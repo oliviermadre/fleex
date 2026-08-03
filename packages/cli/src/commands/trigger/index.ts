@@ -49,7 +49,7 @@ const def: CommandDef = {
     cmd.option('--panel <name>', 'Run a panel (repeatable)', collect);
     cmd.option('--workflow <slug>', 'Start a workflow (repeatable)', collect);
     cmd.option('-m, --message <text>', 'Extra context added to the triggering comment');
-    cmd.option('--board <id>', 'Disambiguate the ticket by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   extraHelp: `\n${SECTION('How it works:')}
   ${DIM('trigger posts a comment containing the @type:name token(s); the server')}

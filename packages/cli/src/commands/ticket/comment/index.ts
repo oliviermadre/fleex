@@ -12,7 +12,7 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.argument('<body>', 'Comment body');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (idArg: string, bodyArg: string, opts: CommentOptions) => {
     const uuid = await resolveTicketId(idArg, opts.board);

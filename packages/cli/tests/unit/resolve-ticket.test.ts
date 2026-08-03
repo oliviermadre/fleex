@@ -7,9 +7,11 @@ vi.mock('../../src/core/api.ts', () => ({
   apiGet,
 }));
 
-import { resolveAnyTicketUuid } from '../../src/commands/ticket/_shared.ts';
+import { resolveAnyTicketUuid, resolveTicketId } from '../../src/commands/ticket/_shared.ts';
+import { resetBoardCache } from '../../src/commands/board/_shared.ts';
 
 const UUID = 'aaaaaaaa-1111-2222-3333-444444444444';
+const BOARD_UUID = 'dddddddd-1111-2222-3333-444444444444';
 
 describe('resolveAnyTicketUuid', () => {
   beforeEach(() => {
@@ -46,5 +48,42 @@ describe('resolveAnyTicketUuid', () => {
     expect(apiGet).not.toHaveBeenCalled();
     exit.mockRestore();
     stderr.mockRestore();
+  });
+});
+
+describe('resolveTicketId --board handling', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    resetBoardCache();
+  });
+
+  it('resolves a board name/prefix to a UUID before filtering tickets', async () => {
+    // The API only understands full board UUIDs — passing through the 8-char id
+    // shown by `board list` is what produced "Board not found: dddddddd".
+    apiGet.mockImplementation(async (url: string) => {
+      if (url.includes('/api/boards')) return [{ id: BOARD_UUID, name: 'Roadmap' }];
+      return [{ id: UUID, displayId: 42, title: 't', boardId: BOARD_UUID }];
+    });
+
+    expect(await resolveTicketId('42', 'dddddddd')).toBe(UUID);
+    const ticketsUrl = apiGet.mock.calls.map((c) => c[0] as string).find((u) => u.includes('/api/tickets'));
+    expect(ticketsUrl).toContain(`boardId=${BOARD_UUID}`);
+  });
+
+  it('accepts a board name just like the epic commands do', async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url.includes('/api/boards')) return [{ id: BOARD_UUID, name: 'Roadmap' }];
+      return [{ id: UUID, displayId: 42, title: 't', boardId: BOARD_UUID }];
+    });
+
+    await resolveTicketId('42', 'roadmap');
+    const ticketsUrl = apiGet.mock.calls.map((c) => c[0] as string).find((u) => u.includes('/api/tickets'));
+    expect(ticketsUrl).toContain(`boardId=${BOARD_UUID}`);
+  });
+
+  it('does not fetch boards when the ticket is already a UUID', async () => {
+    // The UUID short-circuit must stay ahead of board resolution: no wasted call.
+    expect(await resolveTicketId(UUID, 'dddddddd')).toBe(UUID);
+    expect(apiGet).not.toHaveBeenCalled();
   });
 });

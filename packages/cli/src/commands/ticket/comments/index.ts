@@ -12,7 +12,7 @@ const def: CommandDef = {
   description: 'List comments on a ticket (with their ids, for `comment-delete`)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
     cmd.option('--json', 'Output raw JSON');
   },
   action: async (idArg: string, opts: CommentsOptions) => {

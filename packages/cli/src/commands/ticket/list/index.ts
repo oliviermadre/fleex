@@ -1,7 +1,8 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { c, info, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
-import { resolveEpicId } from '../_shared.ts';
+import { resolveEpicId } from '../../epic/_shared.ts';
+import { resolveBoardId } from '../../board/_shared.ts';
 
 interface ListOptions {
   board?: string;
@@ -30,16 +31,19 @@ const def: CommandDef = {
   aliases: ['ls'],
   description: 'List tickets (optionally filtered by --board, --status, --tag, --epic)',
   setup(cmd) {
-    cmd.option('--board <id>', 'Filter by board ID or name');
+    cmd.option('--board <board>', 'Filter by board (name, UUID, or 8-char id prefix)');
     cmd.option('--status <status>', 'Filter by status (backlog|todo|doing|reviewing|done|cancelled)');
     cmd.option('--tag <tag>', 'Filter by tag');
     cmd.option('--epic <id>', 'Filter by epic UUID or 8-char prefix');
   },
   action: async (opts: ListOptions) => {
     const base = apiBase();
+    // Resolve once: the API only understands full board UUIDs, and this id is
+    // reused by the epics/memberships queries below.
+    const boardId = opts.board ? await resolveBoardId(opts.board) : undefined;
     const params: string[] = [];
-    if (opts.board) params.push(`boardId=${encodeURIComponent(opts.board)}`);
-    if (opts.board && opts.status) params.push(`status=${encodeURIComponent(opts.status)}`);
+    if (boardId) params.push(`boardId=${encodeURIComponent(boardId)}`);
+    if (boardId && opts.status) params.push(`status=${encodeURIComponent(opts.status)}`);
     if (opts.tag) params.push(`tag=${encodeURIComponent(opts.tag)}`);
     // The server filters memberships by exact group id, so resolve any 8-char
     // prefix to a full UUID before querying.
@@ -48,7 +52,7 @@ const def: CommandDef = {
 
     let tickets = await apiGet<Ticket[]>(url);
     // Server only filters status when boardId is set; mirror the bash fallback.
-    if (opts.status && !opts.board) {
+    if (opts.status && !boardId) {
       tickets = tickets.filter((t) => t.status === opts.status);
     }
 
@@ -57,8 +61,8 @@ const def: CommandDef = {
     if (tickets.length === 0) { info('No tickets found.'); return; }
 
     // Fetch epics + memberships once to label tickets with their first epic.
-    const epicsUrl = opts.board ? `${base}/api/epics?boardId=${encodeURIComponent(opts.board)}` : `${base}/api/epics`;
-    const membershipsUrl = opts.board ? `${base}/api/epics/memberships?boardId=${encodeURIComponent(opts.board)}` : `${base}/api/epics/memberships`;
+    const epicsUrl = boardId ? `${base}/api/epics?boardId=${encodeURIComponent(boardId)}` : `${base}/api/epics`;
+    const membershipsUrl = boardId ? `${base}/api/epics/memberships?boardId=${encodeURIComponent(boardId)}` : `${base}/api/epics/memberships`;
     const [epics, memberships] = await Promise.all([
       apiGet<Epic[]>(epicsUrl),
       apiGet<Membership[]>(membershipsUrl),
@@ -79,7 +83,7 @@ const def: CommandDef = {
       return '-';
     };
 
-    const showBoard = !opts.board;
+    const showBoard = !boardId;
     let boardMap: Map<string, string> = new Map();
     if (showBoard) {
       const boards = await apiGet<Board[]>(`${base}/api/boards`);

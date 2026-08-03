@@ -14,7 +14,7 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<ticket-id>', 'Ticket display ID or UUID');
     cmd.argument('<deliverable-id>', 'Deliverable UUID');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
     cmd.option('--content-only', 'Print only the raw content (no header)');
   },
   action: async (ticketIdArg: string, delivId: string, opts: ShowOptions) => {

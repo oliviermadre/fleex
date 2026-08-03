@@ -1,7 +1,8 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
-import { assertValidStatus, assertValidPriority, assertValidType, normalizeDueDate, resolveBoardId } from '../_shared.ts';
+import { assertValidStatus, assertValidPriority, assertValidType, normalizeDueDate } from '../_shared.ts';
+import { resolveBoardIdOrDefault } from '../../board/_shared.ts';
 
 interface CreateOptions {
   board?: string;
@@ -21,7 +22,7 @@ const def: CommandDef = {
   description: 'Create a new ticket (--title required)',
   setup(cmd) {
     cmd.requiredOption('--title <title>', 'Ticket title (required)');
-    cmd.option('--board <id>', 'Board ID (auto-detected if only one)');
+    cmd.option('--board <board>', 'Board (name, UUID, or 8-char id prefix; auto-detected if only one board)');
     cmd.option('--description <description>', 'Ticket description');
     cmd.option('--priority <priority>', 'Priority: none | low | medium | high');
     cmd.option('--status <status>', 'Initial status (default: backlog)');
@@ -35,7 +36,7 @@ const def: CommandDef = {
     if (opts.priority) assertValidPriority(opts.priority);
     if (opts.type) assertValidType(opts.type);
 
-    const boardId = await resolveBoardId(opts.board);
+    const boardId = await resolveBoardIdOrDefault(opts.board);
     const body: Record<string, unknown> = { boardId, title: opts.title };
     if (opts.description) body.description = opts.description;
     if (opts.priority) body.priority = opts.priority;

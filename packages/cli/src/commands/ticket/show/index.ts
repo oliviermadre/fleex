@@ -40,7 +40,7 @@ const def: CommandDef = {
   description: 'Show ticket details (use --full for comments + deliverables)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID (e.g. 42 or #42) or full UUID');
-    cmd.option('--board <id>', 'Disambiguate by board when multiple boards share displayIds');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
     cmd.option('--with-comments', 'Include comments');
     cmd.option('--with-deliverables', 'Include deliverables');
     cmd.option('--full', 'Include both comments and deliverables');

@@ -17,7 +17,7 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.option('-f, --force', 'Skip confirmation');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (idArg: string, opts: DeleteOptions) => {
     const uuid = await resolveTicketId(idArg, opts.board);
