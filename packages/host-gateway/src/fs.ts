@@ -1,7 +1,6 @@
 import * as fsp from 'node:fs/promises';
-import * as path from 'node:path';
 
-type FsRequest =
+export type FsRequest =
   | { op: 'read'; path: string }
   | { op: 'write'; path: string; content: string }
   | { op: 'readdir'; path: string }
