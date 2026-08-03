@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Button } from '../ui/Button';
 import { useDraft } from '../../hooks/useDraft';
 import { tintClasses } from '../../lib/tints';
+import { userRemarkPlugins } from '../markdown/profiles';
+
+// Module-level so the references stay stable across renders.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const rehypePlugins: any[] = [rehypeHighlight];
 
 interface Props {
   runId: string;
@@ -52,7 +56,7 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
         </div>
         {question && (
           <div className="needs-review-markdown mt-2 max-h-[460px] overflow-y-auto pr-1 text-xs text-[var(--theme-text-primary)]">
-            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+            <Markdown remarkPlugins={userRemarkPlugins} rehypePlugins={rehypePlugins}>
               {question}
             </Markdown>
           </div>

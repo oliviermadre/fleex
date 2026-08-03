@@ -38,3 +38,34 @@ describe('CommentMarkdown — mention chips', () => {
     expect(chip.closest('a')).toBeNull();
   });
 });
+
+/**
+ * Comments are typed in a textarea where Shift+Enter inserts a newline. Under
+ * strict CommonMark that newline collapses to a space and the comment comes
+ * back as one long line — the stored body is never rewritten to compensate,
+ * the renderer is what carries the behaviour.
+ */
+describe('CommentMarkdown — line breaks', () => {
+  it('renders a lone newline as a <br> inside a single paragraph', () => {
+    const { container } = renderBody('TOTO\nTITY');
+
+    const paragraphs = container.querySelectorAll('p');
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]!.querySelectorAll('br')).toHaveLength(1);
+  });
+
+  it('renders a blank line as two distinct paragraphs, not a <br>', () => {
+    const { container } = renderBody('TOTO\n\nTITY');
+
+    expect(container.querySelectorAll('p')).toHaveLength(2);
+    expect(container.querySelectorAll('br')).toHaveLength(0);
+  });
+
+  it('does not inject <br> inside a fenced code block', () => {
+    const { container } = renderBody('```\nconst a = 1;\nconst b = 2;\n```');
+
+    const pre = container.querySelector('pre');
+    expect(pre).not.toBeNull();
+    expect(pre!.querySelectorAll('br')).toHaveLength(0);
+  });
+});
