@@ -12,16 +12,12 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useTerminalStore } from '../../stores/terminalStore';
 import { useUIStore } from '../../stores/uiStore';
 
+import { floatingPositionRegistry } from './floatingPositionRegistry';
+
 const MIN_WIDTH = 480;
 const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 500;
-
-// Position registry for spatial keyboard navigation between floating overlays
-export const floatingPositionRegistry = new Map<
-  string,
-  { x: number; y: number; width: number; height: number }
->();
 
 /** Resolve the navigation URL for a floating session based on its worktree context. */
 function getSessionNavigationUrl(sessionId: string): string {

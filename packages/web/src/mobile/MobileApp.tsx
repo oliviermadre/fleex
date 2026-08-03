@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { warmMarkdown } from '../components/markdown/LazyMarkdown';
 import { useAgentPersonas } from '../hooks/useAgentPersonas';
 import { useTickets } from '../hooks/useTickets';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -25,6 +26,9 @@ export function MobileApp() {
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   useEffect(() => {
     loadSettings();
+    // Opening a ticket is one tap away — fetch the markdown chunk while idle so
+    // the Suspense fallback never actually shows.
+    warmMarkdown();
   }, [loadSettings]);
 
   const ticket = useTicketStore((s) =>

@@ -14,6 +14,11 @@ import {
 import { isLightTheme, type Theme } from '../lib/themes';
 
 import { AsmClipboardProvider } from './clipboardProvider';
+import {
+  getTerminalAppearance,
+  subscribeTerminalAppearance,
+  type TerminalAppearance,
+} from './terminalAppearance';
 
 interface TerminalInstance {
   terminal: Terminal;
@@ -235,6 +240,12 @@ class TerminalManager {
     }
   }
 
+  /** Apply an appearance snapshot from terminalAppearance (theme may be unset yet). */
+  applyAppearance(appearance: TerminalAppearance): void {
+    if (appearance.theme) this.updateTheme(appearance.theme);
+    this.updateFont(appearance.fontFamily, appearance.fontSize, appearance.fontThicken);
+  }
+
   /**
    * Toggle floating mode: dispose WebGL and use transparent background,
    * or restore WebGL with opaque background.
@@ -296,3 +307,9 @@ class TerminalManager {
 }
 
 export const terminalManager = new TerminalManager();
+
+// This module is lazy-loaded (see LazyTerminalTabContent / AppLayout), so it may
+// arrive long after useTheme()/useTerminalFont() first ran. Replay whatever the
+// hooks already recorded, then keep following it.
+terminalManager.applyAppearance(getTerminalAppearance());
+subscribeTerminalAppearance((appearance) => terminalManager.applyAppearance(appearance));

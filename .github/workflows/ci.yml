@@ -96,6 +96,13 @@ jobs:
       - name: Build
         run: bun run build
 
+      # Reads packages/web/dist/.vite/{manifest,chunk-modules}.json from the
+      # step above, so it must stay after Build. Writes its table to the job
+      # summary. Fails the job on a first-paint regression — see
+      # packages/web/bundle-budget.json for the ceilings.
+      - name: Bundle budget
+        run: node scripts/bundle-budget.mjs
+
       # Coverage floors are measured on one platform only: V8 counters can
       # drift between OSes, and enforcing the same floors twice would double
       # the false-red rate without catching anything new.

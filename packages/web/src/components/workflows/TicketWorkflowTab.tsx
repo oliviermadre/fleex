@@ -1,8 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
 
-import { WorkflowRunView } from './WorkflowRunView';
+// Last static door to @xyflow/react — TicketDetail is eager, so this tab must
+// not be. Only mounted once a run detail has loaded (see the `d` guard below).
+const WorkflowRunView = lazy(() =>
+  import('./WorkflowRunView').then((m) => ({ default: m.WorkflowRunView })),
+);
+
+const RunViewFallback = (
+  <div className="p-6 text-sm" style={{ color: 'var(--theme-text-muted)' }}>
+    Loading…
+  </div>
+);
 
 interface Props {
   ticketId: string;
@@ -83,11 +93,11 @@ export function TicketWorkflowTab({ ticketId }: Props) {
         </div>
       )}
       {d ? (
-        <WorkflowRunView run={d.run} stepRuns={d.stepRuns} />
+        <Suspense fallback={RunViewFallback}>
+          <WorkflowRunView run={d.run} stepRuns={d.stepRuns} />
+        </Suspense>
       ) : (
-        <div className="p-6 text-sm" style={{ color: 'var(--theme-text-muted)' }}>
-          Loading…
-        </div>
+        RunViewFallback
       )}
     </div>
   );

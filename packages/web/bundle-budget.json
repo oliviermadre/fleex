@@ -1,0 +1,20 @@
+{
+  "initialJsGzipKb": 300,
+  "initialCssGzipKb": 25,
+  "initialShells": ["DesktopShell", "MobileApp"],
+  "forbiddenInInitial": [
+    "mermaid",
+    "cytoscape",
+    "katex",
+    "recharts",
+    "@xterm/xterm",
+    "@xyflow/react",
+    "highlight.js",
+    "react-markdown"
+  ],
+  "_baseline": {
+    "commit": "505bb33",
+    "initialJsGzipKb": 757.7,
+    "initialCssGzipKb": 17.3
+  }
+}

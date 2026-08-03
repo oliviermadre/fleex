@@ -39,6 +39,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { ModelSelect } from '../agents/ModelSelect';
+import { LazyMarkdown } from '../markdown/LazyMarkdown';
 import { preprocessMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
 import {
@@ -271,10 +272,6 @@ function DeliverableChip({
 }
 
 // ── Comment Markdown Renderer ──
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const commentRehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
-const commentRemarkPlugins = [remarkGfm];
 
 export const CommentMarkdown = memo(function CommentMarkdown({
   body,
@@ -521,13 +518,7 @@ export const CommentMarkdown = memo(function CommentMarkdown({
   return (
     <>
       <ImageGalleryStrip images={images} />
-      <Markdown
-        remarkPlugins={commentRemarkPlugins}
-        rehypePlugins={commentRehypePlugins}
-        components={components}
-      >
-        {processed}
-      </Markdown>
+      <LazyMarkdown content={processed} components={components} preset="basic" />
     </>
   );
 });

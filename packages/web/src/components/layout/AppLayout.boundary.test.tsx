@@ -67,15 +67,16 @@ describe('AppLayout error isolation', () => {
     vi.restoreAllMocks();
   });
 
-  it('contains a crashing Analytics view without taking down the rest of the app', () => {
+  it('contains a crashing Analytics view without taking down the rest of the app', async () => {
     render(
       <MemoryRouter>
         <AppLayout />
       </MemoryRouter>,
     );
 
-    // The crash screen replaced only the main view…
-    expect(screen.getByText('This view crashed')).toBeTruthy();
+    // The crash screen replaced only the main view… (`findBy` because main
+    // views are lazy-loaded: the throw happens once the chunk resolves.)
+    expect(await screen.findByText('This view crashed')).toBeTruthy();
 
     // …while the surrounding chrome is still mounted, so the user can navigate
     // away instead of reloading the page.
@@ -83,12 +84,13 @@ describe('AppLayout error isolation', () => {
     expect(screen.getByTestId('content-panel')).toBeTruthy();
   });
 
-  it('reports the crash with the view key that identifies the dead branch', () => {
+  it('reports the crash with the view key that identifies the dead branch', async () => {
     render(
       <MemoryRouter>
         <AppLayout />
       </MemoryRouter>,
     );
+    await screen.findByText('This view crashed');
 
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     const report = fetchMock.mock.calls.find((c) => c[0] === '/api/client-errors');

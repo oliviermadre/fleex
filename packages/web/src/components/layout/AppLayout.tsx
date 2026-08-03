@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
 import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
@@ -18,17 +18,37 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { ErrorBoundary } from '../errors/ErrorBoundary';
-import { FloatingSessionOverlay } from '../main-panel/FloatingSessionOverlay';
 import { MainPanel } from '../main-panel/MainPanel';
 import { useMainViewKey } from '../main-panel/useMainViewKey';
+import { warmMarkdown } from '../markdown/LazyMarkdown';
 import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
-import { ScratchpadPanel } from '../scratchpad/ScratchpadPanel';
 import { ContentPanel } from '../sidebar/ContentPanel';
 import { NavSidebar } from '../sidebar/NavSidebar';
-import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
-import { FloatingDeliverableOverlay } from '../tickets/FloatingDeliverableOverlay';
 
 import { ResizeHandle } from './ResizeHandle';
+
+// Overlays and panels that are absent from the default view. Each one's own
+// "render nothing" condition is hoisted to the call site below, so the chunk is
+// never fetched for a component that would immediately return null.
+// FloatingSessionOverlay in particular is the last static edge to @xterm/xterm.
+const ScratchpadPanel = lazy(() =>
+  import('../scratchpad/ScratchpadPanel').then((m) => ({ default: m.ScratchpadPanel })),
+);
+const FloatingSessionOverlay = lazy(() =>
+  import('../main-panel/FloatingSessionOverlay').then((m) => ({
+    default: m.FloatingSessionOverlay,
+  })),
+);
+const FloatingDeliverableOverlay = lazy(() =>
+  import('../tickets/FloatingDeliverableOverlay').then((m) => ({
+    default: m.FloatingDeliverableOverlay,
+  })),
+);
+const DeliverableReadingOverlay = lazy(() =>
+  import('../tickets/DeliverableReadingOverlay').then((m) => ({
+    default: m.DeliverableReadingOverlay,
+  })),
+);
 
 const NAV_COLLAPSED_WIDTH = 64;
 const NAV_EXPANDED_WIDTH = 200;
@@ -65,10 +85,20 @@ export function AppLayout() {
     loadSettings().catch(report('loadSettings'));
     fetchRepositories().catch(report('fetchRepositories'));
     loadDeliverableTypes().catch(report('loadDeliverableTypes'));
+    // The default panel is the kanban board, and any ticket renders markdown —
+    // fetch that chunk while idle so the Suspense fallback never actually shows.
+    warmMarkdown();
   }, [loadSettings, fetchRepositories, loadDeliverableTypes]);
 
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
   const mainViewKey = useMainViewKey();
+
+  // Hoisted out of the lazy components themselves — see the comment on the
+  // lazy() declarations above.
+  const scratchpadOpen = useUIStore((s) => s.scratchpadOpen);
+  const hasFloatingSessions = useUIStore((s) => s.floatingSessionIds.length > 0);
+  const hasFloatingDeliverables = useUIStore((s) => s.floatingDeliverableIds.length > 0);
+  const hasDeliverableOverlay = useUIStore((s) => s.deliverableOverlay !== null);
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
   // Hide the content panel when editing a workflow so the editor takes the full viewport width
@@ -120,13 +150,15 @@ export function AppLayout() {
         </ErrorBoundary>
       </div>
       <ErrorBoundary name="scratchpad" variant="inline">
-        <ScratchpadPanel />
         <ScratchpadHint />
+        <Suspense fallback={null}>{scratchpadOpen && <ScratchpadPanel />}</Suspense>
       </ErrorBoundary>
       <ErrorBoundary name="overlays" variant="inline">
-        <FloatingSessionOverlay />
-        <FloatingDeliverableOverlay />
-        <DeliverableReadingOverlay />
+        <Suspense fallback={null}>
+          {hasFloatingSessions && <FloatingSessionOverlay />}
+          {hasFloatingDeliverables && <FloatingDeliverableOverlay />}
+          {hasDeliverableOverlay && <DeliverableReadingOverlay />}
+        </Suspense>
       </ErrorBoundary>
     </div>
   );

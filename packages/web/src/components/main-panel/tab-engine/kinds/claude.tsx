@@ -6,6 +6,7 @@ import { useSessionStore } from '../../../../stores/sessionStore';
 import { StatusDot } from '../../../ui/StatusDot';
 import { registerTabKind } from '../registry';
 
+import { LazyTerminalTabContent } from './LazyTerminalTabContent';
 import { TerminalTabContent } from './TerminalTabContent';
 
 import type { DisplayStatus } from '../../../../lib/deriveStatus';
@@ -33,7 +34,7 @@ function ClaudeStatus({ tab }: TabStatusProps) {
 
 registerTabKind('claude', {
   Icon: ClaudeIcon,
-  Content: TerminalTabContent,
+  Content: LazyTerminalTabContent,
   StatusIndicator: ClaudeStatus,
   defaultCapabilities: { closable: true, renamable: true, orderable: true, floatable: true },
 

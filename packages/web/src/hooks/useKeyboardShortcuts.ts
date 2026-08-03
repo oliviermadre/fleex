@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 
 import type { Session, WorktreeSessionGroup } from '@fleex/shared';
 
-import { floatingPositionRegistry } from '../components/main-panel/FloatingSessionOverlay';
+import { floatingPositionRegistry } from '../components/main-panel/floatingPositionRegistry';
 import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
 import { worktreeFlow, SESSION_FLOW_ORDER } from '../lib/sessionFlow';
 import * as api from '../services/api';

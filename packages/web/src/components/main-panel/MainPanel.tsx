@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import type { Session } from '@fleex/shared';
@@ -10,27 +11,63 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { AgentPersonaView } from '../agents/AgentPersonaView';
-import { PanelDetailView } from '../agents/PanelDetailView';
-import { SkillEditor } from '../agents/SkillEditor';
-import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { AssistantConversation } from '../assistant/AssistantConversation';
-import { ClaudeConfigEditor } from '../claude-config/ClaudeConfigEditor';
 import { DashboardView } from '../dashboard/DashboardView';
-import { DocumentsPage } from '../documents/DocumentsPage';
-import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 import { ListFocusView } from '../list-focus/ListFocusView';
-import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard';
 import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
 import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
-import { ScratchpadMainView } from '../scratchpad/ScratchpadMainView';
-import { SettingsPanel } from '../settings/SettingsPanel';
 import { KanbanBoard } from '../tickets/KanbanBoard';
 import { TicketDetail } from '../tickets/TicketDetail';
-import { WorkflowEditorView } from '../workflows/WorkflowEditorView';
 
 import { EmptyState } from './EmptyState';
+import { PanelFallback } from './PanelFallback';
 import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
+
+// ── Lazy panels ───────────────────────────────────────────────────────────────
+//
+// One chunk per rarely-opened branch of `activePanel`. AnalyticsPanel carries
+// recharts and WorkflowEditorView carries @xyflow/react; the rest is app code
+// for panels most sessions never open.
+//
+// Kept eager on purpose: KanbanBoard and TicketDetail (activePanel defaults to
+// 'tickets', so they are the hot path), UnifiedWorktreePanel, DashboardView,
+// ListFocusView, AssistantConversation (all small and commonly the first view
+// after the board), and the *EmptyState components.
+const SettingsPanel = lazy(() =>
+  import('../settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel })),
+);
+const RepositoryDashboard = lazy(() =>
+  import('../repository-dashboard/RepositoryDashboard').then((m) => ({
+    default: m.RepositoryDashboard,
+  })),
+);
+const ClaudeConfigEditor = lazy(() =>
+  import('../claude-config/ClaudeConfigEditor').then((m) => ({ default: m.ClaudeConfigEditor })),
+);
+const ScratchpadMainView = lazy(() =>
+  import('../scratchpad/ScratchpadMainView').then((m) => ({ default: m.ScratchpadMainView })),
+);
+const AgentPersonaView = lazy(() =>
+  import('../agents/AgentPersonaView').then((m) => ({ default: m.AgentPersonaView })),
+);
+const SkillEditor = lazy(() =>
+  import('../agents/SkillEditor').then((m) => ({ default: m.SkillEditor })),
+);
+const PanelDetailView = lazy(() =>
+  import('../agents/PanelDetailView').then((m) => ({ default: m.PanelDetailView })),
+);
+const WorkflowEditorView = lazy(() =>
+  import('../workflows/WorkflowEditorView').then((m) => ({ default: m.WorkflowEditorView })),
+);
+const AnalyticsPanel = lazy(() =>
+  import('../analytics/AnalyticsPanel').then((m) => ({ default: m.AnalyticsPanel })),
+);
+const ExecutionLogPage = lazy(() =>
+  import('../execution-log/ExecutionLogPage').then((m) => ({ default: m.ExecutionLogPage })),
+);
+const DocumentsPage = lazy(() =>
+  import('../documents/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
+);
 
 function GroupEmptyCell() {
   return (
@@ -59,6 +96,14 @@ function GroupCell({ session, focused, onFocus }: GroupCellProps) {
 }
 
 export function MainPanel() {
+  return (
+    <Suspense fallback={<PanelFallback />}>
+      <MainPanelRoutes />
+    </Suspense>
+  );
+}
+
+function MainPanelRoutes() {
   const activePanel = useUIStore((s) => s.activePanel);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);

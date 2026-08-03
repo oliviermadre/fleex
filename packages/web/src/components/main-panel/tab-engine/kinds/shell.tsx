@@ -6,6 +6,7 @@ import { useSessionStore } from '../../../../stores/sessionStore';
 import { StatusDot } from '../../../ui/StatusDot';
 import { registerTabKind } from '../registry';
 
+import { LazyTerminalTabContent } from './LazyTerminalTabContent';
 import { TerminalTabContent } from './TerminalTabContent';
 
 import type { DisplayStatus } from '../../../../lib/deriveStatus';
@@ -43,7 +44,7 @@ function ShellStatus({ tab }: TabStatusProps) {
 
 registerTabKind('shell', {
   Icon: ShellIcon,
-  Content: TerminalTabContent,
+  Content: LazyTerminalTabContent,
   StatusIndicator: ShellStatus,
   defaultCapabilities: { closable: true, renamable: true, orderable: true, floatable: true },
 

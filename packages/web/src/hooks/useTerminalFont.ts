@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { terminalManager } from '../services/terminalManager';
+import { setTerminalFont } from '../services/terminalAppearance';
 import { useSettingsStore } from '../stores/settingsStore';
 
 export function useTerminalFont() {
@@ -9,6 +9,6 @@ export function useTerminalFont() {
   const fontThicken = useSettingsStore((s) => s.settings.terminalFontThicken);
 
   useEffect(() => {
-    terminalManager.updateFont(fontFamily, fontSize, fontThicken);
+    setTerminalFont(fontFamily, fontSize, fontThicken);
   }, [fontFamily, fontSize, fontThicken]);
 }
