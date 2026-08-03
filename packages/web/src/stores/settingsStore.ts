@@ -1,9 +1,19 @@
 import { create } from 'zustand';
+
 import { DEFAULT_AGENT_MAX_TURNS, migrateActionsConfig, resolveTemplate } from '@fleex/shared';
 import type { ActionDef, WorkspaceContext } from '@fleex/shared';
-import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, STORAGE_KEY_SETTINGS } from '../lib/constants';
-import type { Theme } from '../lib/themes';
+
+import {
+  API_URL,
+  TERMINAL_FONT_FAMILY,
+  TERMINAL_FONT_SIZE,
+  STORAGE_KEY_SETTINGS,
+} from '../lib/constants';
 import * as api from '../services/api';
+
+import { useRepositoryStore } from './repositoryStore';
+
+import type { Theme } from '../lib/themes';
 
 /**
  * Actions the user can trigger, filtered by scope. Kept as plain functions
@@ -122,12 +132,50 @@ function loadFromStorage(): AppSettings {
     // config comes back.
     if (parsed && typeof parsed === 'object') migrateActionsConfig(parsed);
     return { ...defaultSettings, ...parsed };
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return defaultSettings;
 }
 
 function saveToStorage(settings: AppSettings) {
   localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings, null, 2));
+}
+
+function stringList(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+/**
+ * Commits a repository-list change from the `PUT /config` response.
+ *
+ * The server response wins over the optimistic local list: only it expands glob
+ * patterns into `resolvedRepositories`. Both client-side caches of the repo list
+ * are refreshed here — `settings.resolvedRepositories` (ticket repo picker,
+ * filters, scratchpads) and the repositoryStore (New Task picker) — so neither
+ * goes stale after an add/remove.
+ */
+function applyRepositoryConfig(
+  set: (partial: { settings: AppSettings }) => void,
+  current: AppSettings,
+  config: Record<string, unknown>,
+  fallbackRepositories: string[],
+) {
+  const updated: AppSettings = {
+    ...current,
+    repositories: stringList(config['repositories']) ?? fallbackRepositories,
+    resolvedRepositories:
+      stringList(config['resolvedRepositories']) ?? current.resolvedRepositories,
+  };
+  set({ settings: updated });
+  saveToStorage(updated);
+  void useRepositoryStore
+    .getState()
+    .fetchRepositories()
+    .catch(() => {
+      /* toasted by request() */
+    });
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -139,14 +187,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const res = await fetch(`${API_URL}/config`);
       if (res.ok) {
         const data = await res.json();
-        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.actions)) {
+        if (
+          data &&
+          typeof data === 'object' &&
+          (data.basePath || data.repositories || data.actions)
+        ) {
           const merged = { ...defaultSettings, ...data };
           set({ settings: merged, loaded: true });
           saveToStorage(merged);
           return;
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     set({ settings: loadFromStorage(), loaded: true });
   },
 
@@ -161,32 +215,37 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
       });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   },
 
   setSessionDisplayName: (sessionId, name) => {
     const trimmed = name.trim();
-    api.renameSession(sessionId, trimmed).then(() => {
-      // On success, remove local override — server is now authoritative
-      const current = get().settings;
-      const sessionDisplayNames = { ...current.sessionDisplayNames };
-      delete sessionDisplayNames[sessionId];
-      const updated = { ...current, sessionDisplayNames };
-      set({ settings: updated });
-      saveToStorage(updated);
-    }).catch(() => {
-      // On failure, keep local state as fallback
-      const current = get().settings;
-      const sessionDisplayNames = { ...current.sessionDisplayNames };
-      if (trimmed) {
-        sessionDisplayNames[sessionId] = trimmed;
-      } else {
+    api
+      .renameSession(sessionId, trimmed)
+      .then(() => {
+        // On success, remove local override — server is now authoritative
+        const current = get().settings;
+        const sessionDisplayNames = { ...current.sessionDisplayNames };
         delete sessionDisplayNames[sessionId];
-      }
-      const updated = { ...current, sessionDisplayNames };
-      set({ settings: updated });
-      saveToStorage(updated);
-    });
+        const updated = { ...current, sessionDisplayNames };
+        set({ settings: updated });
+        saveToStorage(updated);
+      })
+      .catch(() => {
+        // On failure, keep local state as fallback
+        const current = get().settings;
+        const sessionDisplayNames = { ...current.sessionDisplayNames };
+        if (trimmed) {
+          sessionDisplayNames[sessionId] = trimmed;
+        } else {
+          delete sessionDisplayNames[sessionId];
+        }
+        const updated = { ...current, sessionDisplayNames };
+        set({ settings: updated });
+        saveToStorage(updated);
+      });
   },
 
   getSessionDisplayName: (sessionId) => {
@@ -202,7 +261,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   setWorktreeOrder: (repoGroupId, order) => {
@@ -215,7 +276,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   setSessionOrder: (worktreeGroupId, order) => {
@@ -228,7 +291,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   executeAction: (action: ActionDef, context?: WorkspaceContext) => {
@@ -248,7 +313,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(context ? { ticketId: context.ticket_id } : {}),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   saveActions: async (actions: ActionDef[]) => {
@@ -284,7 +351,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
     return id;
   },
 
@@ -298,7 +367,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   bindLayoutGroupCell: (groupId, cellIndex, sessionId) => {
@@ -316,7 +387,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   getRepoConfig: (org, name) => {
@@ -335,25 +408,28 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   addRepositories: async (repos) => {
     const current = get().settings;
-    const merged = [...new Set([...current.repositories.map((r) => r.toLowerCase()), ...repos.map((r) => r.toLowerCase())])].sort();
-    await api.updateConfig({ repositories: merged });
-    const updated = { ...current, repositories: merged };
-    set({ settings: updated });
-    saveToStorage(updated);
+    const merged = [
+      ...new Set([
+        ...current.repositories.map((r) => r.toLowerCase()),
+        ...repos.map((r) => r.toLowerCase()),
+      ]),
+    ].sort();
+    const config = await api.updateConfig({ repositories: merged });
+    applyRepositoryConfig(set, current, config, merged);
   },
 
   removeRepository: async (repo) => {
     const target = repo.toLowerCase();
     const current = get().settings;
     const filtered = current.repositories.filter((r) => r.toLowerCase() !== target);
-    await api.updateConfig({ repositories: filtered });
-    const updated = { ...current, repositories: filtered };
-    set({ settings: updated });
-    saveToStorage(updated);
+    const config = await api.updateConfig({ repositories: filtered });
+    applyRepositoryConfig(set, current, config, filtered);
   },
 }));

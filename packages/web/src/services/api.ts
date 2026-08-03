@@ -202,8 +202,11 @@ export async function fetchConfig(): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>('/config');
 }
 
-export async function updateConfig(config: Record<string, unknown>): Promise<void> {
-  await request<void>('/config', {
+/** Returns the config as persisted by the server, with repository patterns already resolved. */
+export async function updateConfig(
+  config: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/config', {
     method: 'PUT',
     body: JSON.stringify(config),
   });
