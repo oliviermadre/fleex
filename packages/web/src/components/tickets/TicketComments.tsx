@@ -3,7 +3,6 @@ import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, 
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import { tint, tintText, tintClasses } from '../../lib/tints';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import type { Components } from 'react-markdown';
 import { appWs } from '../../services/websocket';
@@ -40,6 +39,7 @@ import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/Merma
 import { useColorMode } from '../../hooks/useActiveTheme';
 import { preprocessMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
+import { userRemarkPlugins } from '../markdown/profiles';
 
 /** Per-mode color for the conversation execution-mode pill. */
 const MODE_PILL_CLASS: Record<ConversationMode, string> = {
@@ -195,7 +195,9 @@ function DeliverableChip({ deliverable, onOpen }: {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const commentRehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
-const commentRemarkPlugins = [remarkGfm];
+// Comments are always typed in a textarea (or emitted by an agent in chat
+// mode) → `user` profile: a lone `\n` renders as a <br>.
+const commentRemarkPlugins = userRemarkPlugins;
 
 export const CommentMarkdown = memo(function CommentMarkdown({
   body,
@@ -345,8 +347,12 @@ export const CommentMarkdown = memo(function CommentMarkdown({
       <h6 className="text-xs font-medium mt-1 text-[var(--theme-text-muted)]">{children}</h6>
     ),
 
+    // Bottom-only margin: a lone `\n` is now a <br>, so the paragraph gap has
+    // to stay visibly larger than a simple line break.
     p: ({ children }) => (
-      <p className="py-0.5 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{children}</p>
+      <p className="mb-2 last:mb-0 text-sm leading-relaxed text-[var(--theme-text-secondary)]">
+        {children}
+      </p>
     ),
 
     blockquote: ({ children }) => (

@@ -1,6 +1,5 @@
 import { memo, useMemo, useState, Children } from 'react';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -10,10 +9,17 @@ import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/Merma
 import { useColorMode } from '../../hooks/useActiveTheme';
 import { preprocessTicketMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
+import { remarkPluginsFor, type MarkdownProfile } from '../markdown/profiles';
 
 interface MarkdownRendererProps {
   content: string;
   onToggleCheckbox: (lineIndex: number) => void;
+  /**
+   * `user` (default) renders a lone `\n` as a <br> — the right behaviour for
+   * everything Fleex displays today. Use `doc` for hand-wrapped authored
+   * markdown. See ../markdown/profiles.
+   */
+  profile?: MarkdownProfile;
 }
 
 // ── Segment types ─────────────────────────────────────────────────────────────
@@ -89,7 +95,6 @@ function parseSegments(content: string): Segment[] {
 // detect: true → rehype-highlight adds the `hljs` class even to code blocks
 // without a language specifier, so we can reliably distinguish block vs inline
 // code in the `code` component override.
-const remarkPlugins = [remarkGfm];
 
 const sanitizeSchema = {
   ...defaultSchema,
@@ -108,7 +113,11 @@ const rehypePlugins: any[] = [rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehy
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export const MarkdownRenderer = memo(function MarkdownRenderer({ content, onToggleCheckbox }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  content,
+  onToggleCheckbox,
+  profile = 'user',
+}: MarkdownRendererProps) {
   const segments = useMemo(() => parseSegments(content), [content]);
 
   return (
@@ -119,6 +128,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, onTogg
             <ToggleBlock key={i} summary={segment.summary}>
               <MarkdownRenderer
                 content={segment.content}
+                profile={profile}
                 onToggleCheckbox={(localLine) =>
                   onToggleCheckbox(segment.contentStartLine + localLine)
                 }
@@ -132,6 +142,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, onTogg
             key={i}
             content={segment.content}
             startLine={segment.startLine}
+            profile={profile}
             onToggleCheckbox={onToggleCheckbox}
           />
         );
@@ -145,10 +156,12 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, onTogg
 function MarkdownSection({
   content,
   startLine,
+  profile,
   onToggleCheckbox,
 }: {
   content: string;
   startLine: number;
+  profile: MarkdownProfile;
   onToggleCheckbox: (lineIndex: number) => void;
 }) {
   const colorMode = useColorMode();
@@ -242,8 +255,13 @@ function MarkdownSection({
     ),
 
     // ── Paragraph ────────────────────────────────────────────────────────────
+    // Bottom-only margin, clearly larger than the line height: with the `user`
+    // profile a lone `\n` is a <br>, so the gap between two paragraphs has to
+    // stay visibly distinct from a simple line break.
     p: ({ children }) => (
-      <p className="text-sm leading-5 py-0.5 text-[var(--theme-text-primary)]">{children}</p>
+      <p className="text-sm leading-5 mb-2 last:mb-0 text-[var(--theme-text-primary)]">
+        {children}
+      </p>
     ),
 
     // ── Blockquote ───────────────────────────────────────────────────────────
@@ -409,7 +427,11 @@ function MarkdownSection({
   return (
     <>
       <ImageGalleryStrip images={images} />
-      <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+      <Markdown
+        remarkPlugins={remarkPluginsFor(profile)}
+        rehypePlugins={rehypePlugins}
+        components={components}
+      >
         {processed}
       </Markdown>
     </>
