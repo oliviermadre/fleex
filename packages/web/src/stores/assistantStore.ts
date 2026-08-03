@@ -35,6 +35,9 @@ export interface AssistantSession {
   lastMessageAt?: string;
   /** Absent when served by an older companion — treat as nothing approved. */
   autoApprove?: AssistantAutoApprove;
+  /** A web page has been attached: standing approvals can't leave this
+   *  conversation, and the machine-wide list is ignored for it. */
+  pageTainted?: boolean;
 }
 
 export interface AssistantWorkspace {
@@ -71,8 +74,22 @@ export interface AssistantConfirmRequest {
   argv: string[];
 }
 
+/**
+ * Features advertised by the running companion.
+ *
+ * The companion is a machine-wide singleton that `fleex start` reuses, so this
+ * app routinely talks to a host older than itself. Anything the UI offers must
+ * be gated on a capability, or the button lies (which is how "Toujours
+ * autoriser" shipped looking functional while doing nothing).
+ */
+export const CAP_PERSISTENT_ALLOWLIST = 'persistent_allowlist';
+
 interface AssistantState {
   connected: boolean;
+  /** Empty until the `hello` frame lands, or forever on a pre-`hello` host. */
+  capabilities: string[];
+  /** Tools auto-approved in every conversation, machine-wide. */
+  globalAllowlist: string[];
   sessions: AssistantSession[];
   activeId: string | null;
   itemsBySession: Record<string, AssistantChatItem[]>;
@@ -94,6 +111,9 @@ interface AssistantState {
   /** `always` upgrades an approval into a standing one for this conversation. */
   answerConfirm: (id: string, approved: boolean, always?: 'tool' | 'session') => void;
   setAutoApprove: (sessionId: string, next: AssistantAutoApprove) => void;
+  /** Drop a machine-wide standing approval (restores the prompt next call). */
+  revokeGlobalTool: (name: string) => void;
+  clearGlobalAllowlist: () => void;
   clearAutoApproveNotice: () => void;
   clearError: () => void;
 }
@@ -120,6 +140,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
   function handleServerMessage(msg: Record<string, unknown>): void {
     const sessionId = msg.sessionId as string | undefined;
     switch (msg.type) {
+      case 'hello':
+        set({ capabilities: (msg.capabilities as string[]) ?? [] });
+        break;
+      case 'global_allowlist':
+        set({ globalAllowlist: (msg.tools as string[]) ?? [] });
+        break;
       case 'sessions':
         set({ sessions: (msg.sessions as AssistantSession[]) ?? [] });
         break;
@@ -246,7 +272,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       if (ws === socket) {
         ws = null;
         // The server unwinds pending confirmations as denied on disconnect.
-        set({ connected: false, confirmReqs: [] });
+        // Capabilities are dropped too: the next `hello` may come from a
+        // different (restarted, possibly older) host.
+        set({ connected: false, confirmReqs: [], capabilities: [] });
         retryTimer = setTimeout(connect, 3000);
       }
     };
@@ -262,6 +290,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
 
   return {
     connected: false,
+    capabilities: [],
+    globalAllowlist: [],
     sessions: [],
     activeId: null,
     itemsBySession: {},
@@ -336,6 +366,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     setAutoApprove: (sessionId, next) => {
       sendMsg({ type: 'set_auto_approve', id: sessionId, all: next.all, tools: next.tools });
     },
+
+    // Revocation is the one place a tool name legitimately travels client →
+    // server: it only ever reduces privilege, so an unknown name is a no-op.
+    revokeGlobalTool: (name) => sendMsg({ type: 'revoke_global_tool', name }),
+
+    clearGlobalAllowlist: () => sendMsg({ type: 'clear_global_allowlist' }),
 
     clearAutoApproveNotice: () => set({ autoApproveNotice: null }),
 

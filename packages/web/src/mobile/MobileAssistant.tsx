@@ -4,6 +4,7 @@ import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import {
   useAssistantStore,
   toolLabel,
+  CAP_PERSISTENT_ALLOWLIST,
   type AssistantChatItem,
   type AssistantToolStatus,
 } from '../stores/assistantStore';
@@ -46,6 +47,7 @@ export function MobileAssistant() {
   const sendUser = useAssistantStore((s) => s.sendUser);
   const answerConfirm = useAssistantStore((s) => s.answerConfirm);
   const setAutoApprove = useAssistantStore((s) => s.setAutoApprove);
+  const canPersistAllowlist = useAssistantStore((s) => s.capabilities.includes(CAP_PERSISTENT_ALLOWLIST));
 
   const [showSessions, setShowSessions] = useState(false);
   const [draft, setDraft] = useState('');
@@ -254,13 +256,23 @@ export function MobileAssistant() {
                   Approuver
                 </button>
               </div>
-              {/* Standing approval for this command name only, this conversation only */}
-              <button
-                onClick={() => answerConfirm(confirmReq.id, true, 'tool')}
-                className={`rounded-lg border px-4 py-3 text-sm font-medium ${tint('yellow')}`}
-              >
-                ⚡ Toujours autoriser «&nbsp;{toolLabel(confirmReq.name)}&nbsp;»
-              </button>
+              {/* Standing approval for this command name only — machine-wide,
+                  unless a web page tainted this conversation. Hidden when the
+                  running companion can't persist it (stale singleton). */}
+              {canPersistAllowlist && (
+                <button
+                  onClick={() => answerConfirm(confirmReq.id, true, 'tool')}
+                  className={`rounded-lg border px-4 py-3 text-sm font-medium ${tint('yellow')}`}
+                >
+                  ⚡ Toujours autoriser «&nbsp;{toolLabel(confirmReq.name)}&nbsp;»
+                  {activeSession?.pageTainted && ' (cette conversation)'}
+                </button>
+              )}
+              {!canPersistAllowlist && (
+                <p className="text-center text-[11px] text-[var(--theme-text-muted)]">
+                  Companion obsolète — relance <code>fleex start</code> pour activer les autorisations permanentes.
+                </p>
+              )}
             </div>
           </div>
         </div>

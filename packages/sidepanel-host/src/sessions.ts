@@ -76,6 +76,13 @@ export interface SessionData {
   transcript: TranscriptItem[];
   /** Absent on sessions persisted by an older companion. */
   autoApprove?: AutoApprove;
+  /**
+   * Untrusted web-page content has been attached to this conversation at least
+   * once. Sticky by design: the injected instructions stay in `messages`
+   * forever, so the risk never expires. A tainted conversation ignores the
+   * machine-wide allowlist and re-confirms every mutating call.
+   */
+  pageTainted?: boolean;
 }
 
 /** Lightweight projection sent to the side panel for the session list. */
@@ -91,6 +98,9 @@ export interface SessionSummary {
   lastMessageAt: string;
   /** Always defined client-side, even for sessions persisted before the field existed. */
   autoApprove: AutoApprove;
+  /** True once a web page has been attached — the UI downgrades "always allow"
+   *  to conversation scope and says so. Defaults to false on legacy sessions. */
+  pageTainted: boolean;
 }
 
 const DEFAULT_TITLE = 'New conversation';
@@ -115,6 +125,7 @@ export function toSummary(s: SessionData): SessionSummary {
     createdAt: s.createdAt,
     lastMessageAt: s.lastMessageAt ?? s.createdAt,
     autoApprove: s.autoApprove ?? noAutoApprove(),
+    pageTainted: s.pageTainted === true,
   };
 }
 
@@ -250,6 +261,19 @@ export class SessionStore {
   /** Disarm every auto-approval for this conversation. */
   clearAutoApprove(id: string): void {
     this.setAutoApprove(id, noAutoApprove());
+  }
+
+  /**
+   * Mark this conversation as having ingested untrusted page content.
+   *
+   * One-way: nothing un-taints a conversation, because the injected text stays
+   * in its message history for as long as the conversation lives.
+   */
+  markPageTainted(id: string): void {
+    const s = this.sessions.get(id);
+    if (!s || s.pageTainted === true) return;
+    s.pageTainted = true;
+    this.save(id);
   }
 
   /** Stamp the last-message time (called when a user/assistant item lands). */

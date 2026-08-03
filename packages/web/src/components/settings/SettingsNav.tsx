@@ -51,6 +51,13 @@ const tabIcons: Record<SettingsTab, React.ReactNode> = {
       <line x1="9" y1="17" x2="13" y2="17" />
     </svg>
   ),
+  'assistant-permissions': (
+    // Shield/check icon — standing approvals the assistant may act on
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l7 3v6c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V5l7-3z" />
+      <polyline points="9 12 11 14 15 10" />
+    </svg>
+  ),
 };
 
 const tabs: { key: SettingsTab; label: string }[] = [
@@ -60,6 +67,7 @@ const tabs: { key: SettingsTab; label: string }[] = [
   { key: 'workspace-actions', label: 'Workspace Actions' },
   { key: 'agent-tokens', label: 'Agent Tokens' },
   { key: 'deliverable-types', label: 'Deliverable Types' },
+  { key: 'assistant-permissions', label: 'Assistant Permissions' },
 ];
 
 // Claude config lives in its own two-panel view (file tree + Monaco editor),

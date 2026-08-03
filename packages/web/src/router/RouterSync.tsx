@@ -33,6 +33,7 @@ const VALID_SETTINGS_TABS: SettingsTab[] = [
   'workspace-actions',
   'agent-tokens',
   'deliverable-types',
+  'assistant-permissions',
 ];
 
 // ─── URL → Store state ───────────────────────────────────────────────────────

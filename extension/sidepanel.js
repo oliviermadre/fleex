@@ -67,11 +67,14 @@ let modelsList       = [];
 let convQuery  = '';
 let convFilter = 'all';
 
+// Features advertised by the connected companion (see the `hello` frame).
+let capabilities = [];
+
 // ── WebSocket ──────────────────────────────────────────────────────────────
 function connect() {
   ws = new WebSocket(`ws://${HOST}/chat`);
   ws.onopen  = () => setOnline(true);
-  ws.onclose = () => { setOnline(false); setTimeout(connect, 1500); };
+  ws.onclose = () => { capabilities = []; setOnline(false); setTimeout(connect, 1500); };
   ws.onerror = () => setOnline(false);
   ws.onmessage = (e) => handle(JSON.parse(e.data));
 }
@@ -92,6 +95,12 @@ function handle(m) {
     case 'dev_reload':
       if (m.full) { try { chrome.runtime.reload(); } catch { location.reload(); } }
       else location.reload();
+      return;
+    case 'hello':
+      // The companion is a machine-wide singleton `fleex start` reuses, so this
+      // panel can be newer than the host it just connected to. Track what the
+      // host actually supports rather than offering controls it will ignore.
+      capabilities = m.capabilities || [];
       return;
     case 'sessions':
       onSessions(m.sessions || []);
@@ -318,14 +327,14 @@ function renderConfirm(ev) {
   const no = document.createElement('button');
   no.className = 'confirm-decline';
   no.textContent = 'Decline';
-  // Standing approval for this command name in this conversation only. The
-  // server resolves which session/tool it covers from its own pending entry —
-  // we only send the scope.
+  // Standing approval for this command name, in every conversation. The server
+  // resolves which session/tool it covers from its own pending entry — we only
+  // send the scope, never a name.
   const label = ev.name.replace(/^fleex_/, '').replace(/_/g, ' ');
   const always = document.createElement('button');
   always.className = 'confirm-always';
   always.textContent = `⚡ Always allow "${label}"`;
-  always.title = `Every "${label}" command in this conversation`;
+  always.title = `Every "${label}" command, in every conversation, until revoked`;
   const decide = (approved, alwaysScope) => {
     sendMsg({ type: 'confirm', sessionId: ev.sessionId, id: ev.id, approved, ...(alwaysScope ? { always: alwaysScope } : {}) });
     delete pendingConfirm[ev.sessionId];
@@ -338,7 +347,10 @@ function renderConfirm(ev) {
   yes.onclick = () => decide(true);
   no.onclick = () => decide(false);
   always.onclick = () => decide(true, 'tool');
-  actions.append(yes, no, always);
+  // A host too old to persist the grant would accept the click and forget it —
+  // don't offer a button the backend can't honour.
+  actions.append(yes, no);
+  if (capabilities.includes('persistent_allowlist')) actions.append(always);
   card.append(title, code, actions);
   thread.appendChild(card);
   thread.scrollTop = thread.scrollHeight;

@@ -12,6 +12,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import {
   useAssistantStore,
   toolLabel,
+  CAP_PERSISTENT_ALLOWLIST,
   type AssistantChatItem,
   type AssistantToolStatus,
 } from '../../stores/assistantStore';
@@ -47,6 +48,7 @@ export function AssistantConversation() {
   const confirmReqs = useAssistantStore((s) => s.confirmReqs);
   const errorMsg = useAssistantStore((s) => s.errorMsg);
   const autoApproveNotice = useAssistantStore((s) => s.autoApproveNotice);
+  const canPersistAllowlist = useAssistantStore((s) => s.capabilities.includes(CAP_PERSISTENT_ALLOWLIST));
   const ensureConnected = useAssistantStore((s) => s.ensureConnected);
   const newSession = useAssistantStore((s) => s.newSession);
   const openSession = useAssistantStore((s) => s.openSession);
@@ -426,19 +428,30 @@ export function AssistantConversation() {
                   Refuser
                 </button>
                 {/* Scoped to this command name: approving "ticket create" 50
-                    times in a row is data entry, not a security decision. */}
-                <button
-                  onClick={() => answerConfirm(req.id, true, 'tool')}
-                  title={`Toutes les commandes « ${toolLabel(req.name)} » de cette conversation`}
-                  className={cn(
-                    'rounded-md border px-4 py-1.5 text-xs font-medium',
-                    tintClasses('yellow').borderColor,
-                    tintText('yellow'),
-                    'hover:bg-[var(--theme-bg-hover)]',
-                  )}
-                >
-                  ⚡ Toujours autoriser «&nbsp;{toolLabel(req.name)}&nbsp;»
-                </button>
+                    times in a row is data entry, not a security decision — so
+                    it holds across conversations. Except in a conversation that
+                    ingested a web page, where it stays local (injection guard).
+                    Hidden entirely on a companion too old to persist it: a
+                    button must never promise what the backend can't hold. */}
+                {canPersistAllowlist && (
+                  <button
+                    onClick={() => answerConfirm(req.id, true, 'tool')}
+                    title={
+                      session.pageTainted
+                        ? "Une page web est jointe : l'autorisation reste locale à cette conversation"
+                        : "Toutes les commandes de ce type, dans toutes les conversations, jusqu'à révocation"
+                    }
+                    className={cn(
+                      'rounded-md border px-4 py-1.5 text-xs font-medium',
+                      tintClasses('yellow').borderColor,
+                      tintText('yellow'),
+                      'hover:bg-[var(--theme-bg-hover)]',
+                    )}
+                  >
+                    ⚡ Toujours autoriser «&nbsp;{toolLabel(req.name)}&nbsp;»
+                    {session.pageTainted && ' (cette conversation)'}
+                  </button>
+                )}
                 <button
                   onClick={() => answerConfirm(req.id, true)}
                   className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-semibold text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]"
@@ -446,6 +459,11 @@ export function AssistantConversation() {
                   Approuver
                 </button>
               </div>
+              {!canPersistAllowlist && (
+                <p className="mt-2 text-right text-[10px] text-[var(--theme-text-muted)]">
+                  Companion obsolète — relance <code>fleex start</code> pour activer les autorisations permanentes.
+                </p>
+              )}
             </div>
           </div>
         ))}

@@ -3,13 +3,22 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../src/sessions.ts';
-import { applyConfirm, applySetAutoApprove, disarmForPage, type PendingConfirm } from '../src/auto-approve.ts';
+import { GlobalAllowlist } from '../src/global-allowlist.ts';
+import {
+  applyConfirm,
+  applySetAutoApprove,
+  disarmForPage,
+  resolveAutoApproved,
+  type PendingConfirm,
+} from '../src/auto-approve.ts';
 
 let dir: string;
 let store: SessionStore;
+let global: GlobalAllowlist;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleex-auto-approve-'));
-  store = new SessionStore(dir);
+  store = new SessionStore(path.join(dir, 'sessions'));
+  global = new GlobalAllowlist(dir);
 });
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
@@ -104,6 +113,100 @@ describe('applyConfirm', () => {
   });
 });
 
+describe('applyConfirm + the machine-wide allowlist', () => {
+  it('keys the grant on the CANONICAL tool name, never on a display label', () => {
+    // Regression guard for the reported bug's hypothesis: if the allowlist were
+    // ever keyed on what the button shows ("Ticket Link"), the read side would
+    // never match `fleex_ticket_link` and the prompt would come back forever.
+    const s = store.create();
+    const { map } = pendingFor(s.id, 'fleex_ticket_link');
+
+    applyConfirm({ id: 'call-1', approved: true, always: 'tool' }, map, store, global);
+
+    expect(global.list()).toEqual(['fleex_ticket_link']);
+  });
+
+  it('persists the grant so a later conversation stops asking', () => {
+    const first = store.create();
+    const { map } = pendingFor(first.id, 'fleex_ticket_link');
+    applyConfirm({ id: 'call-1', approved: true, always: 'tool' }, map, store, global);
+
+    const later = store.create();
+    expect(resolveAutoApproved(later, global, 'fleex_ticket_link')).toBe(true);
+  });
+
+  it('keeps a blanket "allow everything" inside its own conversation', () => {
+    // Trusting one conversation wholesale is a contextual judgement; it must
+    // never leak into the next one.
+    const s = store.create();
+    const { map } = pendingFor(s.id, 'fleex_ticket_create');
+
+    applyConfirm({ id: 'call-1', approved: true, always: 'session' }, map, store, global);
+
+    expect(global.list()).toEqual([]);
+    expect(resolveAutoApproved(store.create(), global, 'fleex_ticket_create')).toBe(false);
+  });
+
+  it('keeps a grant local when the conversation ingested a web page', () => {
+    const s = store.create();
+    disarmForPage(s.id, store);
+    const { map } = pendingFor(s.id, 'fleex_ticket_create');
+
+    const out = applyConfirm({ id: 'call-1', approved: true, always: 'tool' }, map, store, global);
+
+    expect(out?.globalChanged).toBe(false);
+    expect(global.list()).toEqual([]);
+    // Still granted in-conversation: the user consented to THIS call's tool
+    // with the page in view, so the rest of the turn stops asking.
+    expect(store.get(s.id)!.autoApprove).toEqual({ all: false, tools: ['fleex_ticket_create'] });
+  });
+
+  it('never writes to the global list on a refusal', () => {
+    const s = store.create();
+    const { map } = pendingFor(s.id, 'fleex_ticket_create');
+    applyConfirm({ id: 'call-1', approved: false, always: 'tool' }, map, store, global);
+    expect(global.list()).toEqual([]);
+  });
+});
+
+describe('resolveAutoApproved', () => {
+  it('honours the machine-wide list in a clean conversation', () => {
+    global.allow('fleex_ticket_link');
+    expect(resolveAutoApproved(store.create(), global, 'fleex_ticket_link')).toBe(true);
+  });
+
+  it('only covers the exact tool that was granted', () => {
+    global.allow('fleex_ticket_link');
+    expect(resolveAutoApproved(store.create(), global, 'fleex_ticket_delete')).toBe(false);
+  });
+
+  it('ignores the machine-wide list once a page tainted the conversation', () => {
+    // The prompt-injection guard: page content could ask for `ticket delete`,
+    // and a permission earned in a safe conversation must not pay for it.
+    global.allow('fleex_ticket_link');
+    const s = store.create();
+    disarmForPage(s.id, store);
+    expect(resolveAutoApproved(store.get(s.id)!, global, 'fleex_ticket_link')).toBe(false);
+  });
+
+  it('still honours a grant made INSIDE the tainted conversation', () => {
+    const s = store.create();
+    disarmForPage(s.id, store);
+    store.allowTool(s.id, 'fleex_ticket_link');
+    expect(resolveAutoApproved(store.get(s.id)!, global, 'fleex_ticket_link')).toBe(true);
+  });
+
+  it('honours a blanket conversation approval for any tool', () => {
+    const s = store.create();
+    store.setAutoApprove(s.id, { all: true, tools: [] });
+    expect(resolveAutoApproved(store.get(s.id)!, global, 'fleex_anything')).toBe(true);
+  });
+
+  it('approves nothing when neither scope granted it', () => {
+    expect(resolveAutoApproved(store.create(), global, 'fleex_ticket_link')).toBe(false);
+  });
+});
+
 describe('applySetAutoApprove', () => {
   it('replaces the whole state and reports the change', () => {
     const s = store.create();
@@ -148,5 +251,23 @@ describe('disarmForPage', () => {
     const s = store.create();
     expect(disarmForPage(s.id, store)).toBe(false);
     expect(disarmForPage('unknown', store)).toBe(false);
+  });
+
+  it('taints the conversation for good, even with nothing armed to disarm', () => {
+    // The injected instructions stay in the message history forever, so the
+    // risk does not expire when the turn ends.
+    const s = store.create();
+    disarmForPage(s.id, store);
+    expect(store.get(s.id)!.pageTainted).toBe(true);
+  });
+
+  it('does not revoke permissions earned in OTHER conversations', () => {
+    // Attaching a page here is not a reason to punish the user everywhere.
+    global.allow('fleex_ticket_link');
+    const tainted = store.create();
+    disarmForPage(tainted.id, store);
+
+    expect(global.list()).toEqual(['fleex_ticket_link']);
+    expect(resolveAutoApproved(store.create(), global, 'fleex_ticket_link')).toBe(true);
   });
 });

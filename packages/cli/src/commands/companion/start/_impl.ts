@@ -4,9 +4,11 @@ import { spawn } from 'node:child_process';
 import { FLEEX_HOME } from '../../../core/instance.ts';
 import { info, ok, warn, c } from '../../../core/colors.ts';
 import { waitForService, killByPort } from '../../../core/process.ts';
+import { computeFingerprint } from '../../../core/build-fingerprint.ts';
 import {
   COMPANION_PORT,
   buildCompanionLaunch,
+  decideCompanionAction,
   companionLogFile,
   companionPidFile,
   companionRepoDir,
@@ -24,29 +26,38 @@ export interface CompanionStartOptions {
  * Start the companion if it isn't already serving. Idempotent: a healthy host on
  * the port is reused, never duplicated (the fixed port makes it a true singleton).
  *
- * Self-healing: a companion that booted before ANTHROPIC_API_KEY was configured
- * stays "healthy" but can't talk to Claude (the front then shows an auth error).
- * If we now have a key but the running host reports it has none, we restart it
- * rather than silently reusing the broken one.
+ * Self-healing (see `decideCompanionAction` for the matrix): a running host is
+ * restarted when it can't do its job — booted before ANTHROPIC_API_KEY was
+ * configured, or running sources older than the repo we'd launch from now.
+ * Without the second check the singleton survives every `git pull` while the
+ * browser serves a fresh front-end, so new client features talk to an old
+ * server that ignores them.
  */
 export async function ensureCompanion(opts: CompanionStartOptions = {}): Promise<void> {
   const configEnv = loadCompanionConfig();
   const haveKey = Boolean(configEnv.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY);
 
+  const repoDir = companionRepoDir();
+
   const health = await probeCompanion();
   if (health) {
-    // hasApiKey === false only on a build that reports the field (newer hosts).
-    // Undefined (older host) → leave it; we can't tell, don't churn it.
-    if (health.hasApiKey === false && haveKey) {
-      warn('Companion is running without an Anthropic key — restarting it to pick up ~/.fleex/config.');
+    const action = decideCompanionAction(health, { haveKey, localFingerprint: computeFingerprint(repoDir) });
+    if (action.kind === 'restart') {
+      warn(
+        action.reason === 'no_api_key'
+          ? 'Companion is running without an Anthropic key — restarting it to pick up ~/.fleex/config.'
+          : `Companion is running stale code — restarting it to pick up ${repoDir}.`,
+      );
       await stopCompanion();
     } else {
+      if (action.kind === 'warn_stale') {
+        warn("Companion is running stale code but is mid-conversation — run 'fleex companion stop' when idle.");
+      }
       if (!opts.quiet) ok(`Companion already running on http://localhost:${COMPANION_PORT}`);
       return;
     }
   }
 
-  const repoDir = companionRepoDir();
   const serverPath = path.join(repoDir, 'packages/sidepanel-host/src/server.ts');
   if (!fs.existsSync(serverPath)) {
     warn(

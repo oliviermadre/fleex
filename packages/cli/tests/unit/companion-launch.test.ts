@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildCompanionLaunch, type CompanionLaunchContext } from '../../src/core/companion.ts';
+import {
+  buildCompanionLaunch,
+  decideCompanionAction,
+  type CompanionLaunchContext,
+} from '../../src/core/companion.ts';
 
 const ctx: CompanionLaunchContext = {
   repoDir: '/home/me/.fleex/repo',
@@ -56,5 +60,60 @@ describe('buildCompanionLaunch', () => {
     expect(env.FLEEX_MCP_BIN).toBe('fleex');
     // Empty string is a deliberate override (fleex on PATH, no prefix args).
     expect(env.FLEEX_MCP_PREFIX).toBe('');
+  });
+});
+
+describe('decideCompanionAction', () => {
+  const local = 'abc123';
+  const fresh = { ok: true, hasApiKey: true, fingerprint: local, busy: 0 };
+
+  it('reuses a healthy host running the same sources', () => {
+    expect(decideCompanionAction(fresh, { haveKey: true, localFingerprint: local })).toEqual({ kind: 'reuse' });
+  });
+
+  it('restarts a keyless host once a key is configured', () => {
+    expect(decideCompanionAction({ ...fresh, hasApiKey: false }, { haveKey: true, localFingerprint: local })).toEqual({
+      kind: 'restart',
+      reason: 'no_api_key',
+    });
+  });
+
+  it('restarts a host running stale code', () => {
+    // Without this the machine-wide singleton survives every `git pull` and a
+    // fresh front-end ends up talking to a server that ignores its new frames.
+    expect(decideCompanionAction({ ...fresh, fingerprint: 'old' }, { haveKey: true, localFingerprint: local })).toEqual({
+      kind: 'restart',
+      reason: 'stale_code',
+    });
+  });
+
+  it('treats a host that reports no fingerprint as stale', () => {
+    // Only builds predating this mechanism omit it — necessarily older.
+    expect(decideCompanionAction({ ok: true, hasApiKey: true }, { haveKey: true, localFingerprint: local })).toEqual({
+      kind: 'restart',
+      reason: 'stale_code',
+    });
+  });
+
+  it('warns instead of killing a stale host that is mid-conversation', () => {
+    expect(
+      decideCompanionAction({ ...fresh, fingerprint: 'old', busy: 2 }, { haveKey: true, localFingerprint: local }),
+    ).toEqual({ kind: 'warn_stale' });
+  });
+
+  it('does not churn a keyless host when no key is configured either', () => {
+    expect(
+      decideCompanionAction({ ...fresh, hasApiKey: false }, { haveKey: false, localFingerprint: local }),
+    ).toEqual({ kind: 'reuse' });
+  });
+
+  it('prefers the missing-key restart over the staleness one', () => {
+    // Both are true right after an update; the key message is the actionable one.
+    expect(
+      decideCompanionAction(
+        { ...fresh, hasApiKey: false, fingerprint: 'old' },
+        { haveKey: true, localFingerprint: local },
+      ),
+    ).toEqual({ kind: 'restart', reason: 'no_api_key' });
   });
 });

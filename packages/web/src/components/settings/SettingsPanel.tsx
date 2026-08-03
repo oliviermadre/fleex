@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { AppearanceTab } from './AppearanceTab';
 import { DeliverableTypesTab } from './DeliverableTypesTab';
+import { AssistantPermissionsTab } from './AssistantPermissionsTab';
 import { cn } from '../../lib/cn';
 import type { AgentToken } from '@fleex/shared';
 import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from '@fleex/shared';
@@ -17,6 +18,7 @@ const tabLabels: Record<SettingsTab, string> = {
   'workspace-actions': 'Workspace Actions',
   'agent-tokens': 'Agent Tokens',
   'deliverable-types': 'Deliverable Types',
+  'assistant-permissions': 'Assistant Permissions',
 };
 
 export function SettingsPanel() {
@@ -149,9 +151,10 @@ export function SettingsPanel() {
           )}
           {settingsTab === 'agent-tokens' && <AgentTokensTab />}
           {settingsTab === 'deliverable-types' && <DeliverableTypesTab />}
+          {settingsTab === 'assistant-permissions' && <AssistantPermissionsTab />}
 
           {/* Save button — hidden for tabs that persist changes immediately. */}
-          {settingsTab !== 'deliverable-types' && (
+          {settingsTab !== 'deliverable-types' && settingsTab !== 'assistant-permissions' && (
             <div className="mt-8 flex justify-end">
               <Button variant="primary" onClick={handleSave}>
                 Save Settings

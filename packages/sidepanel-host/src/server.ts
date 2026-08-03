@@ -26,8 +26,10 @@ import { createClient, createLlm, createExec, DEFAULT_MODEL } from './anthropic.
 import { FALLBACK_MODELS } from '@fleex/shared';
 import { buildSystemPrompt, formatPageContext } from './system-prompt.ts';
 import { listWorkspaces, resolveWorkspace } from './workspaces.ts';
-import { SessionStore, isToolAutoApproved, type TranscriptItem } from './sessions.ts';
-import { applyConfirm, applySetAutoApprove, disarmForPage, type PendingConfirm } from './auto-approve.ts';
+import { SessionStore, type TranscriptItem } from './sessions.ts';
+import { applyConfirm, applySetAutoApprove, disarmForPage, resolveAutoApproved, type PendingConfirm } from './auto-approve.ts';
+import { GlobalAllowlist } from './global-allowlist.ts';
+import { computeFingerprint } from '@fleex/cli/build-fingerprint';
 import {
   findRunningInstance,
   findWorkspaceServerPort,
@@ -83,6 +85,21 @@ const tools = generateTools(await buildProgram());
 const anthropicTools = toAnthropicTools(tools);
 const client = createClient();
 const store = new SessionStore();
+const globalAllowlist = new GlobalAllowlist();
+
+/**
+ * What this build can do, advertised on /health and on socket open.
+ *
+ * The companion is a machine-wide singleton that `fleex start` reuses, so an
+ * old host routinely serves a new front-end. The client uses this list to hide
+ * controls the running backend can't honour, instead of offering a button that
+ * silently does nothing (the exact shape of the bug this feature shipped with).
+ */
+const CAPABILITIES = ['always_allow', 'persistent_allowlist'] as const;
+
+// Fingerprint of the sources THIS process is running, so `fleex start` can tell
+// a stale singleton from an up-to-date one and restart it.
+const FINGERPRINT = computeFingerprint(path.resolve(import.meta.dir, '../../..'));
 
 const baseExecOpts: ExecOptions = {
   bin: process.env.FLEEX_MCP_BIN,
@@ -113,6 +130,18 @@ function send(ws: ServerWebSocket<WsData>, msg: unknown): void {
 /** Push the current session list to every connected client (drives the sidebar). */
 function broadcastSessions(): void {
   const payload = JSON.stringify({ type: 'sessions', sessions: store.list() });
+  for (const ws of sockets) {
+    try {
+      ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Push the machine-wide allowlist to every client (drives the Settings list). */
+function broadcastGlobalAllowlist(): void {
+  const payload = JSON.stringify({ type: 'global_allowlist', tools: globalAllowlist.list() });
   for (const ws of sockets) {
     try {
       ws.send(payload);
@@ -242,8 +271,9 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
       onEvent,
       workspace,
       // Read through the live session the store owns, so an "always allow"
-      // clicked on the first call of this turn covers the remaining ones.
-      isAutoApproved: (name) => isToolAutoApproved(session.autoApprove, name),
+      // clicked on the first call of this turn covers the remaining ones, plus
+      // the machine-wide list so it also covers later turns and conversations.
+      isAutoApproved: (name) => resolveAutoApproved(session, globalAllowlist, name),
     });
   } catch (e) {
     broadcastEvent(sessionId, { type: 'error', message: e instanceof Error ? e.message : String(e) });
@@ -268,8 +298,18 @@ Bun.serve<WsData>({
       // hasApiKey lets `fleex companion` detect a booted-but-keyless host (e.g.
       // started before ANTHROPIC_API_KEY landed in ~/.fleex/config) and restart
       // it instead of silently reusing one that can't talk to Claude.
+      // fingerprint/capabilities let `fleex companion` detect a host running
+      // pre-update code and restart it; `busy` keeps it from killing a
+      // conversation mid-turn.
       return Response.json(
-        { ok: true, tools: tools.length, hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY) },
+        {
+          ok: true,
+          tools: tools.length,
+          hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
+          fingerprint: FINGERPRINT,
+          capabilities: [...CAPABILITIES],
+          busy: store.list().filter((s) => s.status !== 'idle').length,
+        },
         { headers: CORS },
       );
     }
@@ -296,7 +336,12 @@ Bun.serve<WsData>({
   websocket: {
     open(ws) {
       sockets.add(ws);
+      // Announce what this build supports BEFORE anything else: a client
+      // talking to a stale singleton must be able to hide controls it can't
+      // honour rather than promise them.
+      send(ws, { type: 'hello', capabilities: [...CAPABILITIES], fingerprint: FINGERPRINT });
       send(ws, { type: 'sessions', sessions: store.list() });
+      send(ws, { type: 'global_allowlist', tools: globalAllowlist.list() });
     },
     message(ws, raw) {
       let msg: Record<string, unknown>;
@@ -373,18 +418,21 @@ Bun.serve<WsData>({
             pendingPages.set(id, { content, url: asString(msg.url), title: asString(msg.title) });
             send(ws, { type: 'page_attached', sessionId: id, title: asString(msg.title) ?? asString(msg.url) ?? 'page' });
             // Untrusted page content just entered this conversation: any
-            // standing approval granted before it is void.
-            if (disarmForPage(id, store)) {
-              broadcastSessions();
-              broadcastEvent(id, { type: 'auto_approve_disarmed', reason: 'page_attached' });
-            }
+            // standing approval granted before it is void, and the conversation
+            // is tainted for good (it stops reading the machine-wide list).
+            const disarmed = disarmForPage(id, store);
+            // Always rebroadcast: the taint flag itself changes what the UI
+            // offers, even when nothing was armed to disarm.
+            broadcastSessions();
+            if (disarmed) broadcastEvent(id, { type: 'auto_approve_disarmed', reason: 'page_attached' });
           }
           break;
         }
         case 'confirm': {
-          const outcome = applyConfirm(msg, pendingConfirms, store);
+          const outcome = applyConfirm(msg, pendingConfirms, store, globalAllowlist);
           if (!outcome) break;
           if (outcome.allowlistChanged) broadcastSessions();
+          if (outcome.globalChanged) broadcastGlobalAllowlist();
           outcome.pending.resolve(outcome.approved);
           break;
         }
@@ -392,6 +440,23 @@ Bun.serve<WsData>({
           if (applySetAutoApprove(msg, store)) broadcastSessions();
           break;
         }
+        case 'list_global_allowlist':
+          send(ws, { type: 'global_allowlist', tools: globalAllowlist.list() });
+          break;
+        case 'revoke_global_tool': {
+          // Client-named on purpose: this only ever REDUCES privilege, so an
+          // unknown or forged name is harmless (a no-op).
+          const name = asString(msg.name);
+          if (name) {
+            globalAllowlist.revoke(name);
+            broadcastGlobalAllowlist();
+          }
+          break;
+        }
+        case 'clear_global_allowlist':
+          globalAllowlist.clear();
+          broadcastGlobalAllowlist();
+          break;
         default:
           send(ws, { type: 'error', message: `Unknown message type: ${String(msg.type)}` });
       }

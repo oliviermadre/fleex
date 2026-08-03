@@ -11,6 +11,11 @@
       "types": "./src/core/program.ts",
       "development": "./src/core/program.ts",
       "default": "./src/core/program.ts"
+    },
+    "./build-fingerprint": {
+      "types": "./src/core/build-fingerprint.ts",
+      "development": "./src/core/build-fingerprint.ts",
+      "default": "./src/core/build-fingerprint.ts"
     }
   },
   "scripts": {

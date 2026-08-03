@@ -101,6 +101,45 @@ export interface CompanionHealth {
   ok: boolean;
   /** Whether the running host has an Anthropic key (older builds omit it → undefined). */
   hasApiKey?: boolean;
+  /** Fingerprint of the sources the running host was launched from (older builds omit it). */
+  fingerprint?: string;
+  /** Features the running host supports (older builds omit it). */
+  capabilities?: string[];
+  /** Conversations currently mid-turn — restarting would drop them. */
+  busy?: number;
+}
+
+/** What `ensureCompanion` should do about an already-running host. */
+export type CompanionAction =
+  | { kind: 'reuse' }
+  | { kind: 'restart'; reason: 'no_api_key' | 'stale_code' }
+  | { kind: 'warn_stale' };
+
+/**
+ * Decide whether a live companion can be reused.
+ *
+ * The companion is a machine-wide singleton started idempotently, so without
+ * this check a host launched before a `git pull` is reused forever while the
+ * browser loads the new front-end — a new client silently talking to an old
+ * server. Comparing the running host's source fingerprint to the repo we would
+ * launch from now is what makes that drift detectable at all.
+ *
+ * Pure, so the decision matrix is testable without spawning anything.
+ */
+export function decideCompanionAction(
+  health: CompanionHealth,
+  opts: { haveKey: boolean; localFingerprint: string },
+): CompanionAction {
+  // hasApiKey === false only on a build that reports the field (newer hosts).
+  if (health.hasApiKey === false && opts.haveKey) return { kind: 'restart', reason: 'no_api_key' };
+  // No fingerprint at all → a host predating this mechanism, so necessarily
+  // older than the code we'd launch now.
+  if (health.fingerprint === undefined) return { kind: 'restart', reason: 'stale_code' };
+  if (health.fingerprint !== opts.localFingerprint) {
+    // Never kill a conversation mid-turn; tell the user to do it when idle.
+    return (health.busy ?? 0) > 0 ? { kind: 'warn_stale' } : { kind: 'restart', reason: 'stale_code' };
+  }
+  return { kind: 'reuse' };
 }
 
 /** Probe /health; null if nothing answers on `port`. */
@@ -112,7 +151,13 @@ export async function probeCompanion(port: number = COMPANION_PORT, timeoutMs = 
     clearTimeout(t);
     if (!res.ok) return null;
     const body = (await res.json()) as CompanionHealth;
-    return { ok: true, hasApiKey: body?.hasApiKey };
+    return {
+      ok: true,
+      hasApiKey: body?.hasApiKey,
+      fingerprint: body?.fingerprint,
+      capabilities: body?.capabilities,
+      busy: body?.busy,
+    };
   } catch {
     return null;
   }
