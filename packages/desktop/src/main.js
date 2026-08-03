@@ -159,11 +159,27 @@ function updateNavMenuState() {
 }
 
 function buildApplicationMenu() {
+  // These three are declared separately so the object literals get a contextual
+  // type: inside a spread ternary they would widen `role` to `string`, which
+  // Electron's MenuItemConstructorOptions (a string-literal union) rejects.
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
+  const appMenu = isMac ? [{ role: 'appMenu' }] : [];
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
+  const fileSubmenu = isMac ? [{ role: 'close' }] : [{ role: 'quit' }];
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
+  const editExtras = isMac
+    ? [{ role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }]
+    : [{ role: 'delete' }, { type: 'separator' }, { role: 'selectAll' }];
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
   const template = [
-    ...(isMac ? [{ role: 'appMenu' }] : []),
+    ...appMenu,
     {
       label: 'File',
-      submenu: [isMac ? { role: 'close' } : { role: 'quit' }],
+      submenu: fileSubmenu,
     },
     {
       label: 'Edit',
@@ -174,9 +190,7 @@ function buildApplicationMenu() {
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
-        ...(isMac
-          ? [{ role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }]
-          : [{ role: 'delete' }, { type: 'separator' }, { role: 'selectAll' }]),
+        ...editExtras,
       ],
     },
     {
