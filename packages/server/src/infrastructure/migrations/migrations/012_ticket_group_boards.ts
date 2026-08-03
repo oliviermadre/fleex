@@ -4,7 +4,6 @@ const migration: Migration = {
   name: '012_ticket_group_boards',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return;
 
     // Create junction table
     const createTable = ctx.dialect({
@@ -63,7 +62,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
     const sql = ctx.dialect({
       sqlite: 'DROP TABLE IF EXISTS ticket_group_boards',
       pgsql: 'DROP TABLE IF EXISTS ticket_group_boards CASCADE',

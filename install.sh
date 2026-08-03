@@ -21,8 +21,6 @@ REPO_URL="git@github.com:oliviermadre/fleex.git"
 REPO_DIR="$FLEEX_HOME/repo"
 BIN_DIR="$FLEEX_HOME/bin"
 CLI_NAME="fleex"
-CONFIG_FILE="$FLEEX_HOME/config.json"
-PROJECTS_DIR="$FLEEX_HOME/projects"
 ENV_FILE="$REPO_DIR/.env"
 WORKSPACES_FILE="$FLEEX_HOME/workspaces.json"
 DB_FILE="$FLEEX_HOME/fleex.db"
@@ -661,21 +659,13 @@ phase_wizard() {
   local base_path
   base_path="$(ui_prompt_text "Where should repositories and worktrees be stored?" "$HOME/projects" "{basePath}/{org}/{repo}.{worktree}")"
 
-  # 4. Storage driver
-  local driver_choice
-  driver_choice="$(ui_prompt_choice "Choose your storage backend" "sqlite (recommended, fast local DB)|json (simple file-based)" 1)"
-  local storage_driver
-  case "$driver_choice" in
-    1) storage_driver="sqlite" ;;
-    2) storage_driver="json" ;;
-    *) storage_driver="sqlite" ;;
-  esac
+  # 4. Storage driver — sqlite, no choice. (pgsql/supabase stay available via
+  # manual configuration but are not offered at install time.)
+  local storage_driver="sqlite"
 
-  # 4b. SQLite database file path (only relevant for the sqlite driver).
-  local sqlite_path=""
-  if [ "$storage_driver" = "sqlite" ]; then
-    sqlite_path="$(ui_prompt_text "Where should the SQLite database file be stored?" "$DB_FILE" "one file per workspace; must be unique across workspaces")"
-  fi
+  # 4b. SQLite database file path.
+  local sqlite_path
+  sqlite_path="$(ui_prompt_text "Where should the SQLite database file be stored?" "$DB_FILE" "one file per workspace; must be unique across workspaces")"
 
   echo ""
   ok "Configuration:"
@@ -683,31 +673,29 @@ phase_wizard() {
   printf "    Mention name:   ${BOLD}@%s${NC}\n" "$mention_name"
   printf "    Base path:      ${BOLD}%s${NC}\n" "$base_path"
   printf "    Storage driver: ${BOLD}%s${NC}\n" "$storage_driver"
-  if [ "$storage_driver" = "sqlite" ]; then
-    printf "    SQLite path:    ${BOLD}%s${NC}\n" "$sqlite_path"
-  fi
+  printf "    SQLite path:    ${BOLD}%s${NC}\n" "$sqlite_path"
   echo ""
 
   # Detect shell
   local default_shell
   default_shell="${SHELL:-/bin/zsh}"
 
-  # Write config — to DB when sqlite, to config.json when json
+  # Write config to the SQLite DB (app_config table).
   mkdir -p "$FLEEX_HOME"
-  if [ "$storage_driver" = "sqlite" ]; then
-    # Run migrations to create all tables before writing config
-    info "Running database migrations..."
-    FLEEX_STORAGE_DRIVER="sqlite" \
-    FLEEX_SQLITE_PATH="$DB_FILE" \
-    bun --conditions development "$REPO_DIR/packages/server/src/infrastructure/migrations/cli-migrate.ts"
-    ok "Migrations applied."
 
-    FLEEX_CFG_BASE_PATH="$base_path" \
-    FLEEX_CFG_SHELL="$default_shell" \
-    FLEEX_CFG_DISPLAY="$display_name" \
-    FLEEX_CFG_MENTION="$mention_name" \
-    FLEEX_CFG_DB="$DB_FILE" \
-    bun -e '
+  # Run migrations to create all tables before writing config
+  info "Running database migrations..."
+  FLEEX_STORAGE_DRIVER="sqlite" \
+  FLEEX_SQLITE_PATH="$DB_FILE" \
+  bun --conditions development "$REPO_DIR/packages/server/src/infrastructure/migrations/cli-migrate.ts"
+  ok "Migrations applied."
+
+  FLEEX_CFG_BASE_PATH="$base_path" \
+  FLEEX_CFG_SHELL="$default_shell" \
+  FLEEX_CFG_DISPLAY="$display_name" \
+  FLEEX_CFG_MENTION="$mention_name" \
+  FLEEX_CFG_DB="$DB_FILE" \
+  bun -e '
 import { Database } from "bun:sqlite";
 const db = new Database(process.env.FLEEX_CFG_DB, { create: true });
 db.exec("PRAGMA journal_mode = WAL");
@@ -723,28 +711,8 @@ const config = {
 const now = new Date().toISOString();
 db.prepare("INSERT OR REPLACE INTO app_config (id, data, updated_at) VALUES (?, ?, ?)").run("singleton", JSON.stringify(config), now);
 db.close();
-    '
-    ok "Config written to $DB_FILE (app_config table)"
-  else
-    FLEEX_CFG_BASE_PATH="$base_path" \
-    FLEEX_CFG_SHELL="$default_shell" \
-    FLEEX_CFG_DISPLAY="$display_name" \
-    FLEEX_CFG_MENTION="$mention_name" \
-    FLEEX_CFG_OUT="$CONFIG_FILE" \
-    bun -e '
-      const config = {
-        basePath: process.env.FLEEX_CFG_BASE_PATH,
-        defaultShell: process.env.FLEEX_CFG_SHELL,
-        repositoryRefreshIntervalMs: 0,
-        humanDisplayName: process.env.FLEEX_CFG_DISPLAY,
-        humanMentionName: process.env.FLEEX_CFG_MENTION,
-        repositories: [],
-        resolvedRepositories: []
-      };
-      await Bun.write(process.env.FLEEX_CFG_OUT, JSON.stringify(config, null, 2) + "\n");
-    '
-    ok "Config written to $CONFIG_FILE"
-  fi
+  '
+  ok "Config written to $DB_FILE (app_config table)"
 
   # Write workspaces.json — the global config that replaces the per-repo .env.
   # Each workspace owns its own env block (driver, DB, hub, API keys); this is
@@ -797,11 +765,7 @@ phase_seed() {
   id_builder="$(generate_uuid)"
   id_board="$(generate_uuid)"
 
-  if [ "$WIZARD_STORAGE_DRIVER" = "json" ]; then
-    seed_json "$now" "$id_jarvis" "$id_catalyst" "$id_builder" "$id_board"
-  else
-    seed_sqlite "$now" "$id_jarvis" "$id_catalyst" "$id_builder" "$id_board"
-  fi
+  seed_sqlite "$now" "$id_jarvis" "$id_catalyst" "$id_builder" "$id_board"
 
   echo ""
   ok "Created personas:"
@@ -811,96 +775,6 @@ phase_seed() {
   echo ""
   ok "Created board:"
   printf "    🏠 ${CYAN}Personal${NC}\n"
-}
-
-seed_json() {
-  local now="$1"
-  local id_jarvis="$2"
-  local id_catalyst="$3"
-  local id_builder="$4"
-  local id_board="$5"
-
-  mkdir -p "$PROJECTS_DIR"
-
-  local personas_file="$PROJECTS_DIR/personas.json"
-  local boards_file="$PROJECTS_DIR/boards.json"
-
-  # Only seed if files don't already exist
-  if [ ! -f "$personas_file" ]; then
-    SEED_MENTION="$WIZARD_MENTION_NAME" \
-    SEED_NOW="$now" \
-    SEED_ID1="$id_jarvis" \
-    SEED_ID2="$id_catalyst" \
-    SEED_ID3="$id_builder" \
-    SEED_OUT="$personas_file" \
-    bun -e '
-const m = process.env.SEED_MENTION;
-const now = process.env.SEED_NOW;
-const personas = [
-  {
-    id: process.env.SEED_ID1,
-    name: "jarvis",
-    displayName: "Jarvis",
-    model: "claude-sonnet-4-20250514",
-    soulMd: "You are Jarvis, a personal AI assistant. You are helpful, efficient, and proactive.",
-    identityMd: "",
-    memoryMd: "",
-    humanMentionName: m,
-    createdAt: now,
-    updatedAt: now
-  },
-  {
-    id: process.env.SEED_ID2,
-    name: "the-catalyst",
-    displayName: "The Catalyst",
-    model: "claude-sonnet-4-20250514",
-    soulMd: "You are The Catalyst, a project manager agent. You break down complex projects into actionable tasks, track progress, and keep teams aligned.",
-    identityMd: "",
-    memoryMd: "",
-    humanMentionName: m,
-    createdAt: now,
-    updatedAt: now
-  },
-  {
-    id: process.env.SEED_ID3,
-    name: "the-builder",
-    displayName: "The Builder",
-    model: "claude-sonnet-4-20250514",
-    soulMd: "You are The Builder, a software developer agent. You write clean, tested, production-quality code. You follow best practices and focus on maintainability.",
-    identityMd: "",
-    memoryMd: "",
-    humanMentionName: m,
-    createdAt: now,
-    updatedAt: now
-  }
-];
-await Bun.write(process.env.SEED_OUT, JSON.stringify(personas, null, 2) + "\n");
-'
-    ok "Personas written to $personas_file"
-  else
-    info "Personas file already exists, skipping"
-  fi
-
-  if [ ! -f "$boards_file" ]; then
-    SEED_NOW="$now" \
-    SEED_ID="$id_board" \
-    SEED_OUT="$boards_file" \
-    bun -e '
-const boards = [
-  {
-    id: process.env.SEED_ID,
-    name: "Personal",
-    emoji: "🏠",
-    createdAt: process.env.SEED_NOW,
-    updatedAt: process.env.SEED_NOW
-  }
-];
-await Bun.write(process.env.SEED_OUT, JSON.stringify(boards, null, 2) + "\n");
-'
-    ok "Boards written to $boards_file"
-  else
-    info "Boards file already exists, skipping"
-  fi
 }
 
 seed_sqlite() {
@@ -988,10 +862,9 @@ phase_repositories() {
   echo ""
 
   # Build repositories array and merge into config
-  if [ "$WIZARD_STORAGE_DRIVER" = "sqlite" ]; then
-    FLEEX_CFG_DB="$DB_FILE" \
-    FLEEX_REPOS="$repos" \
-    bun -e '
+  FLEEX_CFG_DB="$DB_FILE" \
+  FLEEX_REPOS="$repos" \
+  bun -e '
 import { Database } from "bun:sqlite";
 const db = new Database(process.env.FLEEX_CFG_DB);
 const row = db.prepare("SELECT data FROM app_config WHERE id = ?").get("singleton");
@@ -1002,21 +875,7 @@ config.resolvedRepositories = [];
 const now = new Date().toISOString();
 db.prepare("INSERT OR REPLACE INTO app_config (id, data, updated_at) VALUES (?, ?, ?)").run("singleton", JSON.stringify(config), now);
 db.close();
-    '
-  else
-    FLEEX_CFG_PATH="$CONFIG_FILE" \
-    FLEEX_REPOS="$repos" \
-    bun -e '
-const configPath = process.env.FLEEX_CFG_PATH;
-const config = JSON.parse(await Bun.file(configPath).text());
-
-const repoList = process.env.FLEEX_REPOS.split("|").filter(Boolean);
-config.repositories = repoList;
-config.resolvedRepositories = [];
-
-await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n");
-    '
-  fi
+  '
   ok "Repositories registered in config"
 
   # Show what was registered
@@ -1122,11 +981,7 @@ DONE
   printf "    Mention name     ${BOLD}@%s${NC}\n" "$WIZARD_MENTION_NAME"
   printf "    Base path        ${BOLD}%s${NC}\n" "$WIZARD_BASE_PATH"
   printf "    Storage driver   ${BOLD}%s${NC}\n" "$WIZARD_STORAGE_DRIVER"
-  if [ "$WIZARD_STORAGE_DRIVER" = "sqlite" ]; then
-    printf "    Config           ${DIM}%s (app_config table)${NC}\n" "$DB_FILE"
-  else
-    printf "    Config           ${DIM}%s${NC}\n" "$CONFIG_FILE"
-  fi
+  printf "    Config           ${DIM}%s (app_config table)${NC}\n" "$DB_FILE"
   echo ""
 
   printf "  ${BOLD}Default personas:${NC}\n"

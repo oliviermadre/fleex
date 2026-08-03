@@ -15,7 +15,7 @@ const migration: Migration = {
   name: '019_fix_workflow_templates_enabled_type',
 
   async up(ctx) {
-    if (ctx.adapter === 'json' || ctx.adapter === 'sqlite') return;
+    if (ctx.adapter === 'sqlite') return;
 
     // pgsql / supabase: convert INTEGER → BOOLEAN (1 → true, 0 → false)
     await ctx.exec(`
@@ -27,7 +27,7 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json' || ctx.adapter === 'sqlite') return;
+    if (ctx.adapter === 'sqlite') return;
     await ctx.exec(`
       ALTER TABLE workflow_templates
         ALTER COLUMN enabled DROP DEFAULT,

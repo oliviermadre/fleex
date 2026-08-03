@@ -30,7 +30,6 @@ const migration: Migration = {
   name: '015_migrate_ticket_types',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return;
 
     for (const [oldType, newType] of Object.entries(OLD_TO_NEW)) {
       if (oldType === newType) continue;

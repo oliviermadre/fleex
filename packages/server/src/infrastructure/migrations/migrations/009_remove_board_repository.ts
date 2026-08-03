@@ -4,7 +4,6 @@ const migration: Migration = {
   name: '009_remove_board_repository',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return;
 
     if (ctx.adapter === 'sqlite') {
       // SQLite requires separate ALTER TABLE statements
@@ -28,7 +27,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
 
     if (ctx.adapter === 'sqlite') {
       for (const col of ['repository_org', 'repository_name']) {

@@ -94,7 +94,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
     {
       workspace: ctx.workspace,
       branch: ctx.branch,
-      driver: process.env.FLEEX_STORAGE_DRIVER ?? 'json',
+      driver: process.env.FLEEX_STORAGE_DRIVER ?? 'sqlite',
       startedAt: new Date().toISOString(),
     },
     ctx,
@@ -114,7 +114,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
     ...env,
     PORT: String(ports.server),
     HOST_GATEWAY_URL: `http://localhost:${ports.gateway}`,
-    FLEEX_STORAGE_DRIVER: process.env.FLEEX_STORAGE_DRIVER ?? 'json',
+    FLEEX_STORAGE_DRIVER: process.env.FLEEX_STORAGE_DRIVER ?? 'sqlite',
   }, ['run', 'dev:server']);
   savePid('server', serverProc.pid!, ctx);
 

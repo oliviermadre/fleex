@@ -9,7 +9,7 @@
  * cli-migrate.ts (no HTTP server, no gateway) so it works headless.
  *
  * Environment variables (same as cli-migrate.ts):
- *   FLEEX_STORAGE_DRIVER  - json | sqlite | pgsql | supabase (default: json)
+ *   FLEEX_STORAGE_DRIVER  - sqlite | pgsql | supabase (default: sqlite)
  *   FLEEX_SQLITE_PATH     - Path to SQLite database file
  *   FLEEX_PGSQL_URL       - PostgreSQL connection URL
  *   FLEEX_SUPABASE_URL / FLEEX_SUPABASE_KEY / FLEEX_SUPABASE_DB_URL
@@ -18,7 +18,7 @@
  * missing value as "nothing to migrate" and must never be blocked.
  */
 
-const driver = (process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'json');
+const driver = (process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'sqlite');
 const DEFAULT_BASE_PATH = '~/projects';
 
 /** Pull basePath out of a parsed app_config blob, honouring the legacy key. */
@@ -29,20 +29,6 @@ function pick(data: Record<string, unknown> | null | undefined): string | null {
 }
 
 async function readBasePath(): Promise<string | null> {
-  if (driver === 'json') {
-    const { join } = await import('node:path');
-    const { homedir } = await import('node:os');
-    const { readFileSync, existsSync } = await import('node:fs');
-    const { FLEEX_DIR, CONFIG_FILE } = await import('@fleex/shared');
-    const file = join(homedir(), FLEEX_DIR, CONFIG_FILE);
-    if (!existsSync(file)) return DEFAULT_BASE_PATH;
-    try {
-      return pick(JSON.parse(readFileSync(file, 'utf8'))) ?? DEFAULT_BASE_PATH;
-    } catch {
-      return DEFAULT_BASE_PATH;
-    }
-  }
-
   if (driver === 'sqlite') {
     const { join } = await import('node:path');
     const { homedir } = await import('node:os');

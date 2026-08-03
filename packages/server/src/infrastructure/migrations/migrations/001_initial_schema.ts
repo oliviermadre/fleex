@@ -58,7 +58,6 @@ const migration: Migration = {
         claude_prompt TEXT,
         display_name TEXT
       )`,
-      json: null,
     });
     if (sessionsSql) await ctx.exec(sessionsSql);
 
@@ -94,7 +93,6 @@ const migration: Migration = {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (boardsSql) await ctx.exec(boardsSql);
 
@@ -163,7 +161,6 @@ const migration: Migration = {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (ticketsSql) await ctx.exec(ticketsSql);
 
@@ -199,7 +196,6 @@ const migration: Migration = {
         source TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (ticketActivitiesSql) await ctx.exec(ticketActivitiesSql);
 
@@ -229,7 +225,6 @@ const migration: Migration = {
         last_used_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (apiTokensSql) await ctx.exec(apiTokensSql);
 
@@ -274,7 +269,6 @@ const migration: Migration = {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (commentsSql) await ctx.exec(commentsSql);
 
@@ -319,7 +313,6 @@ const migration: Migration = {
         resolved_deliverable_id TEXT,
         created_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (mentionsSql) await ctx.exec(mentionsSql);
 
@@ -364,7 +357,6 @@ const migration: Migration = {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (deliverablesSql) await ctx.exec(deliverablesSql);
 
@@ -382,10 +374,8 @@ const migration: Migration = {
       'CREATE INDEX IF NOT EXISTS idx_deliverables_ticket_id ON deliverables(ticket_id)',
     ];
 
-    if (ctx.adapter !== 'json') {
-      for (const sql of indexes) {
-        await ctx.exec(sql);
-      }
+    for (const sql of indexes) {
+      await ctx.exec(sql);
     }
 
     // ── Agent Personas ──
@@ -426,13 +416,10 @@ const migration: Migration = {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (personasSql) await ctx.exec(personasSql);
 
-    if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name)');
-    }
+    await ctx.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name)');
 
     // ── Agent Event Executions ──
     const execSql = ctx.dialect({
@@ -472,14 +459,11 @@ const migration: Migration = {
         sdk_session_id TEXT,
         last_event_at TIMESTAMPTZ
       )`,
-      json: null,
     });
     if (execSql) await ctx.exec(execSql);
 
-    if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket ON agent_event_executions(ticket_id)');
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id)');
-    }
+    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket ON agent_event_executions(ticket_id)');
+    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id)');
 
     // ── Domain Event Log ──
     const eventLogSql = ctx.dialect({
@@ -504,14 +488,11 @@ const migration: Migration = {
         instance_id TEXT NOT NULL,
         occurred_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (eventLogSql) await ctx.exec(eventLogSql);
 
-    if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_domain_event_log_occurred_at ON domain_event_log(occurred_at)');
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_domain_event_log_event_type ON domain_event_log(event_type)');
-    }
+    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_domain_event_log_occurred_at ON domain_event_log(occurred_at)');
+    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_domain_event_log_event_type ON domain_event_log(event_type)');
 
     // ── App Config ──
     const appConfigSql = ctx.dialect({
@@ -530,7 +511,6 @@ const migration: Migration = {
         data JSONB NOT NULL DEFAULT '{}',
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )`,
-      json: null,
     });
     if (appConfigSql) await ctx.exec(appConfigSql);
 
@@ -547,7 +527,6 @@ const migration: Migration = {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )`,
       supabase: null, // Supabase uses user_kv, managed via SQL Editor
-      json: null,
     });
     if (kvSql) await ctx.exec(kvSql);
   },
@@ -570,7 +549,6 @@ const migration: Migration = {
       'sessions',
     ];
 
-    if (ctx.adapter === 'json') return;
 
     for (const table of tables) {
       await ctx.exec(`DROP TABLE IF EXISTS ${table}`);

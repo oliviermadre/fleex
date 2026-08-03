@@ -102,6 +102,40 @@ function migrateBasePathToWorkspaces(updateDir: string): void {
 }
 
 /**
+ * The JSON storage driver was removed. Rewrite any lingering `driver=json`
+ * workspace to `sqlite` so existing installs keep booting. The JSON data files
+ * under ~/.fleex/projects/ are left untouched — they are simply no longer read.
+ * Idempotent. Preserves 0600.
+ */
+export function normalizeJsonDriverInWorkspaces(file: string = workspacesFilePath()): void {
+  let raw: { workspaces?: unknown };
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return;
+  }
+  const list = Array.isArray(raw.workspaces) ? raw.workspaces : [];
+  let changed = false;
+  for (const ws of list as Array<Record<string, unknown>>) {
+    if (!ws || typeof ws !== 'object') continue;
+    const env = (ws['env'] ?? {}) as Record<string, string>;
+    if (env['FLEEX_STORAGE_DRIVER'] !== 'json') continue;
+    env['FLEEX_STORAGE_DRIVER'] = 'sqlite';
+    ws['env'] = env;
+    changed = true;
+    warn(
+      `Workspace '${String(ws['name'])}': storage driver 'json' is no longer supported → switched to 'sqlite'. ` +
+        'Previous JSON data in ~/.fleex/projects/ is preserved but not imported.',
+    );
+  }
+  if (changed) {
+    fs.writeFileSync(file, JSON.stringify(raw, null, 2) + '\n', { mode: 0o600 });
+    try { fs.chmodSync(file, 0o600); } catch { /* best effort */ }
+    ok('workspaces.json updated: json driver replaced by sqlite.');
+  }
+}
+
+/**
  * One-time backfill for existing users: every `driver=sqlite` workspace gets an
  * explicit `FLEEX_SQLITE_PATH` (default ~/.fleex/fleex.db — where their data
  * already lives) so the DB file becomes configurable per workspace. Idempotent:
@@ -180,6 +214,9 @@ const def: CommandDef = {
     if (rc !== 0) die(`Build failed. See ${installLog}`);
     ok('Build complete.');
 
+    // One-time: the json driver is gone — move those workspaces onto sqlite first,
+    // so the steps below read the right DB and backfill FLEEX_SQLITE_PATH.
+    normalizeJsonDriverInWorkspaces();
     // One-time: lift basePath from each workspace's DB config into workspaces.json
     // (new source of truth). Idempotent — skips workspaces that already have one.
     migrateBasePathToWorkspaces(updateDir);

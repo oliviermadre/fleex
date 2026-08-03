@@ -42,15 +42,12 @@ const migration: Migration = {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (skillsSql) await ctx.exec(skillsSql);
 
     // ── Indexes ──
-    if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_command_name ON skills(command_name)');
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_skills_persona_id ON skills(persona_id)');
-    }
+    await ctx.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_command_name ON skills(command_name)');
+    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_skills_persona_id ON skills(persona_id)');
 
     // ── Supabase RLS ──
     if (ctx.adapter === 'supabase') {
@@ -60,7 +57,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
     await ctx.exec('DROP TABLE IF EXISTS skills');
   },
 };

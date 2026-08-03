@@ -26,7 +26,12 @@ interface SerializedSession {
   hookStatusUpdatedAt?: string | null;
 }
 
-export class JsonSessionStore implements SessionStorePort {
+/**
+ * Session store backed by a local file, used whatever the storage driver is.
+ * Sessions are ephemeral tmux data, not ticketing data: a remote store causes
+ * network-race flickering.
+ */
+export class LocalSessionStore implements SessionStorePort {
   private readonly sessions = new Map<string, SessionEntity>();
   private readonly filePath: string;
   private initialized = false;

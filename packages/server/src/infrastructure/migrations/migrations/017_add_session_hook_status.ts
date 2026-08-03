@@ -18,14 +18,12 @@ const migration: Migration = {
   name: '017_add_session_hook_status',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return; // JSON adapter persists the entity blob — no schema change
 
     // ── hook_status ──
     const statusSql = ctx.dialect({
       sqlite: `ALTER TABLE sessions ADD COLUMN hook_status TEXT NOT NULL DEFAULT 'unknown'`,
       pgsql: `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS hook_status TEXT NOT NULL DEFAULT 'unknown'`,
       supabase: `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS hook_status TEXT NOT NULL DEFAULT 'unknown'`,
-      json: null,
     });
     if (statusSql) await ctx.exec(statusSql);
 
@@ -34,7 +32,6 @@ const migration: Migration = {
       sqlite: `ALTER TABLE sessions ADD COLUMN hook_waiting_reason TEXT`,
       pgsql: `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS hook_waiting_reason TEXT`,
       supabase: `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS hook_waiting_reason TEXT`,
-      json: null,
     });
     if (reasonSql) await ctx.exec(reasonSql);
 
@@ -43,7 +40,6 @@ const migration: Migration = {
       sqlite: `ALTER TABLE sessions ADD COLUMN hook_last_message TEXT`,
       pgsql: `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS hook_last_message TEXT`,
       supabase: `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS hook_last_message TEXT`,
-      json: null,
     });
     if (messageSql) await ctx.exec(messageSql);
 
@@ -52,7 +48,6 @@ const migration: Migration = {
       sqlite: `ALTER TABLE sessions ADD COLUMN hook_status_updated_at TEXT`,
       pgsql: `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS hook_status_updated_at TIMESTAMPTZ`,
       supabase: `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS hook_status_updated_at TIMESTAMPTZ`,
-      json: null,
     });
     if (updatedAtSql) await ctx.exec(updatedAtSql);
 
@@ -62,7 +57,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
 
     await ctx.exec(`DROP INDEX IF EXISTS idx_sessions_hook_status`);
 
@@ -72,7 +66,6 @@ const migration: Migration = {
         sqlite: `ALTER TABLE sessions DROP COLUMN ${col}`,
         pgsql: `ALTER TABLE sessions DROP COLUMN IF EXISTS ${col}`,
         supabase: `ALTER TABLE sessions DROP COLUMN IF EXISTS ${col}`,
-        json: null,
       });
       if (sql) {
         try {

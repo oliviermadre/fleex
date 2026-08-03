@@ -12,7 +12,7 @@ OAuth SSO (GitHub / Google) and WebSocket reverse tunnel for NAT traversal.
 2. [Prerequisites](#2-prerequisites)
 3. [PostgreSQL setup](#3-postgresql-setup)
 4. [Environment variables reference](#4-environment-variables-reference)
-5. [Migrating from local JSON storage](#5-migrating-from-local-json-storage)
+5. [The removed JSON storage driver](#5-the-removed-json-storage-driver)
 6. [Host gateway setup](#6-host-gateway-setup)
 7. [Central server setup](#7-central-server-setup)
 8. [OAuth SSO — GitHub](#8-oauth-sso--github)
@@ -123,7 +123,7 @@ A default local user is seeded automatically:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `PORT` | No | `3000` | HTTP port for the Fastify server |
-| `DATABASE_URL` | For Postgres | — | PostgreSQL connection URL. If omitted, JSON file storage is used |
+| `DATABASE_URL` | For Postgres | — | PostgreSQL connection URL. If omitted, SQLite storage is used |
 | `HOST_GATEWAY_URL` | No | `http://localhost:3001` | URL of the default host gateway |
 | `HOST_HOMEDIR` | No | OS homedir | Override the home directory path on the gateway host |
 | `GITHUB_CLIENT_ID` | For GitHub SSO | — | GitHub OAuth App client ID |
@@ -151,36 +151,22 @@ A default local user is seeded automatically:
 
 ---
 
-## 5. Migrating from local JSON storage
+## 5. The removed JSON storage driver
 
-If you were running Fleex in local-only mode (no PostgreSQL), your data lives
-in JSON files on the host filesystem (under `~/.fleex/`). To migrate:
+The `json` storage driver has been removed. `sqlite` is now the default (and the
+only backend offered at install time); `pgsql` and `supabase` remain available
+through manual configuration.
 
-1. **Set up PostgreSQL** (section 3 above).
-2. **Start the server** with `DATABASE_URL` set — migrations run
-   automatically, creating all tables.
-3. **Export existing JSON data** (optional — if you want to preserve tickets,
-   scratchpads, etc.):
+Old `~/.fleex/projects/*.json` files are no longer read. They are left on disk —
+nothing deletes them — and can be removed manually once you no longer need them.
+There is no automatic JSON → SQLite migrator.
 
-```bash
-# Example: read existing tickets JSON
-cat ~/.fleex/tickets.json | jq .
+`fleex self-update` rewrites any lingering `"FLEEX_STORAGE_DRIVER": "json"` in
+`~/.fleex/workspaces.json` to `"sqlite"`. Setting `FLEEX_STORAGE_DRIVER=json`
+by hand now fails fast with an explicit error.
 
-# Insert into PostgreSQL (you'd write a small script, or re-create
-# tickets through the UI).
-```
-
-There is no automatic JSON → PostgreSQL migrator at this time. For most
-teams, starting fresh is simpler. The host gateway still stores its identity
-in `~/.fleex/gateway.json` — this is intentional and separate from the
-application data.
-
-4. **Remove the local JSON files** once you've verified everything works:
-
-```bash
-rm -f ~/.fleex/sessions.json ~/.fleex/tickets.json ~/.fleex/tokens.json
-# Keep ~/.fleex/gateway.json — it's the gateway identity!
-```
+> Keep `~/.fleex/gateway.json` — it is the gateway identity, not application
+> data, and is unrelated to the storage driver.
 
 ---
 

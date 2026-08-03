@@ -48,14 +48,11 @@ const migration: Migration = {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (panelsSql) await ctx.exec(panelsSql);
 
     // ── Indexes ──
-    if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_panels_name ON panels(name)');
-    }
+    await ctx.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_panels_name ON panels(name)');
 
     // ── Supabase RLS ──
     if (ctx.adapter === 'supabase') {
@@ -65,7 +62,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
     await ctx.exec('DROP TABLE IF EXISTS panels');
   },
 };

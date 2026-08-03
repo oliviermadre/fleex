@@ -6,7 +6,7 @@
  *   bun run packages/server/src/infrastructure/migrations/cli-migrate.ts [migrate|rollback]
  *
  * Environment variables:
- *   FLEEX_STORAGE_DRIVER  - json | sqlite | pgsql | supabase (default: json)
+ *   FLEEX_STORAGE_DRIVER  - sqlite | pgsql | supabase (default: sqlite)
  *   FLEEX_SQLITE_PATH     - Path to SQLite database file
  *   FLEEX_PGSQL_URL       - PostgreSQL connection URL
  *   FLEEX_SUPABASE_URL    - Supabase URL
@@ -17,7 +17,7 @@
 import type { AdapterType } from './types.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 
-const driver = (process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'json') as AdapterType;
+const driver = (process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'sqlite') as AdapterType;
 const command = process.argv[2] ?? 'migrate';
 
 // Simple console logger for CLI usage
