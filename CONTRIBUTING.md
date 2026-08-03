@@ -77,11 +77,41 @@ After **renaming or moving** a file, or after adding a rule to
 bun run lint:baseline    # then commit scripts/lint-snapshot.json
 ```
 
-Please don't rebaseline to silence a genuine regression. If a violation is
-deliberate, prefer a narrow, justified suppression:
+Rebaselining cannot silence a genuine regression, because CI does not trust the
+snapshot in your branch. A ratchet has two directions, and each gets its own
+CI step:
+
+| Direction               | CI step                        | Reference used         |
+| ----------------------- | ------------------------------ | ---------------------- |
+| the ceiling cannot rise | `Baseline not worse than main` | the snapshot on `main` |
+| a drop must be recorded | `Snapshots up to date`         | your working tree      |
+
+`bun run lint` compares against your local snapshot — the fast, actionable
+signal while you work. CI _additionally_ compares against the snapshot on
+`main`, which your branch cannot rewrite. So running `bun run lint:baseline`
+after introducing a violation still fails CI, naming the file and the rule.
+Renames are handled automatically (the allowance follows the file), so
+rebaselining after a move is safe and expected.
+
+If a violation is deliberate, prefer a narrow, justified suppression:
 
 ```ts
 // eslint-disable-next-line <rule> -- <why this is correct here>
+```
+
+If the baseline **legitimately** grows — because you enabled a new rule — a
+maintainer adds the `lint-baseline-reset` label to the PR, which skips the
+check. That is deliberately a manual, visible step rather than a command
+anyone can run.
+
+### Merge conflicts on the snapshot
+
+Every PR that fixes a violation rewrites `scripts/lint-snapshot.json`, so it is
+a conflict hotspot. Never hand-edit it — take either side and regenerate:
+
+```sh
+git checkout --ours scripts/lint-snapshot.json   # either side works
+bun run lint:baseline
 ```
 
 ### git blame

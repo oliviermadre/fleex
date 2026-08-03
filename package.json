@@ -28,6 +28,7 @@
     "lint:eslint": "node scripts/check-lint-ratchet.mjs",
     "lint:types": "tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/mcp/tsconfig.json && tsc --noEmit -p packages/sidepanel-host/tsconfig.json",
     "lint:baseline": "node scripts/check-lint-ratchet.mjs --write",
+    "lint:ratchet:ci": "node scripts/check-lint-ratchet.mjs --against .ci/main-lint-snapshot.json --renames .ci/renames.txt",
     "format": "prettier --write .",
     "prepare": "node scripts/setup-git-hooks.mjs",
     "audit:theme": "node scripts/theme-audit/run.mjs",

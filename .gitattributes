@@ -1,0 +1,5 @@
+# Generated ratchet snapshots. Every PR that fixes a violation rewrites one of
+# these, so GitHub collapses them by default in review: the CI delta summary is
+# the readable source of truth, not a 700-line JSON diff.
+scripts/lint-snapshot.json linguist-generated=true
+scripts/raw-palette-snapshot.json linguist-generated=true
