@@ -36,6 +36,20 @@ function fakeProgram(): Command {
   del.argument('<id>', 'Ticket ID');
   del.option('-f, --force', 'Skip confirmation');
 
+  // Same flag NAME, different meaning — mirrors `marketplace add --force`
+  // ("re-clone if it already exists"). An operation modifier, not a gate.
+  const importCmd = ticket.command('import').description('Import a ticket from GitHub');
+  importCmd.argument('<url>', 'GitHub issue URL');
+  importCmd.option('--force', 're-import even if the ticket already exists');
+
+  // Long-running: creates a git worktree and runs post-checkout hooks.
+  const link = ticket.command('link').description('Link a repo to a ticket');
+  link.argument('<id>', 'Ticket ID');
+  link.option('--repo <name>', 'Repository');
+
+  // A leaf nobody classified — the fail-closed default must gate it.
+  ticket.command('frobnicate').description('Do something new and unclassified');
+
   // A parent group with subcommands — must NOT become a tool itself.
   const deliverable = ticket.command('deliverable').description('Manage deliverables');
   const add = deliverable.command('add').description('Add a deliverable');
@@ -63,6 +77,9 @@ describe('generateTools', () => {
       'fleex_ticket_create',
       'fleex_ticket_delete',
       'fleex_ticket_deliverable_add',
+      'fleex_ticket_frobnicate',
+      'fleex_ticket_import',
+      'fleex_ticket_link',
       'fleex_ticket_list',
       'fleex_ticket_move',
       'fleex_ticket_update',
@@ -79,6 +96,19 @@ describe('generateTools', () => {
     expect(byName(tools, 'fleex_ticket_update').mutating).toBe(true);
     expect(byName(tools, 'fleex_ticket_deliverable_add').mutating).toBe(true);
     expect(byName(tools, 'fleex_ticket_list').mutating).toBe(false);
+  });
+
+  it('gates a leaf it does not recognise (fail-closed)', () => {
+    // Classification is a security control, so the unknown case must land on
+    // the safe side: a command added tomorrow is gated until proven read-only.
+    expect(byName(tools, 'fleex_ticket_frobnicate').mutating).toBe(true);
+  });
+
+  it('gives long-running commands their own execution budget', () => {
+    // `ticket link` awaits worktree creation + post-checkout hooks server-side;
+    // the ambient 30s default would kill it mid-flight.
+    expect(byName(tools, 'fleex_ticket_link').timeoutMs).toBe(300_000);
+    expect(byName(tools, 'fleex_ticket_list').timeoutMs).toBeUndefined();
   });
 
   it('builds an input schema with required fields and hides --workspace', () => {
@@ -117,6 +147,28 @@ describe('generateTools', () => {
   it('detects the confirmation-skip flag on destructive commands', () => {
     expect(byName(tools, 'fleex_ticket_delete').confirmFlag).toBe('--force');
     expect(byName(tools, 'fleex_ticket_create').confirmFlag).toBeUndefined();
+  });
+
+  it('keeps the confirmation-skip flag out of the model-facing schema', () => {
+    // If `--force` were a tool parameter the model could wave away the CLI's
+    // own guard on its own initiative. It is host-controlled, like --workspace.
+    const del = byName(tools, 'fleex_ticket_delete');
+    expect(del.inputSchema.properties.force).toBeUndefined();
+    expect(del.options.map((o) => o.key)).not.toContain('force');
+    // …but the executor still knows which flag to inject once approved.
+    expect(del.confirmFlag).toBe('--force');
+  });
+
+  it('leaves a --force that is an operation modifier alone', () => {
+    // `--force` is not always a confirmation gate: on `marketplace add` it means
+    // "re-clone if it already exists". Matching on the flag name alone would
+    // strip it from the schema AND re-inject it on every approved call — here,
+    // silently re-importing a ticket the caller never asked to overwrite. The
+    // stated intent in the description is what separates the two.
+    const imported = byName(tools, 'fleex_ticket_import');
+    expect(imported.confirmFlag).toBeUndefined();
+    expect(imported.inputSchema.properties.force?.type).toBe('boolean');
+    expect(imported.options.map((o) => o.key)).toContain('force');
   });
 
   it('respects a custom include allowlist', () => {
@@ -169,13 +221,27 @@ describe('buildArgv', () => {
     ]);
   });
 
-  it('injects the confirm flag with assumeYes, without duplicating it', () => {
+  it('injects the confirm flag only when the host says so', () => {
     const del = byName(tools, 'fleex_ticket_delete');
     expect(buildArgv(del, { id: '5' }, { assumeYes: true })).toEqual(['ticket', 'delete', '5', '--force']);
-    // already provided by the model → not duplicated
-    expect(buildArgv(del, { id: '5', force: true }, { assumeYes: true })).toEqual(['ticket', 'delete', '5', '--force']);
     // assumeYes off → no force flag
     expect(buildArgv(del, { id: '5' })).toEqual(['ticket', 'delete', '5']);
+  });
+
+  it('ignores a force flag the model supplies itself', () => {
+    // The gate only means something if the model cannot open it. `force` is not
+    // in the schema, and even if a client smuggles it through it is dropped.
+    const del = byName(tools, 'fleex_ticket_delete');
+    expect(buildArgv(del, { id: '5', force: true })).toEqual(['ticket', 'delete', '5']);
+  });
+
+  it('never injects a --force that was not a confirmation gate', () => {
+    // The dangerous half of misreading a modifier as a gate: approval of ANY
+    // call would silently add `--force`, so every import would overwrite.
+    const imported = byName(tools, 'fleex_ticket_import');
+    expect(buildArgv(imported, { url: 'u' }, { assumeYes: true })).toEqual(['ticket', 'import', 'u']);
+    // It stays a normal parameter the caller can set deliberately.
+    expect(buildArgv(imported, { url: 'u', force: true })).toEqual(['ticket', 'import', 'u', '--force']);
   });
 
   it('throws when a required positional argument is missing', () => {

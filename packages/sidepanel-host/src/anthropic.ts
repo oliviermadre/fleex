@@ -46,7 +46,9 @@ export function createExec(execOpts: ExecOptions = {}): ExecFn {
       ? res.data !== undefined
         ? JSON.stringify(res.data)
         : res.stdout.trim() || 'OK'
-      : res.stdout.trim() || res.stderr.trim() || `fleex exited with code ${res.exitCode}`;
+      : res.timedOut
+        ? `fleex ${res.argv.join(' ')} timed out after ${res.timeoutMs} ms`
+        : res.stdout.trim() || res.stderr.trim() || `fleex exited with code ${res.exitCode}`;
     return { ok: res.ok, text };
   };
 }

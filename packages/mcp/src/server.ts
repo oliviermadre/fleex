@@ -12,6 +12,8 @@
  *   FLEEX_MCP_BIN        fleex binary (default: `fleex`)
  *   FLEEX_MCP_PREFIX     space-separated args before fleex argv (e.g. for bun)
  *   FLEEX_MCP_INCLUDE    comma-separated top-level groups to expose
+ *   FLEEX_MCP_ASSUME_YES let destructive tools skip the CLI confirmation prompt
+ *   FLEEX_MCP_TIMEOUT_MS default per-tool execution budget (default 30000)
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -28,11 +30,18 @@ async function main(): Promise<void> {
     : undefined;
   const tools = generateTools(root, include ? { include } : {});
 
+  const timeoutMs = Number(process.env.FLEEX_MCP_TIMEOUT_MS);
   const execOpts: ExecOptions = {
     workspace: process.env.FLEEX_WORKSPACE,
     bin: process.env.FLEEX_MCP_BIN,
     prefixArgs: process.env.FLEEX_MCP_PREFIX ? process.env.FLEEX_MCP_PREFIX.split(' ').filter(Boolean) : undefined,
+    ...(Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs } : {}),
   };
+
+  // Off by default: the stdio transport owns stdin, so the CLI's confirmation
+  // prompt has nobody to answer it. Opting in makes the MCP client the
+  // approval authority for the handful of tools carrying `--force`.
+  const assumeYes = /^(1|true|yes)$/i.test(process.env.FLEEX_MCP_ASSUME_YES ?? '');
 
   const server = new Server(
     { name: 'fleex', version: '0.1.0' },
@@ -45,7 +54,7 @@ async function main(): Promise<void> {
       tools,
       req.params.name,
       (req.params.arguments ?? {}) as Record<string, unknown>,
-      { execOpts },
+      { execOpts, assumeYes },
     );
     return result as CallToolResult;
   });

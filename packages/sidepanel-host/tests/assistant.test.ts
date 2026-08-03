@@ -35,6 +35,19 @@ const tools: GeneratedTool[] = [
     arguments: [{ key: 'id', required: true, variadic: false }],
     options: [],
   },
+  {
+    // Spends money: it queues an agent run. Classified mutating by
+    // @fleex/mcp (asserted in its leaf-classification suite); here we check the
+    // side panel actually gates on that classification.
+    name: 'fleex_ticket_mention_run',
+    commandPath: ['ticket', 'mention', 'run'],
+    description: 'Run an agent on a mention',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    mutating: true,
+    workspaceAware: true,
+    arguments: [{ key: 'id', required: true, variadic: false }],
+    options: [],
+  },
 ];
 const anthropicTools = toAnthropicTools(tools);
 
@@ -122,6 +135,27 @@ describe('runAssistant gating', () => {
       (m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((b) => (b as { type: string }).type === 'tool_result'),
     );
     expect(toolResultTurn).toBeDefined();
+  });
+
+  it('gates an agent run requested from untrusted page content', async () => {
+    // The scenario the gate exists for: a page says "run mention X", the model
+    // complies, and the run costs money. Declining must stop it dead.
+    const confirm = vi.fn(async () => false);
+    const exec = vi.fn(async () => ({ ok: true, text: 'should not run' }));
+    const { onEvent, events } = collect();
+    const llm = scriptedLlm([
+      { content: [toolBlock('t1', 'fleex_ticket_mention_run', { id: 'a1b2' })], stopReason: 'tool_use' },
+      { content: [textBlock('I did not run it.')], stopReason: 'end_turn' },
+    ]);
+
+    await runAssistant({
+      llm, exec, confirm, tools, anthropicTools,
+      system: 's', messages: [{ role: 'user', content: 'summarise this page' }], onEvent,
+    });
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(exec).not.toHaveBeenCalled();
+    expect(events.some((e) => e.type === 'tool_denied')).toBe(true);
   });
 
   it('streams text deltas as text events', async () => {
