@@ -16,7 +16,7 @@ import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
-import { buildSdkOptions } from '../utils/build-sdk-options.js';
+import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
@@ -813,6 +813,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       if (humanName) contextSections.push(`Human operator (@${humanName})`);
       if (worktreePath) contextSections.push(`Working directory (${worktreePath})`);
 
+      // The turn budget this run will actually get, reported up front so the
+      // Execution Log states the cap instead of leaving it to be guessed.
+      const runMaxTurns = effectiveMaxTurns(effectiveMode, this.config.get().agentMaxTurns);
+
       await emitEvent('execution_start', buildExecutionStartData({
         executionId,
         personaId: persona.id,
@@ -824,6 +828,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         worktreePath,
         resumeSessionId: previousSessionId ?? null,
         kind: 'persona',
+        maxTurns: runMaxTurns,
         systemPromptSections: contextSections,
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPromptTextLength,
@@ -850,6 +855,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let sdkOutputTokens: number | undefined;
       let sdkCacheReadTokens: number | undefined;
       let sdkCacheCreationTokens: number | undefined;
+      let sdkNumTurns: number | undefined;
       let cliStderr = '';
       let resultSubtype: string | undefined;
 
@@ -862,6 +868,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           resume: previousSessionId ?? undefined,
           effort: resolved.effort,
           fast: resolved.fast,
+          maxTurns: this.config.get().agentMaxTurns,
           talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
         });
 
@@ -919,8 +926,26 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         sdkOutputTokens = streamResult.metrics.outputTokens;
         sdkCacheReadTokens = streamResult.metrics.cacheReadTokens;
         sdkCacheCreationTokens = streamResult.metrics.cacheCreationTokens;
+        sdkNumTurns = streamResult.metrics.numTurns;
         cliStderr = streamResult.stderr ?? '';
         resultSubtype = streamResult.resultSubtype;
+
+        // The SDK stops with this subtype when the turn budget runs out. Say so
+        // explicitly: an agent that ran out of turns produces a truncated answer
+        // that otherwise looks like a normal (if unfinished) completion.
+        if (streamResult.resultSubtype === 'error_max_turns') {
+          this.logger.warn('SDK query hit the configured turn budget', {
+            executionId,
+            persona: persona.name,
+            numTurns: sdkNumTurns,
+            maxTurns: runMaxTurns,
+          });
+          await emitEvent('max_turns_reached', {
+            numTurns: sdkNumTurns,
+            maxTurns: runMaxTurns,
+            ticketId: mention.ticketId,
+          });
+        }
 
         if (streamResult.resultSubtype === 'error_max_structured_output_retries') {
           this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
@@ -1045,6 +1070,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputTokens: sdkOutputTokens,
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
+        // Turns consumed vs the budget that was in force, so the log answers
+        // "did this run hit the cap?" directly instead of by tool-call guesswork.
+        numTurns: sdkNumTurns,
+        maxTurns: runMaxTurns,
       });
 
       // 10. Store session ID for future resume (in-memory + DB)
@@ -1497,6 +1526,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       0,
     );
 
+    const skillMaxTurns = effectiveMaxTurns('edit', this.config.get().agentMaxTurns);
+
     await emitEvent('execution_start', buildExecutionStartData({
       executionId,
       personaId: persona.id,
@@ -1508,6 +1539,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       effectiveMode: 'edit',
       worktreePath,
       kind: 'skill',
+      maxTurns: skillMaxTurns,
       label: skill.displayName,
       skillId,
       skillName: skill.commandName,
@@ -1544,6 +1576,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         cwd: worktreePath,
         outputFormat: opts?.outputFormatOverride ?? this.outputFormatSchema(),
         resume: previousSessionId ?? undefined,
+        maxTurns: this.config.get().agentMaxTurns,
       });
 
       // Build prompt: content blocks if images, string otherwise
@@ -1569,6 +1602,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const sdkOutputTokens = streamResult.metrics.outputTokens;
       const sdkCacheReadTokens = streamResult.metrics.cacheReadTokens;
       const sdkCacheCreationTokens = streamResult.metrics.cacheCreationTokens;
+      const sdkNumTurns = streamResult.metrics.numTurns;
+
+      if (streamResult.resultSubtype === 'error_max_turns') {
+        this.logger.warn('Skill query hit the configured turn budget', {
+          executionId, skill: skill.commandName, numTurns: sdkNumTurns, maxTurns: skillMaxTurns,
+        });
+        await emitEvent('max_turns_reached', { numTurns: sdkNumTurns, maxTurns: skillMaxTurns, ticketId });
+      }
 
       clearTimeout(timeoutHandle);
 
@@ -1601,6 +1642,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputTokens: sdkOutputTokens,
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
+        numTurns: sdkNumTurns,
+        maxTurns: skillMaxTurns,
       });
 
       // Short-circuit: workflow orchestrator handles persistence via step_runs
@@ -1920,6 +1963,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       if (worktreePath) wfContextSections.push(`Working directory (${worktreePath})`);
       wfContextSections.push('Workflow step');
 
+      const wfMaxTurns = effectiveMaxTurns(effectiveMode, this.config.get().agentMaxTurns);
+
       await emitEvent('execution_start', buildExecutionStartData({
         executionId,
         personaId: persona.id,
@@ -1931,6 +1976,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         worktreePath,
         kind: 'workflow_step',
         label: 'workflow step',
+        maxTurns: wfMaxTurns,
         systemPromptSections: wfContextSections,
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPromptText.length,
@@ -1944,6 +1990,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const queryOptions = buildSdkOptions(effectiveMode, {
         model: persona.model, systemPrompt, cwd: worktreePath,
         outputFormat: params.outputFormat,
+        maxTurns: this.config.get().agentMaxTurns,
         talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
       });
 
@@ -1960,6 +2007,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let sdkOutputTokens: number | undefined;
       let sdkCacheReadTokens: number | undefined;
       let sdkCacheCreationTokens: number | undefined;
+      let sdkNumTurns: number | undefined;
       try {
         const streamResult = await streamSdkQuery({
           prompt: hasImages ? userPromptBlocks : userPromptText,
@@ -1976,6 +2024,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         sdkOutputTokens = streamResult.metrics.outputTokens;
         sdkCacheReadTokens = streamResult.metrics.cacheReadTokens;
         sdkCacheCreationTokens = streamResult.metrics.cacheCreationTokens;
+        sdkNumTurns = streamResult.metrics.numTurns;
+
+        if (streamResult.resultSubtype === 'error_max_turns') {
+          this.logger.warn('Workflow step hit the configured turn budget', {
+            executionId, numTurns: sdkNumTurns, maxTurns: wfMaxTurns,
+          });
+          await emitEvent('max_turns_reached', {
+            numTurns: sdkNumTurns, maxTurns: wfMaxTurns, ticketId: params.ticketId,
+          });
+        }
       } catch (err) {
         // Cancelled (Terminate / cancel run / force restart): cancelExecution()
         // already emitted `execution_end` (interrupted) and completed the
@@ -2013,6 +2071,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputTokens: sdkOutputTokens,
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
+        numTurns: sdkNumTurns,
+        maxTurns: wfMaxTurns,
       });
       await this.agentEventStore.completeExecution(executionId, 'completed', {
         model: persona.model,

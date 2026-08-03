@@ -14,6 +14,8 @@ export interface BuildExecutionStartArgs {
   label?: string;
   skillId?: string;
   skillName?: string;
+  /** Effective (already clamped) turn budget for this run; omit when N/A. */
+  maxTurns?: number;
   systemPromptSections: string[];
   systemPromptLength: number;
   userPromptLength: number;
@@ -49,6 +51,7 @@ export function buildExecutionStartData(args: BuildExecutionStartArgs): Executio
     label: args.label,
     skillId: args.skillId,
     skillName: args.skillName,
+    maxTurns: args.maxTurns,
     context: {
       systemPromptSections: args.systemPromptSections,
       systemPromptLength: args.systemPromptLength,
