@@ -1,7 +1,9 @@
-import { WorkflowRunEntity } from '../../../domain/entities/workflow-run.entity.js';
-import type { WorkflowRunStorePort } from '../../../application/ports/workflow-run-store.port.js';
-import type { SupabaseConnection } from './connection.js';
 import type { WorkflowRunStatus, WorkflowTemplateSnapshot } from '@fleex/shared';
+
+import { WorkflowRunEntity } from '../../../domain/entities/workflow-run.entity.js';
+
+import type { SupabaseConnection } from './connection.js';
+import type { WorkflowRunStorePort } from '../../../application/ports/workflow-run-store.port.js';
 
 interface WorkflowRunRow {
   id: string;
@@ -68,7 +70,8 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
       .in('status', ACTIVE)
       .limit(1)
       .maybeSingle();
-    if (error) throw new Error(`SupabaseWorkflowRunStore.getActiveByTicket failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseWorkflowRunStore.getActiveByTicket failed: ${error.message}`);
     return data ? rowToEntity(data as WorkflowRunRow) : null;
   }
 

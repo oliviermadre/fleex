@@ -1,8 +1,10 @@
-import type { Command } from 'commander';
 import fs from 'node:fs';
-import type { CommandDef } from '../../../core/types.ts';
+
 import { c, ok, die } from '../../../core/colors.ts';
 import { getMarketplace, removeMarketplace } from '../../../core/registry.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
+import type { Command } from 'commander';
 
 const def: CommandDef = {
   name: 'remove',

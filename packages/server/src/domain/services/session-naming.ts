@@ -92,9 +92,7 @@ export class SessionNamingService {
    */
   parseSidebarParentId(name: string): string | null {
     if (!name.startsWith(FLEEX_SIDEBAR_PREFIX)) return null;
-    const match = name.match(
-      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
-    );
+    const match = name.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     return match ? match[0] : null;
   }
 

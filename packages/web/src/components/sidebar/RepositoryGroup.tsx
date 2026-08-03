@@ -1,11 +1,13 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import type { SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
-import { useUIStore } from '../../stores/uiStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { WorktreeGroup } from './WorktreeGroup';
-import { GitHubIcon } from './icons';
-import { cn } from '../../lib/cn';
 
+import type { SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
+
+import { GitHubIcon } from './icons';
+import { WorktreeGroup } from './WorktreeGroup';
 
 export type FlowType = 'manual' | 'agentic';
 
@@ -29,7 +31,10 @@ export function RepositoryGroup({ group, flowType }: Props) {
   const draggedBranchRef = useRef<string | null>(null);
 
   const sortedWorktrees: readonly WorktreeSessionGroup[] = useMemo(() => {
-    if (!wtOrder || wtOrder.length === 0) return [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
+    if (!wtOrder || wtOrder.length === 0)
+      return [...group.worktrees].sort((a, b) =>
+        a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()),
+      );
     const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
     return [...group.worktrees].sort((a, b) => {
       const aOrder = orderMap.get(a.branch) ?? Infinity;
@@ -38,13 +43,16 @@ export function RepositoryGroup({ group, flowType }: Props) {
     });
   }, [group.worktrees, wtOrder]);
 
-  const handleWtDragStart = useCallback((branch: string) => (e: React.DragEvent) => {
-    e.stopPropagation();
-    draggedBranchRef.current = branch;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-worktree', `${groupId}:${branch}`);
-    (e.currentTarget as HTMLElement).style.opacity = '0.4';
-  }, [groupId]);
+  const handleWtDragStart = useCallback(
+    (branch: string) => (e: React.DragEvent) => {
+      e.stopPropagation();
+      draggedBranchRef.current = branch;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-worktree', `${groupId}:${branch}`);
+      (e.currentTarget as HTMLElement).style.opacity = '0.4';
+    },
+    [groupId],
+  );
 
   const handleWtDragEnd = useCallback((e: React.DragEvent) => {
     draggedBranchRef.current = null;
@@ -52,48 +60,57 @@ export function RepositoryGroup({ group, flowType }: Props) {
     (e.currentTarget as HTMLElement).style.opacity = '';
   }, []);
 
-  const handleWtDragOver = useCallback((branch: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-worktree')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'move';
+  const handleWtDragOver = useCallback(
+    (branch: string) => (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes('application/x-worktree')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
 
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    setDropEdge(e.clientY < midY ? 'top' : 'bottom');
-    setDragOverBranch(branch);
-  }, []);
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      setDropEdge(e.clientY < midY ? 'top' : 'bottom');
+      setDragOverBranch(branch);
+    },
+    [],
+  );
 
-  const handleWtDragLeave = useCallback((branch: string) => (e: React.DragEvent) => {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (dragOverBranch === branch) setDragOverBranch(null);
-  }, [dragOverBranch]);
+  const handleWtDragLeave = useCallback(
+    (branch: string) => (e: React.DragEvent) => {
+      if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+      if (dragOverBranch === branch) setDragOverBranch(null);
+    },
+    [dragOverBranch],
+  );
 
-  const handleWtDrop = useCallback((targetBranch: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const data = e.dataTransfer.getData('application/x-worktree');
-    setDragOverBranch(null);
-    if (!data) return;
+  const handleWtDrop = useCallback(
+    (targetBranch: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const data = e.dataTransfer.getData('application/x-worktree');
+      setDragOverBranch(null);
+      if (!data) return;
 
-    const [sourceRepo, sourceBranch] = [
-      data.substring(0, data.lastIndexOf(':')),
-      data.substring(data.lastIndexOf(':') + 1),
-    ];
-    if (sourceRepo !== groupId || sourceBranch === targetBranch) return;
+      const [sourceRepo, sourceBranch] = [
+        data.substring(0, data.lastIndexOf(':')),
+        data.substring(data.lastIndexOf(':') + 1),
+      ];
+      if (sourceRepo !== groupId || sourceBranch === targetBranch) return;
 
-    const branches = sortedWorktrees.map((wt) => wt.branch);
-    const fromIdx = branches.indexOf(sourceBranch);
-    if (fromIdx === -1) return;
+      const branches = sortedWorktrees.map((wt) => wt.branch);
+      const fromIdx = branches.indexOf(sourceBranch);
+      if (fromIdx === -1) return;
 
-    branches.splice(fromIdx, 1);
-    let toIdx = branches.indexOf(targetBranch);
-    if (toIdx === -1) return;
-    if (dropEdge === 'bottom') toIdx += 1;
-    branches.splice(toIdx, 0, sourceBranch);
+      branches.splice(fromIdx, 1);
+      let toIdx = branches.indexOf(targetBranch);
+      if (toIdx === -1) return;
+      if (dropEdge === 'bottom') toIdx += 1;
+      branches.splice(toIdx, 0, sourceBranch);
 
-    setWorktreeOrder(groupId, branches);
-  }, [groupId, sortedWorktrees, dropEdge, setWorktreeOrder]);
+      setWorktreeOrder(groupId, branches);
+    },
+    [groupId, sortedWorktrees, dropEdge, setWorktreeOrder],
+  );
 
   return (
     <div className="my-1.5">
@@ -108,7 +125,7 @@ export function RepositoryGroup({ group, flowType }: Props) {
           fill="currentColor"
           className={cn(
             'text-[var(--theme-text-muted)] transition-transform',
-            collapsed ? 'rotate-0' : 'rotate-90'
+            collapsed ? 'rotate-0' : 'rotate-90',
           )}
         >
           <path d="M3 1l5 4-5 4V1z" />
@@ -131,7 +148,16 @@ export function RepositoryGroup({ group, flowType }: Props) {
               }}
               title="Open scratchpad"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
               </svg>
             </span>

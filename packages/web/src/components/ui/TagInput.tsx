@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+
 import { cn } from '../../lib/cn';
 
 interface TagInputProps {
@@ -13,15 +14,24 @@ export function TagInput({ label, tags, onChange, placeholder, helperText }: Tag
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const addTags = useCallback((raw: string) => {
-    const entries = raw.split(/[\n,\s]+/).map((s) => s.trim()).filter(Boolean);
-    const unique = entries.filter((e) => !tags.includes(e));
-    if (unique.length > 0) onChange([...tags, ...unique]);
-  }, [tags, onChange]);
+  const addTags = useCallback(
+    (raw: string) => {
+      const entries = raw
+        .split(/[\n,\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const unique = entries.filter((e) => !tags.includes(e));
+      if (unique.length > 0) onChange([...tags, ...unique]);
+    },
+    [tags, onChange],
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const isCommit = e.key === 'Enter' || e.key === ' ' || e.key === ','
-      || (e.key === 'Tab' && input.trim() !== '');
+    const isCommit =
+      e.key === 'Enter' ||
+      e.key === ' ' ||
+      e.key === ',' ||
+      (e.key === 'Tab' && input.trim() !== '');
     if (isCommit) {
       e.preventDefault();
       if (input.trim()) {
@@ -47,15 +57,13 @@ export function TagInput({ label, tags, onChange, placeholder, helperText }: Tag
   return (
     <div className="flex flex-col gap-1">
       {label && (
-        <label className="text-xs font-medium text-[var(--theme-text-secondary)]">
-          {label}
-        </label>
+        <label className="text-xs font-medium text-[var(--theme-text-secondary)]">{label}</label>
       )}
       <div
         className={cn(
           'flex flex-wrap gap-1.5 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2',
           'focus-within:border-[var(--theme-accent)] focus-within:ring-1 focus-within:ring-[var(--theme-accent)]',
-          'cursor-text'
+          'cursor-text',
         )}
         onClick={() => inputRef.current?.focus()}
       >
@@ -68,7 +76,10 @@ export function TagInput({ label, tags, onChange, placeholder, helperText }: Tag
             <button
               type="button"
               className="text-current hover:text-[var(--theme-text-primary)] leading-none"
-              onClick={(e) => { e.stopPropagation(); removeTag(i); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                removeTag(i);
+              }}
             >
               ×
             </button>
@@ -84,9 +95,7 @@ export function TagInput({ label, tags, onChange, placeholder, helperText }: Tag
           placeholder={tags.length === 0 ? placeholder : undefined}
         />
       </div>
-      {helperText && (
-        <div className="text-xs text-[var(--theme-text-muted)]">{helperText}</div>
-      )}
+      {helperText && <div className="text-xs text-[var(--theme-text-muted)]">{helperText}</div>}
     </div>
   );
 }

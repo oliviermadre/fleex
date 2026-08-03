@@ -1,8 +1,10 @@
 import type { RepositorySummary } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
 import { useUIStore } from '../../stores/uiStore';
+
 import { GitHubIcon } from './icons';
 import { RepoItem } from './RepoItem';
-import { cn } from '../../lib/cn';
 
 interface Props {
   org: string;
@@ -54,13 +56,10 @@ export function OrgGroup({ org, repos, onRemove }: Props) {
           <GitHubIcon size={14} />
         </a>
       </button>
-      {!collapsed && repos.map((repo) => (
-        <RepoItem
-          key={`${repo.org}/${repo.name}`}
-          summary={repo}
-          onRemove={onRemove}
-        />
-      ))}
+      {!collapsed &&
+        repos.map((repo) => (
+          <RepoItem key={`${repo.org}/${repo.name}`} summary={repo} onRemove={onRemove} />
+        ))}
     </div>
   );
 }

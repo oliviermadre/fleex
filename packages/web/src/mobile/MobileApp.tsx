@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useWebSocket } from '../hooks/useWebSocket';
-import { useTickets } from '../hooks/useTickets';
+
 import { useAgentPersonas } from '../hooks/useAgentPersonas';
-import { useTicketStore } from '../stores/ticketStore';
+import { useTickets } from '../hooks/useTickets';
+import { useWebSocket } from '../hooks/useWebSocket';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useTicketStore } from '../stores/ticketStore';
+
+import { MobileAssistant } from './MobileAssistant';
 import { MobileBoard } from './MobileBoard';
 import { MobileTicketDetail } from './MobileTicketDetail';
-import { MobileAssistant } from './MobileAssistant';
 
 type MobileView = 'board' | 'assistant';
 
@@ -26,7 +28,7 @@ export function MobileApp() {
   }, [loadSettings]);
 
   const ticket = useTicketStore((s) =>
-    s.selectedTicketId ? s.tickets.find((t) => t.id === s.selectedTicketId) ?? null : null,
+    s.selectedTicketId ? (s.tickets.find((t) => t.id === s.selectedTicketId) ?? null) : null,
   );
 
   const [view, setView] = useState<MobileView>('board');

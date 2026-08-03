@@ -1,18 +1,31 @@
 import type { Session } from '@fleex/shared';
-import { StatusDot } from '../../../ui/StatusDot';
+
 import { deriveDisplayStatus } from '../../../../lib/deriveStatus';
-import type { DisplayStatus } from '../../../../lib/deriveStatus';
-import { useSessionStore } from '../../../../stores/sessionStore';
 import * as api from '../../../../services/api';
+import { useSessionStore } from '../../../../stores/sessionStore';
+import { StatusDot } from '../../../ui/StatusDot';
 import { registerTabKind } from '../registry';
+
 import { TerminalTabContent } from './TerminalTabContent';
+
+import type { DisplayStatus } from '../../../../lib/deriveStatus';
 import type { TabDescriptor, TabIconProps, TabStatusProps } from '../types';
 
 // ——— Icon ———
 
 function ShellIcon(_props: TabIconProps) {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
       <path d="M4 5l3 3-3 3" />
       <line x1="9" y1="11" x2="12" y2="11" />
     </svg>
@@ -44,7 +57,9 @@ registerTabKind('shell', {
     const sessionId = tab.meta.sessionId as string;
     const updated = await api.renameSession(sessionId, newName);
     const { sessions } = useSessionStore.getState();
-    useSessionStore.getState().setSessions(sessions.map((s) => (s.id === updated.id ? updated : s)));
+    useSessionStore
+      .getState()
+      .setSessions(sessions.map((s) => (s.id === updated.id ? updated : s)));
   },
 });
 

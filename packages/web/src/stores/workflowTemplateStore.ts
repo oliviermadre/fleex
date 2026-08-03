@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+
 import type { WorkflowTemplate } from '@fleex/shared';
+
 import * as api from '../services/api';
 
 interface WorkflowTemplateState {
@@ -10,8 +12,13 @@ interface WorkflowTemplateState {
 
   selectWorkflow(id: string | null): void;
   refresh(): Promise<void>;
-  create(input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate>;
-  update(id: string, input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate>;
+  create(
+    input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<WorkflowTemplate>;
+  update(
+    id: string,
+    input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<WorkflowTemplate>;
   remove(id: string): Promise<void>;
   getBySlug(slug: string): WorkflowTemplate | undefined;
 }

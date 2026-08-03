@@ -9,19 +9,9 @@ export class BoardEntity {
     public updatedAt: Date,
   ) {}
 
-  static create(params: {
-    id: string;
-    name: string;
-    emoji?: string;
-  }): BoardEntity {
+  static create(params: { id: string; name: string; emoji?: string }): BoardEntity {
     const now = new Date();
-    return new BoardEntity(
-      params.id,
-      params.name,
-      params.emoji ?? '📋',
-      now,
-      now,
-    );
+    return new BoardEntity(params.id, params.name, params.emoji ?? '📋', now, now);
   }
 
   update(changes: { name?: string; emoji?: string }): void {

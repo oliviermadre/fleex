@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+
 import type { TicketGroup } from '@fleex/shared';
-import { useTicketGroupStore } from '../../stores/ticketGroupStore';
+
 import * as api from '../../services/api';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 
 /**
  * Picker for assigning/removing a ticket from epics.
@@ -57,7 +59,8 @@ export function EpicPicker({ ticketId, boardId }: { ticketId: string; boardId: s
   );
 
   const availableGroups = useMemo(
-    () => mergedGroups.filter((g) => g.groupStatus !== 'archived' && !assignedGroupIds.includes(g.id)),
+    () =>
+      mergedGroups.filter((g) => g.groupStatus !== 'archived' && !assignedGroupIds.includes(g.id)),
     [mergedGroups, assignedGroupIds],
   );
 
@@ -73,14 +76,24 @@ export function EpicPicker({ ticketId, boardId }: { ticketId: string; boardId: s
             <div key={group.id} className="flex items-center gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
                 <span className="flex-shrink-0 text-xs">{group.emoji}</span>
-                <span className="truncate text-xs text-[var(--theme-text-secondary)]">{group.name}</span>
+                <span className="truncate text-xs text-[var(--theme-text-secondary)]">
+                  {group.name}
+                </span>
               </div>
               <button
                 className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
                 onClick={() => removeTicketFromGroup(group.id, ticketId)}
                 title="Remove from epic"
               >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
                   <line x1="4" y1="4" x2="12" y2="12" />
                   <line x1="12" y1="4" x2="4" y2="12" />
                 </svg>
@@ -101,9 +114,13 @@ export function EpicPicker({ ticketId, boardId }: { ticketId: string; boardId: s
             }
           }}
         >
-          <option value="" disabled>+ Add to epic...</option>
+          <option value="" disabled>
+            + Add to epic...
+          </option>
           {availableGroups.map((g) => (
-            <option key={g.id} value={g.id}>{g.emoji} {g.name}</option>
+            <option key={g.id} value={g.id}>
+              {g.emoji} {g.name}
+            </option>
           ))}
         </select>
       )}

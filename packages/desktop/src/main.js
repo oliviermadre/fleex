@@ -1,7 +1,8 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage } = require('electron');
-const path = require('path');
-const os = require('os');
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage } = require('electron');
 
 // ── Configuration ────────────────────────────────────────────────────────────
 // When launched by `fleex start --desktop`, the CLI passes the server port.
@@ -68,9 +69,17 @@ function scanRunningInstances() {
       const ports = JSON.parse(fs.readFileSync(path.join(dir, 'ports.json'), 'utf8'));
       const pid = parseInt(fs.readFileSync(path.join(dir, 'server.pid'), 'utf8').trim(), 10);
       if (typeof ports.web !== 'number' || !Number.isFinite(pid) || pid <= 0) continue;
-      try { process.kill(pid, 0); } catch { continue; } // not alive
+      try {
+        process.kill(pid, 0);
+      } catch {
+        continue;
+      } // not alive
       let meta = {};
-      try { meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8')); } catch { /* optional */ }
+      try {
+        meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+      } catch {
+        /* optional */
+      }
       out.push({
         slug,
         workspace: meta.workspace || slug,
@@ -92,7 +101,9 @@ function currentWebPort() {
   try {
     const u = new URL(mainWindow.webContents.getURL());
     if (u.port) return parseInt(u.port, 10);
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return parseInt(serverPort, 10);
 }
 
@@ -189,7 +200,12 @@ function buildApplicationMenu() {
         // secondaries Cmd+←/Cmd+→ are handled in the preload so they keep their
         // edit meaning inside text fields / terminals.
         { id: 'nav-back', label: 'Back', accelerator: isMac ? 'Cmd+[' : 'Alt+Left', click: goBack },
-        { id: 'nav-forward', label: 'Forward', accelerator: isMac ? 'Cmd+]' : 'Alt+Right', click: goForward },
+        {
+          id: 'nav-forward',
+          label: 'Forward',
+          accelerator: isMac ? 'Cmd+]' : 'Alt+Right',
+          click: goForward,
+        },
       ],
     },
     { role: 'windowMenu' },
@@ -410,8 +426,10 @@ function createWindow() {
     // port; the renderer builds the switcher and navigates on selection.
     const instances = scanRunningInstances();
     const curPort = currentWebPort();
-    const curWs = (instances.find((i) => i.webPort === curPort) || {}).workspace
-      || process.env['FLEEX_WORKSPACE'] || '';
+    const curWs =
+      (instances.find((i) => i.webPort === curPort) || {}).workspace ||
+      process.env['FLEEX_WORKSPACE'] ||
+      '';
     const instancesJson = JSON.stringify(instances);
     const currentPortJson = JSON.stringify(curPort);
     const currentWsJson = JSON.stringify(curWs);

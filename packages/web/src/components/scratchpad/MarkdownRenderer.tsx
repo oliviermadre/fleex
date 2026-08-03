@@ -1,15 +1,21 @@
 import { memo, useMemo, useState, Children } from 'react';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import type { Components } from 'react-markdown';
-import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
-import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+import remarkGfm from 'remark-gfm';
+
 import { useColorMode } from '../../hooks/useActiveTheme';
 import { preprocessTicketMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
+import {
+  ImageGalleryStrip,
+  ImagePlaceholder,
+  extractMarkdownImages,
+} from '../shared/ImageThumbnail';
+import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+
+import type { Components } from 'react-markdown';
 
 interface MarkdownRendererProps {
   content: string;
@@ -104,11 +110,18 @@ const sanitizeSchema = {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rehypePlugins: any[] = [rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeHighlight, { detect: true }]];
+const rehypePlugins: any[] = [
+  rehypeRaw,
+  [rehypeSanitize, sanitizeSchema],
+  [rehypeHighlight, { detect: true }],
+];
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export const MarkdownRenderer = memo(function MarkdownRenderer({ content, onToggleCheckbox }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  content,
+  onToggleCheckbox,
+}: MarkdownRendererProps) {
   const segments = useMemo(() => parseSegments(content), [content]);
 
   return (
@@ -386,9 +399,7 @@ function MarkdownSection({
         <table className="w-full text-sm border-collapse">{children}</table>
       </div>
     ),
-    thead: ({ children }) => (
-      <thead className="bg-[var(--theme-bg-overlay)]">{children}</thead>
-    ),
+    thead: ({ children }) => <thead className="bg-[var(--theme-bg-overlay)]">{children}</thead>,
     tbody: ({ children }) => (
       <tbody className="divide-y divide-[var(--theme-border)]">{children}</tbody>
     ),
@@ -403,7 +414,6 @@ function MarkdownSection({
         {children}
       </td>
     ),
-
   };
 
   return (

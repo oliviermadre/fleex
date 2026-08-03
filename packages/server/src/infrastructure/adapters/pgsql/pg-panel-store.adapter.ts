@@ -1,7 +1,9 @@
-import { PanelEntity } from '../../../domain/entities/panel.entity.js';
-import type { PanelStorePort } from '../../../application/ports/panel-store.port.js';
-import type { PgConnection } from './connection.js';
 import type { PanelMember } from '@fleex/shared';
+
+import { PanelEntity } from '../../../domain/entities/panel.entity.js';
+
+import type { PgConnection } from './connection.js';
+import type { PanelStorePort } from '../../../application/ports/panel-store.port.js';
 
 export class PgPanelStore implements PanelStorePort {
   constructor(private readonly db: PgConnection) {}
@@ -64,7 +66,8 @@ export class PgPanelStore implements PanelStorePort {
 function rowToPanel(row: Record<string, unknown>): PanelEntity {
   let members: PanelMember[];
   try {
-    members = typeof row.members === 'string' ? JSON.parse(row.members) : (row.members as PanelMember[]);
+    members =
+      typeof row.members === 'string' ? JSON.parse(row.members) : (row.members as PanelMember[]);
   } catch {
     members = [];
   }

@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import type { ServerWebSocket } from 'bun';
+
 import { logInfo, logError } from './logger';
+
+import type { ServerWebSocket } from 'bun';
 
 interface PtyInitMessage {
   tmuxSessionName: string;
@@ -34,10 +36,7 @@ export function handlePtyOpen(ws: ServerWebSocket<PtyWsData>) {
   logInfo('[pty] WebSocket connected, waiting for init message');
 }
 
-export function handlePtyMessage(
-  ws: ServerWebSocket<PtyWsData>,
-  message: string | Buffer,
-) {
+export function handlePtyMessage(ws: ServerWebSocket<PtyWsData>, message: string | Buffer) {
   // If not initialized yet, expect a JSON init message
   if (!ws.data.initialized) {
     try {

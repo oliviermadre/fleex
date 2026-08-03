@@ -1,9 +1,5 @@
 import { dirname, join } from 'node:path';
-import type { LoggerPort } from '../ports/logger.port.js';
-import type { ConfigPort } from '../ports/config.port.js';
-import type { GitPort } from '../ports/git.port.js';
-import type { HostFs, ExecFn } from '../../infrastructure/host/types.js';
-import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+
 import type {
   HookResult,
   OverlayFileStatus,
@@ -15,6 +11,7 @@ import type {
   OverlaySyncRemoveResponse,
   OverlaySyncRepoScan,
 } from '@fleex/shared';
+
 import {
   buildTree,
   classifyStatus,
@@ -23,6 +20,12 @@ import {
   parseIgnoredEntries,
   type CollapsedDir,
 } from './overlay-sync-helpers.js';
+
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import type { HostFs, ExecFn } from '../../infrastructure/host/types.js';
+import type { ConfigPort } from '../ports/config.port.js';
+import type { GitPort } from '../ports/git.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 
 const DEFAULT_HOOK_TIMEOUT_SECONDS = 60;
 
@@ -84,7 +87,8 @@ export class OverlayManager {
       this.logger.info('Applied overlay files to worktree', { source: filesDir, worktreePath });
     } catch (err) {
       this.logger.warn('Failed to apply overlay files', {
-        source: filesDir, worktreePath,
+        source: filesDir,
+        worktreePath,
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -95,12 +99,7 @@ export class OverlayManager {
    * Checks both file-based hooks (overlays/org/name/hooks/) and inline config hooks.
    * Returns HookResult if a hook ran, null otherwise.
    */
-  firePostCheckoutHooks(
-    org: string,
-    name: string,
-    worktreePath: string,
-    branch: string,
-  ): boolean {
+  firePostCheckoutHooks(org: string, name: string, worktreePath: string, branch: string): boolean {
     const repoKey = `${org}/${name}`;
 
     // 1. Run global file-based hooks first
@@ -134,7 +133,8 @@ export class OverlayManager {
         this.logger.info('Post-checkout hook completed', { repoKey, worktreePath });
       })
       .catch((err) => {
-        const stderr = (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
+        const stderr =
+          (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
         this.logger.warn('Post-checkout hook failed', { repoKey, worktreePath, stderr });
       });
 
@@ -174,13 +174,17 @@ export class OverlayManager {
           });
           this.logger.info('Hook script completed', { scriptPath });
         } catch (err) {
-          const stderr = (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
+          const stderr =
+            (err as { stderr?: string }).stderr ??
+            (err instanceof Error ? err.message : String(err));
           this.logger.warn('Hook script failed', { scriptPath, stderr });
         }
       }
     })().catch((err) => {
       this.logger.warn('Failed to run file hooks', {
-        org, name, error: err instanceof Error ? err.message : String(err),
+        org,
+        name,
+        error: err instanceof Error ? err.message : String(err),
       });
     });
   }
@@ -274,7 +278,13 @@ export class OverlayManager {
     const base = { org, name, worktreePath: repoPath, overlayFilesDir };
 
     if (!(await this.hostFs.exists(repoPath))) {
-      return { ...base, available: false, message: 'Worktree unavailable locally', tree: [], overlayContents: [] };
+      return {
+        ...base,
+        available: false,
+        message: 'Worktree unavailable locally',
+        tree: [],
+        overlayContents: [],
+      };
     }
 
     let porcelain: string;
@@ -284,8 +294,15 @@ export class OverlayManager {
       });
       porcelain = stdout;
     } catch (err) {
-      const message = (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
-      return { ...base, available: false, message: `git status failed: ${message}`, tree: [], overlayContents: [] };
+      const message =
+        (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
+      return {
+        ...base,
+        available: false,
+        message: `git status failed: ${message}`,
+        tree: [],
+        overlayContents: [],
+      };
     }
 
     const { files, dirs } = parseIgnoredEntries(porcelain);
@@ -312,7 +329,10 @@ export class OverlayManager {
 
     const overlayRel = await this.listOverlayFilesRecursive(org, name);
     const localSet = new Set(fileNodes.map((n) => n.relPath));
-    const overlayContents = overlayRel.map((relPath) => ({ relPath, orphan: !localSet.has(relPath) }));
+    const overlayContents = overlayRel.map((relPath) => ({
+      relPath,
+      orphan: !localSet.has(relPath),
+    }));
 
     return { ...base, available: true, tree, overlayContents };
   }
@@ -384,7 +404,12 @@ export class OverlayManager {
         copied.push({ org, name, relPath, target: dest, overwritten });
         this.logger.info('Copied file to overlay', { org, name, relPath, dest });
       } catch (err) {
-        errors.push({ org, name, relPath, error: err instanceof Error ? err.message : String(err) });
+        errors.push({
+          org,
+          name,
+          relPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -392,7 +417,11 @@ export class OverlayManager {
   }
 
   /** Explicitly remove files from a repo's overlay (cleanup gesture). */
-  async removeFromOverlay(org: string, name: string, relPaths: string[]): Promise<OverlaySyncRemoveResponse> {
+  async removeFromOverlay(
+    org: string,
+    name: string,
+    relPaths: string[],
+  ): Promise<OverlaySyncRemoveResponse> {
     const removed: OverlaySyncRemoveResponse['removed'] = [];
     const errors: OverlaySyncRemoveResponse['errors'] = [];
     const overlayFilesDir = this.resolver.overlayFilesDir(org, name);
@@ -498,14 +527,32 @@ export class OverlayManager {
     const stat = await this.safeStat(abs);
     if (!stat) return null;
     if (stat.size > PREVIEW_MAX_READ_BYTES) {
-      return { content: null, size: stat.size, mtimeMs: stat.mtimeMs, binary: false, truncated: true };
+      return {
+        content: null,
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        binary: false,
+        truncated: true,
+      };
     }
     const raw = await this.safeRead(abs);
     if (raw === null) {
-      return { content: null, size: stat.size, mtimeMs: stat.mtimeMs, binary: false, truncated: false };
+      return {
+        content: null,
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        binary: false,
+        truncated: false,
+      };
     }
     if (raw.includes('\u0000')) {
-      return { content: null, size: stat.size, mtimeMs: stat.mtimeMs, binary: true, truncated: false };
+      return {
+        content: null,
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        binary: true,
+        truncated: false,
+      };
     }
     const truncated = raw.length > PREVIEW_CAP_BYTES;
     return {

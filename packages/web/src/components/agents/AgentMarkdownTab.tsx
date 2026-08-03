@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+
 import type { AgentPersona } from '@fleex/shared';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+
 import { cn } from '../../lib/cn';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 
 interface AgentMarkdownTabProps {
   persona: AgentPersona;
@@ -19,7 +21,8 @@ const FIELD_LABELS: Record<string, { title: string; description: string }> = {
   },
   memoryMd: {
     title: 'Memory',
-    description: 'Persistent learnings and context accumulated across sessions. Can be updated by the agent.',
+    description:
+      'Persistent learnings and context accumulated across sessions. Can be updated by the agent.',
   },
 };
 

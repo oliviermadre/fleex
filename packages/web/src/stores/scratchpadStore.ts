@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import {
   fetchScratchpad,
   saveScratchpad,
@@ -122,7 +123,12 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       set((state) => ({
         entries: {
           ...state.entries,
-          [key]: { ...getEntry(state.entries, key), saving: false, savedAt: Date.now(), dirty: false },
+          [key]: {
+            ...getEntry(state.entries, key),
+            saving: false,
+            savedAt: Date.now(),
+            dirty: false,
+          },
         },
       }));
     } catch {

@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback } from 'react';
-import { Modal } from '../ui/Modal';
+
 import { useFileUpload } from '../../hooks/useFileUpload';
-import * as api from '../../services/api';
-import { useToastStore } from '../../stores/toastStore';
-import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { tint } from '../../lib/tints';
+import * as api from '../../services/api';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { useToastStore } from '../../stores/toastStore';
+import { Modal } from '../ui/Modal';
 
 interface DeliverableFormModalProps {
   open: boolean;
@@ -14,7 +15,9 @@ interface DeliverableFormModalProps {
 
 export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFormModalProps) {
   const selectableTypes = useDeliverableTypesStore((s) => s.types).filter((t) => !t.system);
-  const defaultType = selectableTypes.some((t) => t.id === 'report') ? 'report' : (selectableTypes[0]?.id ?? 'report');
+  const defaultType = selectableTypes.some((t) => t.id === 'report')
+    ? 'report'
+    : (selectableTypes[0]?.id ?? 'report');
   const [title, setTitle] = useState('');
   const [type, setType] = useState<string>(defaultType);
   const [status, setStatus] = useState<'draft' | 'final'>('final');
@@ -98,9 +101,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
             }`}
             autoFocus
           />
-          {titleError && (
-            <span className="text-xs text-[var(--theme-danger)]">{titleError}</span>
-          )}
+          {titleError && <span className="text-xs text-[var(--theme-danger)]">{titleError}</span>}
         </div>
 
         {/* Type + Status row */}
@@ -113,7 +114,9 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
               className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-input)] px-3 py-2 text-sm text-[var(--theme-text-primary)] outline-none transition-colors focus:border-[var(--theme-accent)]"
             >
               {selectableTypes.map((t) => (
-                <option key={t.id} value={t.id}>{t.label}</option>
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
               ))}
             </select>
           </div>
@@ -124,9 +127,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
               type="button"
               onClick={() => setStatus((s) => (s === 'draft' ? 'final' : 'draft'))}
               className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-                status === 'draft'
-                  ? tint('yellow')
-                  : tint('green')
+                status === 'draft' ? tint('yellow') : tint('green')
               }`}
             >
               {status === 'draft' ? 'Draft' : 'Final'}
@@ -137,7 +138,9 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
         {/* Content */}
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-[var(--theme-text-secondary)]">Content</label>
+            <label className="text-xs font-medium text-[var(--theme-text-secondary)]">
+              Content
+            </label>
             <button
               type="button"
               onClick={openFilePicker}
@@ -149,7 +152,9 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
           <div
             {...dragProps}
             className={`relative rounded-md border transition-colors ${
-              isDragOver ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/5' : 'border-[var(--theme-border)]'
+              isDragOver
+                ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/5'
+                : 'border-[var(--theme-border)]'
             }`}
           >
             <textarea
@@ -163,7 +168,9 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
             />
             {isDragOver && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-[var(--theme-accent)]/10">
-                <span className="text-sm font-medium text-[var(--theme-accent)]">Drop file here</span>
+                <span className="text-sm font-medium text-[var(--theme-accent)]">
+                  Drop file here
+                </span>
               </div>
             )}
           </div>

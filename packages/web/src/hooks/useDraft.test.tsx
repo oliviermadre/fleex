@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+
 import { useDraft } from './useDraft';
 
 /** Test harness that surfaces the hook's API onto the DOM and a ref. */

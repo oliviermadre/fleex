@@ -1,9 +1,14 @@
-import type { CommandDef } from '../../../../core/types.ts';
-import { ok, die } from '../../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../../core/api.ts';
+import { ok, die } from '../../../../core/colors.ts';
 import { fetchRunDetail, resolveStepRunId } from '../../_shared.ts';
 
-interface ResolveOptions { outcome?: string; notes?: string; ticket?: string }
+import type { CommandDef } from '../../../../core/types.ts';
+
+interface ResolveOptions {
+  outcome?: string;
+  notes?: string;
+  ticket?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -12,9 +17,15 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<runId>', 'Workflow run UUID or short id prefix (needs --ticket)');
     cmd.argument('<stepRunId>', 'Step run UUID or short id prefix (the human_gate step)');
-    cmd.requiredOption('--outcome <name>', 'Gate outcome (as declared by the workflow, e.g. approved)');
+    cmd.requiredOption(
+      '--outcome <name>',
+      'Gate outcome (as declared by the workflow, e.g. approved)',
+    );
     cmd.option('--notes <text>', 'Optional notes recorded with the decision');
-    cmd.option('--ticket <id>', 'Ticket display ID (#42) or UUID — required to resolve a run prefix');
+    cmd.option(
+      '--ticket <id>',
+      'Ticket display ID (#42) or UUID — required to resolve a run prefix',
+    );
   },
   action: async (runId: string, stepRunId: string, opts: ResolveOptions) => {
     const outcome = opts.outcome?.trim();

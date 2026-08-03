@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
-import type { Container } from '../container.js';
+
 import {
   getGitHubConfig,
   getGoogleConfig,
@@ -9,6 +8,9 @@ import {
   fetchGoogleUser,
   type OAuthProviderConfig,
 } from '../auth/oauth-providers.js';
+
+import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 const SESSION_COOKIE = 'fleex_session';
 const STATE_COOKIE = 'fleex_oauth_state';
@@ -107,7 +109,10 @@ export function authRoutes(container: Container) {
           response_type: 'code',
         });
 
-        reply.header('Set-Cookie', setCookie(STATE_COOKIE, state, 'Path=/; HttpOnly; SameSite=Lax; Max-Age=600'));
+        reply.header(
+          'Set-Cookie',
+          setCookie(STATE_COOKIE, state, 'Path=/; HttpOnly; SameSite=Lax; Max-Age=600'),
+        );
         return reply.redirect(`${config.authorizeUrl}?${params.toString()}`);
       });
 

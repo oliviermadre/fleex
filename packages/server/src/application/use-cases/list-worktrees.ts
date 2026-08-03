@@ -1,7 +1,8 @@
 import type { Worktree } from '@fleex/shared';
+
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
-import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 
 export class ListWorktreesUseCase {

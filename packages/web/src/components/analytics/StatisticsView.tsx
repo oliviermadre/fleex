@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+
 import type {
   StatisticsResponse,
   StatisticsSummary,
@@ -8,8 +9,11 @@ import type {
   PanelLeaderboardEntry,
   WorkflowLeaderboardEntry,
 } from '@fleex/shared';
-import { useStatisticsStore, type Preset, type Granularity } from '../../stores/statisticsStore';
+
 import { cn } from '../../lib/cn';
+import { useStatisticsStore, type Preset, type Granularity } from '../../stores/statisticsStore';
+
+import { ActivityHeatmap, CandidateGallery } from './statCandidates';
 import {
   ChartCard,
   DeliveryComposedChart,
@@ -28,7 +32,6 @@ import {
   type DonutSlice,
   type SeriesDef,
 } from './statCharts';
-import { ActivityHeatmap, CandidateGallery } from './statCandidates';
 
 // ── Focus tabs ──────────────────────────────────────────────────────────────
 
@@ -144,9 +147,21 @@ function Toolbar({
         className="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] disabled:opacity-50"
         title="Refresh"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn(loading && 'animate-spin')}>
-          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" />
-          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" />
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={cn(loading && 'animate-spin')}
+        >
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+          <path d="M3 21v-5h5" />
         </svg>
       </button>
     </div>
@@ -175,37 +190,171 @@ interface KpiDef {
 const KPI_GROUPS: Record<Exclude<Focus, 'catalogue'>, KpiDef[]> = {
   overview: [
     // Row 1 — execution modes
-    { key: 'agentsSpawned', label: 'Agents Spawned', color: colorAt(0), sparkKey: 'agentsSpawned', format: formatCompact },
-    { key: 'skillsExecuted', label: 'Skills Run', color: colorAt(6), sparkKey: 'skillsExecuted', format: formatCompact },
-    { key: 'panelsExecuted', label: 'Panels Run', color: colorAt(4), sparkKey: 'panelsExecuted', format: formatCompact },
-    { key: 'workflowsStarted', label: 'Workflows Started', color: colorAt(8), sparkKey: 'workflowsStarted', format: formatCompact },
+    {
+      key: 'agentsSpawned',
+      label: 'Agents Spawned',
+      color: colorAt(0),
+      sparkKey: 'agentsSpawned',
+      format: formatCompact,
+    },
+    {
+      key: 'skillsExecuted',
+      label: 'Skills Run',
+      color: colorAt(6),
+      sparkKey: 'skillsExecuted',
+      format: formatCompact,
+    },
+    {
+      key: 'panelsExecuted',
+      label: 'Panels Run',
+      color: colorAt(4),
+      sparkKey: 'panelsExecuted',
+      format: formatCompact,
+    },
+    {
+      key: 'workflowsStarted',
+      label: 'Workflows Started',
+      color: colorAt(8),
+      sparkKey: 'workflowsStarted',
+      format: formatCompact,
+    },
     // Row 2 — delivery & cost
-    { key: 'prsCreated', label: 'PRs Created', color: colorAt(9), sparkKey: 'prsCreated', format: formatCompact },
-    { key: 'prsMerged', label: 'PRs Merged', color: colorAt(5), sparkKey: 'prsMerged', format: formatCompact },
-    { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(1), sparkKey: 'deliverablesCreated', format: formatCompact },
-    { key: 'totalCostUsd', label: 'Total Cost', color: colorAt(2), sparkKey: 'totalCostUsd', format: formatUsd, goodWhenDown: true },
+    {
+      key: 'prsCreated',
+      label: 'PRs Created',
+      color: colorAt(9),
+      sparkKey: 'prsCreated',
+      format: formatCompact,
+    },
+    {
+      key: 'prsMerged',
+      label: 'PRs Merged',
+      color: colorAt(5),
+      sparkKey: 'prsMerged',
+      format: formatCompact,
+    },
+    {
+      key: 'deliverablesCreated',
+      label: 'Deliverables',
+      color: colorAt(1),
+      sparkKey: 'deliverablesCreated',
+      format: formatCompact,
+    },
+    {
+      key: 'totalCostUsd',
+      label: 'Total Cost',
+      color: colorAt(2),
+      sparkKey: 'totalCostUsd',
+      format: formatUsd,
+      goodWhenDown: true,
+    },
   ],
   delivery: [
-    { key: 'ticketsCreated', label: 'Tickets Created', color: colorAt(0), sparkKey: 'ticketsCreated', format: formatCompact },
-    { key: 'ticketsCompleted', label: 'Tickets Completed', color: colorAt(1), sparkKey: 'ticketsCompleted', format: formatCompact },
-    { key: 'prsCreated', label: 'PRs Created', color: colorAt(8), sparkKey: 'prsCreated', format: formatCompact },
+    {
+      key: 'ticketsCreated',
+      label: 'Tickets Created',
+      color: colorAt(0),
+      sparkKey: 'ticketsCreated',
+      format: formatCompact,
+    },
+    {
+      key: 'ticketsCompleted',
+      label: 'Tickets Completed',
+      color: colorAt(1),
+      sparkKey: 'ticketsCompleted',
+      format: formatCompact,
+    },
+    {
+      key: 'prsCreated',
+      label: 'PRs Created',
+      color: colorAt(8),
+      sparkKey: 'prsCreated',
+      format: formatCompact,
+    },
     { key: 'prsMerged', label: 'PRs Merged', color: colorAt(5), format: formatCompact },
-    { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(2), sparkKey: 'deliverablesCreated', format: formatCompact },
-    { key: 'commentsCreated', label: 'Comments', color: colorAt(3), sparkKey: 'commentsCreated', format: formatCompact },
-    { key: 'worktreesCreated', label: 'Worktrees', color: colorAt(4), sparkKey: 'worktreesCreated', format: formatCompact },
-    { key: 'mentionsResolved', label: 'Mentions Resolved', color: colorAt(6), sparkKey: 'mentionsResolved', format: formatCompact },
+    {
+      key: 'deliverablesCreated',
+      label: 'Deliverables',
+      color: colorAt(2),
+      sparkKey: 'deliverablesCreated',
+      format: formatCompact,
+    },
+    {
+      key: 'commentsCreated',
+      label: 'Comments',
+      color: colorAt(3),
+      sparkKey: 'commentsCreated',
+      format: formatCompact,
+    },
+    {
+      key: 'worktreesCreated',
+      label: 'Worktrees',
+      color: colorAt(4),
+      sparkKey: 'worktreesCreated',
+      format: formatCompact,
+    },
+    {
+      key: 'mentionsResolved',
+      label: 'Mentions Resolved',
+      color: colorAt(6),
+      sparkKey: 'mentionsResolved',
+      format: formatCompact,
+    },
   ],
   costs: [
-    { key: 'totalCostUsd', label: 'Total Cost', color: colorAt(2), sparkKey: 'totalCostUsd', format: formatUsd, goodWhenDown: true },
+    {
+      key: 'totalCostUsd',
+      label: 'Total Cost',
+      color: colorAt(2),
+      sparkKey: 'totalCostUsd',
+      format: formatUsd,
+      goodWhenDown: true,
+    },
     // Same global total, split by origin (agentic SDK vs manual CLI).
-    { key: 'totalCostUsd', id: 'sdkCost', label: 'SDK Cost', color: colorAt(0), value: (d) => d.summary.totalCostBySource.sdk, spark: (d) => d.timeSeries.map((b) => b.costBySource.sdk), format: formatUsd, goodWhenDown: true },
-    { key: 'totalCostUsd', id: 'cliCost', label: 'CLI Cost', color: colorAt(1), value: (d) => d.summary.totalCostBySource.cli, spark: (d) => d.timeSeries.map((b) => b.costBySource.cli), format: formatUsd, goodWhenDown: true },
+    {
+      key: 'totalCostUsd',
+      id: 'sdkCost',
+      label: 'SDK Cost',
+      color: colorAt(0),
+      value: (d) => d.summary.totalCostBySource.sdk,
+      spark: (d) => d.timeSeries.map((b) => b.costBySource.sdk),
+      format: formatUsd,
+      goodWhenDown: true,
+    },
+    {
+      key: 'totalCostUsd',
+      id: 'cliCost',
+      label: 'CLI Cost',
+      color: colorAt(1),
+      value: (d) => d.summary.totalCostBySource.cli,
+      spark: (d) => d.timeSeries.map((b) => b.costBySource.cli),
+      format: formatUsd,
+      goodWhenDown: true,
+    },
     { key: 'totalInputTokens', label: 'Input Tokens', color: colorAt(0), format: formatTokens },
     { key: 'totalOutputTokens', label: 'Output Tokens', color: colorAt(8), format: formatTokens },
-    { key: 'agentsSpawned', label: 'Agent Runs', color: colorAt(1), sparkKey: 'agentsSpawned', format: formatCompact },
-    { key: 'skillsExecuted', label: 'Skills Run', color: colorAt(6), sparkKey: 'skillsExecuted', format: formatCompact },
+    {
+      key: 'agentsSpawned',
+      label: 'Agent Runs',
+      color: colorAt(1),
+      sparkKey: 'agentsSpawned',
+      format: formatCompact,
+    },
+    {
+      key: 'skillsExecuted',
+      label: 'Skills Run',
+      color: colorAt(6),
+      sparkKey: 'skillsExecuted',
+      format: formatCompact,
+    },
     { key: 'panelsExecuted', label: 'Panels Run', color: colorAt(4), format: formatCompact },
-    { key: 'avgAgentDurationMs', label: 'Avg Duration', color: colorAt(10), format: formatDuration, goodWhenDown: true },
+    {
+      key: 'avgAgentDurationMs',
+      label: 'Avg Duration',
+      color: colorAt(10),
+      format: formatDuration,
+      goodWhenDown: true,
+    },
     { key: 'activeSessions', label: 'Active Sessions', color: colorAt(5), format: formatCompact },
   ],
 };
@@ -226,7 +375,10 @@ function DeltaBadge({ delta, goodWhenDown }: { delta: number | null; goodWhenDow
   const good = goodWhenDown ? !up : up;
   const color = good ? 'var(--theme-success)' : 'var(--theme-danger)';
   return (
-    <span className="flex items-center gap-0.5 text-[10px] font-semibold tabular-nums" style={{ color }}>
+    <span
+      className="flex items-center gap-0.5 text-[10px] font-semibold tabular-nums"
+      style={{ color }}
+    >
       <span>{up ? '▲' : '▼'}</span>
       {Math.abs(delta).toFixed(0)}%
     </span>
@@ -249,15 +401,20 @@ function KpiCard({
     <div className="flex flex-col justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3.5 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: def.color }} />
-          <span className="text-[11px] font-medium text-[var(--theme-text-muted)]">{def.label}</span>
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: def.color }}
+          />
+          <span className="text-[11px] font-medium text-[var(--theme-text-muted)]">
+            {def.label}
+          </span>
         </div>
         {previous !== undefined && <DeltaBadge delta={delta} goodWhenDown={def.goodWhenDown} />}
       </div>
-      <div className="mt-2 text-2xl font-bold tabular-nums text-[var(--theme-text-primary)]">{def.format(current)}</div>
-      <div className="mt-1 h-9">
-        {def.sparkKey && <Sparkline data={spark} color={def.color} />}
+      <div className="mt-2 text-2xl font-bold tabular-nums text-[var(--theme-text-primary)]">
+        {def.format(current)}
       </div>
+      <div className="mt-1 h-9">{def.sparkKey && <Sparkline data={spark} color={def.color} />}</div>
     </div>
   );
 }
@@ -307,7 +464,10 @@ function LeaderboardTable<T>({
             </thead>
             <tbody>
               {rows.map((row, i) => (
-                <tr key={keyOf(row)} className="border-b border-[var(--theme-border)] transition-colors last:border-0 hover:bg-[var(--theme-bg-hover)]">
+                <tr
+                  key={keyOf(row)}
+                  className="border-b border-[var(--theme-border)] transition-colors last:border-0 hover:bg-[var(--theme-bg-hover)]"
+                >
                   {columns.map((c, ci) => (
                     <td
                       key={ci}
@@ -339,13 +499,26 @@ function RankCell({ index, name }: { index: number; name: string }) {
 }
 
 /** Inline bar showing this value relative to the column max. */
-function BarValue({ value, max, color, label }: { value: number; max: number; color: string; label: string }) {
+function BarValue({
+  value,
+  max,
+  color,
+  label,
+}: {
+  value: number;
+  max: number;
+  color: string;
+  label: string;
+}) {
   const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
   return (
     <div className="flex items-center justify-end gap-2">
       <span className="text-[var(--theme-text-secondary)]">{label}</span>
       <span className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--theme-bg-overlay)]">
-        <span className="block h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+        <span
+          className="block h-full rounded-full"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
       </span>
     </div>
   );
@@ -360,7 +533,11 @@ function flattenByKey(
   const names = new Set<string>();
   for (const b of buckets) for (const n of Object.keys(pick(b) ?? {})) names.add(n);
   const list = [...names];
-  const series: SeriesDef[] = list.map((name, i) => ({ key: name, label: name, color: colorAt(i) }));
+  const series: SeriesDef[] = list.map((name, i) => ({
+    key: name,
+    label: name,
+    color: colorAt(i),
+  }));
   const rows = buckets.map((b) => {
     const src = pick(b) ?? {};
     const row: Record<string, unknown> = { label: shortLabel(b.date) };
@@ -442,8 +619,17 @@ export function StatisticsView() {
 
         {!loading && !data && (
           <div className="flex flex-col items-center justify-center py-20 text-[var(--theme-text-faint)]">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mb-4 opacity-30">
-              <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1"
+              className="mb-4 opacity-30"
+            >
+              <path d="M3 3v18h18" />
+              <path d="M7 16l4-8 4 4 4-6" />
             </svg>
             <p className="text-sm">No statistics available</p>
           </div>
@@ -472,12 +658,19 @@ function DashboardContent({
     [data.timeSeries],
   );
 
-  const cost = useMemo(() => flattenByKey(data.timeSeries, (b) => b.costByAgent), [data.timeSeries]);
-  const costSource = useMemo(
-    () => flattenByKey(data.timeSeries, (b) => ({ SDK: b.costBySource.sdk, CLI: b.costBySource.cli })),
+  const cost = useMemo(
+    () => flattenByKey(data.timeSeries, (b) => b.costByAgent),
     [data.timeSeries],
   );
-  const boards = useMemo(() => flattenByKey(data.timeSeries, (b) => b.ticketsDoneByBoard), [data.timeSeries]);
+  const costSource = useMemo(
+    () =>
+      flattenByKey(data.timeSeries, (b) => ({ SDK: b.costBySource.sdk, CLI: b.costBySource.cli })),
+    [data.timeSeries],
+  );
+  const boards = useMemo(
+    () => flattenByKey(data.timeSeries, (b) => b.ticketsDoneByBoard),
+    [data.timeSeries],
+  );
 
   const costByAgent: DonutSlice[] = useMemo(
     () =>
@@ -490,7 +683,10 @@ function DashboardContent({
   const tokensByAgent: DonutSlice[] = useMemo(
     () =>
       data.agentLeaderboard
-        .map((a) => ({ name: a.personaDisplayName, value: a.totalInputTokens + a.totalOutputTokens }))
+        .map((a) => ({
+          name: a.personaDisplayName,
+          value: a.totalInputTokens + a.totalOutputTokens,
+        }))
         .filter((a) => a.value > 0),
     [data.agentLeaderboard],
   );
@@ -504,7 +700,13 @@ function DashboardContent({
             key={def.id ?? def.key}
             def={def}
             current={def.value ? def.value(data) : Number(data.summary[def.key] ?? 0)}
-            previous={previous ? (def.value ? def.value(previous) : Number(previous.summary[def.key] ?? 0)) : undefined}
+            previous={
+              previous
+                ? def.value
+                  ? def.value(previous)
+                  : Number(previous.summary[def.key] ?? 0)
+                : undefined
+            }
             spark={def.spark ? def.spark(data) : def.sparkKey ? sparkData(def.sparkKey) : []}
           />
         ))}
@@ -512,12 +714,18 @@ function DashboardContent({
 
       {focus === 'overview' && (
         <>
-          <ChartCard title="Activity Heatmap" subtitle="Agent runs by weekday × hour (your local time) — when Fleex works, including off-hours.">
+          <ChartCard
+            title="Activity Heatmap"
+            subtitle="Agent runs by weekday × hour (your local time) — when Fleex works, including off-hours."
+          >
             <ActivityHeatmap data={data.activityHeatmap} />
           </ChartCard>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <ChartCard title="Delivery Throughput" subtitle="Tickets created vs completed, with PRs created">
+            <ChartCard
+              title="Delivery Throughput"
+              subtitle="Tickets created vs completed, with PRs created"
+            >
               <DeliveryComposedChart
                 data={activityRows}
                 xKey="label"
@@ -531,7 +739,12 @@ function DashboardContent({
 
             <ChartCard title="Cost Over Time" subtitle="Agentic spend per bucket, stacked by agent">
               {cost.series.length > 0 ? (
-                <TimeBarChart data={cost.rows} series={cost.series} xKey="label" format={formatUsd} />
+                <TimeBarChart
+                  data={cost.rows}
+                  series={cost.series}
+                  xKey="label"
+                  format={formatUsd}
+                />
               ) : (
                 <EmptyChart message="No cost recorded — run an agent to start tracking" />
               )}
@@ -542,7 +755,10 @@ function DashboardContent({
 
       {focus === 'delivery' && (
         <>
-          <ChartCard title="Delivery Throughput" subtitle="Tickets created vs completed, with PRs created over time">
+          <ChartCard
+            title="Delivery Throughput"
+            subtitle="Tickets created vs completed, with PRs created over time"
+          >
             <DeliveryComposedChart
               data={activityRows}
               xKey="label"
@@ -555,7 +771,10 @@ function DashboardContent({
           </ChartCard>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <ChartCard title="Tickets Done by Board" subtitle="When tickets moved to done, grouped by board">
+            <ChartCard
+              title="Tickets Done by Board"
+              subtitle="When tickets moved to done, grouped by board"
+            >
               {boards.series.length > 0 ? (
                 <TimeBarChart data={boards.rows} series={boards.series} xKey="label" />
               ) : (
@@ -563,7 +782,10 @@ function DashboardContent({
               )}
             </ChartCard>
 
-            <ChartCard title="Collaboration Volume" subtitle="Comments, mentions and deliverables produced">
+            <ChartCard
+              title="Collaboration Volume"
+              subtitle="Comments, mentions and deliverables produced"
+            >
               <TimeAreaChart
                 data={activityRows}
                 xKey="label"
@@ -588,9 +810,18 @@ function DashboardContent({
             )}
           </ChartCard>
 
-          <ChartCard title="Cost by Source" subtitle="Share of spend: agentic (SDK) vs manual CLI sessions, over time">
+          <ChartCard
+            title="Cost by Source"
+            subtitle="Share of spend: agentic (SDK) vs manual CLI sessions, over time"
+          >
             {costSource.rows.length > 0 ? (
-              <TimeBarChart data={costSource.rows} series={costSource.series} xKey="label" format={formatUsd} percent />
+              <TimeBarChart
+                data={costSource.rows}
+                series={costSource.series}
+                xKey="label"
+                format={formatUsd}
+                percent
+              />
             ) : (
               <EmptyChart message="No cost recorded yet" />
             )}
@@ -641,17 +872,65 @@ function AgentLeaderboard({ entries }: { entries: AgentLeaderboardEntry[] }) {
         {
           header: 'Spawns',
           align: 'right',
-          render: (e) => <BarValue value={e.spawnCount} max={maxSpawn} color={colorAt(0)} label={String(e.spawnCount)} />,
+          render: (e) => (
+            <BarValue
+              value={e.spawnCount}
+              max={maxSpawn}
+              color={colorAt(0)}
+              label={String(e.spawnCount)}
+            />
+          ),
         },
-        { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
+        {
+          header: 'Avg Duration',
+          align: 'right',
+          render: (e) => (
+            <span className="text-[var(--theme-text-secondary)]">
+              {e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}
+            </span>
+          ),
+        },
         {
           header: 'Cost',
           align: 'right',
-          render: (e) => <BarValue value={e.totalCostUsd} max={maxCost} color={colorAt(2)} label={e.totalCostUsd > 0 ? formatUsd(e.totalCostUsd) : '—'} />,
+          render: (e) => (
+            <BarValue
+              value={e.totalCostUsd}
+              max={maxCost}
+              color={colorAt(2)}
+              label={e.totalCostUsd > 0 ? formatUsd(e.totalCostUsd) : '—'}
+            />
+          ),
         },
-        { header: 'Tokens', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.totalInputTokens + e.totalOutputTokens > 0 ? formatTokens(e.totalInputTokens + e.totalOutputTokens) : '—'}</span> },
-        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
-        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+        {
+          header: 'Tokens',
+          align: 'right',
+          render: (e) => (
+            <span className="text-[var(--theme-text-secondary)]">
+              {e.totalInputTokens + e.totalOutputTokens > 0
+                ? formatTokens(e.totalInputTokens + e.totalOutputTokens)
+                : '—'}
+            </span>
+          ),
+        },
+        {
+          header: 'Done',
+          align: 'right',
+          render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span>,
+        },
+        {
+          header: 'Failed',
+          align: 'right',
+          render: (e) => (
+            <span
+              style={{
+                color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)',
+              }}
+            >
+              {e.failedCount}
+            </span>
+          ),
+        },
       ]}
     />
   );
@@ -670,10 +949,33 @@ function SkillLeaderboard({ entries }: { entries: SkillLeaderboardEntry[] }) {
         {
           header: 'Runs',
           align: 'right',
-          render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(6)} label={String(e.executionCount)} />,
+          render: (e) => (
+            <BarValue
+              value={e.executionCount}
+              max={max}
+              color={colorAt(6)}
+              label={String(e.executionCount)}
+            />
+          ),
         },
-        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
-        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+        {
+          header: 'Done',
+          align: 'right',
+          render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span>,
+        },
+        {
+          header: 'Failed',
+          align: 'right',
+          render: (e) => (
+            <span
+              style={{
+                color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)',
+              }}
+            >
+              {e.failedCount}
+            </span>
+          ),
+        },
       ]}
     />
   );
@@ -688,15 +990,49 @@ function WorkflowLeaderboard({ entries }: { entries: WorkflowLeaderboardEntry[] 
       empty="No workflow runs yet"
       keyOf={(e) => e.workflowId}
       columns={[
-        { header: 'Workflow', render: (e, i) => <RankCell index={i} name={e.workflowDisplayName} /> },
+        {
+          header: 'Workflow',
+          render: (e, i) => <RankCell index={i} name={e.workflowDisplayName} />,
+        },
         {
           header: 'Runs',
           align: 'right',
-          render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(8)} label={String(e.executionCount)} />,
+          render: (e) => (
+            <BarValue
+              value={e.executionCount}
+              max={max}
+              color={colorAt(8)}
+              label={String(e.executionCount)}
+            />
+          ),
         },
-        { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
-        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
-        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+        {
+          header: 'Avg Duration',
+          align: 'right',
+          render: (e) => (
+            <span className="text-[var(--theme-text-secondary)]">
+              {e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}
+            </span>
+          ),
+        },
+        {
+          header: 'Done',
+          align: 'right',
+          render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span>,
+        },
+        {
+          header: 'Failed',
+          align: 'right',
+          render: (e) => (
+            <span
+              style={{
+                color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)',
+              }}
+            >
+              {e.failedCount}
+            </span>
+          ),
+        },
       ]}
     />
   );
@@ -715,11 +1051,42 @@ function PanelLeaderboard({ entries }: { entries: PanelLeaderboardEntry[] }) {
         {
           header: 'Runs',
           align: 'right',
-          render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(4)} label={String(e.executionCount)} />,
+          render: (e) => (
+            <BarValue
+              value={e.executionCount}
+              max={max}
+              color={colorAt(4)}
+              label={String(e.executionCount)}
+            />
+          ),
         },
-        { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
-        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
-        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+        {
+          header: 'Avg Duration',
+          align: 'right',
+          render: (e) => (
+            <span className="text-[var(--theme-text-secondary)]">
+              {e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}
+            </span>
+          ),
+        },
+        {
+          header: 'Done',
+          align: 'right',
+          render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span>,
+        },
+        {
+          header: 'Failed',
+          align: 'right',
+          render: (e) => (
+            <span
+              style={{
+                color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)',
+              }}
+            >
+              {e.failedCount}
+            </span>
+          ),
+        },
       ]}
     />
   );

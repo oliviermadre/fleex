@@ -1,18 +1,29 @@
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  MarkerType,
+  Position,
+  type Edge,
+} from '@xyflow/react';
 import { useMemo, useState } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, MarkerType, Position, type Edge } from '@xyflow/react';
+
 import '@xyflow/react/dist/style.css';
 import type { WorkflowRun, StepRun, WorkflowStep } from '@fleex/shared';
-import { StepRunNode, type StepRunNodeData } from './StepRunNode';
-import { WorkflowDagEdge } from './WorkflowDagEdge';
+
+import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
+import { postTicketComment } from '../../services/api';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+
+import { CancelledStepRestartPanel } from './CancelledStepRestartPanel';
+import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
-import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
-import { CancelledStepRestartPanel } from './CancelledStepRestartPanel';
-import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { StepRunNode, type StepRunNodeData } from './StepRunNode';
+import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { countCompletedSteps } from './workflowProgress';
-import { postTicketComment } from '../../services/api';
-import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
 
 const nodeTypes = { stepRun: StepRunNode };
 const edgeTypes = { workflow: WorkflowDagEdge };
@@ -62,8 +73,24 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
           width: 180,
           height: 80,
           handles: [
-            { id: null, type: 'target' as const, position: Position.Left, x: 0, y: 40, width: 1, height: 1 },
-            { id: null, type: 'source' as const, position: Position.Right, x: 180, y: 40, width: 1, height: 1 },
+            {
+              id: null,
+              type: 'target' as const,
+              position: Position.Left,
+              x: 0,
+              y: 40,
+              width: 1,
+              height: 1,
+            },
+            {
+              id: null,
+              type: 'source' as const,
+              position: Position.Right,
+              x: 180,
+              y: 40,
+              width: 1,
+              height: 1,
+            },
           ],
           data: data as unknown as Record<string, unknown>,
         };
@@ -115,9 +142,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
               {completed}/{total} steps completed
             </div>
           </div>
-          <span
-            className="text-[10px] px-2 py-0.5 rounded border border-[var(--theme-border-input)] text-[var(--theme-text-secondary)]"
-          >
+          <span className="text-[10px] px-2 py-0.5 rounded border border-[var(--theme-border-input)] text-[var(--theme-text-secondary)]">
             {run.status}
           </span>
         </div>
@@ -156,7 +181,10 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
               pannable
               zoomable
               maskColor={themeColors.bgHover}
-              style={{ background: 'var(--theme-bg-surface)', border: '1px solid var(--theme-border)' }}
+              style={{
+                background: 'var(--theme-bg-surface)',
+                border: '1px solid var(--theme-border)',
+              }}
               nodeColor={themeColors.accentMuted}
               nodeStrokeColor={themeColors.accent}
             />
@@ -227,10 +255,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
               )}
             {selectedStepRun?.status === 'failed' && (
               <FailedStepRetryPanel
-                error={
-                  (selectedStepRun.output?.schemaFields?.error as string | undefined) ??
-                  null
-                }
+                error={(selectedStepRun.output?.schemaFields?.error as string | undefined) ?? null}
                 onRetry={() => retry(run.id, selectedStepRun.id)}
               />
             )}
@@ -241,9 +266,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
               />
             )}
             {selectedStepRun?.status === 'cancelled' && (
-              <CancelledStepRestartPanel
-                onRestart={() => retry(run.id, selectedStepRun.id)}
-              />
+              <CancelledStepRestartPanel onRestart={() => retry(run.id, selectedStepRun.id)} />
             )}
           </div>
         )}

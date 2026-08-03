@@ -1,11 +1,13 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useUIStore } from '../../stores/uiStore';
+
+import { useScrollSync } from '../../hooks/useScrollSync';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
+import { useUIStore } from '../../stores/uiStore';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
+
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { SaveStatus } from './SaveStatus';
-import { useScrollSync } from '../../hooks/useScrollSync';
-import { HotkeyBadge } from '../ui/HotkeyBadge';
 
 export function ScratchpadPanel() {
   const open = useUIStore((s) => s.scratchpadOpen);
@@ -26,7 +28,13 @@ export function ScratchpadPanel() {
 
   // Derive store key from repo key
   const storeKey = scratchpadRepoKey ?? '__global__';
-  const entry = entries[storeKey] ?? { content: '', loaded: false, saving: false, savedAt: null, dirty: false };
+  const entry = entries[storeKey] ?? {
+    content: '',
+    loaded: false,
+    saving: false,
+    savedAt: null,
+    dirty: false,
+  };
 
   const { handleTyping, handlePreviewScroll } = useScrollSync(
     textareaRef,
@@ -95,16 +103,10 @@ export function ScratchpadPanel() {
 
   if (!open) return null;
 
-  const title = scratchpadRepoKey
-    ? `Scratchpad — ${scratchpadRepoKey}`
-    : 'Scratchpad';
+  const title = scratchpadRepoKey ? `Scratchpad — ${scratchpadRepoKey}` : 'Scratchpad';
 
   return createPortal(
-    <div
-      ref={backdropRef}
-      className="scratchpad-backdrop"
-      onClick={handleBackdropClick}
-    >
+    <div ref={backdropRef} className="scratchpad-backdrop" onClick={handleBackdropClick}>
       <div className={`scratchpad-panel ${previewExpanded ? 'scratchpad-panel-wide' : ''}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
@@ -115,7 +117,12 @@ export function ScratchpadPanel() {
                 stroke="currentColor"
                 strokeWidth="1.2"
               />
-              <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+              <path
+                d="M5.5 5h5M5.5 7.5h5M5.5 10h3"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinecap="round"
+              />
             </svg>
             <span className="text-sm font-medium text-[var(--theme-text-primary)] truncate max-w-[260px]">
               {title}
@@ -134,7 +141,15 @@ export function ScratchpadPanel() {
                 onClick={togglePreview}
                 title="Toggle preview (Alt+Shift+V)"
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
                   <circle cx="8" cy="8" r="2" />
                 </svg>
@@ -151,7 +166,12 @@ export function ScratchpadPanel() {
               onClick={toggleScratchpad}
             >
               <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
-                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path
+                  d="M4 4l8 8M12 4l-8 8"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
               </svg>
             </button>
           </div>

@@ -1,4 +1,5 @@
 import type { Ticket } from '@fleex/shared';
+
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 

@@ -1,6 +1,11 @@
 import { FLEEX_PREFIX, DEFAULT_COLS, DEFAULT_ROWS } from '@fleex/shared';
-import type { TmuxPort, TmuxSessionInfo, ManagedSessionsWithPanes } from '../../application/ports/tmux.port.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type {
+  TmuxPort,
+  TmuxSessionInfo,
+  ManagedSessionsWithPanes,
+} from '../../application/ports/tmux.port.js';
 import type { ExecFn } from '../host/types.js';
 
 /** Cache resolved binary names for version-titled pane processes (e.g. claude CLI) */
@@ -21,18 +26,18 @@ export class TmuxCliAdapter implements TmuxPort {
     }
   }
 
-  async createSession(opts: {
-    name: string;
-    cwd: string;
-    command?: string;
-  }): Promise<void> {
+  async createSession(opts: { name: string; cwd: string; command?: string }): Promise<void> {
     const args = [
       'new-session',
       '-d',
-      '-s', opts.name,
-      '-c', opts.cwd,
-      '-x', String(DEFAULT_COLS),
-      '-y', String(DEFAULT_ROWS),
+      '-s',
+      opts.name,
+      '-c',
+      opts.cwd,
+      '-x',
+      String(DEFAULT_COLS),
+      '-y',
+      String(DEFAULT_ROWS),
     ];
 
     if (opts.command) {
@@ -45,55 +50,112 @@ export class TmuxCliAdapter implements TmuxPort {
     // Override WheelUpPane to always enter copy-mode on scroll
     // (bypasses shell mouse tracking that would otherwise cycle command history)
     await this.execFn('tmux', [
-      'bind-key', '-T', 'root', 'WheelUpPane',
-      'if-shell', '-F', '#{pane_in_mode}', 'send-keys -M', 'copy-mode -e',
+      'bind-key',
+      '-T',
+      'root',
+      'WheelUpPane',
+      'if-shell',
+      '-F',
+      '#{pane_in_mode}',
+      'send-keys -M',
+      'copy-mode -e',
     ]);
     // Scroll 1 line at a time in copy-mode (default is 5, too aggressive for trackpads)
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode', 'WheelUpPane',
-      'send-keys', '-X', 'scroll-up',
+      'bind-key',
+      '-T',
+      'copy-mode',
+      'WheelUpPane',
+      'send-keys',
+      '-X',
+      'scroll-up',
     ]);
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode', 'WheelDownPane',
-      'send-keys', '-X', 'scroll-down',
+      'bind-key',
+      '-T',
+      'copy-mode',
+      'WheelDownPane',
+      'send-keys',
+      '-X',
+      'scroll-down',
     ]);
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode-vi', 'WheelUpPane',
-      'send-keys', '-X', 'scroll-up',
+      'bind-key',
+      '-T',
+      'copy-mode-vi',
+      'WheelUpPane',
+      'send-keys',
+      '-X',
+      'scroll-up',
     ]);
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode-vi', 'WheelDownPane',
-      'send-keys', '-X', 'scroll-down',
+      'bind-key',
+      '-T',
+      'copy-mode-vi',
+      'WheelDownPane',
+      'send-keys',
+      '-X',
+      'scroll-down',
     ]);
     // Keep selection visible after mouse drag without copying to clipboard
     // (user explicitly copies with Cmd+C / Ctrl+Shift+C)
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode', 'MouseDragEnd1Pane',
-      'send-keys', '-X', 'stop-selection',
+      'bind-key',
+      '-T',
+      'copy-mode',
+      'MouseDragEnd1Pane',
+      'send-keys',
+      '-X',
+      'stop-selection',
     ]);
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode-vi', 'MouseDragEnd1Pane',
-      'send-keys', '-X', 'stop-selection',
+      'bind-key',
+      '-T',
+      'copy-mode-vi',
+      'MouseDragEnd1Pane',
+      'send-keys',
+      '-X',
+      'stop-selection',
     ]);
     // Ctrl+C: copy selection in copy-mode, SIGINT outside (natural behavior)
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode', 'C-c',
-      'send-keys', '-X', 'copy-selection-no-clear',
+      'bind-key',
+      '-T',
+      'copy-mode',
+      'C-c',
+      'send-keys',
+      '-X',
+      'copy-selection-no-clear',
     ]);
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode-vi', 'C-c',
-      'send-keys', '-X', 'copy-selection-no-clear',
+      'bind-key',
+      '-T',
+      'copy-mode-vi',
+      'C-c',
+      'send-keys',
+      '-X',
+      'copy-selection-no-clear',
     ]);
     // Virtual key (User0) for Cmd+C on macOS (doesn't generate \x03).
     // Only bound in copy-mode — no-op outside.
     await this.execFn('tmux', ['set', '-s', 'user-keys[0]', '\x1b[99~']);
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode', 'User0',
-      'send-keys', '-X', 'copy-selection-no-clear',
+      'bind-key',
+      '-T',
+      'copy-mode',
+      'User0',
+      'send-keys',
+      '-X',
+      'copy-selection-no-clear',
     ]);
     await this.execFn('tmux', [
-      'bind-key', '-T', 'copy-mode-vi', 'User0',
-      'send-keys', '-X', 'copy-selection-no-clear',
+      'bind-key',
+      '-T',
+      'copy-mode-vi',
+      'User0',
+      'send-keys',
+      '-X',
+      'copy-selection-no-clear',
     ]);
     this.logger.debug('tmux session created', { name: opts.name });
   }
@@ -151,7 +213,9 @@ export class TmuxCliAdapter implements TmuxPort {
   async listManagedSessionsWithPaneCommands(): Promise<ManagedSessionsWithPanes> {
     try {
       const { stdout } = await this.execFn('tmux', [
-        'list-panes', '-a', '-F',
+        'list-panes',
+        '-a',
+        '-F',
         '#{session_name},#{session_created},#{session_attached},#{window_width},#{window_height},#{pane_pid},#{pane_current_command},#{pane_current_path}',
       ]);
 
@@ -250,7 +314,10 @@ export class TmuxCliAdapter implements TmuxPort {
   async getPaneCommands(): Promise<Map<string, string>> {
     try {
       const { stdout } = await this.execFn('tmux', [
-        'list-panes', '-a', '-F', '#{session_name} #{pane_pid} #{pane_current_command}',
+        'list-panes',
+        '-a',
+        '-F',
+        '#{session_name} #{pane_pid} #{pane_current_command}',
       ]);
 
       const result = new Map<string, string>();
@@ -304,7 +371,11 @@ export class TmuxCliAdapter implements TmuxPort {
   async getSessionCwd(name: string): Promise<string | null> {
     try {
       const { stdout } = await this.execFn('tmux', [
-        'display-message', '-p', '-t', name, '#{pane_current_path}',
+        'display-message',
+        '-p',
+        '-t',
+        name,
+        '#{pane_current_path}',
       ]);
       const cwd = stdout.trim();
       return cwd || null;

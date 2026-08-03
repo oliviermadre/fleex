@@ -1,6 +1,7 @@
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 const SCRATCHPAD_DIR = '.fleex';
 const SCRATCHPAD_FILE = 'scratchpad.md';
@@ -107,76 +108,30 @@ export function scratchpadRoutes(container: Container) {
 
     // ── List all scratchpads ──
 
-    app.get<{ Querystring: { repos?: string } }>(
-      '/api/scratchpads',
-      async (request) => {
-        const items: { key: string; label: string; lineCount: number }[] = [];
+    app.get<{ Querystring: { repos?: string } }>('/api/scratchpads', async (request) => {
+      const items: { key: string; label: string; lineCount: number }[] = [];
 
-        if (kvStore) {
-          // KV-backed: list all scratchpad:* keys
-          const globalContent = await kvStore.get(KV_GLOBAL);
-          const globalLines = globalContent
-            ? globalContent.split('\n').filter((l: string) => l.trim() !== '').length
-            : 0;
-          items.push({ key: '__global__', label: 'Global', lineCount: globalLines });
+      if (kvStore) {
+        // KV-backed: list all scratchpad:* keys
+        const globalContent = await kvStore.get(KV_GLOBAL);
+        const globalLines = globalContent
+          ? globalContent.split('\n').filter((l: string) => l.trim() !== '').length
+          : 0;
+        items.push({ key: '__global__', label: 'Global', lineCount: globalLines });
 
-          const entries = await kvStore.listByPrefix('scratchpad:');
-          const seen = new Set<string>();
-          for (const entry of entries) {
-            if (entry.key === KV_GLOBAL) continue;
-            const key = entry.key.replace('scratchpad:', '');
-            seen.add(key);
-            const lineCount = entry.value.split('\n').filter((l: string) => l.trim() !== '').length;
-            items.push({ key, label: key, lineCount });
-          }
-
-          // Add configured repos that don't have entries yet
-          const reposParam = request.query.repos;
-          const configuredRepos = reposParam ? reposParam.split(',').filter(Boolean) : [];
-          for (const repo of configuredRepos) {
-            if (!seen.has(repo)) {
-              items.push({ key: repo, label: repo, lineCount: 0 });
-            }
-          }
-
-          return { items };
+        const entries = await kvStore.listByPrefix('scratchpad:');
+        const seen = new Set<string>();
+        for (const entry of entries) {
+          if (entry.key === KV_GLOBAL) continue;
+          const key = entry.key.replace('scratchpad:', '');
+          seen.add(key);
+          const lineCount = entry.value.split('\n').filter((l: string) => l.trim() !== '').length;
+          items.push({ key, label: key, lineCount });
         }
 
-        // Filesystem-backed (original logic)
-        let globalLineCount = 0;
-        if (await hostFs.exists(filePath)) {
-          const content = await hostFs.readFile(filePath);
-          globalLineCount = content.split('\n').filter((l: string) => l.trim() !== '').length;
-        }
-        items.push({ key: '__global__', label: 'Global', lineCount: globalLineCount });
-
+        // Add configured repos that don't have entries yet
         const reposParam = request.query.repos;
         const configuredRepos = reposParam ? reposParam.split(',').filter(Boolean) : [];
-        const seen = new Set<string>();
-
-        if (await hostFs.exists(scratchpadsDir)) {
-          try {
-            const orgEntries = await hostFs.readdir(scratchpadsDir);
-            for (const orgEntry of orgEntries) {
-              if (!orgEntry.isDirectory) continue;
-              const orgPath = join(scratchpadsDir, orgEntry.name);
-              const fileEntries = await hostFs.readdir(orgPath);
-              for (const fileEntry of fileEntries) {
-                if (!fileEntry.isFile || !fileEntry.name.endsWith('.md')) continue;
-                const repoName = fileEntry.name.replace(/\.md$/, '');
-                const key = `${orgEntry.name}/${repoName}`;
-                if (seen.has(key)) continue;
-                seen.add(key);
-                const content = await hostFs.readFile(join(orgPath, fileEntry.name));
-                const lineCount = content.split('\n').filter((l: string) => l.trim() !== '').length;
-                items.push({ key, label: key, lineCount });
-              }
-            }
-          } catch {
-            // directory scan failed
-          }
-        }
-
         for (const repo of configuredRepos) {
           if (!seen.has(repo)) {
             items.push({ key: repo, label: repo, lineCount: 0 });
@@ -184,7 +139,50 @@ export function scratchpadRoutes(container: Container) {
         }
 
         return { items };
-      },
-    );
+      }
+
+      // Filesystem-backed (original logic)
+      let globalLineCount = 0;
+      if (await hostFs.exists(filePath)) {
+        const content = await hostFs.readFile(filePath);
+        globalLineCount = content.split('\n').filter((l: string) => l.trim() !== '').length;
+      }
+      items.push({ key: '__global__', label: 'Global', lineCount: globalLineCount });
+
+      const reposParam = request.query.repos;
+      const configuredRepos = reposParam ? reposParam.split(',').filter(Boolean) : [];
+      const seen = new Set<string>();
+
+      if (await hostFs.exists(scratchpadsDir)) {
+        try {
+          const orgEntries = await hostFs.readdir(scratchpadsDir);
+          for (const orgEntry of orgEntries) {
+            if (!orgEntry.isDirectory) continue;
+            const orgPath = join(scratchpadsDir, orgEntry.name);
+            const fileEntries = await hostFs.readdir(orgPath);
+            for (const fileEntry of fileEntries) {
+              if (!fileEntry.isFile || !fileEntry.name.endsWith('.md')) continue;
+              const repoName = fileEntry.name.replace(/\.md$/, '');
+              const key = `${orgEntry.name}/${repoName}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              const content = await hostFs.readFile(join(orgPath, fileEntry.name));
+              const lineCount = content.split('\n').filter((l: string) => l.trim() !== '').length;
+              items.push({ key, label: key, lineCount });
+            }
+          }
+        } catch {
+          // directory scan failed
+        }
+      }
+
+      for (const repo of configuredRepos) {
+        if (!seen.has(repo)) {
+          items.push({ key: repo, label: repo, lineCount: 0 });
+        }
+      }
+
+      return { items };
+    });
   };
 }

@@ -1,8 +1,9 @@
 import type { AgentActivityState } from '@fleex/shared';
-import { ActivityPill } from '../tickets/ActivityPill';
+
 import { formatAge } from '../../lib/formatAge';
-import { useNow } from '../../lib/useNow';
 import { tint } from '../../lib/tints';
+import { useNow } from '../../lib/useNow';
+import { ActivityPill } from '../tickets/ActivityPill';
 
 interface Props {
   activity: AgentActivityState;

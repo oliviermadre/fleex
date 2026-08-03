@@ -1,6 +1,7 @@
 import { PanelNotFoundError } from '../../domain/errors.js';
-import type { PanelStorePort } from '../ports/panel-store.port.js';
+
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { PanelStorePort } from '../ports/panel-store.port.js';
 
 export class DeletePanelUseCase {
   constructor(

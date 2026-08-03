@@ -1,5 +1,6 @@
 import type { TicketStatus } from '@fleex/shared';
 import { TICKET_STATUS_LABELS, TICKET_STATUSES } from '@fleex/shared';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { STATUS_COLORS } from '../../lib/statusColors';
@@ -28,7 +29,17 @@ interface Props {
 
 function ChevronDownIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="opacity-70"
+    >
       <polyline points="4,6 8,10 12,6" />
     </svg>
   );

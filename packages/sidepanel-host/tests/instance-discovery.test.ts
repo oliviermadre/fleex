@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
 import {
   listWorkspaceInstances,
   findWorkspaceServerPort,
@@ -38,7 +40,9 @@ describe('listWorkspaceInstances', () => {
     mkInstance('sqlite@feature-x', { gateway: 4, server: 55280, web: 6 });
     mkInstance('default@main', { gateway: 7, server: 52216, web: 9 });
     mkInstance('sqlite@broken', null);
-    const got = listWorkspaceInstances('sqlite', runDir).map((i) => i.server).sort();
+    const got = listWorkspaceInstances('sqlite', runDir)
+      .map((i) => i.server)
+      .sort();
     expect(got).toEqual([55275, 55280]);
   });
 
@@ -81,7 +85,9 @@ describe('findRunningInstance', () => {
 describe('instanceBranch', () => {
   it('extracts the branch portion after the @', () => {
     expect(instanceBranch('default@main')).toBe('main');
-    expect(instanceBranch('tada@nas-feat-cli-session-cost-tracking')).toBe('nas-feat-cli-session-cost-tracking');
+    expect(instanceBranch('tada@nas-feat-cli-session-cost-tracking')).toBe(
+      'nas-feat-cli-session-cost-tracking',
+    );
   });
 
   it('returns the whole slug when there is no @', () => {

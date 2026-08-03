@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+
 import { API_URL } from '../lib/constants';
 
 interface VersionInfo {
@@ -17,7 +18,7 @@ export function useVersionCheck() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [dismissed, setDismissed] = useState(() => {
     const raw = localStorage.getItem(DISMISSED_KEY);
-    return raw ? JSON.parse(raw) as { commit: string; at: number } : null;
+    return raw ? (JSON.parse(raw) as { commit: string; at: number }) : null;
   });
 
   const checkVersion = useCallback(async () => {

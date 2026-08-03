@@ -39,7 +39,12 @@ export interface UpdateAgentPersonaRequest {
 }
 
 export interface AgentStructuredOutput {
-  deliverable: { title: string; markdown: string; type: DeliverableType; status: DeliverableStatus } | null;
+  deliverable: {
+    title: string;
+    markdown: string;
+    type: DeliverableType;
+    status: DeliverableStatus;
+  } | null;
   comment: string | null;
   mentionStatus?: 'resolved' | 'waiting_for_info';
 }

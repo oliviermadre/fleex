@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+
 import type { AgentExecution, AgentEvent } from '@fleex/shared';
+
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
 
@@ -77,33 +79,33 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
   subscribeExecution: (executionId) => {
     if (subscribedExecutionIds.has(executionId)) return;
     subscribedExecutionIds.add(executionId);
-    appWs.sendChannel('agent-events',{ action: 'subscribe', executionId });
+    appWs.sendChannel('agent-events', { action: 'subscribe', executionId });
   },
 
   unsubscribeExecution: (executionId) => {
     if (!subscribedExecutionIds.has(executionId)) return;
     subscribedExecutionIds.delete(executionId);
-    appWs.sendChannel('agent-events',{ action: 'unsubscribe', executionId });
+    appWs.sendChannel('agent-events', { action: 'unsubscribe', executionId });
   },
 
   subscribeTicket: (ticketId) => {
     if (subscribedTicketIds.has(ticketId)) return;
     subscribedTicketIds.add(ticketId);
-    appWs.sendChannel('agent-events',{ action: 'subscribe', ticketId });
+    appWs.sendChannel('agent-events', { action: 'subscribe', ticketId });
   },
 
   unsubscribeTicket: (ticketId) => {
     if (!subscribedTicketIds.has(ticketId)) return;
     subscribedTicketIds.delete(ticketId);
-    appWs.sendChannel('agent-events',{ action: 'unsubscribe', ticketId });
+    appWs.sendChannel('agent-events', { action: 'unsubscribe', ticketId });
   },
 
   resubscribeAll: () => {
     for (const executionId of subscribedExecutionIds) {
-      appWs.sendChannel('agent-events',{ action: 'subscribe', executionId });
+      appWs.sendChannel('agent-events', { action: 'subscribe', executionId });
     }
     for (const ticketId of subscribedTicketIds) {
-      appWs.sendChannel('agent-events',{ action: 'subscribe', ticketId });
+      appWs.sendChannel('agent-events', { action: 'subscribe', ticketId });
     }
   },
 
@@ -154,14 +156,23 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
         // reflects the final status (badge, timer, cancel button) without reload.
         if (event.eventType === 'execution_end') {
           const eventData = event.data as { status?: string } | undefined;
-          const finalStatus = (eventData?.status === 'completed' || eventData?.status === 'failed' || eventData?.status === 'interrupted')
-            ? eventData.status
-            : 'completed';
+          const finalStatus =
+            eventData?.status === 'completed' ||
+            eventData?.status === 'failed' ||
+            eventData?.status === 'interrupted'
+              ? eventData.status
+              : 'completed';
           const completedAt = event.createdAt;
 
           const patchExecution = (exec: AgentExecution): AgentExecution =>
             exec.id === event.executionId
-              ? { ...exec, status: finalStatus, completedAt, eventCount: (state.eventsByExecution[event.executionId]?.length ?? exec.eventCount) + 1 }
+              ? {
+                  ...exec,
+                  status: finalStatus,
+                  completedAt,
+                  eventCount:
+                    (state.eventsByExecution[event.executionId]?.length ?? exec.eventCount) + 1,
+                }
               : exec;
 
           next.executionsByPersona = Object.fromEntries(
@@ -185,7 +196,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
       // Auto-subscribe to new executions so the events tab updates live
       if (event.eventType === 'execution_start' && !subscribedExecutionIds.has(event.executionId)) {
         subscribedExecutionIds.add(event.executionId);
-        appWs.sendChannel('agent-events',{ action: 'subscribe', executionId: event.executionId });
+        appWs.sendChannel('agent-events', { action: 'subscribe', executionId: event.executionId });
       }
     }
   },
@@ -193,9 +204,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
   reconcileOnMentionResolved: (ticketId, mentionId) => {
     set((state) => {
       const execs = state.executionsByTicket[ticketId] ?? [];
-      const staleRunning = execs.find(
-        (e) => e.mentionId === mentionId && e.status === 'running',
-      );
+      const staleRunning = execs.find((e) => e.mentionId === mentionId && e.status === 'running');
       if (!staleRunning) return state;
 
       // Force-complete the stale execution and clean up streaming state

@@ -1,8 +1,9 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { info } from '../../../core/colors.ts';
-import { apiBase, apiGet } from '../../../core/api.ts';
 import { printJson, renderTable, trunc } from '../../../core/agentic.ts';
+import { apiBase, apiGet } from '../../../core/api.ts';
+import { info } from '../../../core/colors.ts';
 import { resolveTicketId } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface Mention {
   id: string;
@@ -14,7 +15,11 @@ interface Mention {
   createdAt: string;
 }
 
-interface MentionsOptions { board?: string; status?: string; json?: boolean }
+interface MentionsOptions {
+  board?: string;
+  status?: string;
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -22,7 +27,10 @@ const def: CommandDef = {
   description: 'List the mentions on a ticket (mentions <id> [--status])',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
-    cmd.option('--status <status>', 'Filter by status (pending, acknowledged, waiting_for_info, resolved)');
+    cmd.option(
+      '--status <status>',
+      'Filter by status (pending, acknowledged, waiting_for_info, resolved)',
+    );
     cmd.option('--board <id>', 'Disambiguate by board');
     cmd.option('--json', 'Output raw JSON');
   },

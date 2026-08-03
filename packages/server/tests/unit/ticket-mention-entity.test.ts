@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
+
 import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
 
-function createMention(status: 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info' | 'failed' = 'pending') {
+function createMention(
+  status: 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info' | 'failed' = 'pending',
+) {
   const mention = TicketMentionEntity.create({
     id: 'mention-1',
     ticketId: 'ticket-1',

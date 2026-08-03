@@ -1,21 +1,24 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { EventBus } from '../../src/application/event-bus.js';
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { DomainEventListener } from '../../src/application/domain-event-listener.js';
-import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
-import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
+import { EventBus } from '../../src/application/event-bus.js';
+import { AgentPersonaEntity } from '../../src/domain/entities/agent-persona.entity.js';
 import { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.entity.js';
 import { TicketDeliverableEntity } from '../../src/domain/entities/ticket-deliverable.entity.js';
-import { AgentPersonaEntity } from '../../src/domain/entities/agent-persona.entity.js';
-import type { PersonaStorePort } from '../../src/application/ports/persona-store.port.js';
-import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
-import type { MentionStorePort } from '../../src/application/ports/mention-store.port.js';
+import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+
 import type { CommentStorePort } from '../../src/application/ports/comment-store.port.js';
 import type { DeliverableStorePort } from '../../src/application/ports/deliverable-store.port.js';
+import type { LoggerPort } from '../../src/application/ports/logger.port.js';
+import type { MentionStorePort } from '../../src/application/ports/mention-store.port.js';
+import type { PersonaStorePort } from '../../src/application/ports/persona-store.port.js';
+import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
 import type { AutoReviewWorkflowUseCase } from '../../src/application/use-cases/auto-review-workflow.js';
 import type { ExecuteAgentUseCase } from '../../src/application/use-cases/execute-agent.js';
 import type { WakeWaitingAgentsUseCase } from '../../src/application/use-cases/wake-waiting-agents.js';
-import type { LoggerPort } from '../../src/application/ports/logger.port.js';
 
 function createMocks() {
   const personaStore: PersonaStorePort = {
@@ -133,10 +136,20 @@ describe('DomainEventListener', () => {
   describe('broadcasting', () => {
     it('should broadcast ticket.created via ticketBroadcast', async () => {
       const ticketId = randomUUID();
-      const ticket = TicketEntity.create({ id: ticketId, boardId: randomUUID(), displayId: 1, title: 'Test' });
+      const ticket = TicketEntity.create({
+        id: ticketId,
+        boardId: randomUUID(),
+        displayId: 1,
+        title: 'Test',
+      });
       vi.mocked(mocks.ticketStore.getTicketById).mockResolvedValue(ticket);
 
-      eventBus.emit({ type: 'ticket.created', ticketId, boardId: ticket.boardId, occurredAt: new Date() });
+      eventBus.emit({
+        type: 'ticket.created',
+        ticketId,
+        boardId: ticket.boardId,
+        occurredAt: new Date(),
+      });
       await new Promise((r) => setTimeout(r, 10));
 
       expect(ticketBroadcast).toHaveBeenCalledWith('ticket:created', ticket.toDTO());
@@ -490,9 +503,7 @@ describe('DomainEventListener', () => {
         ticketId: 't1',
         authorType: 'user',
         authorName: 'human',
-        createdMentions: [
-          { mentionId: randomUUID(), targetAgent: 'agent-a', targetType: 'agent' },
-        ],
+        createdMentions: [{ mentionId: randomUUID(), targetAgent: 'agent-a', targetType: 'agent' }],
         wakeExcludeAgents: ['agent-a'],
         occurredAt: new Date(),
       });
@@ -517,7 +528,9 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.autoReviewWorkflow.handleHumanCommentPosted).toHaveBeenCalledWith({ ticketId: 't1' });
+      expect(mocks.autoReviewWorkflow.handleHumanCommentPosted).toHaveBeenCalledWith({
+        ticketId: 't1',
+      });
     });
 
     it('should NOT auto-resolve human mentions when agent posts comment', async () => {

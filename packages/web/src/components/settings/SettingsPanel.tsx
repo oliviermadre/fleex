@@ -1,14 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSettingsStore, type AppSettings, type PinnedIcon, type WorkspaceAction } from '../../stores/settingsStore';
+
+import type { AgentToken } from '@fleex/shared';
+import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
+import * as api from '../../services/api';
+import {
+  useSettingsStore,
+  type AppSettings,
+  type PinnedIcon,
+  type WorkspaceAction,
+} from '../../stores/settingsStore';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+
 import { AppearanceTab } from './AppearanceTab';
 import { DeliverableTypesTab } from './DeliverableTypesTab';
-import { cn } from '../../lib/cn';
-import type { AgentToken } from '@fleex/shared';
-import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from '@fleex/shared';
-import * as api from '../../services/api';
 
 const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
@@ -34,8 +42,12 @@ export function SettingsPanel() {
 
   useEffect(() => {
     setBasePath(settings.basePath);
-    setHumanDisplayName((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string ?? '');
-    setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
+    setHumanDisplayName(
+      ((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string) ?? '',
+    );
+    setHumanMentionName(
+      ((settings as unknown as Record<string, unknown>)['humanMentionName'] as string) ?? '',
+    );
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setAgentMaxTurns(settings.agentMaxTurns ?? DEFAULT_AGENT_MAX_TURNS);
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
@@ -47,8 +59,12 @@ export function SettingsPanel() {
       basePath,
       pinnedIcons,
       workspaceActions,
-      ...(humanDisplayName.trim() ? { humanDisplayName: humanDisplayName.trim() } : { humanDisplayName: undefined }),
-      ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
+      ...(humanDisplayName.trim()
+        ? { humanDisplayName: humanDisplayName.trim() }
+        : { humanDisplayName: undefined }),
+      ...(humanMentionName.trim()
+        ? { humanMentionName: humanMentionName.trim() }
+        : { humanMentionName: undefined }),
       agentMaxConcurrency,
       agentMaxTurns,
     } as Partial<AppSettings> & Record<string, unknown>);
@@ -69,9 +85,7 @@ export function SettingsPanel() {
   };
 
   const updatePinnedIcon = (index: number, patch: Partial<PinnedIcon>) => {
-    setPinnedIcons((prev) =>
-      prev.map((icon, i) => (i === index ? { ...icon, ...patch } : icon))
-    );
+    setPinnedIcons((prev) => prev.map((icon, i) => (i === index ? { ...icon, ...patch } : icon)));
   };
 
   const removePinnedIcon = (index: number) => {
@@ -94,7 +108,7 @@ export function SettingsPanel() {
 
   const updateWorkspaceAction = (index: number, patch: Partial<WorkspaceAction>) => {
     setWorkspaceActions((prev) =>
-      prev.map((action, i) => (i === index ? { ...action, ...patch } : action))
+      prev.map((action, i) => (i === index ? { ...action, ...patch } : action)),
     );
   };
 
@@ -105,10 +119,15 @@ export function SettingsPanel() {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {/* Breadcrumb header */}
-      <div className="flex w-full items-center border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
+      <div
+        className="flex w-full items-center border-b border-[var(--theme-border)] px-3"
+        style={{ height: 'var(--header-height)' }}
+      >
         <span className="text-sm text-[var(--theme-text-muted)]">Settings</span>
         <span className="mx-2 text-sm text-[var(--theme-text-faint)]">/</span>
-        <span className="text-sm font-medium text-[var(--theme-text-primary)]">{tabLabels[settingsTab]}</span>
+        <span className="text-sm font-medium text-[var(--theme-text-primary)]">
+          {tabLabels[settingsTab]}
+        </span>
       </div>
 
       {/* Form content */}
@@ -219,23 +238,33 @@ function GeneralTab({
           onChange={(e) => setHumanDisplayName(e.target.value)}
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-          Your name as shown in ticket comments (e.g. "Wally Worktree"). Falls back to mention name if empty.
+          Your name as shown in ticket comments (e.g. "Wally Worktree"). Falls back to mention name
+          if empty.
         </p>
 
         <div className="mt-4">
-        <Input
-          id="humanMentionName"
-          label="Mention Name"
-          placeholder="Wally"
-          value={humanMentionName}
-          onChange={(e) => setHumanMentionName(e.target.value)}
-        />
-        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-          The <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">@tag</code> agents
-          should use to mention you (e.g. <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">Wally</code> for{' '}
-          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">@Wally</code>).
-          Per-agent overrides can be set in agent configuration.
-        </p>
+          <Input
+            id="humanMentionName"
+            label="Mention Name"
+            placeholder="Wally"
+            value={humanMentionName}
+            onChange={(e) => setHumanMentionName(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+            The{' '}
+            <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+              @tag
+            </code>{' '}
+            agents should use to mention you (e.g.{' '}
+            <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+              Wally
+            </code>{' '}
+            for{' '}
+            <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">
+              @Wally
+            </code>
+            ). Per-agent overrides can be set in agent configuration.
+          </p>
         </div>
       </div>
 
@@ -266,23 +295,29 @@ function GeneralTab({
             setAgentMaxTurns(
               Math.min(
                 AGENT_MAX_TURNS_MAX,
-                Math.max(AGENT_MAX_TURNS_MIN, parseInt(e.target.value, 10) || DEFAULT_AGENT_MAX_TURNS),
+                Math.max(
+                  AGENT_MAX_TURNS_MIN,
+                  parseInt(e.target.value, 10) || DEFAULT_AGENT_MAX_TURNS,
+                ),
               ),
             )
           }
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
           How many conversation turns (assistant round-trips) an agent may take in a single{' '}
-          <strong>plan</strong> or <strong>edit</strong> execution before the SDK stops it — not a count of
-          individual tool calls. A single turn can bundle several tool calls the model runs in parallel (e.g.
-          reading many files at once), so you may see more tool actions in the log than this number. Raise it
-          for long refactors, lower it to cap runaway loops. Default{' '}
+          <strong>plan</strong> or <strong>edit</strong> execution before the SDK stops it — not a
+          count of individual tool calls. A single turn can bundle several tool calls the model runs
+          in parallel (e.g. reading many files at once), so you may see more tool actions in the log
+          than this number. Raise it for long refactors, lower it to cap runaway loops. Default{' '}
           <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
             {DEFAULT_AGENT_MAX_TURNS}
           </code>
-          . Each execution reports its actual usage as <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">turns used / budget</code>{' '}
-          in the Execution Log, so you can size this from real runs. Talk mode is unaffected — it has no
-          agentic loop.
+          . Each execution reports its actual usage as{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+            turns used / budget
+          </code>{' '}
+          in the Execution Log, so you can size this from real runs. Talk mode is unaffected — it
+          has no agentic loop.
         </p>
       </div>
     </div>
@@ -306,12 +341,15 @@ function PinnedIconsTab({
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
   const draggedIdRef = useRef<string | null>(null);
 
-  const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
-    draggedIdRef.current = id;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-pinned-icon', id);
-    (e.currentTarget as HTMLElement).style.opacity = '0.4';
-  }, []);
+  const handleDragStart = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      draggedIdRef.current = id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-pinned-icon', id);
+      (e.currentTarget as HTMLElement).style.opacity = '0.4';
+    },
+    [],
+  );
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     draggedIdRef.current = null;
@@ -319,38 +357,47 @@ function PinnedIconsTab({
     (e.currentTarget as HTMLElement).style.opacity = '';
   }, []);
 
-  const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-pinned-icon')) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    setDropEdge(e.clientY < midY ? 'top' : 'bottom');
-    setDragOverId(id);
-  }, []);
+  const handleDragOver = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes('application/x-pinned-icon')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      setDropEdge(e.clientY < midY ? 'top' : 'bottom');
+      setDragOverId(id);
+    },
+    [],
+  );
 
-  const handleDragLeave = useCallback((id: string) => (e: React.DragEvent) => {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (dragOverId === id) setDragOverId(null);
-  }, [dragOverId]);
+  const handleDragLeave = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+      if (dragOverId === id) setDragOverId(null);
+    },
+    [dragOverId],
+  );
 
-  const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    const draggedId = e.dataTransfer.getData('application/x-pinned-icon');
-    setDragOverId(null);
-    if (!draggedId || draggedId === targetId) return;
+  const handleDrop = useCallback(
+    (targetId: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      const draggedId = e.dataTransfer.getData('application/x-pinned-icon');
+      setDragOverId(null);
+      if (!draggedId || draggedId === targetId) return;
 
-    const items = [...pinnedIcons];
-    const fromIdx = items.findIndex((a) => a.id === draggedId);
-    if (fromIdx === -1) return;
-    const moved = items.splice(fromIdx, 1)[0];
-    if (!moved) return;
-    let toIdx = items.findIndex((a) => a.id === targetId);
-    if (toIdx === -1) return;
-    if (dropEdge === 'bottom') toIdx += 1;
-    items.splice(toIdx, 0, moved);
-    onReorder(items);
-  }, [pinnedIcons, dropEdge, onReorder]);
+      const items = [...pinnedIcons];
+      const fromIdx = items.findIndex((a) => a.id === draggedId);
+      if (fromIdx === -1) return;
+      const moved = items.splice(fromIdx, 1)[0];
+      if (!moved) return;
+      let toIdx = items.findIndex((a) => a.id === targetId);
+      if (toIdx === -1) return;
+      if (dropEdge === 'bottom') toIdx += 1;
+      items.splice(toIdx, 0, moved);
+      onReorder(items);
+    },
+    [pinnedIcons, dropEdge, onReorder],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -416,12 +463,15 @@ function WorkspaceActionsTab({
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
   const draggedIdRef = useRef<string | null>(null);
 
-  const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
-    draggedIdRef.current = id;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-workspace-action', id);
-    (e.currentTarget as HTMLElement).style.opacity = '0.4';
-  }, []);
+  const handleDragStart = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      draggedIdRef.current = id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-workspace-action', id);
+      (e.currentTarget as HTMLElement).style.opacity = '0.4';
+    },
+    [],
+  );
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     draggedIdRef.current = null;
@@ -429,38 +479,47 @@ function WorkspaceActionsTab({
     (e.currentTarget as HTMLElement).style.opacity = '';
   }, []);
 
-  const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-workspace-action')) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    setDropEdge(e.clientY < midY ? 'top' : 'bottom');
-    setDragOverId(id);
-  }, []);
+  const handleDragOver = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes('application/x-workspace-action')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      setDropEdge(e.clientY < midY ? 'top' : 'bottom');
+      setDragOverId(id);
+    },
+    [],
+  );
 
-  const handleDragLeave = useCallback((id: string) => (e: React.DragEvent) => {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (dragOverId === id) setDragOverId(null);
-  }, [dragOverId]);
+  const handleDragLeave = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+      if (dragOverId === id) setDragOverId(null);
+    },
+    [dragOverId],
+  );
 
-  const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    const draggedId = e.dataTransfer.getData('application/x-workspace-action');
-    setDragOverId(null);
-    if (!draggedId || draggedId === targetId) return;
+  const handleDrop = useCallback(
+    (targetId: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      const draggedId = e.dataTransfer.getData('application/x-workspace-action');
+      setDragOverId(null);
+      if (!draggedId || draggedId === targetId) return;
 
-    const items = [...workspaceActions];
-    const fromIdx = items.findIndex((a) => a.id === draggedId);
-    if (fromIdx === -1) return;
-    const moved = items.splice(fromIdx, 1)[0];
-    if (!moved) return;
-    let toIdx = items.findIndex((a) => a.id === targetId);
-    if (toIdx === -1) return;
-    if (dropEdge === 'bottom') toIdx += 1;
-    items.splice(toIdx, 0, moved);
-    onReorder(items);
-  }, [workspaceActions, dropEdge, onReorder]);
+      const items = [...workspaceActions];
+      const fromIdx = items.findIndex((a) => a.id === draggedId);
+      if (fromIdx === -1) return;
+      const moved = items.splice(fromIdx, 1)[0];
+      if (!moved) return;
+      let toIdx = items.findIndex((a) => a.id === targetId);
+      if (toIdx === -1) return;
+      if (dropEdge === 'bottom') toIdx += 1;
+      items.splice(toIdx, 0, moved);
+      onReorder(items);
+    },
+    [workspaceActions, dropEdge, onReorder],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -474,7 +533,8 @@ function WorkspaceActionsTab({
       </div>
 
       <p className="text-xs text-[var(--theme-text-muted)]">
-        Actions appear as icon buttons in ticket and session headers. Template variables resolve to the ticket's workspace.
+        Actions appear as icon buttons in ticket and session headers. Template variables resolve to
+        the ticket's workspace.
         {workspaceActions.length > 1 && ' Drag to reorder.'}
       </p>
 
@@ -513,17 +573,21 @@ function WorkspaceActionsTab({
 
       {/* Template variables reference */}
       <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
-        <p className="mb-2 text-xs font-medium text-[var(--theme-text-secondary)]">Template Variables</p>
+        <p className="mb-2 text-xs font-medium text-[var(--theme-text-secondary)]">
+          Template Variables
+        </p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
           {[
-            ['{{workspace_path}}', "Workspace folder absolute path"],
+            ['{{workspace_path}}', 'Workspace folder absolute path'],
             ['{{workspace_name}}', 'Workspace folder name (id-slug)'],
             ['{{ticket_id}}', 'Full ticket id'],
             ['{{ticket_slug}}', 'Slugified ticket title'],
             ['{{ticket_display_id}}', 'Ticket display number'],
           ].map(([variable, description]) => (
             <div key={variable} className="flex items-baseline gap-2">
-              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{variable}</code>
+              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+                {variable}
+              </code>
               <span className="text-[var(--theme-text-muted)]">{description}</span>
             </div>
           ))}
@@ -532,7 +596,9 @@ function WorkspaceActionsTab({
 
       {/* Pipe functions reference */}
       <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
-        <p className="mb-1 text-xs font-medium text-[var(--theme-text-secondary)]">Pipe Functions</p>
+        <p className="mb-1 text-xs font-medium text-[var(--theme-text-secondary)]">
+          Pipe Functions
+        </p>
         <p className="mb-2 text-xs text-[var(--theme-text-muted)]">
           Transform variables with pipes:{' '}
           <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
@@ -550,7 +616,9 @@ function WorkspaceActionsTab({
             ['default(fallback)', 'Fallback if empty'],
           ].map(([fn, description]) => (
             <div key={fn} className="flex items-baseline gap-2">
-              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{fn}</code>
+              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+                {fn}
+              </code>
               <span className="text-[var(--theme-text-muted)]">{description}</span>
             </div>
           ))}
@@ -584,10 +652,7 @@ function WorkspaceActionEditor({
             height="10"
             viewBox="0 0 10 10"
             fill="currentColor"
-            className={cn(
-              'transition-transform',
-              expanded ? 'rotate-90' : 'rotate-0'
-            )}
+            className={cn('transition-transform', expanded ? 'rotate-90' : 'rotate-0')}
           >
             <path d="M3 1l5 4-5 4V1z" />
           </svg>
@@ -603,7 +668,15 @@ function WorkspaceActionEditor({
           onClick={onRemove}
           title="Remove"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
             <line x1="4" y1="4" x2="12" y2="12" />
             <line x1="12" y1="4" x2="4" y2="12" />
           </svg>
@@ -622,7 +695,9 @@ function WorkspaceActionEditor({
 
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Type</label>
+              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+                Icon Type
+              </label>
               <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
                 {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
                   <button
@@ -631,7 +706,7 @@ function WorkspaceActionEditor({
                       'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
                       action.iconType === type
                         ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                     )}
                     onClick={() => onUpdate({ iconType: type })}
                   >
@@ -643,7 +718,9 @@ function WorkspaceActionEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Icon Value
+            </label>
             <textarea
               className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={3}
@@ -662,14 +739,16 @@ function WorkspaceActionEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Type</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Action Type
+            </label>
             <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
               <button
                 className={cn(
                   'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   action.actionType === 'url'
                     ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                 )}
                 onClick={() => onUpdate({ actionType: 'url' })}
               >
@@ -680,7 +759,7 @@ function WorkspaceActionEditor({
                   'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   action.actionType === 'shell'
                     ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                 )}
                 onClick={() => onUpdate({ actionType: 'shell' })}
               >
@@ -690,7 +769,9 @@ function WorkspaceActionEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Action Value
+            </label>
             <textarea
               className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={action.actionType === 'shell' ? 4 : 2}
@@ -703,7 +784,8 @@ function WorkspaceActionEditor({
               onChange={(e) => onUpdate({ actionValue: e.target.value })}
             />
             <p className="text-xs text-[var(--theme-text-muted)]">
-              Use {'{{template}}'} variables above. They resolve to the ticket's workspace at click time.
+              Use {'{{template}}'} variables above. They resolve to the ticket's workspace at click
+              time.
             </p>
           </div>
         </div>
@@ -736,10 +818,7 @@ function PinnedIconEditor({
             height="10"
             viewBox="0 0 10 10"
             fill="currentColor"
-            className={cn(
-              'transition-transform',
-              expanded ? 'rotate-90' : 'rotate-0'
-            )}
+            className={cn('transition-transform', expanded ? 'rotate-90' : 'rotate-0')}
           >
             <path d="M3 1l5 4-5 4V1z" />
           </svg>
@@ -755,7 +834,15 @@ function PinnedIconEditor({
           onClick={onRemove}
           title="Remove"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
             <line x1="4" y1="4" x2="12" y2="12" />
             <line x1="12" y1="4" x2="4" y2="12" />
           </svg>
@@ -774,7 +861,9 @@ function PinnedIconEditor({
 
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Type</label>
+              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+                Icon Type
+              </label>
               <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
                 {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
                   <button
@@ -783,7 +872,7 @@ function PinnedIconEditor({
                       'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
                       icon.iconType === type
                         ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                     )}
                     onClick={() => onUpdate({ iconType: type })}
                   >
@@ -795,7 +884,9 @@ function PinnedIconEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Icon Value
+            </label>
             <textarea
               className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={3}
@@ -814,14 +905,16 @@ function PinnedIconEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Type</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Action Type
+            </label>
             <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
               <button
                 className={cn(
                   'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   icon.actionType === 'url'
                     ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                 )}
                 onClick={() => onUpdate({ actionType: 'url' })}
               >
@@ -832,7 +925,7 @@ function PinnedIconEditor({
                   'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   icon.actionType === 'shell'
                     ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                 )}
                 onClick={() => onUpdate({ actionType: 'shell' })}
               >
@@ -842,14 +935,14 @@ function PinnedIconEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Action Value
+            </label>
             <textarea
               className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={icon.actionType === 'shell' ? 4 : 2}
               placeholder={
-                icon.actionType === 'url'
-                  ? 'https://example.com'
-                  : 'echo "Hello"\nls -la'
+                icon.actionType === 'url' ? 'https://example.com' : 'echo "Hello"\nls -la'
               }
               value={icon.actionValue}
               onChange={(e) => onUpdate({ actionValue: e.target.value })}
@@ -868,7 +961,13 @@ function AgentTokensTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.fetchAgentTokens().then((t) => { setTokens(t); setLoading(false); }).catch(() => setLoading(false));
+    api
+      .fetchAgentTokens()
+      .then((t) => {
+        setTokens(t);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   const handleCreate = async () => {
@@ -877,7 +976,10 @@ function AgentTokensTab() {
     const created = await api.createAgentToken(name);
     setRevealedSecret(created.secret);
     setNewName('');
-    api.fetchAgentTokens().then(setTokens).catch(() => {});
+    api
+      .fetchAgentTokens()
+      .then(setTokens)
+      .catch(() => {});
   };
 
   const handleDelete = async (id: string) => {
@@ -893,7 +995,10 @@ function AgentTokensTab() {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-xs text-[var(--theme-text-muted)]">
-        Agent tokens allow external agents to access the ticket API at <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">/api/agents/v1/</code>
+        Agent tokens allow external agents to access the ticket API at{' '}
+        <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+          /api/agents/v1/
+        </code>
       </p>
 
       {/* Create form */}
@@ -904,7 +1009,9 @@ function AgentTokensTab() {
             placeholder="my-agent"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreate();
+            }}
           />
         </div>
         <Button variant="primary" size="sm" onClick={handleCreate} disabled={!newName.trim()}>
@@ -925,7 +1032,9 @@ function AgentTokensTab() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => { navigator.clipboard.writeText(revealedSecret); }}
+              onClick={() => {
+                navigator.clipboard.writeText(revealedSecret);
+              }}
             >
               Copy
             </Button>
@@ -955,8 +1064,12 @@ function AgentTokensTab() {
               className="flex items-center gap-3 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2"
             >
               <div className="flex-1">
-                <span className="text-sm font-medium text-[var(--theme-text-primary)]">{token.name}</span>
-                <span className="ml-2 text-xs text-[var(--theme-text-muted)]">{token.prefix}...</span>
+                <span className="text-sm font-medium text-[var(--theme-text-primary)]">
+                  {token.name}
+                </span>
+                <span className="ml-2 text-xs text-[var(--theme-text-muted)]">
+                  {token.prefix}...
+                </span>
               </div>
               {token.lastUsedAt && (
                 <span className="text-[10px] text-[var(--theme-text-muted)]">
@@ -976,4 +1089,3 @@ function AgentTokensTab() {
     </div>
   );
 }
-

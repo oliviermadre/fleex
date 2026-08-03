@@ -1,0 +1,125 @@
+#!/bin/sh
+#
+# Format and autofix staged files (ticket #467).
+#
+# Deliberately does NOT run the full lint ratchet: type-aware ESLint over the
+# whole repo takes far too long for a pre-commit hook. `bun run lint` and CI own
+# that. This hook only keeps formatting tidy and blocks unparseable files.
+#
+# Escape hatches:
+#   FLEEX_SKIP_HOOKS=1 git commit ...
+#   git commit --no-verify
+set -e
+
+[ -n "$FLEEX_SKIP_HOOKS" ] && exit 0
+
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+
+PRETTIER="./node_modules/.bin/prettier"
+ESLINT="./node_modules/.bin/eslint"
+
+# xargs splits on whitespace and honours quotes, so a path containing a space or
+# an apostrophe would be torn into two arguments. Feeding it NUL-separated input
+# is the only portable way to keep one line = one filename.
+nul_list() {
+  printf '%s\n' "$1" | sed '/^$/d' | tr '\n' '\0'
+}
+
+# A fresh clone that has not installed yet must still be able to commit.
+if [ ! -x "$PRETTIER" ]; then
+  echo "[fleex] node_modules missing — skipping the pre-commit hook (run 'bun install')."
+  exit 0
+fi
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR |
+  grep -E '\.(ts|tsx|js|mjs|cjs|css|json|md|ya?ml)$' || true)
+[ -z "$STAGED" ] && exit 0
+
+# Files staged AND modified again in the working tree. Reformatting those would
+# either lose the unstaged edits or silently drag them into the commit, so we
+# leave them alone and only verify them. This is the classic lint-staged trap.
+UNSTAGED=$(git diff --name-only)
+
+CLEAN=""
+PARTIAL=""
+OLD_IFS=$IFS
+IFS='
+'
+for FILE in $STAGED; do
+  if echo "$UNSTAGED" | grep -qxF "$FILE"; then
+    PARTIAL="$PARTIAL$FILE
+"
+  else
+    CLEAN="$CLEAN$FILE
+"
+  fi
+done
+IFS=$OLD_IFS
+
+STATUS=0
+
+# ── Partially staged: check only, never rewrite ──────────────────────────────
+if [ -n "$PARTIAL" ]; then
+  UNFORMATTED=$(nul_list "$PARTIAL" | xargs -0 "$PRETTIER" --list-different 2>/dev/null || true)
+  if [ -n "$UNFORMATTED" ]; then
+    echo "[fleex] These files are staged but also have unstaged changes, and are not formatted:"
+    echo "$UNFORMATTED" | sed 's/^/  /'
+    echo ""
+    echo "  The hook will not rewrite them — that would pull your unstaged edits into the commit."
+    echo "  Either stage them fully, or run: bun run format"
+    STATUS=1
+  fi
+fi
+
+# ── Fully staged: format, autofix, re-stage ──────────────────────────────────
+if [ -n "$CLEAN" ]; then
+  FILES=$(echo "$CLEAN" | sed '/^$/d')
+
+  nul_list "$FILES" | xargs -0 "$PRETTIER" --write --log-level warn
+
+  LINTABLE=$(echo "$FILES" | grep -E '\.(ts|tsx|js|mjs|cjs)$' || true)
+  if [ -n "$LINTABLE" ]; then
+    # Ratcheted violations must not block a commit (that is the ratchet's job in
+    # `bun run lint`), so ESLint's exit code is ignored here on purpose.
+    nul_list "$LINTABLE" | xargs -0 "$ESLINT" --fix --no-error-on-unmatched-pattern >/dev/null 2>&1 || true
+
+    # A file that cannot be parsed is never lintable, so refuse it outright.
+    #
+    # The node script is single-quoted on purpose: the `${...}` inside it is JS
+    # template-literal syntax evaluated by node, not shell expansion.
+    # shellcheck disable=SC2016
+    FATAL=$(nul_list "$LINTABLE" |
+      xargs -0 "$ESLINT" --no-error-on-unmatched-pattern --format json 2>/dev/null |
+      node -e '
+        let raw = "";
+        process.stdin.on("data", (c) => (raw += c));
+        process.stdin.on("end", () => {
+          let results = [];
+          try {
+            results = JSON.parse(raw);
+          } catch {
+            // Past ARG_MAX, xargs invokes ESLint more than once and the JSON
+            // documents concatenate into something unparseable. Returning
+            // quietly here would disable parse-error detection precisely on the
+            // largest commits — the ones that can least afford a blind spot.
+            console.log("  <ESLint output could not be parsed — parse errors were NOT checked>");
+            return;
+          }
+          for (const file of results)
+            for (const message of file.messages ?? [])
+              if (message.fatal) console.log(`  ${file.filePath}:${message.line} ${message.message}`);
+        });
+      ' || true)
+
+    if [ -n "$FATAL" ]; then
+      echo "[fleex] ESLint could not clear these staged files:"
+      echo "$FATAL"
+      STATUS=1
+    fi
+  fi
+
+  nul_list "$FILES" | xargs -0 git add
+fi
+
+exit $STATUS

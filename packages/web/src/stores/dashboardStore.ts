@@ -1,6 +1,9 @@
 import { create } from 'zustand';
+
 import type { DashboardData } from '@fleex/shared';
+
 import { fetchDashboard } from '../services/api';
+
 import { useTicketStore } from './ticketStore';
 
 const SYNC_INTERVAL_KEY = 'fleex-dashboard-sync-interval';

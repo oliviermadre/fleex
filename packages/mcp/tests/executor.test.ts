@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
-import { generateTools } from '../src/generator.ts';
+import { describe, it, expect } from 'vitest';
+
 import { execFleex, runFleexArgv } from '../src/executor.ts';
+import { generateTools } from '../src/generator.ts';
+
 import type { GeneratedTool } from '../src/types.ts';
 
 // Use the current node binary as a stand-in for `fleex`, echoing its argv so we
@@ -60,10 +62,14 @@ describe('execFleex', () => {
       { bin: NODE, prefixArgs: ECHO_ARGV, workspace: 'acme' },
     );
     expect(JSON.parse(res.stdout)).toEqual([
-      'ticket', 'create',
-      '--title', 'Fix bug',
-      '--description', 'multi\nline',
-      '--workspace', 'acme',
+      'ticket',
+      'create',
+      '--title',
+      'Fix bug',
+      '--description',
+      'multi\nline',
+      '--workspace',
+      'acme',
     ]);
   });
 

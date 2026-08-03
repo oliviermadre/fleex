@@ -67,7 +67,10 @@ export class StepRunEntity {
     this.status = 'failed';
     this.result = 'ko';
     if (error && this.output) {
-      this.output = { ...this.output, schemaFields: { ...this.output.schemaFields, error: error.message } };
+      this.output = {
+        ...this.output,
+        schemaFields: { ...this.output.schemaFields, error: error.message },
+      };
     } else if (error) {
       this.output = { schemaFields: { error: error.message }, result: 'ko' };
     }

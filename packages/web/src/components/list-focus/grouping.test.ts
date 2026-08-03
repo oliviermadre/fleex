@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
+
 import type { AgentActivityState, Ticket, TicketStatus } from '@fleex/shared';
-import type { ListFocusFilters } from '../../stores/listFocusStore';
+
 import { DEFAULT_LIST_FOCUS_STATUSES } from '../../stores/listFocusStore';
+
 import { buildListFocusGroups, groupHue, shouldRefreezeForStatusChange } from './grouping';
+
+import type { ListFocusFilters } from '../../stores/listFocusStore';
 
 /**
  * Cockpit grouping (#400). Pass 4 (remark 3) REMOVED the virtual "En attente"
@@ -128,7 +132,11 @@ describe('buildListFocusGroups', () => {
     const byTypes = buildListFocusGroups(tickets, {}, filters({ types: ['fix', 'build'] }));
     expect(idsOf(byTypes, 'doing').sort()).toEqual(['build-low', 'fix-high']);
 
-    const byPriorities = buildListFocusGroups(tickets, {}, filters({ priorities: ['low', 'none'] }));
+    const byPriorities = buildListFocusGroups(
+      tickets,
+      {},
+      filters({ priorities: ['low', 'none'] }),
+    );
     expect(idsOf(byPriorities, 'doing').sort()).toEqual(['build-low', 'untyped']);
 
     const all = buildListFocusGroups(tickets, {}, filters());
@@ -190,13 +198,19 @@ describe('shouldRefreezeForStatusChange', () => {
   // re-snapshot, scoped to the inspected ticket so every other row stays frozen.
   it('refreezes when the SAME inspected ticket changes status', () => {
     expect(
-      shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't1', status: 'reviewing' }),
+      shouldRefreezeForStatusChange(
+        { id: 't1', status: 'doing' },
+        { id: 't1', status: 'reviewing' },
+      ),
     ).toBe(true);
   });
 
   it('does NOT refreeze on navigation to a different ticket (even a different status)', () => {
     expect(
-      shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't2', status: 'reviewing' }),
+      shouldRefreezeForStatusChange(
+        { id: 't1', status: 'doing' },
+        { id: 't2', status: 'reviewing' },
+      ),
     ).toBe(false);
     expect(
       shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't2', status: 'doing' }),
@@ -204,8 +218,14 @@ describe('shouldRefreezeForStatusChange', () => {
   });
 
   it('does NOT refreeze on open, close, or an unchanged status', () => {
-    expect(shouldRefreezeForStatusChange({ id: null, status: null }, { id: 't1', status: 'doing' })).toBe(false); // open
-    expect(shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: null, status: null })).toBe(false); // close
-    expect(shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't1', status: 'doing' })).toBe(false); // no change
+    expect(
+      shouldRefreezeForStatusChange({ id: null, status: null }, { id: 't1', status: 'doing' }),
+    ).toBe(false); // open
+    expect(
+      shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: null, status: null }),
+    ).toBe(false); // close
+    expect(
+      shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't1', status: 'doing' }),
+    ).toBe(false); // no change
   });
 });

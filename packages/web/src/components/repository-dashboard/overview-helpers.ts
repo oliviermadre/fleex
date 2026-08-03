@@ -1,4 +1,12 @@
-import type { Worktree, DiffStats, Ticket, PullRequest, SessionGroup, WorktreeTicketRef } from '@fleex/shared';
+import type {
+  Worktree,
+  DiffStats,
+  Ticket,
+  PullRequest,
+  SessionGroup,
+  WorktreeTicketRef,
+} from '@fleex/shared';
+
 import { deriveWorktreeVerdict, type WorktreeVerdict } from '../../lib/worktreeVerdict';
 
 export interface WorktreeRow {
@@ -46,9 +54,15 @@ export function buildWorktreeRows(
     const grouped = sessionGroup?.worktrees.find((w) => w.path === worktree.path);
     const clientTicket = serverRef
       ? null
-      : (grouped?.ticketId ? tickets.find((t) => t.id === grouped.ticketId) : undefined) ??
-        tickets.find((t) => t.links.some((l) => l.type === 'worktree' && (l.ref === worktree.path || l.ref.endsWith(`/${worktree.branch}`)))) ??
-        null;
+      : ((grouped?.ticketId ? tickets.find((t) => t.id === grouped.ticketId) : undefined) ??
+        tickets.find((t) =>
+          t.links.some(
+            (l) =>
+              l.type === 'worktree' &&
+              (l.ref === worktree.path || l.ref.endsWith(`/${worktree.branch}`)),
+          ),
+        ) ??
+        null);
     const ticket = serverRef ?? (clientTicket ? toRef(worktree.path, clientTicket) : null);
 
     const pr = pulls.find((p) => p.headRefName === worktree.branch) ?? null;

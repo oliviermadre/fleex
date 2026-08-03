@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import type { TicketAgentActivity } from '@fleex/shared';
 
 vi.mock('../services/api', () => ({
@@ -6,6 +7,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import * as api from '../services/api';
+
 import { useTicketActivityStore } from './ticketActivityStore';
 
 describe('ticketActivityStore', () => {
@@ -74,8 +76,19 @@ describe('ticketActivityStore', () => {
     // activity, so it must survive even though idle entries are dropped from
     // activityByTicket.
     vi.mocked(api.fetchTicketAgentActivity).mockResolvedValue([
-      { ticketId: 'a', activity: 'running', detail: 'working', lastActivityAt: '2026-07-17T10:00:00.000Z', cumulativeCostUsd: 0 },
-      { ticketId: 'b', activity: 'idle', lastActivityAt: '2026-07-16T08:00:00.000Z', cumulativeCostUsd: 0 },
+      {
+        ticketId: 'a',
+        activity: 'running',
+        detail: 'working',
+        lastActivityAt: '2026-07-17T10:00:00.000Z',
+        cumulativeCostUsd: 0,
+      },
+      {
+        ticketId: 'b',
+        activity: 'idle',
+        lastActivityAt: '2026-07-16T08:00:00.000Z',
+        cumulativeCostUsd: 0,
+      },
       { ticketId: 'c', activity: 'idle', cumulativeCostUsd: 0 }, // never had an SDK session
     ] satisfies TicketAgentActivity[]);
 
@@ -94,8 +107,19 @@ describe('ticketActivityStore', () => {
     // (idle durations come from lastActivityAt instead).
     vi.mocked(api.fetchTicketAgentActivity)
       .mockResolvedValueOnce([
-        { ticketId: 'a', activity: 'running', since: '2026-07-17T11:00:00.000Z', cumulativeCostUsd: 0 },
-        { ticketId: 'b', activity: 'idle', lastActivityAt: '2026-07-16T08:00:00.000Z', since: '2026-07-16T08:00:00.000Z', cumulativeCostUsd: 0 },
+        {
+          ticketId: 'a',
+          activity: 'running',
+          since: '2026-07-17T11:00:00.000Z',
+          cumulativeCostUsd: 0,
+        },
+        {
+          ticketId: 'b',
+          activity: 'idle',
+          lastActivityAt: '2026-07-16T08:00:00.000Z',
+          since: '2026-07-16T08:00:00.000Z',
+          cumulativeCostUsd: 0,
+        },
       ] satisfies TicketAgentActivity[])
       .mockResolvedValueOnce([{ ticketId: 'a', activity: 'idle', cumulativeCostUsd: 0 }]);
 

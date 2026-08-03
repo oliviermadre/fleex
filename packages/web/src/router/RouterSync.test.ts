@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseUrl, storeToUrl, historyActionForNav } from './RouterSync';
 
 describe('parseUrl', () => {
@@ -176,98 +177,351 @@ describe('parseUrl', () => {
 
 describe('storeToUrl', () => {
   it('generates /sessions when nothing selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'sessions',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/sessions');
     expect(url.search).toBe('');
   });
 
   it('generates /sessions/:ticketId when ticket selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'ticket-abc', null);
+    const url = storeToUrl(
+      'sessions',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'ticket-abc',
+      null,
+    );
     expect(url.pathname).toBe('/sessions/ticket-abc');
   });
 
   it('generates /sessions/:ticketId/:tabKey when ticket and tab selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'ticket-abc', 's:session-123');
+    const url = storeToUrl(
+      'sessions',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'ticket-abc',
+      's:session-123',
+    );
     expect(url.pathname).toBe('/sessions/ticket-abc/s%3Asession-123');
   });
 
   it('generates /sessions/system when system shells selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'system', null);
+    const url = storeToUrl(
+      'sessions',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'system',
+      null,
+    );
     expect(url.pathname).toBe('/sessions/system');
   });
 
   it('generates /repositories when no repo selected', () => {
-    const url = storeToUrl('repositories', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'repositories',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/repositories');
   });
 
   it('generates /repositories/:key when repo selected', () => {
-    const url = storeToUrl('repositories', null, null, 'myorg/myrepo', null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'repositories',
+      null,
+      null,
+      'myorg/myrepo',
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/repositories/myorg/myrepo');
   });
 
   it('generates /tickets/board/all when all boards', () => {
-    const url = storeToUrl('tickets', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'tickets',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/tickets/board/all');
   });
 
   it('generates /tickets/board/:id when board selected', () => {
-    const url = storeToUrl('tickets', null, null, null, 'board-123', null, null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'tickets',
+      null,
+      null,
+      null,
+      'board-123',
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/tickets/board/board-123');
   });
 
   it('generates /tickets/board/:boardId/ticket/:ticketId when ticket selected', () => {
-    const url = storeToUrl('tickets', null, null, null, 'board-123', 'ticket-456', null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'tickets',
+      null,
+      null,
+      null,
+      'board-123',
+      'ticket-456',
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/tickets/board/board-123/ticket/ticket-456');
   });
 
   it('generates /agents when no persona selected', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'agents',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/agents');
   });
 
   it('generates /agents/:id when persona selected', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, 'persona-123', null, 'config', 'general');
+    const url = storeToUrl(
+      'agents',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'persona-123',
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/agents/persona-123');
   });
 
   it('generates /agents/:id/:tab when non-config tab active', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, 'persona-123', null, 'soul', 'general');
+    const url = storeToUrl(
+      'agents',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'persona-123',
+      null,
+      'soul',
+      'general',
+    );
     expect(url.pathname).toBe('/agents/persona-123/soul');
   });
 
   it('generates /scratchpads/global for global scratchpad', () => {
-    const url = storeToUrl('scratchpads', null, null, null, null, null, '__global__', null, null, 'config', 'general');
+    const url = storeToUrl(
+      'scratchpads',
+      null,
+      null,
+      null,
+      null,
+      null,
+      '__global__',
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/scratchpads/global');
   });
 
   it('generates /scratchpads/:org/:name for repo scratchpad', () => {
-    const url = storeToUrl('scratchpads', null, null, null, null, null, 'myorg/myrepo', null, null, 'config', 'general');
+    const url = storeToUrl(
+      'scratchpads',
+      null,
+      null,
+      null,
+      null,
+      null,
+      'myorg/myrepo',
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/scratchpads/myorg/myrepo');
   });
 
   it('generates /settings/:tab', () => {
-    const url = storeToUrl('settings', null, null, null, null, null, null, null, null, 'config', 'appearance');
+    const url = storeToUrl(
+      'settings',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'appearance',
+    );
     expect(url.pathname).toBe('/settings/appearance');
   });
 
   it('generates /claude-config', () => {
-    const url = storeToUrl('claude-config', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'claude-config',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/claude-config');
   });
 
   it('generates /cluster', () => {
-    const url = storeToUrl('cluster', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl(
+      'cluster',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+    );
     expect(url.pathname).toBe('/cluster');
   });
 
   it('generates /sessions/agent/:ticketId when agent worktree selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', 'ticket-123');
+    const url = storeToUrl(
+      'sessions',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+      'ticket-123',
+    );
     expect(url.pathname).toBe('/sessions/agent/ticket-123');
   });
 
   it('prefers ticket over agent worktree when both set', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', 'ticket-123', undefined, undefined, undefined, 'ticket-abc', null);
+    const url = storeToUrl(
+      'sessions',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'config',
+      'general',
+      'ticket-123',
+      undefined,
+      undefined,
+      undefined,
+      'ticket-abc',
+      null,
+    );
     expect(url.pathname).toBe('/sessions/ticket-abc');
   });
 });
@@ -294,17 +548,23 @@ describe('historyActionForNav', () => {
   it('pushes when switching tabs within the same ticket detail', () => {
     // Switching a detail tab is a real navigation: Back must return to the
     // previous tab, not skip past the whole ticket to the board.
-    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('push');
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe(
+      'push',
+    );
   });
 
   it('replaces when the store normalises the default (description) ticket tab', () => {
     // storeToUrl omits the default tab, so the shorthand and the explicit
     // /description form are the same view — no spurious entry.
-    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/description')).toBe('replace');
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/description')).toBe(
+      'replace',
+    );
   });
 
   it('pushes when switching tabs within the same epic detail', () => {
-    expect(action('/tickets/board/all/epic/e1', '/tickets/board/all/epic/e1/deliverables')).toBe('push');
+    expect(action('/tickets/board/all/epic/e1', '/tickets/board/all/epic/e1/deliverables')).toBe(
+      'push',
+    );
   });
 
   it('pushes when switching tabs within the same persona', () => {
@@ -319,8 +579,12 @@ describe('historyActionForNav', () => {
   it('replays the reported tab scenario: comments → deliverables keeps comments', () => {
     // NaS: on a ticket detail, going comments → deliverables then Back must
     // land on comments, not jump straight to the board.
-    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('push');
-    expect(action('/tickets/board/all/ticket/t1/comments', '/tickets/board/all/ticket/t1/deliverables')).toBe('push');
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe(
+      'push',
+    );
+    expect(
+      action('/tickets/board/all/ticket/t1/comments', '/tickets/board/all/ticket/t1/deliverables'),
+    ).toBe('push');
   });
 
   it('replaces when the store normalises bare /settings to /settings/general', () => {

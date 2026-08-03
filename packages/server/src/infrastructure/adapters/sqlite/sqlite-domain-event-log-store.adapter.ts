@@ -1,6 +1,7 @@
 import { DomainEventLogEntity } from '../../../domain/entities/domain-event-log.entity.js';
-import type { DomainEventLogStorePort } from '../../../application/ports/domain-event-log-store.port.js';
+
 import type { SqliteConnection } from './connection.js';
+import type { DomainEventLogStorePort } from '../../../application/ports/domain-event-log-store.port.js';
 
 interface EventLogRow {
   id: string;
@@ -94,9 +95,9 @@ export class SqliteDomainEventLogStoreAdapter implements DomainEventLogStorePort
   }
 
   async count(): Promise<number> {
-    const row = this.conn.db
-      .prepare('SELECT COUNT(*) as cnt FROM domain_event_log')
-      .get() as { cnt: number };
+    const row = this.conn.db.prepare('SELECT COUNT(*) as cnt FROM domain_event_log').get() as {
+      cnt: number;
+    };
     return row.cnt;
   }
 

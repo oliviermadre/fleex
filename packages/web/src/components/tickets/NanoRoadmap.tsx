@@ -1,4 +1,5 @@
 import type { TicketGroupStatus, TicketGroupTimeframe } from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 
@@ -26,12 +27,45 @@ const ABBREVS: Record<RoadmapColumn, string> = {
   cancelled: 'CNCL',
 };
 
-const COLORS: Record<RoadmapColumn, { text: string; bg: string; bar: string; hoverBg: string; hoverText: string }> = {
-  now:       { text: tintClasses('green').text,  bg: tintClasses('green').bg,  bar: tintClasses('green').solid,  hoverBg: tintClasses('green').hoverBg,  hoverText: tintClasses('green').groupHoverText },
-  next:      { text: tintClasses('orange').text, bg: tintClasses('orange').bg, bar: tintClasses('orange').solid, hoverBg: tintClasses('orange').hoverBg, hoverText: tintClasses('orange').groupHoverText },
-  later:     { text: 'text-[var(--theme-text-muted)]', bg: 'bg-[var(--theme-bg-overlay)]', bar: 'bg-[var(--theme-text-muted)]', hoverBg: 'hover:bg-[var(--theme-bg-hover)]', hoverText: 'group-hover:text-[var(--theme-text-secondary)]' },
-  done:      { text: tintClasses('blue').text,   bg: tintClasses('blue').bg,   bar: tintClasses('blue').solid,   hoverBg: tintClasses('blue').hoverBg,   hoverText: tintClasses('blue').groupHoverText },
-  cancelled: { text: tintClasses('red').text,    bg: tintClasses('red').bg,    bar: tintClasses('red').solid,    hoverBg: tintClasses('red').hoverBg,    hoverText: tintClasses('red').groupHoverText },
+const COLORS: Record<
+  RoadmapColumn,
+  { text: string; bg: string; bar: string; hoverBg: string; hoverText: string }
+> = {
+  now: {
+    text: tintClasses('green').text,
+    bg: tintClasses('green').bg,
+    bar: tintClasses('green').solid,
+    hoverBg: tintClasses('green').hoverBg,
+    hoverText: tintClasses('green').groupHoverText,
+  },
+  next: {
+    text: tintClasses('orange').text,
+    bg: tintClasses('orange').bg,
+    bar: tintClasses('orange').solid,
+    hoverBg: tintClasses('orange').hoverBg,
+    hoverText: tintClasses('orange').groupHoverText,
+  },
+  later: {
+    text: 'text-[var(--theme-text-muted)]',
+    bg: 'bg-[var(--theme-bg-overlay)]',
+    bar: 'bg-[var(--theme-text-muted)]',
+    hoverBg: 'hover:bg-[var(--theme-bg-hover)]',
+    hoverText: 'group-hover:text-[var(--theme-text-secondary)]',
+  },
+  done: {
+    text: tintClasses('blue').text,
+    bg: tintClasses('blue').bg,
+    bar: tintClasses('blue').solid,
+    hoverBg: tintClasses('blue').hoverBg,
+    hoverText: tintClasses('blue').groupHoverText,
+  },
+  cancelled: {
+    text: tintClasses('red').text,
+    bg: tintClasses('red').bg,
+    bar: tintClasses('red').solid,
+    hoverBg: tintClasses('red').hoverBg,
+    hoverText: tintClasses('red').groupHoverText,
+  },
 };
 
 function toColumn(groupStatus: TicketGroupStatus, timeframe: TicketGroupTimeframe): RoadmapColumn {
@@ -41,7 +75,12 @@ function toColumn(groupStatus: TicketGroupStatus, timeframe: TicketGroupTimefram
 }
 
 /** Inline roadmap status picker for epics, following the NanoKanban style. */
-export function NanoRoadmap({ groupStatus, timeframe, onChange, size = 'md' }: {
+export function NanoRoadmap({
+  groupStatus,
+  timeframe,
+  onChange,
+  size = 'md',
+}: {
   groupStatus: TicketGroupStatus;
   timeframe: TicketGroupTimeframe;
   onChange: (groupStatus: TicketGroupStatus, timeframe: TicketGroupTimeframe) => void;
@@ -74,12 +113,17 @@ export function NanoRoadmap({ groupStatus, timeframe, onChange, size = 'md' }: {
               sm ? 'gap-px pb-0.5' : 'gap-1 pb-1.5',
               active ? colors.bg : colors.hoverBg,
             )}
-            onClick={(e) => { e.stopPropagation(); handleClick(col); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClick(col);
+            }}
           >
             <div
               className={cn(
                 'w-full transition-all',
-                active ? cn(sm ? 'h-[2px]' : 'h-[3px]', colors.bar) : cn(sm ? 'h-[1px]' : 'h-[2px]', 'opacity-60', colors.bar),
+                active
+                  ? cn(sm ? 'h-[2px]' : 'h-[3px]', colors.bar)
+                  : cn(sm ? 'h-[1px]' : 'h-[2px]', 'opacity-60', colors.bar),
               )}
             />
             <div className="flex flex-col items-center gap-px">

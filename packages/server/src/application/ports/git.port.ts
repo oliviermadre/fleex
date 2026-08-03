@@ -19,7 +19,12 @@ export interface GitPort {
   cloneBare(remote: string, barePath: string): Promise<void>;
   getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats>;
   getDiffSummary(repoPath: string, branch: string, baseBranch?: string): Promise<string>;
-  getLogOneline(repoPath: string, branch: string, baseBranch?: string, limit?: number): Promise<string>;
+  getLogOneline(
+    repoPath: string,
+    branch: string,
+    baseBranch?: string,
+    limit?: number,
+  ): Promise<string>;
   repairWorktrees(repoPath: string): Promise<void>;
   pruneWorktrees(repoPath: string): Promise<void>;
 }

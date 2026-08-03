@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
+import { describe, it, expect } from 'vitest';
+
 import { generateTools } from '../src/generator.ts';
 import { listTools, callToolResult, toMcpTool } from '../src/mcp-handlers.ts';
+
 import type { ExecResult } from '../src/executor.ts';
 
 function fakeProgram(): Command {
@@ -45,14 +47,28 @@ describe('toMcpTool', () => {
 
 describe('callToolResult', () => {
   const okExec = async (): Promise<ExecResult> => ({
-    ok: true, exitCode: 0, stdout: '{"displayId":42}', stderr: '', data: { displayId: 42 }, argv: [],
+    ok: true,
+    exitCode: 0,
+    stdout: '{"displayId":42}',
+    stderr: '',
+    data: { displayId: 42 },
+    argv: [],
   });
   const failExec = async (): Promise<ExecResult> => ({
-    ok: false, exitCode: 1, stdout: '', stderr: 'Stack not running', argv: [],
+    ok: false,
+    exitCode: 1,
+    stdout: '',
+    stderr: 'Stack not running',
+    argv: [],
   });
 
   it('returns parsed JSON data as pretty text on success', async () => {
-    const res = await callToolResult(tools, 'fleex_ticket_create', { title: 'x' }, { exec: okExec });
+    const res = await callToolResult(
+      tools,
+      'fleex_ticket_create',
+      { title: 'x' },
+      { exec: okExec },
+    );
     expect(res.isError).toBe(false);
     expect(JSON.parse(res.content[0]!.text)).toEqual({ displayId: 42 });
   });
@@ -71,7 +87,11 @@ describe('callToolResult', () => {
 
   it('forces --json on via the exec options', async () => {
     let seenJson: boolean | undefined;
-    const spyExec = async (_t: unknown, _i: unknown, opts: { json?: boolean }): Promise<ExecResult> => {
+    const spyExec = async (
+      _t: unknown,
+      _i: unknown,
+      opts: { json?: boolean },
+    ): Promise<ExecResult> => {
       seenJson = opts.json;
       return { ok: true, exitCode: 0, stdout: 'OK', stderr: '', argv: [] };
     };

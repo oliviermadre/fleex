@@ -13,6 +13,8 @@ When creating new tables in a migration, always add RLS policies for Supabase:
 ```typescript
 if (ctx.adapter === 'supabase') {
   await ctx.exec('ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY');
-  await ctx.exec(`CREATE POLICY "service_role_<table_name>" ON <table_name> FOR ALL USING (true) WITH CHECK (true)`);
+  await ctx.exec(
+    `CREATE POLICY "service_role_<table_name>" ON <table_name> FOR ALL USING (true) WITH CHECK (true)`,
+  );
 }
 ```

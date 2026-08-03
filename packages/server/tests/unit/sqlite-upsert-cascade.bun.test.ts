@@ -11,14 +11,15 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SqliteConnection } from '../../src/infrastructure/adapters/sqlite/connection.js';
-import { SqliteTicketStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-ticket-store.adapter.js';
-import { SqliteWorkflowRunStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-workflow-run-store.adapter.js';
-import { SqliteStepRunStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-step-run-store.adapter.js';
-import { runPendingMigrations } from '../../src/infrastructure/migrations/run-migrations.js';
+
+import { StepRunEntity } from '../../src/domain/entities/step-run.entity.js';
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
-import { StepRunEntity } from '../../src/domain/entities/step-run.entity.js';
+import { SqliteConnection } from '../../src/infrastructure/adapters/sqlite/connection.js';
+import { SqliteStepRunStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-step-run-store.adapter.js';
+import { SqliteTicketStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-ticket-store.adapter.js';
+import { SqliteWorkflowRunStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-workflow-run-store.adapter.js';
+import { runPendingMigrations } from '../../src/infrastructure/migrations/run-migrations.js';
 
 // ── minimal logger (silent) ──────────────────────────────────────────────────
 
@@ -31,14 +32,30 @@ function makeTicket(id = 'ticket-1'): TicketEntity {
 }
 
 const SNAPSHOT = {
-  name: 'Test WF', emoji: '🔧',
-  steps: [{ id: 'step-1', name: 'S1', executorType: 'agent' as const, executorRef: 'p', position: { x: 0, y: 0 } }],
+  name: 'Test WF',
+  emoji: '🔧',
+  steps: [
+    {
+      id: 'step-1',
+      name: 'S1',
+      executorType: 'agent' as const,
+      executorRef: 'p',
+      position: { x: 0, y: 0 },
+    },
+  ],
   edges: [],
   entryStepId: 'step-1',
 };
 
 function makeRun(id = 'run-1', ticketId = 'ticket-1'): WorkflowRunEntity {
-  return WorkflowRunEntity.create({ id, ticketId, templateId: 'tmpl-1', templateSnapshot: SNAPSHOT, triggeredBy: '@test', triggeredFrom: 'test' });
+  return WorkflowRunEntity.create({
+    id,
+    ticketId,
+    templateId: 'tmpl-1',
+    templateSnapshot: SNAPSHOT,
+    triggeredBy: '@test',
+    triggeredFrom: 'test',
+  });
 }
 
 function makeStepRun(id = 'sr-1', runId = 'run-1'): StepRunEntity {

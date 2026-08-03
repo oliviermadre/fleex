@@ -7,11 +7,14 @@
  * builder guarantees the introspected surface and the executed CLI never drift.
  */
 import path from 'node:path';
+
 import { Command } from 'commander';
-import type { CommandDef } from './types.ts';
+
+import { isJsonMode, setJsonMode } from './colors.ts';
 import { applyPrettyHelp, recordExtraHelp, setRootProgram } from './help.ts';
 import { activateWorkspace } from './workspaces.ts';
-import { isJsonMode, setJsonMode } from './colors.ts';
+
+import type { CommandDef } from './types.ts';
 
 const commandsDir = path.join(import.meta.dir, '..', 'commands');
 
@@ -63,7 +66,10 @@ function attachCommand(parent: Command, def: CommandDef): void {
   });
   if (def.workspaceAware) {
     if (!hasOption('--workspace')) {
-      cmd.option('--workspace <name>', 'Target the named workspace instance (defaults to the is_default workspace)');
+      cmd.option(
+        '--workspace <name>',
+        'Target the named workspace instance (defaults to the is_default workspace)',
+      );
     }
     cmd.hook('preAction', (thisCommand) => {
       const ws = thisCommand.opts().workspace as string | undefined;
@@ -94,7 +100,10 @@ function attachCommand(parent: Command, def: CommandDef): void {
 }
 
 async function loadAndRegister(program: Command, file: string): Promise<void> {
-  const segments = file.replace(/\\/g, '/').replace(/\/index\.ts$/, '').split('/');
+  const segments = file
+    .replace(/\\/g, '/')
+    .replace(/\/index\.ts$/, '')
+    .split('/');
   const mod = await import(path.join(commandsDir, file));
   const def = mod.default as CommandDef | undefined;
   if (!def) {

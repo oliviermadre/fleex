@@ -1,62 +1,65 @@
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify from 'fastify';
+
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
-import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
-import { createContainer } from './infrastructure/container.js';
-import { fleexServerFactory } from './infrastructure/http/server-factory.js';
+import websocket from '@fastify/websocket';
+import Fastify from 'fastify';
+
+import { ModelService } from './application/services/model.service.js';
 import { migrateRepositoryPatterns } from './domain/services/repository-pattern-migration.js';
-import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
-import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
-import { healthRoutes } from './infrastructure/http/health.routes.js';
-import { versionRoutes } from './infrastructure/http/version.routes.js';
-import { configRoutes } from './infrastructure/http/config.routes.js';
-import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
-import { execRoutes } from './infrastructure/http/exec.routes.js';
-import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
-import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
-import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
-import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
-import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
-import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
-import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
-import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
-import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
-import { agentContextRoutes } from './infrastructure/http/agent-context.routes.js';
-import { agentWorktreesRoutes } from './infrastructure/http/agent-worktrees.routes.js';
+import { createContainer } from './infrastructure/container.js';
 import { agentActivityRoutes } from './infrastructure/http/agent-activity.routes.js';
+import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
 import { createAgentAuthHook } from './infrastructure/http/agent-auth.hook.js';
-import { registerErrorHandler } from './infrastructure/http/error-handler.js';
-import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
-import { unifiedWsPlugin } from './infrastructure/ws/unified-ws.js';
-import { WsHeartbeat } from './infrastructure/ws/ws-heartbeat.js';
-import { personaRoutes } from './infrastructure/http/persona.routes.js';
-import { skillRoutes } from './infrastructure/http/skill.routes.js';
-import { panelRoutes } from './infrastructure/http/panel.routes.js';
+import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
+import { agentContextRoutes } from './infrastructure/http/agent-context.routes.js';
+import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
 import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
-import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
-import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
-import { dashboardRoutes } from './infrastructure/http/dashboard.routes.js';
-import { githubImageProxyRoutes } from './infrastructure/http/github-image-proxy.routes.js';
-import { fileRoutes } from './infrastructure/http/files.routes.js';
-import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
-import { authRoutes } from './infrastructure/http/auth.routes.js';
+import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
+import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
+import { agentWorktreesRoutes } from './infrastructure/http/agent-worktrees.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
-import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
-import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
+import { authRoutes } from './infrastructure/http/auth.routes.js';
+import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
+import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
+import { configRoutes } from './infrastructure/http/config.routes.js';
+import { dashboardRoutes } from './infrastructure/http/dashboard.routes.js';
+import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
+import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
+import { registerErrorHandler } from './infrastructure/http/error-handler.js';
+import { execRoutes } from './infrastructure/http/exec.routes.js';
+import { fileRoutes } from './infrastructure/http/files.routes.js';
+import { githubImageProxyRoutes } from './infrastructure/http/github-image-proxy.routes.js';
+import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
 import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
-import { ModelService } from './application/services/model.service.js';
+import { panelRoutes } from './infrastructure/http/panel.routes.js';
+import { personaRoutes } from './infrastructure/http/persona.routes.js';
+import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
+import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
+import { fleexServerFactory } from './infrastructure/http/server-factory.js';
+import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
+import { skillRoutes } from './infrastructure/http/skill.routes.js';
+import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
+import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
+import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
+import { versionRoutes } from './infrastructure/http/version.routes.js';
+import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
+import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
+import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
+import { unifiedWsPlugin } from './infrastructure/ws/unified-ws.js';
+import { WsHeartbeat } from './infrastructure/ws/ws-heartbeat.js';
 
 async function main() {
   const container = await createContainer();
 
-  migrateRepositoryPatterns(container.config, container.repositoryResolver, container.logger)
-    .catch((err) => container.logger.warn('Repository pattern migration failed', { error: String(err) }));
+  migrateRepositoryPatterns(container.config, container.repositoryResolver, container.logger).catch(
+    (err) => container.logger.warn('Repository pattern migration failed', { error: String(err) }),
+  );
 
   process.on('uncaughtException', (err) => {
     if ((err as NodeJS.ErrnoException).code === 'EPIPE') {
@@ -123,7 +126,9 @@ async function main() {
   if (container.workflowTemplateStore) {
     await app.register(workflowTemplateRoutes({ templateStore: container.workflowTemplateStore }));
   } else {
-    container.logger.warn('workflowTemplateStore not available — /api/workflows/templates routes skipped');
+    container.logger.warn(
+      'workflowTemplateStore not available — /api/workflows/templates routes skipped',
+    );
   }
 
   // Workflow run routes (requires run/step stores + all use cases)
@@ -135,31 +140,38 @@ async function main() {
     container.retryStep &&
     container.cancelWorkflowRun
   ) {
-    await app.register(workflowRunRoutes({
-      runStore: container.workflowRunStore,
-      stepRunStore: container.stepRunStore,
-      createWorkflowRun: container.createWorkflowRun,
-      resolveHumanGate: container.resolveHumanGate,
-      retryStep: container.retryStep,
-      cancelWorkflowRun: container.cancelWorkflowRun,
-      authorNameResolver: () => 'workflow-trigger',
-    }));
+    await app.register(
+      workflowRunRoutes({
+        runStore: container.workflowRunStore,
+        stepRunStore: container.stepRunStore,
+        createWorkflowRun: container.createWorkflowRun,
+        resolveHumanGate: container.resolveHumanGate,
+        retryStep: container.retryStep,
+        cancelWorkflowRun: container.cancelWorkflowRun,
+        authorNameResolver: () => 'workflow-trigger',
+      }),
+    );
   } else {
-    container.logger.warn('workflowRunStore or use cases not available — /api/workflows/runs routes skipped');
+    container.logger.warn(
+      'workflowRunStore or use cases not available — /api/workflows/runs routes skipped',
+    );
   }
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);
-  await app.register(async function (v1) {
-    v1.addHook('preHandler', authHook);
-    await v1.register(agentApiRoutes(container));
-    await v1.register(agentCommentsRoutes(container));
-    await v1.register(agentMentionsRoutes(container));
-    await v1.register(agentDeliverablesRoutes(container));
-    await v1.register(agentContextRoutes(container));
-    await v1.register(agentWorktreesRoutes(container));
-    await v1.register(agentActivityRoutes(container));
-  }, { prefix: '/api/agents/v1' });
+  await app.register(
+    async function (v1) {
+      v1.addHook('preHandler', authHook);
+      await v1.register(agentApiRoutes(container));
+      await v1.register(agentCommentsRoutes(container));
+      await v1.register(agentMentionsRoutes(container));
+      await v1.register(agentDeliverablesRoutes(container));
+      await v1.register(agentContextRoutes(container));
+      await v1.register(agentWorktreesRoutes(container));
+      await v1.register(agentActivityRoutes(container));
+    },
+    { prefix: '/api/agents/v1' },
+  );
 
   // Register WebSocket handlers
   const heartbeat = new WsHeartbeat();
@@ -171,10 +183,17 @@ async function main() {
     const cfg = container.config.get();
     const repos = cfg.repositories;
     const resolved = cfg.resolvedRepositories;
-    if (Array.isArray(repos) && repos.length > 0 && (!Array.isArray(resolved) || resolved.length === 0)) {
+    if (
+      Array.isArray(repos) &&
+      repos.length > 0 &&
+      (!Array.isArray(resolved) || resolved.length === 0)
+    ) {
       try {
         const resolvedRepos = await container.repositoryResolver.resolve(repos);
-        await container.config.update({ resolvedRepositories: resolvedRepos, resolvedAt: new Date().toISOString() });
+        await container.config.update({
+          resolvedRepositories: resolvedRepos,
+          resolvedAt: new Date().toISOString(),
+        });
         container.logger.info('Auto-resolved repository patterns', { count: resolvedRepos.length });
       } catch (err) {
         container.logger.warn('Failed to auto-resolve repos at startup', { error: String(err) });
@@ -224,7 +243,13 @@ async function main() {
   container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {
     const movedIds = await container.detectMerge.execute(mergedPRs, repoKey);
     for (const id of movedIds) {
-      container.eventBus.emit({ type: 'ticket.moved', ticketId: id, fromStatus: '', toStatus: 'done', occurredAt: new Date() });
+      container.eventBus.emit({
+        type: 'ticket.moved',
+        ticketId: id,
+        fromStatus: '',
+        toStatus: 'done',
+        occurredAt: new Date(),
+      });
     }
   });
 
@@ -234,7 +259,12 @@ async function main() {
   if (existsSync(webDistPath)) {
     await app.register(fastifyStatic, { root: webDistPath, prefix: '/' });
     app.setNotFoundHandler((req, reply) => {
-      if (req.method === 'GET' && !req.url.startsWith('/api') && !req.url.startsWith('/ws') && !req.url.startsWith('/health')) {
+      if (
+        req.method === 'GET' &&
+        !req.url.startsWith('/api') &&
+        !req.url.startsWith('/ws') &&
+        !req.url.startsWith('/health')
+      ) {
         return reply.sendFile('index.html');
       }
       return reply.code(404).send({ error: 'Not found' });
@@ -251,7 +281,10 @@ async function main() {
     if (gwRes.ok) {
       container.logger.info('Gateway connected', { gatewayUrl: container.gatewayUrl });
     } else {
-      container.logger.warn('Gateway returned non-OK status', { gatewayUrl: container.gatewayUrl, status: gwRes.status });
+      container.logger.warn('Gateway returned non-OK status', {
+        gatewayUrl: container.gatewayUrl,
+        status: gwRes.status,
+      });
     }
   } catch {
     container.logger.warn('Gateway not reachable at startup', { gatewayUrl: container.gatewayUrl });

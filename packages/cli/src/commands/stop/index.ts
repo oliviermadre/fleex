@@ -1,10 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CommandDef } from '../../core/types.ts';
+
 import { die } from '../../core/colors.ts';
 import { FLEEX_HOME } from '../../core/instance.ts';
 import { assertValidWorkspacesConfig } from '../../core/workspaces.ts';
+
 import { stopAllInstances, stopCurrent, stopInstance } from './_impl.ts';
+
+import type { CommandDef } from '../../core/types.ts';
 
 interface StopOptions {
   all?: boolean;

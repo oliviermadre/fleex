@@ -64,7 +64,9 @@ export function applySetAutoApprove(msg: Record<string, unknown>, store: Session
   if (!id || !store.get(id)) return false;
   const next: AutoApprove = {
     all: msg.all === true,
-    tools: Array.isArray(msg.tools) ? msg.tools.filter((t): t is string => typeof t === 'string') : [],
+    tools: Array.isArray(msg.tools)
+      ? msg.tools.filter((t): t is string => typeof t === 'string')
+      : [],
   };
   store.setAutoApprove(id, next);
   return true;

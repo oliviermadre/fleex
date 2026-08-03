@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { ModelSelect } from './ModelSelect';
+
 import { cn } from '../../lib/cn';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+
+import { ModelSelect } from './ModelSelect';
 
 interface CreateAgentModalProps {
   open: boolean;
@@ -32,7 +34,11 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
     setCreating(true);
     setError(null);
     try {
-      const persona = await createPersona({ name: name.trim(), displayName: displayName.trim(), model });
+      const persona = await createPersona({
+        name: name.trim(),
+        displayName: displayName.trim(),
+        model,
+      });
       selectPersona(persona.id);
       onClose();
       setName('');
@@ -46,12 +52,17 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-md rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-[var(--theme-text-primary)]">Create Agent Persona</h2>
+        <h2 className="text-lg font-semibold text-[var(--theme-text-primary)]">
+          Create Agent Persona
+        </h2>
 
         <div className="mt-4 flex flex-col gap-3">
           <div>
@@ -89,9 +100,7 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
           </div>
         </div>
 
-        {error && (
-          <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>
-        )}
+        {error && <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">
           <button

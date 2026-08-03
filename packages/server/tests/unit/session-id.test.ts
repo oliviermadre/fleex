@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { sessionIdFromTmuxName } from '../../src/domain/services/session-id.js';
 import { SessionNamingService } from '../../src/domain/services/session-naming.js';
 
@@ -17,9 +18,7 @@ describe('sessionIdFromTmuxName', () => {
   it('returns a canonical RFC 4122 v5 UUID (lowercase, hyphenated)', () => {
     const id = sessionIdFromTmuxName('fleex_shell_org_repo_main_shell');
     // version nibble = 5, variant nibble ∈ {8,9,a,b}
-    expect(id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    );
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
   it('is recoverable from a sidebar tmux name via parseSidebarParentId', () => {

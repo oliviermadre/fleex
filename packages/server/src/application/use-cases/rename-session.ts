@@ -1,8 +1,9 @@
-import { SessionNamingService } from '../../domain/services/session-naming.js';
 import { SessionNotFoundError } from '../../domain/errors.js';
-import type { TmuxPort } from '../ports/tmux.port.js';
-import type { SessionStorePort } from '../ports/session-store.port.js';
+
+import type { SessionNamingService } from '../../domain/services/session-naming.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { SessionStorePort } from '../ports/session-store.port.js';
+import type { TmuxPort } from '../ports/tmux.port.js';
 
 export class RenameSessionUseCase {
   constructor(
@@ -29,9 +30,7 @@ export class RenameSessionUseCase {
       .filter((s) => s.id !== sessionId)
       .map((s) => s.tmuxName);
     const liveSessions = await this.tmux.listManagedSessions();
-    const liveNames = liveSessions
-      .filter((s) => s.name !== session.tmuxName)
-      .map((s) => s.name);
+    const liveNames = liveSessions.filter((s) => s.name !== session.tmuxName).map((s) => s.name);
     const existingTmuxNames = [...new Set([...storedNames, ...liveNames])];
 
     const { displayName, tmuxName } = this.namingService.resolveUniqueName(

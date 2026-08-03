@@ -1,9 +1,8 @@
-import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function agentContextRoutes(container: Container) {
   return async function (app: FastifyInstance) {
-
     // Get full ticket context (single call for agent context window)
     app.get<{
       Params: { id: string };

@@ -1,9 +1,13 @@
 import { useState } from 'react';
+
 import type { OverlayFileStatus, OverlaySyncNode, OverlaySyncRepoScan } from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { tintText } from '../../lib/tints';
-import type { TintHue } from '../../lib/tints';
+
 import { fileRelPaths, hasVisibleFiles, itemKey, nodeState } from './overlaySyncModel';
+
+import type { TintHue } from '../../lib/tints';
 
 export interface CheckboxTreeProps {
   group: OverlaySyncRepoScan;
@@ -26,7 +30,13 @@ function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function TriCheckbox({ state, disabled }: { state: 'checked' | 'unchecked' | 'indeterminate'; disabled?: boolean }) {
+function TriCheckbox({
+  state,
+  disabled,
+}: {
+  state: 'checked' | 'unchecked' | 'indeterminate';
+  disabled?: boolean;
+}) {
   return (
     <span
       className={cn(
@@ -101,10 +111,14 @@ export function CheckboxTree({
                   </span>
                   <span className="truncate font-medium">{node.name}/</span>
                   {node.denylisted && (
-                    <span className={cn('ml-1 shrink-0 text-[10px]', tintText('gray'))}>⛔ volumineux</span>
+                    <span className={cn('ml-1 shrink-0 text-[10px]', tintText('gray'))}>
+                      ⛔ volumineux
+                    </span>
                   )}
                   {node.truncated && (
-                    <span className={cn('ml-1 shrink-0 text-[10px]', tintText('yellow'))}>⚠ tronqué</span>
+                    <span className={cn('ml-1 shrink-0 text-[10px]', tintText('yellow'))}>
+                      ⚠ tronqué
+                    </span>
                   )}
                 </button>
               </div>

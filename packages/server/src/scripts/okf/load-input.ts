@@ -14,33 +14,26 @@
  * uniformly through the per-group / per-ticket port methods — this works for
  * every driver instead of reaching into one driver's REST client.
  */
-import {
-  appendFile,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
 import type { TicketRelationship } from '@fleex/shared';
-import type { LoggerPort } from '../../application/ports/logger.port.js';
-import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
-import type { TicketGroupStorePort } from '../../application/ports/ticket-group-store.port.js';
+
+import type { OkfInput } from './build-bundle.js';
 import type { CommentStorePort } from '../../application/ports/comment-store.port.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
+import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
-import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
 import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
+import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
 import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
+import type { TicketGroupStorePort } from '../../application/ports/ticket-group-store.port.js';
+import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
-import type { HostFs } from '../../infrastructure/host/types.js';
 import type { StorageDriver } from '../../infrastructure/adapters/storage-factory.js';
-import type { OkfInput } from './build-bundle.js';
+import type { HostFs } from '../../infrastructure/host/types.js';
 
 /** The read-only slice of stores the OKF export needs, plus a connection closer. */
 interface KnowledgeStores {
@@ -163,16 +156,26 @@ async function createSupabaseStores(logger: LoggerPort): Promise<KnowledgeStores
       'FLEEX_SUPABASE_URL and FLEEX_SUPABASE_KEY are required when FLEEX_STORAGE_DRIVER=supabase',
     );
   }
-  const { SupabaseConnection } = await import('../../infrastructure/adapters/supabase/connection.js');
-  const { SupabaseTicketStore } = await import('../../infrastructure/adapters/supabase/supabase-ticket-store.adapter.js');
-  const { SupabaseTicketGroupStore } = await import('../../infrastructure/adapters/supabase/supabase-ticket-group-store.adapter.js');
-  const { SupabaseCommentStore } = await import('../../infrastructure/adapters/supabase/supabase-comment-store.adapter.js');
-  const { SupabaseDeliverableStore } = await import('../../infrastructure/adapters/supabase/supabase-deliverable-store.adapter.js');
-  const { SupabaseMentionStore } = await import('../../infrastructure/adapters/supabase/supabase-mention-store.adapter.js');
-  const { SupabasePersonaStore } = await import('../../infrastructure/adapters/supabase/supabase-persona-store.adapter.js');
-  const { SupabasePanelStore } = await import('../../infrastructure/adapters/supabase/supabase-panel-store.adapter.js');
-  const { SupabaseSkillStore } = await import('../../infrastructure/adapters/supabase/supabase-skill-store.adapter.js');
-  const { SupabaseWorkflowTemplateStore } = await import('../../infrastructure/adapters/supabase/supabase-workflow-template-store.adapter.js');
+  const { SupabaseConnection } =
+    await import('../../infrastructure/adapters/supabase/connection.js');
+  const { SupabaseTicketStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-ticket-store.adapter.js');
+  const { SupabaseTicketGroupStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-ticket-group-store.adapter.js');
+  const { SupabaseCommentStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-comment-store.adapter.js');
+  const { SupabaseDeliverableStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-deliverable-store.adapter.js');
+  const { SupabaseMentionStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-mention-store.adapter.js');
+  const { SupabasePersonaStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-persona-store.adapter.js');
+  const { SupabasePanelStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-panel-store.adapter.js');
+  const { SupabaseSkillStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-skill-store.adapter.js');
+  const { SupabaseWorkflowTemplateStore } =
+    await import('../../infrastructure/adapters/supabase/supabase-workflow-template-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const conn = new SupabaseConnection(url, key, dbUrl, logger);
@@ -194,15 +197,24 @@ async function createSupabaseStores(logger: LoggerPort): Promise<KnowledgeStores
 
 async function createSqliteStores(): Promise<KnowledgeStores> {
   const { SqliteConnection } = await import('../../infrastructure/adapters/sqlite/connection.js');
-  const { SqliteTicketStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-ticket-store.adapter.js');
-  const { SqliteTicketGroupStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-ticket-group-store.adapter.js');
-  const { SqliteCommentStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-comment-store.adapter.js');
-  const { SqliteDeliverableStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-deliverable-store.adapter.js');
-  const { SqliteMentionStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-mention-store.adapter.js');
-  const { SqlitePersonaStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-persona-store.adapter.js');
-  const { SqlitePanelStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-panel-store.adapter.js');
-  const { SqliteSkillStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-skill-store.adapter.js');
-  const { SqliteWorkflowTemplateStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-workflow-template-store.adapter.js');
+  const { SqliteTicketStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-ticket-store.adapter.js');
+  const { SqliteTicketGroupStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-ticket-group-store.adapter.js');
+  const { SqliteCommentStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-comment-store.adapter.js');
+  const { SqliteDeliverableStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-deliverable-store.adapter.js');
+  const { SqliteMentionStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-mention-store.adapter.js');
+  const { SqlitePersonaStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-persona-store.adapter.js');
+  const { SqlitePanelStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-panel-store.adapter.js');
+  const { SqliteSkillStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-skill-store.adapter.js');
+  const { SqliteWorkflowTemplateStoreAdapter } =
+    await import('../../infrastructure/adapters/sqlite/sqlite-workflow-template-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const conn = new SqliteConnection(dbPath);
@@ -230,14 +242,22 @@ async function createPgsqlStores(): Promise<KnowledgeStores> {
     throw new Error('FLEEX_PGSQL_URL is required when FLEEX_STORAGE_DRIVER=pgsql');
   }
   const { PgConnection } = await import('../../infrastructure/adapters/pgsql/connection.js');
-  const { PgTicketStore } = await import('../../infrastructure/adapters/pgsql/pg-ticket-store.adapter.js');
-  const { PgTicketGroupStore } = await import('../../infrastructure/adapters/pgsql/pg-ticket-group-store.adapter.js');
-  const { PgCommentStore } = await import('../../infrastructure/adapters/pgsql/pg-comment-store.adapter.js');
-  const { PgDeliverableStore } = await import('../../infrastructure/adapters/pgsql/pg-deliverable-store.adapter.js');
-  const { PgMentionStore } = await import('../../infrastructure/adapters/pgsql/pg-mention-store.adapter.js');
-  const { PgPersonaStore } = await import('../../infrastructure/adapters/pgsql/pg-persona-store.adapter.js');
-  const { PgPanelStore } = await import('../../infrastructure/adapters/pgsql/pg-panel-store.adapter.js');
-  const { PgSkillStore } = await import('../../infrastructure/adapters/pgsql/pg-skill-store.adapter.js');
+  const { PgTicketStore } =
+    await import('../../infrastructure/adapters/pgsql/pg-ticket-store.adapter.js');
+  const { PgTicketGroupStore } =
+    await import('../../infrastructure/adapters/pgsql/pg-ticket-group-store.adapter.js');
+  const { PgCommentStore } =
+    await import('../../infrastructure/adapters/pgsql/pg-comment-store.adapter.js');
+  const { PgDeliverableStore } =
+    await import('../../infrastructure/adapters/pgsql/pg-deliverable-store.adapter.js');
+  const { PgMentionStore } =
+    await import('../../infrastructure/adapters/pgsql/pg-mention-store.adapter.js');
+  const { PgPersonaStore } =
+    await import('../../infrastructure/adapters/pgsql/pg-persona-store.adapter.js');
+  const { PgPanelStore } =
+    await import('../../infrastructure/adapters/pgsql/pg-panel-store.adapter.js');
+  const { PgSkillStore } =
+    await import('../../infrastructure/adapters/pgsql/pg-skill-store.adapter.js');
 
   const conn = new PgConnection(url);
   await conn.init();
@@ -257,14 +277,22 @@ async function createPgsqlStores(): Promise<KnowledgeStores> {
 }
 
 async function createJsonStores(logger: LoggerPort): Promise<KnowledgeStores> {
-  const { JsonTicketStore } = await import('../../infrastructure/adapters/json-ticket-store.adapter.js');
-  const { JsonTicketGroupStore } = await import('../../infrastructure/adapters/json-ticket-group-store.adapter.js');
-  const { JsonCommentStore } = await import('../../infrastructure/adapters/json-comment-store.adapter.js');
-  const { JsonDeliverableStore } = await import('../../infrastructure/adapters/json-deliverable-store.adapter.js');
-  const { JsonMentionStore } = await import('../../infrastructure/adapters/json-mention-store.adapter.js');
-  const { JsonPersonaStore } = await import('../../infrastructure/adapters/json-persona-store.adapter.js');
-  const { JsonPanelStore } = await import('../../infrastructure/adapters/json-panel-store.adapter.js');
-  const { JsonSkillStore } = await import('../../infrastructure/adapters/json-skill-store.adapter.js');
+  const { JsonTicketStore } =
+    await import('../../infrastructure/adapters/json-ticket-store.adapter.js');
+  const { JsonTicketGroupStore } =
+    await import('../../infrastructure/adapters/json-ticket-group-store.adapter.js');
+  const { JsonCommentStore } =
+    await import('../../infrastructure/adapters/json-comment-store.adapter.js');
+  const { JsonDeliverableStore } =
+    await import('../../infrastructure/adapters/json-deliverable-store.adapter.js');
+  const { JsonMentionStore } =
+    await import('../../infrastructure/adapters/json-mention-store.adapter.js');
+  const { JsonPersonaStore } =
+    await import('../../infrastructure/adapters/json-persona-store.adapter.js');
+  const { JsonPanelStore } =
+    await import('../../infrastructure/adapters/json-panel-store.adapter.js');
+  const { JsonSkillStore } =
+    await import('../../infrastructure/adapters/json-skill-store.adapter.js');
 
   const fs = nodeHostFs();
   const home = homedir();

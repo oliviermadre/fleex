@@ -1,10 +1,7 @@
 import { create } from 'zustand';
-import type {
-  Skill,
-  CreateSkillRequest,
-  UpdateSkillRequest,
-  SkillWsMessage,
-} from '@fleex/shared';
+
+import type { Skill, CreateSkillRequest, UpdateSkillRequest, SkillWsMessage } from '@fleex/shared';
+
 import * as api from '../services/api';
 
 interface SkillState {

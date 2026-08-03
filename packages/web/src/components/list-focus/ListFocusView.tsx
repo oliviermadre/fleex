@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 import type { Ticket, TicketPriority, TicketStatus, TicketType } from '@fleex/shared';
 import {
   TICKET_PRIORITIES,
@@ -8,27 +9,33 @@ import {
   TICKET_TYPES,
   TICKET_TYPE_LABELS,
 } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useTicketActivityStore } from '../../stores/ticketActivityStore';
-import { useUnreadStore } from '../../stores/unreadStore';
+
+import { cn } from '../../lib/cn';
+import { fetchBulkPRStates } from '../../services/api';
+import { appWs } from '../../services/websocket';
 import {
   useListFocusStore,
   type InspectorFocus,
   type ListFocusFilters,
   type ListFocusGroupSnapshot,
 } from '../../stores/listFocusStore';
-import { appWs } from '../../services/websocket';
-import { fetchBulkPRStates } from '../../services/api';
-import { buildListFocusGroups, shouldRefreezeForStatusChange, type ListFocusGroup } from './grouping';
-import { ListFocusRow, LIST_FOCUS_COL } from './ListFocusRow';
-import { ListFocusGroupHeader } from './ListFocusGroupHeader';
-import { ListFocusInspector } from './ListFocusInspector';
-import { CommentIcon, DeliverableIcon } from './icons';
-import { STATUS_COLOR } from './StatusChipDropdown';
-import { ToolbarMultiSelect } from './ToolbarSelect';
+import { useTicketActivityStore } from '../../stores/ticketActivityStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import { PriorityIndicator, PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { TYPE_ICONS } from '../tickets/TicketTypeBadge';
-import { cn } from '../../lib/cn';
+
+import {
+  buildListFocusGroups,
+  shouldRefreezeForStatusChange,
+  type ListFocusGroup,
+} from './grouping';
+import { CommentIcon, DeliverableIcon } from './icons';
+import { ListFocusGroupHeader } from './ListFocusGroupHeader';
+import { ListFocusInspector } from './ListFocusInspector';
+import { ListFocusRow, LIST_FOCUS_COL } from './ListFocusRow';
+import { STATUS_COLOR } from './StatusChipDropdown';
+import { ToolbarMultiSelect } from './ToolbarSelect';
 
 const EMPTY_UNREAD = {
   ticketId: '',
@@ -120,7 +127,9 @@ export function ListFocusView() {
       }
     }
     if (refs.size === 0) return;
-    fetchBulkPRStates([...refs]).then(setPrStates).catch(() => {});
+    fetchBulkPRStates([...refs])
+      .then(setPrStates)
+      .catch(() => {});
   }, [tickets]);
 
   // unreadStore is not globally WS-wired, so refetch (debounced) when a comment
@@ -155,9 +164,7 @@ export function ListFocusView() {
       return frozenGroups.map((g) => ({
         key: g.key,
         label: g.label,
-        tickets: g.ticketIds
-          .map((id) => ticketById.get(id))
-          .filter((t): t is Ticket => !!t),
+        tickets: g.ticketIds.map((id) => ticketById.get(id)).filter((t): t is Ticket => !!t),
       }));
     }
     return liveGroups;
@@ -233,7 +240,7 @@ export function ListFocusView() {
     () => (frozenGroups ? frozenGroups.flatMap((g) => g.ticketIds) : []),
     [frozenGroups],
   );
-  const selectedTicket = selectedTicketId ? ticketById.get(selectedTicketId) ?? null : null;
+  const selectedTicket = selectedTicketId ? (ticketById.get(selectedTicketId) ?? null) : null;
   const selectedIndex = selectedTicketId ? flatFrozen.indexOf(selectedTicketId) : -1;
   const positionLabel = selectedIndex >= 0 ? `${selectedIndex + 1} / ${flatFrozen.length}` : '';
 
@@ -245,7 +252,10 @@ export function ListFocusView() {
   // row stay frozen. snapshot() is fresh here: the status change came from a
   // `tickets` update that already recomputed liveGroups this render.
   const selectedStatus = selectedTicket?.status ?? null;
-  const prevSelectionRef = useRef<{ id: string | null; status: TicketStatus | null }>({ id: null, status: null });
+  const prevSelectionRef = useRef<{ id: string | null; status: TicketStatus | null }>({
+    id: null,
+    status: null,
+  });
   useEffect(() => {
     const next = { id: selectedTicketId, status: selectedStatus };
     if (shouldRefreezeForStatusChange(prevSelectionRef.current, next)) {
@@ -259,7 +269,9 @@ export function ListFocusView() {
       const next = new Set(filters.statuses);
       if (next.has(status)) next.delete(status);
       else next.add(status);
-      setFilters({ statuses: (TICKET_STATUSES as readonly TicketStatus[]).filter((s) => next.has(s)) });
+      setFilters({
+        statuses: (TICKET_STATUSES as readonly TicketStatus[]).filter((s) => next.has(s)),
+      });
     },
     [filters.statuses, setFilters],
   );
@@ -269,9 +281,7 @@ export function ListFocusView() {
     <K extends 'boardIds' | 'types' | 'priorities'>(key: K, value: ListFocusFilters[K][number]) => {
       const current = filters[key] as string[];
       setFilters({
-        [key]: current.includes(value)
-          ? current.filter((v) => v !== value)
-          : [...current, value],
+        [key]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value],
       } as Partial<ListFocusFilters>);
     },
     [filters, setFilters],
@@ -289,7 +299,9 @@ export function ListFocusView() {
           (pass 4, remark 1), every one multi-select (empty = all, "All" badge)
           except the favorites flag, plus a free-text title filter. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--theme-border)] px-4 py-2.5">
-        <h1 className="mr-2 text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Cockpit</h1>
+        <h1 className="mr-2 text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Cockpit
+        </h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
@@ -421,39 +433,45 @@ export function ListFocusView() {
               // stretch to the widest row instead of stopping at the viewport.
               <div className="min-w-[780px]">
                 {displayGroups.map((group) => {
-                const collapsed = collapsedGroups.has(group.key);
-                return (
-                  <section key={group.key}>
-                    {/* Pass 8: the whole band takes the status colour (bi-tone
+                  const collapsed = collapsedGroups.has(group.key);
+                  return (
+                    <section key={group.key}>
+                      {/* Pass 8: the whole band takes the status colour (bi-tone
                         bg/label), replacing the old inline pill. */}
-                    <ListFocusGroupHeader
-                      groupKey={group.key}
-                      label={group.label}
-                      count={group.tickets.length}
-                      collapsed={collapsed}
-                      onToggle={() => toggleGroup(group.key)}
-                    />
+                      <ListFocusGroupHeader
+                        groupKey={group.key}
+                        label={group.label}
+                        count={group.tickets.length}
+                        collapsed={collapsed}
+                        onToggle={() => toggleGroup(group.key)}
+                      />
 
-                    {!collapsed &&
-                      group.tickets.map((ticket) => (
-                        <ListFocusRow
-                          key={ticket.id}
-                          ticket={ticket}
-                          board={boardById.get(ticket.boardId)}
-                          activity={activityByTicket[ticket.id] ?? 'idle'}
-                          detail={detailByTicket[ticket.id]}
-                          lastActivityAt={lastActivityAtByTicket[ticket.id] ?? null}
-                          since={sinceByTicket[ticket.id] ?? null}
-                          unread={unreadByTicket[ticket.id] ?? { ...EMPTY_UNREAD, ticketId: ticket.id }}
-                          prStates={prStates}
-                          selected={ticket.id === selectedTicketId}
-                          onOpen={(focus) => handleOpen(ticket.id, focus)}
-                          onToggleFavorite={() => void updateTicket(ticket.id, { favorite: !ticket.favorite })}
-                          onToggleBlocked={() => void updateTicket(ticket.id, { blocked: !ticket.blocked })}
-                        />
-                      ))}
-                  </section>
-                );
+                      {!collapsed &&
+                        group.tickets.map((ticket) => (
+                          <ListFocusRow
+                            key={ticket.id}
+                            ticket={ticket}
+                            board={boardById.get(ticket.boardId)}
+                            activity={activityByTicket[ticket.id] ?? 'idle'}
+                            detail={detailByTicket[ticket.id]}
+                            lastActivityAt={lastActivityAtByTicket[ticket.id] ?? null}
+                            since={sinceByTicket[ticket.id] ?? null}
+                            unread={
+                              unreadByTicket[ticket.id] ?? { ...EMPTY_UNREAD, ticketId: ticket.id }
+                            }
+                            prStates={prStates}
+                            selected={ticket.id === selectedTicketId}
+                            onOpen={(focus) => handleOpen(ticket.id, focus)}
+                            onToggleFavorite={() =>
+                              void updateTicket(ticket.id, { favorite: !ticket.favorite })
+                            }
+                            onToggleBlocked={() =>
+                              void updateTicket(ticket.id, { blocked: !ticket.blocked })
+                            }
+                          />
+                        ))}
+                    </section>
+                  );
                 })}
               </div>
             )}
@@ -470,7 +488,9 @@ export function ListFocusView() {
             onClose={close}
             onStatusChange={(status) => handleStatusChange(selectedTicket.id, status)}
             onOpenFull={() =>
-              navigate(`/tickets/board/${selectedTicket.boardId}/ticket/${selectedTicket.id}/comments`)
+              navigate(
+                `/tickets/board/${selectedTicket.boardId}/ticket/${selectedTicket.id}/comments`,
+              )
             }
             onPrev={() => selectRelative(-1)}
             onNext={() => selectRelative(1)}

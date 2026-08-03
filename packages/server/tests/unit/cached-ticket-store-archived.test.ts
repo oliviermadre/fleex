@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
+
 import { describe, it, expect } from 'vitest';
-import { CachedTicketStore } from '../../src/infrastructure/adapters/cached-ticket-store.js';
+
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+import { CachedTicketStore } from '../../src/infrastructure/adapters/cached-ticket-store.js';
+
 import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
 
 /**

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import type { AgentExecution } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
+import * as api from '../../services/api';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { AgentEventStream } from '../main-panel/AgentEventStream';
-import { cn } from '../../lib/cn';
-import * as api from '../../services/api';
-import { tintClasses } from '../../lib/tints';
 
 const EMPTY_EXECUTIONS: AgentExecution[] = [];
 
@@ -46,7 +48,9 @@ function useTickingClock(active: boolean): number {
 export function AgentEventsTab() {
   const selectedPersonaId = useAgentPersonaStore((s) => s.selectedPersonaId);
   const executions = useAgentEventStore((s) =>
-    selectedPersonaId ? s.executionsByPersona[selectedPersonaId] ?? EMPTY_EXECUTIONS : EMPTY_EXECUTIONS
+    selectedPersonaId
+      ? (s.executionsByPersona[selectedPersonaId] ?? EMPTY_EXECUTIONS)
+      : EMPTY_EXECUTIONS,
   );
   const loadExecutions = useAgentEventStore((s) => s.loadExecutionsForPersona);
   const [expandedExecutionId, setExpandedExecutionId] = useState<string | null>(null);
@@ -60,16 +64,24 @@ export function AgentEventsTab() {
     }
   }, [selectedPersonaId, loadExecutions]);
 
-  const handleCancel = useCallback(async (executionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm('Cancel this execution? The agent will be interrupted and the mention reset to pending.')) return;
-    try {
-      await api.cancelExecution(executionId);
-      if (selectedPersonaId) loadExecutions(selectedPersonaId);
-    } catch (err) {
-      console.error('Failed to cancel execution:', err);
-    }
-  }, [selectedPersonaId, loadExecutions]);
+  const handleCancel = useCallback(
+    async (executionId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (
+        !confirm(
+          'Cancel this execution? The agent will be interrupted and the mention reset to pending.',
+        )
+      )
+        return;
+      try {
+        await api.cancelExecution(executionId);
+        if (selectedPersonaId) loadExecutions(selectedPersonaId);
+      } catch (err) {
+        console.error('Failed to cancel execution:', err);
+      }
+    },
+    [selectedPersonaId, loadExecutions],
+  );
 
   if (!selectedPersonaId) {
     return (
@@ -94,11 +106,9 @@ export function AgentEventsTab() {
           <button
             className={cn(
               'w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--theme-bg-hover)] transition-colors',
-              expandedExecutionId === exec.id && 'bg-[var(--theme-bg-hover)]'
+              expandedExecutionId === exec.id && 'bg-[var(--theme-bg-hover)]',
             )}
-            onClick={() => setExpandedExecutionId(
-              expandedExecutionId === exec.id ? null : exec.id
-            )}
+            onClick={() => setExpandedExecutionId(expandedExecutionId === exec.id ? null : exec.id)}
           >
             <StatusBadge status={exec.status} />
             <div className="flex flex-col min-w-0 flex-1">
@@ -107,9 +117,16 @@ export function AgentEventsTab() {
               </span>
               <span className="text-xs text-[var(--theme-text-faint)]">
                 {new Date(exec.startedAt).toLocaleString(undefined, { hour12: false })}
-                {' · '}{exec.eventCount} events
+                {' · '}
+                {exec.eventCount} events
                 {exec.status === 'running' && (
-                  <> · <span className={tintClasses('blue').text}>{formatDuration(exec.startedAt)}</span></>
+                  <>
+                    {' '}
+                    ·{' '}
+                    <span className={tintClasses('blue').text}>
+                      {formatDuration(exec.startedAt)}
+                    </span>
+                  </>
                 )}
                 {exec.status !== 'running' && exec.completedAt && (
                   <> · {formatDuration(exec.startedAt, exec.completedAt)}</>
@@ -130,7 +147,9 @@ export function AgentEventsTab() {
                   tabIndex={0}
                   className={`px-2 py-0.5 rounded text-[10px] font-medium ${tintClasses('red').bg} ${tintClasses('red').text} ${tintClasses('red').hoverBg} transition-colors cursor-pointer`}
                   onClick={(e) => handleCancel(exec.id, e)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleCancel(exec.id, e as unknown as React.MouseEvent); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCancel(exec.id, e as unknown as React.MouseEvent);
+                  }}
                 >
                   Cancel
                 </span>
@@ -156,12 +175,22 @@ function StatusBadge({ status }: { status: AgentExecution['status'] }) {
     running: { bg: tintClasses('blue').bg, text: tintClasses('blue').text, label: 'Running' },
     completed: { bg: tintClasses('green').bg, text: tintClasses('green').text, label: 'Completed' },
     failed: { bg: tintClasses('red').bg, text: tintClasses('red').text, label: 'Failed' },
-    interrupted: { bg: tintClasses('yellow').bg, text: tintClasses('yellow').text, label: 'Interrupted' },
+    interrupted: {
+      bg: tintClasses('yellow').bg,
+      text: tintClasses('yellow').text,
+      label: 'Interrupted',
+    },
   };
   const config = statusMap[status as keyof typeof statusMap];
 
   return (
-    <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium', config.bg, config.text)}>
+    <span
+      className={cn(
+        'shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium',
+        config.bg,
+        config.text,
+      )}
+    >
       {config.label}
     </span>
   );

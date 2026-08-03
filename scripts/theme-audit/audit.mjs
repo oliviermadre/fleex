@@ -12,6 +12,7 @@
  * Preferred entry point: `bun run audit:theme` (scripts/theme-audit/run.mjs).
  */
 import fs from 'node:fs';
+
 import { loadPlaywright } from './playwright-dep.mjs';
 
 export const ROUTES = [
@@ -74,7 +75,8 @@ const auditFn = () => {
     return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
   }
   function ratio(fg, bg) {
-    const l1 = lum(fg), l2 = lum(bg);
+    const l1 = lum(fg),
+      l2 = lum(bg);
     return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
   }
 
@@ -93,7 +95,8 @@ const auditFn = () => {
     if (parseFloat(cs.opacity) < 0.15) continue;
     const rect = el.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
-    if (rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) continue;
+    if (rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth)
+      continue;
     const fg = parseColor(cs.color);
     if (!fg) continue;
     const bg = effBg(el);
@@ -141,7 +144,9 @@ export async function sweep({ base, theme, out }) {
     await route.fulfill({ response: resp, json });
   });
   await context.route('**/api/config', (route) =>
-    route.request().method() === 'PUT' ? route.fulfill({ status: 200, json: {} }) : route.fallback(),
+    route.request().method() === 'PUT'
+      ? route.fulfill({ status: 200, json: {} })
+      : route.fallback(),
   );
 
   const page = await context.newPage();
@@ -213,5 +218,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('AUDIT_BASE is required, e.g. AUDIT_BASE=http://localhost:3000');
     process.exit(2);
   }
-  await sweep({ base, theme, out: process.argv[3] || process.env.AUDIT_OUT || `./theme-audit-out/${theme}` });
+  await sweep({
+    base,
+    theme,
+    out: process.argv[3] || process.env.AUDIT_OUT || `./theme-audit-out/${theme}`,
+  });
 }

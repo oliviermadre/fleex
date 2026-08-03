@@ -15,22 +15,31 @@
  *   --format json       structured, easiest for programmatic consumers
  *   --format text       plain text, no markdown syntax
  */
-import { Command, type Option, type Argument } from 'commander';
-import type { CommandDef } from '../../core/types.ts';
-import { walkCommands, getRootProgram, getExtraHelp } from '../../core/help.ts';
+import { type Option, type Argument } from 'commander';
+
 import { stripAnsi } from '../../core/colors.ts';
+import { walkCommands, getRootProgram, getExtraHelp } from '../../core/help.ts';
+
+import type { CommandDef } from '../../core/types.ts';
+import type { Command } from 'commander';
 
 type Format = 'markdown' | 'json' | 'text';
 
 export interface CommandDoc {
-  path: string;            // "fleex ticket list"
+  path: string; // "fleex ticket list"
   name: string;
   aliases: string[];
   description: string;
   usage: string;
   arguments: Array<{ name: string; description: string; required: boolean; variadic: boolean }>;
-  options: Array<{ flags: string; description: string; defaultValue?: unknown; required: boolean; mandatory: boolean }>;
-  subcommands: string[];   // names of direct children (excluding "help")
+  options: Array<{
+    flags: string;
+    description: string;
+    defaultValue?: unknown;
+    required: boolean;
+    mandatory: boolean;
+  }>;
+  subcommands: string[]; // names of direct children (excluding "help")
   /** ANSI-stripped `CommandDef.extraHelp` (Examples, notes) when the command declares one. */
   notes?: string;
 }
@@ -38,14 +47,17 @@ export interface CommandDoc {
 const def: CommandDef = {
   name: 'documentation',
   aliases: ['docs'],
-  description: 'Print the exhaustive CLI reference (every command, option, alias) — built for LLM discovery',
+  description:
+    'Print the exhaustive CLI reference (every command, option, alias) — built for LLM discovery',
   setup(cmd) {
     cmd.option('-f, --format <format>', 'Output format: markdown | json | text', 'markdown');
   },
   action: async (opts: { format?: Format }) => {
-    const format: Format = (opts.format ?? 'markdown');
+    const format: Format = opts.format ?? 'markdown';
     if (format !== 'markdown' && format !== 'json' && format !== 'text') {
-      process.stderr.write(`fleex: unknown --format '${format}', expected markdown | json | text\n`);
+      process.stderr.write(
+        `fleex: unknown --format '${format}', expected markdown | json | text\n`,
+      );
       process.exit(2);
     }
     const root = getRootProgram();
@@ -55,12 +67,18 @@ const def: CommandDef = {
       .map(({ cmd, path }) => describeCommand(cmd, path));
 
     if (format === 'json') {
-      process.stdout.write(JSON.stringify({
-        program: root.name(),
-        version: root.version() ?? null,
-        description: root.description() || null,
-        commands: docs,
-      }, null, 2) + '\n');
+      process.stdout.write(
+        JSON.stringify(
+          {
+            program: root.name(),
+            version: root.version() ?? null,
+            description: root.description() || null,
+            commands: docs,
+          },
+          null,
+          2,
+        ) + '\n',
+      );
       return;
     }
 
@@ -82,16 +100,25 @@ export default def;
  * maintenance here in this single constant.
  */
 const COMMON_TASKS: Array<{ goal: string; command: string }> = [
-  { goal: 'Attacher / linker une PR GitHub existante à un ticket', command: 'fleex ticket link <ticket-id> --pr <pr-url|org/name#N>' },
-  { goal: 'Attacher / linker une issue GitHub à un ticket', command: 'fleex ticket link <ticket-id> --issue <issue-url|org/name#N>' },
-  { goal: 'Linker un repo à un ticket (crée le worktree)', command: 'fleex ticket link <ticket-id> --repo <org/name>' },
+  {
+    goal: 'Attacher / linker une PR GitHub existante à un ticket',
+    command: 'fleex ticket link <ticket-id> --pr <pr-url|org/name#N>',
+  },
+  {
+    goal: 'Attacher / linker une issue GitHub à un ticket',
+    command: 'fleex ticket link <ticket-id> --issue <issue-url|org/name#N>',
+  },
+  {
+    goal: 'Linker un repo à un ticket (crée le worktree)',
+    command: 'fleex ticket link <ticket-id> --repo <org/name>',
+  },
   { goal: 'Créer un ticket', command: 'fleex ticket create --title "…"' },
   { goal: 'Commenter un ticket', command: 'fleex ticket comment <ticket-id> "…"' },
   { goal: 'Déplacer un ticket vers un statut', command: 'fleex ticket move <ticket-id> <status>' },
 ];
 
 export function describeCommand(cmd: Command, breadcrumb: string[]): CommandDoc {
-  const args = (cmd as unknown as { registeredArguments?: Argument[]; _args?: Argument[] });
+  const args = cmd as unknown as { registeredArguments?: Argument[]; _args?: Argument[] };
   const argList: Argument[] = (args.registeredArguments ?? args._args ?? []) as Argument[];
   const rawNotes = getExtraHelp(cmd);
   const notes = rawNotes ? stripAnsi(rawNotes).trim() : undefined;
@@ -125,10 +152,14 @@ export function renderMarkdown(root: Command, docs: CommandDoc[]): string {
   if (root.version()) lines.push(`Version: \`${root.version()}\``);
   if (root.description()) lines.push('', root.description());
   lines.push('');
-  lines.push('> Auto-generated from the live command tree. Re-run `fleex documentation` after any update.');
+  lines.push(
+    '> Auto-generated from the live command tree. Re-run `fleex documentation` after any update.',
+  );
   lines.push('');
   lines.push('## Common tasks');
-  lines.push('> Intention → commande. Si ton but est listé ici, utilise directement cette commande.');
+  lines.push(
+    '> Intention → commande. Si ton but est listé ici, utilise directement cette commande.',
+  );
   lines.push('');
   for (const t of COMMON_TASKS) lines.push(`- **${t.goal}** → \`${t.command}\``);
   lines.push('');
@@ -147,14 +178,19 @@ export function renderMarkdown(root: Command, docs: CommandDoc[]): string {
     if (d.arguments.length) {
       lines.push('', '**Arguments:**', '');
       for (const a of d.arguments) {
-        const tag = a.required ? `<${a.name}${a.variadic ? '...' : ''}>` : `[${a.name}${a.variadic ? '...' : ''}]`;
+        const tag = a.required
+          ? `<${a.name}${a.variadic ? '...' : ''}>`
+          : `[${a.name}${a.variadic ? '...' : ''}]`;
         lines.push(`- \`${tag}\` — ${a.description || '(no description)'}`);
       }
     }
     if (d.options.length) {
       lines.push('', '**Options:**', '');
       for (const o of d.options) {
-        const dflt = o.defaultValue !== undefined && o.defaultValue !== false ? ` _(default: \`${JSON.stringify(o.defaultValue)}\`)_` : '';
+        const dflt =
+          o.defaultValue !== undefined && o.defaultValue !== false
+            ? ` _(default: \`${JSON.stringify(o.defaultValue)}\`)_`
+            : '';
         const req = o.mandatory ? ' **(required)**' : '';
         lines.push(`- \`${o.flags}\`${req} — ${o.description || '(no description)'}${dflt}`);
       }

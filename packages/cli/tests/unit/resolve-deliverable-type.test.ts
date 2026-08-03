@@ -38,7 +38,9 @@ describe('resolveDeliverableType', () => {
   });
 
   it('exits when the type is not configured', async () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     await expect(resolveDeliverableType('unknown')).rejects.toThrow('exit');
     exit.mockRestore();
@@ -53,7 +55,9 @@ describe('assertValidRenderer', () => {
   });
 
   it('rejects an unknown renderer', () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     expect(() => assertValidRenderer('pdf')).toThrow('exit');
     exit.mockRestore();
@@ -73,7 +77,9 @@ describe('resolveColor', () => {
   });
 
   it('rejects an unknown colour key', () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     expect(() => resolveColor('chartreuse')).toThrow('exit');
     exit.mockRestore();

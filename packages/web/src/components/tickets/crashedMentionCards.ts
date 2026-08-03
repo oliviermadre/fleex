@@ -28,7 +28,8 @@ export const CRASH_REASON_LABELS: Record<string, string> = {
 };
 
 /** Generic remediation shown when the live crash reason is no longer available. */
-export const CRASH_FALLBACK_MESSAGE = "La session s'est interrompue. Consultez les logs, puis relancez.";
+export const CRASH_FALLBACK_MESSAGE =
+  "La session s'est interrompue. Consultez les logs, puis relancez.";
 
 export function crashReasonLabel(reason: string): string {
   return CRASH_REASON_LABELS[reason] ?? 'Session interrompue';

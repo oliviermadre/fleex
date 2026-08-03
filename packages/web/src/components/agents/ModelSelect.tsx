@@ -1,8 +1,11 @@
 import { useMemo, type ReactNode } from 'react';
+
 import type { ModelFamily, ModelOption } from '@fleex/shared';
+
 import { useModels } from '../../hooks/useModels';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+
 import { ModelBadge } from './ModelBadge';
 
 // Family display order + section headers. Mirrors FAMILY_ORDER in the server's
@@ -161,7 +164,9 @@ export function ModelSelect({
           >
             {leadingOption != null && (
               <OptionRow selected={isLeading} onSelect={() => handleSelect(leadingOption.value)}>
-                <span className="flex-1 truncate text-[var(--theme-text-primary)]">{leadingOption.label}</span>
+                <span className="flex-1 truncate text-[var(--theme-text-primary)]">
+                  {leadingOption.label}
+                </span>
               </OptionRow>
             )}
             {unknownId != null && (
@@ -175,9 +180,15 @@ export function ModelSelect({
                   {section.label}
                 </div>
                 {section.models.map((m) => (
-                  <OptionRow key={m.id} selected={m.id === value} onSelect={() => handleSelect(m.id)}>
+                  <OptionRow
+                    key={m.id}
+                    selected={m.id === value}
+                    onSelect={() => handleSelect(m.id)}
+                  >
                     <ModelBadge modelId={m.id} />
-                    <span className="flex-1 truncate text-[var(--theme-text-primary)]">{m.label}</span>
+                    <span className="flex-1 truncate text-[var(--theme-text-primary)]">
+                      {m.label}
+                    </span>
                   </OptionRow>
                 ))}
               </div>
@@ -209,7 +220,9 @@ function OptionRow({
         selected ? 'bg-[var(--theme-accent)]/15' : 'hover:bg-[var(--theme-bg-hover)]',
       )}
     >
-      <span className="flex w-3 shrink-0 justify-center text-[var(--theme-accent)]">{selected ? '✓' : ''}</span>
+      <span className="flex w-3 shrink-0 justify-center text-[var(--theme-accent)]">
+        {selected ? '✓' : ''}
+      </span>
       {children}
     </button>
   );

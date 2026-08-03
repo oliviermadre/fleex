@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
+
 import { WorkflowRunView } from './WorkflowRunView';
 
 interface Props {
@@ -39,7 +41,6 @@ export function TicketWorkflowTab({ ticketId }: Props) {
   // The store's seq guard discards stale in-flight responses.
   useEffect(() => {
     if (currentRunId) void loadDetail(currentRunId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRunId, loadDetail]);
 
   if (!runs || runs.length === 0) {

@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CommandDef } from '../../core/types.ts';
+
 import { ok, warn, die } from '../../core/colors.ts';
 import { FLEEX_HOME, resolveInstance } from '../../core/instance.ts';
 import { SERVICES } from '../../core/ports.ts';
 import { isAlive } from '../../core/process.ts';
+
+import type { CommandDef } from '../../core/types.ts';
 
 interface RemoveOptions {
   allStopped?: boolean;

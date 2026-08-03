@@ -1,11 +1,14 @@
-import { describe, it, expect } from 'vitest';
 import path from 'node:path';
+
+import { describe, it, expect } from 'vitest';
+
 import {
   runRules,
   normalizeBasePath,
   WORKSPACES_RULES,
   type RuleContext,
 } from '../../src/core/workspaces-validation.ts';
+
 import type { Workspace } from '../../src/core/workspaces.ts';
 
 const HOME = '/home/tester';
@@ -42,21 +45,33 @@ describe('single-default rule', () => {
     expect(e?.message).toMatch(/only one default/);
   });
   it('passes with one or zero defaults', () => {
-    expect(runRules(ctx([ws('a', true), ws('b', false)]), ['config']).some((i) => i.rule === 'single-default')).toBe(false);
-    expect(runRules(ctx([ws('a', false)]), ['config']).some((i) => i.rule === 'single-default')).toBe(false);
+    expect(
+      runRules(ctx([ws('a', true), ws('b', false)]), ['config']).some(
+        (i) => i.rule === 'single-default',
+      ),
+    ).toBe(false);
+    expect(
+      runRules(ctx([ws('a', false)]), ['config']).some((i) => i.rule === 'single-default'),
+    ).toBe(false);
   });
 });
 
 describe('unique-base-path rule', () => {
   it('errors when two workspaces share a basePath (after ~ normalization)', () => {
-    const issues = runRules(ctx([ws('a', true, '~/projects'), ws('b', false, '/home/tester/projects')]), ['config']);
+    const issues = runRules(
+      ctx([ws('a', true, '~/projects'), ws('b', false, '/home/tester/projects')]),
+      ['config'],
+    );
     const e = issues.find((i) => i.rule === 'unique-base-path');
     expect(e?.level).toBe('error');
     expect(e?.message).toMatch(/share the same basePath/);
     expect(e?.message).toContain('a, b');
   });
   it('passes when basePaths are distinct', () => {
-    const issues = runRules(ctx([ws('a', true, '~/projects-tada'), ws('b', false, '~/projects-perso')]), ['config']);
+    const issues = runRules(
+      ctx([ws('a', true, '~/projects-tada'), ws('b', false, '~/projects-perso')]),
+      ['config'],
+    );
     expect(issues.some((i) => i.rule === 'unique-base-path')).toBe(false);
   });
   it('ignores workspaces without a basePath for duplicate detection', () => {
@@ -70,7 +85,10 @@ describe('unique-sqlite-path rule', () => {
     wsEnv(name, { FLEEX_STORAGE_DRIVER: 'sqlite', ...(p ? { FLEEX_SQLITE_PATH: p } : {}) });
 
   it('errors when two sqlite workspaces share a db file (after ~ normalization)', () => {
-    const issues = runRules(ctx([sqlite('a', '~/.fleex/fleex.db'), sqlite('b', '/home/tester/.fleex/fleex.db')]), ['config']);
+    const issues = runRules(
+      ctx([sqlite('a', '~/.fleex/fleex.db'), sqlite('b', '/home/tester/.fleex/fleex.db')]),
+      ['config'],
+    );
     const e = issues.find((i) => i.rule === 'unique-sqlite-path');
     expect(e?.level).toBe('error');
     expect(e?.message).toMatch(/share the same database file/);
@@ -78,12 +96,17 @@ describe('unique-sqlite-path rule', () => {
   });
 
   it('passes when sqlite paths are distinct', () => {
-    const issues = runRules(ctx([sqlite('a', '~/.fleex/a.db'), sqlite('b', '~/.fleex/b.db')]), ['config']);
+    const issues = runRules(ctx([sqlite('a', '~/.fleex/a.db'), sqlite('b', '~/.fleex/b.db')]), [
+      'config',
+    ]);
     expect(issues.some((i) => i.rule === 'unique-sqlite-path')).toBe(false);
   });
 
   it('ignores non-sqlite workspaces even if FLEEX_SQLITE_PATH coincides', () => {
-    const supa = wsEnv('s', { FLEEX_STORAGE_DRIVER: 'supabase', FLEEX_SQLITE_PATH: '~/.fleex/fleex.db' });
+    const supa = wsEnv('s', {
+      FLEEX_STORAGE_DRIVER: 'supabase',
+      FLEEX_SQLITE_PATH: '~/.fleex/fleex.db',
+    });
     const issues = runRules(ctx([sqlite('a', '~/.fleex/fleex.db'), supa]), ['config']);
     expect(issues.some((i) => i.rule === 'unique-sqlite-path')).toBe(false);
   });

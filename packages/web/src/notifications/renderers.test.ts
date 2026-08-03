@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { __renderers, registerDefaultRenderers } from './renderers';
+
 import { NotificationRendererRegistry } from './registry';
+import { __renderers, registerDefaultRenderers } from './renderers';
+
 import type { RendererContext } from './types';
 
 const ctx: RendererContext = {
-  ticketLink: (id, tab) => `/tickets/board/all/ticket/${id}${tab && tab !== 'description' ? `/${tab}` : ''}`,
+  ticketLink: (id, tab) =>
+    `/tickets/board/all/ticket/${id}${tab && tab !== 'description' ? `/${tab}` : ''}`,
 };
 
 describe('registerDefaultRenderers', () => {

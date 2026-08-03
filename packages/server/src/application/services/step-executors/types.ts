@@ -1,8 +1,4 @@
-import type {
-  WorkflowStep,
-  StepOutput,
-  WorkflowEdgeCondition,
-} from '@fleex/shared';
+import type { WorkflowStep, StepOutput, WorkflowEdgeCondition } from '@fleex/shared';
 
 export interface StepExecutionInput {
   ticketId: string;

@@ -1,6 +1,7 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+
 import type { CommandDef } from '../../core/types.ts';
+import type { Command } from 'commander';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -8,7 +9,8 @@ const DIM = chalk.dim;
 const def: CommandDef = {
   name: 'deliverable-type',
   aliases: ['deliverable-types', 'dtype'],
-  description: 'Manage configured deliverable types (list, create, update, rename, delete, reassign)',
+  description:
+    'Manage configured deliverable types (list, create, update, rename, delete, reassign)',
   isParent: true,
   extraHelp: `\n${SECTION('Examples:')}
   ${DIM('$')} fleex deliverable-type list                              ${DIM('# configured types + usage counts')}

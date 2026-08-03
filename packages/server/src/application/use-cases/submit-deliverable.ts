@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
+
 import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { normalizeDeliverableTypes, stripHtmlCodeFence } from '@fleex/shared';
-import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import { InvalidDeliverableTypeError } from '../../domain/errors.js';
-import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
+
 import type { ConfigPort } from '../ports/config.port.js';
+import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 export class SubmitDeliverableUseCase {
   constructor(
@@ -38,7 +41,8 @@ export class SubmitDeliverableUseCase {
     // html-rendered content is embedded directly into an iframe — defensively
     // unwrap a markdown code fence the agent may have wrapped the HTML in, so the
     // stored content (and copy/detach) is clean raw HTML.
-    const content = typeDef.renderer === 'html' ? stripHtmlCodeFence(params.content) : params.content;
+    const content =
+      typeDef.renderer === 'html' ? stripHtmlCodeFence(params.content) : params.content;
 
     const deliverable = TicketDeliverableEntity.create({
       id: randomUUID(),
@@ -53,15 +57,17 @@ export class SubmitDeliverableUseCase {
 
     await this.deliverableStore.save(deliverable);
 
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId: params.ticketId,
-      action: 'deliverable_submitted',
-      changes: { deliverableId: { from: null, to: deliverable.id } },
-      actorType: 'agent',
-      actorName: params.agentName,
-      source: 'api',
-    }));
+    await this.ticketStore.saveActivity(
+      TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: params.ticketId,
+        action: 'deliverable_submitted',
+        changes: { deliverableId: { from: null, to: deliverable.id } },
+        actorType: 'agent',
+        actorName: params.agentName,
+        source: 'api',
+      }),
+    );
 
     this.logger.info('Deliverable submitted', {
       ticketId: params.ticketId,

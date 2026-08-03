@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useTicketStore } from '../../stores/ticketStore';
+
 import { cn } from '../../lib/cn';
+import { useTicketStore } from '../../stores/ticketStore';
 
 export function SearchToggle() {
   const searchQuery = useTicketStore((s) => s.searchQuery);
@@ -43,7 +44,16 @@ export function SearchToggle() {
         onClick={() => setExpanded(true)}
         title="Search tickets"
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <circle cx="7" cy="7" r="5" />
           <line x1="10.5" y1="10.5" x2="14" y2="14" />
         </svg>
@@ -55,7 +65,14 @@ export function SearchToggle() {
     <div className="relative flex items-center">
       <svg
         className="absolute left-3 text-[var(--theme-accent)]"
-        width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+        width="15"
+        height="15"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       >
         <circle cx="7" cy="7" r="5" />
         <line x1="10.5" y1="10.5" x2="14" y2="14" />

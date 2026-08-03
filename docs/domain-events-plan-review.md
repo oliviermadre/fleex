@@ -13,6 +13,7 @@ The plan is **architecturally sound**. The diagnosis (3-4 code paths per busines
 `agent-comments.routes.ts` PATCH handler and `tickets.routes.ts` PATCH `/api/mentions/:id/from-comment` both broadcast `comment:updated` with side effects (new mention creation, auto-review triggers). No `UpdateCommentUseCase` exists.
 
 **Action**: Add to catalog and Phase 1:
+
 ```
 comment.updated  { comment, ticketId, createdMentions[] }
 ```
@@ -28,6 +29,7 @@ Listed in catalog but no `DeleteCommentUseCase` planned. `agent-comments.routes.
 `persona.routes.ts` broadcasts `persona:execution_started` on "Play". `agent-events-ws.ts` broadcasts `persona:execution_completed` and `persona:execution_failed`. None are in the event catalog.
 
 **Action**: Add to catalog:
+
 ```
 persona.execution_started    { personaId, mentionIds }
 persona.execution_completed  { personaId, status, mentionId }
@@ -67,6 +69,7 @@ Inline deletion in both route files.
 ### 10. `AcknowledgeMentionUseCase` and `WaitForInfoMentionUseCase` - MEDIUM
 
 `agent-mentions.routes.ts` handles PATCH `/mentions/:id/acknowledge` and `/mentions/:id/wait-for-info` inline. Plan says "also add events for other mention transitions - same pattern" but is not explicit. These need dedicated use cases:
+
 - `AcknowledgeMentionUseCase` -> emits `mention.acknowledged`
 - `WaitForInfoMentionUseCase` -> emits `mention.waiting_for_info`, triggers `handleMentionWaitingForInfo()`
 
@@ -84,11 +87,11 @@ The plan mentions wanting "Command Bus, Command Handler" but only describes an E
 
 The 25 existing use cases already serve as command handlers - `PostCommentUseCase.execute()` IS effectively `handlePostCommentCommand()`. Adding a formal Command Bus wrapping use cases would be over-engineering:
 
-| Pattern | Current | With Command Bus |
-|---------|---------|-----------------|
+| Pattern       | Current                                | With Command Bus                                     |
+| ------------- | -------------------------------------- | ---------------------------------------------------- |
 | Route handler | `container.postComment.execute({...})` | `commandBus.dispatch(new PostCommentCommand({...}))` |
-| Side effects | Manual inline | Event bus listeners |
-| Cross-cutting | None needed yet | Validation, auth, logging middleware |
+| Side effects  | Manual inline                          | Event bus listeners                                  |
+| Cross-cutting | None needed yet                        | Validation, auth, logging middleware                 |
 
 A Command Bus adds value when you need cross-cutting middleware (validation, authorization, logging, retry) applied uniformly across all commands. Currently the use cases don't have this need. Focus on the Event Bus first. Add Command Bus later if cross-cutting concerns start duplicating.
 
@@ -125,12 +128,14 @@ async emit(event, payload) {
 ### 14. `agentBroadcast` vs `ticketBroadcast` - HIGH
 
 The plan's `broadcast.listener.ts` says it handles ALL WS broadcasts. But the current architecture has **two separate broadcast channels**:
+
 - `ticketBroadcast`: broadcasts to ALL connected web clients
 - `agentBroadcast`: broadcasts to **targeted agents** (filters by ticket subscription, mention target, private comment recipient)
 
 `agent-ws.ts` does filtering logic (`shouldReceive()`) to decide which agents see which events. The broadcast listener needs to call BOTH, or `agent-ws.ts` needs to be restructured to listen on the event bus with its own filtering.
 
 **Action**: Either:
+
 - (a) `broadcast.listener.ts` calls both `ticketBroadcast(type, data)` and `agentBroadcast(type, data)`, OR
 - (b) Keep `agent-ws.ts` subscribing to the event bus directly with its own smart filtering listener
 
@@ -152,11 +157,11 @@ Plan says "register broadcast first so UI updates before cascading actions." Thi
 
 ## Missing from Phase 7 Cleanup
 
-| Item | Location |
-|------|----------|
-| Merge detection wiring | `main.ts` lines 131-138 |
-| `agent-worktrees.routes.ts` inline broadcast | `ticket:updated` after worktree link creation |
-| `repository-refresh-scheduler.setBroadcast()` | If repo events migrate (recommended: don't) |
+| Item                                          | Location                                      |
+| --------------------------------------------- | --------------------------------------------- |
+| Merge detection wiring                        | `main.ts` lines 131-138                       |
+| `agent-worktrees.routes.ts` inline broadcast  | `ticket:updated` after worktree link creation |
+| `repository-refresh-scheduler.setBroadcast()` | If repo events migrate (recommended: don't)   |
 
 ---
 
@@ -219,40 +224,40 @@ worktree.created       { ticketId?, org, repo, branch, path }               # NE
 
 ## Revised Use Case Extraction List
 
-| Use Case | Phase | Events Emitted |
-|----------|-------|---------------|
-| `PostCommentUseCase` (modify) | 1 | `comment.created` |
-| `UpdateCommentUseCase` (NEW) | 1 | `comment.updated` |
-| `DeleteCommentUseCase` (NEW) | 1 | `comment.deleted` |
-| `ResolveMentionUseCase` (modify) | 2 | `mention.resolved` |
-| `AcknowledgeMentionUseCase` (NEW) | 2 | `mention.acknowledged` |
-| `WaitForInfoMentionUseCase` (NEW) | 2 | `mention.waiting_for_info` |
-| `DeleteMentionUseCase` (NEW) | 2 | `mention.deleted` |
-| `MoveTicketUseCase` (NEW) | 3 | `ticket.moved` |
-| `SubmitDeliverableUseCase` (modify) | 4 | `deliverable.created` |
-| `UpdateTicketUseCase` (NEW) | 5 | `ticket.updated` |
-| `CreateTicketUseCase` (extract) | 5 | `ticket.created` |
-| `DeleteTicketUseCase` (extract) | 5 | `ticket.deleted` |
-| `DetectMergeUseCase` (modify) | 5 | `ticket.moved` (fixes active bug) |
-| Board CRUD use cases | 6 | `board.created/updated/deleted` |
-| Persona use cases (modify) | 6 | `persona.created/updated/deleted` |
-| Persona execution events | 6 | `persona.execution_started/completed/failed` |
-| Session use cases | 6 | `session.created/killed/renamed` |
+| Use Case                            | Phase | Events Emitted                               |
+| ----------------------------------- | ----- | -------------------------------------------- |
+| `PostCommentUseCase` (modify)       | 1     | `comment.created`                            |
+| `UpdateCommentUseCase` (NEW)        | 1     | `comment.updated`                            |
+| `DeleteCommentUseCase` (NEW)        | 1     | `comment.deleted`                            |
+| `ResolveMentionUseCase` (modify)    | 2     | `mention.resolved`                           |
+| `AcknowledgeMentionUseCase` (NEW)   | 2     | `mention.acknowledged`                       |
+| `WaitForInfoMentionUseCase` (NEW)   | 2     | `mention.waiting_for_info`                   |
+| `DeleteMentionUseCase` (NEW)        | 2     | `mention.deleted`                            |
+| `MoveTicketUseCase` (NEW)           | 3     | `ticket.moved`                               |
+| `SubmitDeliverableUseCase` (modify) | 4     | `deliverable.created`                        |
+| `UpdateTicketUseCase` (NEW)         | 5     | `ticket.updated`                             |
+| `CreateTicketUseCase` (extract)     | 5     | `ticket.created`                             |
+| `DeleteTicketUseCase` (extract)     | 5     | `ticket.deleted`                             |
+| `DetectMergeUseCase` (modify)       | 5     | `ticket.moved` (fixes active bug)            |
+| Board CRUD use cases                | 6     | `board.created/updated/deleted`              |
+| Persona use cases (modify)          | 6     | `persona.created/updated/deleted`            |
+| Persona execution events            | 6     | `persona.execution_started/completed/failed` |
+| Session use cases                   | 6     | `session.created/killed/renamed`             |
 
 ---
 
 ## Summary of Gaps by Severity
 
-| Gap | Severity | Type |
-|-----|----------|------|
-| `comment.updated` event + `UpdateCommentUseCase` | **HIGH** | Missing event + use case |
-| merge-detector misses `handleTicketDone()` | **HIGH** | Active bug |
-| `agentBroadcast` (targeted) vs `ticketBroadcast` (all) distinction | **HIGH** | Missing from broadcast listener design |
-| `persona.execution_*` events | MEDIUM | Missing from catalog |
-| `AcknowledgeMention` / `WaitForInfoMention` use cases | MEDIUM | Missing use cases |
-| `executionId` context in domain events | MEDIUM | Architecture gap |
-| `comment.deleted` + `DeleteCommentUseCase` | MEDIUM | Missing use case |
-| `EventEmitter.maxListeners` for Bun | LOW | Bun compatibility |
-| `DeleteMentionUseCase` | LOW | Missing use case |
-| `agent-worktrees.routes.ts` side effects | LOW | Not covered in any phase |
-| Command Bus | N/A | **Not needed** - use cases serve this role |
+| Gap                                                                | Severity | Type                                       |
+| ------------------------------------------------------------------ | -------- | ------------------------------------------ |
+| `comment.updated` event + `UpdateCommentUseCase`                   | **HIGH** | Missing event + use case                   |
+| merge-detector misses `handleTicketDone()`                         | **HIGH** | Active bug                                 |
+| `agentBroadcast` (targeted) vs `ticketBroadcast` (all) distinction | **HIGH** | Missing from broadcast listener design     |
+| `persona.execution_*` events                                       | MEDIUM   | Missing from catalog                       |
+| `AcknowledgeMention` / `WaitForInfoMention` use cases              | MEDIUM   | Missing use cases                          |
+| `executionId` context in domain events                             | MEDIUM   | Architecture gap                           |
+| `comment.deleted` + `DeleteCommentUseCase`                         | MEDIUM   | Missing use case                           |
+| `EventEmitter.maxListeners` for Bun                                | LOW      | Bun compatibility                          |
+| `DeleteMentionUseCase`                                             | LOW      | Missing use case                           |
+| `agent-worktrees.routes.ts` side effects                           | LOW      | Not covered in any phase                   |
+| Command Bus                                                        | N/A      | **Not needed** - use cases serve this role |

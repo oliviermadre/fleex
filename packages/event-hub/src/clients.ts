@@ -1,7 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 /**
  * Authorized clients file — one entry per Fleex server instance allowed to
@@ -14,8 +14,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
  */
 export interface ClientEntry {
   name: string;
-  tokenHash: string;    // "sha256:<hex>"
-  createdAt: string;    // ISO-8601
+  tokenHash: string; // "sha256:<hex>"
+  createdAt: string; // ISO-8601
 }
 
 export interface ClientsFile {
@@ -24,7 +24,8 @@ export interface ClientsFile {
 }
 
 const HUB_HOME = process.env['FLEEX_HOME'] ?? path.join(os.homedir(), '.fleex');
-export const CLIENTS_FILE = process.env['FLEEX_HUB_CLIENTS_FILE'] ?? path.join(HUB_HOME, 'hub.clients.json');
+export const CLIENTS_FILE =
+  process.env['FLEEX_HUB_CLIENTS_FILE'] ?? path.join(HUB_HOME, 'hub.clients.json');
 
 function readFileSafe(): ClientsFile {
   if (!fs.existsSync(CLIENTS_FILE)) return { version: 1, clients: [] };
@@ -32,7 +33,9 @@ function readFileSafe(): ClientsFile {
     const raw = fs.readFileSync(CLIENTS_FILE, 'utf8');
     const j = JSON.parse(raw);
     if (j && j.version === 1 && Array.isArray(j.clients)) return j as ClientsFile;
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return { version: 1, clients: [] };
 }
 
@@ -89,7 +92,10 @@ export class ClientsStore {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   private serializeForCompare(file: ClientsFile): string {
-    return file.clients.map((c) => c.name + ':' + c.tokenHash).sort().join('|');
+    return file.clients
+      .map((c) => c.name + ':' + c.tokenHash)
+      .sort()
+      .join('|');
   }
 
   stop(): void {

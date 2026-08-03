@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+
 import type { WorkflowStep, JsonSchema } from '@fleex/shared';
+
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
+import { useSkillStore } from '../../stores/skillStore';
 import { TagInput } from '../ui/TagInput';
 
 interface Props {
@@ -68,7 +70,11 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
           value={step.name}
           onChange={(e) => onChange({ ...step, name: e.target.value })}
           className="w-full h-8 px-2 text-xs rounded border"
-          style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
+          style={{
+            background: 'var(--theme-bg-surface)',
+            borderColor: 'var(--theme-border)',
+            color: 'var(--theme-text-primary)',
+          }}
         />
       </label>
 
@@ -91,7 +97,11 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
             value={step.executorRef}
             onChange={(e) => onChange({ ...step, executorRef: e.target.value })}
             className="w-full h-8 px-2 text-xs rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
+            style={{
+              background: 'var(--theme-bg-surface)',
+              borderColor: 'var(--theme-border)',
+              color: 'var(--theme-text-primary)',
+            }}
           >
             <option value="">Select…</option>
             {refOptions.map((o) => (
@@ -117,7 +127,11 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
               });
             }}
             className="w-full h-8 px-2 text-xs rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
+            style={{
+              background: 'var(--theme-bg-surface)',
+              borderColor: 'var(--theme-border)',
+              color: 'var(--theme-text-primary)',
+            }}
           >
             <option value="__inherit__">Inherit from persona</option>
             <option value="talk">talk</option>
@@ -135,7 +149,11 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
             value={step.prompt ?? ''}
             onChange={(e) => onChange({ ...step, prompt: e.target.value || undefined })}
             className="w-full font-mono text-[11px] min-h-[80px] p-2 rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
+            style={{
+              background: 'var(--theme-bg-surface)',
+              borderColor: 'var(--theme-border)',
+              color: 'var(--theme-text-primary)',
+            }}
             placeholder="Custom instructions injected into the agent's workflow context…"
           />
         </label>
@@ -150,9 +168,13 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
             onChange={(next) => onChange({ ...step, humanGateOutcomes: next })}
             placeholder="approve, reject, request_changes"
             helperText={
-              (step.humanGateOutcomes ?? []).length < 2
-                ? <span className="text-[var(--theme-danger)]">A human gate needs at least 2 outcomes.</span>
-                : 'Type an outcome, then press Enter, comma or Tab to add it.'
+              (step.humanGateOutcomes ?? []).length < 2 ? (
+                <span className="text-[var(--theme-danger)]">
+                  A human gate needs at least 2 outcomes.
+                </span>
+              ) : (
+                'Type an outcome, then press Enter, comma or Tab to add it.'
+              )
             }
           />
         </div>
@@ -165,7 +187,11 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
           value={outputSchemaText}
           onChange={(e) => handleOutputSchema(e.target.value)}
           className="w-full font-mono text-[11px] min-h-[160px] p-2 rounded border"
-          style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
+          style={{
+            background: 'var(--theme-bg-surface)',
+            borderColor: 'var(--theme-border)',
+            color: 'var(--theme-text-primary)',
+          }}
           placeholder='{"type":"object","properties":{"path":{"type":"string","enum":["a","b"]}},"required":["path"]}'
         />
         {outputSchemaError && (

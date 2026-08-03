@@ -1,6 +1,5 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, info } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiPost, apiPatch, apiDelete } from '../../../core/api.ts';
+import { ok, die, info } from '../../../core/colors.ts';
 import {
   assertValidStatus,
   assertValidPriority,
@@ -10,6 +9,8 @@ import {
   resolveTicketId,
   resolveEpicId,
 } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface UpdateOptions {
   board?: string;
@@ -53,8 +54,18 @@ const def: CommandDef = {
     cmd.option('--to-board <id>', 'Move the ticket to another board');
     cmd.option('--add-tag <tag>', 'Add a tag (repeatable)', accumulate, [] as string[]);
     cmd.option('--rm-tag <tag>', 'Remove a tag (repeatable)', accumulate, [] as string[]);
-    cmd.option('--add-epic <epic>', 'Add the ticket to an epic (id/prefix, repeatable)', accumulate, [] as string[]);
-    cmd.option('--remove-epic <epic>', 'Remove the ticket from an epic (id/prefix, repeatable)', accumulate, [] as string[]);
+    cmd.option(
+      '--add-epic <epic>',
+      'Add the ticket to an epic (id/prefix, repeatable)',
+      accumulate,
+      [] as string[],
+    );
+    cmd.option(
+      '--remove-epic <epic>',
+      'Remove the ticket from an epic (id/prefix, repeatable)',
+      accumulate,
+      [] as string[],
+    );
   },
   action: async (idArg: string, opts: UpdateOptions) => {
     const addTags = opts.addTag ?? [];
@@ -83,7 +94,9 @@ const def: CommandDef = {
     if (opts.toBoard !== undefined) body.boardId = opts.toBoard;
 
     if (Object.keys(body).length === 0 && !hasTagOps && !hasEpicOps) {
-      die('No updates specified. Use --title, --description, --status, --priority, --type, --assignee, --favorite/--no-favorite, --blocked/--no-blocked, --due/--clear-due, --to-board, --add-tag/--rm-tag, or --add-epic/--remove-epic.');
+      die(
+        'No updates specified. Use --title, --description, --status, --priority, --type, --assignee, --favorite/--no-favorite, --blocked/--no-blocked, --due/--clear-due, --to-board, --add-tag/--rm-tag, or --add-epic/--remove-epic.',
+      );
     }
 
     const uuid = await resolveTicketId(idArg, opts.board);
@@ -101,7 +114,10 @@ const def: CommandDef = {
     let displayId: number | undefined;
     let title: string | undefined;
     if (Object.keys(body).length > 0) {
-      const result = await apiPatch<{ displayId: number; title: string }>(`${base}/api/tickets/${uuid}`, body);
+      const result = await apiPatch<{ displayId: number; title: string }>(
+        `${base}/api/tickets/${uuid}`,
+        body,
+      );
       displayId = result.displayId;
       title = result.title;
     }

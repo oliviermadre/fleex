@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, info, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
+import { c, info, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { resolveEpicId } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface ListOptions {
   board?: string;
@@ -20,9 +21,19 @@ interface Ticket {
   boardId: string;
 }
 
-interface Board { id: string; name: string }
-interface Epic { id: string; name?: string; emoji?: string }
-interface Membership { ticketId: string; groupId: string }
+interface Board {
+  id: string;
+  name: string;
+}
+interface Epic {
+  id: string;
+  name?: string;
+  emoji?: string;
+}
+interface Membership {
+  ticketId: string;
+  groupId: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -31,7 +42,10 @@ const def: CommandDef = {
   description: 'List tickets (optionally filtered by --board, --status, --tag, --epic)',
   setup(cmd) {
     cmd.option('--board <id>', 'Filter by board ID or name');
-    cmd.option('--status <status>', 'Filter by status (backlog|todo|doing|reviewing|done|cancelled)');
+    cmd.option(
+      '--status <status>',
+      'Filter by status (backlog|todo|doing|reviewing|done|cancelled)',
+    );
     cmd.option('--tag <tag>', 'Filter by tag');
     cmd.option('--epic <id>', 'Filter by epic UUID or 8-char prefix');
   },
@@ -52,18 +66,30 @@ const def: CommandDef = {
       tickets = tickets.filter((t) => t.status === opts.status);
     }
 
-    if (isJsonMode()) { process.stdout.write(JSON.stringify(tickets) + '\n'); return; }
+    if (isJsonMode()) {
+      process.stdout.write(JSON.stringify(tickets) + '\n');
+      return;
+    }
 
-    if (tickets.length === 0) { info('No tickets found.'); return; }
+    if (tickets.length === 0) {
+      info('No tickets found.');
+      return;
+    }
 
     // Fetch epics + memberships once to label tickets with their first epic.
-    const epicsUrl = opts.board ? `${base}/api/epics?boardId=${encodeURIComponent(opts.board)}` : `${base}/api/epics`;
-    const membershipsUrl = opts.board ? `${base}/api/epics/memberships?boardId=${encodeURIComponent(opts.board)}` : `${base}/api/epics/memberships`;
+    const epicsUrl = opts.board
+      ? `${base}/api/epics?boardId=${encodeURIComponent(opts.board)}`
+      : `${base}/api/epics`;
+    const membershipsUrl = opts.board
+      ? `${base}/api/epics/memberships?boardId=${encodeURIComponent(opts.board)}`
+      : `${base}/api/epics/memberships`;
     const [epics, memberships] = await Promise.all([
       apiGet<Epic[]>(epicsUrl),
       apiGet<Membership[]>(membershipsUrl),
     ]);
-    const epicById = new Map(epics.map((e) => [e.id, `${e.emoji ? e.emoji + ' ' : ''}${e.name ?? ''}`.trim()]));
+    const epicById = new Map(
+      epics.map((e) => [e.id, `${e.emoji ? e.emoji + ' ' : ''}${e.name ?? ''}`.trim()]),
+    );
     const epicsByTicket = new Map<string, string[]>();
     for (const m of memberships) {
       const arr = epicsByTicket.get(m.ticketId) ?? [];
@@ -96,11 +122,19 @@ const def: CommandDef = {
 
     process.stdout.write('\n');
     if (showBoard) {
-      process.stdout.write(`  ${c.bold('#     '.padEnd(7) + 'Board                  ' + 'Status      ' + 'Prio     ' + 'Assignee     ' + 'Epic               ' + 'Title')}\n`);
-      process.stdout.write(`  ${'──────'.padEnd(7)}${'──────────────────────'.padEnd(23)}${'───────────'.padEnd(12)}${'────────'.padEnd(9)}${'────────────'.padEnd(13)}${'──────────────────'.padEnd(19)}──────────────────────────────\n`);
+      process.stdout.write(
+        `  ${c.bold('#     '.padEnd(7) + 'Board                  ' + 'Status      ' + 'Prio     ' + 'Assignee     ' + 'Epic               ' + 'Title')}\n`,
+      );
+      process.stdout.write(
+        `  ${'──────'.padEnd(7)}${'──────────────────────'.padEnd(23)}${'───────────'.padEnd(12)}${'────────'.padEnd(9)}${'────────────'.padEnd(13)}${'──────────────────'.padEnd(19)}──────────────────────────────\n`,
+      );
     } else {
-      process.stdout.write(`  ${c.bold('#     '.padEnd(7) + 'Status      ' + 'Prio     ' + 'Assignee     ' + 'Epic               ' + 'Title')}\n`);
-      process.stdout.write(`  ${'──────'.padEnd(7)}${'───────────'.padEnd(12)}${'────────'.padEnd(9)}${'────────────'.padEnd(13)}${'──────────────────'.padEnd(19)}──────────────────────────────\n`);
+      process.stdout.write(
+        `  ${c.bold('#     '.padEnd(7) + 'Status      ' + 'Prio     ' + 'Assignee     ' + 'Epic               ' + 'Title')}\n`,
+      );
+      process.stdout.write(
+        `  ${'──────'.padEnd(7)}${'───────────'.padEnd(12)}${'────────'.padEnd(9)}${'────────────'.padEnd(13)}${'──────────────────'.padEnd(19)}──────────────────────────────\n`,
+      );
     }
 
     for (const t of tickets) {
@@ -112,9 +146,13 @@ const def: CommandDef = {
       const ep = epicLabel(t.id).slice(0, 18).padEnd(18);
       if (showBoard) {
         const board = (boardMap.get(t.boardId) ?? 'Unknown').slice(0, 22).padEnd(22);
-        process.stdout.write(`  ${did.padEnd(6)} ${board} ${colored} ${prio} ${assignee} ${ep} ${t.title}\n`);
+        process.stdout.write(
+          `  ${did.padEnd(6)} ${board} ${colored} ${prio} ${assignee} ${ep} ${t.title}\n`,
+        );
       } else {
-        process.stdout.write(`  ${did.padEnd(6)} ${colored} ${prio} ${assignee} ${ep} ${t.title}\n`);
+        process.stdout.write(
+          `  ${did.padEnd(6)} ${colored} ${prio} ${assignee} ${ep} ${t.title}\n`,
+        );
       }
     }
     process.stdout.write('\n');

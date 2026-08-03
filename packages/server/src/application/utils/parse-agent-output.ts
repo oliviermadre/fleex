@@ -49,7 +49,10 @@ export function parseAgentOutput(
   return null;
 }
 
-function tryParseAndValidate(text: string, options: ParseAgentOutputOptions): AgentStructuredOutput | null {
+function tryParseAndValidate(
+  text: string,
+  options: ParseAgentOutputOptions,
+): AgentStructuredOutput | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -66,7 +69,10 @@ function coerceType(raw: unknown, options: ParseAgentOutputOptions): Deliverable
   return raw;
 }
 
-function validateShape(obj: unknown, options: ParseAgentOutputOptions): AgentStructuredOutput | null {
+function validateShape(
+  obj: unknown,
+  options: ParseAgentOutputOptions,
+): AgentStructuredOutput | null {
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
 
   const record = obj as Record<string, unknown>;
@@ -81,7 +87,8 @@ function validateShape(obj: unknown, options: ParseAgentOutputOptions): AgentStr
     const d = deliverable as Record<string, unknown>;
     if (typeof d['title'] !== 'string' || typeof d['markdown'] !== 'string') return null;
     // Validate status if present, otherwise fallback to 'draft'
-    if (d['status'] !== undefined && d['status'] !== 'draft' && d['status'] !== 'final') return null;
+    if (d['status'] !== undefined && d['status'] !== 'draft' && d['status'] !== 'final')
+      return null;
   }
 
   // Validate comment
@@ -92,7 +99,11 @@ function validateShape(obj: unknown, options: ParseAgentOutputOptions): AgentStr
 
   // Validate mentionStatus (optional)
   const mentionStatus = record['mentionStatus'];
-  if (mentionStatus !== undefined && mentionStatus !== 'resolved' && mentionStatus !== 'waiting_for_info') {
+  if (
+    mentionStatus !== undefined &&
+    mentionStatus !== 'resolved' &&
+    mentionStatus !== 'waiting_for_info'
+  ) {
     // Invalid value — ignore it (default to resolved)
   }
 
@@ -103,7 +114,8 @@ function validateShape(obj: unknown, options: ParseAgentOutputOptions): AgentStr
             title: (deliverable as Record<string, unknown>)['title'] as string,
             markdown: (deliverable as Record<string, unknown>)['markdown'] as string,
             type: coerceType((deliverable as Record<string, unknown>)['type'], options),
-            status: ((deliverable as Record<string, unknown>)['status'] as DeliverableStatus) ?? 'draft',
+            status:
+              ((deliverable as Record<string, unknown>)['status'] as DeliverableStatus) ?? 'draft',
           }
         : null,
     comment: (comment as string) ?? null,
@@ -128,9 +140,18 @@ function findLastJsonObject(text: string): string | null {
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
 
-    if (escape) { escape = false; continue; }
-    if (ch === '\\' && inString) { escape = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
     if (inString) continue;
 
     if (ch === '{') {

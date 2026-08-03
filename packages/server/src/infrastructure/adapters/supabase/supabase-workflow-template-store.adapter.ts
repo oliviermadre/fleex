@@ -1,7 +1,9 @@
-import { WorkflowTemplateEntity } from '../../../domain/entities/workflow-template.entity.js';
-import type { WorkflowTemplateStorePort } from '../../../application/ports/workflow-template-store.port.js';
-import type { SupabaseConnection } from './connection.js';
 import type { WorkflowStep, WorkflowEdge } from '@fleex/shared';
+
+import { WorkflowTemplateEntity } from '../../../domain/entities/workflow-template.entity.js';
+
+import type { SupabaseConnection } from './connection.js';
+import type { WorkflowTemplateStorePort } from '../../../application/ports/workflow-template-store.port.js';
 
 interface WorkflowTemplateRow {
   id: string;
@@ -93,10 +95,7 @@ export class SupabaseWorkflowTemplateStore implements WorkflowTemplateStorePort 
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('workflow_templates')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('workflow_templates').delete().eq('id', id);
     if (error) throw new Error(`SupabaseWorkflowTemplateStore.remove failed: ${error.message}`);
   }
 }

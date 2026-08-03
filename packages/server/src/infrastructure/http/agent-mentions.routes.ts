@@ -1,12 +1,13 @@
-import type { FastifyInstance } from 'fastify';
 import { TicketNotFoundError, MentionNotFoundError, ForbiddenError } from '../../domain/errors.js';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function agentMentionsRoutes(container: Container) {
-  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) =>
+    container.eventBus.emit(...events);
 
   return async function (app: FastifyInstance) {
-
     // Get pending mentions for the calling agent
     app.get<{
       Querystring: { ticket_id?: string };
@@ -59,7 +60,13 @@ export function agentMentionsRoutes(container: Container) {
       mention.acknowledge();
       await container.mentionStore.save(mention);
 
-      emit({ type: 'mention.acknowledged', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: new Date() });
+      emit({
+        type: 'mention.acknowledged',
+        mentionId: mention.id,
+        ticketId: mention.ticketId,
+        targetAgent: mention.targetAgent,
+        occurredAt: new Date(),
+      });
       return mention.toDTO();
     });
 
@@ -78,7 +85,14 @@ export function agentMentionsRoutes(container: Container) {
       });
 
       const mention = (await container.mentionStore.getById(request.params.id))!;
-      emit({ type: 'mention.resolved', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, resolvedBy: agentName, occurredAt: new Date() });
+      emit({
+        type: 'mention.resolved',
+        mentionId: mention.id,
+        ticketId: mention.ticketId,
+        targetAgent: mention.targetAgent,
+        resolvedBy: agentName,
+        occurredAt: new Date(),
+      });
       return mention.toDTO();
     });
 
@@ -91,13 +105,21 @@ export function agentMentionsRoutes(container: Container) {
 
       const agentName = request.agent?.name ?? '';
       if (mention.targetAgent !== agentName) {
-        throw new ForbiddenError(`Only ${mention.targetAgent} can set this mention as waiting for info`);
+        throw new ForbiddenError(
+          `Only ${mention.targetAgent} can set this mention as waiting for info`,
+        );
       }
 
       mention.waitForInfo();
       await container.mentionStore.save(mention);
 
-      emit({ type: 'mention.waiting_for_info', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: new Date() });
+      emit({
+        type: 'mention.waiting_for_info',
+        mentionId: mention.id,
+        ticketId: mention.ticketId,
+        targetAgent: mention.targetAgent,
+        occurredAt: new Date(),
+      });
       return mention.toDTO();
     });
   };

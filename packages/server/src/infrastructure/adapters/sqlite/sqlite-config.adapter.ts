@@ -1,10 +1,13 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
-import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
-import type { SqliteConnection } from './connection.js';
-import type { ExecFn, HostFs } from '../../host/types.js';
-import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
 import { applyBasePathEnvOverride } from '../config-env.js';
+import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
+import type { SqliteConnection } from './connection.js';
+import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
+import type { ExecFn, HostFs } from '../../host/types.js';
 
 export class SqliteConfigAdapter implements ConfigPort {
   private config: AppConfig;
@@ -96,9 +99,7 @@ export class SqliteConfigAdapter implements ConfigPort {
   private async syncToDb(): Promise<void> {
     const now = new Date().toISOString();
     this.connection.db
-      .prepare(
-        'INSERT OR REPLACE INTO app_config (id, data, updated_at) VALUES (?, ?, ?)',
-      )
+      .prepare('INSERT OR REPLACE INTO app_config (id, data, updated_at) VALUES (?, ?, ?)')
       .run('singleton', JSON.stringify(this.config), now);
   }
 }

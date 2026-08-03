@@ -1,9 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+
 import type { Ticket } from '@fleex/shared';
-import { TicketMentionChip } from './TicketMentionChip';
+
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
+
+import { TicketMentionChip } from './TicketMentionChip';
 
 const UUID = '05d50f27-b12e-4338-8c36-e840fd288222';
 

@@ -1,8 +1,11 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
+
 import { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
-import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
 import type { HostFs } from '../host/types.js';
 
 interface SerializedPersona {
@@ -39,8 +42,7 @@ export class JsonPersonaStore implements PersonaStorePort {
   }
 
   async getAll(): Promise<AgentPersonaEntity[]> {
-    return Array.from(this.personas.values())
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return Array.from(this.personas.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async getById(id: string): Promise<AgentPersonaEntity | null> {
@@ -70,13 +72,22 @@ export class JsonPersonaStore implements PersonaStorePort {
       const raw = await this.hostFs.readFile(this.filePath);
       const data = JSON.parse(raw) as SerializedPersona[];
       for (const p of data) {
-        this.personas.set(p.id, new AgentPersonaEntity(
-          p.id, p.name, p.displayName, p.model,
-          (p.executionMode ?? 'claude_code') as 'claude_code' | 'message',
-          p.soulMd, p.identityMd, p.memoryMd,
-          p.humanMentionName,
-          new Date(p.createdAt), new Date(p.updatedAt),
-        ));
+        this.personas.set(
+          p.id,
+          new AgentPersonaEntity(
+            p.id,
+            p.name,
+            p.displayName,
+            p.model,
+            (p.executionMode ?? 'claude_code') as 'claude_code' | 'message',
+            p.soulMd,
+            p.identityMd,
+            p.memoryMd,
+            p.humanMentionName,
+            new Date(p.createdAt),
+            new Date(p.updatedAt),
+          ),
+        );
       }
       this.logger.info('Persona store loaded', { count: this.personas.size });
     } catch (err) {
@@ -89,11 +100,17 @@ export class JsonPersonaStore implements PersonaStorePort {
   private async syncToDisk(): Promise<void> {
     try {
       const data: SerializedPersona[] = Array.from(this.personas.values()).map((p) => ({
-        id: p.id, name: p.name, displayName: p.displayName, model: p.model,
+        id: p.id,
+        name: p.name,
+        displayName: p.displayName,
+        model: p.model,
         executionMode: p.executionMode,
-        soulMd: p.soulMd, identityMd: p.identityMd, memoryMd: p.memoryMd,
+        soulMd: p.soulMd,
+        identityMd: p.identityMd,
+        memoryMd: p.memoryMd,
         humanMentionName: p.humanMentionName,
-        createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {

@@ -1,10 +1,15 @@
 import { useEffect, useCallback } from 'react';
+
 import { DEFAULT_COLS, DEFAULT_ROWS, RESIZE_DEBOUNCE_MS, ServerMessageType } from '@fleex/shared';
+
 import { terminalManager } from '../services/terminalManager';
 import { appWs } from '../services/websocket';
 import { useTerminalStore } from '../stores/terminalStore';
 
-export function useTerminal(sessionId: string | null, containerRef: React.RefObject<HTMLElement | null>) {
+export function useTerminal(
+  sessionId: string | null,
+  containerRef: React.RefObject<HTMLElement | null>,
+) {
   const setConnectionStatus = useTerminalStore((s) => s.setConnectionStatus);
 
   const handleResize = useCallback(() => {

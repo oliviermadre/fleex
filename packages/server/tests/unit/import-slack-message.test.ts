@@ -1,12 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import {
   parseSlackMessageUrl,
   SLACK_IMPORT_PENDING_TAG,
   SLACK_IMPORT_FAILED_TAG,
 } from '@fleex/shared';
+
 import { ImportSlackMessageUseCase } from '../../src/application/use-cases/import-slack-message.js';
-import { SlackImportError } from '../../src/domain/errors.js';
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+import { SlackImportError } from '../../src/domain/errors.js';
+
 import type { SlackImportResult } from '../../src/application/ports/slack-import.port.js';
 
 const VALID_URL = 'https://acme.slack.com/archives/C01234ABCDE/p1700000000123456';
@@ -41,7 +44,11 @@ const makeUseCase = () => {
   const slackImport = { synthesizeThread: vi.fn() };
   const logger = makeLogger();
   const eventBus = { emit: vi.fn() };
-  const uc = new ImportSlackMessageUseCase(ticketStore as never, slackImport as never, logger as never);
+  const uc = new ImportSlackMessageUseCase(
+    ticketStore as never,
+    slackImport as never,
+    logger as never,
+  );
   uc.eventBus = eventBus as never;
   return { uc, ticketStore, slackImport, logger, eventBus };
 };
@@ -109,7 +116,10 @@ describe('ImportSlackMessageUseCase.execute (synchronous placeholder)', () => {
     await uc.execute(VALID_URL, 'board-1');
 
     expect(ticketStore.saveActivity).toHaveBeenCalledTimes(1);
-    const activity = ticketStore.saveActivity.mock.calls[0]![0] as { action: string; changes: { source: { to: string } } };
+    const activity = ticketStore.saveActivity.mock.calls[0]![0] as {
+      action: string;
+      changes: { source: { to: string } };
+    };
     expect(activity.action).toBe('created');
     expect(activity.changes.source.to).toBe('slack:C01234ABCDE/1700000000.123456');
   });
@@ -117,7 +127,9 @@ describe('ImportSlackMessageUseCase.execute (synchronous placeholder)', () => {
   it('rejects a non-Slack link before creating anything (SLACK_INVALID_URL)', async () => {
     const { uc, slackImport, ticketStore } = makeUseCase();
 
-    await expect(uc.execute('https://github.com/acme/repo/issues/42', 'board-1')).rejects.toMatchObject({
+    await expect(
+      uc.execute('https://github.com/acme/repo/issues/42', 'board-1'),
+    ).rejects.toMatchObject({
       slackCode: 'SLACK_INVALID_URL',
     });
     expect(slackImport.synthesizeThread).not.toHaveBeenCalled();
@@ -184,13 +196,14 @@ describe('ImportSlackMessageUseCase.completeImport (background failure)', () => 
     expect(reloaded.tags).toContain(SLACK_IMPORT_FAILED_TAG);
     expect(reloaded.tags).not.toContain(SLACK_IMPORT_PENDING_TAG);
     expect(reloaded.description.toLowerCase()).toContain('integration');
-    expect(eventBus.emit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'ticket.updated' }),
-    );
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'ticket.updated' }));
   });
 
   it('surfaces the inaccessibility detail in the failure description', async () => {
-    const { reloaded } = await arrangeFailedImport({ status: 'inaccessible', detail: 'private channel' });
+    const { reloaded } = await arrangeFailedImport({
+      status: 'inaccessible',
+      detail: 'private channel',
+    });
 
     expect(reloaded.tags).toContain(SLACK_IMPORT_FAILED_TAG);
     expect(reloaded.description).toContain('private channel');
@@ -209,7 +222,9 @@ describe('ImportSlackMessageUseCase.completeImport (background failure)', () => 
     const ticket = await uc.execute(VALID_URL, 'board-1');
 
     slackImport.synthesizeThread.mockRejectedValue(new Error('SDK boom'));
-    await expect(uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!)).resolves.toBeUndefined();
+    await expect(
+      uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!),
+    ).resolves.toBeUndefined();
 
     const reloaded = (await ticketStore.getTicketById(ticket.id))!;
     expect(reloaded.tags).toContain(SLACK_IMPORT_FAILED_TAG);
@@ -314,7 +329,12 @@ describe('ImportSlackMessageUseCase.retry', () => {
 
   it('throws SLACK_INVALID_URL when the ticket has no Slack provenance link', async () => {
     const { uc, ticketStore } = makeUseCase();
-    const plain = TicketEntity.create({ id: 'plain-1', boardId: 'b', displayId: 0, title: 'No slack' });
+    const plain = TicketEntity.create({
+      id: 'plain-1',
+      boardId: 'b',
+      displayId: 0,
+      title: 'No slack',
+    });
     await ticketStore.createTicket(plain);
 
     await expect(uc.retry('plain-1')).rejects.toMatchObject({ slackCode: 'SLACK_INVALID_URL' });

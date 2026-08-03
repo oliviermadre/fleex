@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+
 import { info, warn, ok } from '../../core/colors.ts';
+import { countRunningInstances, stopCompanion } from '../../core/companion.ts';
 import { FLEEX_HOME, resolveInstance, ensureDirs } from '../../core/instance.ts';
 import { SERVICES } from '../../core/ports.ts';
 import { isAlive, killByPort, killGroup, killTree, sleep } from '../../core/process.ts';
-import { countRunningInstances, stopCompanion } from '../../core/companion.ts';
 
 export async function stopInstance(slug: string): Promise<void> {
   const runDir = path.join(FLEEX_HOME, '.run', slug);
@@ -17,7 +18,11 @@ export async function stopInstance(slug: string): Promise<void> {
     try {
       pid = parseInt(fs.readFileSync(pf, 'utf8').trim(), 10);
     } catch {
-      try { fs.unlinkSync(pf); } catch { /* ignore */ }
+      try {
+        fs.unlinkSync(pf);
+      } catch {
+        /* ignore */
+      }
       continue;
     }
     if (isAlive(pid)) {
@@ -34,7 +39,11 @@ export async function stopInstance(slug: string): Promise<void> {
       info(`[${slug}] Stopped ${svc} (PID ${pid})`);
       stopped += 1;
     }
-    try { fs.unlinkSync(pf); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(pf);
+    } catch {
+      /* ignore */
+    }
   }
 
   // Defense in depth: reap anything still bound to this instance's ports.
@@ -52,9 +61,15 @@ export async function stopInstance(slug: string): Promise<void> {
         stopped += 1;
       }
     }
-  } catch { /* no ports file — nothing to reap */ }
+  } catch {
+    /* no ports file — nothing to reap */
+  }
 
-  try { fs.unlinkSync(portsFile); } catch { /* ignore */ }
+  try {
+    fs.unlinkSync(portsFile);
+  } catch {
+    /* ignore */
+  }
 
   if (stopped === 0) warn(`[${slug}] No services were running.`);
   else ok(`[${slug}] All services stopped.`);

@@ -1,8 +1,9 @@
-import type { CommandDef } from '../../../../core/types.ts';
-import { ok, die } from '../../../../core/colors.ts';
 import { apiBase, apiPatch } from '../../../../core/api.ts';
+import { ok, die } from '../../../../core/colors.ts';
 import { resolveTicketId } from '../../_shared.ts';
 import { assertValidStatus, resolveContent, type DeliverableDTO } from '../_shared.ts';
+
+import type { CommandDef } from '../../../../core/types.ts';
 
 interface UpdateOptions {
   board?: string;

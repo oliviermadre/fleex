@@ -7,7 +7,12 @@ export function ScratchpadEmptyState() {
           stroke="currentColor"
           strokeWidth="1.2"
         />
-        <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+        <path
+          d="M5.5 5h5M5.5 7.5h5M5.5 10h3"
+          stroke="currentColor"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
       </svg>
       <span className="text-sm">Select a scratchpad from the sidebar</span>
     </div>

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+
 import type { AgentEvent, AgentEventType } from '@fleex/shared';
 
 export class AgentEventEntity {

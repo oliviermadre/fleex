@@ -1,5 +1,5 @@
-import type { Ticket } from './ticket.js';
 import type { PullRequest, Worktree, GitHubIssue } from './repository.js';
+import type { Ticket } from './ticket.js';
 
 export interface DashboardPullRequest extends PullRequest {
   readonly org: string;

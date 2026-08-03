@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+
 import { toNotification } from './pipeline';
 import { NotificationRendererRegistry } from './registry';
+
 import type { RendererContext } from './types';
 
 const ctx: RendererContext = {

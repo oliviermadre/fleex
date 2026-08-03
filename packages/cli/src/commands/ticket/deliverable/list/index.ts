@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../../core/types.ts';
-import { c, info } from '../../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../../core/api.ts';
+import { c, info } from '../../../../core/colors.ts';
 import { resolveTicketId } from '../../_shared.ts';
+
+import type { CommandDef } from '../../../../core/types.ts';
 import type { DeliverableDTO } from '../_shared.ts';
 
-interface ListOptions { board?: string }
+interface ListOptions {
+  board?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -26,7 +29,9 @@ const def: CommandDef = {
     process.stdout.write('\n');
     for (const d of deliverables) {
       const sc = d.status === 'final' ? c.green : c.yellow;
-      process.stdout.write(`  ${c.dim(d.id)}  ${c.bold(d.title)} ${c.dim(`[${d.type}]`)} by ${c.cyan(d.agentName)}  ${sc(d.status)}  ${c.dim(`v${d.version}`)}\n`);
+      process.stdout.write(
+        `  ${c.dim(d.id)}  ${c.bold(d.title)} ${c.dim(`[${d.type}]`)} by ${c.cyan(d.agentName)}  ${sc(d.status)}  ${c.dim(`v${d.version}`)}\n`,
+      );
     }
     process.stdout.write('\n');
   },

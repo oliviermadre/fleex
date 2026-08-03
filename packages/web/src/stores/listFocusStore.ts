@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import type { TicketPriority, TicketStatus, TicketType } from '@fleex/shared';
 
 /**

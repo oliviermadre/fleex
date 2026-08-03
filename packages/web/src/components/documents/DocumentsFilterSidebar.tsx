@@ -1,8 +1,9 @@
 import type { TicketDeliverable } from '@fleex/shared';
-import { useDocumentsStore } from '../../stores/documentsStore';
-import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+
 import { cn } from '../../lib/cn';
 import { tint, tintClasses } from '../../lib/tints';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { useDocumentsStore } from '../../stores/documentsStore';
 
 interface FacetItem {
   value: string;
@@ -22,7 +23,8 @@ function buildFacets(deliverables: TicketDeliverable[], key: keyof TicketDeliver
 }
 
 // Theme-accent fallback used when a type has no configured colour.
-const ACCENT_BADGE = 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)] ring-[var(--theme-accent)]/20';
+const ACCENT_BADGE =
+  'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)] ring-[var(--theme-accent)]/20';
 
 const STATUS_COLORS: Record<string, string> = {
   final: `${tintClasses('green').text} ${tintClasses('green').bg} ${tintClasses('green').ring}`,
@@ -67,7 +69,7 @@ function FacetSection({
                 'flex items-center justify-between rounded-md px-3 py-1.5 text-left text-xs transition-colors',
                 isActive
                   ? 'bg-[var(--theme-bg-hover)] ring-1 ring-[hsl(261,75%,62%)]'
-                  : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
+                  : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
               )}
               onClick={() => onToggle(f.value)}
             >
@@ -77,7 +79,9 @@ function FacetSection({
               <span
                 className={cn(
                   'ml-2 shrink-0 text-[10px] font-medium',
-                  isActive ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]'
+                  isActive
+                    ? 'text-[var(--theme-text-secondary)]'
+                    : 'text-[var(--theme-text-faint)]',
                 )}
               >
                 {f.count}
@@ -104,7 +108,8 @@ export function DocumentsFilterSidebar() {
   const agentFacets = buildFacets(deliverables, 'agentName');
   const statusFacets = buildFacets(deliverables, 'status');
 
-  const hasActiveFilters = filterTypes.size > 0 || filterAgentNames.size > 0 || filterStatuses.size > 0;
+  const hasActiveFilters =
+    filterTypes.size > 0 || filterAgentNames.size > 0 || filterStatuses.size > 0;
 
   return (
     <div className="flex h-full w-[220px] shrink-0 flex-col overflow-y-auto border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-3">
@@ -128,8 +133,15 @@ export function DocumentsFilterSidebar() {
           const c = colorForType(f.value);
           return (
             <span
-              className={cn('whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ring-1', !c && ACCENT_BADGE)}
-              style={c ? { backgroundColor: c.bg, color: c.text, boxShadow: `0 0 0 1px ${c.border}` } : undefined}
+              className={cn(
+                'whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ring-1',
+                !c && ACCENT_BADGE,
+              )}
+              style={
+                c
+                  ? { backgroundColor: c.bg, color: c.text, boxShadow: `0 0 0 1px ${c.border}` }
+                  : undefined
+              }
             >
               {labelForType(f.value)}
             </span>
@@ -143,7 +155,9 @@ export function DocumentsFilterSidebar() {
         onToggle={(v) => toggleFilter('filterAgentNames', v)}
         renderLabel={(f) => (
           <>
-            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${tintClasses('purple').bg} ${tintClasses('purple').text}`}>
+            <span
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${tintClasses('purple').bg} ${tintClasses('purple').text}`}
+            >
               {getInitials(f.label)}
             </span>
             <span className="truncate">{f.label}</span>
@@ -156,7 +170,9 @@ export function DocumentsFilterSidebar() {
         activeValues={filterStatuses}
         onToggle={(v) => toggleFilter('filterStatuses', v)}
         renderLabel={(f) => {
-          const color = STATUS_COLORS[f.value] ?? `${tintClasses('gray').text} ${tintClasses('gray').bg} ${tintClasses('gray').ring}`;
+          const color =
+            STATUS_COLORS[f.value] ??
+            `${tintClasses('gray').text} ${tintClasses('gray').bg} ${tintClasses('gray').ring}`;
           return (
             <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium ring-1', color)}>
               {f.label}

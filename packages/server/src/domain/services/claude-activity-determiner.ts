@@ -1,4 +1,5 @@
 import type { ClaudeActivityStatus } from '@fleex/shared';
+
 import type { ClaudeMessage, ClaudeContentBlock } from '../types/claude-message.js';
 
 export interface ActivityInput {
@@ -27,9 +28,7 @@ export function determineClaudeActivity(input: ActivityInput): ClaudeActivitySta
   const { messages, fileAgeSeconds, cpuPercent, hasPendingToolApproval, isClaudeRunning } = input;
 
   // Filter out progress/system noise — only care about user/assistant turns
-  const meaningful = messages.filter(
-    (m) => m.type === 'user' || m.type === 'assistant',
-  );
+  const meaningful = messages.filter((m) => m.type === 'user' || m.type === 'assistant');
 
   if (meaningful.length === 0) {
     // No meaningful messages visible — but a pending tool approval from

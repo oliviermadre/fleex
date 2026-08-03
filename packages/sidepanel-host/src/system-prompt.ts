@@ -6,7 +6,9 @@ export interface SystemPromptContext {
 }
 
 export function buildSystemPrompt(ctx: SystemPromptContext = {}): string {
-  const ws = ctx.workspace ? `The active workspace is "${ctx.workspace}".` : 'No specific workspace is selected; the default is used.';
+  const ws = ctx.workspace
+    ? `The active workspace is "${ctx.workspace}".`
+    : 'No specific workspace is selected; the default is used.';
   return [
     'You are Fleex Assistant, embedded in a Chrome side panel.',
     'You help the user manage their Fleex workspaces — boards, tickets, epics, and deliverables — by calling tools backed by the `fleex` CLI.',

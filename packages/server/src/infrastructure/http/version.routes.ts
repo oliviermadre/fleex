@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import type { FastifyInstance } from 'fastify';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -19,9 +20,10 @@ function getCurrentVersion(): string {
 
 function getCurrentCommitHash(): string | null {
   try {
-    return execSync('git rev-parse --short HEAD', { cwd: ROOT_DIR, timeout: 5000 })
-      .toString()
-      .trim() || null;
+    return (
+      execSync('git rev-parse --short HEAD', { cwd: ROOT_DIR, timeout: 5000 }).toString().trim() ||
+      null
+    );
   } catch {
     return null;
   }

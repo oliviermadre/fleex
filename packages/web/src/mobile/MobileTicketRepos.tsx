@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
+
 import type { Ticket, TicketLink } from '@fleex/shared';
-import { useTicketStore } from '../stores/ticketStore';
+
 import { useSettingsStore } from '../stores/settingsStore';
+import { useTicketStore } from '../stores/ticketStore';
 
 /**
  * Repository links of a ticket — without a repo link there is no worktree and
@@ -71,7 +73,10 @@ export function MobileTicketRepos({ ticket }: { ticket: Ticket }) {
       </button>
 
       {picking && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/50" onClick={() => setPicking(false)}>
+        <div
+          className="fixed inset-0 z-40 flex items-end bg-black/50"
+          onClick={() => setPicking(false)}
+        >
           <div
             className="max-h-[70dvh] w-full overflow-y-auto rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
@@ -94,7 +99,13 @@ export function MobileTicketRepos({ ticket }: { ticket: Ticket }) {
                   onClick={() => handleAdd(key)}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm text-[var(--theme-text-primary)] active:bg-[var(--theme-bg-hover)] disabled:opacity-50"
                 >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 text-[var(--theme-text-muted)]">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    className="shrink-0 text-[var(--theme-text-muted)]"
+                  >
                     <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
                   </svg>
                   {key}

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { useAssistantStore, __resetAssistantSocketForTests } from './assistantStore';
 import { useSettingsStore } from './settingsStore';
 
@@ -92,17 +93,34 @@ describe('assistantStore — auto-approval', () => {
 
   it('sends the always-scope alongside the approval', () => {
     useAssistantStore.getState().ensureConnected();
-    receive({ type: 'confirm_request', sessionId: 's1', id: 'c1', name: 'fleex_ticket_create', argv: ['ticket', 'create'] });
+    receive({
+      type: 'confirm_request',
+      sessionId: 's1',
+      id: 'c1',
+      name: 'fleex_ticket_create',
+      argv: ['ticket', 'create'],
+    });
 
     useAssistantStore.getState().answerConfirm('c1', true, 'tool');
 
-    expect(sentMessages()).toContainEqual({ type: 'confirm', id: 'c1', approved: true, always: 'tool' });
+    expect(sentMessages()).toContainEqual({
+      type: 'confirm',
+      id: 'c1',
+      approved: true,
+      always: 'tool',
+    });
     expect(useAssistantStore.getState().confirmReqs).toHaveLength(0);
   });
 
   it('omits the scope on a plain one-shot approval', () => {
     useAssistantStore.getState().ensureConnected();
-    receive({ type: 'confirm_request', sessionId: 's1', id: 'c1', name: 'fleex_ticket_create', argv: [] });
+    receive({
+      type: 'confirm_request',
+      sessionId: 's1',
+      id: 'c1',
+      name: 'fleex_ticket_create',
+      argv: [],
+    });
 
     useAssistantStore.getState().answerConfirm('c1', true);
 
@@ -114,14 +132,32 @@ describe('assistantStore — auto-approval', () => {
 
     useAssistantStore.getState().setAutoApprove('s1', { all: true, tools: [] });
 
-    expect(sentMessages()).toContainEqual({ type: 'set_auto_approve', id: 's1', all: true, tools: [] });
+    expect(sentMessages()).toContainEqual({
+      type: 'set_auto_approve',
+      id: 's1',
+      all: true,
+      tools: [],
+    });
   });
 
   it('marks auto-approved tool calls so the transcript stays auditable', () => {
     useAssistantStore.getState().ensureConnected();
 
-    receive({ type: 'tool_call', sessionId: 's1', id: 't1', name: 'fleex_ticket_create', argv: ['ticket', 'create'], autoApproved: true });
-    receive({ type: 'tool_call', sessionId: 's1', id: 't2', name: 'fleex_ticket_delete', argv: ['ticket', 'delete'] });
+    receive({
+      type: 'tool_call',
+      sessionId: 's1',
+      id: 't1',
+      name: 'fleex_ticket_create',
+      argv: ['ticket', 'create'],
+      autoApproved: true,
+    });
+    receive({
+      type: 'tool_call',
+      sessionId: 's1',
+      id: 't2',
+      name: 'fleex_ticket_delete',
+      argv: ['ticket', 'delete'],
+    });
 
     const items = useAssistantStore.getState().itemsBySession['s1']!;
     expect(items.map((i) => i.kind === 'tool' && i.autoApproved)).toEqual([true, false]);
@@ -133,7 +169,16 @@ describe('assistantStore — auto-approval', () => {
     receive({
       type: 'session_history',
       id: 's1',
-      transcript: [{ tool: { name: 'fleex_ticket_create', argv: ['ticket', 'create'], status: 'ok', autoApproved: true } }],
+      transcript: [
+        {
+          tool: {
+            name: 'fleex_ticket_create',
+            argv: ['ticket', 'create'],
+            status: 'ok',
+            autoApproved: true,
+          },
+        },
+      ],
     });
 
     const items = useAssistantStore.getState().itemsBySession['s1']!;

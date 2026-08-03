@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPatch } from '../../../core/api.ts';
+import { ok, die, present } from '../../../core/colors.ts';
 import { assertValidTimeframe, resolveEpic, type Epic } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface UpdateOptions {
   name?: string;
@@ -41,11 +42,14 @@ const def: CommandDef = {
     if (opts.timeframe !== undefined) body.timeframe = opts.timeframe;
     if (opts.blocked !== undefined) body.blocked = opts.blocked;
     if (opts.favorite !== undefined) body.favorite = opts.favorite;
-    if (Object.keys(body).length === 0) die('Nothing to update. Pass at least one field to change.');
+    if (Object.keys(body).length === 0)
+      die('Nothing to update. Pass at least one field to change.');
 
     const epic = await resolveEpic(idArg);
     const updated = await apiPatch<Epic>(`${apiBase()}/api/epics/${epic.id}`, body);
-    present(updated, () => ok(`Updated epic ${updated.emoji ?? ''} ${updated.name} (${updated.id.slice(0, 8)})`));
+    present(updated, () =>
+      ok(`Updated epic ${updated.emoji ?? ''} ${updated.name} (${updated.id.slice(0, 8)})`),
+    );
   },
 };
 

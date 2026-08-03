@@ -1,6 +1,7 @@
 import { SkillNotFoundError } from '../../domain/errors.js';
-import type { SkillStorePort } from '../ports/skill-store.port.js';
+
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { SkillStorePort } from '../ports/skill-store.port.js';
 
 export class DeleteSkillUseCase {
   constructor(

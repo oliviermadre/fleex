@@ -16,13 +16,17 @@
  * output. See spec §7.
  */
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
-import type { LoggerPort } from '../application/ports/logger.port.js';
+
 import { resolveStorageDriver } from '../infrastructure/adapters/storage-factory.js';
+
 import { buildBundle } from './okf/build-bundle.js';
 import { loadOkfInput } from './okf/load-input.js';
+
+import type { LoggerPort } from '../application/ports/logger.port.js';
 
 interface Args {
   out: string;

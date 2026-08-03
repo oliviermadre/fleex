@@ -1,13 +1,20 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import type { ExecutionLogEntry, TicketType, PanelMemberSummary, WorkflowStepSummary } from '@fleex/shared';
+
+import type {
+  ExecutionLogEntry,
+  TicketType,
+  PanelMemberSummary,
+  WorkflowStepSummary,
+} from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
+import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
+import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
 import { cancelExecution } from '../../services/api';
-import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
-import { cn } from '../../lib/cn';
+import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
-import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
-import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
 
 // ── Type badge ──
 
@@ -27,7 +34,9 @@ function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
       {/* `shrink-0` is required: without it the flex row squeezes the SVG for the
           widest label ("WORKFLOW"), which is why that glyph rendered tiny. */}
       <PrimitiveIcon kind={EXEC_TYPE_TO_KIND[type]} size={14} className="shrink-0" />
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">{type}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">
+        {type}
+      </span>
     </div>
   );
 }
@@ -44,7 +53,17 @@ const PRIORITY_COLORS: Record<string, string> = {
 function TicketIcon({ priority }: { priority: string | null }) {
   const color = PRIORITY_COLORS[priority ?? 'none'] ?? PRIORITY_COLORS['none'];
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn('flex-shrink-0', color)}>
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn('flex-shrink-0', color)}
+    >
       <rect x="2" y="2" width="12" height="12" rx="2" />
       <path d="M5 6h6M5 9h4" />
     </svg>
@@ -56,27 +75,77 @@ function TicketIcon({ priority }: { priority: string | null }) {
 function ModeBadge({ mode }: { mode: string | null | undefined }) {
   if (!mode) return null;
   const config: Record<string, { label: string; bg: string; text: string; border: string }> = {
-    edit: { label: 'EDIT', bg: tintClasses('green').bg, text: tintText('green'), border: tintClasses('green').borderColor },
-    plan: { label: 'PLAN', bg: tintClasses('blue').bg, text: tintText('blue'), border: tintClasses('blue').borderColor },
-    talk: { label: 'TALK', bg: tintClasses('gray').bg, text: tintText('gray'), border: tintClasses('gray').borderColor },
+    edit: {
+      label: 'EDIT',
+      bg: tintClasses('green').bg,
+      text: tintText('green'),
+      border: tintClasses('green').borderColor,
+    },
+    plan: {
+      label: 'PLAN',
+      bg: tintClasses('blue').bg,
+      text: tintText('blue'),
+      border: tintClasses('blue').borderColor,
+    },
+    talk: {
+      label: 'TALK',
+      bg: tintClasses('gray').bg,
+      text: tintText('gray'),
+      border: tintClasses('gray').borderColor,
+    },
   };
   const c = config[mode];
   if (!c) return null;
 
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-semibold', c.bg, c.text, c.border)}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-semibold',
+        c.bg,
+        c.text,
+        c.border,
+      )}
+    >
       {mode === 'edit' && (
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
         </svg>
       )}
       {mode === 'plan' && (
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" />
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="3" />
         </svg>
       )}
       {mode === 'talk' && (
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       )}
@@ -88,7 +157,12 @@ function ModeBadge({ mode }: { mode: string | null | undefined }) {
 // ── Ticket type label ──
 
 const TICKET_TYPE_LABELS: Record<string, string> = {
-  build: 'Build', fix: 'Fix', review: 'Review', ops: 'Ops', lead: 'Lead', think: 'Think',
+  build: 'Build',
+  fix: 'Fix',
+  review: 'Review',
+  ops: 'Ops',
+  lead: 'Lead',
+  think: 'Think',
 };
 
 // ── Status badge ──
@@ -105,10 +179,22 @@ function StatusBadge({
   // but the user needs to see the amber "needs your attention" signal.
   if (workflowSubStatus === 'needs_review') {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', tint('yellow'))}>
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+          tint('yellow'),
+        )}
+      >
         <span className="relative flex h-1.5 w-1.5">
-          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', tintSolid('yellow'))} />
-          <span className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', tintSolid('yellow'))} />
+          <span
+            className={cn(
+              'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75',
+              tintSolid('yellow'),
+            )}
+          />
+          <span
+            className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', tintSolid('yellow'))}
+          />
         </span>
         Needs Review
       </span>
@@ -116,25 +202,74 @@ function StatusBadge({
   }
   if (workflowSubStatus === 'blocked') {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', tint('orange'))}>
-        <span className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', tintSolid('orange'))} />
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+          tint('orange'),
+        )}
+      >
+        <span
+          className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', tintSolid('orange'))}
+        />
         Blocked
       </span>
     );
   }
 
-  const config: Record<string, { label: string; dot: string; text: string; bg: string; border: string; pulse?: boolean }> = {
-    running: { label: 'Running', dot: tintSolid('green'), text: tintText('green'), bg: tintClasses('green').bg, border: tintClasses('green').borderColor, pulse: true },
-    completed: { label: 'Completed', dot: tintSolid('green'), text: tintText('green'), bg: tintClasses('green').bg, border: tintClasses('green').borderColor },
-    failed: { label: 'Failed', dot: tintSolid('red'), text: tintText('red'), bg: tintClasses('red').bg, border: tintClasses('red').borderColor },
-    interrupted: { label: 'Interrupted', dot: tintSolid('orange'), text: tintText('orange'), bg: tintClasses('orange').bg, border: tintClasses('orange').borderColor },
+  const config: Record<
+    string,
+    { label: string; dot: string; text: string; bg: string; border: string; pulse?: boolean }
+  > = {
+    running: {
+      label: 'Running',
+      dot: tintSolid('green'),
+      text: tintText('green'),
+      bg: tintClasses('green').bg,
+      border: tintClasses('green').borderColor,
+      pulse: true,
+    },
+    completed: {
+      label: 'Completed',
+      dot: tintSolid('green'),
+      text: tintText('green'),
+      bg: tintClasses('green').bg,
+      border: tintClasses('green').borderColor,
+    },
+    failed: {
+      label: 'Failed',
+      dot: tintSolid('red'),
+      text: tintText('red'),
+      bg: tintClasses('red').bg,
+      border: tintClasses('red').borderColor,
+    },
+    interrupted: {
+      label: 'Interrupted',
+      dot: tintSolid('orange'),
+      text: tintText('orange'),
+      bg: tintClasses('orange').bg,
+      border: tintClasses('orange').borderColor,
+    },
   };
   const c = config[status] ?? config['completed']!;
 
   return (
-    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', c.bg, c.text, c.border)}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+        c.bg,
+        c.text,
+        c.border,
+      )}
+    >
       <span className="relative flex h-1.5 w-1.5">
-        {c.pulse && <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', c.dot)} />}
+        {c.pulse && (
+          <span
+            className={cn(
+              'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75',
+              c.dot,
+            )}
+          />
+        )}
         <span className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', c.dot)} />
       </span>
       {c.label}
@@ -190,13 +325,17 @@ function WorkflowStepDots({ progress }: { progress: WorkflowStepSummary[] }) {
             className={cn(
               'h-3 w-3 flex-shrink-0 rounded-full',
               STEP_DOT_CLASSES[s.status],
-              s.isCurrent && `ring-2 ${tintClasses('green').ring} ring-offset-1 ring-offset-[var(--theme-bg-base)]`,
+              s.isCurrent &&
+                `ring-2 ${tintClasses('green').ring} ring-offset-1 ring-offset-[var(--theme-bg-base)]`,
             )}
           />
         </span>
       ))}
       {overflow > 0 && (
-        <span className="ml-1 text-[10px] tabular-nums text-[var(--theme-text-faint)]" title={`+${overflow} more steps`}>
+        <span
+          className="ml-1 text-[10px] tabular-nums text-[var(--theme-text-faint)]"
+          title={`+${overflow} more steps`}
+        >
           +{overflow}
         </span>
       )}
@@ -224,11 +363,16 @@ function LiveDuration({ startedAt }: { startedAt: string }) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     intervalRef.current = setInterval(() => setNow(Date.now()), 1000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, []);
   const ms = now - new Date(startedAt).getTime();
   return (
-    <span className="font-mono text-xs text-[var(--theme-text-muted)]" title={new Date(startedAt).toLocaleString()}>
+    <span
+      className="font-mono text-xs text-[var(--theme-text-muted)]"
+      title={new Date(startedAt).toLocaleString()}
+    >
       {formatDuration(ms)}
     </span>
   );
@@ -272,7 +416,14 @@ function CommentIcon() {
 
 function DeliverableIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
       <rect x="3" y="1.5" width="10" height="13" rx="1.5" />
       <path d="M5.5 5h5M5.5 8h5M5.5 11h3" />
     </svg>
@@ -281,7 +432,16 @@ function DeliverableIcon() {
 
 function TicketLinkIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="2" y="2" width="12" height="12" rx="2" />
       <path d="M5 6h6M5 9h4" />
     </svg>
@@ -290,7 +450,16 @@ function TicketLinkIcon() {
 
 function ExecutionLogIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="5" cy="6" r="1" />
       <path d="M9 6h11" />
       <circle cx="5" cy="12" r="1" />
@@ -331,9 +500,7 @@ function ParticipantStack({
       {members.map((m) => {
         const isPending = m.status === 'pending';
         const statusClasses = MEMBER_STATUS_CLASSES[m.status];
-        const baseLabel = m.isOrchestrator
-          ? `${m.displayName} · orchestrator`
-          : m.displayName;
+        const baseLabel = m.isOrchestrator ? `${m.displayName} · orchestrator` : m.displayName;
         const title = isPending
           ? `${baseLabel} · ${MEMBER_STATUS_LABELS[m.status]}`
           : `${baseLabel} · ${MEMBER_STATUS_LABELS[m.status]} — view execution`;
@@ -352,9 +519,7 @@ function ParticipantStack({
               'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-semibold transition-transform',
               tintClasses('purple').bg,
               statusClasses,
-              isPending
-                ? 'cursor-default'
-                : 'cursor-pointer hover:scale-110',
+              isPending ? 'cursor-default' : 'cursor-pointer hover:scale-110',
               m.isOrchestrator
                 ? `ring-1 ${tintClasses('yellow').ring} ring-offset-1 ring-offset-[var(--theme-bg-base)] ${tintText('yellow')}`
                 : tintText('purple'),
@@ -393,34 +558,44 @@ export const ExecutionRow = memo(function ExecutionRow({
       } else if (cancelState === 'confirming') {
         if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
         setCancelState('cancelling');
-        try { await cancelExecution(entry.id); } catch { /* ignore */ }
+        try {
+          await cancelExecution(entry.id);
+        } catch {
+          /* ignore */
+        }
         setCancelState('idle');
       }
     },
     [cancelState, entry.id],
   );
 
-  const navigateToTicket = useCallback((e: React.MouseEvent, tab?: 'comments' | 'deliverables' | 'workflow') => {
-    e.stopPropagation();
-    selectTicket(entry.ticketId);
-    if (tab) setTicketTab(tab);
-    setActivePanel('tickets');
-  }, [entry.ticketId, selectTicket, setTicketTab, setActivePanel]);
+  const navigateToTicket = useCallback(
+    (e: React.MouseEvent, tab?: 'comments' | 'deliverables' | 'workflow') => {
+      e.stopPropagation();
+      selectTicket(entry.ticketId);
+      if (tab) setTicketTab(tab);
+      setActivePanel('tickets');
+    },
+    [entry.ticketId, selectTicket, setTicketTab, setActivePanel],
+  );
 
-  const isPanelRun = entry.type === 'panel' && !!entry.panelMembers && entry.panelMembers.length > 0;
+  const isPanelRun =
+    entry.type === 'panel' && !!entry.panelMembers && entry.panelMembers.length > 0;
   const isWorkflow = entry.type === 'workflow';
   const title = entry.ticketTitle || entry.executorName;
   const referenceTime = live ? entry.startedAt : (entry.completedAt ?? entry.startedAt);
 
   // Subtitle: mode · ticketType (ticketType colored per Kanban palette)
-  const ticketTypeLabel = entry.ticketType ? (TICKET_TYPE_LABELS[entry.ticketType] ?? entry.ticketType) : null;
-  const ticketTypeColor = entry.ticketType ? TICKET_TYPE_COLORS[entry.ticketType as TicketType] : '';
+  const ticketTypeLabel = entry.ticketType
+    ? (TICKET_TYPE_LABELS[entry.ticketType] ?? entry.ticketType)
+    : null;
+  const ticketTypeColor = entry.ticketType
+    ? TICKET_TYPE_COLORS[entry.ticketType as TicketType]
+    : '';
 
   return (
     <>
-      <div
-        className="group flex w-full items-center gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-4 py-3 transition-colors hover:bg-[var(--theme-bg-hover)]"
-      >
+      <div className="group flex w-full items-center gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-4 py-3 transition-colors hover:bg-[var(--theme-bg-hover)]">
         {/* Col 1: Type badge */}
         <TypeBadge type={entry.type} />
 
@@ -428,7 +603,9 @@ export const ExecutionRow = memo(function ExecutionRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <TicketIcon priority={entry.ticketPriority} />
-            <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{title}</span>
+            <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+              {title}
+            </span>
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
             {isWorkflow ? (
@@ -498,9 +675,13 @@ export const ExecutionRow = memo(function ExecutionRow({
             </>
           ) : (
             <>
-              <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">{entry.executorName}</div>
+              <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">
+                {entry.executorName}
+              </div>
               {entry.runByName ? (
-                <div className="truncate text-[10px] text-[var(--theme-text-faint)]">by {entry.runByName}</div>
+                <div className="truncate text-[10px] text-[var(--theme-text-faint)]">
+                  by {entry.runByName}
+                </div>
               ) : (
                 entry.model && (
                   <div className="truncate text-[10px] text-[var(--theme-text-faint)]">
@@ -521,16 +702,14 @@ export const ExecutionRow = memo(function ExecutionRow({
 
         {/* Col 5: Execution detail (tokens + cost) */}
         <div className="hidden w-[150px] flex-shrink-0 text-right text-[11px] tabular-nums text-[var(--theme-text-faint)] xl:block">
-          {(entry.inputTokens != null || entry.outputTokens != null) ? (
+          {entry.inputTokens != null || entry.outputTokens != null ? (
             <div>
               {entry.inputTokens != null && <span>in: {formatTokens(entry.inputTokens)}</span>}
               {entry.inputTokens != null && entry.outputTokens != null && <span> · </span>}
               {entry.outputTokens != null && <span>out: {formatTokens(entry.outputTokens)}</span>}
             </div>
           ) : null}
-          {entry.costUsd != null && entry.costUsd > 0 && (
-            <div>${entry.costUsd.toFixed(2)}</div>
-          )}
+          {entry.costUsd != null && entry.costUsd > 0 && <div>${entry.costUsd.toFixed(2)}</div>}
         </div>
 
         {/* Col 6: Duration */}
@@ -547,7 +726,9 @@ export const ExecutionRow = memo(function ExecutionRow({
           {live ? (
             <LiveDuration startedAt={entry.startedAt} />
           ) : entry.durationMs != null ? (
-            <span className="font-mono text-xs text-[var(--theme-text-muted)]">{formatDuration(entry.durationMs)}</span>
+            <span className="font-mono text-xs text-[var(--theme-text-muted)]">
+              {formatDuration(entry.durationMs)}
+            </span>
           ) : null}
         </div>
 
@@ -567,9 +748,22 @@ export const ExecutionRow = memo(function ExecutionRow({
               onClick={handleCancel}
               className={cn(
                 'flex h-7 w-[78px] cursor-pointer items-center justify-center rounded-md border text-[10px] font-semibold shadow-sm transition-colors active:translate-y-px',
-                cancelState === 'idle' && cn(tintClasses('red').borderColor, tintClasses('red').bg, tintText('red'), tintClasses('red').hoverBg),
-                cancelState === 'confirming' && cn(tintClasses('red').borderColor, tintSolid('red'), tintClasses('red').onSolid),
-                cancelState === 'cancelling' && cn('cursor-wait', tintClasses('red').borderColor, tintClasses('red').bg, tintText('red')),
+                cancelState === 'idle' &&
+                  cn(
+                    tintClasses('red').borderColor,
+                    tintClasses('red').bg,
+                    tintText('red'),
+                    tintClasses('red').hoverBg,
+                  ),
+                cancelState === 'confirming' &&
+                  cn(tintClasses('red').borderColor, tintSolid('red'), tintClasses('red').onSolid),
+                cancelState === 'cancelling' &&
+                  cn(
+                    'cursor-wait',
+                    tintClasses('red').borderColor,
+                    tintClasses('red').bg,
+                    tintText('red'),
+                  ),
               )}
               title={cancelState === 'idle' ? 'Cancel this execution' : ''}
             >
@@ -589,7 +783,9 @@ export const ExecutionRow = memo(function ExecutionRow({
             title={`${entry.commentCount} comments — open ticket`}
           >
             <CommentIcon />
-            <span className="min-w-[12px] text-left">{entry.commentCount > 0 ? entry.commentCount : ''}</span>
+            <span className="min-w-[12px] text-left">
+              {entry.commentCount > 0 ? entry.commentCount : ''}
+            </span>
           </button>
 
           {/* Deliverable CTA */}
@@ -599,7 +795,9 @@ export const ExecutionRow = memo(function ExecutionRow({
             title={`${entry.deliverableCount} deliverables — open ticket`}
           >
             <DeliverableIcon />
-            <span className="min-w-[12px] text-left">{entry.deliverableCount > 0 ? entry.deliverableCount : ''}</span>
+            <span className="min-w-[12px] text-left">
+              {entry.deliverableCount > 0 ? entry.deliverableCount : ''}
+            </span>
           </button>
 
           {/* Ticket CTA — for workflow rows, land on the Workflow tab. */}
@@ -617,7 +815,10 @@ export const ExecutionRow = memo(function ExecutionRow({
               the right entry point. */}
           {!isWorkflow && (
             <button
-              onClick={(e) => { e.stopPropagation(); setOpenExecutionId(entry.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenExecutionId(entry.id);
+              }}
               className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
               title="View execution log"
             >
@@ -633,7 +834,8 @@ export const ExecutionRow = memo(function ExecutionRow({
           title={
             openExecutionId === entry.id
               ? `${entry.executorName} — ${title}`
-              : (entry.panelMembers?.find((m) => m.executionId === openExecutionId)?.displayName ?? 'Execution')
+              : (entry.panelMembers?.find((m) => m.executionId === openExecutionId)?.displayName ??
+                'Execution')
           }
           onClose={() => setOpenExecutionId(null)}
         />

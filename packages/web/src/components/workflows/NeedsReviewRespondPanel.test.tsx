@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 
 /** In-memory localStorage (Node 22's experimental global shadows jsdom's). */
@@ -62,23 +63,13 @@ describe('NeedsReviewRespondPanel response persistence', () => {
   it('scopes the draft per step instance (different stepRunId → different draft)', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const { container, rerender } = render(
-      <NeedsReviewRespondPanel
-        runId="run1"
-        stepRunId="stepA"
-        question="Q"
-        onSubmit={onSubmit}
-      />,
+      <NeedsReviewRespondPanel runId="run1" stepRunId="stepA" question="Q" onSubmit={onSubmit} />,
     );
     typeResponse(container.querySelector('textarea')!, 'response for A');
 
     // Switch to a different step instance while mounted.
     rerender(
-      <NeedsReviewRespondPanel
-        runId="run1"
-        stepRunId="stepB"
-        question="Q"
-        onSubmit={onSubmit}
-      />,
+      <NeedsReviewRespondPanel runId="run1" stepRunId="stepB" question="Q" onSubmit={onSubmit} />,
     );
     expect(container.querySelector('textarea')!.value).toBe('');
   });
@@ -86,12 +77,7 @@ describe('NeedsReviewRespondPanel response persistence', () => {
   it('clears the draft after a successful submit', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const { container, getByText } = render(
-      <NeedsReviewRespondPanel
-        runId="run1"
-        stepRunId="step1"
-        question="Q"
-        onSubmit={onSubmit}
-      />,
+      <NeedsReviewRespondPanel runId="run1" stepRunId="step1" question="Q" onSubmit={onSubmit} />,
     );
     typeResponse(container.querySelector('textarea')!, 'my answer');
     await act(async () => {
@@ -105,12 +91,7 @@ describe('NeedsReviewRespondPanel response persistence', () => {
   it('keeps the draft when submit fails (does not lose the response)', async () => {
     const onSubmit = vi.fn().mockRejectedValue(new Error('network'));
     const { container, getByText } = render(
-      <NeedsReviewRespondPanel
-        runId="run1"
-        stepRunId="step1"
-        question="Q"
-        onSubmit={onSubmit}
-      />,
+      <NeedsReviewRespondPanel runId="run1" stepRunId="step1" question="Q" onSubmit={onSubmit} />,
     );
     typeResponse(container.querySelector('textarea')!, 'precious answer');
     await act(async () => {

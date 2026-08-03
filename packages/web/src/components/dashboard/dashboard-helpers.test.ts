@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import type { Session, SessionGroup, DashboardPullRequest } from '@fleex/shared';
+
 import { findSessionsForTicketId, findSessionsForPR } from './dashboard-helpers';
 
 function session(opts: Partial<Session>): Session {

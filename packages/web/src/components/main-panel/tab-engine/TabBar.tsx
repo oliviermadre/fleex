@@ -1,7 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
+
 import { cn } from '../../../lib/cn';
 import { useUIStore } from '../../../stores/uiStore';
+
 import { getTabKind } from './registry';
+
 import type { TabDescriptor } from './types';
 import type { TabDragState } from './useTabEngine';
 
@@ -33,8 +36,12 @@ function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemPr
   const kind = getTabKind(tab.kind);
 
   // Floating overlay toggle (session-backed tabs only)
-  const sessionId = tab.capabilities.floatable ? (tab.meta.sessionId as string | undefined) : undefined;
-  const isFloating = useUIStore((s) => (sessionId ? s.floatingSessionIds.includes(sessionId) : false));
+  const sessionId = tab.capabilities.floatable
+    ? (tab.meta.sessionId as string | undefined)
+    : undefined;
+  const isFloating = useUIStore((s) =>
+    sessionId ? s.floatingSessionIds.includes(sessionId) : false,
+  );
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
   const toggleFloating = useCallback(() => {
@@ -61,14 +68,20 @@ function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemPr
     onRename?.(trimmed);
   }, [editValue, tab.label, onRename]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') commitRename();
-    else if (e.key === 'Escape') setEditing(false);
-  }, [commitRename]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') commitRename();
+      else if (e.key === 'Escape') setEditing(false);
+    },
+    [commitRename],
+  );
 
   const setInputRefCb = useCallback((el: HTMLInputElement | null) => {
     inputRef.current = el;
-    if (el) { el.focus(); el.select(); }
+    if (el) {
+      el.focus();
+      el.select();
+    }
   }, []);
 
   const key = tab.key;
@@ -95,11 +108,21 @@ function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemPr
           'group/tab relative flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap transition-colors cursor-pointer',
           isActive
             ? 'text-[var(--theme-text-primary)]'
-            : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
+            : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
         )}
-        onClick={() => { if (!editing) onSelect(); }}
-        onMouseDown={(e) => { if (e.button === 1 && tab.capabilities.closable && onClose) { e.preventDefault(); onClose(); } }}
-        onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
+        onClick={() => {
+          if (!editing) onSelect();
+        }}
+        onMouseDown={(e) => {
+          if (e.button === 1 && tab.capabilities.closable && onClose) {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          startEditing();
+        }}
       >
         {/* Kind icon */}
         {Icon && <Icon tab={tab} />}
@@ -137,19 +160,33 @@ function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemPr
             <span
               className={cn(
                 'hidden items-center justify-end gap-0.5 group-hover/tab:flex absolute z-10',
-                tab.capabilities.floatable ? 'right-0 top-0 h-4 w-[34px]' : 'inset-0'
+                tab.capabilities.floatable ? 'right-0 top-0 h-4 w-[34px]' : 'inset-0',
               )}
             >
               {tab.capabilities.floatable && (
                 <button
                   className={cn(
                     'flex h-4 w-4 items-center justify-center rounded bg-[var(--theme-bg-surface)] transition-colors hover:bg-[var(--theme-bg-overlay)]',
-                    isFloating ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-accent)]'
+                    isFloating
+                      ? 'text-[var(--theme-accent)]'
+                      : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-accent)]',
                   )}
-                  onClick={(e) => { e.stopPropagation(); toggleFloating(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFloating();
+                  }}
                   title={isFloating ? 'Re-attach to main panel' : 'Detach to floating overlay'}
                 >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <rect x="2" y="2" width="9" height="9" rx="1.5" />
                     <path d="M13 7V3h-4" />
                     <line x1="13" y1="3" x2="7" y2="9" />
@@ -160,12 +197,23 @@ function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemPr
                 <button
                   className={cn(
                     'flex h-4 w-4 items-center justify-center rounded text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]',
-                    tab.capabilities.floatable && 'bg-[var(--theme-bg-surface)]'
+                    tab.capabilities.floatable && 'bg-[var(--theme-bg-surface)]',
                   )}
-                  onClick={(e) => { e.stopPropagation(); onClose(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                  }}
                   title="Close tab"
                 >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
                     <line x1="4" y1="4" x2="12" y2="12" />
                     <line x1="12" y1="4" x2="4" y2="12" />
                   </svg>
@@ -214,11 +262,7 @@ export function TabBar({
       ))}
 
       {/* Trailing slot (e.g. SmartSessionButton) */}
-      {trailing && (
-        <div className="flex items-center px-1 py-1">
-          {trailing}
-        </div>
-      )}
+      {trailing && <div className="flex items-center px-1 py-1">{trailing}</div>}
     </div>
   );
 }

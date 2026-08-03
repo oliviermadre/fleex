@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+
 import { WS_PATH } from '@fleex/shared';
+
+import { WS_BASE_URL } from '../lib/constants';
 import { appWs } from '../services/websocket';
 import { useAgentEventStore } from '../stores/agentEventStore';
-import { WS_BASE_URL } from '../lib/constants';
 
 export function useWebSocket() {
   const handleAgentEvent = useAgentEventStore((s) => s.handleWsEvent);

@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   determineClaudeActivity,
   type ActivityInput,
 } from '../../src/domain/services/claude-activity-determiner.js';
+
 import type { ClaudeMessage } from '../../src/domain/types/claude-message.js';
 
 function makeInput(overrides: Partial<ActivityInput> = {}): ActivityInput {
@@ -62,23 +64,23 @@ describe('determineClaudeActivity', () => {
     });
 
     it('returns unknown when only progress/system messages', () => {
-      expect(
-        determineClaudeActivity(makeInput({ messages: [progressMsg(), systemMsg()] })),
-      ).toBe('unknown');
+      expect(determineClaudeActivity(makeInput({ messages: [progressMsg(), systemMsg()] }))).toBe(
+        'unknown',
+      );
     });
   });
 
   describe('user message last (human input)', () => {
     it('returns working when file recently modified', () => {
-      expect(
-        determineClaudeActivity(makeInput({ messages: [userMsg()], fileAgeSeconds: 2 })),
-      ).toBe('working');
+      expect(determineClaudeActivity(makeInput({ messages: [userMsg()], fileAgeSeconds: 2 }))).toBe(
+        'working',
+      );
     });
 
     it('returns working at 5s boundary', () => {
-      expect(
-        determineClaudeActivity(makeInput({ messages: [userMsg()], fileAgeSeconds: 5 })),
-      ).toBe('working');
+      expect(determineClaudeActivity(makeInput({ messages: [userMsg()], fileAgeSeconds: 5 }))).toBe(
+        'working',
+      );
     });
 
     it('returns idle when file is stale and CPU is low', () => {
@@ -366,9 +368,9 @@ describe('determineClaudeActivity', () => {
         type: 'assistant',
         message: { role: 'assistant', content: 'Just text' },
       };
-      expect(
-        determineClaudeActivity(makeInput({ messages: [msg], fileAgeSeconds: 1 })),
-      ).toBe('working');
+      expect(determineClaudeActivity(makeInput({ messages: [msg], fileAgeSeconds: 1 }))).toBe(
+        'working',
+      );
     });
   });
 
@@ -377,11 +379,7 @@ describe('determineClaudeActivity', () => {
       expect(
         determineClaudeActivity(
           makeInput({
-            messages: [
-              assistantWithTools('Bash'),
-              userToolResultMsg(),
-              assistantWithTools('Read'),
-            ],
+            messages: [assistantWithTools('Bash'), userToolResultMsg(), assistantWithTools('Read')],
             fileAgeSeconds: 5,
           }),
         ),
@@ -392,11 +390,7 @@ describe('determineClaudeActivity', () => {
       expect(
         determineClaudeActivity(
           makeInput({
-            messages: [
-              assistantWithTools('Bash'),
-              userToolResultMsg(),
-              assistantTextMsg(),
-            ],
+            messages: [assistantWithTools('Bash'), userToolResultMsg(), assistantTextMsg()],
             fileAgeSeconds: 60,
           }),
         ),

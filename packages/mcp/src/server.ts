@@ -15,29 +15,37 @@
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ListToolsRequestSchema, CallToolRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  type CallToolResult,
+} from '@modelcontextprotocol/sdk/types.js';
+
 import { buildProgram } from '@fleex/cli/program';
+
 import { generateTools } from './generator.ts';
 import { listTools, callToolResult } from './mcp-handlers.ts';
+
 import type { ExecOptions } from './executor.ts';
 
 async function main(): Promise<void> {
   const root = await buildProgram();
   const include = process.env.FLEEX_MCP_INCLUDE
-    ? process.env.FLEEX_MCP_INCLUDE.split(',').map((s) => s.trim()).filter(Boolean)
+    ? process.env.FLEEX_MCP_INCLUDE.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
     : undefined;
   const tools = generateTools(root, include ? { include } : {});
 
   const execOpts: ExecOptions = {
     workspace: process.env.FLEEX_WORKSPACE,
     bin: process.env.FLEEX_MCP_BIN,
-    prefixArgs: process.env.FLEEX_MCP_PREFIX ? process.env.FLEEX_MCP_PREFIX.split(' ').filter(Boolean) : undefined,
+    prefixArgs: process.env.FLEEX_MCP_PREFIX
+      ? process.env.FLEEX_MCP_PREFIX.split(' ').filter(Boolean)
+      : undefined,
   };
 
-  const server = new Server(
-    { name: 'fleex', version: '0.1.0' },
-    { capabilities: { tools: {} } },
-  );
+  const server = new Server({ name: 'fleex', version: '0.1.0' }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => listTools(tools));
   server.setRequestHandler(CallToolRequestSchema, async (req): Promise<CallToolResult> => {

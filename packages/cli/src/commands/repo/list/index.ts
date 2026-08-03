@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { info } from '../../../core/colors.ts';
-import { apiBase, apiGet } from '../../../core/api.ts';
 import { printJson, renderTable } from '../../../core/agentic.ts';
+import { apiBase, apiGet } from '../../../core/api.ts';
+import { info } from '../../../core/colors.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 import type { Repository } from '../_shared.ts';
 
 interface Summary {
@@ -13,7 +14,9 @@ interface Summary {
   isClonedLocally: boolean;
 }
 
-interface ListOptions { json?: boolean }
+interface ListOptions {
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -35,7 +38,9 @@ const def: CommandDef = {
       return;
     }
     // Summaries are best-effort enrichment.
-    const summaries = await apiGet<Summary[]>(`${base}/api/repositories/summaries`).catch(() => [] as Summary[]);
+    const summaries = await apiGet<Summary[]>(`${base}/api/repositories/summaries`).catch(
+      () => [] as Summary[],
+    );
     const bySlug = new Map(summaries.map((s) => [`${s.org}/${s.name}`, s]));
 
     const rows = repos.map((r) => {

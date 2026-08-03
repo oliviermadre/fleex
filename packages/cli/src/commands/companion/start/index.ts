@@ -1,6 +1,8 @@
 import chalk from 'chalk';
-import type { CommandDef } from '../../../core/types.ts';
+
 import { ensureCompanion } from './_impl.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const SECTION = chalk.bold.yellow;
 

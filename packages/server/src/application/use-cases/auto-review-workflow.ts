@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+
+import type { EventBus } from '../event-bus.js';
+import type { ConfigPort } from '../ports/config.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
-import type { ConfigPort } from '../ports/config.port.js';
-import type { EventBus } from '../event-bus.js';
 
 interface ReviewWorkflowConfig {
   // Default human reviewer when no specific human mentioned
@@ -40,10 +42,7 @@ export class AutoReviewWorkflowUseCase {
    * Handle human mention in comment — unclaim agent and assign the mentioned human.
    * No status change: ticket stays in its current column.
    */
-  async handleHumanMention(params: {
-    ticketId: string;
-    mentionedHuman: string;
-  }): Promise<void> {
+  async handleHumanMention(params: { ticketId: string; mentionedHuman: string }): Promise<void> {
     const config = this.getWorkflowConfig();
     if (!config.enableAutoReview) return;
 
@@ -64,16 +63,23 @@ export class AutoReviewWorkflowUseCase {
     const assignDiff = ticket.assign('user');
 
     await this.ticketStore.saveTicket(ticket);
-    this.eventBus?.emit({ type: 'ticket.updated', ticketId: params.ticketId, changes: { ...unclaimDiff, ...assignDiff }, occurredAt: new Date() });
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
+    this.eventBus?.emit({
+      type: 'ticket.updated',
       ticketId: params.ticketId,
-      action: 'unclaimed_and_assigned_human_via_mention',
       changes: { ...unclaimDiff, ...assignDiff },
-      actorType: 'agent',
-      actorName: 'system',
-      source: 'api',
-    }));
+      occurredAt: new Date(),
+    });
+    await this.ticketStore.saveActivity(
+      TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: params.ticketId,
+        action: 'unclaimed_and_assigned_human_via_mention',
+        changes: { ...unclaimDiff, ...assignDiff },
+        actorType: 'agent',
+        actorName: 'system',
+        source: 'api',
+      }),
+    );
 
     this.logger.info('Agent unclaimed and human assigned via mention', {
       ticketId: params.ticketId,
@@ -141,17 +147,24 @@ export class AutoReviewWorkflowUseCase {
     if (!ticket.blocked) {
       const diff = ticket.update({ blocked: true });
       await this.ticketStore.saveTicket(ticket);
-      this.eventBus?.emit({ type: 'ticket.updated', ticketId: params.ticketId, changes: diff, occurredAt: new Date() });
-
-      await this.ticketStore.saveActivity(TicketActivityEntity.create({
-        id: randomUUID(),
+      this.eventBus?.emit({
+        type: 'ticket.updated',
         ticketId: params.ticketId,
-        action: 'auto_blocked_waiting_for_info',
         changes: diff,
-        actorType: 'agent',
-        actorName: params.agentName,
-        source: 'api',
-      }));
+        occurredAt: new Date(),
+      });
+
+      await this.ticketStore.saveActivity(
+        TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: params.ticketId,
+          action: 'auto_blocked_waiting_for_info',
+          changes: diff,
+          actorType: 'agent',
+          actorName: params.agentName,
+          source: 'api',
+        }),
+      );
 
       this.logger.info('Auto-blocked ticket due to agent waiting for info', {
         ticketId: params.ticketId,
@@ -163,9 +176,7 @@ export class AutoReviewWorkflowUseCase {
   /**
    * When a human posts a comment, resolve all unresolved mentions targeting humans on that ticket.
    */
-  async handleHumanCommentPosted(params: {
-    ticketId: string;
-  }): Promise<void> {
+  async handleHumanCommentPosted(params: { ticketId: string }): Promise<void> {
     const mentions = await this.mentionStore.getByTicket(params.ticketId);
     const unresolvedHuman = mentions.filter(
       (m) => m.targetType === 'human' && m.status !== 'resolved',
@@ -195,9 +206,7 @@ export class AutoReviewWorkflowUseCase {
   /**
    * When a ticket moves to done, resolve all unresolved mentions on that ticket.
    */
-  async handleTicketDone(params: {
-    ticketId: string;
-  }): Promise<void> {
+  async handleTicketDone(params: { ticketId: string }): Promise<void> {
     const mentions = await this.mentionStore.getByTicket(params.ticketId);
     const unresolved = mentions.filter((m) => m.status !== 'resolved');
 

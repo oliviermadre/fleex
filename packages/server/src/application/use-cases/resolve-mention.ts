@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { MentionNotFoundError, ForbiddenError } from '../../domain/errors.js';
+
+import type { LoggerPort } from '../ports/logger.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
 
 export class ResolveMentionUseCase {
   constructor(
@@ -31,15 +33,17 @@ export class ResolveMentionUseCase {
     });
     await this.mentionStore.save(mention);
 
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId: mention.ticketId,
-      action: 'mention_resolved',
-      changes: { mentionId: { from: mention.id, to: 'resolved' } },
-      actorType: 'agent',
-      actorName: params.agentName,
-      source: 'api',
-    }));
+    await this.ticketStore.saveActivity(
+      TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: mention.ticketId,
+        action: 'mention_resolved',
+        changes: { mentionId: { from: mention.id, to: 'resolved' } },
+        actorType: 'agent',
+        actorName: params.agentName,
+        source: 'api',
+      }),
+    );
 
     this.logger.info('Mention resolved', {
       mentionId: params.mentionId,

@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { NameInputModal } from '../ui/NameInputModal';
+
 import type { TicketGroup, TicketGroupTimeframe, Ticket } from '@fleex/shared';
-import { useTicketGroupStore } from '../../stores/ticketGroupStore';
-import { useTicketStore } from '../../stores/ticketStore';
-import { EpicProgressBar } from './EpicProgressBar';
-import { PriorityIndicator } from './PriorityIndicator';
+
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { NameInputModal } from '../ui/NameInputModal';
+
+import { EpicProgressBar } from './EpicProgressBar';
+import { PriorityIndicator } from './PriorityIndicator';
 
 interface RoadmapColumnDef {
   id: string;
@@ -19,11 +22,46 @@ interface RoadmapColumnDef {
 
 // Match kanban column color pattern (tint CSS vars)
 const COLUMNS: RoadmapColumnDef[] = [
-  { id: 'now', label: 'NOW', titleColor: tintClasses('green').text, badgeColor: cn(tintClasses('green').text, tintClasses('green').bg), filter: (g) => g.groupStatus === 'active' && g.timeframe === 'now', collapsible: false },
-  { id: 'next', label: 'NEXT', titleColor: tintClasses('orange').text, badgeColor: cn(tintClasses('orange').text, tintClasses('orange').bg), filter: (g) => g.groupStatus === 'active' && g.timeframe === 'next', collapsible: false },
-  { id: 'later', label: 'LATER', titleColor: 'text-[var(--theme-text-muted)]', badgeColor: 'text-[var(--theme-text-muted)] bg-[var(--theme-bg-overlay)]', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'later', collapsible: false },
-  { id: 'done', label: 'DONE', titleColor: tintClasses('blue').text, badgeColor: cn(tintClasses('blue').text, tintClasses('blue').bg), filter: (g) => g.groupStatus === 'done', collapsible: true },
-  { id: 'cancelled', label: 'CANCELLED', titleColor: tintClasses('red').text, badgeColor: cn(tintClasses('red').text, tintClasses('red').bg), filter: (g) => g.groupStatus === 'cancelled', collapsible: true },
+  {
+    id: 'now',
+    label: 'NOW',
+    titleColor: tintClasses('green').text,
+    badgeColor: cn(tintClasses('green').text, tintClasses('green').bg),
+    filter: (g) => g.groupStatus === 'active' && g.timeframe === 'now',
+    collapsible: false,
+  },
+  {
+    id: 'next',
+    label: 'NEXT',
+    titleColor: tintClasses('orange').text,
+    badgeColor: cn(tintClasses('orange').text, tintClasses('orange').bg),
+    filter: (g) => g.groupStatus === 'active' && g.timeframe === 'next',
+    collapsible: false,
+  },
+  {
+    id: 'later',
+    label: 'LATER',
+    titleColor: 'text-[var(--theme-text-muted)]',
+    badgeColor: 'text-[var(--theme-text-muted)] bg-[var(--theme-bg-overlay)]',
+    filter: (g) => g.groupStatus === 'active' && g.timeframe === 'later',
+    collapsible: false,
+  },
+  {
+    id: 'done',
+    label: 'DONE',
+    titleColor: tintClasses('blue').text,
+    badgeColor: cn(tintClasses('blue').text, tintClasses('blue').bg),
+    filter: (g) => g.groupStatus === 'done',
+    collapsible: true,
+  },
+  {
+    id: 'cancelled',
+    label: 'CANCELLED',
+    titleColor: tintClasses('red').text,
+    badgeColor: cn(tintClasses('red').text, tintClasses('red').bg),
+    filter: (g) => g.groupStatus === 'cancelled',
+    collapsible: true,
+  },
 ];
 
 export function RoadmapView() {
@@ -56,10 +94,13 @@ export function RoadmapView() {
 
   const ticketMap = useMemo(() => new Map(allTickets.map((t) => [t.id, t])), [allTickets]);
 
-  const getGroupTickets = useCallback((groupId: string): Ticket[] => {
-    const ids = groupTicketIds[groupId] ?? [];
-    return ids.map((id) => ticketMap.get(id)).filter(Boolean) as Ticket[];
-  }, [groupTicketIds, ticketMap]);
+  const getGroupTickets = useCallback(
+    (groupId: string): Ticket[] => {
+      const ids = groupTicketIds[groupId] ?? [];
+      return ids.map((id) => ticketMap.get(id)).filter(Boolean) as Ticket[];
+    },
+    [groupTicketIds, ticketMap],
+  );
 
   const visibleGroups = groups.filter((g) => g.groupStatus !== 'archived');
 
@@ -149,11 +190,22 @@ export function RoadmapView() {
                 onClick={() => setCollapsed((p) => ({ ...p, [col.id]: false }))}
                 title={`Expand ${col.label}`}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
               </button>
-              <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', col.badgeColor)}>
+              <span
+                className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', col.badgeColor)}
+              >
                 {colGroups.length}
               </span>
               <span
@@ -192,7 +244,16 @@ export function RoadmapView() {
                   onClick={() => setCollapsed((p) => ({ ...p, [col.id]: true }))}
                   title={`Collapse ${col.label}`}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="15 18 9 12 15 6" />
                   </svg>
                 </button>
@@ -215,7 +276,9 @@ export function RoadmapView() {
             <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-2">
               {colGroups.map((group) => {
                 const tickets = getGroupTickets(group.id);
-                const boardFilteredTickets = selectedBoardId ? tickets.filter(t => t.boardId === selectedBoardId) : tickets;
+                const boardFilteredTickets = selectedBoardId
+                  ? tickets.filter((t) => t.boardId === selectedBoardId)
+                  : tickets;
                 return (
                   <RoadmapCard
                     key={group.id}
@@ -249,7 +312,15 @@ interface RoadmapCardProps {
   onClick: () => void;
 }
 
-function RoadmapCard({ group, tickets, isDragging, showTicketList, onDragStart, onDragEnd, onClick }: RoadmapCardProps) {
+function RoadmapCard({
+  group,
+  tickets,
+  isDragging,
+  showTicketList,
+  onDragStart,
+  onDragEnd,
+  onClick,
+}: RoadmapCardProps) {
   const isStrikethrough = group.groupStatus === 'done' || group.groupStatus === 'cancelled';
 
   return (
@@ -265,10 +336,12 @@ function RoadmapCard({ group, tickets, isDragging, showTicketList, onDragStart, 
     >
       <div className="flex items-center gap-1.5">
         <span className="text-sm">{group.emoji}</span>
-        <span className={cn(
-          'text-sm font-medium text-[var(--theme-text-primary)]',
-          isStrikethrough && 'line-through opacity-60',
-        )}>
+        <span
+          className={cn(
+            'text-sm font-medium text-[var(--theme-text-primary)]',
+            isStrikethrough && 'line-through opacity-60',
+          )}
+        >
           {group.name}
         </span>
       </div>

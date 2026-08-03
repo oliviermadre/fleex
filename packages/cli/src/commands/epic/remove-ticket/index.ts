@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../core/api.ts';
-import { resolveEpic } from '../_shared.ts';
+import { ok } from '../../../core/colors.ts';
 import { resolveTicketId } from '../../ticket/_shared.ts';
+import { resolveEpic } from '../_shared.ts';
 
-interface RemoveTicketOptions { board?: string }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface RemoveTicketOptions {
+  board?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

@@ -1,7 +1,9 @@
 import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
+
 import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliverable.entity.js';
-import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
 
 export class PgDeliverableStore implements DeliverableStorePort {
   constructor(private readonly db: PgConnection) {}
@@ -33,7 +35,10 @@ export class PgDeliverableStore implements DeliverableStorePort {
     return rows.map(rowToDeliverable);
   }
 
-  async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
+  async getByTicketAndType(
+    ticketId: string,
+    type: string,
+  ): Promise<TicketDeliverableEntity | null> {
     const { rows } = await this.db.query(
       'SELECT * FROM deliverables WHERE ticket_id = $1 AND type = $2 LIMIT 1',
       [ticketId, type],

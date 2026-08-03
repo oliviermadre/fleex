@@ -1,14 +1,17 @@
 import { useMemo } from 'react';
-import type { Session } from '@fleex/shared';
-import { useUIStore } from '../../stores/uiStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { TerminalIcon } from './icons';
-import { cn } from '../../lib/cn';
 import { useNavigate } from 'react-router-dom';
+
+import type { Session } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
 import { aggregateBranchStatus } from '../../lib/deriveStatus';
-import { StatusDot } from '../ui/StatusDot';
 import * as api from '../../services/api';
+import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
+import { StatusDot } from '../ui/StatusDot';
+
+import { TerminalIcon } from './icons';
 
 const SYSTEM_GROUP_ID = '_system';
 const SYSTEM_WORKTREE_KEY = '_system';
@@ -35,11 +38,17 @@ export function SystemGroup({ sessions }: Props) {
   const handleClick = () => {
     if (sessions.length === 0) {
       const cwd = basePath || '/tmp';
-      api.createSession({ cwd, type: 'shell' }).then((session) => {
-        addSessionToGroup(session);
-        navigate(`/sessions/system/s:${session.id}`, { replace: true });
-        api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
-      }).catch(() => {});
+      api
+        .createSession({ cwd, type: 'shell' })
+        .then((session) => {
+          addSessionToGroup(session);
+          navigate(`/sessions/system/s:${session.id}`, { replace: true });
+          api
+            .fetchSessionGroups()
+            .then(setSessionGroups)
+            .catch(() => {});
+        })
+        .catch(() => {});
       return;
     }
     const tabSuffix = lastActiveTab ? `/${encodeURIComponent(lastActiveTab)}` : '';
@@ -52,15 +61,19 @@ export function SystemGroup({ sessions }: Props) {
         'flex min-w-0 w-full items-center gap-2 py-2 pl-6 pr-3 text-left transition-colors border-l-2',
         isSelected
           ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
-          : 'border-transparent hover:bg-[var(--theme-bg-hover)]'
+          : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
       )}
       onClick={handleClick}
     >
       <TerminalIcon size={14} className="shrink-0 text-[var(--theme-text-secondary)]" />
-      <span className="truncate text-sm font-semibold font-mono text-[var(--theme-text-primary)]">Shells</span>
+      <span className="truncate text-sm font-semibold font-mono text-[var(--theme-text-primary)]">
+        Shells
+      </span>
       <StatusDot status={branchStatus.status} />
       <span className={`text-xs ${branchStatus.textColor}`}>{branchStatus.label}</span>
-      <span className="ml-auto shrink-0 text-xs text-[var(--theme-text-faint)]">{sessions.length}</span>
+      <span className="ml-auto shrink-0 text-xs text-[var(--theme-text-faint)]">
+        {sessions.length}
+      </span>
     </button>
   );
 }

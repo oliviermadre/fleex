@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 
@@ -43,9 +44,7 @@ export function Autocomplete({
   const selectedLabel = options.find((o) => o.value === value)?.label ?? '';
 
   const filtered = options.filter(
-    (o) =>
-      o.value !== '' &&
-      o.label.toLowerCase().includes(query.toLowerCase())
+    (o) => o.value !== '' && o.label.toLowerCase().includes(query.toLowerCase()),
   );
 
   useEffect(() => {
@@ -77,7 +76,7 @@ export function Autocomplete({
       setIsOpen(false);
       inputRef.current?.blur();
     },
-    [onChange]
+    [onChange],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -138,7 +137,7 @@ export function Autocomplete({
         className={cn(
           'rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-1.5 text-sm text-[var(--theme-text-primary)]',
           'placeholder:text-[var(--theme-text-muted)]',
-          'focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]'
+          'focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]',
         )}
         placeholder={placeholder}
         value={displayValue}
@@ -152,43 +151,46 @@ export function Autocomplete({
       />
       {isOpen && filtered.length > 0 && (
         <FloatingPortal>
-        <ul
-          ref={(node) => { refs.setFloating(node); listRef.current = node; }}
-          style={listStyles}
-          {...getFloatingProps()}
-          className="z-50 overflow-auto rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
-        >
-          {filtered.map((option, index) => (
-            <li
-              key={option.value}
-              className={cn(
-                'cursor-pointer px-3 py-1.5 text-sm',
-                index === highlightedIndex
-                  ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
-                  : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)]'
-              )}
-              onMouseEnter={() => setHighlightedIndex(index)}
-              onMouseDown={(e) => {
-                e.preventDefault(); // prevent blur before click
-                selectOption(option);
-              }}
-            >
-              {option.label}
-            </li>
-          ))}
-        </ul>
+          <ul
+            ref={(node) => {
+              refs.setFloating(node);
+              listRef.current = node;
+            }}
+            style={listStyles}
+            {...getFloatingProps()}
+            className="z-50 overflow-auto rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
+          >
+            {filtered.map((option, index) => (
+              <li
+                key={option.value}
+                className={cn(
+                  'cursor-pointer px-3 py-1.5 text-sm',
+                  index === highlightedIndex
+                    ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                    : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)]',
+                )}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // prevent blur before click
+                  selectOption(option);
+                }}
+              >
+                {option.label}
+              </li>
+            ))}
+          </ul>
         </FloatingPortal>
       )}
       {isOpen && filtered.length === 0 && query && (
         <FloatingPortal>
-        <div
-          ref={refs.setFloating}
-          style={listStyles}
-          {...getFloatingProps()}
-          className="z-50 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-muted)]"
-        >
-          No matches
-        </div>
+          <div
+            ref={refs.setFloating}
+            style={listStyles}
+            {...getFloatingProps()}
+            className="z-50 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-muted)]"
+          >
+            No matches
+          </div>
         </FloatingPortal>
       )}
     </div>

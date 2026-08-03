@@ -44,7 +44,7 @@ same tool surface is reusable by Claude Code, OpenClaw, and Claude Desktop.
   never executed — the defense against prompt injection from page content.
 - **Auto-approval, scoped to one conversation**: batches ("create these 50
   tickets") turned the gate into data entry — one approval per call, with
-  attention gone by click 20, which *weakens* the gate rather than reinforcing
+  attention gone by click 20, which _weakens_ the gate rather than reinforcing
   it. `⚡ Always allow` grants a standing approval for that **command name** in
   that **conversation** only (a header menu offers a blanket toggle). It is
   never inherited by a new conversation, is evaluated server-side, is shown as

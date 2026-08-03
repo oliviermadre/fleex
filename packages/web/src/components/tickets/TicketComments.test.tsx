@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+
 import { CommentMarkdown } from './TicketComments';
 
 /**

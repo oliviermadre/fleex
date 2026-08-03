@@ -1,7 +1,9 @@
 import { create } from 'zustand';
+
 import type { DomainEventLog } from '@fleex/shared';
-import * as api from '../services/api';
+
 import { PAGE_SIZE_AUDIT_TRAIL } from '../lib/constants';
+import * as api from '../services/api';
 
 interface AuditTrailState {
   events: DomainEventLog[];

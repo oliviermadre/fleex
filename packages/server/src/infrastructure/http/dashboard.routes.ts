@@ -1,6 +1,12 @@
-import type { FastifyInstance } from 'fastify';
-import type { DashboardPullRequest, DashboardWorktree, DashboardGitHubIssue, DashboardData } from '@fleex/shared';
+import type {
+  DashboardPullRequest,
+  DashboardWorktree,
+  DashboardGitHubIssue,
+  DashboardData,
+} from '@fleex/shared';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 // Raw shape returned by `gh search issues --json ...`
 interface GhSearchIssue {
@@ -35,7 +41,9 @@ export function dashboardRoutes(container: Container) {
         try {
           const rateLimit = await container.githubGraphql.getRateLimit();
           if (rateLimit.remaining < 100) {
-            container.logger.warn('GitHub rate limit low, dashboard will skip GitHub fetches', { remaining: rateLimit.remaining });
+            container.logger.warn('GitHub rate limit low, dashboard will skip GitHub fetches', {
+              remaining: rateLimit.remaining,
+            });
             rateLimited = true;
           }
         } catch {
@@ -96,57 +104,74 @@ export function dashboardRoutes(container: Container) {
         const repoFlags = configuredRepos.flatMap(({ org, name }) => ['--repo', `${org}/${name}`]);
         const issueJsonFields = 'number,title,author,assignees,repository,createdAt,updatedAt';
 
-        const [
-          batchPRsResult,
-          authoredIssuesResult,
-          assignedIssuesResult,
-          ...worktreeResults
-        ] = await Promise.allSettled([
-          // 1 GraphQL call for all repos' PRs (batch up to 8)
-          configuredRepos.length > 0
-            ? container.githubGraphql.fetchRepoBatch(configuredRepos)
-            : Promise.resolve(new Map()),
-          // 1 gh search call for authored issues
-          configuredRepos.length > 0
-            ? container.execFn('gh', [
-                'search', 'issues',
-                '--author', '@me',
-                '--state', 'open',
-                ...repoFlags,
-                '--json', issueJsonFields,
-                '--limit', '50',
-              ], { timeout: 20_000 })
-            : Promise.resolve({ stdout: '[]', stderr: '', exitCode: 0 }),
-          // 1 gh search call for assigned issues
-          configuredRepos.length > 0
-            ? container.execFn('gh', [
-                'search', 'issues',
-                '--assignee', '@me',
-                '--state', 'open',
-                ...repoFlags,
-                '--json', issueJsonFields,
-                '--limit', '50',
-              ], { timeout: 20_000 })
-            : Promise.resolve({ stdout: '[]', stderr: '', exitCode: 0 }),
-          // Per-repo worktree listing (local git, no API calls)
-          ...configuredRepos.map(async ({ org, name }) => {
-            const barePath = container.resolver.barePath(org, name);
-            const exists = await container.hostFs.exists(barePath);
-            if (!exists) return { org, name, worktrees: [] as DashboardWorktree[] };
-            const wts = await container.listWorktrees.execute(org, name);
-            return {
-              org,
-              name,
-              worktrees: wts
-                .filter((wt) => !wt.isBare && !wt.isMain)
-                .map((wt) => ({ ...wt, org, name })),
-            };
-          }),
-        ]);
+        const [batchPRsResult, authoredIssuesResult, assignedIssuesResult, ...worktreeResults] =
+          await Promise.allSettled([
+            // 1 GraphQL call for all repos' PRs (batch up to 8)
+            configuredRepos.length > 0
+              ? container.githubGraphql.fetchRepoBatch(configuredRepos)
+              : Promise.resolve(new Map()),
+            // 1 gh search call for authored issues
+            configuredRepos.length > 0
+              ? container.execFn(
+                  'gh',
+                  [
+                    'search',
+                    'issues',
+                    '--author',
+                    '@me',
+                    '--state',
+                    'open',
+                    ...repoFlags,
+                    '--json',
+                    issueJsonFields,
+                    '--limit',
+                    '50',
+                  ],
+                  { timeout: 20_000 },
+                )
+              : Promise.resolve({ stdout: '[]', stderr: '', exitCode: 0 }),
+            // 1 gh search call for assigned issues
+            configuredRepos.length > 0
+              ? container.execFn(
+                  'gh',
+                  [
+                    'search',
+                    'issues',
+                    '--assignee',
+                    '@me',
+                    '--state',
+                    'open',
+                    ...repoFlags,
+                    '--json',
+                    issueJsonFields,
+                    '--limit',
+                    '50',
+                  ],
+                  { timeout: 20_000 },
+                )
+              : Promise.resolve({ stdout: '[]', stderr: '', exitCode: 0 }),
+            // Per-repo worktree listing (local git, no API calls)
+            ...configuredRepos.map(async ({ org, name }) => {
+              const barePath = container.resolver.barePath(org, name);
+              const exists = await container.hostFs.exists(barePath);
+              if (!exists) return { org, name, worktrees: [] as DashboardWorktree[] };
+              const wts = await container.listWorktrees.execute(org, name);
+              return {
+                org,
+                name,
+                worktrees: wts
+                  .filter((wt) => !wt.isBare && !wt.isMain)
+                  .map((wt) => ({ ...wt, org, name })),
+              };
+            }),
+          ]);
 
         // ── Process batch PR results (1 GraphQL call covered all repos) ──
         if (batchPRsResult.status === 'fulfilled') {
-          const batchResults = batchPRsResult.value as Map<string, import('../../infrastructure/adapters/github-graphql.adapter.js').RepoBatchResult>;
+          const batchResults = batchPRsResult.value as Map<
+            string,
+            import('../../infrastructure/adapters/github-graphql.adapter.js').RepoBatchResult
+          >;
           for (const [key, result] of batchResults) {
             const repo = repoLookup.get(key.toLowerCase());
             if (!repo) continue;
@@ -177,7 +202,9 @@ export function dashboardRoutes(container: Container) {
             }
           }
         } else {
-          container.logger.warn('Failed to fetch PR batch for dashboard', { error: String((batchPRsResult as PromiseRejectedResult).reason) });
+          container.logger.warn('Failed to fetch PR batch for dashboard', {
+            error: String((batchPRsResult as PromiseRejectedResult).reason),
+          });
         }
 
         // ── Process global issue search results ──
@@ -240,7 +267,11 @@ export function dashboardRoutes(container: Container) {
         // ── Process worktree results (local git, no API calls) ──
         for (const result of worktreeResults) {
           if (result.status === 'fulfilled') {
-            const { worktrees } = result.value as { org: string; name: string; worktrees: DashboardWorktree[] };
+            const { worktrees } = result.value as {
+              org: string;
+              name: string;
+              worktrees: DashboardWorktree[];
+            };
             activeWorktrees.push(...worktrees);
           }
         }

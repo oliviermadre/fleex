@@ -1,12 +1,14 @@
 import type { CreateSessionRequest } from '@fleex/shared';
+
 import { SessionEntity } from '../../domain/entities.js';
-import { SessionNamingService } from '../../domain/services/session-naming.js';
 import { sessionIdFromTmuxName } from '../../domain/services/session-id.js';
-import type { TmuxPort } from '../ports/tmux.port.js';
-import type { SessionStorePort } from '../ports/session-store.port.js';
-import type { GitPort } from '../ports/git.port.js';
+
+import type { SessionNamingService } from '../../domain/services/session-naming.js';
 import type { ConfigPort } from '../ports/config.port.js';
+import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { SessionStorePort } from '../ports/session-store.port.js';
+import type { TmuxPort } from '../ports/tmux.port.js';
 
 export class CreateSessionUseCase {
   constructor(
@@ -37,7 +39,8 @@ export class CreateSessionUseCase {
       }
     }
 
-    const defaultDisplayName = request.displayName ?? this.namingService.defaultDisplayName(request.type);
+    const defaultDisplayName =
+      request.displayName ?? this.namingService.defaultDisplayName(request.type);
 
     // Gather existing tmux names and display names for uniqueness check
     const storedSessions = await this.sessionStore.getAll();
@@ -82,8 +85,7 @@ export class CreateSessionUseCase {
       tmuxName = resolved.tmuxName;
     }
 
-    const command =
-      request.type === 'shell' ? this.config.get().defaultShell : undefined;
+    const command = request.type === 'shell' ? this.config.get().defaultShell : undefined;
 
     await this.tmux.createSession({ name: tmuxName, cwd: request.cwd, command });
 
@@ -112,7 +114,12 @@ export class CreateSessionUseCase {
     );
 
     await this.sessionStore.save(session);
-    this.logger.info('Session created', { id: session.id, type: request.type, tmuxName, displayName });
+    this.logger.info('Session created', {
+      id: session.id,
+      type: request.type,
+      tmuxName,
+      displayName,
+    });
 
     return session;
   }

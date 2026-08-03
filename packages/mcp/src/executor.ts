@@ -7,7 +7,9 @@
  * supplies arguments, never the command to run.
  */
 import { execFile } from 'node:child_process';
+
 import { buildArgv, type BuildArgvOptions } from './argv.ts';
+
 import type { GeneratedTool } from './types.ts';
 
 export interface ExecOptions extends BuildArgvOptions {
@@ -56,11 +58,12 @@ export function runFleexArgv(argv: string[], opts: ExecOptions = {}): Promise<Ex
         windowsHide: true,
       },
       (err, stdout, stderr) => {
-        const exitCode = err && typeof (err as { code?: unknown }).code === 'number'
-          ? (err as { code: number }).code
-          : err
-            ? 1
-            : 0;
+        const exitCode =
+          err && typeof (err as { code?: unknown }).code === 'number'
+            ? (err as { code: number }).code
+            : err
+              ? 1
+              : 0;
         const result: ExecResult = {
           ok: exitCode === 0,
           exitCode,

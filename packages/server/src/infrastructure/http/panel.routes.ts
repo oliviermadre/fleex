@@ -1,10 +1,13 @@
-import type { FastifyInstance } from 'fastify';
-import type { Container } from '../container.js';
 import type { ExecutionMode, PanelMember } from '@fleex/shared';
+
 import { PanelNotFoundError } from '../../domain/errors.js';
 
+import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
+
 export function panelRoutes(container: Container) {
-  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) =>
+    container.eventBus.emit(...events);
 
   return async function (app: FastifyInstance) {
     // GET /api/panels — list all panels
@@ -61,10 +64,7 @@ export function panelRoutes(container: Container) {
         enabled?: boolean;
       };
     }>('/api/panels/:id', async (request) => {
-      const panel = await container.updatePanel.execute(
-        request.params.id,
-        request.body,
-      );
+      const panel = await container.updatePanel.execute(request.params.id, request.body);
       emit({ type: 'panel.updated', panelId: panel.id, occurredAt: new Date() });
       return panel.toDTO();
     });
@@ -88,16 +88,19 @@ export function panelRoutes(container: Container) {
       if (!panel) throw new PanelNotFoundError(id);
 
       // Fire-and-forget — execution runs in background (panel.executed event emitted by run-panel use case on completion)
-      container.runPanel.execute({
-        panelName: panel.name,
-        ticketId,
-        topic,
-      }).catch((err) => {
-        container.logger.error('Panel execution failed', {
-          panelId: id, ticketId,
-          error: err instanceof Error ? err.message : String(err),
+      container.runPanel
+        .execute({
+          panelName: panel.name,
+          ticketId,
+          topic,
+        })
+        .catch((err) => {
+          container.logger.error('Panel execution failed', {
+            panelId: id,
+            ticketId,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
-      });
 
       return { status: 'started', panelId: id, panelName: panel.name, ticketId };
     });

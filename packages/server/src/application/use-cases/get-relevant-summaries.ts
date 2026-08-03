@@ -1,4 +1,5 @@
 import type { TicketSummaryRef } from '@fleex/shared';
+
 import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
@@ -20,10 +21,7 @@ export class GetRelevantSummariesUseCase {
     private readonly ticketStore: TicketStorePort,
   ) {}
 
-  async execute(params: {
-    ticketId: string;
-    limit?: number;
-  }): Promise<TicketSummaryRef[]> {
+  async execute(params: { ticketId: string; limit?: number }): Promise<TicketSummaryRef[]> {
     const limit = params.limit ?? MAX_SUMMARIES;
 
     const currentTicket = await this.ticketStore.getTicketById(params.ticketId);
@@ -38,7 +36,7 @@ export class GetRelevantSummariesUseCase {
 
     // Load ticket data for each candidate to compute scores
     const scored: Array<{
-      summary: typeof candidates[0];
+      summary: (typeof candidates)[0];
       ticket: TicketEntity;
       score: number;
     }> = [];

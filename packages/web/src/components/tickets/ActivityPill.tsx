@@ -1,7 +1,8 @@
 import type { AgentActivityState } from '@fleex/shared';
-import { StatusDot } from '../ui/StatusDot';
+
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
+import { StatusDot } from '../ui/StatusDot';
 
 interface Props {
   activity: AgentActivityState;

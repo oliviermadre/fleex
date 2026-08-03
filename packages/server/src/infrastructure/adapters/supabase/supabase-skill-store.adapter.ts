@@ -1,6 +1,7 @@
 import { SkillEntity } from '../../../domain/entities/skill.entity.js';
-import type { SkillStorePort } from '../../../application/ports/skill-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { SkillStorePort } from '../../../application/ports/skill-store.port.js';
 
 interface SkillRow {
   id: string;
@@ -32,10 +33,7 @@ export class SupabaseSkillStore implements SkillStorePort {
   constructor(private readonly conn: SupabaseConnection) {}
 
   async getAll(): Promise<SkillEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('skills')
-      .select('*')
-      .order('name');
+    const { data, error } = await this.conn.client.from('skills').select('*').order('name');
     if (error) throw new Error(`SupabaseSkillStore.getAll failed: ${error.message}`);
     return (data as SkillRow[]).map(rowToEntity);
   }
@@ -86,10 +84,7 @@ export class SupabaseSkillStore implements SkillStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('skills')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('skills').delete().eq('id', id);
     if (error) throw new Error(`SupabaseSkillStore.remove failed: ${error.message}`);
   }
 }

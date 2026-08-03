@@ -1,12 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act, fireEvent, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
 import type { Ticket, TicketGroup, BoardWithCounts } from '@fleex/shared';
-import { EpicDetailView } from './EpicDetailView';
+
 import { RouterSync } from '../../router/RouterSync';
-import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
+
+import { EpicDetailView } from './EpicDetailView';
 
 /**
  * Regression guard for the reported bug: clicking a ticket inside an epic must

@@ -1,8 +1,9 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
-import { assertValidTimeframe, type Epic } from '../_shared.ts';
+import { ok, die, present } from '../../../core/colors.ts';
 import { resolveBoard } from '../../board/_shared.ts';
+import { assertValidTimeframe, type Epic } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface CreateOptions {
   name?: string;
@@ -39,7 +40,9 @@ const def: CommandDef = {
     if (opts.board) body.boardId = (await resolveBoard(opts.board)).id;
 
     const epic = await apiPost<Epic>(`${apiBase()}/api/epics`, body);
-    present(epic, () => ok(`Created epic ${epic.emoji ?? ''} ${epic.name} (${epic.id.slice(0, 8)})`));
+    present(epic, () =>
+      ok(`Created epic ${epic.emoji ?? ''} ${epic.name} (${epic.id.slice(0, 8)})`),
+    );
   },
 };
 

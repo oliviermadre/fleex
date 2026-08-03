@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import { NotificationRendererRegistry } from './registry';
+
 import type { NotificationDraft } from './types';
 
 const stub = (): NotificationDraft => ({

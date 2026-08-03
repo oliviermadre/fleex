@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, info, present } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
+import { c, info, present } from '../../../core/colors.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 import type { Token } from '../_shared.ts';
 
 const def: CommandDef = {
@@ -16,8 +17,12 @@ const def: CommandDef = {
         return;
       }
       process.stdout.write('\n');
-      process.stdout.write(`  ${c.bold('ID         NAME                      PREFIX        LAST USED')}\n`);
-      process.stdout.write('  ──────────  ────────────────────────  ────────────  ────────────────────\n');
+      process.stdout.write(
+        `  ${c.bold('ID         NAME                      PREFIX        LAST USED')}\n`,
+      );
+      process.stdout.write(
+        '  ──────────  ────────────────────────  ────────────  ────────────────────\n',
+      );
       for (const t of tokens) {
         const id = t.id.slice(0, 8).padEnd(10);
         const name = (t.name ?? '-').slice(0, 24).padEnd(24);

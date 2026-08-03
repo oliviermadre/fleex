@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { mapHookEventToStatus, type HookEventPayload } from '@fleex/shared';
-import { SessionEntity } from '../../src/domain/entities.js';
-import { isCwdMatch } from '../../src/application/use-cases/process-hook-event.js';
 
-function event(partial: Partial<HookEventPayload> & Pick<HookEventPayload, 'event'>): HookEventPayload {
+import { mapHookEventToStatus, type HookEventPayload } from '@fleex/shared';
+
+import { isCwdMatch } from '../../src/application/use-cases/process-hook-event.js';
+import { SessionEntity } from '../../src/domain/entities.js';
+
+function event(
+  partial: Partial<HookEventPayload> & Pick<HookEventPayload, 'event'>,
+): HookEventPayload {
   return {
     cwd: '/tmp/x',
     timestamp: Date.now(),
@@ -23,7 +27,9 @@ describe('mapHookEventToStatus — whitelist', () => {
   });
 
   it('stopFailure → error with error_type message', () => {
-    const r = mapHookEventToStatus(event({ event: 'stopFailure', payload: { error_type: 'rate_limit' } }));
+    const r = mapHookEventToStatus(
+      event({ event: 'stopFailure', payload: { error_type: 'rate_limit' } }),
+    );
     expect(r).toEqual({ status: 'error', message: 'rate_limit' });
   });
 
@@ -38,21 +44,29 @@ describe('mapHookEventToStatus — whitelist', () => {
   it.each(['permission_prompt', 'idle_prompt', 'elicitation_dialog'])(
     'notification(%s) → waiting',
     (kind) => {
-      const r = mapHookEventToStatus(event({ event: 'notification', payload: { notification_type: kind } }));
+      const r = mapHookEventToStatus(
+        event({ event: 'notification', payload: { notification_type: kind } }),
+      );
       expect(r?.status).toBe('waiting');
     },
   );
 
   it('notification(permission_prompt) → waiting/permission', () => {
     const r = mapHookEventToStatus(
-      event({ event: 'notification', payload: { notification_type: 'permission_prompt', message: 'Bash' } }),
+      event({
+        event: 'notification',
+        payload: { notification_type: 'permission_prompt', message: 'Bash' },
+      }),
     );
     expect(r).toEqual({ status: 'waiting', waitingReason: 'permission', message: 'Bash' });
   });
 
   it('notification(idle_prompt) uses last_assistant_message as fallback message', () => {
     const r = mapHookEventToStatus(
-      event({ event: 'notification', payload: { notification_type: 'idle_prompt', last_assistant_message: 'Done.' } }),
+      event({
+        event: 'notification',
+        payload: { notification_type: 'idle_prompt', last_assistant_message: 'Done.' },
+      }),
     );
     expect(r).toEqual({ status: 'waiting', waitingReason: 'idle', message: 'Done.' });
   });
@@ -68,17 +82,25 @@ describe('mapHookEventToStatus — whitelist', () => {
   it.each(['auth_success', 'elicitation_complete', 'unknown_future_type'])(
     'notification(%s) → null (not waiting)',
     (kind) => {
-      expect(mapHookEventToStatus(event({ event: 'notification', payload: { notification_type: kind } }))).toBeNull();
+      expect(
+        mapHookEventToStatus(
+          event({ event: 'notification', payload: { notification_type: kind } }),
+        ),
+      ).toBeNull();
     },
   );
 
   it('preToolUse(AskUserQuestion) → waiting/question (defensive coverage)', () => {
-    const r = mapHookEventToStatus(event({ event: 'preToolUse', payload: { tool_name: 'AskUserQuestion' } }));
+    const r = mapHookEventToStatus(
+      event({ event: 'preToolUse', payload: { tool_name: 'AskUserQuestion' } }),
+    );
     expect(r).toEqual({ status: 'waiting', waitingReason: 'question' });
   });
 
   it('preToolUse(Bash) → null (other tools are observed via Notification, not PreToolUse)', () => {
-    expect(mapHookEventToStatus(event({ event: 'preToolUse', payload: { tool_name: 'Bash' } }))).toBeNull();
+    expect(
+      mapHookEventToStatus(event({ event: 'preToolUse', payload: { tool_name: 'Bash' } })),
+    ).toBeNull();
   });
 });
 
@@ -120,7 +142,10 @@ describe('SessionEntity.applyHookUpdate', () => {
       '/tmp/wt',
       new Date(),
       null,
-      null, null, null, null,
+      null,
+      null,
+      null,
+      null,
     );
   }
 
@@ -137,7 +162,11 @@ describe('SessionEntity.applyHookUpdate', () => {
     const s = freshSession();
     s.applyHookUpdate({ status: 'waiting', waitingReason: 'permission', message: 'Bash' });
     const updatedAt1 = s.hookStatusUpdatedAt;
-    const changed = s.applyHookUpdate({ status: 'waiting', waitingReason: 'permission', message: 'Bash' });
+    const changed = s.applyHookUpdate({
+      status: 'waiting',
+      waitingReason: 'permission',
+      message: 'Bash',
+    });
     expect(changed).toBe(false);
     expect(s.hookStatusUpdatedAt).toBe(updatedAt1);
   });
@@ -177,7 +206,11 @@ describe('SessionEntity.applyHookUpdate', () => {
   it('ALLOWS complete → waiting/permission (legitimate new tool call after completion)', () => {
     const s = freshSession();
     s.applyHookUpdate({ status: 'complete' });
-    const changed = s.applyHookUpdate({ status: 'waiting', waitingReason: 'permission', message: 'Bash' });
+    const changed = s.applyHookUpdate({
+      status: 'waiting',
+      waitingReason: 'permission',
+      message: 'Bash',
+    });
     expect(changed).toBe(true);
     expect(s.hookStatus).toBe('waiting');
     expect(s.hookWaitingReason).toBe('permission');

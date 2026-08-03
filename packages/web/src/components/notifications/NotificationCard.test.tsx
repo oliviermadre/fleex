@@ -1,8 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+
 import type { Ticket } from '@fleex/shared';
-import { NotificationCard } from './NotificationCard';
+
 import { useTicketStore } from '../../stores/ticketStore';
+
+import { NotificationCard } from './NotificationCard';
+
 import type { PulseNotification } from '../../notifications/types';
 
 /** Minimal ticket — the card only reads id/displayId/title. */

@@ -238,6 +238,4 @@ export const SQLITE_SCHEMA: string[] = [
     size_bytes INTEGER NOT NULL,
     created_at TEXT NOT NULL
   )`,
-
 ];
-

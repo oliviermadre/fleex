@@ -1,9 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+
 import type { Ticket } from '@fleex/shared';
-import { MarkdownRenderer } from './MarkdownRenderer';
+
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
+
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 function ticket(id: string, displayId: number, title: string): Ticket {
   return { id, displayId, title, boardId: 'b1' } as unknown as Ticket;

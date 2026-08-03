@@ -1,5 +1,6 @@
-import type { WebSocket } from 'ws';
 import { WS_PING_INTERVAL_MS } from '@fleex/shared';
+
+import type { WebSocket } from 'ws';
 
 const aliveMap = new WeakMap<WebSocket, boolean>();
 const pingPayload = JSON.stringify({ type: 'ping' });

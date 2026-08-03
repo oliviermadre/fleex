@@ -118,9 +118,7 @@
         "mimeType": "application/json",
         "text": "{\n  \"name\": \"project-manager\"\n}"
       },
-      "headers": [
-        { "name": "Content-Type", "value": "application/json" }
-      ],
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
       "parameters": [],
       "authentication": {},
       "parentId": "fld_tokens",
@@ -309,9 +307,7 @@
         { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
         { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
       ],
-      "parameters": [
-        { "name": "board_id", "value": "{{ _.board_id }}", "disabled": true }
-      ],
+      "parameters": [{ "name": "board_id", "value": "{{ _.board_id }}", "disabled": true }],
       "authentication": {},
       "parentId": "fld_boards",
       "metaSortKey": 307
@@ -490,9 +486,7 @@
         { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
         { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
       ],
-      "parameters": [
-        { "name": "ticket_id", "value": "", "disabled": true }
-      ],
+      "parameters": [{ "name": "ticket_id", "value": "", "disabled": true }],
       "authentication": {},
       "parentId": "fld_mentions",
       "metaSortKey": 501
@@ -701,9 +695,7 @@
         { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
         { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
       ],
-      "parameters": [
-        { "name": "limit", "value": "50", "disabled": true }
-      ],
+      "parameters": [{ "name": "limit", "value": "50", "disabled": true }],
       "authentication": {},
       "parentId": "fld_activity",
       "metaSortKey": 901,

@@ -1,8 +1,15 @@
-import type { Command } from 'commander';
 import fs from 'node:fs';
-import type { CommandDef } from '../../../core/types.ts';
+
 import { c, ok, info, warn, die } from '../../../core/colors.ts';
-import { readRegistry, getMarketplace, git, type RegisteredMarketplace } from '../../../core/registry.ts';
+import {
+  readRegistry,
+  getMarketplace,
+  git,
+  type RegisteredMarketplace,
+} from '../../../core/registry.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
+import type { Command } from 'commander';
 
 function pull(mp: RegisteredMarketplace): boolean {
   // Fast-forward only; the cache is read-only from fleex's perspective.

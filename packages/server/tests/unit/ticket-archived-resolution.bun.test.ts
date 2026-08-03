@@ -9,10 +9,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import { SqliteConnection } from '../../src/infrastructure/adapters/sqlite/connection.js';
 import { SqliteTicketStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-ticket-store.adapter.js';
 import { runPendingMigrations } from '../../src/infrastructure/migrations/run-migrations.js';
-import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 
@@ -32,7 +33,12 @@ afterEach(() => {
 
 describe('SqliteTicketStore — getTicketByDisplayId spans archived', () => {
   it('resolves an archived ticket by its display id (the unarchive use case)', async () => {
-    const ticket = TicketEntity.create({ id: 'tk-archived', boardId: 'board-1', displayId: 0, title: 'Archived one' });
+    const ticket = TicketEntity.create({
+      id: 'tk-archived',
+      boardId: 'board-1',
+      displayId: 0,
+      title: 'Archived one',
+    });
     await store.createTicket(ticket); // assigns a real display_id
     const did = ticket.displayId;
 
@@ -54,7 +60,12 @@ describe('SqliteTicketStore — getTicketByDisplayId spans archived', () => {
   });
 
   it('resolves an active ticket by its display id too', async () => {
-    const ticket = TicketEntity.create({ id: 'tk-active', boardId: 'board-1', displayId: 0, title: 'Active one' });
+    const ticket = TicketEntity.create({
+      id: 'tk-active',
+      boardId: 'board-1',
+      displayId: 0,
+      title: 'Active one',
+    });
     await store.createTicket(ticket);
 
     const found = await store.getTicketByDisplayId(ticket.displayId);

@@ -1,6 +1,7 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+
 import { info, ok, warn } from '../../core/colors.ts';
 import { resolveInstance, logFile } from '../../core/instance.ts';
 import { savePid } from '../../core/process.ts';

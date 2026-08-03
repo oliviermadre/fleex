@@ -1,18 +1,27 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import { RetryStepUseCase } from '../../src/application/use-cases/retry-step.js';
-import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
 import { StepRunEntity } from '../../src/domain/entities/step-run.entity.js';
+import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
 import { WorkflowRunNotFoundError, StepRunNotFoundError } from '../../src/domain/errors.js';
 
-const makeRun = () => WorkflowRunEntity.create({
-  id: 'run-1', ticketId: 't-1', templateId: 'tmpl-1',
-  templateSnapshot: {
-    name: 'W', emoji: '🔧',
-    steps: [{ id: 'a', name: 'A', executorType: 'agent', executorRef: 'p1', position: { x: 0, y: 0 } }],
-    edges: [], entryStepId: 'a',
-  },
-  triggeredBy: '@john', triggeredFrom: 'x',
-});
+const makeRun = () =>
+  WorkflowRunEntity.create({
+    id: 'run-1',
+    ticketId: 't-1',
+    templateId: 'tmpl-1',
+    templateSnapshot: {
+      name: 'W',
+      emoji: '🔧',
+      steps: [
+        { id: 'a', name: 'A', executorType: 'agent', executorRef: 'p1', position: { x: 0, y: 0 } },
+      ],
+      edges: [],
+      entryStepId: 'a',
+    },
+    triggeredBy: '@john',
+    triggeredFrom: 'x',
+  });
 
 const runningStep = (executionId: string | null) => {
   const sr = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'a' });
@@ -27,8 +36,15 @@ describe('RetryStepUseCase', () => {
     const stepRunStore = { getById: vi.fn(), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn() };
-    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
-    await expect(uc.execute({ workflowRunId: 'missing', stepRunId: 'sr-1' })).rejects.toBeInstanceOf(WorkflowRunNotFoundError);
+    const uc = new RetryStepUseCase(
+      runStore as never,
+      stepRunStore as never,
+      orchestrator as never,
+      canceller as never,
+    );
+    await expect(
+      uc.execute({ workflowRunId: 'missing', stepRunId: 'sr-1' }),
+    ).rejects.toBeInstanceOf(WorkflowRunNotFoundError);
   });
 
   it('throws when the step_run is missing', async () => {
@@ -37,8 +53,15 @@ describe('RetryStepUseCase', () => {
     const stepRunStore = { getById: vi.fn().mockResolvedValue(null), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn() };
-    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
-    await expect(uc.execute({ workflowRunId: 'run-1', stepRunId: 'missing' })).rejects.toBeInstanceOf(StepRunNotFoundError);
+    const uc = new RetryStepUseCase(
+      runStore as never,
+      stepRunStore as never,
+      orchestrator as never,
+      canceller as never,
+    );
+    await expect(
+      uc.execute({ workflowRunId: 'run-1', stepRunId: 'missing' }),
+    ).rejects.toBeInstanceOf(StepRunNotFoundError);
   });
 
   // WHY (AC4): force-restart on a genuinely-alive step must abort the old agent
@@ -51,7 +74,12 @@ describe('RetryStepUseCase', () => {
     const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn().mockResolvedValue(true) };
-    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
+    const uc = new RetryStepUseCase(
+      runStore as never,
+      stepRunStore as never,
+      orchestrator as never,
+      canceller as never,
+    );
 
     await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1' });
 
@@ -73,7 +101,12 @@ describe('RetryStepUseCase', () => {
     const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn() };
-    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
+    const uc = new RetryStepUseCase(
+      runStore as never,
+      stepRunStore as never,
+      orchestrator as never,
+      canceller as never,
+    );
 
     await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1' });
 
@@ -95,7 +128,12 @@ describe('RetryStepUseCase', () => {
     const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn() };
-    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
+    const uc = new RetryStepUseCase(
+      runStore as never,
+      stepRunStore as never,
+      orchestrator as never,
+      canceller as never,
+    );
 
     await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1' });
 
@@ -114,9 +152,16 @@ describe('RetryStepUseCase', () => {
     const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn().mockRejectedValue(new Error('gone')) };
-    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
+    const uc = new RetryStepUseCase(
+      runStore as never,
+      stepRunStore as never,
+      orchestrator as never,
+      canceller as never,
+    );
 
-    await expect(uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1' })).resolves.toBeUndefined();
+    await expect(
+      uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1' }),
+    ).resolves.toBeUndefined();
 
     expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'a');
   });

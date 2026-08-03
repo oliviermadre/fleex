@@ -1,4 +1,9 @@
-import type { TicketMention, MentionStatus, MentionTargetType, MentionExecutionMode } from '@fleex/shared';
+import type {
+  TicketMention,
+  MentionStatus,
+  MentionTargetType,
+  MentionExecutionMode,
+} from '@fleex/shared';
 
 export class TicketMentionEntity {
   constructor(

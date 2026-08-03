@@ -1,9 +1,11 @@
-import type { FastifyInstance } from 'fastify';
-import type { WebSocket } from 'ws';
 import { WS_AGENT_PATH } from '@fleex/shared';
+
 import { ApiTokenEntity } from '../../domain/entities/api-token.entity.js';
+
 import type { Container } from '../container.js';
 import type { WsHeartbeat } from './ws-heartbeat.js';
+import type { FastifyInstance } from 'fastify';
+import type { WebSocket } from 'ws';
 
 interface AgentClient {
   socket: WebSocket;

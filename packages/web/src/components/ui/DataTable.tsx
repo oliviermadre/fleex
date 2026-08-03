@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
 
@@ -44,7 +45,10 @@ function SkeletonRows({ columns, count }: { columns: Column<unknown>[]; count: n
               className={cn('px-3 py-2', col.shrink && 'whitespace-nowrap')}
               style={colStyle(col)}
             >
-              <div className="h-4 animate-pulse rounded bg-[var(--theme-border-input)]" style={{ opacity: 0.5 }} />
+              <div
+                className="h-4 animate-pulse rounded bg-[var(--theme-border-input)]"
+                style={{ opacity: 0.5 }}
+              />
             </td>
           ))}
         </tr>
@@ -131,7 +135,7 @@ export function DataTable<T>({
                 className={cn(
                   'px-3 py-2 text-xs font-medium text-[var(--theme-text-secondary)]',
                   alignClass(col.align),
-                  col.shrink && 'whitespace-nowrap'
+                  col.shrink && 'whitespace-nowrap',
                 )}
                 style={colStyle(col)}
               >
@@ -163,7 +167,7 @@ export function DataTable<T>({
                     ? tint('green')
                     : keyboardNav && highlightedIndex === i
                       ? 'bg-[var(--theme-bg-hover)] ring-1 ring-inset ring-[var(--theme-border-input)]'
-                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
+                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                 )}
                 onClick={() => onSelect(i)}
               >
@@ -174,7 +178,7 @@ export function DataTable<T>({
                       'px-3 py-2 overflow-hidden',
                       alignClass(col.align),
                       col.shrink && 'whitespace-nowrap',
-                      isFlex(col) && 'max-w-0'
+                      isFlex(col) && 'max-w-0',
                     )}
                     style={colStyle(col)}
                   >

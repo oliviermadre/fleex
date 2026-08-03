@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPatch } from '../../../core/api.ts';
+import { ok, die, present } from '../../../core/colors.ts';
 import { resolveSession, type Session } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -15,11 +16,12 @@ const def: CommandDef = {
     const displayName = name?.trim();
     if (!displayName) die('New session name cannot be empty.');
     const session = await resolveSession(idArg);
-    const updated = await apiPatch<Session>(
-      `${apiBase()}/api/sessions/${session.id}/rename`,
-      { displayName },
+    const updated = await apiPatch<Session>(`${apiBase()}/api/sessions/${session.id}/rename`, {
+      displayName,
+    });
+    present(updated ?? { ...session, displayName }, () =>
+      ok(`Renamed session ${session.id.slice(0, 8)} to "${displayName}"`),
     );
-    present(updated ?? { ...session, displayName }, () => ok(`Renamed session ${session.id.slice(0, 8)} to "${displayName}"`));
   },
 };
 

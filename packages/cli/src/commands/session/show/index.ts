@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { c, present } from '../../../core/colors.ts';
 import { resolveSession } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -19,7 +20,9 @@ const def: CommandDef = {
       process.stdout.write(`  ${c.bold('Type:')}       ${s.type}\n`);
       process.stdout.write(`  ${c.bold('Status:')}     ${s.status}\n`);
       process.stdout.write(`  ${c.bold('Cwd:')}        ${s.cwd}\n`);
-      process.stdout.write(`  ${c.bold('Repo:')}       ${s.repositoryOrg ?? '-'}/${s.repositoryName ?? '-'}\n`);
+      process.stdout.write(
+        `  ${c.bold('Repo:')}       ${s.repositoryOrg ?? '-'}/${s.repositoryName ?? '-'}\n`,
+      );
       process.stdout.write(`  ${c.bold('Branch:')}     ${s.worktreeBranch ?? '-'}\n`);
       process.stdout.write(`  ${c.bold('Created:')}    ${s.createdAt ?? '-'}\n`);
       process.stdout.write(`  ${c.bold('UUID:')}       ${c.dim(s.id)}\n`);

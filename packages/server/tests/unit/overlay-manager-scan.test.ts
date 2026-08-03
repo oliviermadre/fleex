@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
+
 import type { GitRemoteInfo } from '@fleex/shared';
+
 import { OverlayManager } from '../../src/application/services/overlay-manager.js';
 import { RepoPathResolver } from '../../src/domain/services/repo-path-resolver.js';
-import type { ExecFn } from '../../src/infrastructure/host/types.js';
 import { FakeHostFs, FakeConfigPort, FakeLoggerPort, FakeGitPort } from '../helpers/fakes.js';
+
+import type { ExecFn } from '../../src/infrastructure/host/types.js';
 
 const BASE = '/base';
 const WORKSPACE_ROOT = '/base/workspaces/76d062-modif-proxy-sync-overlay';
@@ -47,7 +50,10 @@ function gitInfo(org: string, name: string): GitRemoteInfo {
   };
 }
 
-function makeManager(execFn: ExecFn, git: FakeGitPort): { mgr: OverlayManager; hostFs: FakeHostFs } {
+function makeManager(
+  execFn: ExecFn,
+  git: FakeGitPort,
+): { mgr: OverlayManager; hostFs: FakeHostFs } {
   const hostFs = new FakeHostFs();
   const mgr = new OverlayManager(
     hostFs,
@@ -170,9 +176,7 @@ describe('OverlayManager.scanWorkspace — directory-walking discovery', () => {
     const { execFn, statusCwds } = makeExecFn({});
     const git = new FakeGitPort(); // no info registered → getInfo throws
     const { mgr, hostFs } = makeManager(execFn, git);
-    hostFs.addDirEntries(WORKSPACE_ROOT, [
-      { name: 'mystery', isFile: false, isDirectory: true },
-    ]);
+    hostFs.addDirEntries(WORKSPACE_ROOT, [{ name: 'mystery', isFile: false, isDirectory: true }]);
     hostFs.addExistingPath(`${WORKSPACE_ROOT}/mystery`);
     hostFs.addExistingPath(`${WORKSPACE_ROOT}/mystery/.git`);
 

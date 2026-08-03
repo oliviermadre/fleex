@@ -1,5 +1,5 @@
-import { useToastStore, type ToastType } from '../../stores/toastStore';
 import { cn } from '../../lib/cn';
+import { useToastStore, type ToastType } from '../../stores/toastStore';
 
 /**
  * Left-border accent per type (theme-aware tint solids, literal for the
@@ -42,7 +42,15 @@ export function ToastContainer() {
             className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
             onClick={() => removeToast(toast.id)}
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
               <line x1="4" y1="4" x2="12" y2="12" />
               <line x1="12" y1="4" x2="4" y2="12" />
             </svg>

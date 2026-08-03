@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, info } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
+import { c, info } from '../../../core/colors.ts';
 import { epicStatusColor, timeframeOrder } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface Epic {
   id: string;
@@ -11,7 +12,9 @@ interface Epic {
   groupStatus?: string;
 }
 
-interface ListOptions { board?: string }
+interface ListOptions {
+  board?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -23,7 +26,9 @@ const def: CommandDef = {
   },
   action: async (opts: ListOptions) => {
     const base = apiBase();
-    const url = opts.board ? `${base}/api/epics?boardId=${encodeURIComponent(opts.board)}` : `${base}/api/epics`;
+    const url = opts.board
+      ? `${base}/api/epics?boardId=${encodeURIComponent(opts.board)}`
+      : `${base}/api/epics`;
     const epics = await apiGet<Epic[]>(url);
     if (epics.length === 0) {
       info('No epics found.');
@@ -38,7 +43,9 @@ const def: CommandDef = {
 
     process.stdout.write('\n');
     process.stdout.write(`  ${c.bold('ID         Status      Timeframe   Emoji  Name')}\n`);
-    process.stdout.write('  ──────────  ───────────  ───────────  ──────  ─────────────────────────────\n');
+    process.stdout.write(
+      '  ──────────  ───────────  ───────────  ──────  ─────────────────────────────\n',
+    );
     for (const e of epics) {
       const id = e.id.slice(0, 8);
       const gstatus = e.groupStatus ?? 'active';

@@ -37,7 +37,9 @@ describe('resolveEpic', () => {
   });
 
   it('exits on an ambiguous prefix instead of guessing the first match', async () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     // Both alpha epics share the "aaaaaaaa" prefix — mutating either would be wrong.
     await expect(resolveEpic('aaaaaaaa')).rejects.toThrow('exit');
@@ -46,7 +48,9 @@ describe('resolveEpic', () => {
   });
 
   it('exits when nothing matches', async () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     await expect(resolveEpic('zzzz')).rejects.toThrow('exit');
     exit.mockRestore();

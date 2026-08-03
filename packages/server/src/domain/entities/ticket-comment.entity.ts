@@ -104,10 +104,20 @@ export class TicketCommentEntity {
       const name = match[1]!;
       // Skip if this is an @agent:xxx, @panel:xxx, @skill:xxx, or @workflow:xxx mention (already captured)
       const prefix = body.substring(Math.max(0, match.index! - 10), match.index!);
-      if (prefix.endsWith('@agent:') || prefix.endsWith('@panel:') || prefix.endsWith('@skill:') || prefix.endsWith('@workflow:')) continue;
+      if (
+        prefix.endsWith('@agent:') ||
+        prefix.endsWith('@panel:') ||
+        prefix.endsWith('@skill:') ||
+        prefix.endsWith('@workflow:')
+      )
+        continue;
       // Skip ticket references: @ticket:378 / @ticket:<uuid> are links, not mentions
       // (even if a user happens to be named "ticket").
-      if (name.toLowerCase() === 'ticket' && TICKET_REFERENCE_SUFFIX.test(body.substring(match.index! + match[0].length))) continue;
+      if (
+        name.toLowerCase() === 'ticket' &&
+        TICKET_REFERENCE_SUFFIX.test(body.substring(match.index! + match[0].length))
+      )
+        continue;
       // Skip struck-through mentions: ~~@name~~
       const prefix2 = match.index! >= 2 ? body.substring(match.index! - 2, match.index!) : '';
       if (prefix2 === '~~') continue;

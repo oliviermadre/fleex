@@ -18,6 +18,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+
 import { cn } from '../../lib/cn';
 
 // ── Shared palette ────────────────────────────────────────────────────────
@@ -116,7 +117,9 @@ export function ChartCard({
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">{title}</h3>
-          {subtitle && <p className="mt-0.5 text-[11px] text-[var(--theme-text-muted)]">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-0.5 text-[11px] text-[var(--theme-text-muted)]">{subtitle}</p>
+          )}
         </div>
         {action}
       </div>
@@ -165,13 +168,18 @@ export function StatTooltip({
   return (
     <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-glass-surface-dense)] px-3 py-2 shadow-xl backdrop-blur-md">
       {label != null && (
-        <div className="mb-1.5 text-[11px] font-semibold text-[var(--theme-text-primary)]">{label}</div>
+        <div className="mb-1.5 text-[11px] font-semibold text-[var(--theme-text-primary)]">
+          {label}
+        </div>
       )}
       <div className="space-y-1">
         {rows.map((p, i) => (
           <div key={i} className="flex items-center justify-between gap-4 text-[11px]">
             <span className="flex items-center gap-1.5 text-[var(--theme-text-secondary)]">
-              <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: p.color }} />
+              <span
+                className="inline-block h-2 w-2 rounded-sm"
+                style={{ backgroundColor: p.color }}
+              />
               {p.name}
             </span>
             <span className="font-medium tabular-nums text-[var(--theme-text-primary)]">
@@ -182,7 +190,9 @@ export function StatTooltip({
         {rows.length > 1 && (
           <div className="mt-1 flex items-center justify-between gap-4 border-t border-[var(--theme-border)] pt-1 text-[11px]">
             <span className="text-[var(--theme-text-muted)]">Total</span>
-            <span className="font-semibold tabular-nums text-[var(--theme-text-primary)]">{fmt(total)}</span>
+            <span className="font-semibold tabular-nums text-[var(--theme-text-primary)]">
+              {fmt(total)}
+            </span>
           </div>
         )}
       </div>
@@ -224,11 +234,16 @@ export function TimeAreaChart({
   format?: (v: number) => string;
 }) {
   const gid = useId().replace(/:/g, '');
-  if (data.length === 0 || series.length === 0) return <EmptyChart message="No data for this period" />;
+  if (data.length === 0 || series.length === 0)
+    return <EmptyChart message="No data for this period" />;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }} stackOffset={expand ? 'expand' : undefined}>
+      <AreaChart
+        data={data}
+        margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+        stackOffset={expand ? 'expand' : undefined}
+      >
         <defs>
           {series.map((s) => (
             <linearGradient key={s.key} id={`${gid}-${s.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -245,9 +260,14 @@ export function TimeAreaChart({
           axisLine={false}
           width={44}
           domain={expand ? [0, 1] : undefined}
-          tickFormatter={(v) => (expand ? `${Math.round(Number(v) * 100)}%` : formatCompact(Number(v)))}
+          tickFormatter={(v) =>
+            expand ? `${Math.round(Number(v) * 100)}%` : formatCompact(Number(v))
+          }
         />
-        <Tooltip content={<StatTooltip format={format} hideZero />} cursor={{ stroke: GRID_STROKE }} />
+        <Tooltip
+          content={<StatTooltip format={format} hideZero />}
+          cursor={{ stroke: GRID_STROKE }}
+        />
         {series.map((s) => (
           <Area
             key={s.key}
@@ -295,23 +315,44 @@ export function TimeLineChart({
   legend?: boolean;
   meanLines?: MeanLine[];
 }) {
-  if (data.length === 0 || series.length === 0) return <EmptyChart message="No data for this period" />;
+  if (data.length === 0 || series.length === 0)
+    return <EmptyChart message="No data for this period" />;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
         <XAxis dataKey={xKey} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
-        <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => (format ? format(Number(v)) : formatCompact(Number(v)))} />
-        <Tooltip content={<StatTooltip format={format} hideZero />} cursor={{ stroke: GRID_STROKE }} />
-        {legend && <Legend verticalAlign="top" align="right" iconType="plainline" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />}
+        <YAxis
+          tick={AXIS_TICK}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          tickFormatter={(v) => (format ? format(Number(v)) : formatCompact(Number(v)))}
+        />
+        <Tooltip
+          content={<StatTooltip format={format} hideZero />}
+          cursor={{ stroke: GRID_STROKE }}
+        />
+        {legend && (
+          <Legend
+            verticalAlign="top"
+            align="right"
+            iconType="plainline"
+            wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+          />
+        )}
         {meanLines?.map((m, i) => (
           <ReferenceLine
             key={`mean-${i}`}
             y={m.value}
             stroke={m.color}
             strokeDasharray="5 4"
-            label={m.label ? { value: m.label, position: 'insideTopLeft', fontSize: 9, fill: m.color } : undefined}
+            label={
+              m.label
+                ? { value: m.label, position: 'insideTopLeft', fontSize: 9, fill: m.color }
+                : undefined
+            }
           />
         ))}
         {series.map((s) => (
@@ -352,11 +393,16 @@ export function TimeBarChart({
   percent?: boolean;
   format?: (v: number) => string;
 }) {
-  if (data.length === 0 || series.length === 0) return <EmptyChart message="No data for this period" />;
+  if (data.length === 0 || series.length === 0)
+    return <EmptyChart message="No data for this period" />;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }} stackOffset={percent ? 'expand' : undefined}>
+      <BarChart
+        data={data}
+        margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+        stackOffset={percent ? 'expand' : undefined}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
         <XAxis dataKey={xKey} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
         <YAxis
@@ -365,9 +411,18 @@ export function TimeBarChart({
           axisLine={false}
           width={44}
           domain={percent ? [0, 1] : undefined}
-          tickFormatter={(v) => (percent ? `${Math.round(Number(v) * 100)}%` : format ? format(Number(v)) : formatCompact(Number(v)))}
+          tickFormatter={(v) =>
+            percent
+              ? `${Math.round(Number(v) * 100)}%`
+              : format
+                ? format(Number(v))
+                : formatCompact(Number(v))
+          }
         />
-        <Tooltip content={<StatTooltip format={format} hideZero />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
+        <Tooltip
+          content={<StatTooltip format={format} hideZero />}
+          cursor={{ fill: 'var(--theme-bg-hover)' }}
+        />
         {series.map((s, i) => (
           <Bar
             key={s.key}
@@ -375,7 +430,9 @@ export function TimeBarChart({
             name={s.label}
             stackId={stacked ? 'stack' : undefined}
             fill={s.color}
-            radius={stacked ? (i === series.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]) : [3, 3, 0, 0]}
+            radius={
+              stacked ? (i === series.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]) : [3, 3, 0, 0]
+            }
             maxBarSize={48}
             isAnimationActive={false}
           />
@@ -407,10 +464,24 @@ export function DeliveryComposedChart({
       <ComposedChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
         <XAxis dataKey={xKey} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
-        <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => formatCompact(Number(v))} />
+        <YAxis
+          tick={AXIS_TICK}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          tickFormatter={(v) => formatCompact(Number(v))}
+        />
         <Tooltip content={<StatTooltip hideZero />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
         {bars.map((s) => (
-          <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+          <Bar
+            key={s.key}
+            dataKey={s.key}
+            name={s.label}
+            fill={s.color}
+            radius={[3, 3, 0, 0]}
+            maxBarSize={36}
+            isAnimationActive={false}
+          />
         ))}
         <Line
           type="monotone"
@@ -476,8 +547,16 @@ export function DonutChart({
       </ResponsiveContainer>
       {(centerValue || centerLabel) && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          {centerValue && <span className="text-lg font-bold tabular-nums text-[var(--theme-text-primary)]">{centerValue}</span>}
-          {centerLabel && <span className="text-[10px] uppercase tracking-wide text-[var(--theme-text-muted)]">{centerLabel}</span>}
+          {centerValue && (
+            <span className="text-lg font-bold tabular-nums text-[var(--theme-text-primary)]">
+              {centerValue}
+            </span>
+          )}
+          {centerLabel && (
+            <span className="text-[10px] uppercase tracking-wide text-[var(--theme-text-muted)]">
+              {centerLabel}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -504,9 +583,25 @@ export function HBarChart({
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={rows} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} horizontal={false} />
-        <XAxis type="number" tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v) => (format ? format(Number(v)) : formatCompact(Number(v)))} />
-        <YAxis type="category" dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={false} width={110} />
-        <Tooltip content={<StatTooltip format={format} />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
+        <XAxis
+          type="number"
+          tick={AXIS_TICK}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(v) => (format ? format(Number(v)) : formatCompact(Number(v)))}
+        />
+        <YAxis
+          type="category"
+          dataKey="name"
+          tick={AXIS_TICK}
+          tickLine={false}
+          axisLine={false}
+          width={110}
+        />
+        <Tooltip
+          content={<StatTooltip format={format} />}
+          cursor={{ fill: 'var(--theme-bg-hover)' }}
+        />
         <Bar dataKey="value" radius={[0, 3, 3, 0]} maxBarSize={26} isAnimationActive={false}>
           {rows.map((r, i) => (
             <Cell key={i} fill={r.color ?? color ?? colorAt(i)} />
@@ -542,7 +637,10 @@ export function LegendChips({
             )}
             style={{ borderColor: `${s.color}55`, backgroundColor: `${s.color}1f`, color: s.color }}
           >
-            <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: s.color }} />
+            <span
+              className="inline-block h-2 w-2 rounded-sm"
+              style={{ backgroundColor: s.color }}
+            />
             {s.label}
           </button>
         );
@@ -577,7 +675,15 @@ export function Sparkline({
         </defs>
         {/* Keep a flat baseline visible even when every value is 0. */}
         <YAxis hide domain={[0, (max: number) => (max === 0 ? 1 : max)]} />
-        <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#spark-${gid})`} dot={false} isAnimationActive={false} />
+        <Area
+          type="monotone"
+          dataKey="v"
+          stroke={color}
+          strokeWidth={1.5}
+          fill={`url(#spark-${gid})`}
+          dot={false}
+          isAnimationActive={false}
+        />
       </AreaChart>
     </ResponsiveContainer>
   );

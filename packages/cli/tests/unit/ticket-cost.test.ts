@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { costTier, formatCostUsd } from '../../src/commands/ticket/_shared.ts';
 
 // The CLI cost display (#404) must stay faithful to the Kanban card badge:

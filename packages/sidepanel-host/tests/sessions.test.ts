@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
 import {
   SessionStore,
   messageCount,
@@ -55,7 +57,11 @@ describe('SessionStore', () => {
 
   it('counts user + assistant transcript items as messages (not tool lines)', () => {
     const s: SessionData = {
-      id: 'x', title: 't', status: 'idle', createdAt: '2020', messages: [],
+      id: 'x',
+      title: 't',
+      status: 'idle',
+      createdAt: '2020',
+      messages: [],
       transcript: [
         { role: 'user', text: 'hi' },
         { tool: { name: 'fleex_ticket_list', argv: [], status: 'ok' } },
@@ -148,12 +154,20 @@ describe('SessionStore auto-approval', () => {
 
   it('hydrates a session persisted before the field existed', () => {
     const legacy: SessionData = {
-      id: 'legacy', title: 'Old', status: 'idle', createdAt: '2020', messages: [], transcript: [],
+      id: 'legacy',
+      title: 'Old',
+      status: 'idle',
+      createdAt: '2020',
+      messages: [],
+      transcript: [],
     };
     fs.writeFileSync(path.join(dir, 'legacy.json'), JSON.stringify(legacy));
     const store = new SessionStore(dir);
     expect(store.get('legacy')!.autoApprove).toEqual({ all: false, tools: [] });
-    expect(store.list().find((x) => x.id === 'legacy')!.autoApprove).toEqual({ all: false, tools: [] });
+    expect(store.list().find((x) => x.id === 'legacy')!.autoApprove).toEqual({
+      all: false,
+      tools: [],
+    });
   });
 });
 

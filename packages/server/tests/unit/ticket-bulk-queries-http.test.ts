@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
+
 import Fastify, { type FastifyInstance } from 'fastify';
-import { registerTicketBulkQueryRoutes } from '../../src/infrastructure/http/ticket-bulk-queries.routes.js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { fleexServerFactory } from '../../src/infrastructure/http/server-factory.js';
+import { registerTicketBulkQueryRoutes } from '../../src/infrastructure/http/ticket-bulk-queries.routes.js';
 
 // ---------------------------------------------------------------------------
 // Regression test for #509 — "Request Header Fields Too Large" on Cockpit/Kanban.
@@ -25,7 +27,6 @@ function makeDeps() {
     agentEventStore: { getAllExecutions: async () => [] },
     mentionStore: { getAll: async () => [] },
     workflowRunStore: { getByStatus: async () => [] },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
 
@@ -43,7 +44,9 @@ describe('bulk ticket endpoints over real HTTP (#509)', () => {
     base = `http://127.0.0.1:${addr.port}`;
   });
 
-  afterAll(async () => { await app.close(); });
+  afterAll(async () => {
+    await app.close();
+  });
 
   it('POST /api/tickets/agent-activity handles 1000 ticket IDs', async () => {
     const res = await fetch(`${base}/api/tickets/agent-activity`, {

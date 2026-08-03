@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
-import type { BareCloneManager } from '../services/bare-clone-manager.js';
+
 import type { CreateWorktreeUseCase } from './create-worktree.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import type { HostFs } from '../../infrastructure/host/types.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
-import type { HostFs } from '../../infrastructure/host/types.js';
+import type { BareCloneManager } from '../services/bare-clone-manager.js';
 
 export interface ReconcileResult {
   path: string | null;
@@ -18,7 +19,7 @@ interface CacheEntry {
 }
 
 const SUCCESS_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const FAILURE_TTL_MS = 30 * 1000;      // 30 seconds
+const FAILURE_TTL_MS = 30 * 1000; // 30 seconds
 
 export class ReconcileWorktreeUseCase {
   private readonly cache = new Map<string, CacheEntry>();
@@ -41,9 +42,10 @@ export class ReconcileWorktreeUseCase {
     const cacheKey = `${ws.workspaceId}/${repoName}:${branch}`;
     const cached = this.cache.get(cacheKey);
     if (cached) {
-      const ttl = cached.result.status === 'exists' || cached.result.status === 'created'
-        ? SUCCESS_TTL_MS
-        : FAILURE_TTL_MS;
+      const ttl =
+        cached.result.status === 'exists' || cached.result.status === 'created'
+          ? SUCCESS_TTL_MS
+          : FAILURE_TTL_MS;
       if (Date.now() - cached.checkedAt < ttl) {
         return cached.result;
       }
@@ -105,7 +107,8 @@ export class ReconcileWorktreeUseCase {
     } catch (err) {
       // Branch might not exist remotely — try creating a new local branch from origin/main
       this.logger.debug('Failed to checkout existing branch, trying new branch from origin/main', {
-        branch, error: String(err),
+        branch,
+        error: String(err),
       });
       try {
         const existingPath = await this.createWorktree.execute(org, repoName, wtPath, {
@@ -114,11 +117,19 @@ export class ReconcileWorktreeUseCase {
           ...prOpt,
         });
         const finalPath = existingPath ?? wtPath;
-        this.logger.info('Reconciled worktree (new branch from origin/main)', { org, repoName, branch, path: finalPath });
+        this.logger.info('Reconciled worktree (new branch from origin/main)', {
+          org,
+          repoName,
+          branch,
+          path: finalPath,
+        });
         return { path: finalPath, status: 'created' };
       } catch (retryErr) {
         this.logger.warn('Failed to reconcile worktree', {
-          org, repoName, branch, error: String(retryErr),
+          org,
+          repoName,
+          branch,
+          error: String(retryErr),
         });
         return { path: null, status: 'failed' };
       }
@@ -136,7 +147,8 @@ export class ReconcileWorktreeUseCase {
       }
     } catch (err) {
       this.logger.warn('Failed to write workspace manifest during reconcile', {
-        workspaceId: ws.workspaceId, error: String(err),
+        workspaceId: ws.workspaceId,
+        error: String(err),
       });
     }
   }

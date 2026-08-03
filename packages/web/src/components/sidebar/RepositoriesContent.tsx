@@ -1,16 +1,19 @@
 import { useCallback, useMemo, useState } from 'react';
+
 import type { RepositorySummary } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
+import { tintText } from '../../lib/tints';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { RepositoriesSidebarHeader } from './RepositoriesSidebarHeader';
-import { OrgGroup } from './OrgGroup';
-import { RepoItem } from './RepoItem';
+import { AddRepositoriesModal } from '../repositories/AddRepositoriesModal';
 import { Button } from '../ui/Button';
 import { ConfirmModal } from '../ui/ConfirmModal';
-import { AddRepositoriesModal } from '../repositories/AddRepositoriesModal';
-import { cn } from '../../lib/cn';
-import { tintText } from '../../lib/tints';
+
+import { OrgGroup } from './OrgGroup';
+import { RepoItem } from './RepoItem';
+import { RepositoriesSidebarHeader } from './RepositoriesSidebarHeader';
 
 type Filter = 'all' | 'active' | string;
 
@@ -78,7 +81,9 @@ export function RepositoriesContent() {
     if (!showActiveSection) return [];
     return allSummaries
       .filter((summary) => activeKeys.has(`${summary.org}/${summary.name}`))
-      .sort((a, b) => `${a.org}/${a.name}`.toLowerCase().localeCompare(`${b.org}/${b.name}`.toLowerCase()));
+      .sort((a, b) =>
+        `${a.org}/${a.name}`.toLowerCase().localeCompare(`${b.org}/${b.name}`.toLowerCase()),
+      );
   }, [allSummaries, activeKeys, showActiveSection]);
 
   const handleRemove = useCallback((key: string) => setPendingRemove(key), []);
@@ -117,21 +122,40 @@ export function RepositoriesContent() {
         {allSummaries.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
             <div className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--theme-border)] text-[var(--theme-text-faint)]">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              >
                 <line x1="8" y1="3" x2="8" y2="13" />
                 <line x1="3" y1="8" x2="13" y2="8" />
               </svg>
             </div>
             <p className="text-xs text-[var(--theme-text-muted)]">No repositories tracked yet</p>
-            <Button variant="primary" size="sm" onClick={() => setModalOpen(true)}>+ Add repositories</Button>
+            <Button variant="primary" size="sm" onClick={() => setModalOpen(true)}>
+              + Add repositories
+            </Button>
           </div>
         ) : orgGroups.length === 0 ? (
-          <p className="px-4 py-8 text-center text-xs text-[var(--theme-text-muted)]">No repos match</p>
+          <p className="px-4 py-8 text-center text-xs text-[var(--theme-text-muted)]">
+            No repos match
+          </p>
         ) : (
           <>
             {showActiveSection && activeRepos.length > 0 && (
               <>
-                <div className={cn('px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider', tintText('yellow'))}>Active</div>
+                <div
+                  className={cn(
+                    'px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider',
+                    tintText('yellow'),
+                  )}
+                >
+                  Active
+                </div>
                 {activeRepos.map((repo) => (
                   <RepoItem
                     key={`active-${repo.org}/${repo.name}`}
@@ -151,7 +175,12 @@ export function RepositoriesContent() {
         open={pendingRemove !== null}
         busy={removing}
         title="Stop tracking repository"
-        message={<span>Remove <span className="font-mono">{pendingRemove}</span> from tracked repositories? Its local bare clone will be cleaned up.</span>}
+        message={
+          <span>
+            Remove <span className="font-mono">{pendingRemove}</span> from tracked repositories? Its
+            local bare clone will be cleaned up.
+          </span>
+        }
         confirmLabel="Remove"
         onCancel={() => setPendingRemove(null)}
         onConfirm={async () => {
@@ -171,7 +200,15 @@ export function RepositoriesContent() {
   );
 }
 
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       onClick={onClick}
@@ -189,7 +226,16 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 
 function SearchIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="7" cy="7" r="5" />
       <path d="m14 14-3.5-3.5" />
     </svg>

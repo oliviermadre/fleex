@@ -14,7 +14,9 @@ export function filterPulls(
   if (segment === 'open') {
     base = [...open].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   } else if (segment === 'merged') {
-    base = [...merged].sort((a, b) => (b.mergedAt ?? b.updatedAt).localeCompare(a.mergedAt ?? a.updatedAt));
+    base = [...merged].sort((a, b) =>
+      (b.mergedAt ?? b.updatedAt).localeCompare(a.mergedAt ?? a.updatedAt),
+    );
   } else {
     base = [...open, ...merged].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }

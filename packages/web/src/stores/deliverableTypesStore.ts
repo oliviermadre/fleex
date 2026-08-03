@@ -1,6 +1,13 @@
 import { create } from 'zustand';
+
 import type { DeliverableTypeDef, DeliverableRenderer, DeliverableTypeColor } from '@fleex/shared';
-import { DEFAULT_DELIVERABLE_TYPES, rendererForType, labelForType, colorForType } from '@fleex/shared';
+import {
+  DEFAULT_DELIVERABLE_TYPES,
+  rendererForType,
+  labelForType,
+  colorForType,
+} from '@fleex/shared';
+
 import { themedTypeColor, type ThemedTypeColor } from '../lib/tints';
 import * as api from '../services/api';
 
@@ -10,8 +17,22 @@ interface DeliverableTypesState {
   loaded: boolean;
 
   load: () => Promise<void>;
-  create: (input: { id: string; label: string; description?: string; renderer: DeliverableRenderer; color?: DeliverableTypeColor | null }) => Promise<void>;
-  update: (id: string, patch: { label?: string; description?: string; renderer?: DeliverableRenderer; color?: DeliverableTypeColor | null }) => Promise<void>;
+  create: (input: {
+    id: string;
+    label: string;
+    description?: string;
+    renderer: DeliverableRenderer;
+    color?: DeliverableTypeColor | null;
+  }) => Promise<void>;
+  update: (
+    id: string,
+    patch: {
+      label?: string;
+      description?: string;
+      renderer?: DeliverableRenderer;
+      color?: DeliverableTypeColor | null;
+    },
+  ) => Promise<void>;
   rename: (id: string, newId: string) => Promise<number>;
   remove: (id: string) => Promise<void>;
   reassign: (from: string, to: string) => Promise<number>;

@@ -1,23 +1,30 @@
-import { describe, it, expect, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+
+import { describe, it, expect, vi } from 'vitest';
+
 import { GetStatisticsUseCase } from '../../src/application/use-cases/get-statistics.js';
-import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import { BoardEntity } from '../../src/domain/entities/board.entity.js';
-import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
-import type { CommentStorePort } from '../../src/application/ports/comment-store.port.js';
-import type { MentionStorePort } from '../../src/application/ports/mention-store.port.js';
-import type { DeliverableStorePort } from '../../src/application/ports/deliverable-store.port.js';
+import { DomainEventLogEntity } from '../../src/domain/entities/domain-event-log.entity.js';
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+
 import type { AgentEventStorePort } from '../../src/application/ports/agent-event-store.port.js';
+import type { CommentStorePort } from '../../src/application/ports/comment-store.port.js';
+import type { DeliverableStorePort } from '../../src/application/ports/deliverable-store.port.js';
+import type { DomainEventLogStorePort } from '../../src/application/ports/domain-event-log-store.port.js';
+import type { MentionStorePort } from '../../src/application/ports/mention-store.port.js';
 import type { PersonaStorePort } from '../../src/application/ports/persona-store.port.js';
 import type { SessionStorePort } from '../../src/application/ports/session-store.port.js';
-import type { DomainEventLogStorePort } from '../../src/application/ports/domain-event-log-store.port.js';
-import { DomainEventLogEntity } from '../../src/domain/entities/domain-event-log.entity.js';
+import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
 
 /**
  * Builds a done TicketEntity on a given board whose status transitioned at
  * `doneAt`. `statusChangedAt` is the signal the chart buckets tickets by.
  */
-function doneTicket(boardId: string, doneAt: string, status: 'done' | 'doing' = 'done'): TicketEntity {
+function doneTicket(
+  boardId: string,
+  doneAt: string,
+  status: 'done' | 'doing' = 'done',
+): TicketEntity {
   const ticket = TicketEntity.create({
     id: randomUUID(),
     boardId,
@@ -64,7 +71,11 @@ describe('GetStatisticsUseCase — ticketsDoneByBoard', () => {
     const result = await makeUseCase(tickets, [backend, frontend]).execute(params);
 
     // 3 daily buckets: 06-01, 06-02, 06-03
-    expect(result.timeSeries.map((b) => b.date)).toEqual(['2026-06-01', '2026-06-02', '2026-06-03']);
+    expect(result.timeSeries.map((b) => b.date)).toEqual([
+      '2026-06-01',
+      '2026-06-02',
+      '2026-06-03',
+    ]);
     expect(result.timeSeries[0]!.ticketsDoneByBoard).toEqual({ Backend: 2 });
     expect(result.timeSeries[1]!.ticketsDoneByBoard).toEqual({ Frontend: 1 });
     expect(result.timeSeries[2]!.ticketsDoneByBoard).toEqual({});
@@ -103,11 +114,34 @@ describe('GetStatisticsUseCase — costBySource', () => {
     const executions = {
       getAllExecutions: vi.fn().mockResolvedValue([
         // source absent → counts as sdk
-        { mentionId: 'm1', personaId: 'p1', startedAt: '2026-06-01T09:00:00Z', completedAt: '2026-06-01T09:05:00Z', status: 'completed', costUsd: 2 },
+        {
+          mentionId: 'm1',
+          personaId: 'p1',
+          startedAt: '2026-06-01T09:00:00Z',
+          completedAt: '2026-06-01T09:05:00Z',
+          status: 'completed',
+          costUsd: 2,
+        },
         // explicit sdk
-        { mentionId: 'm2', personaId: 'p1', startedAt: '2026-06-01T10:00:00Z', completedAt: '2026-06-01T10:05:00Z', status: 'completed', costUsd: 3, source: 'sdk' },
+        {
+          mentionId: 'm2',
+          personaId: 'p1',
+          startedAt: '2026-06-01T10:00:00Z',
+          completedAt: '2026-06-01T10:05:00Z',
+          status: 'completed',
+          costUsd: 3,
+          source: 'sdk',
+        },
         // manual CLI session
-        { mentionId: 'cli:abc', personaId: 'cli', startedAt: '2026-06-01T11:00:00Z', completedAt: '2026-06-01T11:30:00Z', status: 'completed', costUsd: 10, source: 'cli' },
+        {
+          mentionId: 'cli:abc',
+          personaId: 'cli',
+          startedAt: '2026-06-01T11:00:00Z',
+          completedAt: '2026-06-01T11:30:00Z',
+          status: 'completed',
+          costUsd: 10,
+          source: 'cli',
+        },
       ]),
     } as unknown as AgentEventStorePort;
     const empty = () => ({ getAll: vi.fn().mockResolvedValue([]) });
@@ -138,7 +172,11 @@ describe('GetStatisticsUseCase — costBySource', () => {
 
 // ── Extended flow metrics (lead time, iterations, usage trend) ──────────────
 
-function logEntry(eventType: string, payload: Record<string, unknown>, occurredAt: string): DomainEventLogEntity {
+function logEntry(
+  eventType: string,
+  payload: Record<string, unknown>,
+  occurredAt: string,
+): DomainEventLogEntity {
   return DomainEventLogEntity.create({
     id: randomUUID(),
     eventType,
@@ -161,8 +199,16 @@ describe('GetStatisticsUseCase — flow metrics', () => {
     const tid = ticket.id;
 
     const events = [
-      logEntry('ticket.moved', { ticketId: tid, fromStatus: 'todo', toStatus: 'doing' }, '2026-06-01T08:00:00Z'),
-      logEntry('ticket.moved', { ticketId: tid, fromStatus: 'doing', toStatus: 'done' }, '2026-06-02T08:00:00Z'),
+      logEntry(
+        'ticket.moved',
+        { ticketId: tid, fromStatus: 'todo', toStatus: 'doing' },
+        '2026-06-01T08:00:00Z',
+      ),
+      logEntry(
+        'ticket.moved',
+        { ticketId: tid, fromStatus: 'doing', toStatus: 'done' },
+        '2026-06-02T08:00:00Z',
+      ),
     ];
 
     // One workflow run for this ticket, started 06-01, completed an hour later.
@@ -193,19 +239,49 @@ describe('GetStatisticsUseCase — flow metrics', () => {
 
     const comments = {
       getAll: vi.fn().mockResolvedValue([
-        withItem(() => ({ id: 'c1', ticketId: tid, createdAt: '2026-06-01T10:00:00Z', authorType: 'user' })),
-        withItem(() => ({ id: 'c2', ticketId: tid, createdAt: '2026-06-01T11:00:00Z', authorType: 'agent' })),
+        withItem(() => ({
+          id: 'c1',
+          ticketId: tid,
+          createdAt: '2026-06-01T10:00:00Z',
+          authorType: 'user',
+        })),
+        withItem(() => ({
+          id: 'c2',
+          ticketId: tid,
+          createdAt: '2026-06-01T11:00:00Z',
+          authorType: 'agent',
+        })),
       ]),
     } as unknown as CommentStorePort;
     const mentions = {
       getAll: vi.fn().mockResolvedValue([
-        withItem(() => ({ id: 'm1', ticketId: tid, createdAt: '2026-06-01T09:30:00Z', status: 'resolved' })),
+        withItem(() => ({
+          id: 'm1',
+          ticketId: tid,
+          createdAt: '2026-06-01T09:30:00Z',
+          status: 'resolved',
+        })),
       ]),
     } as unknown as MentionStorePort;
     const executions = {
       getAllExecutions: vi.fn().mockResolvedValue([
-        { mentionId: 'm1', personaId: 'p1', startedAt: '2026-06-01T09:30:00Z', completedAt: '2026-06-01T09:35:00Z', status: 'completed', costUsd: 0.5, inputTokens: 100, outputTokens: 50 },
-        { mentionId: 'skill:s1', personaId: 'p1', startedAt: '2026-06-01T12:00:00Z', completedAt: null, status: 'completed' },
+        {
+          mentionId: 'm1',
+          personaId: 'p1',
+          startedAt: '2026-06-01T09:30:00Z',
+          completedAt: '2026-06-01T09:35:00Z',
+          status: 'completed',
+          costUsd: 0.5,
+          inputTokens: 100,
+          outputTokens: 50,
+        },
+        {
+          mentionId: 'skill:s1',
+          personaId: 'p1',
+          startedAt: '2026-06-01T12:00:00Z',
+          completedAt: null,
+          status: 'completed',
+        },
       ]),
     } as unknown as AgentEventStorePort;
 
@@ -238,7 +314,13 @@ describe('GetStatisticsUseCase — flow metrics', () => {
     // Iterations: 2 comments + 1 mention + 1 workflow run = 4.
     expect(result.ticketIterations).toHaveLength(1);
     const it0 = result.ticketIterations[0]!;
-    expect(it0).toMatchObject({ comments: 2, mentions: 1, workflowRuns: 1, agentRuns: 1, total: 4 });
+    expect(it0).toMatchObject({
+      comments: 2,
+      mentions: 1,
+      workflowRuns: 1,
+      agentRuns: 1,
+      total: 4,
+    });
 
     // Usage trend: 1 agent run + 1 skill run on 06-01, 1 workflow on 06-01.
     const day1 = result.usageByType[0]!;
