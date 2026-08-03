@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type { TicketDeliverable } from '@fleex/shared';
 import { documentsService } from '../services/documentsService';
+import { createLogger } from '../lib/logger';
+
+const log = createLogger('stores/documentsStore');
 
 interface DocumentsState {
   deliverables: TicketDeliverable[];
@@ -33,7 +36,7 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
       const deliverables = await documentsService.getAll();
       set({ deliverables, loading: false });
     } catch (err) {
-      console.error('Failed to load documents:', err);
+      log.error('Failed to load documents', { err });
       set({ loading: false, error: 'Failed to load documents' });
     }
   },

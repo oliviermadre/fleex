@@ -7,6 +7,9 @@ import type {
   PersonaWsMessage,
 } from '@fleex/shared';
 import * as api from '../services/api';
+import { createLogger } from '../lib/logger';
+
+const log = createLogger('stores/agentPersonaStore');
 
 type PersonaTab = 'config' | 'soul' | 'identity' | 'memory' | 'events';
 
@@ -41,7 +44,7 @@ export const useAgentPersonaStore = create<AgentPersonaState>((set, get) => ({
       const personas = await api.fetchPersonas();
       set({ personas, loaded: true });
     } catch (err) {
-      console.error('Failed to load personas:', err);
+      log.error('Failed to load personas', { err });
     }
   },
 

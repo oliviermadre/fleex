@@ -6,6 +6,9 @@ import type {
   SkillWsMessage,
 } from '@fleex/shared';
 import * as api from '../services/api';
+import { createLogger } from '../lib/logger';
+
+const log = createLogger('stores/skillStore');
 
 interface SkillState {
   skills: Skill[];
@@ -31,7 +34,7 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       const skills = await api.fetchSkills();
       set({ skills, loaded: true });
     } catch (err) {
-      console.error('Failed to load skills:', err);
+      log.error('Failed to load skills', { err });
     }
   },
 

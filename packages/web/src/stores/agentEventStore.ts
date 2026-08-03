@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import type { AgentExecution, AgentEvent } from '@fleex/shared';
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
+import { createLogger } from '../lib/logger';
+
+const log = createLogger('stores/agentEventStore');
 
 const subscribedExecutionIds = new Set<string>();
 const subscribedTicketIds = new Set<string>();
@@ -41,7 +44,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
         executionsByTicket: { ...state.executionsByTicket, [ticketId]: executions },
       }));
     } catch (err) {
-      console.error('Failed to load executions for ticket:', err);
+      log.error('Failed to load executions for ticket', { err });
     }
   },
 
@@ -52,7 +55,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
         executionsByPersona: { ...state.executionsByPersona, [personaId]: executions },
       }));
     } catch (err) {
-      console.error('Failed to load executions for persona:', err);
+      log.error('Failed to load executions for persona', { err });
     }
   },
 
@@ -67,7 +70,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
         eventsLoadStatus: { ...state.eventsLoadStatus, [executionId]: 'loaded' as const },
       }));
     } catch (err) {
-      console.error('Failed to load events for execution:', err);
+      log.error('Failed to load events for execution', { err });
       set((state) => ({
         eventsLoadStatus: { ...state.eventsLoadStatus, [executionId]: 'error' as const },
       }));

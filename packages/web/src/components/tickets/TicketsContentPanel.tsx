@@ -8,6 +8,9 @@ import { useUIStore } from '../../stores/uiStore';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/tickets/TicketsContentPanel');
 
 export function TicketsContentPanel() {
   const rawBoards = useTicketStore((s) => s.boards);
@@ -100,7 +103,7 @@ export function TicketsContentPanel() {
       }
       setQuickTitle('');
     } catch (err) {
-      console.error('Failed to import from link:', err);
+      log.error('Failed to import from link', { err });
       setQuickError(err instanceof Error ? err.message : 'Failed to import from link');
     } finally {
       setQuickImporting(false);

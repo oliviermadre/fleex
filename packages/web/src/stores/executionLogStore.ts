@@ -4,6 +4,9 @@ import { EXECUTION_LOG_REFRESH_MS } from '@fleex/shared';
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
 import { PAGE_SIZE_EXECUTIONS } from '../lib/constants';
+import { createLogger } from '../lib/logger';
+
+const log = createLogger('stores/executionLogStore');
 
 export type ExecutionTypeFilter = 'all' | 'agent' | 'panel' | 'skill' | 'workflow';
 
@@ -72,7 +75,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
         loading: false,
       });
     } catch (err) {
-      console.error('Failed to load execution log:', err);
+      log.error('Failed to load execution log', { err });
       set({ loading: false });
     }
   },
@@ -102,7 +105,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
         loadingMore: false,
       });
     } catch (err) {
-      console.error('Failed to load more executions:', err);
+      log.error('Failed to load more executions', { err });
       set({ loadingMore: false });
     }
   },

@@ -7,6 +7,9 @@ import { AgentEventsTab } from './AgentEventsTab';
 import { ModelBadge } from './ModelBadge';
 import { cn } from '../../lib/cn';
 import { tintClasses, tintSolid } from '../../lib/tints';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/agents/AgentPersonaView');
 
 const TABS = [
   { key: 'config' as const, label: 'Config' },
@@ -34,7 +37,7 @@ export function AgentPersonaView() {
     try {
       await executeAgent(persona.id);
     } catch (err) {
-      console.error('Agent execution failed:', err);
+      log.error('Agent execution failed', { err });
     }
   };
 

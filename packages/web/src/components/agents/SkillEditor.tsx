@@ -4,6 +4,9 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/agents/SkillEditor');
 
 const TABS = [
   { key: 'config' as const, label: 'Config' },
@@ -35,7 +38,7 @@ function SkillConfigTab({ skill }: SkillEditorProps) {
       try {
         await updateSkill(skill.id, changes);
       } catch (err) {
-        console.error('Failed to save skill config:', err);
+        log.error('Failed to save skill config', { err });
       }
     },
     [skill.id, updateSkill],
@@ -142,7 +145,7 @@ function SkillMarkdownTab({ skill }: SkillEditorProps) {
   const handleBlur = useCallback(() => {
     if (content !== skill.markdownContent) {
       updateSkill(skill.id, { markdownContent: content }).catch((err) =>
-        console.error('Failed to save skill markdown:', err),
+        log.error('Failed to save skill markdown', { err }),
       );
     }
   }, [content, skill.id, skill.markdownContent, updateSkill]);

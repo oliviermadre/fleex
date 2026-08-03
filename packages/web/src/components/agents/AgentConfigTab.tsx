@@ -2,6 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import type { AgentPersona, ExecutionMode } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { ModelSelect } from './ModelSelect';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/agents/AgentConfigTab');
 
 interface AgentConfigTabProps {
   persona: AgentPersona;
@@ -29,7 +32,7 @@ export function AgentConfigTab({ persona }: AgentConfigTabProps) {
       try {
         await updatePersona(persona.id, changes);
       } catch (err) {
-        console.error('Failed to save persona config:', err);
+        log.error('Failed to save persona config', { err });
       }
     },
     [persona.id, updatePersona],

@@ -5,6 +5,9 @@ import { AgentEventStream } from './AgentEventStream';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 import { tint, tintText, tintClasses } from '../../lib/tints';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/main-panel/AgentExecutionsPanel');
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -73,7 +76,7 @@ export function AgentExecutionsPanel({ executions }: Props) {
       await api.cancelExecution(executionId);
       loadExecutions(ticketId);
     } catch (err) {
-      console.error('Failed to cancel execution:', err);
+      log.error('Failed to cancel execution', { err });
     }
   }, [loadExecutions]);
 

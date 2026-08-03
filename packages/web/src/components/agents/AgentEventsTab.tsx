@@ -6,6 +6,9 @@ import { AgentEventStream } from '../main-panel/AgentEventStream';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 import { tintClasses } from '../../lib/tints';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/agents/AgentEventsTab');
 
 const EMPTY_EXECUTIONS: AgentExecution[] = [];
 
@@ -67,7 +70,7 @@ export function AgentEventsTab() {
       await api.cancelExecution(executionId);
       if (selectedPersonaId) loadExecutions(selectedPersonaId);
     } catch (err) {
-      console.error('Failed to cancel execution:', err);
+      log.error('Failed to cancel execution', { err });
     }
   }, [selectedPersonaId, loadExecutions]);
 

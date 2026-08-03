@@ -20,6 +20,9 @@ import { PrBadge } from '../ui/PrBadge';
 import { parseGithubPrRef } from '../../lib/prRef';
 import { isMissingRepo, isRepoOptional } from '../../lib/repoStatus';
 import { MissingRepoIcon, RepositoriesIcon } from '../sidebar/icons';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/tickets/KanbanCard');
 
 const PRIORITY_BORDER: Record<string, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
@@ -130,7 +133,7 @@ export function KanbanCard({
     if (retrying) return;
     setRetrying(true);
     retrySlackImport(ticket.id)
-      .catch((err) => console.error('Failed to retry Slack import:', err))
+      .catch((err) => log.error('Failed to retry Slack import', { err }))
       .finally(() => setRetrying(false));
   };
 
