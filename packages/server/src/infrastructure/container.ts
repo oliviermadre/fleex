@@ -89,6 +89,7 @@ import { CachedAgentEventStore } from './adapters/cached-agent-event-store.js';
 import { isRemoteCacheSync, type RemoteCacheSync } from '../application/ports/remote-cache-sync.port.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
+import { resolveGatewayToken } from './host/gateway-token.js';
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
 
@@ -98,11 +99,13 @@ export async function createContainer() {
   const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
 
-  // Gateway — always remote
-  const execFn = remoteExec(gatewayUrl);
-  const shellExecFn = remoteShellExec(gatewayUrl);
-  const hostFs = new RemoteHostFs(gatewayUrl);
-  const ptyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
+  // Gateway — always remote, always authenticated. The token is never logged:
+  // it is equivalent to a shell on the gateway host.
+  const gatewayToken = resolveGatewayToken();
+  const execFn = remoteExec(gatewayUrl, gatewayToken);
+  const shellExecFn = remoteShellExec(gatewayUrl, gatewayToken);
+  const hostFs = new RemoteHostFs(gatewayUrl, gatewayToken);
+  const ptyAdapter = new RemotePtyAdapter(gatewayUrl, gatewayToken, logger);
 
   logger.info('Gateway configured', { gatewayUrl });
 

@@ -32,3 +32,6 @@ jobs:
 
       - name: Run Bun-runtime tests (bun:sqlite)
         run: bun run test:bun
+
+      - name: Run host-gateway tests
+        run: bun run test:gateway

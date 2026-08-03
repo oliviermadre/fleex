@@ -9,6 +9,13 @@ import { isRunning } from '../../core/process.ts';
 import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 import { reportWorkspacesConfig } from '../../core/workspaces.ts';
+import {
+  GATEWAY_TOKEN_FILE,
+  generateGatewayToken,
+  inspectGatewayToken,
+  readGatewayToken,
+  writeGatewayToken,
+} from '../../core/gateway-token.ts';
 
 interface ToolStatus {
   installed: boolean;
@@ -172,9 +179,66 @@ const def: CommandDef = {
       }
     }
 
+    const ports = loadPorts(ctx);
+
+    // gateway token — the gateway runs arbitrary shell commands, so this file
+    // is the only thing standing between any local process and a root-equivalent
+    // shell. Never print the token itself, only its path and state.
+    let tokenReport = inspectGatewayToken();
+    const display = GATEWAY_TOKEN_FILE.replace(process.env.HOME ?? '~', '~');
+    if (opts.fix && tokenReport.state !== 'ok') {
+      // A valid token is never rotated: the running server still holds it.
+      if (tokenReport.state === 'bad-perms') {
+        fs.chmodSync(GATEWAY_TOKEN_FILE, 0o600);
+      } else {
+        writeGatewayToken(generateGatewayToken());
+      }
+      tokenReport = inspectGatewayToken();
+      line(`${c.green('✓')} gateway token — fixed (${display}, 0600)`);
+      line(`  ${c.dim(`Run '${c.bold('fleex restart')}' so the server picks up the new token.`)}`);
+    } else if (tokenReport.state === 'ok') {
+      line(`${c.green('✓')} gateway token — present (${display}, 0600)`);
+    } else if (tokenReport.state === 'bad-perms') {
+      const mode = (tokenReport.mode ?? 0).toString(8).padStart(4, '0');
+      line(`${c.yellow('⚠')} gateway token — file mode is ${mode}, expected 0600. Run: ${c.bold('fleex doctor --fix')}`);
+      allOk = false;
+    } else if (tokenReport.state === 'malformed') {
+      line(`${c.red('✗')} gateway token — malformed (expected 64 hex chars). Run: ${c.bold('fleex doctor --fix')}`);
+      allOk = false;
+    } else {
+      line(`${c.red('✗')} gateway token — missing. Run: ${c.bold('fleex doctor --fix')}`);
+      allOk = false;
+    }
+
+    // Online probe: a token on disk proves nothing if the running gateway was
+    // started with a different one (typically a rotation without a restart).
+    const gatewayToken = readGatewayToken();
+    if (ports && gatewayToken && isRunning('gateway', ctx)) {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 2000);
+        const res = await fetch(`http://localhost:${ports.gateway}/health`, {
+          headers: { Authorization: `Bearer ${gatewayToken}` },
+          signal: ctrl.signal,
+        });
+        clearTimeout(tid);
+        const body = (await res.json().catch(() => ({}))) as { authenticated?: boolean };
+        if (res.ok && body.authenticated) {
+          line(`${c.green('✓')} gateway token — accepted by the running gateway (:${ports.gateway})`);
+        } else {
+          // /health answers 200 even unauthenticated, so the status code alone
+          // says nothing — `authenticated` is what tells them apart.
+          const detail = res.ok ? 'token mismatch' : `HTTP ${res.status}`;
+          line(`${c.red('✗')} gateway token — rejected by the running gateway (${detail}). Run: ${c.bold('fleex restart')}`);
+          allOk = false;
+        }
+      } catch {
+        line(`${c.yellow('⚠')} gateway token — could not reach the running gateway on :${ports.gateway}`);
+      }
+    }
+
     // Services
     process.stdout.write('\n');
-    const ports = loadPorts(ctx);
     if (ports) {
       line(`${c.bold(`Services [${ctx.instanceSlug}]:`)}`);
       for (const svc of SERVICES as readonly Service[]) {

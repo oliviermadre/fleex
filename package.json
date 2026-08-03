@@ -9,7 +9,8 @@
     "packages/desktop",
     "packages/cli",
     "packages/mcp",
-    "packages/sidepanel-host"
+    "packages/sidepanel-host",
+    "packages/host-gateway"
   ],
   "scripts": {
     "dev": "trap 'kill 0' INT; bun run dev:gateway & bun run dev:server & bun run dev:web & wait",
@@ -22,7 +23,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:bun": "cd packages/server && bunx --bun vitest run --config vitest.bun.config.ts",
-    "lint": "node scripts/check-raw-palette.mjs && tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/mcp/tsconfig.json && tsc --noEmit -p packages/sidepanel-host/tsconfig.json",
+    "test:gateway": "cd packages/host-gateway && bun test",
+    "lint": "node scripts/check-raw-palette.mjs && tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/mcp/tsconfig.json && tsc --noEmit -p packages/sidepanel-host/tsconfig.json && tsc --noEmit -p packages/host-gateway/tsconfig.json",
     "audit:theme": "node scripts/theme-audit/run.mjs",
     "dev:desktop": "FLEEX_SERVER_PORT=${PORT:-3000} electron packages/desktop"
   },
