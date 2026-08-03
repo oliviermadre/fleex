@@ -19,6 +19,13 @@ cd "$ROOT"
 PRETTIER="./node_modules/.bin/prettier"
 ESLINT="./node_modules/.bin/eslint"
 
+# xargs splits on whitespace and honours quotes, so a path containing a space or
+# an apostrophe would be torn into two arguments. Feeding it NUL-separated input
+# is the only portable way to keep one line = one filename.
+nul_list() {
+  printf '%s\n' "$1" | sed '/^$/d' | tr '\n' '\0'
+}
+
 # A fresh clone that has not installed yet must still be able to commit.
 if [ ! -x "$PRETTIER" ]; then
   echo "[fleex] node_modules missing — skipping the pre-commit hook (run 'bun install')."
@@ -54,7 +61,7 @@ STATUS=0
 
 # ── Partially staged: check only, never rewrite ──────────────────────────────
 if [ -n "$PARTIAL" ]; then
-  UNFORMATTED=$(echo "$PARTIAL" | sed '/^$/d' | xargs "$PRETTIER" --list-different 2>/dev/null || true)
+  UNFORMATTED=$(nul_list "$PARTIAL" | xargs -0 "$PRETTIER" --list-different 2>/dev/null || true)
   if [ -n "$UNFORMATTED" ]; then
     echo "[fleex] These files are staged but also have unstaged changes, and are not formatted:"
     echo "$UNFORMATTED" | sed 's/^/  /'
@@ -69,25 +76,36 @@ fi
 if [ -n "$CLEAN" ]; then
   FILES=$(echo "$CLEAN" | sed '/^$/d')
 
-  echo "$FILES" | xargs "$PRETTIER" --write --log-level warn
+  nul_list "$FILES" | xargs -0 "$PRETTIER" --write --log-level warn
 
   LINTABLE=$(echo "$FILES" | grep -E '\.(ts|tsx|js|mjs|cjs)$' || true)
   if [ -n "$LINTABLE" ]; then
     # Ratcheted violations must not block a commit (that is the ratchet's job in
     # `bun run lint`), so ESLint's exit code is ignored here on purpose.
-    echo "$LINTABLE" | xargs "$ESLINT" --fix --no-error-on-unmatched-pattern >/dev/null 2>&1 || true
+    nul_list "$LINTABLE" | xargs -0 "$ESLINT" --fix --no-error-on-unmatched-pattern >/dev/null 2>&1 || true
 
     # A file that cannot be parsed is never lintable, so refuse it outright.
-    # shellcheck disable=SC2016 -- ${...} below is JS template-literal syntax
-    # evaluated by node; the single quotes are what keep the shell out of it.
-    FATAL=$(echo "$LINTABLE" |
-      xargs "$ESLINT" --no-error-on-unmatched-pattern --format json 2>/dev/null |
+    #
+    # The node script is single-quoted on purpose: the `${...}` inside it is JS
+    # template-literal syntax evaluated by node, not shell expansion.
+    # shellcheck disable=SC2016
+    FATAL=$(nul_list "$LINTABLE" |
+      xargs -0 "$ESLINT" --no-error-on-unmatched-pattern --format json 2>/dev/null |
       node -e '
         let raw = "";
         process.stdin.on("data", (c) => (raw += c));
         process.stdin.on("end", () => {
           let results = [];
-          try { results = JSON.parse(raw); } catch { return; }
+          try {
+            results = JSON.parse(raw);
+          } catch {
+            // Past ARG_MAX, xargs invokes ESLint more than once and the JSON
+            // documents concatenate into something unparseable. Returning
+            // quietly here would disable parse-error detection precisely on the
+            // largest commits — the ones that can least afford a blind spot.
+            console.log("  <ESLint output could not be parsed — parse errors were NOT checked>");
+            return;
+          }
           for (const file of results)
             for (const message of file.messages ?? [])
               if (message.fatal) console.log(`  ${file.filePath}:${message.line} ${message.message}`);
@@ -95,13 +113,13 @@ if [ -n "$CLEAN" ]; then
       ' || true)
 
     if [ -n "$FATAL" ]; then
-      echo "[fleex] ESLint cannot parse these staged files:"
+      echo "[fleex] ESLint could not clear these staged files:"
       echo "$FATAL"
       STATUS=1
     fi
   fi
 
-  echo "$FILES" | xargs git add
+  nul_list "$FILES" | xargs -0 git add
 fi
 
 exit $STATUS
