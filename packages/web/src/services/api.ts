@@ -998,6 +998,13 @@ export async function retryWorkflowStep(runId: string, stepRunId: string): Promi
   );
 }
 
+export async function cancelWorkflowStep(runId: string, stepRunId: string): Promise<void> {
+  await request<void>(
+    `/workflows/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepRunId)}/cancel`,
+    { method: 'POST' },
+  );
+}
+
 // ── Overlay sync ────────────────────────────────────────────────────────────
 
 export async function overlaySyncScan(

@@ -1,8 +1,12 @@
-import type {
-  WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot,
+import {
+  isCancellableRunStatus,
+  type WorkflowRun, type WorkflowRunStatus, type WorkflowTemplateSnapshot,
 } from '@fleex/shared';
 
-const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'needs_review'];
+// `blocked` is a run waiting on a human gate — as live as `needs_review`. It was
+// missing here, which made any isActive()-guarded operation a silent no-op on a
+// blocked run.
+const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'blocked', 'needs_review'];
 
 export class WorkflowRunEntity {
   constructor(
@@ -78,6 +82,14 @@ export class WorkflowRunEntity {
 
   isActive(): boolean {
     return ACTIVE_STATUSES.includes(this.status);
+  }
+
+  /**
+   * Wider than isActive(): a `failed` run is not active, yet must stay
+   * cancellable so the user can close it out without retrying a step.
+   */
+  isCancellable(): boolean {
+    return isCancellableRunStatus(this.status);
   }
 
   findStep(stepId: string) {

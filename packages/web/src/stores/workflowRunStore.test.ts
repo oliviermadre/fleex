@@ -9,6 +9,7 @@ vi.mock('../services/api', () => ({
   cancelWorkflowRun: vi.fn(),
   resolveWorkflowGate: vi.fn(),
   retryWorkflowStep: vi.fn(),
+  cancelWorkflowStep: vi.fn(),
 }));
 
 import * as api from '../services/api';

@@ -133,7 +133,8 @@ async function main() {
     container.createWorkflowRun &&
     container.resolveHumanGate &&
     container.retryStep &&
-    container.cancelWorkflowRun
+    container.cancelWorkflowRun &&
+    container.cancelStep
   ) {
     await app.register(workflowRunRoutes({
       runStore: container.workflowRunStore,
@@ -142,6 +143,7 @@ async function main() {
       resolveHumanGate: container.resolveHumanGate,
       retryStep: container.retryStep,
       cancelWorkflowRun: container.cancelWorkflowRun,
+      cancelStep: container.cancelStep,
       authorNameResolver: () => 'workflow-trigger',
     }));
   } else {

@@ -71,6 +71,7 @@ import { CreateWorkflowRunUseCase } from '../application/use-cases/create-workfl
 import { ResolveHumanGateUseCase } from '../application/use-cases/resolve-human-gate.js';
 import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
 import { CancelWorkflowRunUseCase } from '../application/use-cases/cancel-workflow-run.js';
+import { CancelStepUseCase } from '../application/use-cases/cancel-step.js';
 import { RecoverOrphanedWorkflowStepsUseCase } from '../application/use-cases/recover-orphaned-workflow-steps.js';
 import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
@@ -396,6 +397,7 @@ export async function createContainer() {
   let resolveHumanGate: ResolveHumanGateUseCase | null = null;
   let retryStep: RetryStepUseCase | null = null;
   let cancelWorkflowRun: CancelWorkflowRunUseCase | null = null;
+  let cancelStep: CancelStepUseCase | null = null;
   let workflowOrchestrator: WorkflowOrchestrator | null = null;
 
   if (workflowTemplateStore && workflowRunStore && stepRunStore) {
@@ -431,6 +433,7 @@ export async function createContainer() {
     resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
     retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, executeAgent);
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
+    cancelStep = new CancelStepUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
 
     logger.info('Workflow orchestration wired', { driver });
   } else {
@@ -544,6 +547,7 @@ export async function createContainer() {
     resolveHumanGate,
     retryStep,
     cancelWorkflowRun,
+    cancelStep,
     eventBus,
     remoteEventBus,
     domainEventListener,

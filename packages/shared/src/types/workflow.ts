@@ -62,6 +62,23 @@ export type WorkflowRunStatus =
   | 'running' | 'blocked' | 'needs_review'
   | 'completed' | 'failed' | 'cancelled';
 
+/**
+ * Statuses a run can be cancelled from. Deliberately wider than "active": a
+ * `failed` run is terminal-but-unresolved, and the user must always keep a way
+ * to close it out instead of being forced to retry a step they don't want.
+ *
+ * Single source of truth — the UI gate and the domain guard MUST both read it.
+ * Duplicating this list is what let them drift and produce a Cancel button the
+ * backend silently refused.
+ */
+export const CANCELLABLE_RUN_STATUSES: readonly WorkflowRunStatus[] = [
+  'running', 'blocked', 'needs_review', 'failed',
+];
+
+export function isCancellableRunStatus(status: WorkflowRunStatus): boolean {
+  return CANCELLABLE_RUN_STATUSES.includes(status);
+}
+
 export interface WorkflowTemplateSnapshot {
   name: string;
   emoji: string;

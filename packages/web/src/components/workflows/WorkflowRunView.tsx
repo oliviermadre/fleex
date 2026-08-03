@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, MarkerType, Position, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { WorkflowRun, StepRun, WorkflowStep } from '@fleex/shared';
+import { isCancellableRunStatus, type WorkflowRun, type StepRun, type WorkflowStep } from '@fleex/shared';
 import { StepRunNode, type StepRunNodeData } from './StepRunNode';
 import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
@@ -9,6 +9,7 @@ import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
 import { CancelledStepRestartPanel } from './CancelledStepRestartPanel';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { countCompletedSteps } from './workflowProgress';
 import { postTicketComment } from '../../services/api';
@@ -24,11 +25,14 @@ interface Props {
 
 export function WorkflowRunView({ run, stepRuns }: Props) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const colorMode = useColorMode();
   const themeColors = useActiveTheme().colors;
   const cancel = useWorkflowRunStore((s) => s.cancel);
   const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
   const retry = useWorkflowRunStore((s) => s.retry);
+  const cancelStep = useWorkflowRunStore((s) => s.cancelStep);
 
   const stepIndex = useMemo(
     () => new Map(run.templateSnapshot.steps.map((s) => [s.id, s])),
@@ -98,6 +102,20 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
   const completed = countCompletedSteps(stepRuns);
   const total = run.templateSnapshot.steps.length;
 
+  // A cancelled run is closed out for good: no step-level action may reopen it,
+  // otherwise "Cancel run" would leave live retry/restart buttons behind.
+  const runIsCancelled = run.status === 'cancelled';
+
+  const doCancel = async () => {
+    setCancelling(true);
+    try {
+      await cancel(run.id);
+      setConfirmCancel(false);
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full w-full">
       {/* Header */}
@@ -121,9 +139,9 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
             {run.status}
           </span>
         </div>
-        {['running', 'blocked', 'needs_review'].includes(run.status) && (
+        {isCancellableRunStatus(run.status) && (
           <button
-            onClick={() => cancel(run.id)}
+            onClick={() => setConfirmCancel(true)}
             className="text-xs px-3 py-1 rounded border border-[var(--theme-border-input)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] transition-colors"
           >
             Cancel run
@@ -195,7 +213,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                 </pre>
               </details>
             )}
-            {selectedStepRun?.status === 'needs_review' &&
+            {!runIsCancelled && selectedStepRun?.status === 'needs_review' &&
               selectedStep.executorType === 'human_gate' && (
                 <HumanGateResolvePanel
                   runId={run.id}
@@ -210,7 +228,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   }
                 />
               )}
-            {selectedStepRun?.status === 'needs_review' &&
+            {!runIsCancelled && selectedStepRun?.status === 'needs_review' &&
               selectedStep.executorType !== 'human_gate' && (
                 <NeedsReviewRespondPanel
                   runId={run.id}
@@ -225,22 +243,23 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   }}
                 />
               )}
-            {selectedStepRun?.status === 'failed' && (
+            {!runIsCancelled && selectedStepRun?.status === 'failed' && (
               <FailedStepRetryPanel
                 error={
                   (selectedStepRun.output?.schemaFields?.error as string | undefined) ??
                   null
                 }
                 onRetry={() => retry(run.id, selectedStepRun.id)}
+                onDismiss={() => cancelStep(run.id, selectedStepRun.id)}
               />
             )}
-            {selectedStepRun?.status === 'running' && (
+            {!runIsCancelled && selectedStepRun?.status === 'running' && (
               <RunningStepForceRestartPanel
                 startedAt={selectedStepRun.startedAt}
                 onForceRestart={() => retry(run.id, selectedStepRun.id)}
               />
             )}
-            {selectedStepRun?.status === 'cancelled' && (
+            {!runIsCancelled && selectedStepRun?.status === 'cancelled' && (
               <CancelledStepRestartPanel
                 onRestart={() => retry(run.id, selectedStepRun.id)}
               />
@@ -248,6 +267,16 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmCancel}
+        title="Cancel this workflow run?"
+        message="Any step still running will be aborted immediately. Completed steps are kept, but the run cannot be resumed."
+        confirmLabel="Cancel run"
+        busy={cancelling}
+        onConfirm={doCancel}
+        onCancel={() => setConfirmCancel(false)}
+      />
     </div>
   );
 }

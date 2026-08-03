@@ -11,6 +11,7 @@ import type { StepRunStorePort } from '../../application/ports/step-run-store.po
 import type { CreateWorkflowRunUseCase } from '../../application/use-cases/create-workflow-run.js';
 import type { ResolveHumanGateUseCase } from '../../application/use-cases/resolve-human-gate.js';
 import type { RetryStepUseCase } from '../../application/use-cases/retry-step.js';
+import type { CancelStepUseCase } from '../../application/use-cases/cancel-step.js';
 import type { CancelWorkflowRunUseCase } from '../../application/use-cases/cancel-workflow-run.js';
 
 // ── Manual validation helpers ──────────────────────────────────────────────
@@ -82,6 +83,7 @@ interface WorkflowRunRouteDeps {
   createWorkflowRun: CreateWorkflowRunUseCase;
   resolveHumanGate: ResolveHumanGateUseCase;
   retryStep: RetryStepUseCase;
+  cancelStep: CancelStepUseCase;
   cancelWorkflowRun: CancelWorkflowRunUseCase;
   authorNameResolver: () => string;
 }
@@ -174,6 +176,25 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
       async (request, reply) => {
         try {
           await deps.retryStep.execute({
+            workflowRunId: request.params.id,
+            stepRunId: request.params.stepRunId,
+          });
+          return reply.code(204).send();
+        } catch (err) {
+          if (err instanceof WorkflowRunNotFoundError || err instanceof StepRunNotFoundError) {
+            return reply.code(404).send({ error: (err as WorkflowRunNotFoundError | StepRunNotFoundError).code, message: err.message });
+          }
+          throw err;
+        }
+      },
+    );
+
+    // POST /api/workflows/runs/:id/steps/:stepRunId/cancel — abandon a step
+    app.post<{ Params: { id: string; stepRunId: string } }>(
+      '/api/workflows/runs/:id/steps/:stepRunId/cancel',
+      async (request, reply) => {
+        try {
+          await deps.cancelStep.execute({
             workflowRunId: request.params.id,
             stepRunId: request.params.stepRunId,
           });

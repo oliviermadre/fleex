@@ -15,7 +15,7 @@ export class CancelWorkflowRunUseCase {
   async execute(workflowRunId: string): Promise<void> {
     const run = await this.runStore.getById(workflowRunId);
     if (!run) throw new WorkflowRunNotFoundError(workflowRunId);
-    if (!run.isActive()) return; // idempotent
+    if (!run.isCancellable()) return; // idempotent on completed/cancelled runs
 
     run.cancel();
     await this.runStore.save(run);

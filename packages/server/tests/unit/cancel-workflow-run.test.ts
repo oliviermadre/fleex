@@ -85,6 +85,60 @@ describe('CancelWorkflowRunUseCase', () => {
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_cancelled' }));
   });
 
+  // WHY (AC9): a `failed` run is the exact case the user gets stuck in — the
+  // only affordance left is a retry they don't want. Cancelling must work.
+  it('cancels a failed run so the user can close it out without retrying', async () => {
+    const run = makeRun();
+    run.fail();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { getByWorkflowRun: vi.fn().mockResolvedValue([]), save: vi.fn() };
+    const canceller = { cancelExecution: vi.fn() };
+    const eventBus = { emit: vi.fn() };
+    const uc = new CancelWorkflowRunUseCase(runStore as never, stepRunStore as never, canceller as never, eventBus as never);
+
+    await uc.execute('run-1');
+
+    expect(run.status).toBe('cancelled');
+    expect(run.completedAt).toBeInstanceOf(Date);
+    expect(runStore.save).toHaveBeenCalledWith(run);
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_cancelled' }));
+  });
+
+  // WHY (AC10): `blocked` was offered by the UI but missing from the guard, so
+  // the button appeared to work and silently did nothing.
+  it('cancels a blocked run', async () => {
+    const run = makeRun();
+    run.status = 'blocked';
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { getByWorkflowRun: vi.fn().mockResolvedValue([]), save: vi.fn() };
+    const canceller = { cancelExecution: vi.fn() };
+    const eventBus = { emit: vi.fn() };
+    const uc = new CancelWorkflowRunUseCase(runStore as never, stepRunStore as never, canceller as never, eventBus as never);
+
+    await uc.execute('run-1');
+
+    expect(run.status).toBe('cancelled');
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_cancelled' }));
+  });
+
+  // WHY (AC12): re-cancelling must stay a no-op, and a `completed` run must not
+  // be rewritten into `cancelled` by a stale click.
+  it('is a no-op on a completed run', async () => {
+    const run = makeRun();
+    run.complete();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { getByWorkflowRun: vi.fn(), save: vi.fn() };
+    const canceller = { cancelExecution: vi.fn() };
+    const eventBus = { emit: vi.fn() };
+    const uc = new CancelWorkflowRunUseCase(runStore as never, stepRunStore as never, canceller as never, eventBus as never);
+
+    await uc.execute('run-1');
+
+    expect(run.status).toBe('completed');
+    expect(runStore.save).not.toHaveBeenCalled();
+    expect(eventBus.emit).not.toHaveBeenCalled();
+  });
+
   it('skips steps that are not running and steps without a live executionId', async () => {
     const run = makeRun();
     const noExec = runningStep(null);            // running but no executionId yet

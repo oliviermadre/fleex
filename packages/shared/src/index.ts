@@ -299,6 +299,8 @@ export type {
   ResolveHumanGateInput,
 } from './types/workflow.js';
 
+export { CANCELLABLE_RUN_STATUSES, isCancellableRunStatus } from './types/workflow.js';
+
 export type {
   PrimitiveKind,
   PrimitiveRef,

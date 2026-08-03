@@ -7,23 +7,29 @@ interface Props {
   // executor threw before producing structured output).
   error: string | null;
   onRetry: () => Promise<void>;
+  // Abandons the step (→ `cancelled`), which is what makes this banner go away
+  // for good. Reversible: a cancelled step can still be restarted.
+  onDismiss: () => Promise<void>;
 }
 
-export function FailedStepRetryPanel({ error, onRetry }: Props) {
-  const [busy, setBusy] = useState(false);
+export function FailedStepRetryPanel({ error, onRetry, onDismiss }: Props) {
+  const [busy, setBusy] = useState<'retry' | 'dismiss' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const retry = async () => {
-    setBusy(true);
+  const run = (action: 'retry' | 'dismiss', fn: () => Promise<void>) => async () => {
+    setBusy(action);
     setSubmitError(null);
     try {
-      await onRetry();
+      await fn();
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
+
+  const retry = run('retry', onRetry);
+  const dismiss = run('dismiss', onDismiss);
 
   return (
     <div className={`space-y-3 rounded-md border ${tintClasses('red').borderColor} ${tintClasses('red').bg} p-3`}>
@@ -38,9 +44,12 @@ export function FailedStepRetryPanel({ error, onRetry }: Props) {
         )}
       </div>
       {submitError && <div className={`text-xs ${tintClasses('red').text}`}>{submitError}</div>}
-      <div className="flex justify-end">
-        <Button variant="primary" size="sm" disabled={busy} onClick={retry}>
-          {busy ? 'Retrying…' : 'Retry step'}
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" disabled={busy !== null} onClick={dismiss}>
+          {busy === 'dismiss' ? 'Dismissing…' : 'Dismiss'}
+        </Button>
+        <Button variant="primary" size="sm" disabled={busy !== null} onClick={retry}>
+          {busy === 'retry' ? 'Retrying…' : 'Retry step'}
         </Button>
       </div>
     </div>
