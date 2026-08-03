@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
+
 import type { BoardWithCounts } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
+import { useTicketStore } from '../../stores/ticketStore';
 
 export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
   const updateBoard = useTicketStore((s) => s.updateBoard);
@@ -55,7 +57,16 @@ export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
         {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
         title="Board actions"
       >
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" />
           <line x1="9" y1="4" x2="12" y2="7" />
         </svg>
@@ -78,7 +89,10 @@ export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleFinishRename();
-                    if (e.key === 'Escape') { setRenaming(false); setOpen(false); }
+                    if (e.key === 'Escape') {
+                      setRenaming(false);
+                      setOpen(false);
+                    }
                   }}
                   onBlur={handleFinishRename}
                 />
@@ -89,17 +103,39 @@ export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
                   onClick={handleStartRename}
                 >
-                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="11"
+                    height="11"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" />
                   </svg>
                   Rename
                 </button>
                 {boards.length > 1 && (
                   <button
-                    className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors', tintClasses('red').text, tintClasses('red').hoverBg)}
+                    className={cn(
+                      'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
+                      tintClasses('red').text,
+                      tintClasses('red').hoverBg,
+                    )}
                     onClick={handleDelete}
                   >
-                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <polyline points="3 6 3 14 13 14 13 6" />
                       <line x1="1" y1="3" x2="15" y2="3" />
                       <line x1="6" y1="1" x2="10" y2="1" />

@@ -90,7 +90,9 @@ if (regressions.length > 0) {
 
 if (total < snapshot.total || JSON.stringify(counts) !== JSON.stringify(snapshot.files)) {
   fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify({ total, files: counts }, null, 2) + '\n');
-  console.log(`✓ Raw palette count improved (${snapshot.total === Infinity ? '?' : snapshot.total} → ${total}). Snapshot updated — commit scripts/raw-palette-snapshot.json.`);
+  console.log(
+    `✓ Raw palette count improved (${snapshot.total === Infinity ? '?' : snapshot.total} → ${total}). Snapshot updated — commit scripts/raw-palette-snapshot.json.`,
+  );
 } else {
   console.log(`✓ Raw palette ratchet OK (${total} occurrence(s) outside lib/tints.ts).`);
 }

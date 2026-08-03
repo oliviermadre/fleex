@@ -1,13 +1,27 @@
-import type { FastifyInstance } from 'fastify';
-import type { DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepoDiscovery, RepositorySummary, Worktree, WorktreeTicketRef } from '@fleex/shared';
+import type {
+  DiffStats,
+  GitHubIssue,
+  GitHubIssueDetail,
+  PullRequest,
+  RepoDiscovery,
+  RepositorySummary,
+  Worktree,
+  WorktreeTicketRef,
+} from '@fleex/shared';
+
+import { GetRepositoryStatsUseCase } from '../../application/use-cases/get-repository-stats.js';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
 import { parseTicketBranch } from '../../domain/services/worktree-ticket-resolver.js';
-import { GetRepositoryStatsUseCase } from '../../application/use-cases/get-repository-stats.js';
+
 import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function repositoryRoutes(container: Container) {
-  const getRepositoryStats = new GetRepositoryStatsUseCase(container.ticketStore, container.agentEventStore);
+  const getRepositoryStats = new GetRepositoryStatsUseCase(
+    container.ticketStore,
+    container.agentEventStore,
+  );
 
   /**
    * Resolve each non-bare/non-main worktree to its Fleex ticket. Authoritative
@@ -42,7 +56,9 @@ export function repositoryRoutes(container: Container) {
       return null;
     };
 
-    const resolved = await Promise.all(targets.map(async (wt) => ({ wt, ticket: await resolveOne(wt) })));
+    const resolved = await Promise.all(
+      targets.map(async (wt) => ({ wt, ticket: await resolveOne(wt) })),
+    );
     return resolved
       .filter((r): r is { wt: Worktree; ticket: TicketEntity } => r.ticket !== null)
       .map(({ wt, ticket }) => ({
@@ -88,7 +104,6 @@ export function repositoryRoutes(container: Container) {
         return container.listWorktrees.execute(org, name);
       },
     );
-
 
     app.delete<{ Params: { org: string; name: string }; Body: { path: string } }>(
       '/api/repositories/:org/:name/worktrees',
@@ -146,7 +161,11 @@ export function repositoryRoutes(container: Container) {
         try {
           const rateLimit = await container.githubGraphql.getRateLimit();
           if (rateLimit.remaining < 100) {
-            container.logger.warn('GitHub rate limit low, skipping PR fetch', { org, name, remaining: rateLimit.remaining });
+            container.logger.warn('GitHub rate limit low, skipping PR fetch', {
+              org,
+              name,
+              remaining: rateLimit.remaining,
+            });
             return [];
           }
         } catch {
@@ -158,45 +177,90 @@ export function repositoryRoutes(container: Container) {
           const mergedDateStr = thirtyDaysAgo.toISOString().split('T')[0];
 
           const [openResult, mergedResult, closedResult] = await Promise.all([
-            container.execFn('gh', [
-              'pr', 'list',
-              '--repo', `${org}/${name}`,
-              '--json', 'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
-              '--limit', '50',
-              '--state', 'open',
-            ], { timeout: 15_000 }),
-            container.execFn('gh', [
-              'pr', 'list',
-              '--repo', `${org}/${name}`,
-              '--json', 'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt,mergedAt',
-              '--limit', '20',
-              '--state', 'merged',
-              '--search', `merged:>${mergedDateStr}`,
-            ], { timeout: 15_000 }),
-            container.execFn('gh', [
-              'pr', 'list',
-              '--repo', `${org}/${name}`,
-              '--json', 'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
-              '--limit', '20',
-              '--state', 'closed',
-              '--search', `-is:merged closed:>${mergedDateStr}`,
-            ], { timeout: 15_000 }),
+            container.execFn(
+              'gh',
+              [
+                'pr',
+                'list',
+                '--repo',
+                `${org}/${name}`,
+                '--json',
+                'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
+                '--limit',
+                '50',
+                '--state',
+                'open',
+              ],
+              { timeout: 15_000 },
+            ),
+            container.execFn(
+              'gh',
+              [
+                'pr',
+                'list',
+                '--repo',
+                `${org}/${name}`,
+                '--json',
+                'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt,mergedAt',
+                '--limit',
+                '20',
+                '--state',
+                'merged',
+                '--search',
+                `merged:>${mergedDateStr}`,
+              ],
+              { timeout: 15_000 },
+            ),
+            container.execFn(
+              'gh',
+              [
+                'pr',
+                'list',
+                '--repo',
+                `${org}/${name}`,
+                '--json',
+                'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
+                '--limit',
+                '20',
+                '--state',
+                'closed',
+                '--search',
+                `-is:merged closed:>${mergedDateStr}`,
+              ],
+              { timeout: 15_000 },
+            ),
           ]);
 
           const rawOpen = JSON.parse(openResult.stdout) as {
-            number: number; title: string; headRefName: string; isDraft: boolean;
-            author: { login: string }; assignees: { login: string }[];
-            createdAt: string; updatedAt: string;
+            number: number;
+            title: string;
+            headRefName: string;
+            isDraft: boolean;
+            author: { login: string };
+            assignees: { login: string }[];
+            createdAt: string;
+            updatedAt: string;
           }[];
           const rawMerged = JSON.parse(mergedResult.stdout) as {
-            number: number; title: string; headRefName: string; isDraft: boolean;
-            author: { login: string }; assignees: { login: string }[];
-            createdAt: string; updatedAt: string; mergedAt: string;
+            number: number;
+            title: string;
+            headRefName: string;
+            isDraft: boolean;
+            author: { login: string };
+            assignees: { login: string }[];
+            createdAt: string;
+            updatedAt: string;
+            mergedAt: string;
           }[];
           const rawClosed = JSON.parse(closedResult.stdout) as {
-            number: number; title: string; headRefName: string; isDraft: boolean;
-            author: { login: string }; assignees: { login: string }[];
-            createdAt: string; updatedAt: string;
+            number: number;
+            title: string;
+            headRefName: string;
+            isDraft: boolean;
+            author: { login: string };
+            assignees: { login: string }[];
+            createdAt: string;
+            updatedAt: string;
           }[];
 
           const openPRs = rawOpen.map((pr): PullRequest => ({
@@ -249,13 +313,22 @@ export function repositoryRoutes(container: Container) {
       async (request, reply) => {
         const { org, name } = request.params;
         try {
-          const { stdout } = await container.execFn('gh', [
-            'issue', 'list',
-            '--repo', `${org}/${name}`,
-            '--json', 'number,title,state,author,assignees,labels,comments,createdAt,updatedAt,closedAt',
-            '--state', 'open',
-            '--limit', '50',
-          ], { timeout: 15_000 });
+          const { stdout } = await container.execFn(
+            'gh',
+            [
+              'issue',
+              'list',
+              '--repo',
+              `${org}/${name}`,
+              '--json',
+              'number,title,state,author,assignees,labels,comments,createdAt,updatedAt,closedAt',
+              '--state',
+              'open',
+              '--limit',
+              '50',
+            ],
+            { timeout: 15_000 },
+          );
           const raw = JSON.parse(stdout) as {
             number: number;
             title: string;
@@ -281,7 +354,11 @@ export function repositoryRoutes(container: Container) {
             ...(issue.closedAt ? { closedAt: issue.closedAt } : {}),
           }));
         } catch (err) {
-          container.logger.warn('Failed to list issues via gh CLI', { org, name, error: String(err) });
+          container.logger.warn('Failed to list issues via gh CLI', {
+            org,
+            name,
+            error: String(err),
+          });
           return reply.code(502).send({ error: 'Failed to list issues from GitHub' });
         }
       },
@@ -298,7 +375,12 @@ export function repositoryRoutes(container: Container) {
         try {
           return await container.githubGraphql.fetchIssueDetail(org, name, issueNumber);
         } catch (err) {
-          container.logger.warn('Failed to fetch issue detail', { org, name, number: issueNumber, error: String(err) });
+          container.logger.warn('Failed to fetch issue detail', {
+            org,
+            name,
+            number: issueNumber,
+            error: String(err),
+          });
           return reply.code(502).send({ error: 'Failed to fetch issue detail from GitHub' });
         }
       },
@@ -399,7 +481,9 @@ export function repositoryRoutes(container: Container) {
         // Try cache first
         const cachedPulls = container.repositoryCache.get<PullRequest[]>(`pulls:${key}`);
         const cachedIssues = container.repositoryCache.get<GitHubIssue[]>(`issues:${key}`);
-        const cachedClosedIssues = container.repositoryCache.get<GitHubIssue[]>(`closedIssues:${key}`);
+        const cachedClosedIssues = container.repositoryCache.get<GitHubIssue[]>(
+          `closedIssues:${key}`,
+        );
         const cachedMerged = container.repositoryCache.get<PullRequest[]>(`merged:${key}`);
 
         let pulls = cachedPulls?.data;
@@ -418,7 +502,11 @@ export function repositoryRoutes(container: Container) {
             mergedPRs = result.mergedPRs;
             container.repositoryCache.set(`pulls:${key}`, pulls, RepositoryCache.TTL_PULLS);
             container.repositoryCache.set(`issues:${key}`, issues, RepositoryCache.TTL_ISSUES);
-            container.repositoryCache.set(`closedIssues:${key}`, closedIssues, RepositoryCache.TTL_ISSUES);
+            container.repositoryCache.set(
+              `closedIssues:${key}`,
+              closedIssues,
+              RepositoryCache.TTL_ISSUES,
+            );
             container.repositoryCache.set(`merged:${key}`, mergedPRs, RepositoryCache.TTL_MERGED);
           } else {
             pulls = pulls ?? [];
@@ -497,15 +585,33 @@ export function repositoryRoutes(container: Container) {
         try {
           const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
           const dateStr = sevenDaysAgo.toISOString().split('T')[0];
-          const { stdout } = await container.execFn('gh', [
-            'pr', 'list', '--repo', `${org}/${name}`,
-            '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt,mergedAt',
-            '--limit', '20', '--state', 'merged', '--search', `merged:>${dateStr}`,
-          ], { timeout: 15_000 });
+          const { stdout } = await container.execFn(
+            'gh',
+            [
+              'pr',
+              'list',
+              '--repo',
+              `${org}/${name}`,
+              '--json',
+              'number,title,headRefName,author,assignees,createdAt,updatedAt,mergedAt',
+              '--limit',
+              '20',
+              '--state',
+              'merged',
+              '--search',
+              `merged:>${dateStr}`,
+            ],
+            { timeout: 15_000 },
+          );
           const raw = JSON.parse(stdout) as {
-            number: number; title: string; headRefName: string;
-            author: { login: string }; assignees: { login: string }[];
-            createdAt: string; updatedAt: string; mergedAt: string;
+            number: number;
+            title: string;
+            headRefName: string;
+            author: { login: string };
+            assignees: { login: string }[];
+            createdAt: string;
+            updatedAt: string;
+            mergedAt: string;
           }[];
           const result: PullRequest[] = raw.map((pr) => ({
             number: pr.number,
@@ -567,13 +673,16 @@ export function repositoryRoutes(container: Container) {
       }
     });
 
-    app.get<{ Querystring: { repo?: string } }>('/api/github/verify-repo', async (request, reply) => {
-      const repo = request.query.repo?.trim().toLowerCase() ?? '';
-      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-        return reply.code(400).send({ error: 'repo must be owner/repo' });
-      }
-      return container.githubDiscovery.verifyRepo(repo);
-    });
+    app.get<{ Querystring: { repo?: string } }>(
+      '/api/github/verify-repo',
+      async (request, reply) => {
+        const repo = request.query.repo?.trim().toLowerCase() ?? '';
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+          return reply.code(400).send({ error: 'repo must be owner/repo' });
+        }
+        return container.githubDiscovery.verifyRepo(repo);
+      },
+    );
 
     // ---- Clone endpoints ----
 

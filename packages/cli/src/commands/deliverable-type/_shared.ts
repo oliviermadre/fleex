@@ -1,10 +1,8 @@
-import { die, c } from '../../core/colors.ts';
-import { apiBase, apiGet } from '../../core/api.ts';
-import {
-  DELIVERABLE_RENDERERS,
-  DELIVERABLE_COLOR_PRESETS,
-} from '@fleex/shared';
+import { DELIVERABLE_RENDERERS, DELIVERABLE_COLOR_PRESETS } from '@fleex/shared';
 import type { DeliverableTypeDef, DeliverableRenderer, DeliverableTypeColor } from '@fleex/shared';
+
+import { apiBase, apiGet } from '../../core/api.ts';
+import { die, c } from '../../core/colors.ts';
 
 /** Full view returned by the deliverable-types API: configured types + usage counts. */
 export interface DeliverableTypesView {

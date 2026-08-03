@@ -1,5 +1,5 @@
-import type { PostCommentUseCase } from '../../use-cases/post-comment.js';
 import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
+import type { PostCommentUseCase } from '../../use-cases/post-comment.js';
 
 export class HumanGateStepExecutor implements StepExecutor {
   constructor(private readonly postComment: PostCommentUseCase) {}

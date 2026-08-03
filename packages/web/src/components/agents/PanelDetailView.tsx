@@ -1,18 +1,31 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 import type { ExecutionMode, PanelMember } from '@fleex/shared';
-import { usePanelStore } from '../../stores/panelStore';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { ModelBadge } from './ModelBadge';
-import { ModelSelect } from './ModelSelect';
+
 import { cn } from '../../lib/cn';
 import { tint, tintClasses } from '../../lib/tints';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { usePanelStore } from '../../stores/panelStore';
+
+import { ModelBadge } from './ModelBadge';
+import { ModelSelect } from './ModelSelect';
 
 function PanelEmptyState() {
   return (
     <div className="flex flex-1 items-center justify-center bg-[var(--theme-bg-primary)]">
       <div className="flex flex-col items-center gap-3 text-center">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+        <svg
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-[var(--theme-text-faint)]"
+        >
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
           <circle cx="9" cy="7" r="4" />
           <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -66,14 +79,13 @@ export function PanelDetailView() {
 
   if (!panel) return <PanelEmptyState />;
 
-  const availablePersonas = personas.filter(
-    (p) => !members.some((m) => m.personaId === p.id)
-  );
+  const availablePersonas = personas.filter((p) => !members.some((m) => m.personaId === p.id));
 
   const validate = (): boolean => {
     const errs: string[] = [];
     if (!name.trim()) errs.push('Name (slug) is required');
-    if (!/^[a-z0-9][a-z0-9_-]*$/.test(name)) errs.push('Name must be lowercase alphanumeric with hyphens/underscores');
+    if (!/^[a-z0-9][a-z0-9_-]*$/.test(name))
+      errs.push('Name must be lowercase alphanumeric with hyphens/underscores');
     if (!displayName.trim()) errs.push('Display name is required');
     if (members.length < 2) errs.push('At least 2 members are required');
     setErrors(errs);
@@ -111,10 +123,7 @@ export function PanelDetailView() {
   };
 
   const addMember = (personaId: string) => {
-    setMembers([
-      ...members,
-      { personaId, order: members.length, modelOverride: 'inherited' },
-    ]);
+    setMembers([...members, { personaId, order: members.length, modelOverride: 'inherited' }]);
   };
 
   const removeMember = (index: number) => {
@@ -128,9 +137,22 @@ export function PanelDetailView() {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
+      <div
+        className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3"
+        style={{ height: 'var(--header-height)' }}
+      >
         <div className="flex items-center gap-1.5 min-w-0">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-secondary)]">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0 text-[var(--theme-text-secondary)]"
+          >
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
             <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -173,16 +195,22 @@ export function PanelDetailView() {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-5">
           {errors.length > 0 && (
-            <div className={`rounded-md border ${tintClasses('red').borderColor} ${tintClasses('red').bg} px-3 py-2`}>
+            <div
+              className={`rounded-md border ${tintClasses('red').borderColor} ${tintClasses('red').bg} px-3 py-2`}
+            >
               {errors.map((err, i) => (
-                <p key={i} className={`text-xs ${tintClasses('red').text}`}>{err}</p>
+                <p key={i} className={`text-xs ${tintClasses('red').text}`}>
+                  {err}
+                </p>
               ))}
             </div>
           )}
 
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Name (slug)</label>
+              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">
+                Name (slug)
+              </label>
               <input
                 type="text"
                 value={name}
@@ -191,11 +219,17 @@ export function PanelDetailView() {
                 className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               />
               <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-                Used in <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">@panel:{name || 'name'}</code> mentions
+                Used in{' '}
+                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+                  @panel:{name || 'name'}
+                </code>{' '}
+                mentions
               </p>
             </div>
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Display Name</label>
+              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">
+                Display Name
+              </label>
               <input
                 type="text"
                 value={displayName}
@@ -207,7 +241,9 @@ export function PanelDetailView() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-[var(--theme-text-secondary)]">Description</label>
+            <label className="text-xs font-medium text-[var(--theme-text-secondary)]">
+              Description
+            </label>
             <textarea
               className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={2}
@@ -218,7 +254,9 @@ export function PanelDetailView() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-[var(--theme-text-secondary)]">Execution Mode</label>
+            <label className="text-xs font-medium text-[var(--theme-text-secondary)]">
+              Execution Mode
+            </label>
             <select
               className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
               value={executionMode}
@@ -236,7 +274,8 @@ export function PanelDetailView() {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-[var(--theme-text-secondary)]">
-              Orchestrator Persona <span className="font-normal text-[var(--theme-text-muted)]">(optional)</span>
+              Orchestrator Persona{' '}
+              <span className="font-normal text-[var(--theme-text-muted)]">(optional)</span>
             </label>
             <select
               className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
@@ -245,32 +284,43 @@ export function PanelDetailView() {
             >
               <option value="">None (default synthesis)</option>
               {personas.map((p) => (
-                <option key={p.id} value={p.id}>{p.displayName || p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.displayName || p.name}
+                </option>
               ))}
             </select>
             <p className="text-xs text-[var(--theme-text-muted)]">
-              If set, the persona's soul, identity and memory will be used as system prompt for the synthesis
+              If set, the persona's soul, identity and memory will be used as system prompt for the
+              synthesis
             </p>
           </div>
 
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Orchestrator Model</label>
+              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">
+                Orchestrator Model
+              </label>
               <ModelSelect
                 value={orchestratorModel}
                 onChange={setOrchestratorModel}
                 ariaLabel="Orchestrator model"
               />
-              <p className="mt-1 text-xs text-[var(--theme-text-muted)]">Model used to generate the synthesis</p>
+              <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+                Model used to generate the synthesis
+              </p>
             </div>
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Default Member Model</label>
+              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">
+                Default Member Model
+              </label>
               <ModelSelect
                 value={defaultMemberModel}
                 onChange={setDefaultMemberModel}
                 ariaLabel="Default member model"
               />
-              <p className="mt-1 text-xs text-[var(--theme-text-muted)]">Fallback model for members set to "inherited"</p>
+              <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+                Fallback model for members set to "inherited"
+              </p>
             </div>
           </div>
 
@@ -298,7 +348,9 @@ export function PanelDetailView() {
                   <span className="text-xs text-[var(--theme-text-muted)]">#{i + 1}</span>
                   <span className="flex-1 text-sm text-[var(--theme-text-primary)]">
                     {persona?.displayName ?? 'Unknown'}
-                    <span className="ml-2 text-xs text-[var(--theme-text-muted)]">{persona?.name}</span>
+                    <span className="ml-2 text-xs text-[var(--theme-text-muted)]">
+                      {persona?.name}
+                    </span>
                   </span>
                   <ModelSelect
                     variant="inline"
@@ -312,7 +364,15 @@ export function PanelDetailView() {
                     onClick={() => removeMember(i)}
                     title="Remove"
                   >
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    >
                       <line x1="4" y1="4" x2="12" y2="12" />
                       <line x1="12" y1="4" x2="4" y2="12" />
                     </svg>
@@ -333,9 +393,13 @@ export function PanelDetailView() {
                     }
                   }}
                 >
-                  <option value="" disabled>+ Add a persona...</option>
+                  <option value="" disabled>
+                    + Add a persona...
+                  </option>
                   {availablePersonas.map((p) => (
-                    <option key={p.id} value={p.id}>{p.displayName} ({p.name})</option>
+                    <option key={p.id} value={p.id}>
+                      {p.displayName} ({p.name})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -345,7 +409,8 @@ export function PanelDetailView() {
           {/* Orchestrator Prompt */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-[var(--theme-text-secondary)]">
-              Synthesis Prompt <span className="font-normal text-[var(--theme-text-muted)]">(optional)</span>
+              Synthesis Prompt{' '}
+              <span className="font-normal text-[var(--theme-text-muted)]">(optional)</span>
             </label>
             <textarea
               className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 font-mono text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"

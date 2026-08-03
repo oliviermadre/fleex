@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useNotificationStore } from '../../stores/notificationStore';
-import { NotificationCard } from './NotificationCard';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+import { useNotificationStore } from '../../stores/notificationStore';
+
+import { NotificationCard } from './NotificationCard';
 
 /** Grace period before the hover flyout closes, so the cursor can travel from
  *  the nav item across the small gap into the panel without it vanishing. */
@@ -11,7 +13,16 @@ const CLOSE_DELAY_MS = 150;
 
 function BellIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
@@ -134,40 +145,42 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
             {...getFloatingProps()}
             className="flex max-h-[70vh] w-80 max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] shadow-xl"
           >
-          <div className="flex items-center justify-between border-b border-[var(--theme-border-subtle)] px-3 py-2">
-            <span className="text-xs font-semibold text-[var(--theme-text-primary)]">Notifications</span>
-            {notifications.length > 0 && (
-              <button
-                type="button"
-                className="text-[10px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-primary)]"
-                onClick={clear}
-              >
-                Clear all
-              </button>
-            )}
-          </div>
+            <div className="flex items-center justify-between border-b border-[var(--theme-border-subtle)] px-3 py-2">
+              <span className="text-xs font-semibold text-[var(--theme-text-primary)]">
+                Notifications
+              </span>
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  className="text-[10px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-primary)]"
+                  onClick={clear}
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
 
-          <div className="flex-1 overflow-y-auto p-2">
-            {notifications.length === 0 ? (
-              <p className="px-2 py-8 text-center text-[11px] text-[var(--theme-text-faint)]">
-                No notifications yet.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {notifications.map((n) => (
-                  <NotificationCard
-                    key={n.id}
-                    notification={n}
-                    onClick={() => {
-                      cancelClose();
-                      navigate(n.link);
-                      closePanel();
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {notifications.length === 0 ? (
+                <p className="px-2 py-8 text-center text-[11px] text-[var(--theme-text-faint)]">
+                  No notifications yet.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {notifications.map((n) => (
+                    <NotificationCard
+                      key={n.id}
+                      notification={n}
+                      onClick={() => {
+                        cancelClose();
+                        navigate(n.link);
+                        closePanel();
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </FloatingPortal>
       )}

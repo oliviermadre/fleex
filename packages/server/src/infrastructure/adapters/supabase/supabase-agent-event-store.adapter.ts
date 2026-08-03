@@ -1,12 +1,18 @@
-import { join } from 'node:path';
-import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
+
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type {
+  AgentEventStorePort,
+  CliExecutionUpsert,
+} from '../../../application/ports/agent-event-store.port.js';
 
 interface ExecutionRow {
   execution_id: string;
@@ -94,11 +100,24 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     }
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
-    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string;
-  }): Promise<void> {
+  async completeExecution(
+    executionId: string,
+    status: 'completed' | 'failed' | 'interrupted',
+    metrics?: {
+      model?: string;
+      effectiveMode?: string;
+      effort?: string;
+      fast?: boolean;
+      durationMs?: number;
+      costUsd?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+      commentId?: string;
+      deliverableId?: string;
+    },
+  ): Promise<void> {
     const update: Record<string, unknown> = { status, completed_at: new Date().toISOString() };
     if (metrics?.model) update.model = metrics.model;
     if (metrics?.effectiveMode) update.effective_mode = metrics.effectiveMode;
@@ -109,17 +128,22 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (metrics?.inputTokens != null) update.input_tokens = metrics.inputTokens;
     if (metrics?.outputTokens != null) update.output_tokens = metrics.outputTokens;
     if (metrics?.cacheReadTokens != null) update.cache_read_tokens = metrics.cacheReadTokens;
-    if (metrics?.cacheCreationTokens != null) update.cache_creation_tokens = metrics.cacheCreationTokens;
+    if (metrics?.cacheCreationTokens != null)
+      update.cache_creation_tokens = metrics.cacheCreationTokens;
     if (metrics?.commentId != null) update.comment_id = metrics.commentId;
     if (metrics?.deliverableId != null) update.deliverable_id = metrics.deliverableId;
     const { error } = await this.conn.client
       .from('agent_event_executions')
       .update(update)
       .eq('execution_id', executionId);
-    if (error) throw new Error(`SupabaseAgentEventStore.completeExecution failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseAgentEventStore.completeExecution failed: ${error.message}`);
   }
 
-  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+  async setExecutionOutputs(
+    executionId: string,
+    refs: { commentId?: string; deliverableId?: string },
+  ): Promise<void> {
     const update: Record<string, unknown> = {};
     if (refs.commentId != null) update.comment_id = refs.commentId;
     if (refs.deliverableId != null) update.deliverable_id = refs.deliverableId;
@@ -128,13 +152,13 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       .from('agent_event_executions')
       .update(update)
       .eq('execution_id', executionId);
-    if (error) throw new Error(`SupabaseAgentEventStore.setExecutionOutputs failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseAgentEventStore.setExecutionOutputs failed: ${error.message}`);
   }
 
   async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
-    const { error } = await this.conn.client
-      .from('agent_event_executions')
-      .upsert({
+    const { error } = await this.conn.client.from('agent_event_executions').upsert(
+      {
         execution_id: p.executionId,
         persona_id: 'cli',
         ticket_id: p.ticketId,
@@ -152,8 +176,11 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
         cache_read_tokens: p.cacheReadTokens,
         cache_creation_tokens: p.cacheCreationTokens,
         source: 'cli',
-      }, { onConflict: 'execution_id' });
-    if (error) throw new Error(`SupabaseAgentEventStore.upsertCliExecution failed: ${error.message}`);
+      },
+      { onConflict: 'execution_id' },
+    );
+    if (error)
+      throw new Error(`SupabaseAgentEventStore.upsertCliExecution failed: ${error.message}`);
   }
 
   async getEventsByExecution(executionId: string): Promise<AgentEventEntity[]> {
@@ -166,10 +193,16 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       if (!line.trim()) continue;
       try {
         const dto = JSON.parse(line);
-        events.push(new AgentEventEntity(
-          dto.id, dto.executionId, dto.eventType,
-          dto.data, dto.sequence, new Date(dto.createdAt),
-        ));
+        events.push(
+          new AgentEventEntity(
+            dto.id,
+            dto.executionId,
+            dto.eventType,
+            dto.data,
+            dto.sequence,
+            new Date(dto.createdAt),
+          ),
+        );
       } catch {
         // Skip malformed lines
       }
@@ -183,7 +216,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       .select('*')
       .eq('ticket_id', ticketId)
       .order('started_at', { ascending: false });
-    if (error) throw new Error(`SupabaseAgentEventStore.getExecutionsByTicket failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseAgentEventStore.getExecutionsByTicket failed: ${error.message}`);
     return (data as ExecutionRow[]).map(rowToExecution);
   }
 
@@ -194,7 +228,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       .eq('persona_id', personaId)
       .order('started_at', { ascending: false })
       .limit(limit);
-    if (error) throw new Error(`SupabaseAgentEventStore.getExecutionsByPersona failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseAgentEventStore.getExecutionsByPersona failed: ${error.message}`);
     return (data as ExecutionRow[]).map(rowToExecution);
   }
 
@@ -220,7 +255,10 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       .from('agent_event_executions')
       .select('mention_id')
       .eq('status', 'running');
-    if (readErr) throw new Error(`SupabaseAgentEventStore.markInterruptedExecutions read failed: ${readErr.message}`);
+    if (readErr)
+      throw new Error(
+        `SupabaseAgentEventStore.markInterruptedExecutions read failed: ${readErr.message}`,
+      );
 
     const mentionIds = (running as { mention_id: string }[]).map((r) => r.mention_id);
 
@@ -229,25 +267,35 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
         .from('agent_event_executions')
         .update({ status: 'interrupted', completed_at: new Date().toISOString() })
         .eq('status', 'running');
-      if (error) throw new Error(`SupabaseAgentEventStore.markInterruptedExecutions update failed: ${error.message}`);
+      if (error)
+        throw new Error(
+          `SupabaseAgentEventStore.markInterruptedExecutions update failed: ${error.message}`,
+        );
     }
 
     return mentionIds;
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<
+    Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>
+  > {
     const { data, error } = await this.conn.client
       .from('agent_event_executions')
       .select('persona_id, ticket_id, sdk_session_id')
       .not('sdk_session_id', 'is', null)
       .order('started_at', { ascending: false });
-    if (error) throw new Error(`SupabaseAgentEventStore.getSessionHistory failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseAgentEventStore.getSessionHistory failed: ${error.message}`);
 
     const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
     for (const row of data as { persona_id: string; ticket_id: string; sdk_session_id: string }[]) {
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
-        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });
+        result.set(key, {
+          sdkSessionId: row.sdk_session_id,
+          personaId: row.persona_id,
+          ticketId: row.ticket_id,
+        });
       }
     }
     return result;

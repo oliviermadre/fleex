@@ -1,11 +1,21 @@
 import type { BoardWithCounts } from '@fleex/shared';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses } from '../../lib/tints';
 
 function ImportIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M8 2v8" />
       <polyline points="4,7 8,11 12,7" />
       <path d="M2 13h12" />
@@ -15,7 +25,16 @@ function ImportIcon() {
 
 function ChevronDownIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="4,6 8,10 12,6" />
     </svg>
   );
@@ -34,10 +53,20 @@ export function ImportTaskButton({
 
   if (importing) {
     return (
-      <div className={cn('flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium', tint('yellow'))}>
+      <div
+        className={cn(
+          'flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium',
+          tint('yellow'),
+        )}
+      >
         <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
           <circle cx="8" cy="8" r="6" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
-          <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path
+            d="M14 8a6 6 0 0 0-6-6"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
         </svg>
         Importing...
       </div>
@@ -55,7 +84,12 @@ export function ImportTaskButton({
     <>
       <button
         ref={refs.setReference}
-        className={cn('flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium transition-all', tint('yellow'), tintClasses('yellow').hoverBg, tintClasses('yellow').hoverBorderColor)}
+        className={cn(
+          'flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+          tint('yellow'),
+          tintClasses('yellow').hoverBg,
+          tintClasses('yellow').hoverBorderColor,
+        )}
         {...getReferenceProps({ onClick: handleClick })}
       >
         <ImportIcon />

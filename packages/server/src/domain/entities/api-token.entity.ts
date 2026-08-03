@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+
 import type { AgentToken, AgentTokenCreated } from '@fleex/shared';
 
 export class ApiTokenEntity {

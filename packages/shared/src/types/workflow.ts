@@ -59,8 +59,7 @@ export interface WorkflowTemplate {
 }
 
 export type WorkflowRunStatus =
-  | 'running' | 'blocked' | 'needs_review'
-  | 'completed' | 'failed' | 'cancelled';
+  'running' | 'blocked' | 'needs_review' | 'completed' | 'failed' | 'cancelled';
 
 export interface WorkflowTemplateSnapshot {
   name: string;
@@ -86,8 +85,7 @@ export interface WorkflowRun {
 }
 
 export type StepRunStatus =
-  | 'queued' | 'running' | 'completed'
-  | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
+  'queued' | 'running' | 'completed' | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
 
 export type StepRunResult = 'ok' | 'needs_review' | 'ko';
 

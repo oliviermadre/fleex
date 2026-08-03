@@ -1,7 +1,8 @@
 import { useMemo, useEffect } from 'react';
-import { ScratchpadContent } from '../../scratchpad/ScratchpadContent';
+
 import { useSidebarTerminalsStore } from '../../../stores/sidebarTerminalsStore';
 import { useUIStore } from '../../../stores/uiStore';
+import { ScratchpadContent } from '../../scratchpad/ScratchpadContent';
 
 interface ScratchpadTab {
   /** Logical store key — '__global__' or 'org/name'. */
@@ -89,7 +90,16 @@ export function SidebarTopPanel({ parentSessionId, repoKeys, defaultRepoKey }: P
           title="Collapse sidebar"
           className="flex h-full items-center justify-center px-2 text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] transition-colors flex-shrink-0 border-l border-[var(--theme-border)]"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
             <line x1="10" y1="1.5" x2="10" y2="14.5" />
           </svg>

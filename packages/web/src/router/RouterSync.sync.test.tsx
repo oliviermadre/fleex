@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { RouterSync } from './RouterSync';
-import { useTicketStore } from '../stores/ticketStore';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
 import { useTicketGroupStore } from '../stores/ticketGroupStore';
+import { useTicketStore } from '../stores/ticketStore';
 import { useUIStore } from '../stores/uiStore';
+
+import { RouterSync } from './RouterSync';
 
 /**
  * These tests pin the *intent* of the history fix: the default detail tab
@@ -33,7 +35,11 @@ function renderAt(initialPath: string) {
 
 describe('RouterSync URL→Store detail-tab sync', () => {
   beforeEach(() => {
-    useTicketStore.setState({ selectedBoardId: null, selectedTicketId: null, ticketTab: 'description' });
+    useTicketStore.setState({
+      selectedBoardId: null,
+      selectedTicketId: null,
+      ticketTab: 'description',
+    });
     useTicketGroupStore.setState({ selectedEpicDetailId: null, epicDetailTab: 'description' });
     useUIStore.setState({ activePanel: 'dashboard' });
   });

@@ -4,8 +4,8 @@ export interface DomainEventLogStorePort {
   save(entry: DomainEventLogEntity): Promise<void>;
   list(params: {
     limit: number;
-    before?: string;           // cursor pagination by ID
-    eventType?: string;        // filter by type or prefix (e.g. 'ticket.')
+    before?: string; // cursor pagination by ID
+    eventType?: string; // filter by type or prefix (e.g. 'ticket.')
     instanceId?: string;
     since?: Date;
     until?: Date;

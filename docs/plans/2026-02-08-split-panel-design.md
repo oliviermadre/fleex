@@ -1,14 +1,17 @@
 # Split Panel View — Implementation Plan
 
 ## Overview
+
 Shift+click a session in the sidebar to open it side-by-side with the current session. Two tmux terminals visible simultaneously, with a glowing border on the active (focused) pane. Any normal session navigation exits the split.
 
 ## Architecture Changes
 
 ### 1. Session Store — Add split state
+
 **File:** `packages/web/src/stores/sessionStore.ts`
 
 Add to state:
+
 - `splitSessionId: string | null` — session in the right pane (null = no split)
 - `focusedPane: 'primary' | 'split'` — which pane has focus
 - `openSplit(sessionId: string)` — enter split mode with given session in right pane
@@ -19,6 +22,7 @@ Update `selectSession(id)` to also call `closeSplit()` (any normal selection exi
 Update `removeSession(id)` to handle removal of the split session.
 
 ### 2. Terminal Manager — Remove singleton assumptions
+
 **File:** `packages/web/src/services/terminalManager.ts`
 
 - Remove `activeSessionId` field
@@ -30,9 +34,11 @@ Update `removeSession(id)` to handle removal of the split session.
 - `getActive()` removed (no longer meaningful)
 
 ### 3. useTerminal Hook — Per-instance WebSocket
+
 **File:** `packages/web/src/hooks/useTerminal.ts`
 
 Major refactor:
+
 - Create a **new `WebSocketManager` instance** inside the hook (not the singleton)
 - Connect it on mount, disconnect on unmount
 - Each hook instance is fully self-contained: own WS, own terminal, own container
@@ -40,6 +46,7 @@ Major refactor:
 - Accept container ref as before
 
 ### 4. WebSocket Singleton Cleanup
+
 **File:** `packages/web/src/services/websocket.ts`
 
 - Keep `dashboardWs` singleton (still needed globally)
@@ -47,13 +54,16 @@ Major refactor:
 - Terminal WS connections are now created per-hook instance
 
 **File:** `packages/web/src/hooks/useWebSocket.ts`
+
 - Remove `terminalWs.connect()` / `terminalWs.disconnect()`
 - Only manage `dashboardWs`
 
 ### 5. MainPanel — Split-aware layout
+
 **File:** `packages/web/src/components/main-panel/MainPanel.tsx`
 
 New rendering logic:
+
 ```
 if (splitSessionId) {
   // Two-pane layout
@@ -69,9 +79,11 @@ if (splitSessionId) {
 ```
 
 ### 6. New SessionPane Component
+
 **File:** `packages/web/src/components/main-panel/SessionPane.tsx`
 
 Extracted from MainPanel's current single-session view:
+
 - Props: `sessionId`, `focused`, `onFocus`
 - Contains: `SessionHeader` + `TerminalView` + `StatusBar`
 - onClick → `setFocusedPane` for this pane
@@ -79,6 +91,7 @@ Extracted from MainPanel's current single-session view:
 - CSS: `box-shadow: 0 0 0 2px var(--theme-accent), 0 0 12px rgba(accent, 0.3)` + `border-radius: 4px`
 
 ### 7. SessionItem — Shift+Click + dual highlighting
+
 **File:** `packages/web/src/components/sidebar/SessionItem.tsx`
 
 - onClick handler checks `e.shiftKey`:
@@ -89,6 +102,7 @@ Extracted from MainPanel's current single-session view:
   - Split session: slightly dimmer variant (e.g., accent-muted border)
 
 ### 8. Keyboard Shortcuts — Exit split on navigate
+
 **File:** `packages/web/src/hooks/useKeyboardShortcuts.ts`
 
 - Cmd+Shift+Up/Down already calls `selectSession()` which now calls `closeSplit()`

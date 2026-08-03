@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { WorkflowTemplateEntity } from '../../src/domain/entities/workflow-template.entity.js';
 
 describe('WorkflowTemplateEntity', () => {
@@ -12,8 +13,12 @@ describe('WorkflowTemplateEntity', () => {
 
   it('creates with required fields', () => {
     const t = WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'Feature Delivery', slug: 'feature-delivery',
-      steps: [validStep], edges: [], entryStepId: 'triage',
+      id: 'wf-1',
+      name: 'Feature Delivery',
+      slug: 'feature-delivery',
+      steps: [validStep],
+      edges: [],
+      entryStepId: 'triage',
     });
     expect(t.name).toBe('Feature Delivery');
     expect(t.slug).toBe('feature-delivery');
@@ -23,32 +28,55 @@ describe('WorkflowTemplateEntity', () => {
   });
 
   it('rejects when entryStepId is not in steps[]', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [validStep], edges: [], entryStepId: 'nonexistent',
-    })).toThrow(/entryStepId/);
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'x',
+        steps: [validStep],
+        edges: [],
+        entryStepId: 'nonexistent',
+      }),
+    ).toThrow(/entryStepId/);
   });
 
   it('rejects empty steps[]', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [], edges: [], entryStepId: '',
-    })).toThrow(/at least one step/);
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'x',
+        steps: [],
+        edges: [],
+        entryStepId: '',
+      }),
+    ).toThrow(/at least one step/);
   });
 
   it('rejects invalid slug', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'INVALID Slug!',
-      steps: [validStep], edges: [], entryStepId: 'triage',
-    })).toThrow(/slug/);
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'INVALID Slug!',
+        steps: [validStep],
+        edges: [],
+        entryStepId: 'triage',
+      }),
+    ).toThrow(/slug/);
   });
 
   it('rejects edges referencing nonexistent steps', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [validStep], entryStepId: 'triage',
-      edges: [{ id: 'e1', source: 'triage', target: 'missing', isDefault: true }],
-    })).toThrow(/edge .* target/);
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'x',
+        steps: [validStep],
+        entryStepId: 'triage',
+        edges: [{ id: 'e1', source: 'triage', target: 'missing', isDefault: true }],
+      }),
+    ).toThrow(/edge .* target/);
   });
 
   const humanGateStep = (humanGateOutcomes?: string[]) => ({
@@ -64,24 +92,40 @@ describe('WorkflowTemplateEntity', () => {
     // A gate with a single (or zero) outcome has no real branch to decide on,
     // so it must offer at least two outcomes (e.g. approve / reject).
     for (const outcomes of [undefined, [], ['approve']]) {
-      expect(() => WorkflowTemplateEntity.create({
-        id: 'wf-1', name: 'X', slug: 'x',
-        steps: [humanGateStep(outcomes)], edges: [], entryStepId: 'gate',
-      })).toThrow(/at least two outcomes/);
+      expect(() =>
+        WorkflowTemplateEntity.create({
+          id: 'wf-1',
+          name: 'X',
+          slug: 'x',
+          steps: [humanGateStep(outcomes)],
+          edges: [],
+          entryStepId: 'gate',
+        }),
+      ).toThrow(/at least two outcomes/);
     }
   });
 
   it('accepts a human_gate with two or more outcomes', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [humanGateStep(['approve', 'reject'])], edges: [], entryStepId: 'gate',
-    })).not.toThrow();
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'x',
+        steps: [humanGateStep(['approve', 'reject'])],
+        edges: [],
+        entryStepId: 'gate',
+      }),
+    ).not.toThrow();
   });
 
   it('toDTO returns serializable shape', () => {
     const t = WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [validStep], edges: [], entryStepId: 'triage',
+      id: 'wf-1',
+      name: 'X',
+      slug: 'x',
+      steps: [validStep],
+      edges: [],
+      entryStepId: 'triage',
     });
     const dto = t.toDTO();
     expect(dto.id).toBe('wf-1');
@@ -90,8 +134,12 @@ describe('WorkflowTemplateEntity', () => {
 
   it('update mutates and bumps updatedAt', async () => {
     const t = WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [validStep], edges: [], entryStepId: 'triage',
+      id: 'wf-1',
+      name: 'X',
+      slug: 'x',
+      steps: [validStep],
+      edges: [],
+      entryStepId: 'triage',
     });
     const before = t.updatedAt.getTime();
     await new Promise((r) => setTimeout(r, 5));

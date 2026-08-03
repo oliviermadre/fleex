@@ -1,8 +1,12 @@
 import pg from 'pg';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 
 export type DbPool = pg.Pool & {
-  connect(): Promise<{ query(text: string, params?: unknown[]): Promise<{ rows: any[] }>; release(): void }>;
+  connect(): Promise<{
+    query(text: string, params?: unknown[]): Promise<{ rows: any[] }>;
+    release(): void;
+  }>;
 };
 
 const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000';

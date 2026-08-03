@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+
 import { useUIStore } from '../stores/uiStore';
 
 export function useHotkeyReveal() {

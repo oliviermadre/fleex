@@ -1,7 +1,9 @@
 import type { MentionStatus } from '@fleex/shared';
+
 import { TicketMentionEntity } from '../../../domain/entities/ticket-mention.entity.js';
-import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
+
 import type { SqliteConnection } from './connection.js';
+import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
 
 interface MentionRow {
   id: string;
@@ -29,9 +31,8 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
   }
 
   async getById(id: string): Promise<TicketMentionEntity | null> {
-    const row = this.conn.db
-      .prepare('SELECT * FROM mentions WHERE id = ?')
-      .get(id) as MentionRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM mentions WHERE id = ?').get(id) as
+      MentionRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 
@@ -65,7 +66,9 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
     // same agent would silently re-run a crashed one, looping on an unresolved
     // cause (the "no auto-retry" non-goal, ticket #443).
     const rows = this.conn.db
-      .prepare('SELECT * FROM mentions WHERE target_agent = ? AND status NOT IN (?, ?, ?) ORDER BY created_at ASC')
+      .prepare(
+        'SELECT * FROM mentions WHERE target_agent = ? AND status NOT IN (?, ?, ?) ORDER BY created_at ASC',
+      )
       .all(agentName, 'resolved', 'waiting_for_info', 'failed') as MentionRow[];
     return rows.map((r) => this.toEntity(r));
   }

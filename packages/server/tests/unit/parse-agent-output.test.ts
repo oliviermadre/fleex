@@ -1,15 +1,26 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseAgentOutput } from '../../src/application/utils/parse-agent-output.js';
 
 describe('parseAgentOutput', () => {
   it('parses clean JSON with both fields', () => {
     const input = JSON.stringify({
-      deliverable: { title: 'Analysis Report', markdown: '# Report\n\nFindings...', type: 'report', status: 'final' },
+      deliverable: {
+        title: 'Analysis Report',
+        markdown: '# Report\n\nFindings...',
+        type: 'report',
+        status: 'final',
+      },
       comment: 'Done! @agent:reviewer please take a look.',
     });
     const result = parseAgentOutput(input);
     expect(result).toEqual({
-      deliverable: { title: 'Analysis Report', markdown: '# Report\n\nFindings...', type: 'report', status: 'final' },
+      deliverable: {
+        title: 'Analysis Report',
+        markdown: '# Report\n\nFindings...',
+        type: 'report',
+        status: 'final',
+      },
       comment: 'Done! @agent:reviewer please take a look.',
     });
   });
@@ -49,19 +60,34 @@ describe('parseAgentOutput', () => {
 Hope that helps!`;
     const result = parseAgentOutput(input);
     expect(result).toEqual({
-      deliverable: { title: 'Code Review', markdown: 'Looks good', type: 'report', status: 'final' },
+      deliverable: {
+        title: 'Code Review',
+        markdown: 'Looks good',
+        type: 'report',
+        status: 'final',
+      },
       comment: null,
     });
   });
 
   it('handles deliverable-only output (comment is null)', () => {
     const input = JSON.stringify({
-      deliverable: { title: 'Implementation', markdown: '```ts\nconst x = 1;\n```', type: 'code', status: 'draft' },
+      deliverable: {
+        title: 'Implementation',
+        markdown: '```ts\nconst x = 1;\n```',
+        type: 'code',
+        status: 'draft',
+      },
       comment: null,
     });
     const result = parseAgentOutput(input);
     expect(result).toEqual({
-      deliverable: { title: 'Implementation', markdown: '```ts\nconst x = 1;\n```', type: 'code', status: 'draft' },
+      deliverable: {
+        title: 'Implementation',
+        markdown: '```ts\nconst x = 1;\n```',
+        type: 'code',
+        status: 'draft',
+      },
       comment: null,
     });
   });

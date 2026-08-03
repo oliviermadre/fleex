@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { ExecuteAgentUseCase } from '../../src/application/use-cases/execute-agent.js';
 
 /**
@@ -18,7 +19,9 @@ function makeUseCase() {
     appendEvent: async (e: { executionId: string; eventType: string; data: unknown }) => {
       emitted.push({ executionId: e.executionId, eventType: e.eventType, data: e.data });
     },
-    completeExecution: async (id: string, status: string) => { completed.push({ id, status }); },
+    completeExecution: async (id: string, status: string) => {
+      completed.push({ id, status });
+    },
   } as never;
 
   const mentionStore = { getById: async () => null, save: async () => {} } as never;
@@ -28,7 +31,20 @@ function makeUseCase() {
   const stub = {} as never;
 
   const useCase = new ExecuteAgentUseCase(
-    personaStore, mentionStore, stub, stub, stub, stub, agentEventStore, stub, stub, stub, logger, stub, sdkLimiter, stub,
+    personaStore,
+    mentionStore,
+    stub,
+    stub,
+    stub,
+    stub,
+    agentEventStore,
+    stub,
+    stub,
+    stub,
+    logger,
+    stub,
+    sdkLimiter,
+    stub,
   );
 
   return { useCase, completed, emitted };
@@ -41,7 +57,12 @@ describe('ExecutionRegistry — panel sessions are individually abortable', () =
   it('WHY: a registered panel member can be terminated from the UI (no more 404)', async () => {
     const { useCase, completed, emitted } = makeUseCase();
     const abortController = new AbortController();
-    useCase.registerExecution({ executionId: 'exec-member-1', personaId: 'p1', ticketId: 'T1', abortController });
+    useCase.registerExecution({
+      executionId: 'exec-member-1',
+      personaId: 'p1',
+      ticketId: 'T1',
+      abortController,
+    });
 
     const ok = await useCase.cancelExecution('exec-member-1');
 
@@ -58,8 +79,18 @@ describe('ExecutionRegistry — panel sessions are individually abortable', () =
     const { useCase } = makeUseCase();
     const a = new AbortController();
     const b = new AbortController();
-    useCase.registerExecution({ executionId: 'member-a', personaId: 'pa', ticketId: 'T', abortController: a });
-    useCase.registerExecution({ executionId: 'member-b', personaId: 'pb', ticketId: 'T', abortController: b });
+    useCase.registerExecution({
+      executionId: 'member-a',
+      personaId: 'pa',
+      ticketId: 'T',
+      abortController: a,
+    });
+    useCase.registerExecution({
+      executionId: 'member-b',
+      personaId: 'pb',
+      ticketId: 'T',
+      abortController: b,
+    });
 
     await useCase.cancelExecution('member-a');
 
@@ -75,7 +106,12 @@ describe('ExecutionRegistry — panel sessions are individually abortable', () =
     expect(await useCase.cancelExecution('never-registered')).toBe(false);
 
     const ac = new AbortController();
-    useCase.registerExecution({ executionId: 'exec-x', personaId: 'p1', ticketId: 'T', abortController: ac });
+    useCase.registerExecution({
+      executionId: 'exec-x',
+      personaId: 'p1',
+      ticketId: 'T',
+      abortController: ac,
+    });
     expect(await useCase.cancelExecution('exec-x')).toBe(true);
     // Second cancel of the same (now non-running) execution is a no-op, not a 500.
     expect(await useCase.cancelExecution('exec-x')).toBe(false);
@@ -84,7 +120,12 @@ describe('ExecutionRegistry — panel sessions are individually abortable', () =
   it('WHY: finalizeExecution evicts a settled entry (no unbounded registry growth)', async () => {
     const { useCase } = makeUseCase();
     const ac = new AbortController();
-    useCase.registerExecution({ executionId: 'exec-fin', personaId: 'p1', ticketId: 'T', abortController: ac });
+    useCase.registerExecution({
+      executionId: 'exec-fin',
+      personaId: 'p1',
+      ticketId: 'T',
+      abortController: ac,
+    });
 
     useCase.finalizeExecution('exec-fin');
     // Still present within the 30s grace window (preserves the Terminate lookup).
@@ -100,10 +141,15 @@ describe('ExecutionRegistry — panel sessions are individually abortable', () =
   it('WHY: finalize never resurrects a cancelled execution to running', async () => {
     const { useCase } = makeUseCase();
     const ac = new AbortController();
-    useCase.registerExecution({ executionId: 'exec-c', personaId: 'p1', ticketId: 'T', abortController: ac });
+    useCase.registerExecution({
+      executionId: 'exec-c',
+      personaId: 'p1',
+      ticketId: 'T',
+      abortController: ac,
+    });
 
     await useCase.cancelExecution('exec-c'); // sets status 'failed'
-    useCase.finalizeExecution('exec-c');     // must not flip it back to running
+    useCase.finalizeExecution('exec-c'); // must not flip it back to running
 
     expect(await useCase.cancelExecution('exec-c')).toBe(false);
   });

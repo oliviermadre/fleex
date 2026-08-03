@@ -1,31 +1,40 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { SessionGroup, Session, WorktreeSessionGroup, TicketLink, RepositorySummary } from '@fleex/shared';
+
+import type {
+  SessionGroup,
+  Session,
+  WorktreeSessionGroup,
+  TicketLink,
+  RepositorySummary,
+} from '@fleex/shared';
 import { TOOLTIP_HIDE_DELAY_MS } from '@fleex/shared';
+
 import { useTooltip, FloatingPortal } from '../../hooks/usePopover';
-import { useUIStore, type SettingsTab } from '../../stores/uiStore';
+import { cn } from '../../lib/cn';
+import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
+import { tintSolid, tintText } from '../../lib/tints';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
-import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
-import { useScratchpadStore } from '../../stores/scratchpadStore';
-import { SidebarHeader } from './SidebarHeader';
-import { SessionGroups } from './SessionGroups';
-import { SettingsNav } from '../settings/SettingsNav';
+import { useUIStore, type SettingsTab } from '../../stores/uiStore';
+import { AgentListPanel } from '../agents/AgentListPanel';
 import { AnalyticsNav } from '../analytics/AnalyticsNav';
-import { RepositoriesContent } from './RepositoriesContent';
+import { AssistantSidebar } from '../assistant/AssistantSidebar';
 import { ClaudeConfigTree } from '../claude-config/ClaudeConfigTree';
 import { ScratchpadsContent } from '../scratchpad/ScratchpadsContent';
+import { SettingsNav } from '../settings/SettingsNav';
 import { TicketsContentPanel } from '../tickets/TicketsContentPanel';
-import { AgentListPanel } from '../agents/AgentListPanel';
-import { AssistantSidebar } from '../assistant/AssistantSidebar';
-import { RepositoriesIcon } from './icons';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
-import { cn } from '../../lib/cn';
-import { tintSolid, tintText } from '../../lib/tints';
+
+import { RepositoriesIcon } from './icons';
+import { RepositoriesContent } from './RepositoriesContent';
+import { SessionGroups } from './SessionGroups';
+import { SidebarHeader } from './SidebarHeader';
 
 export function ContentPanel() {
   const activePanel = useUIStore((s) => s.activePanel);
@@ -107,12 +116,15 @@ function useCollapsedTooltip() {
   // Positioned to the RIGHT of the hovered row; flip/shift keep it on-screen.
   const { refs, floatingStyles, getFloatingProps } = useTooltip({ placement: 'right' });
 
-  const show = useCallback((e: React.MouseEvent, line1: string, line2: string) => {
-    clearTimeout(hideTimeout.current);
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    refs.setPositionReference({ getBoundingClientRect: () => rect });
-    setTooltip({ line1, line2 });
-  }, [refs]);
+  const show = useCallback(
+    (e: React.MouseEvent, line1: string, line2: string) => {
+      clearTimeout(hideTimeout.current);
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      refs.setPositionReference({ getBoundingClientRect: () => rect });
+      setTooltip({ line1, line2 });
+    },
+    [refs],
+  );
 
   const hide = useCallback(() => {
     hideTimeout.current = setTimeout(() => setTooltip(null), TOOLTIP_HIDE_DELAY_MS);
@@ -131,7 +143,16 @@ function ExpandButton() {
       style={{ height: 'var(--header-height)' }}
       title="Expand panel"
     >
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
         <line x1="6" y1="1.5" x2="6" y2="14.5" />
       </svg>
@@ -228,7 +249,7 @@ function CollapsedWorktreeItem({
           'relative flex min-w-0 w-full flex-col gap-0.5 py-2.5 text-left transition-colors border-l-2',
           isSelected
             ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
-            : 'border-transparent hover:bg-[var(--theme-bg-hover)]'
+            : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
         )}
         onClick={onClick}
         onMouseEnter={onMouseEnter}
@@ -250,11 +271,26 @@ function CollapsedWorktreeItem({
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
           {status === 'needs-approval' && (
-            <span className={cn('absolute -top-0.5 right-0.5 text-[10px]', tintText('yellow'))}>&#9888;</span>
+            <span className={cn('absolute -top-0.5 right-0.5 text-[10px]', tintText('yellow'))}>
+              &#9888;
+            </span>
           )}
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
-            <circle cx="5" cy="3.5" r="1.5" /><circle cx="11" cy="3.5" r="1.5" /><circle cx="8" cy="12.5" r="1.5" />
-            <line x1="5" y1="5" x2="5" y2="7" /><line x1="11" y1="5" x2="11" y2="7" />
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-[var(--theme-text-faint)]"
+          >
+            <circle cx="5" cy="3.5" r="1.5" />
+            <circle cx="11" cy="3.5" r="1.5" />
+            <circle cx="8" cy="12.5" r="1.5" />
+            <line x1="5" y1="5" x2="5" y2="7" />
+            <line x1="11" y1="5" x2="11" y2="7" />
             <path d="M5 7c0 1.5 1.5 2.5 3 4M11 7c0 1.5-1.5 2.5-3 4" />
           </svg>
           <StatusDot status={status} />
@@ -284,18 +320,32 @@ function CollapsedSystemItem({
           'relative flex min-w-0 w-full flex-col gap-0.5 py-2.5 text-left transition-colors border-l-2',
           isSelected
             ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
-            : 'border-transparent hover:bg-[var(--theme-bg-hover)]'
+            : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
         )}
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
         <div className="invisible">
-          <div className="flex items-center gap-1.5"><span className="text-sm font-semibold font-mono">&nbsp;</span></div>
-          <div className="flex items-center gap-1.5 pl-5"><span className="text-xs">&nbsp;</span></div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold font-mono">&nbsp;</span>
+          </div>
+          <div className="flex items-center gap-1.5 pl-5">
+            <span className="text-xs">&nbsp;</span>
+          </div>
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-[var(--theme-text-faint)]"
+          >
             <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
             <polyline points="4.5,6.5 7,9 4.5,11.5" />
             <line x1="9" y1="11.5" x2="11.5" y2="11.5" />
@@ -359,7 +409,8 @@ function CollapsedBranchesPanel() {
   const navigateToWorktree = (worktreeKey: string, sessions: Session[]) => {
     if (sessions.length === 0) return;
     const lastActive = lastActiveTabByWorktree[worktreeKey];
-    const targetId = lastActive && sessions.some((s) => s.id === lastActive) ? lastActive : sessions[0]!.id;
+    const targetId =
+      lastActive && sessions.some((s) => s.id === lastActive) ? lastActive : sessions[0]!.id;
     navigate(`/sessions/${targetId}`, { replace: true });
   };
 
@@ -367,15 +418,21 @@ function CollapsedBranchesPanel() {
   const systemSelected = systemSessions.some((s) => s.id === selectedSessionId);
 
   // Render worktrees from a group, filtered by predicate
-  const renderWorktrees = (group: SessionGroup, filter: (wt: SessionGroup['worktrees'][0]) => boolean) => {
+  const renderWorktrees = (
+    group: SessionGroup,
+    filter: (wt: SessionGroup['worktrees'][0]) => boolean,
+  ) => {
     const groupId = `${group.repositoryOrg}/${group.repositoryName}`;
     const wtOrder = worktreeOrder[groupId];
-    const sorted = wtOrder && wtOrder.length > 0
-      ? [...group.worktrees].sort((a, b) => {
-          const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
-          return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
-        })
-      : [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
+    const sorted =
+      wtOrder && wtOrder.length > 0
+        ? [...group.worktrees].sort((a, b) => {
+            const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
+            return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
+          })
+        : [...group.worktrees].sort((a, b) =>
+            a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()),
+          );
 
     return sorted.filter(filter).map((wt) => {
       const worktreeKey = `${groupId}:${wt.branch}`;
@@ -406,22 +463,33 @@ function CollapsedBranchesPanel() {
             isSelected={systemSelected}
             onClick={() => {
               const lastActive = lastActiveTabByWorktree['_system'];
-              const isValidTabKey = lastActive && systemSessions.some((s) => `s:${s.id}` === lastActive);
+              const isValidTabKey =
+                lastActive && systemSessions.some((s) => `s:${s.id}` === lastActive);
               const tabSuffix = isValidTabKey ? `/${encodeURIComponent(lastActive!)}` : '';
               navigate(`/sessions/system${tabSuffix}`, { replace: true });
             }}
-            onMouseEnter={(e) => showTooltip(e, 'Shells', `${systemSessions.length} session${systemSessions.length !== 1 ? 's' : ''}`)}
+            onMouseEnter={(e) =>
+              showTooltip(
+                e,
+                'Shells',
+                `${systemSessions.length} session${systemSessions.length !== 1 ? 's' : ''}`,
+              )
+            }
             onMouseLeave={hideTooltip}
           />
         )}
 
         {/* Manual Flow section */}
         <CollapsedSectionDivider />
-        {!manualFlowCollapsed && repoGroups.map((group) => renderWorktrees(group, (wt) => wt.sessions.length > 0))}
+        {!manualFlowCollapsed &&
+          repoGroups.map((group) => renderWorktrees(group, (wt) => wt.sessions.length > 0))}
 
         {/* Agentic Flow section */}
         <CollapsedSectionDivider />
-        {!agenticFlowCollapsed && repoGroups.map((group) => renderWorktrees(group, (wt) => wt.sessions.length === 0 && wt.agentWorktree != null))}
+        {!agenticFlowCollapsed &&
+          repoGroups.map((group) =>
+            renderWorktrees(group, (wt) => wt.sessions.length === 0 && wt.agentWorktree != null),
+          )}
       </div>
       <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
@@ -447,7 +515,8 @@ function CollapsedRepositoriesPanel() {
       existing.push(summary);
       groups.set(summary.org, existing);
     }
-    for (const [, repos] of groups) repos.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    for (const [, repos] of groups)
+      repos.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
     return [...groups.entries()].sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()));
   }, [summaries]);
 
@@ -458,38 +527,45 @@ function CollapsedRepositoriesPanel() {
           <div className="flex items-center justify-center py-6">
             <RepositoriesIcon size={16} className="text-[var(--theme-text-faint)]" />
           </div>
-        ) : orgGroups.map(([org, repos]) => {
-          const orgGroupId = `org:${org}`;
-          const isOrgCollapsed = collapsedGroups.has(orgGroupId);
+        ) : (
+          orgGroups.map(([org, repos]) => {
+            const orgGroupId = `org:${org}`;
+            const isOrgCollapsed = collapsedGroups.has(orgGroupId);
 
-          return (
-            <div key={org} className="my-1.5">
-              <CollapsedSeparator />
-              {!isOrgCollapsed && repos.map((repo) => {
-                const key = `${repo.org}/${repo.name}`;
-                const isSelected = selectedRepoKey === key;
-                const initials = nameToInitials(repo.name);
-                return (
-                  <CollapsedRow
-                    key={key}
-                    isSelected={isSelected}
-                    onClick={() => navigate(`/repositories/${key}`, { replace: true })}
-                    onMouseEnter={(e) => showTooltip(e, repo.name, org)}
-                    onMouseLeave={hideTooltip}
-                    icon={
-                      <span className={cn(
-                        'text-[10px] font-bold leading-none',
-                        isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
-                      )}>
-                        {initials}
-                      </span>
-                    }
-                  />
-                );
-              })}
-            </div>
-          );
-        })}
+            return (
+              <div key={org} className="my-1.5">
+                <CollapsedSeparator />
+                {!isOrgCollapsed &&
+                  repos.map((repo) => {
+                    const key = `${repo.org}/${repo.name}`;
+                    const isSelected = selectedRepoKey === key;
+                    const initials = nameToInitials(repo.name);
+                    return (
+                      <CollapsedRow
+                        key={key}
+                        isSelected={isSelected}
+                        onClick={() => navigate(`/repositories/${key}`, { replace: true })}
+                        onMouseEnter={(e) => showTooltip(e, repo.name, org)}
+                        onMouseLeave={hideTooltip}
+                        icon={
+                          <span
+                            className={cn(
+                              'text-[10px] font-bold leading-none',
+                              isSelected
+                                ? 'text-[var(--theme-text-primary)]'
+                                : 'text-[var(--theme-text-muted)]',
+                            )}
+                          >
+                            {initials}
+                          </span>
+                        }
+                      />
+                    );
+                  })}
+              </div>
+            );
+          })
+        )}
       </div>
       <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
@@ -510,7 +586,10 @@ const TICKET_STATUS_COLORS: Record<string, string> = {
 
 function CollapsedTicketsPanel() {
   const rawBoards = useTicketStore((s) => s.boards);
-  const boards = useMemo(() => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)), [rawBoards]);
+  const boards = useMemo(
+    () => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)),
+    [rawBoards],
+  );
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const selectBoard = useTicketStore((s) => s.selectBoard);
   const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
@@ -531,7 +610,8 @@ function CollapsedTicketsPanel() {
       <div className="flex-1 overflow-y-auto w-full">
         {/* Boards */}
         {boards.map((board) => {
-          const isSelected = selectedBoardId === board.id || (selectedBoardId === null && boards.length === 1);
+          const isSelected =
+            selectedBoardId === board.id || (selectedBoardId === null && boards.length === 1);
           return (
             <CollapsedRow
               key={board.id}
@@ -539,9 +619,7 @@ function CollapsedTicketsPanel() {
               onClick={() => selectBoard(board.id)}
               onMouseEnter={(e) => showTooltip(e, `${board.emoji} ${board.name}`, 'Board')}
               onMouseLeave={hideTooltip}
-              icon={
-                <span className="text-sm">{board.emoji || '📋'}</span>
-              }
+              icon={<span className="text-sm">{board.emoji || '📋'}</span>}
             />
           );
         })}
@@ -557,12 +635,18 @@ function CollapsedTicketsPanel() {
               key={status}
               className="flex w-full items-center justify-center gap-1.5 py-1.5"
               onMouseEnter={(e) => {
-                showTooltip(e, status.charAt(0).toUpperCase() + status.slice(1), `${count} ticket${count !== 1 ? 's' : ''}`);
+                showTooltip(
+                  e,
+                  status.charAt(0).toUpperCase() + status.slice(1),
+                  `${count} ticket${count !== 1 ? 's' : ''}`,
+                );
               }}
               onMouseLeave={hideTooltip}
             >
               <span className={cn('h-2 w-2 rounded-full', TICKET_STATUS_COLORS[status])} />
-              <span className="text-[10px] font-medium tabular-nums text-[var(--theme-text-muted)]">{count}</span>
+              <span className="text-[10px] font-medium tabular-nums text-[var(--theme-text-muted)]">
+                {count}
+              </span>
             </div>
           );
         })}
@@ -573,10 +657,26 @@ function CollapsedTicketsPanel() {
             <CollapsedSeparator />
             <div
               className="flex w-full items-center justify-center py-2"
-              onMouseEnter={(e) => showTooltip(e, 'Filters active', `${activeFilterCount} filter${activeFilterCount !== 1 ? 's' : ''}`)}
+              onMouseEnter={(e) =>
+                showTooltip(
+                  e,
+                  'Filters active',
+                  `${activeFilterCount} filter${activeFilterCount !== 1 ? 's' : ''}`,
+                )
+              }
               onMouseLeave={hideTooltip}
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-accent)]">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-[var(--theme-accent)]"
+              >
                 <path d="M1.5 2.5h13l-5 6v4l-3 1.5v-5.5l-5-6z" />
               </svg>
             </div>
@@ -613,35 +713,69 @@ function CollapsedClaudeConfigPanel() {
       <div className="flex-1 overflow-y-auto w-full">
         {items.length === 0 ? (
           <div className="flex items-center justify-center py-6">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className="text-[var(--theme-text-faint)]"
+            >
               <path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" />
               <polyline points="9,1.5 9,5.5 13,5.5" />
             </svg>
           </div>
-        ) : items.map((item) => {
-          const isSelected = selectedFile === item.path;
-          return (
-            <CollapsedRow
-              key={item.path}
-              isSelected={isSelected}
-              onClick={() => { if (!item.isDir) selectFile(item.path); }}
-              onMouseEnter={(e) => showTooltip(e, item.name, item.isDir ? 'Directory' : 'File')}
-              onMouseLeave={hideTooltip}
-              icon={
-                item.isDir ? (
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className={isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-faint)]'}>
-                    <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z" />
-                  </svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-faint)]'}>
-                    <path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" />
-                    <polyline points="9,1.5 9,5.5 13,5.5" />
-                  </svg>
-                )
-              }
-            />
-          );
-        })}
+        ) : (
+          items.map((item) => {
+            const isSelected = selectedFile === item.path;
+            return (
+              <CollapsedRow
+                key={item.path}
+                isSelected={isSelected}
+                onClick={() => {
+                  if (!item.isDir) selectFile(item.path);
+                }}
+                onMouseEnter={(e) => showTooltip(e, item.name, item.isDir ? 'Directory' : 'File')}
+                onMouseLeave={hideTooltip}
+                icon={
+                  item.isDir ? (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                      className={
+                        isSelected
+                          ? 'text-[var(--theme-text-primary)]'
+                          : 'text-[var(--theme-text-faint)]'
+                      }
+                    >
+                      <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      className={
+                        isSelected
+                          ? 'text-[var(--theme-text-primary)]'
+                          : 'text-[var(--theme-text-faint)]'
+                      }
+                    >
+                      <path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" />
+                      <polyline points="9,1.5 9,5.5 13,5.5" />
+                    </svg>
+                  )
+                }
+              />
+            );
+          })
+        )}
       </div>
       <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
@@ -665,36 +799,58 @@ function CollapsedAgentsPanel() {
       <div className="flex-1 overflow-y-auto w-full">
         {personas.length === 0 ? (
           <div className="flex items-center justify-center py-6">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
-              <circle cx="8" cy="5" r="3" /><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className="text-[var(--theme-text-faint)]"
+            >
+              <circle cx="8" cy="5" r="3" />
+              <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
             </svg>
           </div>
-        ) : personas.map((persona) => {
-          const isSelected = selectedPersonaId === persona.id;
-          const status = executionStatuses[persona.id];
-          const isRunning = status?.running ?? false;
-          const initials = nameToInitials(persona.displayName);
-          return (
-            <CollapsedRow
-              key={persona.id}
-              isSelected={isSelected}
-              onClick={() => navigate(`/agents/${persona.id}`, { replace: true })}
-              onMouseEnter={(e) => showTooltip(e, persona.displayName, isRunning ? 'Running' : 'Agent')}
-              onMouseLeave={hideTooltip}
-              icon={
-                <span className={cn(
-                  'relative text-[10px] font-bold leading-none',
-                  isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
-                )}>
-                  {initials}
-                  {isRunning && (
-                    <span className={cn('absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full', tintSolid('yellow'))} />
-                  )}
-                </span>
-              }
-            />
-          );
-        })}
+        ) : (
+          personas.map((persona) => {
+            const isSelected = selectedPersonaId === persona.id;
+            const status = executionStatuses[persona.id];
+            const isRunning = status?.running ?? false;
+            const initials = nameToInitials(persona.displayName);
+            return (
+              <CollapsedRow
+                key={persona.id}
+                isSelected={isSelected}
+                onClick={() => navigate(`/agents/${persona.id}`, { replace: true })}
+                onMouseEnter={(e) =>
+                  showTooltip(e, persona.displayName, isRunning ? 'Running' : 'Agent')
+                }
+                onMouseLeave={hideTooltip}
+                icon={
+                  <span
+                    className={cn(
+                      'relative text-[10px] font-bold leading-none',
+                      isSelected
+                        ? 'text-[var(--theme-text-primary)]'
+                        : 'text-[var(--theme-text-muted)]',
+                    )}
+                  >
+                    {initials}
+                    {isRunning && (
+                      <span
+                        className={cn(
+                          'absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full',
+                          tintSolid('yellow'),
+                        )}
+                      />
+                    )}
+                  </span>
+                }
+              />
+            );
+          })
+        )}
       </div>
       <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
@@ -739,8 +895,11 @@ function CollapsedScratchpadsPanel() {
       }
     }
 
-    for (const [, items] of byOrg) items.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-    const orgGroups = [...byOrg.entries()].sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    for (const [, items] of byOrg)
+      items.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+    const orgGroups = [...byOrg.entries()].sort(([a], [b]) =>
+      a.toLowerCase().localeCompare(b.toLowerCase()),
+    );
 
     return { globalItem, orgGroups };
   }, [scratchpadList]);
@@ -750,33 +909,52 @@ function CollapsedScratchpadsPanel() {
       <div className="flex-1 overflow-y-auto w-full">
         {scratchpadList.length === 0 ? (
           <div className="flex items-center justify-center py-6">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className="text-[var(--theme-text-faint)]"
+            >
               <path d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11z" />
               <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" strokeWidth="1" strokeLinecap="round" />
             </svg>
           </div>
         ) : (
           <>
-            {globalItem && (() => {
-              const isSelected = selectedScratchpadKey === globalItem.key;
-              return (
-                <CollapsedRow
-                  key={globalItem.key}
-                  isSelected={isSelected}
-                  onClick={() => handleSelect(globalItem.key)}
-                  onMouseEnter={(e) => showTooltip(e, globalItem.label, `${globalItem.lineCount} line${globalItem.lineCount !== 1 ? 's' : ''}`)}
-                  onMouseLeave={hideTooltip}
-                  icon={
-                    <span className={cn(
-                      'text-[10px] font-bold leading-none',
-                      isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
-                    )}>
-                      G
-                    </span>
-                  }
-                />
-              );
-            })()}
+            {globalItem &&
+              (() => {
+                const isSelected = selectedScratchpadKey === globalItem.key;
+                return (
+                  <CollapsedRow
+                    key={globalItem.key}
+                    isSelected={isSelected}
+                    onClick={() => handleSelect(globalItem.key)}
+                    onMouseEnter={(e) =>
+                      showTooltip(
+                        e,
+                        globalItem.label,
+                        `${globalItem.lineCount} line${globalItem.lineCount !== 1 ? 's' : ''}`,
+                      )
+                    }
+                    onMouseLeave={hideTooltip}
+                    icon={
+                      <span
+                        className={cn(
+                          'text-[10px] font-bold leading-none',
+                          isSelected
+                            ? 'text-[var(--theme-text-primary)]'
+                            : 'text-[var(--theme-text-muted)]',
+                        )}
+                      >
+                        G
+                      </span>
+                    }
+                  />
+                );
+              })()}
             {orgGroups.map(([org, items]) => {
               const orgGroupId = `scratchpad-org:${org}`;
               const isOrgCollapsed = collapsedGroups.has(orgGroupId);
@@ -784,28 +962,33 @@ function CollapsedScratchpadsPanel() {
               return (
                 <div key={org} className="my-1.5">
                   <CollapsedSeparator />
-                  {!isOrgCollapsed && items.map((item) => {
-                    const isSelected = selectedScratchpadKey === item.key;
-                    const repoName = item.key.substring(item.key.indexOf('/') + 1);
-                    const initials = nameToInitials(repoName);
-                    return (
-                      <CollapsedRow
-                        key={item.key}
-                        isSelected={isSelected}
-                        onClick={() => handleSelect(item.key)}
-                        onMouseEnter={(e) => showTooltip(e, repoName, org)}
-                        onMouseLeave={hideTooltip}
-                        icon={
-                          <span className={cn(
-                            'text-[10px] font-bold leading-none',
-                            isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
-                          )}>
-                            {initials}
-                          </span>
-                        }
-                      />
-                    );
-                  })}
+                  {!isOrgCollapsed &&
+                    items.map((item) => {
+                      const isSelected = selectedScratchpadKey === item.key;
+                      const repoName = item.key.substring(item.key.indexOf('/') + 1);
+                      const initials = nameToInitials(repoName);
+                      return (
+                        <CollapsedRow
+                          key={item.key}
+                          isSelected={isSelected}
+                          onClick={() => handleSelect(item.key)}
+                          onMouseEnter={(e) => showTooltip(e, repoName, org)}
+                          onMouseLeave={hideTooltip}
+                          icon={
+                            <span
+                              className={cn(
+                                'text-[10px] font-bold leading-none',
+                                isSelected
+                                  ? 'text-[var(--theme-text-primary)]'
+                                  : 'text-[var(--theme-text-muted)]',
+                              )}
+                            >
+                              {initials}
+                            </span>
+                          }
+                        />
+                      );
+                    })}
                 </div>
               );
             })}
@@ -821,20 +1004,51 @@ function CollapsedScratchpadsPanel() {
 // ── 7. Collapsed Analytics panel ──
 // ═══════════════════════════════════════════════
 
-const ANALYTICS_TABS: { key: 'audit-trail' | 'statistics'; label: string; icon: React.ReactNode }[] = [
-  { key: 'audit-trail', label: 'Audit Trail', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-    </svg>
-  )},
-  { key: 'statistics', label: 'Statistics', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
-    </svg>
-  )},
+const ANALYTICS_TABS: {
+  key: 'audit-trail' | 'statistics';
+  label: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    key: 'audit-trail',
+    label: 'Audit Trail',
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+      </svg>
+    ),
+  },
+  {
+    key: 'statistics',
+    label: 'Statistics',
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 3v18h18" />
+        <path d="M7 16l4-8 4 4 4-6" />
+      </svg>
+    ),
+  },
 ];
 
 function CollapsedAnalyticsPanel() {
@@ -856,7 +1070,13 @@ function CollapsedAnalyticsPanel() {
               onMouseEnter={(e) => showTooltip(e, tab.label, 'Analytics')}
               onMouseLeave={hideTooltip}
               icon={
-                <span className={isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-faint)]'}>
+                <span
+                  className={
+                    isSelected
+                      ? 'text-[var(--theme-text-primary)]'
+                      : 'text-[var(--theme-text-faint)]'
+                  }
+                >
                   {tab.icon}
                 </span>
               }
@@ -874,39 +1094,124 @@ function CollapsedAnalyticsPanel() {
 // ═══════════════════════════════════════════════
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'general', label: 'General', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-    </svg>
-  )},
-  { key: 'appearance', label: 'Appearance', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" /><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none" />
-      <circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none" /><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none" />
-      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
-    </svg>
-  )},
-  { key: 'pinned-icons', label: 'Pinned Icons', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="17" x2="12" y2="22" />
-      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
-    </svg>
-  )},
-  { key: 'workspace-actions', label: 'Workspace Actions', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  )},
-  { key: 'agent-tokens', label: 'Agent Tokens', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-    </svg>
-  )},
-  { key: 'deliverable-types', label: 'Deliverable Types', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="13" y2="17" />
-    </svg>
-  )},
+  {
+    key: 'general',
+    label: 'General',
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
+      </svg>
+    ),
+  },
+  {
+    key: 'appearance',
+    label: 'Appearance',
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none" />
+        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'pinned-icons',
+    label: 'Pinned Icons',
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <line x1="12" y1="17" x2="12" y2="22" />
+        <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'workspace-actions',
+    label: 'Workspace Actions',
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'agent-tokens',
+    label: 'Agent Tokens',
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+      </svg>
+    ),
+  },
+  {
+    key: 'deliverable-types',
+    label: 'Deliverable Types',
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="9" y1="13" x2="15" y2="13" />
+        <line x1="9" y1="17" x2="13" y2="17" />
+      </svg>
+    ),
+  },
 ];
 
 function CollapsedSettingsPanel() {
@@ -928,7 +1233,13 @@ function CollapsedSettingsPanel() {
               onMouseEnter={(e) => showTooltip(e, tab.label, 'Settings')}
               onMouseLeave={hideTooltip}
               icon={
-                <span className={isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-faint)]'}>
+                <span
+                  className={
+                    isSelected
+                      ? 'text-[var(--theme-text-primary)]'
+                      : 'text-[var(--theme-text-faint)]'
+                  }
+                >
                   {tab.icon}
                 </span>
               }
@@ -940,4 +1251,3 @@ function CollapsedSettingsPanel() {
     </CollapsedShell>
   );
 }
-

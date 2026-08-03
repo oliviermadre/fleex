@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { useSettingsStore } from '../stores/settingsStore';
+
 import { terminalManager } from '../services/terminalManager';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export function useTerminalFont() {
   const fontFamily = useSettingsStore((s) => s.settings.terminalFontFamily);

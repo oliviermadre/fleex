@@ -1,19 +1,38 @@
-import type { FastifyInstance } from 'fastify';
-import { computeInitials, type PanelMemberSummary, type ExecutionLogEntry, type AgentExecution, type WorkflowStepSummary } from '@fleex/shared';
-import { AgentPersonaNotFoundError } from '../../domain/errors.js';
-import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
-import type { StepRunEntity } from '../../domain/entities/step-run.entity.js';
-import type { Container } from '../container.js';
+import {
+  computeInitials,
+  type PanelMemberSummary,
+  type ExecutionLogEntry,
+  type AgentExecution,
+  type WorkflowStepSummary,
+} from '@fleex/shared';
 
-const VALID_STATUSES = new Set<AgentExecution['status']>(['running', 'completed', 'failed', 'interrupted']);
+import { AgentPersonaNotFoundError } from '../../domain/errors.js';
+
+import type { StepRunEntity } from '../../domain/entities/step-run.entity.js';
+import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
+import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
+
+const VALID_STATUSES = new Set<AgentExecution['status']>([
+  'running',
+  'completed',
+  'failed',
+  'interrupted',
+]);
 const VALID_TYPES = new Set<ExecutionLogEntry['type']>(['agent', 'panel', 'skill', 'workflow']);
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 100;
 const MAX_Q_LENGTH = 200;
 
-function parseCsvWhitelist<T extends string>(raw: string | undefined, whitelist: Set<T>): T[] | null {
+function parseCsvWhitelist<T extends string>(
+  raw: string | undefined,
+  whitelist: Set<T>,
+): T[] | null {
   if (!raw) return null;
-  const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
+  const parts = raw
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
   const allowed = parts.filter((p): p is T => whitelist.has(p as T));
   return allowed.length > 0 ? allowed : null;
 }
@@ -38,8 +57,14 @@ export function agentEventsRoutes(container: Container) {
       };
     }>('/api/executions', async (request) => {
       // ── Query param validation (defensive) ──────────────────────────────
-      const statusFilter = parseCsvWhitelist<AgentExecution['status']>(request.query.status, VALID_STATUSES);
-      const typeFilter = parseCsvWhitelist<ExecutionLogEntry['type']>(request.query.type, VALID_TYPES);
+      const statusFilter = parseCsvWhitelist<AgentExecution['status']>(
+        request.query.status,
+        VALID_STATUSES,
+      );
+      const typeFilter = parseCsvWhitelist<ExecutionLogEntry['type']>(
+        request.query.type,
+        VALID_TYPES,
+      );
       const q = request.query.q ? request.query.q.slice(0, MAX_Q_LENGTH).toLowerCase() : undefined;
       const limit = clampInt(request.query.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
       const offset = clampInt(request.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
@@ -73,7 +98,16 @@ export function agentEventsRoutes(container: Container) {
       // Each lookup falls back to an empty result on failure so a transient store
       // error in one collection doesn't 500 the whole Execution Log view.
       const ticketIdArr = [...ticketIds];
-      const [allTickets, allPersonas, allMentions, allComments, allDeliverables, allPanels, allSkills, allStepRuns] = await Promise.all([
+      const [
+        allTickets,
+        allPersonas,
+        allMentions,
+        allComments,
+        allDeliverables,
+        allPanels,
+        allSkills,
+        allStepRuns,
+      ] = await Promise.all([
         container.ticketStore.getAllTickets().catch((err: unknown) => {
           request.log.error({ err }, 'executions: ticketStore.getAllTickets failed');
           return [];
@@ -263,7 +297,10 @@ export function agentEventsRoutes(container: Container) {
           if (!hasOrchestrator) {
             const orchestratorPersona = personaMap.get(panel.orchestratorPersonaId);
             if (orchestratorPersona) {
-              const displayName = orchestratorPersona.displayName ?? orchestratorPersona.name ?? panel.orchestratorPersonaId;
+              const displayName =
+                orchestratorPersona.displayName ??
+                orchestratorPersona.name ??
+                panel.orchestratorPersonaId;
               members.push({
                 executionId: `orchestrator-pending:${mentionId}`,
                 personaId: panel.orchestratorPersonaId,
@@ -286,12 +323,11 @@ export function agentEventsRoutes(container: Container) {
         const startedAt = sorted[0]!.startedAt;
         const completedAts = sorted.map((e) => e.completedAt).filter((x): x is string => !!x);
         const allCompleted = aggStatus !== 'running' && completedAts.length === sorted.length;
-        const completedAt = allCompleted
-          ? completedAts.sort().slice(-1)[0] ?? null
-          : null;
-        const durationMs = allCompleted && completedAt
-          ? new Date(completedAt).getTime() - new Date(startedAt).getTime()
-          : null;
+        const completedAt = allCompleted ? (completedAts.sort().slice(-1)[0] ?? null) : null;
+        const durationMs =
+          allCompleted && completedAt
+            ? new Date(completedAt).getTime() - new Date(startedAt).getTime()
+            : null;
 
         // Aggregated tokens + cost (SUM across members)
         const sumOrNull = (vals: (number | null | undefined)[]): number | null => {
@@ -305,7 +341,8 @@ export function agentEventsRoutes(container: Container) {
         const costUsd = sumOrNull(sorted.map((e) => e.costUsd));
 
         // Orchestrator's exec (for personaId / executorName / model anchor)
-        const orchestratorExec = sorted.find((e) => e.personaId === panel?.orchestratorPersonaId) ?? sorted[0]!;
+        const orchestratorExec =
+          sorted.find((e) => e.personaId === panel?.orchestratorPersonaId) ?? sorted[0]!;
         const orchestratorPersona = personaMap.get(orchestratorExec.personaId);
 
         // Ticket context — pull from any exec, they share it
@@ -340,7 +377,10 @@ export function agentEventsRoutes(container: Container) {
           cacheCreationTokens,
 
           type: 'panel',
-          executorName: orchestratorPersona?.displayName ?? orchestratorPersona?.name ?? orchestratorExec.personaId,
+          executorName:
+            orchestratorPersona?.displayName ??
+            orchestratorPersona?.name ??
+            orchestratorExec.personaId,
           ticketTitle: ticket?.title ?? null,
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,
@@ -383,7 +423,8 @@ export function agentEventsRoutes(container: Container) {
           const curLatest = latestPerStep.get(sr.stepId);
           if (!curLatest || sr.attempt > curLatest.attempt) latestPerStep.set(sr.stepId, sr);
           const curEarliest = earliestCreatedAt.get(sr.stepId);
-          if (!curEarliest || sr.createdAt < curEarliest) earliestCreatedAt.set(sr.stepId, sr.createdAt);
+          if (!curEarliest || sr.createdAt < curEarliest)
+            earliestCreatedAt.set(sr.stepId, sr.createdAt);
         }
 
         // Build the dot list in execution order: steps that ran appear first,
@@ -572,58 +613,49 @@ export function agentEventsRoutes(container: Container) {
     );
 
     // GET /api/tickets/:id/executions — list executions for a ticket
-    app.get<{ Params: { id: string } }>(
-      '/api/tickets/:id/executions',
-      async (request) => {
-        return container.agentEventStore.getExecutionsByTicket(request.params.id);
-      },
-    );
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/executions', async (request) => {
+      return container.agentEventStore.getExecutionsByTicket(request.params.id);
+    });
 
     // POST /api/executions/:id/cancel — cancel a running execution
-    app.post<{ Params: { id: string } }>(
-      '/api/executions/:id/cancel',
-      async (request, reply) => {
-        const cancelled = await container.executeAgent.cancelExecution(request.params.id);
-        if (!cancelled) {
-          return reply.status(404).send({ error: 'Execution not found or not running' });
-        }
-        return { cancelled: true };
-      },
-    );
+    app.post<{ Params: { id: string } }>('/api/executions/:id/cancel', async (request, reply) => {
+      const cancelled = await container.executeAgent.cancelExecution(request.params.id);
+      if (!cancelled) {
+        return reply.status(404).send({ error: 'Execution not found or not running' });
+      }
+      return { cancelled: true };
+    });
 
     // GET /api/executions/:id/events — get all events for an execution (historical replay)
-    app.get<{ Params: { id: string } }>(
-      '/api/executions/:id/events',
-      async (request) => {
-        const executionId = request.params.id;
-        const events = await container.agentEventStore.getEventsByExecution(executionId);
-        const dtos = events.map((e) => e.toDTO());
+    app.get<{ Params: { id: string } }>('/api/executions/:id/events', async (request) => {
+      const executionId = request.params.id;
+      const events = await container.agentEventStore.getEventsByExecution(executionId);
+      const dtos = events.map((e) => e.toDTO());
 
-        // Backfill execution_start events that lack executionId/sdkSessionId (old events)
-        for (const dto of dtos) {
-          if (dto.eventType === 'execution_start' && dto.data && typeof dto.data === 'object') {
-            const data = dto.data as Record<string, unknown>;
-            if (!data['executionId']) {
-              data['executionId'] = executionId;
-            }
-            if (!data['resumeSessionId']) {
-              // Look up sdkSessionId from execution index
-              const executions = await container.agentEventStore.getExecutionsByTicket(
-                (data['ticketId'] as string) ?? '',
-              );
-              // Find the execution just before this one for the same persona to get the resume session
-              const thisExec = executions.find((e) => e.id === executionId);
-              if (thisExec?.sdkSessionId) {
-                // This is the session that was obtained *during* this execution,
-                // not the one it resumed from — but still useful to show
-                data['sdkSessionId'] = thisExec.sdkSessionId;
-              }
+      // Backfill execution_start events that lack executionId/sdkSessionId (old events)
+      for (const dto of dtos) {
+        if (dto.eventType === 'execution_start' && dto.data && typeof dto.data === 'object') {
+          const data = dto.data as Record<string, unknown>;
+          if (!data['executionId']) {
+            data['executionId'] = executionId;
+          }
+          if (!data['resumeSessionId']) {
+            // Look up sdkSessionId from execution index
+            const executions = await container.agentEventStore.getExecutionsByTicket(
+              (data['ticketId'] as string) ?? '',
+            );
+            // Find the execution just before this one for the same persona to get the resume session
+            const thisExec = executions.find((e) => e.id === executionId);
+            if (thisExec?.sdkSessionId) {
+              // This is the session that was obtained *during* this execution,
+              // not the one it resumed from — but still useful to show
+              data['sdkSessionId'] = thisExec.sdkSessionId;
             }
           }
         }
+      }
 
-        return dtos;
-      },
-    );
+      return dtos;
+    });
   };
 }

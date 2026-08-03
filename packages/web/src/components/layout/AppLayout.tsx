@@ -1,29 +1,31 @@
 import { useEffect } from 'react';
-import { useWebSocket } from '../../hooks/useWebSocket';
-import { useSessions } from '../../hooks/useSessions';
-import { useRepositoryDashboard } from '../../hooks/useRepositoryDashboard';
-import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
-import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
-import { usePullRequestPolling } from '../../hooks/usePullRequestPolling';
-import { useTickets } from '../../hooks/useTickets';
-import { useTicketActivity } from '../../hooks/useTicketActivity';
-import { useNotifications } from '../../hooks/useNotifications';
+
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
+import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useNotifications } from '../../hooks/useNotifications';
+import { usePullRequestPolling } from '../../hooks/usePullRequestPolling';
+import { useRepositoryDashboard } from '../../hooks/useRepositoryDashboard';
+import { useSessions } from '../../hooks/useSessions';
 import { useSkills } from '../../hooks/useSkills';
-import { useUIStore } from '../../stores/uiStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useRepositoryStore } from '../../stores/repositoryStore';
+import { useTicketActivity } from '../../hooks/useTicketActivity';
+import { useTickets } from '../../hooks/useTickets';
+import { useWebSocket } from '../../hooks/useWebSocket';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { useRepositoryStore } from '../../stores/repositoryStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { NavSidebar } from '../sidebar/NavSidebar';
-import { ContentPanel } from '../sidebar/ContentPanel';
-import { MainPanel } from '../main-panel/MainPanel';
-import { ResizeHandle } from './ResizeHandle';
-import { ScratchpadPanel } from '../scratchpad/ScratchpadPanel';
-import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
 import { FloatingSessionOverlay } from '../main-panel/FloatingSessionOverlay';
-import { FloatingDeliverableOverlay } from '../tickets/FloatingDeliverableOverlay';
+import { MainPanel } from '../main-panel/MainPanel';
+import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
+import { ScratchpadPanel } from '../scratchpad/ScratchpadPanel';
+import { ContentPanel } from '../sidebar/ContentPanel';
+import { NavSidebar } from '../sidebar/NavSidebar';
 import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
+import { FloatingDeliverableOverlay } from '../tickets/FloatingDeliverableOverlay';
+
+import { ResizeHandle } from './ResizeHandle';
 
 const NAV_COLLAPSED_WIDTH = 64;
 const NAV_EXPANDED_WIDTH = 200;
@@ -61,7 +63,14 @@ export function AppLayout() {
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
   // Hide the content panel when editing a workflow so the editor takes the full viewport width
   const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId;
-  const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'list-focus' || activePanel === 'execution-log' || activePanel === 'documents' || editingWorkflow;
+  const hideContentPanel =
+    activePanel === 'dashboard' ||
+    activePanel === 'cluster' ||
+    activePanel === 'tickets' ||
+    activePanel === 'list-focus' ||
+    activePanel === 'execution-log' ||
+    activePanel === 'documents' ||
+    editingWorkflow;
   const effectiveContentWidth = hideContentPanel
     ? 0
     : contentPanelCollapsed

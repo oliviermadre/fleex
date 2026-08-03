@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+
 import type { TicketDeliverable } from '@fleex/shared';
+
 import { documentsService } from '../services/documentsService';
 
 interface DocumentsState {
@@ -14,7 +16,10 @@ interface DocumentsState {
 
   // Actions
   fetchAll: () => Promise<void>;
-  toggleFilter: (dimension: 'filterTypes' | 'filterAgentNames' | 'filterStatuses', value: string) => void;
+  toggleFilter: (
+    dimension: 'filterTypes' | 'filterAgentNames' | 'filterStatuses',
+    value: string,
+  ) => void;
   clearFilters: () => void;
 }
 
@@ -48,9 +53,10 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     set({ [dimension]: current });
   },
 
-  clearFilters: () => set({
-    filterTypes: new Set(),
-    filterAgentNames: new Set(),
-    filterStatuses: new Set(),
-  }),
+  clearFilters: () =>
+    set({
+      filterTypes: new Set(),
+      filterAgentNames: new Set(),
+      filterStatuses: new Set(),
+    }),
 }));

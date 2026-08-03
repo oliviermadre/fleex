@@ -1,5 +1,5 @@
-import type { SessionEntity } from '../../domain/entities.js';
 import type { SessionStorePort } from '../../application/ports/session-store.port.js';
+import type { SessionEntity } from '../../domain/entities.js';
 
 /**
  * Write-through in-memory cache over any SessionStorePort.

@@ -1,9 +1,10 @@
 import type { TicketStatus, TicketLinkType } from '@fleex/shared';
-import type { BoardEntity } from '../../domain/entities/board.entity.js';
-import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
-import type { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
+
 import type { RemoteCacheSync } from '../../application/ports/remote-cache-sync.port.js';
+import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
+import type { BoardEntity } from '../../domain/entities/board.entity.js';
+import type { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { AnyDomainEvent } from '../../domain/events.js';
 
 /**
@@ -124,7 +125,9 @@ export class CachedTicketStore implements TicketStorePort, RemoteCacheSync {
 
   async getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]> {
     await this.ensureWarmed();
-    return [...this.tickets.values()].filter((t) => t.boardId === boardId && t.status === status && t.archivedAt === null);
+    return [...this.tickets.values()].filter(
+      (t) => t.boardId === boardId && t.status === status && t.archivedAt === null,
+    );
   }
 
   async getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]> {
@@ -159,7 +162,11 @@ export class CachedTicketStore implements TicketStorePort, RemoteCacheSync {
 
   // ── Archive ──
 
-  async getArchivedTickets(boardId?: string, limit?: number, offset?: number): Promise<TicketEntity[]> {
+  async getArchivedTickets(
+    boardId?: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<TicketEntity[]> {
     return this.inner.getArchivedTickets(boardId, limit, offset);
   }
 

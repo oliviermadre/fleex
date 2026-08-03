@@ -431,7 +431,9 @@ const migration: Migration = {
     if (personasSql) await ctx.exec(personasSql);
 
     if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name)');
+      await ctx.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name)',
+      );
     }
 
     // ── Agent Event Executions ──
@@ -477,8 +479,12 @@ const migration: Migration = {
     if (execSql) await ctx.exec(execSql);
 
     if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket ON agent_event_executions(ticket_id)');
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id)');
+      await ctx.exec(
+        'CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket ON agent_event_executions(ticket_id)',
+      );
+      await ctx.exec(
+        'CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id)',
+      );
     }
 
     // ── Domain Event Log ──
@@ -509,8 +515,12 @@ const migration: Migration = {
     if (eventLogSql) await ctx.exec(eventLogSql);
 
     if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_domain_event_log_occurred_at ON domain_event_log(occurred_at)');
-      await ctx.exec('CREATE INDEX IF NOT EXISTS idx_domain_event_log_event_type ON domain_event_log(event_type)');
+      await ctx.exec(
+        'CREATE INDEX IF NOT EXISTS idx_domain_event_log_occurred_at ON domain_event_log(occurred_at)',
+      );
+      await ctx.exec(
+        'CREATE INDEX IF NOT EXISTS idx_domain_event_log_event_type ON domain_event_log(event_type)',
+      );
     }
 
     // ── App Config ──

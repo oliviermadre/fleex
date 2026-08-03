@@ -1,6 +1,7 @@
-import { groupHue } from './grouping';
-import { tintClasses } from '../../lib/tints';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
+
+import { groupHue } from './grouping';
 
 interface Props {
   /** Status id — drives the tint hue (doing=blue, reviewing=purple…). */

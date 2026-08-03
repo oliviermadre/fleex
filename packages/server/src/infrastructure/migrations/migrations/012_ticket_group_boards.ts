@@ -58,7 +58,9 @@ const migration: Migration = {
     // Supabase RLS
     if (ctx.adapter === 'supabase') {
       await ctx.exec('ALTER TABLE ticket_group_boards ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_ticket_group_boards" ON ticket_group_boards FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_ticket_group_boards" ON ticket_group_boards FOR ALL USING (true) WITH CHECK (true)`,
+      );
     }
   },
 

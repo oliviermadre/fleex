@@ -1,10 +1,13 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+
 import type { Board, Ticket } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
+
+import { appWs } from '../../services/websocket';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { appWs } from '../../services/websocket';
+
 import { ListFocusInspector } from './ListFocusInspector';
 
 // The inspector embeds the full comment thread / deliverable list; those own
@@ -96,7 +99,10 @@ describe('ListFocusInspector', () => {
     vi.clearAllMocks();
     // SmartSessionButton (now in the header) refreshes templates on mount —
     // stub it so the inspector never reaches the network.
-    useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
+    useWorkflowTemplateStore.setState({
+      templates: [],
+      refresh: vi.fn().mockResolvedValue(undefined),
+    });
     loadForTicket = vi.fn().mockResolvedValue(undefined);
     useWorkflowRunStore.setState({ runsByTicket: {}, detail: {}, loadForTicket });
   });
@@ -151,7 +157,10 @@ describe('ListFocusInspector', () => {
 
 describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
   beforeEach(() => {
-    useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
+    useWorkflowTemplateStore.setState({
+      templates: [],
+      refresh: vi.fn().mockResolvedValue(undefined),
+    });
     useWorkflowRunStore.setState({ loadForTicket: vi.fn().mockResolvedValue(undefined) });
   });
   afterEach(cleanup);
@@ -265,7 +274,11 @@ describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
     // WHY: at the first/last ticket there is nowhere to step, so the matching
     // chevron must be disabled rather than silently no-op.
     renderInspector({ board, canPrev: false, canNext: true });
-    expect((screen.getByRole('button', { name: /previous/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: /next/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: /previous/i }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect((screen.getByRole('button', { name: /next/i }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 });

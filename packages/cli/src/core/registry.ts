@@ -1,11 +1,13 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+
 import type {
   MarketplaceManifest,
   MarketplacePrimitiveContent,
   MarketplacePrimitiveEntry,
 } from '@fleex/shared';
+
 import { FLEEX_HOME } from './instance.ts';
 
 export const MARKETPLACES_DIR = path.join(FLEEX_HOME, 'marketplaces');
@@ -51,7 +53,10 @@ export function removeMarketplace(name: string): boolean {
 
 /** Derive a stable "owner-repo" name from a git URL. */
 export function deriveName(url: string): string {
-  const cleaned = url.trim().replace(/\.git$/, '').replace(/\/$/, '');
+  const cleaned = url
+    .trim()
+    .replace(/\.git$/, '')
+    .replace(/\/$/, '');
   const m = cleaned.match(/[:/]([^/:]+)\/([^/]+)$/);
   if (m) return `${m[1]}-${m[2]}`.toLowerCase();
   return (cleaned.split(/[/:]/).pop() || 'marketplace').toLowerCase();
@@ -77,5 +82,7 @@ export function loadPrimitiveContent(
   dir: string,
   entry: MarketplacePrimitiveEntry,
 ): MarketplacePrimitiveContent {
-  return JSON.parse(fs.readFileSync(path.join(dir, entry.path), 'utf8')) as MarketplacePrimitiveContent;
+  return JSON.parse(
+    fs.readFileSync(path.join(dir, entry.path), 'utf8'),
+  ) as MarketplacePrimitiveContent;
 }

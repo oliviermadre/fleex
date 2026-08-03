@@ -19,9 +19,7 @@ export type ServerMessageType = (typeof ServerMessageType)[keyof typeof ServerMe
 
 // Dashboard WebSocket (JSON text frames)
 export type DashboardMessage =
-  | SessionsUpdatedMessage
-  | SessionCreatedMessage
-  | SessionRemovedMessage;
+  SessionsUpdatedMessage | SessionCreatedMessage | SessionRemovedMessage;
 
 export interface SessionsUpdatedMessage {
   readonly type: 'sessions:updated';

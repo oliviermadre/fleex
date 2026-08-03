@@ -1,6 +1,7 @@
-import type { DisplayStatus } from '../../lib/deriveStatus';
 import { cn } from '../../lib/cn';
 import { tintSolid } from '../../lib/tints';
+
+import type { DisplayStatus } from '../../lib/deriveStatus';
 
 interface Props {
   status: DisplayStatus;
@@ -21,16 +22,18 @@ export function StatusDot({ status, size = 'md', className }: Props) {
   if (isActive) {
     return (
       <span className={cn('relative inline-flex shrink-0', px, className)}>
-        <span className={cn('absolute inset-0 animate-ping rounded-full opacity-60 motion-reduce:animate-none', tintSolid('blue'))} />
+        <span
+          className={cn(
+            'absolute inset-0 animate-ping rounded-full opacity-60 motion-reduce:animate-none',
+            tintSolid('blue'),
+          )}
+        />
         <span className={cn('relative inline-flex rounded-full', tintSolid('blue'), px)} />
       </span>
     );
   }
 
-  const color =
-    status === 'needs-approval' ? tintSolid('yellow') : 'bg-[var(--theme-text-muted)]';
+  const color = status === 'needs-approval' ? tintSolid('yellow') : 'bg-[var(--theme-text-muted)]';
 
-  return (
-    <span className={cn('shrink-0 rounded-full', px, color, className)} />
-  );
+  return <span className={cn('shrink-0 rounded-full', px, color, className)} />;
 }

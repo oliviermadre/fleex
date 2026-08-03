@@ -1,22 +1,28 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { NameInputModal } from '../ui/NameInputModal';
+
 import { TICKET_STATUSES } from '@fleex/shared';
 import type { TicketStatus, Ticket } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useTicketGroupStore } from '../../stores/ticketGroupStore';
+
 import { fetchBulkPRStates } from '../../services/api';
-import { KanbanColumn } from './KanbanColumn';
-import { KanbanHeader } from './KanbanHeader';
+import { useTicketActivityStore } from '../../stores/ticketActivityStore';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUnreadStore } from '../../stores/unreadStore';
+import { NameInputModal } from '../ui/NameInputModal';
+
 import { ArchivedTicketsModal } from './ArchivedTicketsModal';
 import { EpicBanner } from './EpicBanner';
-import { RoadmapView } from './RoadmapView';
 import { EpicDetailView } from './EpicDetailView';
-import { useUnreadStore } from '../../stores/unreadStore';
-import { useTicketActivityStore } from '../../stores/ticketActivityStore';
+import { KanbanColumn } from './KanbanColumn';
+import { KanbanHeader } from './KanbanHeader';
+import { RoadmapView } from './RoadmapView';
 
 export function KanbanBoard() {
   const rawBoards = useTicketStore((s) => s.boards);
-  const boards = useMemo(() => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)), [rawBoards]);
+  const boards = useMemo(
+    () => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)),
+    [rawBoards],
+  );
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
   const tickets = useTicketStore((s) => s.tickets);
@@ -33,8 +39,12 @@ export function KanbanBoard() {
 
   // Load unread counts + agentic activity on mount and when tickets change
   const ticketIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
-  useEffect(() => { loadUnreadCounts(ticketIds); }, [ticketIds, loadUnreadCounts]);
-  useEffect(() => { loadActivity(ticketIds); }, [ticketIds, loadActivity]);
+  useEffect(() => {
+    loadUnreadCounts(ticketIds);
+  }, [ticketIds, loadUnreadCounts]);
+  useEffect(() => {
+    loadActivity(ticketIds);
+  }, [ticketIds, loadActivity]);
 
   const [prStates, setPrStates] = useState<Record<string, string>>({});
 
@@ -47,7 +57,9 @@ export function KanbanBoard() {
       }
     }
     if (prRefs.size === 0) return;
-    fetchBulkPRStates([...prRefs]).then(setPrStates).catch(() => {});
+    fetchBulkPRStates([...prRefs])
+      .then(setPrStates)
+      .catch(() => {});
   }, [tickets]);
 
   // Collapsed columns state with localStorage persistence
@@ -56,7 +68,9 @@ export function KanbanBoard() {
     try {
       const stored = localStorage.getItem(COLLAPSED_STORAGE_KEY);
       if (stored) return new Set(JSON.parse(stored) as TicketStatus[]);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return new Set<TicketStatus>(['cancelled']);
   });
 
@@ -76,7 +90,7 @@ export function KanbanBoard() {
   const [showArchived, setShowArchived] = useState(false);
 
   const isAllBoards = selectedBoardId === null && boards.length > 1;
-  const board = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) ?? null : null;
+  const board = selectedBoardId ? (boards.find((b) => b.id === selectedBoardId) ?? null) : null;
 
   const createBoard = useTicketStore((s) => s.createBoard);
   const [showCreateBoard, setShowCreateBoard] = useState(false);
@@ -119,11 +133,7 @@ export function KanbanBoard() {
   if (activeView === 'roadmap') {
     return (
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
-        <KanbanHeader
-          board={board}
-          isAllBoards={isAllBoards}
-          hideActions
-        />
+        <KanbanHeader board={board} isAllBoards={isAllBoards} hideActions />
         <RoadmapView />
       </div>
     );
@@ -163,7 +173,6 @@ export function KanbanBoard() {
           />
         ))}
       </div>
-
     </div>
   );
 }
@@ -179,7 +188,7 @@ function filterColumnsByEpics(
   // Collect the union of all ticket IDs from selected epics
   const allowedIds = new Set<string>();
   for (const epicId of selectedEpicIds) {
-    for (const ticketId of (groupTicketIds[epicId] ?? [])) {
+    for (const ticketId of groupTicketIds[epicId] ?? []) {
       allowedIds.add(ticketId);
     }
   }

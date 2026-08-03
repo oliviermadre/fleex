@@ -11,11 +11,13 @@
 **Spec:** `docs/superpowers/specs/2026-05-23-ticket-workflows-design.md`
 
 **Phase dependencies:**
+
 ```
 Phase A (Domain) ──┬─→ Phase B (Orchestrator) ──→ Phase C (Trigger)
                    ├─→ Phase D (UI runtime)
                    └─→ Phase E (UI editor)
 ```
+
 D and E can run in parallel once A is merged. C requires both A and B.
 
 ---
@@ -27,6 +29,7 @@ Foundation: shared types, migration, entities, store ports + 2 adapters per port
 ### Task A.1: Shared types in `@fleex/shared`
 
 **Files:**
+
 - Create: `packages/shared/src/types/workflow.ts`
 - Modify: `packages/shared/src/types/index.ts` (add re-export)
 - Modify: `packages/shared/src/types/ticket.ts` (extend `MentionTargetType`)
@@ -94,8 +97,7 @@ export interface WorkflowTemplate {
 }
 
 export type WorkflowRunStatus =
-  | 'running' | 'blocked' | 'needs_review'
-  | 'completed' | 'failed' | 'cancelled';
+  'running' | 'blocked' | 'needs_review' | 'completed' | 'failed' | 'cancelled';
 
 export interface WorkflowTemplateSnapshot {
   name: string;
@@ -121,8 +123,7 @@ export interface WorkflowRun {
 }
 
 export type StepRunStatus =
-  | 'queued' | 'running' | 'completed'
-  | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
+  'queued' | 'running' | 'completed' | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
 
 export type StepRunResult = 'ok' | 'needs_review' | 'ko';
 
@@ -201,6 +202,7 @@ git commit -m "feat(shared): add workflow domain types"
 ### Task A.2: Migration `017_add_workflows.ts`
 
 **Files:**
+
 - Create: `packages/server/src/infrastructure/migrations/migrations/017_add_workflows.ts`
 - Modify: `packages/server/src/infrastructure/migrations/migrations/index.ts` (register migration)
 
@@ -268,7 +270,9 @@ const migration: Migration = {
         updated_at ${tsType} NOT NULL ${tsDefault}
       )
     `);
-    await ctx.exec('CREATE INDEX idx_workflow_runs_ticket_status ON workflow_runs(ticket_id, status)');
+    await ctx.exec(
+      'CREATE INDEX idx_workflow_runs_ticket_status ON workflow_runs(ticket_id, status)',
+    );
 
     // step_runs
     await ctx.exec(`
@@ -292,11 +296,17 @@ const migration: Migration = {
     // Supabase RLS (cf. CLAUDE.md)
     if (ctx.adapter === 'supabase') {
       await ctx.exec('ALTER TABLE workflow_templates ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_workflow_templates" ON workflow_templates FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_workflow_templates" ON workflow_templates FOR ALL USING (true) WITH CHECK (true)`,
+      );
       await ctx.exec('ALTER TABLE workflow_runs ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_workflow_runs" ON workflow_runs FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_workflow_runs" ON workflow_runs FOR ALL USING (true) WITH CHECK (true)`,
+      );
       await ctx.exec('ALTER TABLE step_runs ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_step_runs" ON step_runs FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_step_runs" ON step_runs FOR ALL USING (true) WITH CHECK (true)`,
+      );
     }
   },
 
@@ -332,6 +342,7 @@ git commit -m "feat(server): migration 017 — workflow_templates, workflow_runs
 ### Task A.3: `WorkflowTemplateEntity`
 
 **Files:**
+
 - Create: `packages/server/src/domain/entities/workflow-template.entity.ts`
 - Create: `packages/server/tests/unit/workflow-template.entity.test.ts`
 
@@ -354,8 +365,12 @@ describe('WorkflowTemplateEntity', () => {
 
   it('creates with required fields', () => {
     const t = WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'Feature Delivery', slug: 'feature-delivery',
-      steps: [validStep], edges: [], entryStepId: 'triage',
+      id: 'wf-1',
+      name: 'Feature Delivery',
+      slug: 'feature-delivery',
+      steps: [validStep],
+      edges: [],
+      entryStepId: 'triage',
     });
     expect(t.name).toBe('Feature Delivery');
     expect(t.slug).toBe('feature-delivery');
@@ -365,38 +380,65 @@ describe('WorkflowTemplateEntity', () => {
   });
 
   it('rejects when entryStepId is not in steps[]', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [validStep], edges: [], entryStepId: 'nonexistent',
-    })).toThrow(/entryStepId/);
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'x',
+        steps: [validStep],
+        edges: [],
+        entryStepId: 'nonexistent',
+      }),
+    ).toThrow(/entryStepId/);
   });
 
   it('rejects empty steps[]', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [], edges: [], entryStepId: '',
-    })).toThrow(/at least one step/);
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'x',
+        steps: [],
+        edges: [],
+        entryStepId: '',
+      }),
+    ).toThrow(/at least one step/);
   });
 
   it('rejects invalid slug', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'INVALID Slug!',
-      steps: [validStep], edges: [], entryStepId: 'triage',
-    })).toThrow(/slug/);
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'INVALID Slug!',
+        steps: [validStep],
+        edges: [],
+        entryStepId: 'triage',
+      }),
+    ).toThrow(/slug/);
   });
 
   it('rejects edges referencing nonexistent steps', () => {
-    expect(() => WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [validStep], entryStepId: 'triage',
-      edges: [{ id: 'e1', source: 'triage', target: 'missing', isDefault: true }],
-    })).toThrow(/edge .* target/);
+    expect(() =>
+      WorkflowTemplateEntity.create({
+        id: 'wf-1',
+        name: 'X',
+        slug: 'x',
+        steps: [validStep],
+        entryStepId: 'triage',
+        edges: [{ id: 'e1', source: 'triage', target: 'missing', isDefault: true }],
+      }),
+    ).toThrow(/edge .* target/);
   });
 
   it('toDTO returns serializable shape', () => {
     const t = WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [validStep], edges: [], entryStepId: 'triage',
+      id: 'wf-1',
+      name: 'X',
+      slug: 'x',
+      steps: [validStep],
+      edges: [],
+      entryStepId: 'triage',
     });
     const dto = t.toDTO();
     expect(dto.id).toBe('wf-1');
@@ -405,8 +447,12 @@ describe('WorkflowTemplateEntity', () => {
 
   it('update mutates and bumps updatedAt', async () => {
     const t = WorkflowTemplateEntity.create({
-      id: 'wf-1', name: 'X', slug: 'x',
-      steps: [validStep], edges: [], entryStepId: 'triage',
+      id: 'wf-1',
+      name: 'X',
+      slug: 'x',
+      steps: [validStep],
+      edges: [],
+      entryStepId: 'triage',
     });
     const before = t.updatedAt.getTime();
     await new Promise((r) => setTimeout(r, 5));
@@ -427,9 +473,7 @@ Expected: FAIL — `Cannot find module '../../src/domain/entities/workflow-templ
 Write `packages/server/src/domain/entities/workflow-template.entity.ts`:
 
 ```ts
-import type {
-  WorkflowTemplate, WorkflowStep, WorkflowEdge,
-} from '@fleex/shared';
+import type { WorkflowTemplate, WorkflowStep, WorkflowEdge } from '@fleex/shared';
 
 const SLUG_PATTERN = /^[a-z0-9_-]+$/;
 
@@ -460,7 +504,10 @@ export class WorkflowTemplateEntity {
     enabled?: boolean;
   }): WorkflowTemplateEntity {
     WorkflowTemplateEntity.validate({
-      slug: params.slug, steps: params.steps, edges: params.edges, entryStepId: params.entryStepId,
+      slug: params.slug,
+      steps: params.steps,
+      edges: params.edges,
+      entryStepId: params.entryStepId,
     });
     const now = new Date();
     return new WorkflowTemplateEntity(
@@ -479,7 +526,10 @@ export class WorkflowTemplateEntity {
   }
 
   static validate(input: {
-    slug: string; steps: WorkflowStep[]; edges: WorkflowEdge[]; entryStepId: string;
+    slug: string;
+    steps: WorkflowStep[];
+    edges: WorkflowEdge[];
+    entryStepId: string;
   }): void {
     if (!SLUG_PATTERN.test(input.slug)) {
       throw new Error(`Invalid slug: must match ${SLUG_PATTERN}`);
@@ -571,6 +621,7 @@ git commit -m "feat(server): WorkflowTemplateEntity with validation"
 ### Task A.4: `WorkflowRunEntity`
 
 **Files:**
+
 - Create: `packages/server/src/domain/entities/workflow-run.entity.ts`
 - Create: `packages/server/tests/unit/workflow-run.entity.test.ts`
 
@@ -587,8 +638,20 @@ describe('WorkflowRunEntity', () => {
     name: 'Feature Delivery',
     emoji: '🏭',
     steps: [
-      { id: 'triage', name: 'Triage', executorType: 'agent' as const, executorRef: 'the-sentinel', position: { x: 0, y: 0 } },
-      { id: 'dev', name: 'Dev', executorType: 'agent' as const, executorRef: 'jeff', position: { x: 200, y: 0 } },
+      {
+        id: 'triage',
+        name: 'Triage',
+        executorType: 'agent' as const,
+        executorRef: 'the-sentinel',
+        position: { x: 0, y: 0 },
+      },
+      {
+        id: 'dev',
+        name: 'Dev',
+        executorType: 'agent' as const,
+        executorRef: 'jeff',
+        position: { x: 200, y: 0 },
+      },
     ],
     edges: [{ id: 'e1', source: 'triage', target: 'dev', isDefault: true }],
     entryStepId: 'triage',
@@ -596,8 +659,12 @@ describe('WorkflowRunEntity', () => {
 
   it('creates with status=running and currentStepId=entryStepId', () => {
     const run = WorkflowRunEntity.create({
-      id: 'run-1', ticketId: 't-1', templateId: 'wf-1',
-      templateSnapshot: snapshot, triggeredBy: '@john', triggeredFrom: 'comment:c-1',
+      id: 'run-1',
+      ticketId: 't-1',
+      templateId: 'wf-1',
+      templateSnapshot: snapshot,
+      triggeredBy: '@john',
+      triggeredFrom: 'comment:c-1',
     });
     expect(run.status).toBe('running');
     expect(run.currentStepId).toBe('triage');
@@ -606,8 +673,12 @@ describe('WorkflowRunEntity', () => {
 
   it('advanceTo updates currentStepId and bumps updatedAt', async () => {
     const run = WorkflowRunEntity.create({
-      id: 'run-1', ticketId: 't-1', templateId: 'wf-1',
-      templateSnapshot: snapshot, triggeredBy: '@john', triggeredFrom: 'comment:c-1',
+      id: 'run-1',
+      ticketId: 't-1',
+      templateId: 'wf-1',
+      templateSnapshot: snapshot,
+      triggeredBy: '@john',
+      triggeredFrom: 'comment:c-1',
     });
     const before = run.updatedAt.getTime();
     await new Promise((r) => setTimeout(r, 5));
@@ -619,8 +690,12 @@ describe('WorkflowRunEntity', () => {
 
   it('block sets status=needs_review without clearing currentStepId', () => {
     const run = WorkflowRunEntity.create({
-      id: 'run-1', ticketId: 't-1', templateId: 'wf-1',
-      templateSnapshot: snapshot, triggeredBy: '@john', triggeredFrom: 'comment:c-1',
+      id: 'run-1',
+      ticketId: 't-1',
+      templateId: 'wf-1',
+      templateSnapshot: snapshot,
+      triggeredBy: '@john',
+      triggeredFrom: 'comment:c-1',
     });
     run.block();
     expect(run.status).toBe('needs_review');
@@ -629,8 +704,12 @@ describe('WorkflowRunEntity', () => {
 
   it('complete sets status=completed, currentStepId=null, completedAt', () => {
     const run = WorkflowRunEntity.create({
-      id: 'run-1', ticketId: 't-1', templateId: 'wf-1',
-      templateSnapshot: snapshot, triggeredBy: '@john', triggeredFrom: 'comment:c-1',
+      id: 'run-1',
+      ticketId: 't-1',
+      templateId: 'wf-1',
+      templateSnapshot: snapshot,
+      triggeredBy: '@john',
+      triggeredFrom: 'comment:c-1',
     });
     run.complete();
     expect(run.status).toBe('completed');
@@ -640,8 +719,12 @@ describe('WorkflowRunEntity', () => {
 
   it('fail sets status=failed and completedAt', () => {
     const run = WorkflowRunEntity.create({
-      id: 'run-1', ticketId: 't-1', templateId: 'wf-1',
-      templateSnapshot: snapshot, triggeredBy: '@john', triggeredFrom: 'comment:c-1',
+      id: 'run-1',
+      ticketId: 't-1',
+      templateId: 'wf-1',
+      templateSnapshot: snapshot,
+      triggeredBy: '@john',
+      triggeredFrom: 'comment:c-1',
     });
     run.fail();
     expect(run.status).toBe('failed');
@@ -650,8 +733,12 @@ describe('WorkflowRunEntity', () => {
 
   it('cancel sets status=cancelled and completedAt', () => {
     const run = WorkflowRunEntity.create({
-      id: 'run-1', ticketId: 't-1', templateId: 'wf-1',
-      templateSnapshot: snapshot, triggeredBy: '@john', triggeredFrom: 'comment:c-1',
+      id: 'run-1',
+      ticketId: 't-1',
+      templateId: 'wf-1',
+      templateSnapshot: snapshot,
+      triggeredBy: '@john',
+      triggeredFrom: 'comment:c-1',
     });
     run.cancel();
     expect(run.status).toBe('cancelled');
@@ -660,8 +747,12 @@ describe('WorkflowRunEntity', () => {
 
   it('isActive returns true for running|blocked|needs_review', () => {
     const run = WorkflowRunEntity.create({
-      id: 'run-1', ticketId: 't-1', templateId: 'wf-1',
-      templateSnapshot: snapshot, triggeredBy: '@john', triggeredFrom: 'comment:c-1',
+      id: 'run-1',
+      ticketId: 't-1',
+      templateId: 'wf-1',
+      templateSnapshot: snapshot,
+      triggeredBy: '@john',
+      triggeredFrom: 'comment:c-1',
     });
     expect(run.isActive()).toBe(true);
     run.block();
@@ -682,9 +773,7 @@ Expected: FAIL — module not found.
 Write `packages/server/src/domain/entities/workflow-run.entity.ts`:
 
 ```ts
-import type {
-  WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot,
-} from '@fleex/shared';
+import type { WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot } from '@fleex/shared';
 
 const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'blocked', 'needs_review'];
 
@@ -807,6 +896,7 @@ git commit -m "feat(server): WorkflowRunEntity with state transitions"
 ### Task A.5: `StepRunEntity`
 
 **Files:**
+
 - Create: `packages/server/src/domain/entities/step-run.entity.ts`
 - Create: `packages/server/tests/unit/step-run.entity.test.ts`
 
@@ -821,7 +911,9 @@ import { StepRunEntity } from '../../src/domain/entities/step-run.entity.js';
 describe('StepRunEntity', () => {
   it('creates with attempt=1 status=queued by default', () => {
     const sr = StepRunEntity.create({
-      id: 'sr-1', workflowRunId: 'run-1', stepId: 'triage',
+      id: 'sr-1',
+      workflowRunId: 'run-1',
+      stepId: 'triage',
     });
     expect(sr.attempt).toBe(1);
     expect(sr.status).toBe('queued');
@@ -854,7 +946,9 @@ describe('StepRunEntity', () => {
   it('markNeedsReview sets status=needs_review and result=needs_review', () => {
     const sr = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'gate' });
     sr.start();
-    sr.markNeedsReview({ output: { schemaFields: { outcomes: ['approve','reject'] }, result: 'needs_review' } });
+    sr.markNeedsReview({
+      output: { schemaFields: { outcomes: ['approve', 'reject'] }, result: 'needs_review' },
+    });
     expect(sr.status).toBe('needs_review');
     expect(sr.result).toBe('needs_review');
   });
@@ -871,7 +965,9 @@ describe('StepRunEntity', () => {
   it('resolveGate writes outcome to output.schemaFields', () => {
     const sr = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'gate' });
     sr.start();
-    sr.markNeedsReview({ output: { schemaFields: { outcomes: ['approve'] }, result: 'needs_review' } });
+    sr.markNeedsReview({
+      output: { schemaFields: { outcomes: ['approve'] }, result: 'needs_review' },
+    });
     sr.resolveGate('approve', 'looks good');
     expect(sr.status).toBe('completed');
     expect(sr.result).toBe('ok');
@@ -960,7 +1056,10 @@ export class StepRunEntity {
     this.status = 'failed';
     this.result = 'ko';
     if (error && this.output) {
-      this.output = { ...this.output, schemaFields: { ...this.output.schemaFields, error: error.message } };
+      this.output = {
+        ...this.output,
+        schemaFields: { ...this.output.schemaFields, error: error.message },
+      };
     } else if (error) {
       this.output = { schemaFields: { error: error.message }, result: 'ko' };
     }
@@ -1021,6 +1120,7 @@ git commit -m "feat(server): StepRunEntity with retry-friendly append-only seman
 ### Task A.6: Store ports
 
 **Files:**
+
 - Create: `packages/server/src/application/ports/workflow-template-store.port.ts`
 - Create: `packages/server/src/application/ports/workflow-run-store.port.ts`
 - Create: `packages/server/src/application/ports/step-run-store.port.ts`
@@ -1085,6 +1185,7 @@ git commit -m "feat(server): workflow store ports (template, run, step-run)"
 ### Task A.7: SQLite adapters for workflow stores
 
 **Files:**
+
 - Create: `packages/server/src/infrastructure/adapters/sqlite/sqlite-workflow-template-store.adapter.ts`
 - Create: `packages/server/src/infrastructure/adapters/sqlite/sqlite-workflow-run-store.adapter.ts`
 - Create: `packages/server/src/infrastructure/adapters/sqlite/sqlite-step-run-store.adapter.ts`
@@ -1115,33 +1216,50 @@ export class SqliteWorkflowTemplateStoreAdapter implements WorkflowTemplateStore
   constructor(private readonly conn: SqliteConnection) {}
 
   async getAll() {
-    const rows = this.conn.db.prepare('SELECT * FROM workflow_templates ORDER BY name ASC').all() as Row[];
+    const rows = this.conn.db
+      .prepare('SELECT * FROM workflow_templates ORDER BY name ASC')
+      .all() as Row[];
     return rows.map((r) => this.toEntity(r));
   }
   async getById(id: string) {
-    const r = this.conn.db.prepare('SELECT * FROM workflow_templates WHERE id = ?').get(id) as Row | undefined;
+    const r = this.conn.db.prepare('SELECT * FROM workflow_templates WHERE id = ?').get(id) as
+      Row | undefined;
     return r ? this.toEntity(r) : null;
   }
   async getBySlug(slug: string) {
-    const r = this.conn.db.prepare('SELECT * FROM workflow_templates WHERE slug = ?').get(slug) as Row | undefined;
+    const r = this.conn.db.prepare('SELECT * FROM workflow_templates WHERE slug = ?').get(slug) as
+      Row | undefined;
     return r ? this.toEntity(r) : null;
   }
   async getEnabled() {
-    const rows = this.conn.db.prepare('SELECT * FROM workflow_templates WHERE enabled = 1 ORDER BY name ASC').all() as Row[];
+    const rows = this.conn.db
+      .prepare('SELECT * FROM workflow_templates WHERE enabled = 1 ORDER BY name ASC')
+      .all() as Row[];
     return rows.map((r) => this.toEntity(r));
   }
   async save(t: WorkflowTemplateEntity) {
-    this.conn.db.prepare(`
+    this.conn.db
+      .prepare(
+        `
       INSERT OR REPLACE INTO workflow_templates
         (id, name, slug, emoji, description, steps, edges, entry_step_id, enabled, created_at, updated_at)
       VALUES
         (@id, @name, @slug, @emoji, @description, @steps, @edges, @entry_step_id, @enabled, @created_at, @updated_at)
-    `).run({
-      id: t.id, name: t.name, slug: t.slug, emoji: t.emoji, description: t.description,
-      steps: JSON.stringify(t.steps), edges: JSON.stringify(t.edges),
-      entry_step_id: t.entryStepId, enabled: t.enabled ? 1 : 0,
-      created_at: t.createdAt.toISOString(), updated_at: t.updatedAt.toISOString(),
-    });
+    `,
+      )
+      .run({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        emoji: t.emoji,
+        description: t.description,
+        steps: JSON.stringify(t.steps),
+        edges: JSON.stringify(t.edges),
+        entry_step_id: t.entryStepId,
+        enabled: t.enabled ? 1 : 0,
+        created_at: t.createdAt.toISOString(),
+        updated_at: t.updatedAt.toISOString(),
+      });
   }
   async remove(id: string) {
     this.conn.db.prepare('DELETE FROM workflow_templates WHERE id = ?').run(id);
@@ -1149,11 +1267,17 @@ export class SqliteWorkflowTemplateStoreAdapter implements WorkflowTemplateStore
 
   private toEntity(r: Row): WorkflowTemplateEntity {
     return new WorkflowTemplateEntity(
-      r.id, r.name, r.slug, r.emoji, r.description,
+      r.id,
+      r.name,
+      r.slug,
+      r.emoji,
+      r.description,
       JSON.parse(r.steps) as WorkflowStep[],
       JSON.parse(r.edges) as WorkflowEdge[],
-      r.entry_step_id, r.enabled === 1,
-      new Date(r.created_at), new Date(r.updated_at),
+      r.entry_step_id,
+      r.enabled === 1,
+      new Date(r.created_at),
+      new Date(r.updated_at),
     );
   }
 }
@@ -1188,55 +1312,70 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
   constructor(private readonly conn: SqliteConnection) {}
 
   async getById(id: string) {
-    const r = this.conn.db.prepare('SELECT * FROM workflow_runs WHERE id = ?').get(id) as Row | undefined;
+    const r = this.conn.db.prepare('SELECT * FROM workflow_runs WHERE id = ?').get(id) as
+      Row | undefined;
     return r ? this.toEntity(r) : null;
   }
   async getByTicket(ticketId: string) {
-    const rows = this.conn.db.prepare('SELECT * FROM workflow_runs WHERE ticket_id = ? ORDER BY started_at DESC').all(ticketId) as Row[];
+    const rows = this.conn.db
+      .prepare('SELECT * FROM workflow_runs WHERE ticket_id = ? ORDER BY started_at DESC')
+      .all(ticketId) as Row[];
     return rows.map((r) => this.toEntity(r));
   }
   async getActiveByTicket(ticketId: string) {
-    const r = this.conn.db.prepare(`SELECT * FROM workflow_runs WHERE ticket_id = ? AND status IN ${ACTIVE} LIMIT 1`).get(ticketId) as Row | undefined;
+    const r = this.conn.db
+      .prepare(`SELECT * FROM workflow_runs WHERE ticket_id = ? AND status IN ${ACTIVE} LIMIT 1`)
+      .get(ticketId) as Row | undefined;
     return r ? this.toEntity(r) : null;
   }
   async getByStatus(status: WorkflowRunStatus) {
-    const rows = this.conn.db.prepare('SELECT * FROM workflow_runs WHERE status = ?').all(status) as Row[];
+    const rows = this.conn.db
+      .prepare('SELECT * FROM workflow_runs WHERE status = ?')
+      .all(status) as Row[];
     return rows.map((r) => this.toEntity(r));
   }
   async save(run: WorkflowRunEntity) {
-    this.conn.db.prepare(`
+    this.conn.db
+      .prepare(
+        `
       INSERT OR REPLACE INTO workflow_runs
         (id, ticket_id, template_id, template_snapshot, status, current_step_id,
          triggered_by, triggered_from, started_at, completed_at, created_at, updated_at)
       VALUES
         (@id, @ticket_id, @template_id, @template_snapshot, @status, @current_step_id,
          @triggered_by, @triggered_from, @started_at, @completed_at, @created_at, @updated_at)
-    `).run({
-      id: run.id,
-      ticket_id: run.ticketId,
-      template_id: run.templateId,
-      template_snapshot: JSON.stringify(run.templateSnapshot),
-      status: run.status,
-      current_step_id: run.currentStepId,
-      triggered_by: run.triggeredBy,
-      triggered_from: run.triggeredFrom,
-      started_at: run.startedAt.toISOString(),
-      completed_at: run.completedAt?.toISOString() ?? null,
-      created_at: run.createdAt.toISOString(),
-      updated_at: run.updatedAt.toISOString(),
-    });
+    `,
+      )
+      .run({
+        id: run.id,
+        ticket_id: run.ticketId,
+        template_id: run.templateId,
+        template_snapshot: JSON.stringify(run.templateSnapshot),
+        status: run.status,
+        current_step_id: run.currentStepId,
+        triggered_by: run.triggeredBy,
+        triggered_from: run.triggeredFrom,
+        started_at: run.startedAt.toISOString(),
+        completed_at: run.completedAt?.toISOString() ?? null,
+        created_at: run.createdAt.toISOString(),
+        updated_at: run.updatedAt.toISOString(),
+      });
   }
 
   private toEntity(r: Row): WorkflowRunEntity {
     return new WorkflowRunEntity(
-      r.id, r.ticket_id, r.template_id,
+      r.id,
+      r.ticket_id,
+      r.template_id,
       JSON.parse(r.template_snapshot) as WorkflowTemplateSnapshot,
       r.status as WorkflowRunStatus,
       r.current_step_id,
-      r.triggered_by, r.triggered_from,
+      r.triggered_by,
+      r.triggered_from,
       new Date(r.started_at),
       r.completed_at ? new Date(r.completed_at) : null,
-      new Date(r.created_at), new Date(r.updated_at),
+      new Date(r.created_at),
+      new Date(r.updated_at),
     );
   }
 }
@@ -1269,51 +1408,68 @@ export class SqliteStepRunStoreAdapter implements StepRunStorePort {
   constructor(private readonly conn: SqliteConnection) {}
 
   async getById(id: string) {
-    const r = this.conn.db.prepare('SELECT * FROM step_runs WHERE id = ?').get(id) as Row | undefined;
+    const r = this.conn.db.prepare('SELECT * FROM step_runs WHERE id = ?').get(id) as
+      Row | undefined;
     return r ? this.toEntity(r) : null;
   }
   async getByWorkflowRun(workflowRunId: string) {
-    const rows = this.conn.db.prepare('SELECT * FROM step_runs WHERE workflow_run_id = ? ORDER BY created_at ASC, attempt ASC').all(workflowRunId) as Row[];
+    const rows = this.conn.db
+      .prepare(
+        'SELECT * FROM step_runs WHERE workflow_run_id = ? ORDER BY created_at ASC, attempt ASC',
+      )
+      .all(workflowRunId) as Row[];
     return rows.map((r) => this.toEntity(r));
   }
   async getLatestForStep(workflowRunId: string, stepId: string) {
-    const r = this.conn.db.prepare(`
+    const r = this.conn.db
+      .prepare(
+        `
       SELECT * FROM step_runs WHERE workflow_run_id = ? AND step_id = ?
       ORDER BY attempt DESC LIMIT 1
-    `).get(workflowRunId, stepId) as Row | undefined;
+    `,
+      )
+      .get(workflowRunId, stepId) as Row | undefined;
     return r ? this.toEntity(r) : null;
   }
   async save(sr: StepRunEntity) {
-    this.conn.db.prepare(`
+    this.conn.db
+      .prepare(
+        `
       INSERT OR REPLACE INTO step_runs
         (id, workflow_run_id, step_id, attempt, status, result, output,
          next_edge_id, execution_id, started_at, completed_at, created_at)
       VALUES
         (@id, @workflow_run_id, @step_id, @attempt, @status, @result, @output,
          @next_edge_id, @execution_id, @started_at, @completed_at, @created_at)
-    `).run({
-      id: sr.id,
-      workflow_run_id: sr.workflowRunId,
-      step_id: sr.stepId,
-      attempt: sr.attempt,
-      status: sr.status,
-      result: sr.result,
-      output: sr.output ? JSON.stringify(sr.output) : null,
-      next_edge_id: sr.nextEdgeId,
-      execution_id: sr.executionId,
-      started_at: sr.startedAt?.toISOString() ?? null,
-      completed_at: sr.completedAt?.toISOString() ?? null,
-      created_at: sr.createdAt.toISOString(),
-    });
+    `,
+      )
+      .run({
+        id: sr.id,
+        workflow_run_id: sr.workflowRunId,
+        step_id: sr.stepId,
+        attempt: sr.attempt,
+        status: sr.status,
+        result: sr.result,
+        output: sr.output ? JSON.stringify(sr.output) : null,
+        next_edge_id: sr.nextEdgeId,
+        execution_id: sr.executionId,
+        started_at: sr.startedAt?.toISOString() ?? null,
+        completed_at: sr.completedAt?.toISOString() ?? null,
+        created_at: sr.createdAt.toISOString(),
+      });
   }
 
   private toEntity(r: Row): StepRunEntity {
     return new StepRunEntity(
-      r.id, r.workflow_run_id, r.step_id, r.attempt,
+      r.id,
+      r.workflow_run_id,
+      r.step_id,
+      r.attempt,
       r.status as StepRunStatus,
       (r.result as StepRunResult | null) ?? null,
-      r.output ? JSON.parse(r.output) as StepOutput : null,
-      r.next_edge_id, r.execution_id,
+      r.output ? (JSON.parse(r.output) as StepOutput) : null,
+      r.next_edge_id,
+      r.execution_id,
       r.started_at ? new Date(r.started_at) : null,
       r.completed_at ? new Date(r.completed_at) : null,
       new Date(r.created_at),
@@ -1339,6 +1495,7 @@ git commit -m "feat(server): SQLite adapters for workflow stores"
 ### Task A.8: Supabase adapters for workflow stores
 
 **Files:**
+
 - Create: `packages/server/src/infrastructure/adapters/supabase/supabase-workflow-template-store.adapter.ts`
 - Create: `packages/server/src/infrastructure/adapters/supabase/supabase-workflow-run-store.adapter.ts`
 - Create: `packages/server/src/infrastructure/adapters/supabase/supabase-step-run-store.adapter.ts`
@@ -1381,25 +1538,45 @@ export class SupabaseWorkflowTemplateStoreAdapter implements WorkflowTemplateSto
     return (data ?? []).map((r) => this.toEntity(r as Row));
   }
   async getById(id: string) {
-    const { data, error } = await this.client.from('workflow_templates').select('*').eq('id', id).maybeSingle();
+    const { data, error } = await this.client
+      .from('workflow_templates')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
     if (error) throw error;
     return data ? this.toEntity(data as Row) : null;
   }
   async getBySlug(slug: string) {
-    const { data, error } = await this.client.from('workflow_templates').select('*').eq('slug', slug).maybeSingle();
+    const { data, error } = await this.client
+      .from('workflow_templates')
+      .select('*')
+      .eq('slug', slug)
+      .maybeSingle();
     if (error) throw error;
     return data ? this.toEntity(data as Row) : null;
   }
   async getEnabled() {
-    const { data, error } = await this.client.from('workflow_templates').select('*').eq('enabled', true).order('name');
+    const { data, error } = await this.client
+      .from('workflow_templates')
+      .select('*')
+      .eq('enabled', true)
+      .order('name');
     if (error) throw error;
     return (data ?? []).map((r) => this.toEntity(r as Row));
   }
   async save(t: WorkflowTemplateEntity) {
     const { error } = await this.client.from('workflow_templates').upsert({
-      id: t.id, name: t.name, slug: t.slug, emoji: t.emoji, description: t.description,
-      steps: t.steps, edges: t.edges, entry_step_id: t.entryStepId, enabled: t.enabled,
-      created_at: t.createdAt.toISOString(), updated_at: t.updatedAt.toISOString(),
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      emoji: t.emoji,
+      description: t.description,
+      steps: t.steps,
+      edges: t.edges,
+      entry_step_id: t.entryStepId,
+      enabled: t.enabled,
+      created_at: t.createdAt.toISOString(),
+      updated_at: t.updatedAt.toISOString(),
     });
     if (error) throw error;
   }
@@ -1410,9 +1587,17 @@ export class SupabaseWorkflowTemplateStoreAdapter implements WorkflowTemplateSto
 
   private toEntity(r: Row): WorkflowTemplateEntity {
     return new WorkflowTemplateEntity(
-      r.id, r.name, r.slug, r.emoji, r.description,
-      r.steps, r.edges, r.entry_step_id, r.enabled,
-      new Date(r.created_at), new Date(r.updated_at),
+      r.id,
+      r.name,
+      r.slug,
+      r.emoji,
+      r.description,
+      r.steps,
+      r.edges,
+      r.entry_step_id,
+      r.enabled,
+      new Date(r.created_at),
+      new Date(r.updated_at),
     );
   }
 }
@@ -1447,46 +1632,74 @@ export class SupabaseWorkflowRunStoreAdapter implements WorkflowRunStorePort {
   constructor(private readonly client: SupabaseClient) {}
 
   async getById(id: string) {
-    const { data, error } = await this.client.from('workflow_runs').select('*').eq('id', id).maybeSingle();
+    const { data, error } = await this.client
+      .from('workflow_runs')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
     if (error) throw error;
     return data ? this.toEntity(data as Row) : null;
   }
   async getByTicket(ticketId: string) {
-    const { data, error } = await this.client.from('workflow_runs').select('*').eq('ticket_id', ticketId).order('started_at', { ascending: false });
+    const { data, error } = await this.client
+      .from('workflow_runs')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('started_at', { ascending: false });
     if (error) throw error;
     return (data ?? []).map((r) => this.toEntity(r as Row));
   }
   async getActiveByTicket(ticketId: string) {
-    const { data, error } = await this.client.from('workflow_runs').select('*').eq('ticket_id', ticketId).in('status', ACTIVE).limit(1).maybeSingle();
+    const { data, error } = await this.client
+      .from('workflow_runs')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .in('status', ACTIVE)
+      .limit(1)
+      .maybeSingle();
     if (error) throw error;
     return data ? this.toEntity(data as Row) : null;
   }
   async getByStatus(status: WorkflowRunStatus) {
-    const { data, error } = await this.client.from('workflow_runs').select('*').eq('status', status);
+    const { data, error } = await this.client
+      .from('workflow_runs')
+      .select('*')
+      .eq('status', status);
     if (error) throw error;
     return (data ?? []).map((r) => this.toEntity(r as Row));
   }
   async save(run: WorkflowRunEntity) {
     const { error } = await this.client.from('workflow_runs').upsert({
-      id: run.id, ticket_id: run.ticketId, template_id: run.templateId,
+      id: run.id,
+      ticket_id: run.ticketId,
+      template_id: run.templateId,
       template_snapshot: run.templateSnapshot,
-      status: run.status, current_step_id: run.currentStepId,
-      triggered_by: run.triggeredBy, triggered_from: run.triggeredFrom,
+      status: run.status,
+      current_step_id: run.currentStepId,
+      triggered_by: run.triggeredBy,
+      triggered_from: run.triggeredFrom,
       started_at: run.startedAt.toISOString(),
       completed_at: run.completedAt?.toISOString() ?? null,
-      created_at: run.createdAt.toISOString(), updated_at: run.updatedAt.toISOString(),
+      created_at: run.createdAt.toISOString(),
+      updated_at: run.updatedAt.toISOString(),
     });
     if (error) throw error;
   }
 
   private toEntity(r: Row): WorkflowRunEntity {
     return new WorkflowRunEntity(
-      r.id, r.ticket_id, r.template_id, r.template_snapshot,
-      r.status as WorkflowRunStatus, r.current_step_id,
-      r.triggered_by, r.triggered_from,
+      r.id,
+      r.ticket_id,
+      r.template_id,
+      r.template_snapshot,
+      r.status as WorkflowRunStatus,
+      r.current_step_id,
+      r.triggered_by,
+      r.triggered_from,
       new Date(r.started_at),
       r.completed_at ? new Date(r.completed_at) : null,
-      new Date(r.created_at), new Date(r.updated_at),
+      new Date(r.created_at),
+      new Date(r.updated_at),
     );
   }
 }
@@ -1519,27 +1732,47 @@ export class SupabaseStepRunStoreAdapter implements StepRunStorePort {
   constructor(private readonly client: SupabaseClient) {}
 
   async getById(id: string) {
-    const { data, error } = await this.client.from('step_runs').select('*').eq('id', id).maybeSingle();
+    const { data, error } = await this.client
+      .from('step_runs')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
     if (error) throw error;
     return data ? this.toEntity(data as Row) : null;
   }
   async getByWorkflowRun(workflowRunId: string) {
-    const { data, error } = await this.client.from('step_runs').select('*').eq('workflow_run_id', workflowRunId).order('created_at').order('attempt');
+    const { data, error } = await this.client
+      .from('step_runs')
+      .select('*')
+      .eq('workflow_run_id', workflowRunId)
+      .order('created_at')
+      .order('attempt');
     if (error) throw error;
     return (data ?? []).map((r) => this.toEntity(r as Row));
   }
   async getLatestForStep(workflowRunId: string, stepId: string) {
-    const { data, error } = await this.client.from('step_runs').select('*')
-      .eq('workflow_run_id', workflowRunId).eq('step_id', stepId)
-      .order('attempt', { ascending: false }).limit(1).maybeSingle();
+    const { data, error } = await this.client
+      .from('step_runs')
+      .select('*')
+      .eq('workflow_run_id', workflowRunId)
+      .eq('step_id', stepId)
+      .order('attempt', { ascending: false })
+      .limit(1)
+      .maybeSingle();
     if (error) throw error;
     return data ? this.toEntity(data as Row) : null;
   }
   async save(sr: StepRunEntity) {
     const { error } = await this.client.from('step_runs').upsert({
-      id: sr.id, workflow_run_id: sr.workflowRunId, step_id: sr.stepId, attempt: sr.attempt,
-      status: sr.status, result: sr.result, output: sr.output,
-      next_edge_id: sr.nextEdgeId, execution_id: sr.executionId,
+      id: sr.id,
+      workflow_run_id: sr.workflowRunId,
+      step_id: sr.stepId,
+      attempt: sr.attempt,
+      status: sr.status,
+      result: sr.result,
+      output: sr.output,
+      next_edge_id: sr.nextEdgeId,
+      execution_id: sr.executionId,
       started_at: sr.startedAt?.toISOString() ?? null,
       completed_at: sr.completedAt?.toISOString() ?? null,
       created_at: sr.createdAt.toISOString(),
@@ -1549,11 +1782,15 @@ export class SupabaseStepRunStoreAdapter implements StepRunStorePort {
 
   private toEntity(r: Row): StepRunEntity {
     return new StepRunEntity(
-      r.id, r.workflow_run_id, r.step_id, r.attempt,
+      r.id,
+      r.workflow_run_id,
+      r.step_id,
+      r.attempt,
       r.status as StepRunStatus,
       (r.result as StepRunResult | null) ?? null,
       r.output,
-      r.next_edge_id, r.execution_id,
+      r.next_edge_id,
+      r.execution_id,
       r.started_at ? new Date(r.started_at) : null,
       r.completed_at ? new Date(r.completed_at) : null,
       new Date(r.created_at),
@@ -1575,6 +1812,7 @@ git commit -m "feat(server): Supabase adapters for workflow stores"
 ### Task A.9: Wire workflow stores into DI container
 
 **Files:**
+
 - Modify: `packages/server/src/infrastructure/container.ts` (or whichever file wires adapters — check pattern from skillStore)
 
 - [ ] **Step 1: Locate the DI wiring for `skillStore`**
@@ -1614,6 +1852,7 @@ _End of Phase A._
 ### Task B.1: `EdgeEvaluator` — pure function
 
 **Files:**
+
 - Create: `packages/server/src/application/services/edge-evaluator.ts`
 - Create: `packages/server/tests/unit/edge-evaluator.test.ts`
 
@@ -1626,8 +1865,11 @@ import { describe, it, expect } from 'vitest';
 import { EdgeEvaluator } from '../../src/application/services/edge-evaluator.js';
 import type { WorkflowEdge } from '@fleex/shared';
 
-const edge = (overrides: Partial<WorkflowEdge> & { id: string; source: string; target: string }): WorkflowEdge => ({
-  isDefault: false, ...overrides,
+const edge = (
+  overrides: Partial<WorkflowEdge> & { id: string; source: string; target: string },
+): WorkflowEdge => ({
+  isDefault: false,
+  ...overrides,
 });
 
 describe('EdgeEvaluator', () => {
@@ -1637,8 +1879,18 @@ describe('EdgeEvaluator', () => {
 
   it('returns the matching conditional edge (eq)', () => {
     const edges = [
-      edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'path', operator: 'eq', value: 'standard' } }),
-      edge({ id: 'e2', source: 's', target: 't2', condition: { field: 'path', operator: 'eq', value: 'hotfix' } }),
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'path', operator: 'eq', value: 'standard' },
+      }),
+      edge({
+        id: 'e2',
+        source: 's',
+        target: 't2',
+        condition: { field: 'path', operator: 'eq', value: 'hotfix' },
+      }),
     ];
     const out = { schemaFields: { path: 'hotfix' }, result: 'ok' as const };
     expect(EdgeEvaluator.resolve(out, edges)?.id).toBe('e2');
@@ -1646,7 +1898,12 @@ describe('EdgeEvaluator', () => {
 
   it('returns the default edge when no condition matches', () => {
     const edges = [
-      edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'path', operator: 'eq', value: 'standard' } }),
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'path', operator: 'eq', value: 'standard' },
+      }),
       edge({ id: 'e2', source: 's', target: 't2', isDefault: true }),
     ];
     const out = { schemaFields: { path: 'unknown' }, result: 'ok' as const };
@@ -1655,7 +1912,12 @@ describe('EdgeEvaluator', () => {
 
   it('returns null when no condition matches and no default', () => {
     const edges = [
-      edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'path', operator: 'eq', value: 'standard' } }),
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'path', operator: 'eq', value: 'standard' },
+      }),
     ];
     const out = { schemaFields: { path: 'other' }, result: 'ok' as const };
     expect(EdgeEvaluator.resolve(out, edges)).toBeNull();
@@ -1663,47 +1925,103 @@ describe('EdgeEvaluator', () => {
 
   it('handles dotted paths (deliverable.status)', () => {
     const edges = [
-      edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'deliverable.status', operator: 'eq', value: 'final' } }),
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'deliverable.status', operator: 'eq', value: 'final' },
+      }),
     ];
-    const out = { deliverable: { status: 'final' as const, title: 'x', markdown: 'y', type: 'report' }, schemaFields: {}, result: 'ok' as const };
+    const out = {
+      deliverable: { status: 'final' as const, title: 'x', markdown: 'y', type: 'report' },
+      schemaFields: {},
+      result: 'ok' as const,
+    };
     expect(EdgeEvaluator.resolve(out, edges)?.id).toBe('e1');
   });
 
   it('operator neq', () => {
-    const edges = [edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'x', operator: 'neq', value: '1' } })];
+    const edges = [
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'x', operator: 'neq', value: '1' },
+      }),
+    ];
     expect(EdgeEvaluator.resolve({ schemaFields: { x: '2' }, result: 'ok' }, edges)?.id).toBe('e1');
     expect(EdgeEvaluator.resolve({ schemaFields: { x: '1' }, result: 'ok' }, edges)).toBeNull();
   });
 
   it('operator in', () => {
-    const edges = [edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'p', operator: 'in', value: ['a','b'] } })];
+    const edges = [
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'p', operator: 'in', value: ['a', 'b'] },
+      }),
+    ];
     expect(EdgeEvaluator.resolve({ schemaFields: { p: 'b' }, result: 'ok' }, edges)?.id).toBe('e1');
     expect(EdgeEvaluator.resolve({ schemaFields: { p: 'c' }, result: 'ok' }, edges)).toBeNull();
   });
 
   it('operator gt/lt', () => {
-    const edges = [edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'n', operator: 'gt', value: '5' } })];
+    const edges = [
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'n', operator: 'gt', value: '5' },
+      }),
+    ];
     expect(EdgeEvaluator.resolve({ schemaFields: { n: 10 }, result: 'ok' }, edges)?.id).toBe('e1');
     expect(EdgeEvaluator.resolve({ schemaFields: { n: 3 }, result: 'ok' }, edges)).toBeNull();
     expect(EdgeEvaluator.resolve({ schemaFields: { n: 'NaN' }, result: 'ok' }, edges)).toBeNull();
   });
 
   it('operator contains', () => {
-    const edges = [edge({ id: 'e1', source: 's', target: 't1', condition: { field: 's', operator: 'contains', value: 'foo' } })];
-    expect(EdgeEvaluator.resolve({ schemaFields: { s: 'hello foobar' }, result: 'ok' }, edges)?.id).toBe('e1');
+    const edges = [
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 's', operator: 'contains', value: 'foo' },
+      }),
+    ];
+    expect(
+      EdgeEvaluator.resolve({ schemaFields: { s: 'hello foobar' }, result: 'ok' }, edges)?.id,
+    ).toBe('e1');
     expect(EdgeEvaluator.resolve({ schemaFields: { s: 'bye' }, result: 'ok' }, edges)).toBeNull();
   });
 
   it('outcome shorthand: edges can match on outcome top-level field', () => {
-    const edges = [edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'outcome', operator: 'eq', value: 'approve' } })];
+    const edges = [
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'outcome', operator: 'eq', value: 'approve' },
+      }),
+    ];
     const out = { schemaFields: {}, outcome: 'approve', result: 'ok' as const };
     expect(EdgeEvaluator.resolve(out, edges)?.id).toBe('e1');
   });
 
   it('stable order: first matching conditional wins', () => {
     const edges = [
-      edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'x', operator: 'eq', value: 'a' } }),
-      edge({ id: 'e2', source: 's', target: 't2', condition: { field: 'x', operator: 'eq', value: 'a' } }),
+      edge({
+        id: 'e1',
+        source: 's',
+        target: 't1',
+        condition: { field: 'x', operator: 'eq', value: 'a' },
+      }),
+      edge({
+        id: 'e2',
+        source: 's',
+        target: 't2',
+        condition: { field: 'x', operator: 'eq', value: 'a' },
+      }),
     ];
     expect(EdgeEvaluator.resolve({ schemaFields: { x: 'a' }, result: 'ok' }, edges)?.id).toBe('e1');
   });
@@ -1724,7 +2042,9 @@ import type { WorkflowEdge, StepOutput, EdgeOperator } from '@fleex/shared';
 
 export const EdgeEvaluator = {
   resolve(output: StepOutput, edges: WorkflowEdge[]): WorkflowEdge | null {
-    const conditional = edges.filter((e) => e.condition && !e.isDefault).sort((a, b) => a.id.localeCompare(b.id));
+    const conditional = edges
+      .filter((e) => e.condition && !e.isDefault)
+      .sort((a, b) => a.id.localeCompare(b.id));
     const defaults = edges.filter((e) => e.isDefault).sort((a, b) => a.id.localeCompare(b.id));
 
     for (const edge of conditional) {
@@ -1762,18 +2082,24 @@ function getByPath(output: StepOutput, path: string): unknown {
 
 function matches(actual: unknown, op: EdgeOperator, value: string | string[]): boolean {
   switch (op) {
-    case 'eq':       return actual === value;
-    case 'neq':      return actual !== value;
-    case 'in':       return Array.isArray(value) && value.includes(String(actual));
+    case 'eq':
+      return actual === value;
+    case 'neq':
+      return actual !== value;
+    case 'in':
+      return Array.isArray(value) && value.includes(String(actual));
     case 'gt': {
-      const a = Number(actual), v = Number(value as string);
+      const a = Number(actual),
+        v = Number(value as string);
       return Number.isFinite(a) && Number.isFinite(v) && a > v;
     }
     case 'lt': {
-      const a = Number(actual), v = Number(value as string);
+      const a = Number(actual),
+        v = Number(value as string);
       return Number.isFinite(a) && Number.isFinite(v) && a < v;
     }
-    case 'contains': return typeof actual === 'string' && typeof value === 'string' && actual.includes(value);
+    case 'contains':
+      return typeof actual === 'string' && typeof value === 'string' && actual.includes(value);
   }
 }
 ```
@@ -1795,6 +2121,7 @@ git commit -m "feat(server): EdgeEvaluator pure function with 6 operators"
 ### Task B.2: `mergeOutputSchemas` helper
 
 **Files:**
+
 - Create: `packages/server/src/application/utils/merge-output-schemas.ts`
 - Create: `packages/server/tests/unit/merge-output-schemas.test.ts`
 
@@ -1804,7 +2131,10 @@ Write `packages/server/tests/unit/merge-output-schemas.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../src/application/utils/merge-output-schemas.js';
+import {
+  mergeOutputSchemas,
+  STANDARD_OUTPUT_SCHEMA,
+} from '../../src/application/utils/merge-output-schemas.js';
 
 describe('mergeOutputSchemas', () => {
   it('returns standard when custom is undefined', () => {
@@ -1815,11 +2145,14 @@ describe('mergeOutputSchemas', () => {
   it('merges custom properties at top-level', () => {
     const custom = {
       type: 'object' as const,
-      properties: { path: { type: 'string' as const, enum: ['standard','hotfix'] } },
+      properties: { path: { type: 'string' as const, enum: ['standard', 'hotfix'] } },
       required: ['path'],
     };
     const merged = mergeOutputSchemas(STANDARD_OUTPUT_SCHEMA, custom);
-    expect((merged.schema.properties as Record<string, unknown>).path).toEqual({ type: 'string', enum: ['standard','hotfix'] });
+    expect((merged.schema.properties as Record<string, unknown>).path).toEqual({
+      type: 'string',
+      enum: ['standard', 'hotfix'],
+    });
     expect((merged.schema.properties as Record<string, unknown>).deliverable).toBeDefined();
     expect(merged.schema.required).toContain('path');
     expect(merged.schema.required).toContain('deliverable');
@@ -1827,7 +2160,9 @@ describe('mergeOutputSchemas', () => {
 
   it('custom required is added without removing standard required', () => {
     const merged = mergeOutputSchemas(STANDARD_OUTPUT_SCHEMA, {
-      type: 'object', properties: { x: { type: 'string' } }, required: ['x'],
+      type: 'object',
+      properties: { x: { type: 'string' } },
+      required: ['x'],
     });
     expect(merged.schema.required).toEqual(expect.arrayContaining(['x', 'deliverable', 'comment']));
   });
@@ -1868,7 +2203,11 @@ export const STANDARD_OUTPUT_SCHEMA = {
         ],
       },
       comment: { oneOf: [{ type: 'string' }, { type: 'null' }] },
-      mentionStatus: { type: 'string', enum: ['resolved', 'waiting_for_info'], default: 'resolved' },
+      mentionStatus: {
+        type: 'string',
+        enum: ['resolved', 'waiting_for_info'],
+        default: 'resolved',
+      },
     },
     required: ['deliverable', 'comment'],
   },
@@ -1907,6 +2246,7 @@ git commit -m "feat(server): mergeOutputSchemas helper + STANDARD_OUTPUT_SCHEMA 
 ### Task B.3: Refactor — extract `OUTPUT_FORMAT_SCHEMA` const into shared helper
 
 **Files:**
+
 - Modify: `packages/server/src/application/use-cases/execute-agent.ts` (remove local OUTPUT_FORMAT_SCHEMA, import from helper)
 
 - [ ] **Step 1: Replace the const definition**
@@ -1939,6 +2279,7 @@ git commit -m "refactor(server): use shared STANDARD_OUTPUT_SCHEMA in ExecuteAge
 ### Task B.4: `composeWorkflowContextPrompt` helper
 
 **Files:**
+
 - Create: `packages/server/src/application/utils/compose-workflow-context.ts`
 - Create: `packages/server/tests/unit/compose-workflow-context.test.ts`
 
@@ -1958,13 +2299,27 @@ describe('composeWorkflowContextPrompt', () => {
       outputSchema: {
         type: 'object',
         properties: {
-          path: { type: 'string', enum: ['standard','hotfix','doc_only'], description: 'Routing path' },
+          path: {
+            type: 'string',
+            enum: ['standard', 'hotfix', 'doc_only'],
+            description: 'Routing path',
+          },
         },
         required: ['path'],
       },
       outgoingEdges: [
-        { id: 'e1', label: 'standard', condition: { field: 'path', operator: 'eq', value: 'standard' }, targetName: 'Product Spec' },
-        { id: 'e2', label: 'hotfix', condition: { field: 'path', operator: 'eq', value: 'hotfix' }, targetName: 'Development' },
+        {
+          id: 'e1',
+          label: 'standard',
+          condition: { field: 'path', operator: 'eq', value: 'standard' },
+          targetName: 'Product Spec',
+        },
+        {
+          id: 'e2',
+          label: 'hotfix',
+          condition: { field: 'path', operator: 'eq', value: 'hotfix' },
+          targetName: 'Development',
+        },
       ],
       previousOutputs: {},
     });
@@ -1978,7 +2333,8 @@ describe('composeWorkflowContextPrompt', () => {
 
   it('renders previousOutputs when present', () => {
     const out = composeWorkflowContextPrompt({
-      workflowName: 'X', stepName: 'Y',
+      workflowName: 'X',
+      stepName: 'Y',
       outputSchema: undefined,
       outgoingEdges: [],
       previousOutputs: { triage: { path: 'standard', priority: 'high' } },
@@ -1989,8 +2345,11 @@ describe('composeWorkflowContextPrompt', () => {
 
   it('handles no outgoing edges (terminal step)', () => {
     const out = composeWorkflowContextPrompt({
-      workflowName: 'X', stepName: 'Final',
-      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+      workflowName: 'X',
+      stepName: 'Final',
+      outputSchema: undefined,
+      outgoingEdges: [],
+      previousOutputs: {},
     });
     expect(out).toContain('terminal');
   });
@@ -2031,7 +2390,9 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
   parts.push('');
 
   if (input.outputSchema && Object.keys(input.outputSchema.properties).length > 0) {
-    parts.push(`**Expected output fields** (in addition to the standard \`deliverable\`/\`comment\`/\`mentionStatus\`):`);
+    parts.push(
+      `**Expected output fields** (in addition to the standard \`deliverable\`/\`comment\`/\`mentionStatus\`):`,
+    );
     for (const [name, prop] of Object.entries(input.outputSchema.properties)) {
       const enumPart = prop.enum ? ` (enum: ${prop.enum.join(', ')})` : '';
       const descPart = prop.description ? ` — ${prop.description}` : '';
@@ -2047,8 +2408,12 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
     for (const e of input.outgoingEdges) {
       if (e.condition) {
         const opSym = opSymbol(e.condition.operator);
-        const value = Array.isArray(e.condition.value) ? JSON.stringify(e.condition.value) : `"${e.condition.value}"`;
-        parts.push(`- If \`${e.condition.field}\` ${opSym} ${value} → next step: **${e.targetName}**${e.label ? ` (${e.label})` : ''}`);
+        const value = Array.isArray(e.condition.value)
+          ? JSON.stringify(e.condition.value)
+          : `"${e.condition.value}"`;
+        parts.push(
+          `- If \`${e.condition.field}\` ${opSym} ${value} → next step: **${e.targetName}**${e.label ? ` (${e.label})` : ''}`,
+        );
       } else {
         parts.push(`- Default → next step: **${e.targetName}**${e.label ? ` (${e.label})` : ''}`);
       }
@@ -2070,13 +2435,20 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
 
 function opSymbol(op: string): string {
   switch (op) {
-    case 'eq': return '==';
-    case 'neq': return '!=';
-    case 'in': return 'in';
-    case 'gt': return '>';
-    case 'lt': return '<';
-    case 'contains': return 'contains';
-    default: return op;
+    case 'eq':
+      return '==';
+    case 'neq':
+      return '!=';
+    case 'in':
+      return 'in';
+    case 'gt':
+      return '>';
+    case 'lt':
+      return '<';
+    case 'contains':
+      return 'contains';
+    default:
+      return op;
   }
 }
 ```
@@ -2098,6 +2470,7 @@ git commit -m "feat(server): composeWorkflowContextPrompt for workflow-aware age
 ### Task B.5: `StepExecutor` interface + `StepExecutionInput`
 
 **Files:**
+
 - Create: `packages/server/src/application/services/step-executors/types.ts`
 
 - [ ] **Step 1: Write the interface**
@@ -2152,6 +2525,7 @@ git commit -m "feat(server): StepExecutor interface + StepExecutionInput types"
 ### Task B.6: `HumanGateStepExecutor`
 
 **Files:**
+
 - Create: `packages/server/src/application/services/step-executors/human-gate-step-executor.ts`
 - Create: `packages/server/tests/unit/human-gate-step-executor.test.ts`
 
@@ -2164,22 +2538,37 @@ import { describe, it, expect, vi } from 'vitest';
 import { HumanGateStepExecutor } from '../../src/application/services/step-executors/human-gate-step-executor.js';
 
 const makeInput = (overrides: Partial<{ outcomes: string[] }> = {}) => ({
-  ticketId: 't-1', workflowRunId: 'run-1', stepRunId: 'sr-1',
+  ticketId: 't-1',
+  workflowRunId: 'run-1',
+  stepRunId: 'sr-1',
   step: {
-    id: 'gate', name: 'Human Review', executorType: 'human_gate' as const,
-    executorRef: '', position: { x: 0, y: 0 },
+    id: 'gate',
+    name: 'Human Review',
+    executorType: 'human_gate' as const,
+    executorRef: '',
+    position: { x: 0, y: 0 },
     humanGateOutcomes: overrides.outcomes ?? ['approve', 'reject'],
   },
-  workflowContext: { workflowName: 'W', stepName: 'Human Review', outgoingEdges: [], previousOutputs: {} },
+  workflowContext: {
+    workflowName: 'W',
+    stepName: 'Human Review',
+    outgoingEdges: [],
+    previousOutputs: {},
+  },
 });
 
 describe('HumanGateStepExecutor', () => {
   it('posts a comment and returns needs_review', async () => {
-    const postComment = { execute: vi.fn().mockResolvedValue({ comment: { id: 'c-1' }, createdMentions: [] }) };
+    const postComment = {
+      execute: vi.fn().mockResolvedValue({ comment: { id: 'c-1' }, createdMentions: [] }),
+    };
     const exec = new HumanGateStepExecutor(postComment as never);
     const r = await exec.execute(makeInput());
     expect(r.output.result).toBe('needs_review');
-    expect((r.output.schemaFields as Record<string, unknown>).outcomes).toEqual(['approve', 'reject']);
+    expect((r.output.schemaFields as Record<string, unknown>).outcomes).toEqual([
+      'approve',
+      'reject',
+    ]);
     expect(postComment.execute).toHaveBeenCalledOnce();
   });
 
@@ -2256,6 +2645,7 @@ git commit -m "feat(server): HumanGateStepExecutor — posts comment, returns ne
 ### Task B.7: `AgentStepExecutor`
 
 **Files:**
+
 - Create: `packages/server/src/application/services/step-executors/agent-step-executor.ts`
 - Create: `packages/server/tests/unit/agent-step-executor.test.ts`
 - Modify: `packages/server/src/application/use-cases/execute-agent.ts` (add `executeForWorkflowStep` method)
@@ -2409,18 +2799,40 @@ describe('AgentStepExecutor', () => {
   it('calls executeForWorkflowStep and maps result to StepOutput', async () => {
     const executeAgent = {
       executeForWorkflowStep: vi.fn().mockResolvedValue({
-        structuredOutput: { deliverable: null, comment: 'Triaged', path: 'standard', priority: 'high' },
+        structuredOutput: {
+          deliverable: null,
+          comment: 'Triaged',
+          path: 'standard',
+          priority: 'high',
+        },
         rawText: '',
         executionId: 'exec-1',
       }),
     };
     const exec = new AgentStepExecutor(executeAgent as never);
     const r = await exec.execute({
-      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
-      step: { id: 's1', name: 'Triage', executorType: 'agent', executorRef: 'the-sentinel', mode: 'plan',
-              outputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
-              position: { x: 0, y: 0 } },
-      workflowContext: { workflowName: 'W', stepName: 'Triage', outgoingEdges: [], previousOutputs: {} },
+      ticketId: 't-1',
+      workflowRunId: 'r-1',
+      stepRunId: 'sr-1',
+      step: {
+        id: 's1',
+        name: 'Triage',
+        executorType: 'agent',
+        executorRef: 'the-sentinel',
+        mode: 'plan',
+        outputSchema: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          required: ['path'],
+        },
+        position: { x: 0, y: 0 },
+      },
+      workflowContext: {
+        workflowName: 'W',
+        stepName: 'Triage',
+        outgoingEdges: [],
+        previousOutputs: {},
+      },
     });
     expect(r.executionId).toBe('exec-1');
     expect(r.output.comment).toBe('Triaged');
@@ -2432,14 +2844,27 @@ describe('AgentStepExecutor', () => {
   it('marks result=needs_review when mentionStatus=waiting_for_info', async () => {
     const executeAgent = {
       executeForWorkflowStep: vi.fn().mockResolvedValue({
-        structuredOutput: { deliverable: null, comment: 'I need clarification', mentionStatus: 'waiting_for_info' },
-        rawText: '', executionId: 'exec-2',
+        structuredOutput: {
+          deliverable: null,
+          comment: 'I need clarification',
+          mentionStatus: 'waiting_for_info',
+        },
+        rawText: '',
+        executionId: 'exec-2',
       }),
     };
     const exec = new AgentStepExecutor(executeAgent as never);
     const r = await exec.execute({
-      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
-      step: { id: 's1', name: 'X', executorType: 'agent', executorRef: 'p', position: { x: 0, y: 0 } },
+      ticketId: 't-1',
+      workflowRunId: 'r-1',
+      stepRunId: 'sr-1',
+      step: {
+        id: 's1',
+        name: 'X',
+        executorType: 'agent',
+        executorRef: 'p',
+        position: { x: 0, y: 0 },
+      },
       workflowContext: { workflowName: 'W', stepName: 'X', outgoingEdges: [], previousOutputs: {} },
     });
     expect(r.output.result).toBe('needs_review');
@@ -2448,13 +2873,23 @@ describe('AgentStepExecutor', () => {
   it('marks result=ko when SDK returns no structured output', async () => {
     const executeAgent = {
       executeForWorkflowStep: vi.fn().mockResolvedValue({
-        structuredOutput: null, rawText: 'plain text fallback', executionId: 'exec-3',
+        structuredOutput: null,
+        rawText: 'plain text fallback',
+        executionId: 'exec-3',
       }),
     };
     const exec = new AgentStepExecutor(executeAgent as never);
     const r = await exec.execute({
-      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
-      step: { id: 's1', name: 'X', executorType: 'agent', executorRef: 'p', position: { x: 0, y: 0 } },
+      ticketId: 't-1',
+      workflowRunId: 'r-1',
+      stepRunId: 'sr-1',
+      step: {
+        id: 's1',
+        name: 'X',
+        executorType: 'agent',
+        executorRef: 'p',
+        position: { x: 0, y: 0 },
+      },
       workflowContext: { workflowName: 'W', stepName: 'X', outgoingEdges: [], previousOutputs: {} },
     });
     expect(r.output.result).toBe('ko');
@@ -2495,13 +2930,14 @@ export class AgentStepExecutor implements StepExecutor {
 
     const mode: MentionExecutionMode = input.step.mode ?? 'edit';
 
-    const { structuredOutput, rawText, executionId } = await this.executeAgent.executeForWorkflowStep({
-      personaName: input.step.executorRef,
-      ticketId: input.ticketId,
-      outputFormat,
-      workflowContextPrompt,
-      mode,
-    });
+    const { structuredOutput, rawText, executionId } =
+      await this.executeAgent.executeForWorkflowStep({
+        personaName: input.step.executorRef,
+        ticketId: input.ticketId,
+        outputFormat,
+        workflowContextPrompt,
+        mode,
+      });
 
     return { output: this.toStepOutput(structuredOutput, rawText), executionId };
   }
@@ -2544,6 +2980,7 @@ git commit -m "feat(server): AgentStepExecutor + executeForWorkflowStep entry on
 ### Task B.8: `SkillStepExecutor`
 
 **Files:**
+
 - Create: `packages/server/src/application/services/step-executors/skill-step-executor.ts`
 - Create: `packages/server/tests/unit/skill-step-executor.test.ts`
 - Modify: `packages/server/src/application/use-cases/execute-agent.ts` (extend `executeForSkill` to accept `outputFormatOverride` + `workflowContextPrompt`)
@@ -2583,15 +3020,32 @@ describe('SkillStepExecutor', () => {
     };
     const executeAgent = {
       executeForSkill: vi.fn().mockResolvedValue({
-        structuredOutput: { deliverable: { title: 'Doc', markdown: '...', type: 'spec', status: 'final' }, comment: null },
-        rawText: '', executionId: 'exec-1',
+        structuredOutput: {
+          deliverable: { title: 'Doc', markdown: '...', type: 'spec', status: 'final' },
+          comment: null,
+        },
+        rawText: '',
+        executionId: 'exec-1',
       }),
     };
     const exec = new SkillStepExecutor(executeAgent as never, skillStore as never);
     const r = await exec.execute({
-      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
-      step: { id: 's1', name: 'Doc Update', executorType: 'skill', executorRef: 'doc-writer', position: { x: 0, y: 0 } },
-      workflowContext: { workflowName: 'W', stepName: 'Doc Update', outgoingEdges: [], previousOutputs: {} },
+      ticketId: 't-1',
+      workflowRunId: 'r-1',
+      stepRunId: 'sr-1',
+      step: {
+        id: 's1',
+        name: 'Doc Update',
+        executorType: 'skill',
+        executorRef: 'doc-writer',
+        position: { x: 0, y: 0 },
+      },
+      workflowContext: {
+        workflowName: 'W',
+        stepName: 'Doc Update',
+        outgoingEdges: [],
+        previousOutputs: {},
+      },
     });
     expect(skillStore.getByCommandName).toHaveBeenCalledWith('doc-writer');
     expect(r.output.deliverable?.title).toBe('Doc');
@@ -2601,11 +3055,26 @@ describe('SkillStepExecutor', () => {
   it('throws when skill is not found', async () => {
     const skillStore = { getByCommandName: vi.fn().mockResolvedValue(null) };
     const exec = new SkillStepExecutor({} as never, skillStore as never);
-    await expect(exec.execute({
-      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
-      step: { id: 's1', name: 'X', executorType: 'skill', executorRef: 'missing', position: { x: 0, y: 0 } },
-      workflowContext: { workflowName: 'W', stepName: 'X', outgoingEdges: [], previousOutputs: {} },
-    })).rejects.toThrow(/skill .* not found/);
+    await expect(
+      exec.execute({
+        ticketId: 't-1',
+        workflowRunId: 'r-1',
+        stepRunId: 'sr-1',
+        step: {
+          id: 's1',
+          name: 'X',
+          executorType: 'skill',
+          executorRef: 'missing',
+          position: { x: 0, y: 0 },
+        },
+        workflowContext: {
+          workflowName: 'W',
+          stepName: 'X',
+          outgoingEdges: [],
+          previousOutputs: {},
+        },
+      }),
+    ).rejects.toThrow(/skill .* not found/);
   });
 });
 ```
@@ -2655,7 +3124,9 @@ export class SkillStepExecutor implements StepExecutor {
     });
 
     if (!result || !('structuredOutput' in result)) {
-      throw new Error('executeForSkill did not return structured output (returnStructured flag ignored?)');
+      throw new Error(
+        'executeForSkill did not return structured output (returnStructured flag ignored?)',
+      );
     }
 
     return { output: this.toStepOutput(result.structuredOutput), executionId: result.executionId };
@@ -2696,6 +3167,7 @@ git commit -m "feat(server): SkillStepExecutor + extend executeForSkill with out
 ### Task B.9: `PanelStepExecutor`
 
 **Files:**
+
 - Create: `packages/server/src/application/services/step-executors/panel-step-executor.ts`
 - Create: `packages/server/tests/unit/panel-step-executor.test.ts`
 - Modify: `packages/server/src/application/use-cases/run-panel.ts` (add `extraContextPrompt` optional param + return structured aggregate)
@@ -2733,19 +3205,39 @@ describe('PanelStepExecutor', () => {
   it('calls runPanel with extra context + structured return', async () => {
     const runPanel = {
       execute: vi.fn().mockResolvedValue({
-        structuredOutput: { deliverable: { title: 'Spec', markdown: '...', type: 'spec', status: 'final' }, comment: 'Approved by panel' },
+        structuredOutput: {
+          deliverable: { title: 'Spec', markdown: '...', type: 'spec', status: 'final' },
+          comment: 'Approved by panel',
+        },
         executionId: 'exec-1',
       }),
     };
     const exec = new PanelStepExecutor(runPanel as never);
     const r = await exec.execute({
-      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
-      step: { id: 's1', name: 'Spec Panel', executorType: 'panel', executorRef: 'les-big-tech', position: { x: 0, y: 0 } },
-      workflowContext: { workflowName: 'W', stepName: 'Spec Panel', outgoingEdges: [], previousOutputs: {} },
+      ticketId: 't-1',
+      workflowRunId: 'r-1',
+      stepRunId: 'sr-1',
+      step: {
+        id: 's1',
+        name: 'Spec Panel',
+        executorType: 'panel',
+        executorRef: 'les-big-tech',
+        position: { x: 0, y: 0 },
+      },
+      workflowContext: {
+        workflowName: 'W',
+        stepName: 'Spec Panel',
+        outgoingEdges: [],
+        previousOutputs: {},
+      },
     });
-    expect(runPanel.execute).toHaveBeenCalledWith(expect.objectContaining({
-      panelName: 'les-big-tech', ticketId: 't-1', returnStructured: true,
-    }));
+    expect(runPanel.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        panelName: 'les-big-tech',
+        ticketId: 't-1',
+        returnStructured: true,
+      }),
+    );
     expect(r.output.deliverable?.title).toBe('Spec');
     expect(r.output.result).toBe('ok');
   });
@@ -2831,6 +3323,7 @@ git commit -m "feat(server): PanelStepExecutor + extend RunPanelUseCase with ext
 ### Task B.10: `CreateWorkflowRunUseCase`
 
 **Files:**
+
 - Create: `packages/server/src/application/use-cases/create-workflow-run.ts`
 - Create: `packages/server/tests/unit/create-workflow-run.test.ts`
 - Create: `packages/server/src/domain/errors.ts` (add `WorkflowRunAlreadyActiveError`)
@@ -2885,12 +3378,26 @@ import { describe, it, expect, vi } from 'vitest';
 import { CreateWorkflowRunUseCase } from '../../src/application/use-cases/create-workflow-run.js';
 import { WorkflowTemplateEntity } from '../../src/domain/entities/workflow-template.entity.js';
 import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
-import { WorkflowRunAlreadyActiveError, WorkflowTemplateNotFoundError } from '../../src/domain/errors.js';
+import {
+  WorkflowRunAlreadyActiveError,
+  WorkflowTemplateNotFoundError,
+} from '../../src/domain/errors.js';
 
 const template = WorkflowTemplateEntity.create({
-  id: 'tmpl-1', name: 'X', slug: 'x',
-  steps: [{ id: 'triage', name: 'Triage', executorType: 'agent', executorRef: 'p', position: { x: 0, y: 0 } }],
-  edges: [], entryStepId: 'triage',
+  id: 'tmpl-1',
+  name: 'X',
+  slug: 'x',
+  steps: [
+    {
+      id: 'triage',
+      name: 'Triage',
+      executorType: 'agent',
+      executorRef: 'p',
+      position: { x: 0, y: 0 },
+    },
+  ],
+  edges: [],
+  entryStepId: 'triage',
 });
 
 describe('CreateWorkflowRunUseCase', () => {
@@ -2899,34 +3406,71 @@ describe('CreateWorkflowRunUseCase', () => {
     const runStore = { getActiveByTicket: vi.fn().mockResolvedValue(null), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
-    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, orchestrator as never, eventBus as never);
+    const uc = new CreateWorkflowRunUseCase(
+      templateStore as never,
+      runStore as never,
+      orchestrator as never,
+      eventBus as never,
+    );
 
-    const run = await uc.execute({ ticketId: 't-1', templateId: 'tmpl-1', triggeredBy: '@john', triggeredFrom: 'comment:c-1' });
+    const run = await uc.execute({
+      ticketId: 't-1',
+      templateId: 'tmpl-1',
+      triggeredBy: '@john',
+      triggeredFrom: 'comment:c-1',
+    });
 
     expect(run).toBeInstanceOf(WorkflowRunEntity);
     expect(run.status).toBe('running');
     expect(run.currentStepId).toBe('triage');
     expect(runStore.save).toHaveBeenCalledOnce();
     expect(orchestrator.runStep).toHaveBeenCalledWith(run.id, 'triage');
-    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_created' }));
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'workflow.run_created' }),
+    );
   });
 
   it('throws WorkflowRunAlreadyActiveError if a run is active', async () => {
     const templateStore = { getById: vi.fn().mockResolvedValue(template) };
-    const runStore = { getActiveByTicket: vi.fn().mockResolvedValue({ id: 'existing' }), save: vi.fn() };
-    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, { runStep: vi.fn() } as never, { emit: vi.fn() } as never);
+    const runStore = {
+      getActiveByTicket: vi.fn().mockResolvedValue({ id: 'existing' }),
+      save: vi.fn(),
+    };
+    const uc = new CreateWorkflowRunUseCase(
+      templateStore as never,
+      runStore as never,
+      { runStep: vi.fn() } as never,
+      { emit: vi.fn() } as never,
+    );
 
-    await expect(uc.execute({ ticketId: 't-1', templateId: 'tmpl-1', triggeredBy: '@john', triggeredFrom: 'x' }))
-      .rejects.toBeInstanceOf(WorkflowRunAlreadyActiveError);
+    await expect(
+      uc.execute({
+        ticketId: 't-1',
+        templateId: 'tmpl-1',
+        triggeredBy: '@john',
+        triggeredFrom: 'x',
+      }),
+    ).rejects.toBeInstanceOf(WorkflowRunAlreadyActiveError);
   });
 
   it('throws WorkflowTemplateNotFoundError if template missing', async () => {
     const templateStore = { getById: vi.fn().mockResolvedValue(null) };
     const runStore = { getActiveByTicket: vi.fn().mockResolvedValue(null), save: vi.fn() };
-    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, { runStep: vi.fn() } as never, { emit: vi.fn() } as never);
+    const uc = new CreateWorkflowRunUseCase(
+      templateStore as never,
+      runStore as never,
+      { runStep: vi.fn() } as never,
+      { emit: vi.fn() } as never,
+    );
 
-    await expect(uc.execute({ ticketId: 't-1', templateId: 'missing', triggeredBy: '@john', triggeredFrom: 'x' }))
-      .rejects.toBeInstanceOf(WorkflowTemplateNotFoundError);
+    await expect(
+      uc.execute({
+        ticketId: 't-1',
+        templateId: 'missing',
+        triggeredBy: '@john',
+        triggeredFrom: 'x',
+      }),
+    ).rejects.toBeInstanceOf(WorkflowTemplateNotFoundError);
   });
 });
 ```
@@ -2943,7 +3487,10 @@ Write `packages/server/src/application/use-cases/create-workflow-run.ts`:
 ```ts
 import { randomUUID } from 'node:crypto';
 import { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
-import { WorkflowRunAlreadyActiveError, WorkflowTemplateNotFoundError } from '../../domain/errors.js';
+import {
+  WorkflowRunAlreadyActiveError,
+  WorkflowTemplateNotFoundError,
+} from '../../domain/errors.js';
 import type { WorkflowTemplateStorePort } from '../ports/workflow-template-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { EventBus } from '../event-bus.js';
@@ -3019,6 +3566,7 @@ git commit -m "feat(server): CreateWorkflowRunUseCase + domain errors"
 ### Task B.11: `RunWorkflowStepUseCase`
 
 **Files:**
+
 - Create: `packages/server/src/application/use-cases/run-workflow-step.ts`
 - Create: `packages/server/tests/unit/run-workflow-step.test.ts`
 
@@ -3031,28 +3579,42 @@ import { describe, it, expect, vi } from 'vitest';
 import { RunWorkflowStepUseCase } from '../../src/application/use-cases/run-workflow-step.js';
 import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
 
-const makeRun = () => WorkflowRunEntity.create({
-  id: 'run-1', ticketId: 't-1', templateId: 'tmpl-1',
-  templateSnapshot: {
-    name: 'W', emoji: '🔧',
-    steps: [
-      { id: 'a', name: 'A', executorType: 'agent', executorRef: 'p1', position: { x: 0, y: 0 } },
-      { id: 'b', name: 'B', executorType: 'agent', executorRef: 'p2', position: { x: 200, y: 0 } },
-    ],
-    edges: [{ id: 'e1', source: 'a', target: 'b', isDefault: true }],
-    entryStepId: 'a',
-  },
-  triggeredBy: '@john', triggeredFrom: 'x',
-});
+const makeRun = () =>
+  WorkflowRunEntity.create({
+    id: 'run-1',
+    ticketId: 't-1',
+    templateId: 'tmpl-1',
+    templateSnapshot: {
+      name: 'W',
+      emoji: '🔧',
+      steps: [
+        { id: 'a', name: 'A', executorType: 'agent', executorRef: 'p1', position: { x: 0, y: 0 } },
+        {
+          id: 'b',
+          name: 'B',
+          executorType: 'agent',
+          executorRef: 'p2',
+          position: { x: 200, y: 0 },
+        },
+      ],
+      edges: [{ id: 'e1', source: 'a', target: 'b', isDefault: true }],
+      entryStepId: 'a',
+    },
+    triggeredBy: '@john',
+    triggeredFrom: 'x',
+  });
 
 describe('RunWorkflowStepUseCase', () => {
   it('executes step, persists step_run with output, advances to next step', async () => {
     const run = makeRun();
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
     const stepRunStore = { save: vi.fn() };
-    const agentExecutor = { execute: vi.fn().mockResolvedValue({
-      output: { schemaFields: {}, result: 'ok' }, executionId: 'exec-1',
-    }) };
+    const agentExecutor = {
+      execute: vi.fn().mockResolvedValue({
+        output: { schemaFields: {}, result: 'ok' },
+        executionId: 'exec-1',
+      }),
+    };
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
 
@@ -3075,40 +3637,78 @@ describe('RunWorkflowStepUseCase', () => {
     expect(stepRunStore.save).toHaveBeenCalled();
     expect(run.currentStepId).toBe('b');
     expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'b');
-    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.step_started' }));
-    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.step_completed' }));
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'workflow.step_started' }),
+    );
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'workflow.step_completed' }),
+    );
   });
 
   it('completes the run when no outgoing edges match', async () => {
     const run = WorkflowRunEntity.create({
-      id: 'run-1', ticketId: 't-1', templateId: 'tmpl-1',
-      templateSnapshot: { name: 'W', emoji: '', steps: [{ id: 'final', name: 'F', executorType: 'agent', executorRef: 'p', position: { x: 0, y: 0 } }], edges: [], entryStepId: 'final' },
-      triggeredBy: '@john', triggeredFrom: 'x',
+      id: 'run-1',
+      ticketId: 't-1',
+      templateId: 'tmpl-1',
+      templateSnapshot: {
+        name: 'W',
+        emoji: '',
+        steps: [
+          {
+            id: 'final',
+            name: 'F',
+            executorType: 'agent',
+            executorRef: 'p',
+            position: { x: 0, y: 0 },
+          },
+        ],
+        edges: [],
+        entryStepId: 'final',
+      },
+      triggeredBy: '@john',
+      triggeredFrom: 'x',
     });
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
     const stepRunStore = { save: vi.fn() };
-    const agentExecutor = { execute: vi.fn().mockResolvedValue({ output: { schemaFields: {}, result: 'ok' }, executionId: 'e' }) };
+    const agentExecutor = {
+      execute: vi
+        .fn()
+        .mockResolvedValue({ output: { schemaFields: {}, result: 'ok' }, executionId: 'e' }),
+    };
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
 
     const uc = new RunWorkflowStepUseCase({
-      runStore: runStore as never, stepRunStore: stepRunStore as never,
-      orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      runStore: runStore as never,
+      stepRunStore: stepRunStore as never,
+      orchestrator: orchestrator as never,
+      eventBus: eventBus as never,
+      executors: {
+        agent: agentExecutor as never,
+        skill: {} as never,
+        panel: {} as never,
+        human_gate: {} as never,
+      },
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'final' });
 
     expect(run.status).toBe('completed');
     expect(orchestrator.runStep).not.toHaveBeenCalled();
-    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_completed' }));
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'workflow.run_completed' }),
+    );
   });
 
   it('marks run needs_review when step returns result=needs_review', async () => {
     const run = makeRun();
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
     const stepRunStore = { save: vi.fn() };
-    const humanGate = { execute: vi.fn().mockResolvedValue({ output: { schemaFields: { outcomes: ['approve'] }, result: 'needs_review' } }) };
+    const humanGate = {
+      execute: vi.fn().mockResolvedValue({
+        output: { schemaFields: { outcomes: ['approve'] }, result: 'needs_review' },
+      }),
+    };
     run.templateSnapshot.steps[0]!.executorType = 'human_gate';
     run.templateSnapshot.steps[0]!.humanGateOutcomes = ['approve'];
 
@@ -3116,9 +3716,16 @@ describe('RunWorkflowStepUseCase', () => {
     const eventBus = { emit: vi.fn() };
 
     const uc = new RunWorkflowStepUseCase({
-      runStore: runStore as never, stepRunStore: stepRunStore as never,
-      orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: {} as never, skill: {} as never, panel: {} as never, human_gate: humanGate as never },
+      runStore: runStore as never,
+      stepRunStore: stepRunStore as never,
+      orchestrator: orchestrator as never,
+      eventBus: eventBus as never,
+      executors: {
+        agent: {} as never,
+        skill: {} as never,
+        panel: {} as never,
+        human_gate: humanGate as never,
+      },
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
@@ -3136,16 +3743,25 @@ describe('RunWorkflowStepUseCase', () => {
     const eventBus = { emit: vi.fn() };
 
     const uc = new RunWorkflowStepUseCase({
-      runStore: runStore as never, stepRunStore: stepRunStore as never,
-      orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: failing as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      runStore: runStore as never,
+      stepRunStore: stepRunStore as never,
+      orchestrator: orchestrator as never,
+      eventBus: eventBus as never,
+      executors: {
+        agent: failing as never,
+        skill: {} as never,
+        panel: {} as never,
+        human_gate: {} as never,
+      },
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
 
     expect(run.status).toBe('failed');
     expect(orchestrator.runStep).not.toHaveBeenCalled();
-    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_failed' }));
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'workflow.run_failed' }),
+    );
   });
 });
 ```
@@ -3194,12 +3810,21 @@ export class RunWorkflowStepUseCase {
     const attempt = (latest?.attempt ?? 0) + 1;
 
     // 2. Create and start step_run
-    const stepRun = StepRunEntity.create({ id: randomUUID(), workflowRunId: run.id, stepId: step.id, attempt });
+    const stepRun = StepRunEntity.create({
+      id: randomUUID(),
+      workflowRunId: run.id,
+      stepId: step.id,
+      attempt,
+    });
     stepRun.start();
     await this.deps.stepRunStore.save(stepRun);
     this.deps.eventBus.emit({
-      type: 'workflow.step_started', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-      ticketId: run.ticketId, occurredAt: new Date(),
+      type: 'workflow.step_started',
+      workflowRunId: run.id,
+      stepRunId: stepRun.id,
+      stepId: step.id,
+      ticketId: run.ticketId,
+      occurredAt: new Date(),
     });
 
     // 3. Build workflow context (previousOutputs from prior step_runs)
@@ -3215,16 +3840,23 @@ export class RunWorkflowStepUseCase {
     const outgoingEdges = run.outgoingEdges(step.id).map((e) => {
       const target = run.findStep(e.target);
       return {
-        id: e.id, label: e.label, condition: e.condition,
+        id: e.id,
+        label: e.label,
+        condition: e.condition,
         targetName: target?.name ?? e.target,
       };
     });
 
     const input: StepExecutionInput = {
-      ticketId: run.ticketId, workflowRunId: run.id, stepRunId: stepRun.id, step,
+      ticketId: run.ticketId,
+      workflowRunId: run.id,
+      stepRunId: stepRun.id,
+      step,
       workflowContext: {
-        workflowName: run.templateSnapshot.name, stepName: step.name,
-        outgoingEdges, previousOutputs,
+        workflowName: run.templateSnapshot.name,
+        stepName: step.name,
+        outgoingEdges,
+        previousOutputs,
       },
     };
 
@@ -3243,8 +3875,12 @@ export class RunWorkflowStepUseCase {
         await this.deps.stepRunStore.save(stepRun);
         await this.deps.runStore.save(run);
         this.deps.eventBus.emit({
-          type: 'workflow.needs_review', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-          ticketId: run.ticketId, occurredAt: new Date(),
+          type: 'workflow.needs_review',
+          workflowRunId: run.id,
+          stepRunId: stepRun.id,
+          stepId: step.id,
+          ticketId: run.ticketId,
+          occurredAt: new Date(),
         });
         return;
       }
@@ -3255,8 +3891,13 @@ export class RunWorkflowStepUseCase {
       stepRun.complete({ output: result.output, nextEdgeId: nextEdge?.id ?? null, executionId });
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
-        type: 'workflow.step_completed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
+        type: 'workflow.step_completed',
+        workflowRunId: run.id,
+        stepRunId: stepRun.id,
+        stepId: step.id,
+        ticketId: run.ticketId,
+        nextEdgeId: nextEdge?.id ?? null,
+        occurredAt: new Date(),
       });
 
       // 7. Advance or complete
@@ -3268,7 +3909,10 @@ export class RunWorkflowStepUseCase {
         run.complete();
         await this.deps.runStore.save(run);
         this.deps.eventBus.emit({
-          type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId, occurredAt: new Date(),
+          type: 'workflow.run_completed',
+          workflowRunId: run.id,
+          ticketId: run.ticketId,
+          occurredAt: new Date(),
         });
       }
     } catch (err) {
@@ -3277,8 +3921,13 @@ export class RunWorkflowStepUseCase {
       await this.deps.stepRunStore.save(stepRun);
       await this.deps.runStore.save(run);
       this.deps.eventBus.emit({
-        type: 'workflow.run_failed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
+        type: 'workflow.run_failed',
+        workflowRunId: run.id,
+        stepRunId: stepRun.id,
+        stepId: step.id,
+        ticketId: run.ticketId,
+        error: err instanceof Error ? err.message : String(err),
+        occurredAt: new Date(),
       });
     }
   }
@@ -3302,6 +3951,7 @@ git commit -m "feat(server): RunWorkflowStepUseCase orchestrates step exec, edge
 ### Task B.12: `WorkflowOrchestrator` queue service
 
 **Files:**
+
 - Create: `packages/server/src/application/services/workflow-orchestrator.ts`
 
 The orchestrator queues `runStep(runId, stepId)` calls and drains them sequentially. Wraps `RunWorkflowStepUseCase` so the rest of the codebase only depends on `OrchestratorPort.runStep`.
@@ -3339,7 +3989,8 @@ export class WorkflowOrchestrator implements OrchestratorPort {
           await this.runStepUseCase.execute({ workflowRunId: item.runId, stepId: item.stepId });
         } catch (err) {
           this.logger.error('Workflow step execution crashed', {
-            workflowRunId: item.runId, stepId: item.stepId,
+            workflowRunId: item.runId,
+            stepId: item.stepId,
             error: err instanceof Error ? err.message : String(err),
           });
         }
@@ -3368,6 +4019,7 @@ git commit -m "feat(server): WorkflowOrchestrator queueing service"
 ### Task B.13: `ResolveHumanGateUseCase`
 
 **Files:**
+
 - Create: `packages/server/src/application/use-cases/resolve-human-gate.ts`
 - Create: `packages/server/tests/unit/resolve-human-gate.test.ts`
 
@@ -3382,19 +4034,44 @@ import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity
 import { StepRunEntity } from '../../src/domain/entities/step-run.entity.js';
 import { InvalidGateOutcomeError, StepRunNotFoundError } from '../../src/domain/errors.js';
 
-const makeRun = () => WorkflowRunEntity.create({
-  id: 'run-1', ticketId: 't-1', templateId: 'tmpl-1',
-  templateSnapshot: {
-    name: 'W', emoji: '',
-    steps: [
-      { id: 'gate', name: 'Gate', executorType: 'human_gate', executorRef: '', humanGateOutcomes: ['approve','reject'], position: { x: 0, y: 0 } },
-      { id: 'after', name: 'After', executorType: 'agent', executorRef: 'p', position: { x: 200, y: 0 } },
-    ],
-    edges: [{ id: 'e1', source: 'gate', target: 'after', condition: { field: 'outcome', operator: 'eq', value: 'approve' } }],
-    entryStepId: 'gate',
-  },
-  triggeredBy: '@x', triggeredFrom: 'x',
-});
+const makeRun = () =>
+  WorkflowRunEntity.create({
+    id: 'run-1',
+    ticketId: 't-1',
+    templateId: 'tmpl-1',
+    templateSnapshot: {
+      name: 'W',
+      emoji: '',
+      steps: [
+        {
+          id: 'gate',
+          name: 'Gate',
+          executorType: 'human_gate',
+          executorRef: '',
+          humanGateOutcomes: ['approve', 'reject'],
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: 'after',
+          name: 'After',
+          executorType: 'agent',
+          executorRef: 'p',
+          position: { x: 200, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: 'e1',
+          source: 'gate',
+          target: 'after',
+          condition: { field: 'outcome', operator: 'eq', value: 'approve' },
+        },
+      ],
+      entryStepId: 'gate',
+    },
+    triggeredBy: '@x',
+    triggeredFrom: 'x',
+  });
 
 describe('ResolveHumanGateUseCase', () => {
   it('writes outcome+notes, completes step_run, resumes orchestrator', async () => {
@@ -3402,15 +4079,27 @@ describe('ResolveHumanGateUseCase', () => {
     run.block();
     const stepRun = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'gate' });
     stepRun.start();
-    stepRun.markNeedsReview({ output: { schemaFields: { outcomes: ['approve','reject'] }, result: 'needs_review' } });
+    stepRun.markNeedsReview({
+      output: { schemaFields: { outcomes: ['approve', 'reject'] }, result: 'needs_review' },
+    });
 
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
     const stepRunStore = { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
-    const uc = new ResolveHumanGateUseCase(runStore as never, stepRunStore as never, orchestrator as never, eventBus as never);
+    const uc = new ResolveHumanGateUseCase(
+      runStore as never,
+      stepRunStore as never,
+      orchestrator as never,
+      eventBus as never,
+    );
 
-    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'LGTM' });
+    await uc.execute({
+      workflowRunId: 'run-1',
+      stepRunId: 'sr-1',
+      outcome: 'approve',
+      notes: 'LGTM',
+    });
 
     expect(stepRun.status).toBe('completed');
     expect(stepRun.output?.schemaFields.outcome).toBe('approve');
@@ -3422,28 +4111,40 @@ describe('ResolveHumanGateUseCase', () => {
   });
 
   it('rejects unknown outcome', async () => {
-    const run = makeRun(); run.block();
+    const run = makeRun();
+    run.block();
     const stepRun = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'gate' });
-    stepRun.markNeedsReview({ output: { schemaFields: { outcomes: ['approve','reject'] }, result: 'needs_review' } });
+    stepRun.markNeedsReview({
+      output: { schemaFields: { outcomes: ['approve', 'reject'] }, result: 'needs_review' },
+    });
     const uc = new ResolveHumanGateUseCase(
       { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
       { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
       { runStep: vi.fn() } as never,
       { emit: vi.fn() } as never,
     );
-    await expect(uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'unknown' }))
-      .rejects.toBeInstanceOf(InvalidGateOutcomeError);
+    await expect(
+      uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'unknown' }),
+    ).rejects.toBeInstanceOf(InvalidGateOutcomeError);
   });
 
   it('completes the run when outcome matches no edge', async () => {
-    const run = makeRun(); run.block();
+    const run = makeRun();
+    run.block();
     const stepRun = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'gate' });
-    stepRun.markNeedsReview({ output: { schemaFields: { outcomes: ['approve','reject'] }, result: 'needs_review' } });
+    stepRun.markNeedsReview({
+      output: { schemaFields: { outcomes: ['approve', 'reject'] }, result: 'needs_review' },
+    });
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
     const stepRunStore = { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
-    const uc = new ResolveHumanGateUseCase(runStore as never, stepRunStore as never, orchestrator as never, eventBus as never);
+    const uc = new ResolveHumanGateUseCase(
+      runStore as never,
+      stepRunStore as never,
+      orchestrator as never,
+      eventBus as never,
+    );
 
     await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'reject' });
 
@@ -3465,7 +4166,9 @@ Write `packages/server/src/application/use-cases/resolve-human-gate.ts`:
 ```ts
 import { EdgeEvaluator } from '../services/edge-evaluator.js';
 import {
-  WorkflowRunNotFoundError, StepRunNotFoundError, InvalidGateOutcomeError,
+  WorkflowRunNotFoundError,
+  StepRunNotFoundError,
+  InvalidGateOutcomeError,
 } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
@@ -3510,8 +4213,13 @@ export class ResolveHumanGateUseCase {
     await this.stepRunStore.save(stepRun);
 
     this.eventBus.emit({
-      type: 'workflow.step_completed', workflowRunId: run.id, stepRunId: stepRun.id,
-      stepId: step.id, ticketId: run.ticketId, nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
+      type: 'workflow.step_completed',
+      workflowRunId: run.id,
+      stepRunId: stepRun.id,
+      stepId: step.id,
+      ticketId: run.ticketId,
+      nextEdgeId: nextEdge?.id ?? null,
+      occurredAt: new Date(),
     });
 
     if (nextEdge) {
@@ -3522,7 +4230,10 @@ export class ResolveHumanGateUseCase {
       run.complete();
       await this.runStore.save(run);
       this.eventBus.emit({
-        type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId, occurredAt: new Date(),
+        type: 'workflow.run_completed',
+        workflowRunId: run.id,
+        ticketId: run.ticketId,
+        occurredAt: new Date(),
       });
     }
   }
@@ -3546,6 +4257,7 @@ git commit -m "feat(server): ResolveHumanGateUseCase advances after human decisi
 ### Task B.14: `RetryStepUseCase` + `CancelWorkflowRunUseCase`
 
 **Files:**
+
 - Create: `packages/server/src/application/use-cases/retry-step.ts`
 - Create: `packages/server/src/application/use-cases/cancel-workflow-run.ts`
 
@@ -3600,7 +4312,9 @@ export class CancelWorkflowRunUseCase {
     await this.runStore.save(run);
     this.eventBus.emit({
       type: 'workflow.run_cancelled',
-      workflowRunId: run.id, ticketId: run.ticketId, occurredAt: new Date(),
+      workflowRunId: run.id,
+      ticketId: run.ticketId,
+      occurredAt: new Date(),
     });
   }
 }
@@ -3623,6 +4337,7 @@ git commit -m "feat(server): RetryStepUseCase + CancelWorkflowRunUseCase"
 ### Task B.15: Wire Phase B into DI container + event bus types
 
 **Files:**
+
 - Modify: `packages/server/src/application/event-bus.ts` (add new event types)
 - Modify: `packages/server/src/infrastructure/container.ts` (instantiate executors, orchestrator, use cases)
 
@@ -3633,38 +4348,62 @@ In `packages/server/src/application/event-bus.ts`, add to the union of domain ev
 ```ts
 export type WorkflowRunCreatedEvent = {
   type: 'workflow.run_created';
-  workflowRunId: string; ticketId: string; templateId: string; occurredAt: Date;
+  workflowRunId: string;
+  ticketId: string;
+  templateId: string;
+  occurredAt: Date;
 };
 
 export type WorkflowStepStartedEvent = {
   type: 'workflow.step_started';
-  workflowRunId: string; stepRunId: string; stepId: string; ticketId: string; occurredAt: Date;
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+  occurredAt: Date;
 };
 
 export type WorkflowStepCompletedEvent = {
   type: 'workflow.step_completed';
-  workflowRunId: string; stepRunId: string; stepId: string; ticketId: string;
-  nextEdgeId: string | null; occurredAt: Date;
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+  nextEdgeId: string | null;
+  occurredAt: Date;
 };
 
 export type WorkflowNeedsReviewEvent = {
   type: 'workflow.needs_review';
-  workflowRunId: string; stepRunId: string; stepId: string; ticketId: string; occurredAt: Date;
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+  occurredAt: Date;
 };
 
 export type WorkflowRunCompletedEvent = {
   type: 'workflow.run_completed';
-  workflowRunId: string; ticketId: string; occurredAt: Date;
+  workflowRunId: string;
+  ticketId: string;
+  occurredAt: Date;
 };
 
 export type WorkflowRunFailedEvent = {
   type: 'workflow.run_failed';
-  workflowRunId: string; stepRunId: string; stepId: string; ticketId: string; error: string; occurredAt: Date;
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+  error: string;
+  occurredAt: Date;
 };
 
 export type WorkflowRunCancelledEvent = {
   type: 'workflow.run_cancelled';
-  workflowRunId: string; ticketId: string; occurredAt: Date;
+  workflowRunId: string;
+  ticketId: string;
+  occurredAt: Date;
 };
 ```
 
@@ -3698,17 +4437,28 @@ const executors = {
 const runWorkflowStep = new RunWorkflowStepUseCase({
   runStore: workflowRunStore,
   stepRunStore,
-  orchestrator: null as never,  // wired below
+  orchestrator: null as never, // wired below
   eventBus,
   executors,
 });
 
 const workflowOrchestrator = new WorkflowOrchestrator(runWorkflowStep, logger);
 // resolve circular ref
-(runWorkflowStep as unknown as { deps: { orchestrator: WorkflowOrchestrator } }).deps.orchestrator = workflowOrchestrator;
+(runWorkflowStep as unknown as { deps: { orchestrator: WorkflowOrchestrator } }).deps.orchestrator =
+  workflowOrchestrator;
 
-const createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus);
-const resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus);
+const createWorkflowRun = new CreateWorkflowRunUseCase(
+  workflowTemplateStore,
+  workflowRunStore,
+  workflowOrchestrator,
+  eventBus,
+);
+const resolveHumanGate = new ResolveHumanGateUseCase(
+  workflowRunStore,
+  stepRunStore,
+  workflowOrchestrator,
+  eventBus,
+);
 const retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator);
 const cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, eventBus);
 ```
@@ -3738,6 +4488,7 @@ _End of Phase B._
 ### Task C.1: Workflow mention pattern in `ticket-comment.entity.ts`
 
 **Files:**
+
 - Modify: `packages/server/src/domain/entities/ticket-comment.entity.ts`
 - Modify: `packages/server/tests/unit/ticket-comment.entity.test.ts` (or create if missing)
 
@@ -3751,7 +4502,9 @@ import { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.en
 
 describe('TicketCommentEntity.extractWorkflowMentions', () => {
   it('extracts @workflow:slug mentions', () => {
-    const out = TicketCommentEntity.extractWorkflowMentions('Hello @workflow:feature-delivery and @workflow:bug-fix');
+    const out = TicketCommentEntity.extractWorkflowMentions(
+      'Hello @workflow:feature-delivery and @workflow:bug-fix',
+    );
     expect(out).toEqual(['feature-delivery', 'bug-fix']);
   });
 
@@ -3760,7 +4513,9 @@ describe('TicketCommentEntity.extractWorkflowMentions', () => {
   });
 
   it('skips struck-through mentions', () => {
-    expect(TicketCommentEntity.extractWorkflowMentions('~~@workflow:cancelled~~ and @workflow:active')).toEqual(['active']);
+    expect(
+      TicketCommentEntity.extractWorkflowMentions('~~@workflow:cancelled~~ and @workflow:active'),
+    ).toEqual(['active']);
   });
 
   it('does not match @workflow without colon', () => {
@@ -3799,7 +4554,13 @@ static extractWorkflowMentions(body: string): string[] {
 Also update `extractHumanMentions` to skip `@workflow:` prefix collisions (line 91):
 
 ```ts
-if (prefix.endsWith('agent:') || prefix.endsWith('panel:') || prefix.endsWith('skill:') || prefix.endsWith('orkflow:')) continue;
+if (
+  prefix.endsWith('agent:') ||
+  prefix.endsWith('panel:') ||
+  prefix.endsWith('skill:') ||
+  prefix.endsWith('orkflow:')
+)
+  continue;
 ```
 
 (Note: `orkflow:` is `workflow:` with the leading `w` already consumed by the `@` match — slice the last 7 chars but `workflow:` is 9 chars including `@` ; using `endsWith('orkflow:')` works because we slice `Math.max(0, match.index - 6)` to `match.index`. To be safe, increase the slice window to 9.)
@@ -3808,7 +4569,13 @@ Adjust the `prefix` lookup to use 9 chars instead of 6:
 
 ```ts
 const prefix = body.substring(Math.max(0, match.index! - 9), match.index!);
-if (prefix.endsWith('@agent:') || prefix.endsWith('@panel:') || prefix.endsWith('@skill:') || prefix.endsWith('@workflow:')) continue;
+if (
+  prefix.endsWith('@agent:') ||
+  prefix.endsWith('@panel:') ||
+  prefix.endsWith('@skill:') ||
+  prefix.endsWith('@workflow:')
+)
+  continue;
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -3828,6 +4595,7 @@ git commit -m "feat(server): @workflow:slug mention pattern in ticket-comment en
 ### Task C.2: Plumb `targetType='workflow'` through mention creation
 
 **Files:**
+
 - Modify: `packages/server/src/application/use-cases/post-comment.ts` (extract workflow mentions and create mentions with type='workflow')
 
 - [ ] **Step 1: Locate the mention creation in PostCommentUseCase**
@@ -3875,6 +4643,7 @@ git commit -m "feat(server): create workflow-typed mentions from @workflow:slug"
 ### Task C.3: `handleAutoTriggerWorkflow` in `domain-event-listener.ts`
 
 **Files:**
+
 - Modify: `packages/server/src/application/domain-event-listener.ts`
 
 - [ ] **Step 1: Add the handler registration**
@@ -3946,6 +4715,7 @@ git commit -m "feat(server): handleAutoTriggerWorkflow creates runs from @workfl
 ### Task C.4: HTTP routes — `/api/workflows/templates`
 
 **Files:**
+
 - Create: `packages/server/src/infrastructure/http/workflow-template.routes.ts`
 - Modify: `packages/server/src/infrastructure/http/index.ts` (register routes)
 
@@ -3971,15 +4741,20 @@ const stepSchema = z.object({
   executorType: z.enum(['agent', 'skill', 'panel', 'human_gate']),
   executorRef: z.string(),
   mode: z.enum(['talk', 'plan', 'edit']).optional(),
-  outputSchema: z.object({
-    type: z.literal('object'),
-    properties: z.record(z.string(), z.object({
-      type: z.enum(['string', 'number', 'boolean', 'array', 'object']),
-      enum: z.array(z.string()).optional(),
-      description: z.string().optional(),
-    })),
-    required: z.array(z.string()).optional(),
-  }).optional(),
+  outputSchema: z
+    .object({
+      type: z.literal('object'),
+      properties: z.record(
+        z.string(),
+        z.object({
+          type: z.enum(['string', 'number', 'boolean', 'array', 'object']),
+          enum: z.array(z.string()).optional(),
+          description: z.string().optional(),
+        }),
+      ),
+      required: z.array(z.string()).optional(),
+    })
+    .optional(),
   humanGateOutcomes: z.array(z.string()).optional(),
   position: z.object({ x: z.number(), y: z.number() }),
 });
@@ -3989,11 +4764,13 @@ const edgeSchema = z.object({
   source: z.string(),
   target: z.string(),
   isDefault: z.boolean(),
-  condition: z.object({
-    field: z.string(),
-    operator: z.enum(['eq', 'neq', 'in', 'gt', 'lt', 'contains']),
-    value: z.union([z.string(), z.array(z.string())]),
-  }).optional(),
+  condition: z
+    .object({
+      field: z.string(),
+      operator: z.enum(['eq', 'neq', 'in', 'gt', 'lt', 'contains']),
+      value: z.union([z.string(), z.array(z.string())]),
+    })
+    .optional(),
   label: z.string().optional(),
 });
 
@@ -4008,7 +4785,10 @@ const templateBodySchema = z.object({
   enabled: z.boolean().default(true),
 });
 
-export function registerWorkflowTemplateRoutes(app: FastifyInstance, deps: { templateStore: WorkflowTemplateStorePort }) {
+export function registerWorkflowTemplateRoutes(
+  app: FastifyInstance,
+  deps: { templateStore: WorkflowTemplateStorePort },
+) {
   app.get('/api/workflows/templates', async () => {
     const templates = await deps.templateStore.getAll();
     return templates.map((t) => t.toDTO());
@@ -4023,7 +4803,8 @@ export function registerWorkflowTemplateRoutes(app: FastifyInstance, deps: { tem
 
   app.post('/api/workflows/templates', async (req, reply) => {
     const parsed = templateBodySchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'invalid_body', details: parsed.error.format() });
+    if (!parsed.success)
+      return reply.code(400).send({ error: 'invalid_body', details: parsed.error.format() });
 
     // Unique slug check
     const existing = await deps.templateStore.getBySlug(parsed.data.slug);
@@ -4034,14 +4815,18 @@ export function registerWorkflowTemplateRoutes(app: FastifyInstance, deps: { tem
       await deps.templateStore.save(t);
       return reply.code(201).send(t.toDTO());
     } catch (err) {
-      return reply.code(400).send({ error: 'invalid_template', message: err instanceof Error ? err.message : String(err) });
+      return reply.code(400).send({
+        error: 'invalid_template',
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   });
 
   app.put('/api/workflows/templates/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = templateBodySchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'invalid_body', details: parsed.error.format() });
+    if (!parsed.success)
+      return reply.code(400).send({ error: 'invalid_body', details: parsed.error.format() });
 
     const t = await deps.templateStore.getById(id);
     if (!t) return reply.code(404).send({ error: 'not_found' });
@@ -4057,7 +4842,10 @@ export function registerWorkflowTemplateRoutes(app: FastifyInstance, deps: { tem
       await deps.templateStore.save(t);
       return t.toDTO();
     } catch (err) {
-      return reply.code(400).send({ error: 'invalid_template', message: err instanceof Error ? err.message : String(err) });
+      return reply.code(400).send({
+        error: 'invalid_template',
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   });
 
@@ -4103,6 +4891,7 @@ git commit -m "feat(server): /api/workflows/templates CRUD"
 ### Task C.5: HTTP routes — `/api/workflows/runs`
 
 **Files:**
+
 - Create: `packages/server/src/infrastructure/http/workflow-run.routes.ts`
 - Modify: `packages/server/src/infrastructure/http/index.ts` (register routes)
 
@@ -4114,8 +4903,11 @@ Write `packages/server/src/infrastructure/http/workflow-run.routes.ts`:
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
-  WorkflowRunAlreadyActiveError, WorkflowTemplateNotFoundError,
-  WorkflowRunNotFoundError, StepRunNotFoundError, InvalidGateOutcomeError,
+  WorkflowRunAlreadyActiveError,
+  WorkflowTemplateNotFoundError,
+  WorkflowRunNotFoundError,
+  StepRunNotFoundError,
+  InvalidGateOutcomeError,
 } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
@@ -4124,15 +4916,18 @@ import type { ResolveHumanGateUseCase } from '../../application/use-cases/resolv
 import type { RetryStepUseCase } from '../../application/use-cases/retry-step.js';
 import type { CancelWorkflowRunUseCase } from '../../application/use-cases/cancel-workflow-run.js';
 
-export function registerWorkflowRunRoutes(app: FastifyInstance, deps: {
-  runStore: WorkflowRunStorePort;
-  stepRunStore: StepRunStorePort;
-  createWorkflowRun: CreateWorkflowRunUseCase;
-  resolveHumanGate: ResolveHumanGateUseCase;
-  retryStep: RetryStepUseCase;
-  cancelWorkflowRun: CancelWorkflowRunUseCase;
-  authorNameResolver: () => string;
-}) {
+export function registerWorkflowRunRoutes(
+  app: FastifyInstance,
+  deps: {
+    runStore: WorkflowRunStorePort;
+    stepRunStore: StepRunStorePort;
+    createWorkflowRun: CreateWorkflowRunUseCase;
+    resolveHumanGate: ResolveHumanGateUseCase;
+    retryStep: RetryStepUseCase;
+    cancelWorkflowRun: CancelWorkflowRunUseCase;
+    authorNameResolver: () => string;
+  },
+) {
   app.get('/api/workflows/runs', async (req) => {
     const q = (req.query ?? {}) as { ticketId?: string };
     if (!q.ticketId) return [];
@@ -4156,7 +4951,8 @@ export function registerWorkflowRunRoutes(app: FastifyInstance, deps: {
 
   app.post('/api/workflows/runs', async (req, reply) => {
     const parsed = createBody.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'invalid_body', details: parsed.error.format() });
+    if (!parsed.success)
+      return reply.code(400).send({ error: 'invalid_body', details: parsed.error.format() });
     try {
       const run = await deps.createWorkflowRun.execute({
         ticketId: parsed.data.ticketId,
@@ -4166,8 +4962,10 @@ export function registerWorkflowRunRoutes(app: FastifyInstance, deps: {
       });
       return reply.code(201).send(run.toDTO());
     } catch (err) {
-      if (err instanceof WorkflowRunAlreadyActiveError) return reply.code(409).send({ error: 'run_already_active' });
-      if (err instanceof WorkflowTemplateNotFoundError) return reply.code(404).send({ error: 'template_not_found' });
+      if (err instanceof WorkflowRunAlreadyActiveError)
+        return reply.code(409).send({ error: 'run_already_active' });
+      if (err instanceof WorkflowTemplateNotFoundError)
+        return reply.code(404).send({ error: 'template_not_found' });
       throw err;
     }
   });
@@ -4178,7 +4976,8 @@ export function registerWorkflowRunRoutes(app: FastifyInstance, deps: {
       await deps.cancelWorkflowRun.execute(id);
       return reply.code(204).send();
     } catch (err) {
-      if (err instanceof WorkflowRunNotFoundError) return reply.code(404).send({ error: 'not_found' });
+      if (err instanceof WorkflowRunNotFoundError)
+        return reply.code(404).send({ error: 'not_found' });
       throw err;
     }
   });
@@ -4191,13 +4990,19 @@ export function registerWorkflowRunRoutes(app: FastifyInstance, deps: {
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_body' });
     try {
       await deps.resolveHumanGate.execute({
-        workflowRunId: id, stepRunId, outcome: parsed.data.outcome, notes: parsed.data.notes,
+        workflowRunId: id,
+        stepRunId,
+        outcome: parsed.data.outcome,
+        notes: parsed.data.notes,
       });
       return reply.code(204).send();
     } catch (err) {
-      if (err instanceof StepRunNotFoundError) return reply.code(404).send({ error: 'step_run_not_found' });
-      if (err instanceof WorkflowRunNotFoundError) return reply.code(404).send({ error: 'run_not_found' });
-      if (err instanceof InvalidGateOutcomeError) return reply.code(400).send({ error: 'invalid_outcome', message: err.message });
+      if (err instanceof StepRunNotFoundError)
+        return reply.code(404).send({ error: 'step_run_not_found' });
+      if (err instanceof WorkflowRunNotFoundError)
+        return reply.code(404).send({ error: 'run_not_found' });
+      if (err instanceof InvalidGateOutcomeError)
+        return reply.code(400).send({ error: 'invalid_outcome', message: err.message });
       throw err;
     }
   });
@@ -4208,8 +5013,10 @@ export function registerWorkflowRunRoutes(app: FastifyInstance, deps: {
       await deps.retryStep.execute({ workflowRunId: id, stepRunId });
       return reply.code(204).send();
     } catch (err) {
-      if (err instanceof StepRunNotFoundError) return reply.code(404).send({ error: 'step_run_not_found' });
-      if (err instanceof WorkflowRunNotFoundError) return reply.code(404).send({ error: 'run_not_found' });
+      if (err instanceof StepRunNotFoundError)
+        return reply.code(404).send({ error: 'step_run_not_found' });
+      if (err instanceof WorkflowRunNotFoundError)
+        return reply.code(404).send({ error: 'run_not_found' });
       throw err;
     }
   });
@@ -4255,6 +5062,7 @@ git commit -m "feat(server): /api/workflows/runs + resolve/retry/cancel endpoint
 ### Task C.6: WebSocket broadcasts for workflow events
 
 **Files:**
+
 - Modify: `packages/server/src/infrastructure/ws/` (find the WS plugin that listens to event-bus events and broadcasts on the `tickets:{ticketId}` channel)
 
 - [ ] **Step 1: Locate the WS event subscriber**
@@ -4267,13 +5075,46 @@ Expected: identify the file/handler that bridges domain events → WS messages.
 In the matching file, add subscriptions:
 
 ```ts
-bus.on('workflow.run_created', (e) => ticketBroadcast(e.ticketId, 'workflow:run_created', { workflowRunId: e.workflowRunId, templateId: e.templateId }));
-bus.on('workflow.step_started', (e) => ticketBroadcast(e.ticketId, 'workflow:step_started', { workflowRunId: e.workflowRunId, stepRunId: e.stepRunId, stepId: e.stepId }));
-bus.on('workflow.step_completed', (e) => ticketBroadcast(e.ticketId, 'workflow:step_completed', { workflowRunId: e.workflowRunId, stepRunId: e.stepRunId, stepId: e.stepId, nextEdgeId: e.nextEdgeId }));
-bus.on('workflow.needs_review', (e) => ticketBroadcast(e.ticketId, 'workflow:needs_review', { workflowRunId: e.workflowRunId, stepRunId: e.stepRunId, stepId: e.stepId }));
-bus.on('workflow.run_completed', (e) => ticketBroadcast(e.ticketId, 'workflow:run_completed', { workflowRunId: e.workflowRunId }));
-bus.on('workflow.run_failed', (e) => ticketBroadcast(e.ticketId, 'workflow:run_failed', { workflowRunId: e.workflowRunId, error: e.error }));
-bus.on('workflow.run_cancelled', (e) => ticketBroadcast(e.ticketId, 'workflow:run_cancelled', { workflowRunId: e.workflowRunId }));
+bus.on('workflow.run_created', (e) =>
+  ticketBroadcast(e.ticketId, 'workflow:run_created', {
+    workflowRunId: e.workflowRunId,
+    templateId: e.templateId,
+  }),
+);
+bus.on('workflow.step_started', (e) =>
+  ticketBroadcast(e.ticketId, 'workflow:step_started', {
+    workflowRunId: e.workflowRunId,
+    stepRunId: e.stepRunId,
+    stepId: e.stepId,
+  }),
+);
+bus.on('workflow.step_completed', (e) =>
+  ticketBroadcast(e.ticketId, 'workflow:step_completed', {
+    workflowRunId: e.workflowRunId,
+    stepRunId: e.stepRunId,
+    stepId: e.stepId,
+    nextEdgeId: e.nextEdgeId,
+  }),
+);
+bus.on('workflow.needs_review', (e) =>
+  ticketBroadcast(e.ticketId, 'workflow:needs_review', {
+    workflowRunId: e.workflowRunId,
+    stepRunId: e.stepRunId,
+    stepId: e.stepId,
+  }),
+);
+bus.on('workflow.run_completed', (e) =>
+  ticketBroadcast(e.ticketId, 'workflow:run_completed', { workflowRunId: e.workflowRunId }),
+);
+bus.on('workflow.run_failed', (e) =>
+  ticketBroadcast(e.ticketId, 'workflow:run_failed', {
+    workflowRunId: e.workflowRunId,
+    error: e.error,
+  }),
+);
+bus.on('workflow.run_cancelled', (e) =>
+  ticketBroadcast(e.ticketId, 'workflow:run_cancelled', { workflowRunId: e.workflowRunId }),
+);
 ```
 
 - [ ] **Step 3: Restart + verify**
@@ -4303,6 +5144,7 @@ _End of Phase C._
 ### Task D.1: Install `@xyflow/react`
 
 **Files:**
+
 - Modify: `packages/web/package.json`
 
 - [ ] **Step 1: Install the dependency**
@@ -4331,6 +5173,7 @@ git commit -m "feat(web): add @xyflow/react for workflow DAG rendering"
 ### Task D.2: `useWorkflowTemplateStore` (Zustand)
 
 **Files:**
+
 - Create: `packages/web/src/stores/workflowTemplateStore.ts`
 
 - [ ] **Step 1: Read the existing skillStore pattern**
@@ -4352,8 +5195,13 @@ interface State {
   loading: boolean;
   error: string | null;
   refresh(): Promise<void>;
-  create(input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate>;
-  update(id: string, input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate>;
+  create(
+    input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<WorkflowTemplate>;
+  update(
+    id: string,
+    input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<WorkflowTemplate>;
   remove(id: string): Promise<void>;
   getBySlug(slug: string): WorkflowTemplate | undefined;
 }
@@ -4377,7 +5225,9 @@ export const useWorkflowTemplateStore = create<State>((set, get) => ({
 
   async create(input) {
     const res = await fetch(`${apiBase()}/api/workflows/templates`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     const t = (await res.json()) as WorkflowTemplate;
@@ -4387,11 +5237,13 @@ export const useWorkflowTemplateStore = create<State>((set, get) => ({
 
   async update(id, input) {
     const res = await fetch(`${apiBase()}/api/workflows/templates/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     const t = (await res.json()) as WorkflowTemplate;
-    set((s) => ({ templates: s.templates.map((x) => x.id === id ? t : x) }));
+    set((s) => ({ templates: s.templates.map((x) => (x.id === id ? t : x)) }));
     return t;
   },
 
@@ -4426,6 +5278,7 @@ git commit -m "feat(web): useWorkflowTemplateStore (Zustand)"
 ### Task D.3: `useWorkflowRunStore` (Zustand)
 
 **Files:**
+
 - Create: `packages/web/src/stores/workflowRunStore.ts`
 
 - [ ] **Step 1: Write the store**
@@ -4443,8 +5296,8 @@ interface RunDetail {
 }
 
 interface State {
-  runsByTicket: Record<string, WorkflowRun[]>;   // ticketId → runs (desc order by startedAt)
-  detail: Record<string, RunDetail>;             // runId → full detail
+  runsByTicket: Record<string, WorkflowRun[]>; // ticketId → runs (desc order by startedAt)
+  detail: Record<string, RunDetail>; // runId → full detail
   loading: boolean;
   error: string | null;
 
@@ -4473,7 +5326,9 @@ export const useWorkflowRunStore = create<State>((set, get) => ({
   async loadForTicket(ticketId) {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${apiBase()}/api/workflows/runs?ticketId=${encodeURIComponent(ticketId)}`);
+      const res = await fetch(
+        `${apiBase()}/api/workflows/runs?ticketId=${encodeURIComponent(ticketId)}`,
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const runs = (await res.json()) as WorkflowRun[];
       set((s) => ({ runsByTicket: { ...s.runsByTicket, [ticketId]: runs }, loading: false }));
@@ -4491,12 +5346,15 @@ export const useWorkflowRunStore = create<State>((set, get) => ({
 
   async start(ticketId, templateId) {
     const res = await fetch(`${apiBase()}/api/workflows/runs`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ticketId, templateId, triggeredFrom: 'smart-button' }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     const run = (await res.json()) as WorkflowRun;
-    set((s) => ({ runsByTicket: { ...s.runsByTicket, [ticketId]: [run, ...(s.runsByTicket[ticketId] ?? [])] } }));
+    set((s) => ({
+      runsByTicket: { ...s.runsByTicket, [ticketId]: [run, ...(s.runsByTicket[ticketId] ?? [])] },
+    }));
     return run;
   },
 
@@ -4507,14 +5365,17 @@ export const useWorkflowRunStore = create<State>((set, get) => ({
 
   async resolveGate(runId, stepRunId, outcome, notes) {
     const res = await fetch(`${apiBase()}/api/workflows/runs/${runId}/steps/${stepRunId}/resolve`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outcome, notes }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
   },
 
   async retry(runId, stepRunId) {
-    const res = await fetch(`${apiBase()}/api/workflows/runs/${runId}/steps/${stepRunId}/retry`, { method: 'POST' });
+    const res = await fetch(`${apiBase()}/api/workflows/runs/${runId}/steps/${stepRunId}/retry`, {
+      method: 'POST',
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
   },
 
@@ -4530,7 +5391,7 @@ export const useWorkflowRunStore = create<State>((set, get) => ({
     // Simplest correct response: refetch the affected ticket's runs and the run detail if known
     const ticketId = event.ticketId;
     void get().loadForTicket(ticketId);
-    const runId = (event.payload?.workflowRunId as string | undefined);
+    const runId = event.payload?.workflowRunId as string | undefined;
     if (runId && get().detail[runId]) void get().loadDetail(runId);
   },
 }));
@@ -4553,13 +5414,26 @@ git commit -m "feat(web): useWorkflowRunStore (Zustand) with WS-driven refetch"
 ### Task D.4: `StepRunNode` custom React Flow node (runtime)
 
 **Files:**
+
 - Create: `packages/web/src/components/workflows/StepRunNode.tsx`
 
 - [ ] **Step 1: Write the node component**
 
 ```tsx
 import { Handle, Position } from '@xyflow/react';
-import { Bot, BookOpen, UserCheck, Users, CheckCircle2, XCircle, AlertTriangle, Clock, Loader2, CircleDot, SkipForward } from 'lucide-react';
+import {
+  Bot,
+  BookOpen,
+  UserCheck,
+  Users,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Clock,
+  Loader2,
+  CircleDot,
+  SkipForward,
+} from 'lucide-react';
 import type { WorkflowStep, StepRunStatus } from '@fleex/shared';
 import { cn } from '@/lib/utils';
 
@@ -4572,7 +5446,10 @@ export interface StepRunNodeData {
 }
 
 const executorIcon = {
-  agent: Bot, panel: Users, skill: BookOpen, human_gate: UserCheck,
+  agent: Bot,
+  panel: Users,
+  skill: BookOpen,
+  human_gate: UserCheck,
 } as const;
 
 const executorColor = {
@@ -4584,14 +5461,21 @@ const executorColor = {
 
 function statusIcon(status: StepRunStatus | 'pending') {
   switch (status) {
-    case 'completed': return <CheckCircle2 className="w-4 h-4 text-fleex-cyan" />;
-    case 'running': return <Loader2 className="w-4 h-4 text-fleex-green animate-spin" />;
-    case 'failed': return <XCircle className="w-4 h-4 text-fleex-red" />;
-    case 'needs_review': return <AlertTriangle className="w-4 h-4 text-fleex-amber" />;
-    case 'queued': return <Clock className="w-4 h-4 text-fleex-blue" />;
+    case 'completed':
+      return <CheckCircle2 className="w-4 h-4 text-fleex-cyan" />;
+    case 'running':
+      return <Loader2 className="w-4 h-4 text-fleex-green animate-spin" />;
+    case 'failed':
+      return <XCircle className="w-4 h-4 text-fleex-red" />;
+    case 'needs_review':
+      return <AlertTriangle className="w-4 h-4 text-fleex-amber" />;
+    case 'queued':
+      return <Clock className="w-4 h-4 text-fleex-blue" />;
     case 'cancelled':
-    case 'skipped': return <SkipForward className="w-4 h-4 text-muted-foreground" />;
-    default: return <CircleDot className="w-4 h-4 text-muted-foreground/40" />;
+    case 'skipped':
+      return <SkipForward className="w-4 h-4 text-muted-foreground" />;
+    default:
+      return <CircleDot className="w-4 h-4 text-muted-foreground/40" />;
   }
 }
 
@@ -4599,7 +5483,11 @@ export function StepRunNode({ data }: { data: StepRunNodeData }) {
   const Icon = executorIcon[data.step.executorType];
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-muted-foreground/40 !border-2 !border-card" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!w-3 !h-3 !bg-muted-foreground/40 !border-2 !border-card"
+      />
       <div
         onClick={() => data.onSelect(data.step.id)}
         className={cn(
@@ -4610,15 +5498,23 @@ export function StepRunNode({ data }: { data: StepRunNodeData }) {
       >
         <div className="flex items-center gap-2 mb-1">
           <Icon className="w-4 h-4" />
-          <span className="text-xs font-medium truncate flex-1 text-foreground">{data.step.name}</span>
+          <span className="text-xs font-medium truncate flex-1 text-foreground">
+            {data.step.name}
+          </span>
           {statusIcon(data.status)}
         </div>
-        <div className="text-[10px] text-muted-foreground truncate">{data.step.executorRef || '—'}</div>
+        <div className="text-[10px] text-muted-foreground truncate">
+          {data.step.executorRef || '—'}
+        </div>
         {data.summary && (
           <div className="mt-1 text-[10px] text-muted-foreground line-clamp-2">{data.summary}</div>
         )}
       </div>
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-muted-foreground/40 !border-2 !border-card" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!w-3 !h-3 !bg-muted-foreground/40 !border-2 !border-card"
+      />
     </div>
   );
 }
@@ -4641,6 +5537,7 @@ git commit -m "feat(web): StepRunNode custom React Flow node for runtime DAG"
 ### Task D.5: `WorkflowRunView` — DAG canvas + header + step detail panel
 
 **Files:**
+
 - Create: `packages/web/src/components/workflows/WorkflowRunView.tsx`
 - Create: `packages/web/src/components/workflows/HumanGateResolvePanel.tsx`
 
@@ -4663,7 +5560,11 @@ export function HumanGateResolvePanel({ outcomes, onResolve, onRetry }: Props) {
 
   const click = async (outcome: string) => {
     setBusy(true);
-    try { await onResolve(outcome, notes.trim() || undefined); } finally { setBusy(false); }
+    try {
+      await onResolve(outcome, notes.trim() || undefined);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -4671,14 +5572,19 @@ export function HumanGateResolvePanel({ outcomes, onResolve, onRetry }: Props) {
       <h3 className="text-sm font-medium">Resolve gate</h3>
       <Textarea
         placeholder="Notes (optional, injected as context for the next step)"
-        value={notes} onChange={(e) => setNotes(e.target.value)}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
         className="text-xs"
       />
       <div className="flex flex-wrap gap-2">
         {outcomes.map((o) => (
-          <Button key={o} variant="outline" size="sm" disabled={busy} onClick={() => click(o)}>{o}</Button>
+          <Button key={o} variant="outline" size="sm" disabled={busy} onClick={() => click(o)}>
+            {o}
+          </Button>
         ))}
-        <Button variant="ghost" size="sm" disabled={busy} onClick={onRetry}>Retry step</Button>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={onRetry}>
+          Retry step
+        </Button>
       </div>
     </div>
   );
@@ -4689,7 +5595,15 @@ export function HumanGateResolvePanel({ outcomes, onResolve, onRetry }: Props) {
 
 ```tsx
 import { useMemo, useState } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge, MarkerType } from '@xyflow/react';
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  type Node,
+  type Edge,
+  MarkerType,
+} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -4711,7 +5625,10 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
   const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
   const retry = useWorkflowRunStore((s) => s.retry);
 
-  const stepIndex = useMemo(() => new Map(run.templateSnapshot.steps.map((s) => [s.id, s])), [run.templateSnapshot.steps]);
+  const stepIndex = useMemo(
+    () => new Map(run.templateSnapshot.steps.map((s) => [s.id, s])),
+    [run.templateSnapshot.steps],
+  );
   const latestPerStep = useMemo(() => {
     const m = new Map<string, StepRun>();
     for (const sr of stepRuns) {
@@ -4721,31 +5638,47 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
     return m;
   }, [stepRuns]);
 
-  const nodes: Node<StepRunNodeData>[] = useMemo(() => run.templateSnapshot.steps.map((step) => {
-    const sr = latestPerStep.get(step.id);
-    return {
-      id: step.id,
-      type: 'stepRun',
-      position: step.position,
-      data: {
-        step,
-        status: sr?.status ?? 'pending',
-        summary: (sr?.output?.comment ?? undefined) as string | undefined,
-        isCurrent: run.currentStepId === step.id,
-        onSelect: setSelectedStepId,
-      },
-    };
-  }), [run.templateSnapshot.steps, latestPerStep, run.currentStepId]);
+  const nodes: Node<StepRunNodeData>[] = useMemo(
+    () =>
+      run.templateSnapshot.steps.map((step) => {
+        const sr = latestPerStep.get(step.id);
+        return {
+          id: step.id,
+          type: 'stepRun',
+          position: step.position,
+          data: {
+            step,
+            status: sr?.status ?? 'pending',
+            summary: (sr?.output?.comment ?? undefined) as string | undefined,
+            isCurrent: run.currentStepId === step.id,
+            onSelect: setSelectedStepId,
+          },
+        };
+      }),
+    [run.templateSnapshot.steps, latestPerStep, run.currentStepId],
+  );
 
-  const edges: Edge[] = useMemo(() => run.templateSnapshot.edges.map((e) => ({
-    id: e.id, source: e.source, target: e.target,
-    label: e.label ?? (e.condition ? `${e.condition.field} ${e.condition.operator} ${String(e.condition.value)}` : ''),
-    animated: latestPerStep.get(e.source)?.nextEdgeId === e.id,
-    style: { strokeDasharray: e.isDefault ? undefined : '5,5' },
-    markerEnd: { type: MarkerType.ArrowClosed },
-  })), [run.templateSnapshot.edges, latestPerStep]);
+  const edges: Edge[] = useMemo(
+    () =>
+      run.templateSnapshot.edges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        label:
+          e.label ??
+          (e.condition
+            ? `${e.condition.field} ${e.condition.operator} ${String(e.condition.value)}`
+            : ''),
+        animated: latestPerStep.get(e.source)?.nextEdgeId === e.id,
+        style: { strokeDasharray: e.isDefault ? undefined : '5,5' },
+        markerEnd: { type: MarkerType.ArrowClosed },
+      })),
+    [run.templateSnapshot.edges, latestPerStep],
+  );
 
-  const selectedStep: WorkflowStep | undefined = selectedStepId ? stepIndex.get(selectedStepId) : undefined;
+  const selectedStep: WorkflowStep | undefined = selectedStepId
+    ? stepIndex.get(selectedStepId)
+    : undefined;
   const selectedStepRun = selectedStepId ? latestPerStep.get(selectedStepId) : undefined;
 
   const completed = stepRuns.filter((s) => s.status === 'completed').length;
@@ -4759,14 +5692,26 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
           <span className="text-xl">{run.templateSnapshot.emoji}</span>
           <div>
             <div className="text-sm font-medium">{run.templateSnapshot.name}</div>
-            <div className="text-xs text-muted-foreground">{completed}/{total} steps completed</div>
+            <div className="text-xs text-muted-foreground">
+              {completed}/{total} steps completed
+            </div>
           </div>
-          <Badge variant={run.status === 'running' ? 'default' : run.status === 'failed' ? 'destructive' : 'secondary'}>
+          <Badge
+            variant={
+              run.status === 'running'
+                ? 'default'
+                : run.status === 'failed'
+                  ? 'destructive'
+                  : 'secondary'
+            }
+          >
             {run.status}
           </Badge>
         </div>
         {['running', 'blocked', 'needs_review'].includes(run.status) && (
-          <Button variant="ghost" size="sm" onClick={() => cancel(run.id)}>Cancel run</Button>
+          <Button variant="ghost" size="sm" onClick={() => cancel(run.id)}>
+            Cancel run
+          </Button>
         )}
       </div>
 
@@ -4774,9 +5719,14 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1">
           <ReactFlow
-            nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-            nodesDraggable={false} nodesConnectable={false} elementsSelectable
-            fitView fitViewOptions={{ padding: 0.2 }}
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
           >
             <Background />
             <Controls />
@@ -4787,9 +5737,17 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
           <div className="w-[320px] border-l border-border p-4 overflow-y-auto space-y-3">
             <h3 className="text-sm font-medium">{selectedStep.name}</h3>
             <div className="text-xs text-muted-foreground space-y-1">
-              <div>Type: <code>{selectedStep.executorType}</code></div>
-              <div>Ref: <code>{selectedStep.executorRef || '—'}</code></div>
-              {selectedStepRun && <div>Status: <code>{selectedStepRun.status}</code> (attempt {selectedStepRun.attempt})</div>}
+              <div>
+                Type: <code>{selectedStep.executorType}</code>
+              </div>
+              <div>
+                Ref: <code>{selectedStep.executorRef || '—'}</code>
+              </div>
+              {selectedStepRun && (
+                <div>
+                  Status: <code>{selectedStepRun.status}</code> (attempt {selectedStepRun.attempt})
+                </div>
+              )}
             </div>
             {selectedStepRun?.output && (
               <details className="text-xs">
@@ -4799,15 +5757,25 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                 </pre>
               </details>
             )}
-            {selectedStepRun?.status === 'needs_review' && selectedStep.executorType === 'human_gate' && (
-              <HumanGateResolvePanel
-                outcomes={(selectedStepRun.output?.schemaFields?.outcomes as string[]) ?? selectedStep.humanGateOutcomes ?? []}
-                onResolve={(outcome, notes) => resolveGate(run.id, selectedStepRun.id, outcome, notes)}
-                onRetry={() => retry(run.id, selectedStepRun.id)}
-              />
-            )}
+            {selectedStepRun?.status === 'needs_review' &&
+              selectedStep.executorType === 'human_gate' && (
+                <HumanGateResolvePanel
+                  outcomes={
+                    (selectedStepRun.output?.schemaFields?.outcomes as string[]) ??
+                    selectedStep.humanGateOutcomes ??
+                    []
+                  }
+                  onResolve={(outcome, notes) =>
+                    resolveGate(run.id, selectedStepRun.id, outcome, notes)
+                  }
+                  onRetry={() => retry(run.id, selectedStepRun.id)}
+                />
+              )}
             {selectedStepRun?.executionId && (
-              <a href={`#agent-events/${selectedStepRun.executionId}`} className="text-xs text-fleex-blue underline">
+              <a
+                href={`#agent-events/${selectedStepRun.executionId}`}
+                className="text-xs text-fleex-blue underline"
+              >
                 View agent events
               </a>
             )}
@@ -4836,6 +5804,7 @@ git commit -m "feat(web): WorkflowRunView (DAG + step detail) + HumanGateResolve
 ### Task D.6: `TicketWorkflowTab` + plug into `TicketDetail`
 
 **Files:**
+
 - Create: `packages/web/src/components/workflows/TicketWorkflowTab.tsx`
 - Modify: `packages/web/src/components/tickets/TicketDetail.tsx`
 
@@ -4845,9 +5814,17 @@ git commit -m "feat(web): WorkflowRunView (DAG + step detail) + HumanGateResolve
 import { useEffect, useState } from 'react';
 import { useWorkflowRunStore } from '@/stores/workflowRunStore';
 import { WorkflowRunView } from './WorkflowRunView';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 
-interface Props { ticketId: string }
+interface Props {
+  ticketId: string;
+}
 
 export function TicketWorkflowTab({ ticketId }: Props) {
   const loadForTicket = useWorkflowRunStore((s) => s.loadForTicket);
@@ -4858,7 +5835,9 @@ export function TicketWorkflowTab({ ticketId }: Props) {
   const history = useWorkflowRunStore((s) => s.historyByTicket(ticketId));
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  useEffect(() => { void loadForTicket(ticketId); }, [ticketId, loadForTicket]);
+  useEffect(() => {
+    void loadForTicket(ticketId);
+  }, [ticketId, loadForTicket]);
 
   const currentRunId = active?.id ?? selectedRunId ?? history[0]?.id;
   useEffect(() => {
@@ -4866,7 +5845,9 @@ export function TicketWorkflowTab({ ticketId }: Props) {
   }, [currentRunId, detail, loadDetail]);
 
   if ((runsByTicket[ticketId]?.length ?? 0) === 0) {
-    return <div className="p-6 text-sm text-muted-foreground">No workflow runs on this ticket yet.</div>;
+    return (
+      <div className="p-6 text-sm text-muted-foreground">No workflow runs on this ticket yet.</div>
+    );
   }
 
   const d = currentRunId ? detail[currentRunId] : undefined;
@@ -4876,18 +5857,25 @@ export function TicketWorkflowTab({ ticketId }: Props) {
         <div className="px-4 py-2 border-b border-border flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Historical run:</span>
           <Select value={currentRunId ?? undefined} onValueChange={setSelectedRunId}>
-            <SelectTrigger className="h-8 w-[240px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[240px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               {history.map((r) => (
                 <SelectItem key={r.id} value={r.id}>
-                  {r.templateSnapshot.emoji} {r.templateSnapshot.name} — {new Date(r.startedAt).toLocaleString()}
+                  {r.templateSnapshot.emoji} {r.templateSnapshot.name} —{' '}
+                  {new Date(r.startedAt).toLocaleString()}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
       )}
-      {d ? <WorkflowRunView run={d.run} stepRuns={d.stepRuns} /> : <div className="p-6 text-sm text-muted-foreground">Loading…</div>}
+      {d ? (
+        <WorkflowRunView run={d.run} stepRuns={d.stepRuns} />
+      ) : (
+        <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+      )}
     </div>
   );
 }
@@ -4903,16 +5891,22 @@ import { TicketWorkflowTab } from '@/components/workflows/TicketWorkflowTab';
 
 // ...inside TicketDetail component:
 const workflowRuns = useWorkflowRunStore((s) => s.runsByTicket[ticketId] ?? []);
-useEffect(() => { void useWorkflowRunStore.getState().loadForTicket(ticketId); }, [ticketId]);
+useEffect(() => {
+  void useWorkflowRunStore.getState().loadForTicket(ticketId);
+}, [ticketId]);
 
 // in the tabs JSX (alongside Ticket Details / Comments / Deliverables):
-{workflowRuns.length > 0 && (
-  <TabsTrigger value="workflow">Workflow</TabsTrigger>
-)}
+{
+  workflowRuns.length > 0 && <TabsTrigger value="workflow">Workflow</TabsTrigger>;
+}
 // ...
-{workflowRuns.length > 0 && (
-  <TabsContent value="workflow"><TicketWorkflowTab ticketId={ticketId} /></TabsContent>
-)}
+{
+  workflowRuns.length > 0 && (
+    <TabsContent value="workflow">
+      <TicketWorkflowTab ticketId={ticketId} />
+    </TabsContent>
+  );
+}
 ```
 
 - [ ] **Step 3: Restart and smoke test in browser**
@@ -4935,6 +5929,7 @@ git commit -m "feat(web): TicketWorkflowTab plugged into TicketDetail tabs"
 ### Task D.7: Subscribe to workflow WS events
 
 **Files:**
+
 - Modify: `packages/web/src/lib/appWs.ts` (or wherever the global WS subscription dispatches events to stores)
 
 - [ ] **Step 1: Locate the WS dispatcher**
@@ -4948,7 +5943,9 @@ In `packages/web/src/lib/appWs.ts`, in the handler that receives ticket channel 
 
 ```ts
 if (event.type.startsWith('workflow:') && event.ticketId) {
-  useWorkflowRunStore.getState().applyEvent({ type: event.type, ticketId: event.ticketId, payload: event.payload ?? {} });
+  useWorkflowRunStore
+    .getState()
+    .applyEvent({ type: event.type, ticketId: event.ticketId, payload: event.payload ?? {} });
 }
 ```
 
@@ -4976,6 +5973,7 @@ _End of Phase D._
 ### Task E.1: `EditorStepNode` custom node + executor palette
 
 **Files:**
+
 - Create: `packages/web/src/components/workflows/EditorStepNode.tsx`
 - Create: `packages/web/src/components/workflows/executor-palette.tsx`
 
@@ -4994,13 +5992,41 @@ export interface PaletteEntry {
 }
 
 export const EXECUTOR_PALETTE: PaletteEntry[] = [
-  { type: 'agent',      label: 'Agent',      Icon: Bot,       color: 'text-fleex-purple', description: 'AI agent execution' },
-  { type: 'panel',      label: 'Panel',      Icon: Users,     color: 'text-fleex-blue',   description: 'Multi-agent committee with synthesis' },
-  { type: 'skill',      label: 'Skill',      Icon: BookOpen,  color: 'text-fleex-green',  description: 'Deterministic skill instruction file' },
-  { type: 'human_gate', label: 'Human Gate', Icon: UserCheck, color: 'text-fleex-amber',  description: 'Manual approval checkpoint' },
+  {
+    type: 'agent',
+    label: 'Agent',
+    Icon: Bot,
+    color: 'text-fleex-purple',
+    description: 'AI agent execution',
+  },
+  {
+    type: 'panel',
+    label: 'Panel',
+    Icon: Users,
+    color: 'text-fleex-blue',
+    description: 'Multi-agent committee with synthesis',
+  },
+  {
+    type: 'skill',
+    label: 'Skill',
+    Icon: BookOpen,
+    color: 'text-fleex-green',
+    description: 'Deterministic skill instruction file',
+  },
+  {
+    type: 'human_gate',
+    label: 'Human Gate',
+    Icon: UserCheck,
+    color: 'text-fleex-amber',
+    description: 'Manual approval checkpoint',
+  },
 ];
 
-export function ExecutorPalette({ onDragStart }: { onDragStart: (type: WorkflowExecutorType, e: React.DragEvent) => void }) {
+export function ExecutorPalette({
+  onDragStart,
+}: {
+  onDragStart: (type: WorkflowExecutorType, e: React.DragEvent) => void;
+}) {
   return (
     <div className="w-[200px] border-r border-border p-3 space-y-2 overflow-y-auto">
       <h3 className="text-xs font-medium uppercase text-muted-foreground mb-2">Step types</h3>
@@ -5055,7 +6081,11 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   const isUnconfigured = data.step.executorType !== 'human_gate' && !data.step.executorRef;
   return (
     <div className="relative group">
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-muted-foreground/40 !border-2 !border-card" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!w-3 !h-3 !bg-muted-foreground/40 !border-2 !border-card"
+      />
       <div
         onClick={() => data.onSelect(data.step.id)}
         className={cn(
@@ -5065,7 +6095,10 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
         )}
       >
         <button
-          onClick={(e) => { e.stopPropagation(); data.onDelete(data.step.id); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onDelete(data.step.id);
+          }}
           className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-fleex-red/20 text-fleex-red flex items-center justify-center opacity-0 group-hover:opacity-100"
         >
           <X className="w-3 h-3" />
@@ -5073,13 +6106,25 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
         <div className="flex items-center gap-2 mb-1">
           <Icon className="w-4 h-4" />
           <span className="text-xs font-medium truncate flex-1">{data.step.name || 'Unnamed'}</span>
-          {data.isEntry && <span className="text-[9px] font-mono bg-fleex-green/20 text-fleex-green px-1 rounded">entry</span>}
+          {data.isEntry && (
+            <span className="text-[9px] font-mono bg-fleex-green/20 text-fleex-green px-1 rounded">
+              entry
+            </span>
+          )}
         </div>
         <div className="text-[10px] text-muted-foreground truncate">
-          {isUnconfigured ? <span className="italic">Unconfigured</span> : data.step.executorRef || '—'}
+          {isUnconfigured ? (
+            <span className="italic">Unconfigured</span>
+          ) : (
+            data.step.executorRef || '—'
+          )}
         </div>
       </div>
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-muted-foreground/40 !border-2 !border-card" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!w-3 !h-3 !bg-muted-foreground/40 !border-2 !border-card"
+      />
     </div>
   );
 }
@@ -5102,6 +6147,7 @@ git commit -m "feat(web): editor step node + executor palette"
 ### Task E.2: `StepConfigPanel` (right-side config for selected step)
 
 **Files:**
+
 - Create: `packages/web/src/components/workflows/StepConfigPanel.tsx`
 
 - [ ] **Step 1: Write the component**
@@ -5111,7 +6157,13 @@ import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { usePersonaStore } from '@/stores/personaStore';
 import { useSkillStore } from '@/stores/skillStore';
@@ -5142,10 +6194,14 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
 
   const refOptions = (() => {
     switch (step.executorType) {
-      case 'agent': return personas.map((p) => ({ value: p.name, label: p.displayName || p.name }));
-      case 'skill': return skills.map((s) => ({ value: s.commandName, label: s.displayName || s.commandName }));
-      case 'panel': return panels.map((p) => ({ value: p.name, label: p.displayName || p.name }));
-      case 'human_gate': return [];
+      case 'agent':
+        return personas.map((p) => ({ value: p.name, label: p.displayName || p.name }));
+      case 'skill':
+        return skills.map((s) => ({ value: s.commandName, label: s.displayName || s.commandName }));
+      case 'panel':
+        return panels.map((p) => ({ value: p.name, label: p.displayName || p.name }));
+      case 'human_gate':
+        return [];
     }
   })();
 
@@ -5158,7 +6214,8 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
     }
     try {
       const parsed = JSON.parse(text) as JsonSchema;
-      if (parsed.type !== 'object' || !parsed.properties) throw new Error('must be {"type":"object","properties":{...}}');
+      if (parsed.type !== 'object' || !parsed.properties)
+        throw new Error('must be {"type":"object","properties":{...}}');
       setOutputSchemaError(null);
       onChange({ ...step, outputSchema: parsed });
     } catch (e) {
@@ -5170,7 +6227,11 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
     <div className="space-y-3">
       <div>
         <Label className="text-xs">Step name</Label>
-        <Input value={step.name} onChange={(e) => onChange({ ...step, name: e.target.value })} className="h-8 text-xs" />
+        <Input
+          value={step.name}
+          onChange={(e) => onChange({ ...step, name: e.target.value })}
+          className="h-8 text-xs"
+        />
       </div>
       <div>
         <Label className="text-xs">Type</Label>
@@ -5179,10 +6240,19 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
       {step.executorType !== 'human_gate' && (
         <div>
           <Label className="text-xs">Executor ref</Label>
-          <Select value={step.executorRef} onValueChange={(v) => onChange({ ...step, executorRef: v })}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select…" /></SelectTrigger>
+          <Select
+            value={step.executorRef}
+            onValueChange={(v) => onChange({ ...step, executorRef: v })}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Select…" />
+            </SelectTrigger>
             <SelectContent>
-              {refOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              {refOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -5192,9 +6262,16 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
           <Label className="text-xs">Mode override (optional)</Label>
           <Select
             value={step.mode ?? '__inherit__'}
-            onValueChange={(v) => onChange({ ...step, mode: v === '__inherit__' ? undefined : v as 'talk' | 'plan' | 'edit' })}
+            onValueChange={(v) =>
+              onChange({
+                ...step,
+                mode: v === '__inherit__' ? undefined : (v as 'talk' | 'plan' | 'edit'),
+              })
+            }
           >
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="__inherit__">Inherit from persona</SelectItem>
               <SelectItem value="talk">talk</SelectItem>
@@ -5209,7 +6286,15 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
           <Label className="text-xs">Outcomes (comma-separated)</Label>
           <Input
             value={(step.humanGateOutcomes ?? []).join(', ')}
-            onChange={(e) => onChange({ ...step, humanGateOutcomes: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+            onChange={(e) =>
+              onChange({
+                ...step,
+                humanGateOutcomes: e.target.value
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
             className="h-8 text-xs"
             placeholder="approve, reject, request_changes"
           />
@@ -5223,7 +6308,9 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
           className="text-[11px] font-mono min-h-[160px]"
           placeholder='{"type":"object","properties":{"path":{"type":"string","enum":["a","b"]}},"required":["path"]}'
         />
-        {outputSchemaError && <div className="text-[10px] text-fleex-red mt-1">{outputSchemaError}</div>}
+        {outputSchemaError && (
+          <div className="text-[10px] text-fleex-red mt-1">{outputSchemaError}</div>
+        )}
       </div>
       <Button size="sm" variant="outline" disabled={isEntry} onClick={onSetEntry}>
         {isEntry ? 'Entry step' : 'Set as entry step'}
@@ -5250,6 +6337,7 @@ git commit -m "feat(web): StepConfigPanel with ref autocomplete + JSON Schema te
 ### Task E.3: `EdgeConfigPanel` (right-side config for selected edge)
 
 **Files:**
+
 - Create: `packages/web/src/components/workflows/EdgeConfigPanel.tsx`
 
 - [ ] **Step 1: Write the component**
@@ -5258,7 +6346,13 @@ git commit -m "feat(web): StepConfigPanel with ref autocomplete + JSON Schema te
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import type { WorkflowEdge, EdgeOperator } from '@fleex/shared';
 
@@ -5278,18 +6372,26 @@ export function EdgeConfigPanel({ edge, onChange, onDelete }: Props) {
     <div className="space-y-3">
       <div>
         <Label className="text-xs">Label (optional)</Label>
-        <Input value={edge.label ?? ''} onChange={(e) => onChange({ ...edge, label: e.target.value || undefined })} className="h-8 text-xs" />
+        <Input
+          value={edge.label ?? ''}
+          onChange={(e) => onChange({ ...edge, label: e.target.value || undefined })}
+          className="h-8 text-xs"
+        />
       </div>
 
       <div className="flex items-center justify-between">
         <Label className="text-xs">Default (fallback) edge</Label>
         <Switch
           checked={isDefault}
-          onCheckedChange={(checked) => onChange({
-            ...edge,
-            isDefault: checked,
-            condition: checked ? undefined : (condition ?? { field: '', operator: 'eq', value: '' }),
-          })}
+          onCheckedChange={(checked) =>
+            onChange({
+              ...edge,
+              isDefault: checked,
+              condition: checked
+                ? undefined
+                : (condition ?? { field: '', operator: 'eq', value: '' }),
+            })
+          }
         />
       </div>
 
@@ -5299,7 +6401,15 @@ export function EdgeConfigPanel({ edge, onChange, onDelete }: Props) {
             <Label className="text-xs">Field (from output schema)</Label>
             <Input
               value={condition?.field ?? ''}
-              onChange={(e) => onChange({ ...edge, condition: { ...(condition ?? { operator: 'eq', value: '' }), field: e.target.value } })}
+              onChange={(e) =>
+                onChange({
+                  ...edge,
+                  condition: {
+                    ...(condition ?? { operator: 'eq', value: '' }),
+                    field: e.target.value,
+                  },
+                })
+              }
               placeholder="e.g. path, outcome, deliverable.status"
               className="h-8 text-xs font-mono"
             />
@@ -5308,22 +6418,51 @@ export function EdgeConfigPanel({ edge, onChange, onDelete }: Props) {
             <Label className="text-xs">Operator</Label>
             <Select
               value={condition?.operator ?? 'eq'}
-              onValueChange={(v) => onChange({ ...edge, condition: { ...(condition ?? { field: '', value: '' }), operator: v as EdgeOperator } })}
+              onValueChange={(v) =>
+                onChange({
+                  ...edge,
+                  condition: {
+                    ...(condition ?? { field: '', value: '' }),
+                    operator: v as EdgeOperator,
+                  },
+                })
+              }
             >
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {OPERATORS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                {OPERATORS.map((o) => (
+                  <SelectItem key={o} value={o}>
+                    {o}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Value{condition?.operator === 'in' ? ' (comma-separated)' : ''}</Label>
+            <Label className="text-xs">
+              Value{condition?.operator === 'in' ? ' (comma-separated)' : ''}
+            </Label>
             <Input
-              value={Array.isArray(condition?.value) ? condition!.value.join(', ') : (condition?.value ?? '')}
+              value={
+                Array.isArray(condition?.value)
+                  ? condition!.value.join(', ')
+                  : (condition?.value ?? '')
+              }
               onChange={(e) => {
                 const raw = e.target.value;
-                const value = condition?.operator === 'in' ? raw.split(',').map((s) => s.trim()).filter(Boolean) : raw;
-                onChange({ ...edge, condition: { ...(condition ?? { field: '', operator: 'eq' }), value } });
+                const value =
+                  condition?.operator === 'in'
+                    ? raw
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                    : raw;
+                onChange({
+                  ...edge,
+                  condition: { ...(condition ?? { field: '', operator: 'eq' }), value },
+                });
               }}
               className="h-8 text-xs font-mono"
             />
@@ -5331,7 +6470,9 @@ export function EdgeConfigPanel({ edge, onChange, onDelete }: Props) {
         </>
       )}
 
-      <Button variant="ghost" size="sm" className="text-fleex-red" onClick={onDelete}>Delete edge</Button>
+      <Button variant="ghost" size="sm" className="text-fleex-red" onClick={onDelete}>
+        Delete edge
+      </Button>
     </div>
   );
 }
@@ -5354,6 +6495,7 @@ git commit -m "feat(web): EdgeConfigPanel — default toggle + condition (field/
 ### Task E.4: `WorkflowEditorView` main editor
 
 **Files:**
+
 - Create: `packages/web/src/components/workflows/WorkflowEditorView.tsx`
 
 - [ ] **Step 1: Write the main editor**
@@ -5361,9 +6503,20 @@ git commit -m "feat(web): EdgeConfigPanel — default toggle + condition (field/
 ```tsx
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  ReactFlow, Background, Controls, MiniMap, ReactFlowProvider, useReactFlow,
-  applyNodeChanges, applyEdgeChanges, addEdge,
-  type Node, type Edge, type Connection, type NodeChange, type EdgeChange,
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  ReactFlowProvider,
+  useReactFlow,
+  applyNodeChanges,
+  applyEdgeChanges,
+  addEdge,
+  type Node,
+  type Edge,
+  type Connection,
+  type NodeChange,
+  type EdgeChange,
   MarkerType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -5377,7 +6530,12 @@ import { StepConfigPanel } from './StepConfigPanel';
 import { EdgeConfigPanel } from './EdgeConfigPanel';
 import { useWorkflowTemplateStore } from '@/stores/workflowTemplateStore';
 import { useToast } from '@/hooks/use-toast';
-import type { WorkflowExecutorType, WorkflowStep, WorkflowEdge as WfEdge, WorkflowTemplate } from '@fleex/shared';
+import type {
+  WorkflowExecutorType,
+  WorkflowStep,
+  WorkflowEdge as WfEdge,
+  WorkflowTemplate,
+} from '@fleex/shared';
 
 const nodeTypes = { editorStep: EditorStepNode };
 
@@ -5414,36 +6572,58 @@ function EditorInner({ template, onBack }: Props) {
   const [saving, setSaving] = useState(false);
 
   // RF nodes/edges derived from local state
-  const nodes: Node<EditorStepNodeData>[] = useMemo(() => steps.map((s) => ({
-    id: s.id,
-    type: 'editorStep',
-    position: s.position,
-    data: {
-      step: s, isSelected: s.id === selectedStepId, isEntry: s.id === entryStepId,
-      onSelect: (id) => { setSelectedStepId(id); setSelectedEdgeId(null); },
-      onDelete: (id) => {
-        setSteps((prev) => prev.filter((x) => x.id !== id));
-        setEdges((prev) => prev.filter((e) => e.source !== id && e.target !== id));
-        if (selectedStepId === id) setSelectedStepId(null);
-        if (entryStepId === id) {
-          const next = steps.find((x) => x.id !== id);
-          if (next) setEntryStepId(next.id);
-        }
-      },
-    },
-  })), [steps, selectedStepId, entryStepId]);
+  const nodes: Node<EditorStepNodeData>[] = useMemo(
+    () =>
+      steps.map((s) => ({
+        id: s.id,
+        type: 'editorStep',
+        position: s.position,
+        data: {
+          step: s,
+          isSelected: s.id === selectedStepId,
+          isEntry: s.id === entryStepId,
+          onSelect: (id) => {
+            setSelectedStepId(id);
+            setSelectedEdgeId(null);
+          },
+          onDelete: (id) => {
+            setSteps((prev) => prev.filter((x) => x.id !== id));
+            setEdges((prev) => prev.filter((e) => e.source !== id && e.target !== id));
+            if (selectedStepId === id) setSelectedStepId(null);
+            if (entryStepId === id) {
+              const next = steps.find((x) => x.id !== id);
+              if (next) setEntryStepId(next.id);
+            }
+          },
+        },
+      })),
+    [steps, selectedStepId, entryStepId],
+  );
 
-  const rfEdges: Edge[] = useMemo(() => edges.map((e) => ({
-    id: e.id, source: e.source, target: e.target,
-    label: e.label ?? (e.condition ? `${e.condition.field} ${e.condition.operator} ${String(e.condition.value)}` : ''),
-    style: { strokeDasharray: e.isDefault ? undefined : '5,5' },
-    markerEnd: { type: MarkerType.ArrowClosed },
-    selected: e.id === selectedEdgeId,
-  })), [edges, selectedEdgeId]);
+  const rfEdges: Edge[] = useMemo(
+    () =>
+      edges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        label:
+          e.label ??
+          (e.condition
+            ? `${e.condition.field} ${e.condition.operator} ${String(e.condition.value)}`
+            : ''),
+        style: { strokeDasharray: e.isDefault ? undefined : '5,5' },
+        markerEnd: { type: MarkerType.ArrowClosed },
+        selected: e.id === selectedEdgeId,
+      })),
+    [edges, selectedEdgeId],
+  );
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setSteps((prev) => {
-      const next = applyNodeChanges(changes, prev.map((s) => ({ id: s.id, position: s.position, data: {} } as Node))) as Node[];
+      const next = applyNodeChanges(
+        changes,
+        prev.map((s) => ({ id: s.id, position: s.position, data: {} }) as Node),
+      ) as Node[];
       return prev.map((s) => {
         const updated = next.find((n) => n.id === s.id);
         return updated ? { ...s, position: updated.position } : s;
@@ -5464,26 +6644,43 @@ function EditorInner({ template, onBack }: Props) {
 
   const onConnect = useCallback((connection: Connection) => {
     const id = `e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setEdges((prev) => [...prev, { id, source: connection.source!, target: connection.target!, isDefault: true }]);
+    setEdges((prev) => [
+      ...prev,
+      { id, source: connection.source!, target: connection.target!, isDefault: true },
+    ]);
   }, []);
 
-  const onDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    const type = event.dataTransfer.getData('application/x-fleex-executor') as WorkflowExecutorType;
-    if (!type) return;
-    const bounds = wrapperRef.current!.getBoundingClientRect();
-    const position = reactFlow.screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
-    const id = `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const step: WorkflowStep = {
-      id, name: type === 'human_gate' ? 'Human Gate' : 'New Step',
-      executorType: type, executorRef: '', position,
-      humanGateOutcomes: type === 'human_gate' ? ['approve', 'reject'] : undefined,
-    };
-    setSteps((prev) => [...prev, step]);
-    if (steps.length === 0) setEntryStepId(id);
-  }, [reactFlow, steps.length]);
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const type = event.dataTransfer.getData(
+        'application/x-fleex-executor',
+      ) as WorkflowExecutorType;
+      if (!type) return;
+      const bounds = wrapperRef.current!.getBoundingClientRect();
+      const position = reactFlow.screenToFlowPosition({
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      });
+      const id = `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const step: WorkflowStep = {
+        id,
+        name: type === 'human_gate' ? 'Human Gate' : 'New Step',
+        executorType: type,
+        executorRef: '',
+        position,
+        humanGateOutcomes: type === 'human_gate' ? ['approve', 'reject'] : undefined,
+      };
+      setSteps((prev) => [...prev, step]);
+      if (steps.length === 0) setEntryStepId(id);
+    },
+    [reactFlow, steps.length],
+  );
 
-  const onDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
   const onPaletteDragStart = useCallback((type: WorkflowExecutorType, e: React.DragEvent) => {
     e.dataTransfer.setData('application/x-fleex-executor', type);
     e.dataTransfer.effectAllowed = 'move';
@@ -5495,10 +6692,23 @@ function EditorInner({ template, onBack }: Props) {
   const save = async () => {
     setSaving(true);
     try {
-      await update(template.id, { name, slug, emoji, description, steps, edges, entryStepId, enabled: template.enabled });
+      await update(template.id, {
+        name,
+        slug,
+        emoji,
+        description,
+        steps,
+        edges,
+        entryStepId,
+        enabled: template.enabled,
+      });
       toast({ title: 'Workflow saved' });
     } catch (err) {
-      toast({ title: 'Save failed', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
+      toast({
+        title: 'Save failed',
+        description: err instanceof Error ? err.message : String(err),
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -5508,14 +6718,35 @@ function EditorInner({ template, onBack }: Props) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={onBack}>← Back</Button>
-          <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 w-[200px] text-sm" placeholder="Name" />
-          <Input value={slug} onChange={(e) => setSlug(e.target.value)} className="h-8 w-[180px] text-xs font-mono" placeholder="slug" />
-          <Input value={emoji} onChange={(e) => setEmoji(e.target.value)} className="h-8 w-[60px] text-center" placeholder="🏭" />
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            ← Back
+          </Button>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-8 w-[200px] text-sm"
+            placeholder="Name"
+          />
+          <Input
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            className="h-8 w-[180px] text-xs font-mono"
+            placeholder="slug"
+          />
+          <Input
+            value={emoji}
+            onChange={(e) => setEmoji(e.target.value)}
+            className="h-8 w-[60px] text-center"
+            placeholder="🏭"
+          />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{steps.length} steps · {edges.length} edges</span>
-          <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Workflow'}</Button>
+          <span className="text-xs text-muted-foreground">
+            {steps.length} steps · {edges.length} edges
+          </span>
+          <Button size="sm" onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : 'Save Workflow'}
+          </Button>
         </div>
       </div>
 
@@ -5523,11 +6754,22 @@ function EditorInner({ template, onBack }: Props) {
         <ExecutorPalette onDragStart={onPaletteDragStart} />
         <div ref={wrapperRef} className="flex-1" onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
-            nodes={nodes} edges={rfEdges} nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
-            onEdgeClick={(_, e) => { setSelectedEdgeId(e.id); setSelectedStepId(null); }}
-            onPaneClick={() => { setSelectedStepId(null); setSelectedEdgeId(null); }}
-            fitView fitViewOptions={{ padding: 0.2 }}
+            nodes={nodes}
+            edges={rfEdges}
+            nodeTypes={nodeTypes}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onEdgeClick={(_, e) => {
+              setSelectedEdgeId(e.id);
+              setSelectedStepId(null);
+            }}
+            onPaneClick={() => {
+              setSelectedStepId(null);
+              setSelectedEdgeId(null);
+            }}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
           >
             <Background />
             <Controls />
@@ -5539,21 +6781,34 @@ function EditorInner({ template, onBack }: Props) {
             <StepConfigPanel
               step={selectedStep}
               isEntry={selectedStep.id === entryStepId}
-              onChange={(next) => setSteps((prev) => prev.map((s) => s.id === next.id ? next : s))}
+              onChange={(next) =>
+                setSteps((prev) => prev.map((s) => (s.id === next.id ? next : s)))
+              }
               onSetEntry={() => setEntryStepId(selectedStep.id)}
             />
           ) : selectedEdge ? (
             <EdgeConfigPanel
               edge={selectedEdge}
-              onChange={(next) => setEdges((prev) => prev.map((e) => e.id === next.id ? next : e))}
-              onDelete={() => { setEdges((prev) => prev.filter((e) => e.id !== selectedEdge.id)); setSelectedEdgeId(null); }}
+              onChange={(next) =>
+                setEdges((prev) => prev.map((e) => (e.id === next.id ? next : e)))
+              }
+              onDelete={() => {
+                setEdges((prev) => prev.filter((e) => e.id !== selectedEdge.id));
+                setSelectedEdgeId(null);
+              }}
             />
           ) : (
             <div className="space-y-3">
               <Label className="text-xs">Description</Label>
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} className="text-xs" />
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="text-xs"
+              />
               <div className="text-[10px] text-muted-foreground">
-                Drag a step type from the palette into the canvas. Connect nodes by dragging from the right handle to the left handle of another node. Click a step or edge to configure it.
+                Drag a step type from the palette into the canvas. Connect nodes by dragging from
+                the right handle to the left handle of another node. Click a step or edge to
+                configure it.
               </div>
             </div>
           )}
@@ -5581,6 +6836,7 @@ git commit -m "feat(web): WorkflowEditorView — React Flow editor with palette 
 ### Task E.5: `CreateWorkflowModal` + add "Workflows" section to `AgentListPanel`
 
 **Files:**
+
 - Create: `packages/web/src/components/agents/CreateWorkflowModal.tsx`
 - Modify: `packages/web/src/components/agents/AgentListPanel.tsx`
 
@@ -5588,7 +6844,13 @@ git commit -m "feat(web): WorkflowEditorView — React Flow editor with palette 
 
 ```tsx
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -5611,17 +6873,34 @@ export function CreateWorkflowModal({ open, onOpenChange, onCreated }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    setBusy(true); setError(null);
+    setBusy(true);
+    setError(null);
     try {
       const entryId = `s-${Date.now()}`;
       const t = await create({
-        name, slug, emoji, description,
-        steps: [{ id: entryId, name: 'Entry Step', executorType: 'agent', executorRef: '', position: { x: 0, y: 0 } }],
-        edges: [], entryStepId: entryId, enabled: true,
+        name,
+        slug,
+        emoji,
+        description,
+        steps: [
+          {
+            id: entryId,
+            name: 'Entry Step',
+            executorType: 'agent',
+            executorRef: '',
+            position: { x: 0, y: 0 },
+          },
+        ],
+        edges: [],
+        entryStepId: entryId,
+        enabled: true,
       });
       onCreated(t.id);
       onOpenChange(false);
-      setName(''); setSlug(''); setEmoji('🔧'); setDescription('');
+      setName('');
+      setSlug('');
+      setEmoji('🔧');
+      setDescription('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -5632,19 +6911,34 @@ export function CreateWorkflowModal({ open, onOpenChange, onCreated }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>New workflow</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>New workflow</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3">
           <div>
             <Label className="text-xs">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Feature Delivery" />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Feature Delivery"
+            />
           </div>
           <div>
             <Label className="text-xs">Slug (used as @workflow:slug)</Label>
-            <Input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '-'))} placeholder="feature-delivery" className="font-mono text-xs" />
+            <Input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '-'))}
+              placeholder="feature-delivery"
+              className="font-mono text-xs"
+            />
           </div>
           <div>
             <Label className="text-xs">Emoji</Label>
-            <Input value={emoji} onChange={(e) => setEmoji(e.target.value)} className="w-[80px] text-center" />
+            <Input
+              value={emoji}
+              onChange={(e) => setEmoji(e.target.value)}
+              className="w-[80px] text-center"
+            />
           </div>
           <div>
             <Label className="text-xs">Description</Label>
@@ -5653,8 +6947,12 @@ export function CreateWorkflowModal({ open, onOpenChange, onCreated }: Props) {
           {error && <div className="text-xs text-fleex-red">{error}</div>}
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={busy || !name || !slug}>Create</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={busy || !name || !slug}>
+            Create
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -5735,6 +7033,7 @@ git commit -m "feat(web): Workflows section in AgentListPanel + CreateWorkflowMo
 ### Task E.6: Hook workflows into `SmartSessionButton`
 
 **Files:**
+
 - Modify: `packages/web/src/components/dashboard/SmartSessionButton.tsx`
 
 - [ ] **Step 1: Locate the existing skills section in the dropdown**
@@ -5756,25 +7055,27 @@ const startRun = useWorkflowRunStore((s) => s.start);
 const enabledTemplates = templates.filter((t) => t.enabled);
 
 // In the JSX, after the skills section:
-{enabledTemplates.length > 0 && (
-  <div className="border-t border-border pt-1 mt-1">
-    <div className="px-2 py-1 text-[10px] uppercase text-muted-foreground">Workflows</div>
-    {enabledTemplates.map((t) => (
-      <button
-        key={t.id}
-        className="w-full text-left px-2 py-1.5 hover:bg-muted/30 flex items-center gap-2"
-        onClick={() => {
-          void startRun(currentTicketId, t.id);
-          closeDropdown();
-        }}
-      >
-        <span>{t.emoji}</span>
-        <span className="text-xs flex-1">{t.name}</span>
-        <span className="text-[9px] font-mono text-muted-foreground">/{t.slug}</span>
-      </button>
-    ))}
-  </div>
-)}
+{
+  enabledTemplates.length > 0 && (
+    <div className="border-t border-border pt-1 mt-1">
+      <div className="px-2 py-1 text-[10px] uppercase text-muted-foreground">Workflows</div>
+      {enabledTemplates.map((t) => (
+        <button
+          key={t.id}
+          className="w-full text-left px-2 py-1.5 hover:bg-muted/30 flex items-center gap-2"
+          onClick={() => {
+            void startRun(currentTicketId, t.id);
+            closeDropdown();
+          }}
+        >
+          <span>{t.emoji}</span>
+          <span className="text-xs flex-1">{t.name}</span>
+          <span className="text-[9px] font-mono text-muted-foreground">/{t.slug}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 ```
 
 Adjust `currentTicketId` and `closeDropdown` to the existing API of the component.
@@ -5833,7 +7134,3 @@ _End of Phase E._
 ---
 
 _End of plan._
-
-
-
-

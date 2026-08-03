@@ -1,6 +1,5 @@
 import * as path from 'node:path';
-import type { FastifyInstance } from 'fastify';
-import type { WebSocket } from 'ws';
+
 import {
   WS_PATH,
   DASHBOARD_BROADCAST_INTERVAL_MS,
@@ -8,11 +7,15 @@ import {
   DEFAULT_ROWS,
 } from '@fleex/shared';
 import type { PtyHandle, DashboardMessage, WsChannel } from '@fleex/shared';
-import type { Container } from '../container.js';
-import type { JsonlFileWatcher } from '../services/jsonl-file-watcher.js';
-import type { WsHeartbeat } from './ws-heartbeat.js';
+
 import { encodePath } from '../../domain/services/claude-path-encoding.js';
 import { DiffStatsCache } from '../../domain/services/diff-stats-cache.js';
+
+import type { Container } from '../container.js';
+import type { WsHeartbeat } from './ws-heartbeat.js';
+import type { JsonlFileWatcher } from '../services/jsonl-file-watcher.js';
+import type { FastifyInstance } from 'fastify';
+import type { WebSocket } from 'ws';
 
 // Binary protocol constants (match shared ClientMessageType / ServerMessageType)
 const CLIENT_ATTACH = 0x01;
@@ -36,7 +39,11 @@ interface UnifiedClient {
   subscribedToAllExecutions: boolean;
 }
 
-function sendChannelJson(ws: WebSocket, channel: WsChannel, msg: { type: string; data: unknown }): void {
+function sendChannelJson(
+  ws: WebSocket,
+  channel: WsChannel,
+  msg: { type: string; data: unknown },
+): void {
   if (ws.readyState === 1) {
     ws.send(JSON.stringify({ channel, ...msg }));
   }
@@ -78,7 +85,11 @@ function parseAttachPayload(payload: Buffer): { sessionId: string; cols: number;
   return { sessionId, cols, rows };
 }
 
-export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatcher | undefined, heartbeat: WsHeartbeat) {
+export function unifiedWsPlugin(
+  container: Container,
+  fileWatcher: JsonlFileWatcher | undefined,
+  heartbeat: WsHeartbeat,
+) {
   return async function (app: FastifyInstance) {
     const clients = new Map<WebSocket, UnifiedClient>();
 
@@ -92,7 +103,10 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
 
     async function dashboardBroadcast(): Promise<void> {
       if (clients.size === 0) return;
-      if (broadcastInFlight) { pendingBroadcast = true; return; }
+      if (broadcastInFlight) {
+        pendingBroadcast = true;
+        return;
+      }
 
       broadcastInFlight = true;
       try {
@@ -117,11 +131,16 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         });
       } finally {
         broadcastInFlight = false;
-        if (pendingBroadcast) { pendingBroadcast = false; dashboardBroadcast(); }
+        if (pendingBroadcast) {
+          pendingBroadcast = false;
+          dashboardBroadcast();
+        }
       }
     }
 
-    function reconcileWatchers(groups: Awaited<ReturnType<typeof container.getSessionGroups.execute>>): void {
+    function reconcileWatchers(
+      groups: Awaited<ReturnType<typeof container.getSessionGroups.execute>>,
+    ): void {
       if (!fileWatcher) return;
       const activeDirs = new Set<string>();
       for (const group of groups) {
@@ -141,7 +160,10 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       }
     }
 
-    const dashboardInterval = setInterval(() => dashboardBroadcast(), DASHBOARD_BROADCAST_INTERVAL_MS);
+    const dashboardInterval = setInterval(
+      () => dashboardBroadcast(),
+      DASHBOARD_BROADCAST_INTERVAL_MS,
+    );
     if (fileWatcher) {
       fileWatcher.on('change', () => dashboardBroadcast());
     }
@@ -158,7 +180,9 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       try {
         const groups = await container.getSessionGroups.execute();
         await diffStatsCache.refresh(groups);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     refreshDiffStats(); // initial refresh on startup
     const diffStatsInterval = setInterval(() => refreshDiffStats(), DIFF_STATS_INTERVAL_MS);
@@ -176,16 +200,18 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
 
     // Wire up repository scheduler broadcast
     container.repositoryRefreshScheduler.setBroadcast((type, data) =>
-      channelBroadcast('repositories', type, data)
+      channelBroadcast('repositories', type, data),
     );
 
     // Wire up ticket broadcast
-    const ticketBroadcast = (type: string, data: unknown) => channelBroadcast('tickets', type, data);
+    const ticketBroadcast = (type: string, data: unknown) =>
+      channelBroadcast('tickets', type, data);
     container.ticketBroadcast = ticketBroadcast;
     container.domainEventListener.setTicketBroadcast(ticketBroadcast);
 
     // Wire up persona broadcast
-    const personaBroadcast = (type: string, data: unknown) => channelBroadcast('personas', type, data);
+    const personaBroadcast = (type: string, data: unknown) =>
+      channelBroadcast('personas', type, data);
     container.personaBroadcast = personaBroadcast;
     container.domainEventListener.setPersonaBroadcast(personaBroadcast);
 
@@ -209,11 +235,17 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       }
     };
 
-    const broadcastAgentEvent = (event: { toDTO: () => { executionId: string; eventType: string; data: unknown } }) => {
+    const broadcastAgentEvent = (event: {
+      toDTO: () => { executionId: string; eventType: string; data: unknown };
+    }) => {
       if (clients.size === 0) return;
       const dto = event.toDTO();
       const executionId = dto.executionId;
-      const payload = JSON.stringify({ channel: 'agent-events' as WsChannel, type: 'agent_event:delta', data: dto });
+      const payload = JSON.stringify({
+        channel: 'agent-events' as WsChannel,
+        type: 'agent_event:delta',
+        data: dto,
+      });
 
       for (const client of clients.values()) {
         if (client.subscribedExecutions.has(executionId)) {
@@ -221,7 +253,11 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         }
       }
 
-      if (dto.eventType === 'execution_start' || dto.eventType === 'execution_end' || dto.eventType === 'error') {
+      if (
+        dto.eventType === 'execution_start' ||
+        dto.eventType === 'execution_end' ||
+        dto.eventType === 'error'
+      ) {
         const ticketId = (dto.data as Record<string, unknown>)?.['ticketId'] as string | undefined;
         for (const client of clients.values()) {
           // Skip clients already subscribed to this execution
@@ -245,13 +281,17 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     container.runPanel.onEvent = broadcastAgentEvent;
 
     container.executeAgent.onExecutionComplete = (personaId, status, _mentionId) => {
-      const type = status === 'completed' ? 'persona:execution_completed' : 'persona:execution_failed';
+      const type =
+        status === 'completed' ? 'persona:execution_completed' : 'persona:execution_failed';
       container.personaBroadcast(type, { personaId });
     };
 
     container.agentEventBroadcast = (msg: unknown) => {
       if (clients.size === 0) return;
-      const payload = JSON.stringify({ channel: 'agent-events' as WsChannel, ...(msg as Record<string, unknown>) });
+      const payload = JSON.stringify({
+        channel: 'agent-events' as WsChannel,
+        ...(msg as Record<string, unknown>),
+      });
       for (const client of clients.values()) {
         if (client.socket.readyState === 1) {
           client.socket.send(payload);
@@ -314,7 +354,9 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
 
                 const sidBuf = Buffer.from(sessionId, 'utf-8');
 
-                container.logger.info('Spawning PTY for tmux attach', { tmuxName: session.tmuxName });
+                container.logger.info('Spawning PTY for tmux attach', {
+                  tmuxName: session.tmuxName,
+                });
                 const handle = container.pty.spawnAttach(session.tmuxName, { cols, rows });
                 client.ptyHandles.set(sessionId, handle);
 
@@ -348,8 +390,14 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
                 sendBinary(ws, attachedMsg);
                 container.logger.info('Terminal ATTACHED confirmation sent', { sessionId });
               } catch (err) {
-                container.logger.error('Terminal attach failed', { error: err instanceof Error ? err.message : String(err) });
-                sendTerminalError(ws, sessionId, err instanceof Error ? err.message : 'Attach failed');
+                container.logger.error('Terminal attach failed', {
+                  error: err instanceof Error ? err.message : String(err),
+                });
+                sendTerminalError(
+                  ws,
+                  sessionId,
+                  err instanceof Error ? err.message : 'Attach failed',
+                );
               }
               break;
             }

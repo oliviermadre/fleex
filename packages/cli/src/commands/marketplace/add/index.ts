@@ -1,8 +1,8 @@
-import type { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
+
 import { MARKETPLACE_SCHEMA_VERSION } from '@fleex/shared';
-import type { CommandDef } from '../../../core/types.ts';
+
 import { c, ok, info, warn, die } from '../../../core/colors.ts';
 import {
   MARKETPLACES_DIR,
@@ -12,6 +12,9 @@ import {
   loadManifest,
   upsertMarketplace,
 } from '../../../core/registry.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
+import type { Command } from 'commander';
 
 interface AddOptions {
   name?: string;
@@ -31,7 +34,9 @@ const def: CommandDef = {
     const dest = path.join(MARKETPLACES_DIR, name);
 
     if (getMarketplace(name) && !opts.force) {
-      die(`Marketplace "${name}" is already registered. Use "fleex marketplace update ${name}" or --force.`);
+      die(
+        `Marketplace "${name}" is already registered. Use "fleex marketplace update ${name}" or --force.`,
+      );
     }
 
     if (fs.existsSync(dest)) {
@@ -43,7 +48,9 @@ const def: CommandDef = {
     info(`Cloning ${c.cyan(url)} …`);
     const cloned = git(['clone', '--depth', '1', url, dest]);
     if (!cloned.ok) {
-      die(`git clone failed:\n${cloned.output}\n\nCheck the URL and that you have access (private repos use your git credentials).`);
+      die(
+        `git clone failed:\n${cloned.output}\n\nCheck the URL and that you have access (private repos use your git credentials).`,
+      );
     }
 
     // Validate it's actually a marketplace.
@@ -56,7 +63,9 @@ const def: CommandDef = {
     }
 
     if (manifest.schemaVersion > MARKETPLACE_SCHEMA_VERSION) {
-      warn(`marketplace.json schemaVersion is ${manifest.schemaVersion}; this fleex supports ${MARKETPLACE_SCHEMA_VERSION}. Consider updating fleex.`);
+      warn(
+        `marketplace.json schemaVersion is ${manifest.schemaVersion}; this fleex supports ${MARKETPLACE_SCHEMA_VERSION}. Consider updating fleex.`,
+      );
     }
 
     upsertMarketplace({ name, url, path: dest });

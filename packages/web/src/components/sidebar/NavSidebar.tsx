@@ -1,19 +1,29 @@
 import { useNavigate } from 'react-router-dom';
-import { useUIStore } from '../../stores/uiStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useAgentEventStore } from '../../stores/agentEventStore';
+
 import { cn } from '../../lib/cn';
-import { RepositoriesIcon } from './icons';
+import { useAgentEventStore } from '../../stores/agentEventStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useUIStore } from '../../stores/uiStore';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
+
+import { RepositoriesIcon } from './icons';
 
 function FleexLogo({ collapsed }: { collapsed: boolean }) {
   return (
-    <div className={cn(
-      'flex items-center border-b border-[var(--theme-border)] px-4 py-4',
-      collapsed ? 'justify-center' : 'gap-2'
-    )}>
+    <div
+      className={cn(
+        'flex items-center border-b border-[var(--theme-border)] px-4 py-4',
+        collapsed ? 'justify-center' : 'gap-2',
+      )}
+    >
       {/* Lightning bolt */}
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="shrink-0 text-[var(--theme-accent)]">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        className="shrink-0 text-[var(--theme-accent)]"
+      >
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor" />
       </svg>
       {!collapsed && (
@@ -46,7 +56,16 @@ export function NavSidebar() {
         {/* Assistant (companion-backed LLM chat) */}
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
               <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
             </svg>
@@ -64,7 +83,14 @@ export function NavSidebar() {
         {/* Kanban (was Backlog / Tickets) */}
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1"
+            >
               <rect x="1" y="2" width="22" height="20" rx="1.5" stroke="currentColor" fill="none" />
               <line x1="8.5" y1="2" x2="8.5" y2="22" />
               <line x1="15.5" y1="2" x2="15.5" y2="22" />
@@ -89,7 +115,16 @@ export function NavSidebar() {
         {/* Cockpit (cross-board list/focus monitoring) */}
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="8" y1="6" x2="21" y2="6" />
               <line x1="8" y1="12" x2="21" y2="12" />
               <line x1="8" y1="18" x2="21" y2="18" />
@@ -108,7 +143,16 @@ export function NavSidebar() {
         {/* Sessions (live agent runs) */}
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <circle cx="5" cy="3.5" r="1.5" />
               <circle cx="5" cy="12.5" r="1.5" />
               <circle cx="12" cy="7" r="1.5" />
@@ -119,22 +163,42 @@ export function NavSidebar() {
           shortLabel="Sessions"
           active={activePanel === 'sessions'}
           collapsed={navCollapsed}
-          badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
+          badge={
+            sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined
+          }
           onClick={() => navigate('/sessions')}
         />
 
         {/* Execution Log */}
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="5,3 19,12 5,21" fill={activePanel === 'execution-log' ? 'currentColor' : 'none'} />
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polygon
+                points="5,3 19,12 5,21"
+                fill={activePanel === 'execution-log' ? 'currentColor' : 'none'}
+              />
             </svg>
           }
           label="Execution Log"
           shortLabel="Logs"
           active={activePanel === 'execution-log'}
           collapsed={navCollapsed}
-          badge={liveExecutionCount > 0 ? (liveExecutionCount > 9 ? '9+' : String(liveExecutionCount)) : undefined}
+          badge={
+            liveExecutionCount > 0
+              ? liveExecutionCount > 9
+                ? '9+'
+                : String(liveExecutionCount)
+              : undefined
+          }
           onClick={() => navigate('/execution-log')}
         />
 
@@ -150,7 +214,12 @@ export function NavSidebar() {
                 stroke="currentColor"
                 strokeWidth="1.5"
               />
-              <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+              <path
+                d="M5.5 5h5M5.5 7.5h5M5.5 10h3"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinecap="round"
+              />
             </svg>
           }
           label="Notes"
@@ -163,9 +232,16 @@ export function NavSidebar() {
         {/* Documents */}
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-              stroke="currentColor" strokeWidth="1.5"
-              strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="3" y="5" width="14" height="12" rx="1.5" />
               <path d="M6 2h8" />
               <path d="M7 9h6M7 12h4" />
@@ -188,7 +264,16 @@ export function NavSidebar() {
             primitive family. */}
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <circle cx="17.5" cy="6.5" r="3.5" />
               <path d="M6.5 14 10 21 3 21 Z" />
@@ -203,8 +288,18 @@ export function NavSidebar() {
         />
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 3v18h18" />
+              <path d="M7 16l4-8 4 4 4-6" />
             </svg>
           }
           label="Analytics"
@@ -224,7 +319,16 @@ export function NavSidebar() {
         />
         <NavItem
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
@@ -256,9 +360,7 @@ export function NavSidebar() {
         >
           <polyline points="6,4 10,8 6,12" />
         </svg>
-        {!navCollapsed && (
-          <span className="text-xs">Collapse</span>
-        )}
+        {!navCollapsed && <span className="text-xs">Collapse</span>}
       </button>
     </div>
   );
@@ -290,7 +392,7 @@ function NavItem({
           : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
         collapsed
           ? 'flex flex-col items-center gap-1 px-1 py-2'
-          : 'flex items-center gap-2.5 px-4 py-3 text-[15px]'
+          : 'flex items-center gap-2.5 px-4 py-3 text-[15px]',
       )}
       onClick={onClick}
       title={collapsed ? label : undefined}
@@ -307,7 +409,7 @@ function NavItem({
         <span
           className={cn(
             'max-w-full truncate text-[10px] font-medium leading-none tracking-tight',
-            active ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-faint)]'
+            active ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-faint)]',
           )}
         >
           {shortLabel ?? label}

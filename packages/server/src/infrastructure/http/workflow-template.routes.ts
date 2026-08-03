@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+
+import type { WorkflowStep, WorkflowEdge, JsonSchemaProperty } from '@fleex/shared';
+
 import { WorkflowTemplateEntity } from '../../domain/entities/workflow-template.entity.js';
+
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
-import type {
-  WorkflowStep, WorkflowEdge, JsonSchemaProperty,
-} from '@fleex/shared';
+import type { FastifyInstance } from 'fastify';
 
 // ── Manual validation helpers ──────────────────────────────────────────────
 
@@ -55,7 +56,8 @@ function validateJsonSchemaProperty(prop: unknown, path: string): ValidationResu
 function validateOutputSchema(schema: unknown, path: string): ValidationResult {
   if (!isObject(schema)) return { ok: false, error: `${path} must be an object` };
   if (schema['type'] !== 'object') return { ok: false, error: `${path}.type must be "object"` };
-  if (!isObject(schema['properties'])) return { ok: false, error: `${path}.properties must be an object` };
+  if (!isObject(schema['properties']))
+    return { ok: false, error: `${path}.properties must be an object` };
   for (const [key, prop] of Object.entries(schema['properties'])) {
     const r = validateJsonSchemaProperty(prop, `${path}.properties.${key}`);
     if (!r.ok) return r;
@@ -71,13 +73,19 @@ function validateOutputSchema(schema: unknown, path: string): ValidationResult {
 function validateStep(step: unknown, idx: number): ValidationResult {
   const p = `steps[${idx}]`;
   if (!isObject(step)) return { ok: false, error: `${p} must be an object` };
-  if (!isString(step['id']) || step['id'].length === 0) return { ok: false, error: `${p}.id must be a non-empty string` };
-  if (!isString(step['name']) || step['name'].length === 0) return { ok: false, error: `${p}.name must be a non-empty string` };
+  if (!isString(step['id']) || step['id'].length === 0)
+    return { ok: false, error: `${p}.id must be a non-empty string` };
+  if (!isString(step['name']) || step['name'].length === 0)
+    return { ok: false, error: `${p}.name must be a non-empty string` };
   if (!isString(step['executorType']) || !EXECUTOR_TYPES.includes(step['executorType'] as never)) {
     return { ok: false, error: `${p}.executorType must be one of ${EXECUTOR_TYPES.join(', ')}` };
   }
-  if (!isString(step['executorRef'])) return { ok: false, error: `${p}.executorRef must be a string` };
-  if (step['mode'] !== undefined && (!isString(step['mode']) || !STEP_MODES.includes(step['mode'] as never))) {
+  if (!isString(step['executorRef']))
+    return { ok: false, error: `${p}.executorRef must be a string` };
+  if (
+    step['mode'] !== undefined &&
+    (!isString(step['mode']) || !STEP_MODES.includes(step['mode'] as never))
+  ) {
     return { ok: false, error: `${p}.mode must be one of ${STEP_MODES.join(', ')}` };
   }
   if (step['outputSchema'] !== undefined) {
@@ -90,26 +98,38 @@ function validateStep(step: unknown, idx: number): ValidationResult {
     }
   }
   if (!isObject(step['position'])) return { ok: false, error: `${p}.position must be an object` };
-  if (!isNumber((step['position'] as Record<string, unknown>)['x'])) return { ok: false, error: `${p}.position.x must be a number` };
-  if (!isNumber((step['position'] as Record<string, unknown>)['y'])) return { ok: false, error: `${p}.position.y must be a number` };
+  if (!isNumber((step['position'] as Record<string, unknown>)['x']))
+    return { ok: false, error: `${p}.position.x must be a number` };
+  if (!isNumber((step['position'] as Record<string, unknown>)['y']))
+    return { ok: false, error: `${p}.position.y must be a number` };
   return { ok: true };
 }
 
 function validateEdge(edge: unknown, idx: number): ValidationResult {
   const p = `edges[${idx}]`;
   if (!isObject(edge)) return { ok: false, error: `${p} must be an object` };
-  if (!isString(edge['id']) || edge['id'].length === 0) return { ok: false, error: `${p}.id must be a non-empty string` };
-  if (!isString(edge['source']) || edge['source'].length === 0) return { ok: false, error: `${p}.source must be a non-empty string` };
-  if (!isString(edge['target']) || edge['target'].length === 0) return { ok: false, error: `${p}.target must be a non-empty string` };
-  if (!isBoolean(edge['isDefault'])) return { ok: false, error: `${p}.isDefault must be a boolean` };
+  if (!isString(edge['id']) || edge['id'].length === 0)
+    return { ok: false, error: `${p}.id must be a non-empty string` };
+  if (!isString(edge['source']) || edge['source'].length === 0)
+    return { ok: false, error: `${p}.source must be a non-empty string` };
+  if (!isString(edge['target']) || edge['target'].length === 0)
+    return { ok: false, error: `${p}.target must be a non-empty string` };
+  if (!isBoolean(edge['isDefault']))
+    return { ok: false, error: `${p}.isDefault must be a boolean` };
   if (edge['condition'] !== undefined) {
     const c = edge['condition'];
     if (!isObject(c)) return { ok: false, error: `${p}.condition must be an object` };
     if (!isString(c['field'])) return { ok: false, error: `${p}.condition.field must be a string` };
     if (!isString(c['operator']) || !EDGE_OPERATORS.includes(c['operator'] as never)) {
-      return { ok: false, error: `${p}.condition.operator must be one of ${EDGE_OPERATORS.join(', ')}` };
+      return {
+        ok: false,
+        error: `${p}.condition.operator must be one of ${EDGE_OPERATORS.join(', ')}`,
+      };
     }
-    if (!isString(c['value']) && !(isArray(c['value']) && (c['value'] as unknown[]).every(isString))) {
+    if (
+      !isString(c['value']) &&
+      !(isArray(c['value']) && (c['value'] as unknown[]).every(isString))
+    ) {
       return { ok: false, error: `${p}.condition.value must be a string or array of strings` };
     }
   }
@@ -130,7 +150,9 @@ interface TemplateBody {
   enabled: boolean;
 }
 
-function parseTemplateBody(body: unknown): { ok: true; data: TemplateBody } | { ok: false; error: string } {
+function parseTemplateBody(
+  body: unknown,
+): { ok: true; data: TemplateBody } | { ok: false; error: string } {
   if (!isObject(body)) return { ok: false, error: 'body must be an object' };
 
   if (!isString(body['name']) || body['name'].length === 0) {
@@ -201,7 +223,10 @@ export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateSt
 
       // Slug uniqueness check
       const existing = await deps.templateStore.getBySlug(parsed.data.slug);
-      if (existing) return reply.code(409).send({ error: 'SLUG_TAKEN', message: `Slug "${parsed.data.slug}" is already in use` });
+      if (existing)
+        return reply
+          .code(409)
+          .send({ error: 'SLUG_TAKEN', message: `Slug "${parsed.data.slug}" is already in use` });
 
       try {
         const t = WorkflowTemplateEntity.create({ id: randomUUID(), ...parsed.data });
@@ -226,7 +251,10 @@ export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateSt
       // Slug collision check (only if slug changed)
       if (parsed.data.slug !== t.slug) {
         const existing = await deps.templateStore.getBySlug(parsed.data.slug);
-        if (existing) return reply.code(409).send({ error: 'SLUG_TAKEN', message: `Slug "${parsed.data.slug}" is already in use` });
+        if (existing)
+          return reply
+            .code(409)
+            .send({ error: 'SLUG_TAKEN', message: `Slug "${parsed.data.slug}" is already in use` });
       }
 
       try {
@@ -242,12 +270,15 @@ export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateSt
     });
 
     // DELETE /api/workflows/templates/:id — soft delete (enabled = false)
-    app.delete<{ Params: { id: string } }>('/api/workflows/templates/:id', async (request, reply) => {
-      const t = await deps.templateStore.getById(request.params.id);
-      if (!t) return reply.code(404).send({ error: 'WORKFLOW_TEMPLATE_NOT_FOUND' });
-      t.update({ enabled: false });
-      await deps.templateStore.save(t);
-      return reply.code(204).send();
-    });
+    app.delete<{ Params: { id: string } }>(
+      '/api/workflows/templates/:id',
+      async (request, reply) => {
+        const t = await deps.templateStore.getById(request.params.id);
+        if (!t) return reply.code(404).send({ error: 'WORKFLOW_TEMPLATE_NOT_FOUND' });
+        t.update({ enabled: false });
+        await deps.templateStore.save(t);
+        return reply.code(204).send();
+      },
+    );
   };
 }

@@ -34,7 +34,10 @@ function loadPersisted(): PersistedShape {
 }
 
 function savePersisted(
-  state: Pick<SidebarTerminalsState, 'terminalsByParent' | 'activeByParent' | 'activeTopTabByParent'>,
+  state: Pick<
+    SidebarTerminalsState,
+    'terminalsByParent' | 'activeByParent' | 'activeTopTabByParent'
+  >,
 ): void {
   if (typeof window === 'undefined') return;
   try {
@@ -61,10 +64,17 @@ export const useSidebarTerminalsStore = create<SidebarTerminalsState>((set, get)
   addTerminal: (parentSessionId, sidebarSessionId) => {
     const current = get().terminalsByParent[parentSessionId] ?? [];
     if (current.includes(sidebarSessionId)) return;
-    const nextTerminals = { ...get().terminalsByParent, [parentSessionId]: [...current, sidebarSessionId] };
+    const nextTerminals = {
+      ...get().terminalsByParent,
+      [parentSessionId]: [...current, sidebarSessionId],
+    };
     const nextActive = { ...get().activeByParent, [parentSessionId]: sidebarSessionId };
     set({ terminalsByParent: nextTerminals, activeByParent: nextActive });
-    savePersisted({ terminalsByParent: nextTerminals, activeByParent: nextActive, activeTopTabByParent: get().activeTopTabByParent });
+    savePersisted({
+      terminalsByParent: nextTerminals,
+      activeByParent: nextActive,
+      activeTopTabByParent: get().activeTopTabByParent,
+    });
   },
 
   removeTerminal: (parentSessionId, sidebarSessionId) => {
@@ -74,22 +84,36 @@ export const useSidebarTerminalsStore = create<SidebarTerminalsState>((set, get)
     const wasActive = get().activeByParent[parentSessionId] === sidebarSessionId;
     const nextActive = {
       ...get().activeByParent,
-      [parentSessionId]: wasActive ? (remaining[remaining.length - 1] ?? null) : get().activeByParent[parentSessionId] ?? null,
+      [parentSessionId]: wasActive
+        ? (remaining[remaining.length - 1] ?? null)
+        : (get().activeByParent[parentSessionId] ?? null),
     };
     set({ terminalsByParent: nextTerminals, activeByParent: nextActive });
-    savePersisted({ terminalsByParent: nextTerminals, activeByParent: nextActive, activeTopTabByParent: get().activeTopTabByParent });
+    savePersisted({
+      terminalsByParent: nextTerminals,
+      activeByParent: nextActive,
+      activeTopTabByParent: get().activeTopTabByParent,
+    });
   },
 
   setActive: (parentSessionId, sidebarSessionId) => {
     const nextActive = { ...get().activeByParent, [parentSessionId]: sidebarSessionId };
     set({ activeByParent: nextActive });
-    savePersisted({ terminalsByParent: get().terminalsByParent, activeByParent: nextActive, activeTopTabByParent: get().activeTopTabByParent });
+    savePersisted({
+      terminalsByParent: get().terminalsByParent,
+      activeByParent: nextActive,
+      activeTopTabByParent: get().activeTopTabByParent,
+    });
   },
 
   setActiveTopTab: (parentSessionId, tabKey) => {
     const nextTop = { ...get().activeTopTabByParent, [parentSessionId]: tabKey };
     set({ activeTopTabByParent: nextTop });
-    savePersisted({ terminalsByParent: get().terminalsByParent, activeByParent: get().activeByParent, activeTopTabByParent: nextTop });
+    savePersisted({
+      terminalsByParent: get().terminalsByParent,
+      activeByParent: get().activeByParent,
+      activeTopTabByParent: nextTop,
+    });
   },
 
   reconcile: (knownSessionIds) => {
@@ -113,6 +137,10 @@ export const useSidebarTerminalsStore = create<SidebarTerminalsState>((set, get)
     }
     if (!changed) return;
     set({ terminalsByParent: nextTerminals, activeByParent: nextActive });
-    savePersisted({ terminalsByParent: nextTerminals, activeByParent: nextActive, activeTopTabByParent });
+    savePersisted({
+      terminalsByParent: nextTerminals,
+      activeByParent: nextActive,
+      activeTopTabByParent,
+    });
   },
 }));

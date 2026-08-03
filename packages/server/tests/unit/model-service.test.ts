@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
+
 import { ModelService } from '../../src/application/services/model.service.js';
 import { FakeLoggerPort } from '../helpers/fakes.js';
 
 // Minimal stub matching the shape ModelService consumes from the SDK.
-function makeFakeClient(data: Array<{ id: string; display_name?: string | null }>, opts: { throws?: boolean } = {}) {
+function makeFakeClient(
+  data: Array<{ id: string; display_name?: string | null }>,
+  opts: { throws?: boolean } = {},
+) {
   return {
     models: {
       async list() {

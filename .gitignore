@@ -10,3 +10,5 @@ coverage/
 *.tsbuildinfo
 .claude/settings.local.json
 .fleex/
+# Scratch space for the CI baseline comparison (see lint:ratchet:ci).
+.ci/

@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+
+import { describe, it, expect, vi } from 'vitest';
+
 import { stripAnsi } from '../../src/core/colors.ts';
 import {
   EXECUTION_MODES,
@@ -206,7 +208,11 @@ describe('applyMemberEdits', () => {
 
   it('dies when adding an existing member', () => {
     const out = captureDie(() =>
-      applyMemberEdits(current(), { add: [{ ref: 'alpha', personaId: A }], rm: [], setModel: [] }, nameOf),
+      applyMemberEdits(
+        current(),
+        { add: [{ ref: 'alpha', personaId: A }], rm: [], setModel: [] },
+        nameOf,
+      ),
     );
     expect(out).toContain(
       '"alpha" is already a member of this panel. Use --set-member-model alpha:<model> to change its model.',
@@ -224,7 +230,11 @@ describe('applyMemberEdits', () => {
 
   it('dies when removing a persona that is not a member', () => {
     const out = captureDie(() =>
-      applyMemberEdits(current(), { add: [], rm: [{ ref: 'gamma', personaId: C }], setModel: [] }, nameOf),
+      applyMemberEdits(
+        current(),
+        { add: [], rm: [{ ref: 'gamma', personaId: C }], setModel: [] },
+        nameOf,
+      ),
     );
     expect(out).toContain('"gamma" is not a member of this panel.');
   });
@@ -233,7 +243,14 @@ describe('applyMemberEdits', () => {
     const out = captureDie(() =>
       applyMemberEdits(
         current(),
-        { add: [], rm: [{ ref: 'alpha', personaId: A }, { ref: 'beta', personaId: B }], setModel: [] },
+        {
+          add: [],
+          rm: [
+            { ref: 'alpha', personaId: A },
+            { ref: 'beta', personaId: B },
+          ],
+          setModel: [],
+        },
         nameOf,
       ),
     );

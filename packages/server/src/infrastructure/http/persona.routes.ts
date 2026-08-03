@@ -1,10 +1,13 @@
-import type { FastifyInstance } from 'fastify';
 import type { ExecutionMode } from '@fleex/shared';
-import type { Container } from '../container.js';
+
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 
+import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
+
 export function personaRoutes(container: Container) {
-  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) =>
+    container.eventBus.emit(...events);
 
   return async function (app: FastifyInstance) {
     // GET /api/personas — list all personas
@@ -52,10 +55,7 @@ export function personaRoutes(container: Container) {
         humanMentionName?: string | null;
       };
     }>('/api/personas/:id', async (request) => {
-      const persona = await container.updatePersona.execute(
-        request.params.id,
-        request.body,
-      );
+      const persona = await container.updatePersona.execute(request.params.id, request.body);
       emit({ type: 'persona.updated', personaId: persona.id, occurredAt: new Date() });
       return persona.toDTO();
     });
@@ -71,7 +71,12 @@ export function personaRoutes(container: Container) {
     app.post<{ Params: { id: string } }>('/api/personas/:id/execute', async (request) => {
       const result = await container.executeAgent.execute(request.params.id);
       if (result.status === 'started') {
-        emit({ type: 'persona.execution_started', personaId: request.params.id, mentionIds: result.mentionIds, occurredAt: new Date() });
+        emit({
+          type: 'persona.execution_started',
+          personaId: request.params.id,
+          mentionIds: result.mentionIds,
+          occurredAt: new Date(),
+        });
       }
       return result;
     });
@@ -89,7 +94,10 @@ export function personaRoutes(container: Container) {
         }
       }
 
-      const statuses: Record<string, { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> = {};
+      const statuses: Record<
+        string,
+        { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }
+      > = {};
       for (const persona of personas) {
         const status = container.executeAgent.getStatus(persona.id);
         statuses[persona.id] = {

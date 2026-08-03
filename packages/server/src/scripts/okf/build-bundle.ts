@@ -23,8 +23,9 @@ import type {
   WorkflowEdge,
   TicketLink,
 } from '@fleex/shared';
-import { frontmatter, type FmPair } from './frontmatter.js';
+
 import { dayOf, firstLine, flatten, maxIso, summarizeOneLine, toZ } from './format.js';
+import { frontmatter, type FmPair } from './frontmatter.js';
 import { assignSlugs, slugifyOr } from './slugify.js';
 
 export interface OkfInput {
@@ -94,21 +95,77 @@ function heading(title: string, body: string): string | null {
 
 export function buildBundle(input: OkfInput): OkfFile[] {
   // 1. Stable sort every collection (spec §7.1).
-  const boards = [...input.boards].sort(cmpName((b) => b.name, (b) => b.id));
-  const epics = [...input.epics].sort(cmpName((e) => e.name, (e) => e.id));
-  const tickets = [...input.tickets].sort((a, b) => a.displayId - b.displayId || cmpStr(a.id, b.id));
-  const personas = [...input.personas].sort(cmpName((p) => p.name, (p) => p.id));
-  const panels = [...input.panels].sort(cmpName((p) => p.name, (p) => p.id));
-  const skills = [...input.skills].sort(cmpName((s) => s.commandName, (s) => s.id));
-  const workflows = [...input.workflows].sort(cmpName((w) => w.slug, (w) => w.id));
+  const boards = [...input.boards].sort(
+    cmpName(
+      (b) => b.name,
+      (b) => b.id,
+    ),
+  );
+  const epics = [...input.epics].sort(
+    cmpName(
+      (e) => e.name,
+      (e) => e.id,
+    ),
+  );
+  const tickets = [...input.tickets].sort(
+    (a, b) => a.displayId - b.displayId || cmpStr(a.id, b.id),
+  );
+  const personas = [...input.personas].sort(
+    cmpName(
+      (p) => p.name,
+      (p) => p.id,
+    ),
+  );
+  const panels = [...input.panels].sort(
+    cmpName(
+      (p) => p.name,
+      (p) => p.id,
+    ),
+  );
+  const skills = [...input.skills].sort(
+    cmpName(
+      (s) => s.commandName,
+      (s) => s.id,
+    ),
+  );
+  const workflows = [...input.workflows].sort(
+    cmpName(
+      (w) => w.slug,
+      (w) => w.id,
+    ),
+  );
 
   // 2. Deterministic slugs.
-  const boardSlug = assignSlugs(boards, (b) => b.id, (b) => b.name);
-  const epicSlug = assignSlugs(epics, (e) => e.id, (e) => e.name);
-  const personaSlug = assignSlugs(personas, (p) => p.id, (p) => p.name);
-  const panelSlug = assignSlugs(panels, (p) => p.id, (p) => p.name);
-  const skillSlug = assignSlugs(skills, (s) => s.id, (s) => s.commandName);
-  const workflowSlug = assignSlugs(workflows, (w) => w.id, (w) => w.slug);
+  const boardSlug = assignSlugs(
+    boards,
+    (b) => b.id,
+    (b) => b.name,
+  );
+  const epicSlug = assignSlugs(
+    epics,
+    (e) => e.id,
+    (e) => e.name,
+  );
+  const personaSlug = assignSlugs(
+    personas,
+    (p) => p.id,
+    (p) => p.name,
+  );
+  const panelSlug = assignSlugs(
+    panels,
+    (p) => p.id,
+    (p) => p.name,
+  );
+  const skillSlug = assignSlugs(
+    skills,
+    (s) => s.id,
+    (s) => s.commandName,
+  );
+  const workflowSlug = assignSlugs(
+    workflows,
+    (w) => w.id,
+    (w) => w.slug,
+  );
 
   const ticketDir = new Map<string, string>(); // ticketId → `<NNNN>-<slug>`
   for (const t of tickets) {
@@ -148,7 +205,10 @@ export function buildBundle(input: OkfInput): OkfFile[] {
   const epicsByTicket = new Map<string, TicketGroup[]>();
   for (const m of input.memberships) {
     const epic = epics.find((e) => e.id === m.groupId);
-    if (epic) (epicsByTicket.get(m.ticketId) ?? epicsByTicket.set(m.ticketId, []).get(m.ticketId)!).push(epic);
+    if (epic)
+      (epicsByTicket.get(m.ticketId) ?? epicsByTicket.set(m.ticketId, []).get(m.ticketId)!).push(
+        epic,
+      );
   }
 
   const childrenByTicket = groupBy(input.relationships, (r) => r.parentId);
@@ -178,7 +238,9 @@ export function buildBundle(input: OkfInput): OkfFile[] {
     const title = withEmoji(board.emoji, board.name);
 
     const epicsBody = (epicsByBoard.get(board.id) ?? [])
-      .map((e) => bullet(withEmoji(e.emoji, e.name), epicLink(e.id), summarizeOneLine(e.description)))
+      .map((e) =>
+        bullet(withEmoji(e.emoji, e.name), epicLink(e.id), summarizeOneLine(e.description)),
+      )
       .join('\n');
 
     const ticketsBody = STATUS_ORDER.map((status) => {
@@ -259,14 +321,21 @@ export function buildBundle(input: OkfInput): OkfFile[] {
     const comments = publicCommentsByTicket.get(ticket.id) ?? [];
     const deliverables = deliverablesByTicket.get(ticket.id) ?? [];
     const mentions = mentionsByTicket.get(ticket.id) ?? [];
-    const ticketEpics = (epicsByTicket.get(ticket.id) ?? []).sort(cmpName((e) => e.name, (e) => e.id));
+    const ticketEpics = (epicsByTicket.get(ticket.id) ?? []).sort(
+      cmpName(
+        (e) => e.name,
+        (e) => e.id,
+      ),
+    );
 
     // # Context
     const contextLines: string[] = [];
     const bLink = boardLink(ticket.boardId);
     if (bLink) {
       const b = boardById.get(ticket.boardId);
-      contextLines.push(`- Board: [${withEmoji(b?.emoji ?? '', b?.name ?? ticket.boardId)}](${bLink})`);
+      contextLines.push(
+        `- Board: [${withEmoji(b?.emoji ?? '', b?.name ?? ticket.boardId)}](${bLink})`,
+      );
     }
     for (const e of ticketEpics) {
       const l = epicLink(e.id);
@@ -285,7 +354,9 @@ export function buildBundle(input: OkfInput): OkfFile[] {
 
     // # Discussion (link to the discussion concept)
     const discussionBody =
-      comments.length > 0 ? `> Voir la [discussion](./discussion.md) (${comments.length} commentaires).` : '';
+      comments.length > 0
+        ? `> Voir la [discussion](./discussion.md) (${comments.length} commentaires).`
+        : '';
 
     // # Deliverables
     const deliverablesBody = deliverables
@@ -348,7 +419,10 @@ export function buildBundle(input: OkfInput): OkfFile[] {
           [
             ['type', 'Fleex Discussion'],
             ['title', `Discussion — ${ticket.title}`],
-            ['description', `${comments.length} commentaires publics sur le ticket #${ticket.displayId}.`],
+            [
+              'description',
+              `${comments.length} commentaires publics sur le ticket #${ticket.displayId}.`,
+            ],
             ['tags', ['discussion']],
             ['timestamp', toZ(ts)],
             ['fleex_kind', 'discussion'],
@@ -426,7 +500,8 @@ export function buildBundle(input: OkfInput): OkfFile[] {
         const name = persona ? persona.displayName || persona.name : m.personaId;
         const link = personaSlug.get(m.personaId);
         const label = link ? `[${name}](/agents/personas/${link}.md)` : name;
-        const model = m.modelOverride && m.modelOverride !== 'inherited' ? ` — ${m.modelOverride}` : '';
+        const model =
+          m.modelOverride && m.modelOverride !== 'inherited' ? ` — ${m.modelOverride}` : '';
         return `- ${label}${model}`;
       })
       .join('\n');
@@ -461,9 +536,10 @@ export function buildBundle(input: OkfInput): OkfFile[] {
   for (const skill of skills) {
     const slug = skillSlug.get(skill.id)!;
     const persona = skill.personaId ? personaById.get(skill.personaId) : undefined;
-    const personaLink = persona && personaSlug.get(persona.id)
-      ? `> Persona: [${persona.displayName || persona.name}](/agents/personas/${personaSlug.get(persona.id)}.md).`
-      : '';
+    const personaLink =
+      persona && personaSlug.get(persona.id)
+        ? `> Persona: [${persona.displayName || persona.name}](/agents/personas/${personaSlug.get(persona.id)}.md).`
+        : '';
     files.push(
       conceptFile(
         `agents/skills/${slug}.md`,
@@ -514,31 +590,41 @@ export function buildBundle(input: OkfInput): OkfFile[] {
   }
 
   // ── index.md files ──
-  files.push(...buildIndexes({ boards, epics, tickets, personas, panels, skills, workflows }, {
-    boardSlug,
-    epicSlug,
-    personaSlug,
-    panelSlug,
-    skillSlug,
-    workflowSlug,
-    ticketDir,
-    publicCommentsByTicket,
-    deliverablesByTicket,
-    deliverableMeta,
-  }));
+  files.push(
+    ...buildIndexes(
+      { boards, epics, tickets, personas, panels, skills, workflows },
+      {
+        boardSlug,
+        epicSlug,
+        personaSlug,
+        panelSlug,
+        skillSlug,
+        workflowSlug,
+        ticketDir,
+        publicCommentsByTicket,
+        deliverablesByTicket,
+        deliverableMeta,
+      },
+    ),
+  );
 
   // ── log.md ──
-  files.push(buildLog({ boards, epics, tickets, personas, panels, skills, workflows }, {
-    boardSlug,
-    epicSlug,
-    personaSlug,
-    panelSlug,
-    skillSlug,
-    workflowSlug,
-    ticketDir,
-    deliverablesByTicket,
-    deliverableMeta,
-  }));
+  files.push(
+    buildLog(
+      { boards, epics, tickets, personas, panels, skills, workflows },
+      {
+        boardSlug,
+        epicSlug,
+        personaSlug,
+        panelSlug,
+        skillSlug,
+        workflowSlug,
+        ticketDir,
+        deliverablesByTicket,
+        deliverableMeta,
+      },
+    ),
+  );
 
   // Deterministic file ordering (does not affect bytes, but keeps the plan stable).
   files.sort((a, b) => cmpStr(a.path, b.path));
@@ -578,16 +664,26 @@ function buildIndexes(c: SortedCollections, m: SlugMaps): OkfFile[] {
     `---\nokf_version: "0.1"\n---`,
     heading(
       'Boards',
-      c.boards.map((b) => bullet(withEmoji(b.emoji, b.name), `boards/${m.boardSlug.get(b.id)}.md`)).join('\n'),
+      c.boards
+        .map((b) => bullet(withEmoji(b.emoji, b.name), `boards/${m.boardSlug.get(b.id)}.md`))
+        .join('\n'),
     ),
     heading(
       'Epics',
-      c.epics.map((e) => bullet(withEmoji(e.emoji, e.name), `epics/${m.epicSlug.get(e.id)}.md`)).join('\n'),
+      c.epics
+        .map((e) => bullet(withEmoji(e.emoji, e.name), `epics/${m.epicSlug.get(e.id)}.md`))
+        .join('\n'),
     ),
     heading(
       'Tickets',
       c.tickets
-        .map((t) => bullet(t.title, `tickets/${m.ticketDir.get(t.id)}/ticket.md`, summarizeOneLine(t.description)))
+        .map((t) =>
+          bullet(
+            t.title,
+            `tickets/${m.ticketDir.get(t.id)}/ticket.md`,
+            summarizeOneLine(t.description),
+          ),
+        )
         .join('\n'),
     ),
     heading(
@@ -603,23 +699,47 @@ function buildIndexes(c: SortedCollections, m: SlugMaps): OkfFile[] {
   files.push({ path: 'index.md', content: `${rootBody.replace(/\n+$/, '')}\n` });
 
   // boards/index.md, epics/index.md
-  files.push(plainFile('boards/index.md', listIndex('Boards', c.boards.map((b) => ({
-    title: withEmoji(b.emoji, b.name),
-    url: `${m.boardSlug.get(b.id)}.md`,
-    desc: '',
-  })))));
-  files.push(plainFile('epics/index.md', listIndex('Epics', c.epics.map((e) => ({
-    title: withEmoji(e.emoji, e.name),
-    url: `${m.epicSlug.get(e.id)}.md`,
-    desc: summarizeOneLine(e.description),
-  })))));
+  files.push(
+    plainFile(
+      'boards/index.md',
+      listIndex(
+        'Boards',
+        c.boards.map((b) => ({
+          title: withEmoji(b.emoji, b.name),
+          url: `${m.boardSlug.get(b.id)}.md`,
+          desc: '',
+        })),
+      ),
+    ),
+  );
+  files.push(
+    plainFile(
+      'epics/index.md',
+      listIndex(
+        'Epics',
+        c.epics.map((e) => ({
+          title: withEmoji(e.emoji, e.name),
+          url: `${m.epicSlug.get(e.id)}.md`,
+          desc: summarizeOneLine(e.description),
+        })),
+      ),
+    ),
+  );
 
   // tickets/index.md (all tickets)
-  files.push(plainFile('tickets/index.md', listIndex('Tickets', c.tickets.map((t) => ({
-    title: t.title,
-    url: `${m.ticketDir.get(t.id)}/ticket.md`,
-    desc: summarizeOneLine(t.description),
-  })))));
+  files.push(
+    plainFile(
+      'tickets/index.md',
+      listIndex(
+        'Tickets',
+        c.tickets.map((t) => ({
+          title: t.title,
+          url: `${m.ticketDir.get(t.id)}/ticket.md`,
+          desc: summarizeOneLine(t.description),
+        })),
+      ),
+    ),
+  );
 
   // per-ticket index.md + deliverables/index.md
   for (const t of c.tickets) {
@@ -630,7 +750,11 @@ function buildIndexes(c: SortedCollections, m: SlugMaps): OkfFile[] {
     }
     const deliverables = m.deliverablesByTicket.get(t.id) ?? [];
     if (deliverables.length > 0) {
-      entries.push({ title: 'Deliverables', url: 'deliverables/', desc: `${deliverables.length} deliverables` });
+      entries.push({
+        title: 'Deliverables',
+        url: 'deliverables/',
+        desc: `${deliverables.length} deliverables`,
+      });
     }
     files.push(plainFile(`tickets/${dir}/index.md`, listIndex(`Ticket #${t.displayId}`, entries)));
 
@@ -642,7 +766,11 @@ function buildIndexes(c: SortedCollections, m: SlugMaps): OkfFile[] {
             'Deliverables',
             deliverables.map((d) => {
               const meta = m.deliverableMeta.get(d.id)!;
-              return { title: d.title, url: `${meta.ordinal}-${meta.slug}.md`, desc: `${d.type}, ${d.status}` };
+              return {
+                title: d.title,
+                url: `${meta.ordinal}-${meta.slug}.md`,
+                desc: `${d.type}, ${d.status}`,
+              };
             }),
           ),
         ),
@@ -651,56 +779,119 @@ function buildIndexes(c: SortedCollections, m: SlugMaps): OkfFile[] {
   }
 
   // agents indexes
-  files.push(plainFile('agents/index.md', listIndex('Agents', [
-    { title: 'Personas', url: 'personas/', desc: 'agent personas' },
-    { title: 'Panels', url: 'panels/', desc: 'deliberation panels' },
-    { title: 'Skills', url: 'skills/', desc: 'slash-command skills' },
-    { title: 'Workflows', url: 'workflows/', desc: 'workflow templates' },
-  ])));
-  files.push(plainFile('agents/personas/index.md', listIndex('Personas', c.personas.map((p) => ({
-    title: p.displayName || p.name,
-    url: `${m.personaSlug.get(p.id)}.md`,
-    desc: firstLine(p.soulMd) || firstLine(p.identityMd),
-  })))));
-  files.push(plainFile('agents/panels/index.md', listIndex('Panels', c.panels.map((p) => ({
-    title: p.displayName || p.name,
-    url: `${m.panelSlug.get(p.id)}.md`,
-    desc: summarizeOneLine(p.description),
-  })))));
-  files.push(plainFile('agents/skills/index.md', listIndex('Skills', c.skills.map((s) => ({
-    title: s.displayName || s.name,
-    url: `${m.skillSlug.get(s.id)}.md`,
-    desc: `/${s.commandName}`,
-  })))));
-  files.push(plainFile('agents/workflows/index.md', listIndex('Workflows', c.workflows.map((w) => ({
-    title: withEmoji(w.emoji, w.name),
-    url: `${m.workflowSlug.get(w.id)}.md`,
-    desc: summarizeOneLine(w.description),
-  })))));
+  files.push(
+    plainFile(
+      'agents/index.md',
+      listIndex('Agents', [
+        { title: 'Personas', url: 'personas/', desc: 'agent personas' },
+        { title: 'Panels', url: 'panels/', desc: 'deliberation panels' },
+        { title: 'Skills', url: 'skills/', desc: 'slash-command skills' },
+        { title: 'Workflows', url: 'workflows/', desc: 'workflow templates' },
+      ]),
+    ),
+  );
+  files.push(
+    plainFile(
+      'agents/personas/index.md',
+      listIndex(
+        'Personas',
+        c.personas.map((p) => ({
+          title: p.displayName || p.name,
+          url: `${m.personaSlug.get(p.id)}.md`,
+          desc: firstLine(p.soulMd) || firstLine(p.identityMd),
+        })),
+      ),
+    ),
+  );
+  files.push(
+    plainFile(
+      'agents/panels/index.md',
+      listIndex(
+        'Panels',
+        c.panels.map((p) => ({
+          title: p.displayName || p.name,
+          url: `${m.panelSlug.get(p.id)}.md`,
+          desc: summarizeOneLine(p.description),
+        })),
+      ),
+    ),
+  );
+  files.push(
+    plainFile(
+      'agents/skills/index.md',
+      listIndex(
+        'Skills',
+        c.skills.map((s) => ({
+          title: s.displayName || s.name,
+          url: `${m.skillSlug.get(s.id)}.md`,
+          desc: `/${s.commandName}`,
+        })),
+      ),
+    ),
+  );
+  files.push(
+    plainFile(
+      'agents/workflows/index.md',
+      listIndex(
+        'Workflows',
+        c.workflows.map((w) => ({
+          title: withEmoji(w.emoji, w.name),
+          url: `${m.workflowSlug.get(w.id)}.md`,
+          desc: summarizeOneLine(w.description),
+        })),
+      ),
+    ),
+  );
 
   return files;
 }
 
 function buildLog(c: SortedCollections, m: SlugMaps): OkfFile {
-  interface LogItem { createdAt: string; id: string; title: string; path: string; }
+  interface LogItem {
+    createdAt: string;
+    id: string;
+    title: string;
+    path: string;
+  }
   const items: LogItem[] = [];
   const add = (createdAt: string, id: string, title: string, path: string) =>
     items.push({ createdAt, id, title, path });
 
-  for (const b of c.boards) add(b.createdAt, b.id, withEmoji(b.emoji, b.name), `/boards/${m.boardSlug.get(b.id)}.md`);
-  for (const e of c.epics) add(e.createdAt, e.id, withEmoji(e.emoji, e.name), `/epics/${m.epicSlug.get(e.id)}.md`);
+  for (const b of c.boards)
+    add(b.createdAt, b.id, withEmoji(b.emoji, b.name), `/boards/${m.boardSlug.get(b.id)}.md`);
+  for (const e of c.epics)
+    add(e.createdAt, e.id, withEmoji(e.emoji, e.name), `/epics/${m.epicSlug.get(e.id)}.md`);
   for (const t of c.tickets) {
     const dir = m.ticketDir.get(t.id)!;
     add(t.createdAt, t.id, t.title, `/tickets/${dir}/ticket.md`);
     for (const d of m.deliverablesByTicket.get(t.id) ?? []) {
       const meta = m.deliverableMeta.get(d.id)!;
-      add(d.createdAt, d.id, d.title, `/tickets/${dir}/deliverables/${meta.ordinal}-${meta.slug}.md`);
+      add(
+        d.createdAt,
+        d.id,
+        d.title,
+        `/tickets/${dir}/deliverables/${meta.ordinal}-${meta.slug}.md`,
+      );
     }
   }
-  for (const p of c.personas) add(p.createdAt, p.id, p.displayName || p.name, `/agents/personas/${m.personaSlug.get(p.id)}.md`);
-  for (const p of c.panels) add(p.createdAt, p.id, p.displayName || p.name, `/agents/panels/${m.panelSlug.get(p.id)}.md`);
-  for (const s of c.skills) add(s.createdAt, s.id, s.displayName || s.name, `/agents/skills/${m.skillSlug.get(s.id)}.md`);
-  for (const w of c.workflows) add(w.createdAt, w.id, withEmoji(w.emoji, w.name), `/agents/workflows/${m.workflowSlug.get(w.id)}.md`);
+  for (const p of c.personas)
+    add(
+      p.createdAt,
+      p.id,
+      p.displayName || p.name,
+      `/agents/personas/${m.personaSlug.get(p.id)}.md`,
+    );
+  for (const p of c.panels)
+    add(p.createdAt, p.id, p.displayName || p.name, `/agents/panels/${m.panelSlug.get(p.id)}.md`);
+  for (const s of c.skills)
+    add(s.createdAt, s.id, s.displayName || s.name, `/agents/skills/${m.skillSlug.get(s.id)}.md`);
+  for (const w of c.workflows)
+    add(
+      w.createdAt,
+      w.id,
+      withEmoji(w.emoji, w.name),
+      `/agents/workflows/${m.workflowSlug.get(w.id)}.md`,
+    );
 
   // Group by day, newest day first; within a day order by (createdAt, id).
   const byDay = new Map<string, LogItem[]>();
@@ -725,7 +916,11 @@ function buildLog(c: SortedCollections, m: SlugMaps): OkfFile {
 
 // ── Small pure helpers ─────────────────────────────────────────────────────────
 
-interface IndexEntry { title: string; url: string; desc: string; }
+interface IndexEntry {
+  title: string;
+  url: string;
+  desc: string;
+}
 
 function listIndex(title: string, entries: IndexEntry[]): string {
   const list = entries.map((e) => bullet(e.title, e.url, e.desc)).join('\n');
@@ -798,10 +993,16 @@ function renderThread(comments: TicketComment[]): string {
 }
 
 /** Order steps by a deterministic BFS from the entry step, then append the rest by id. */
-function topoSteps(steps: WorkflowStep[], edges: WorkflowEdge[], entryStepId: string): WorkflowStep[] {
+function topoSteps(
+  steps: WorkflowStep[],
+  edges: WorkflowEdge[],
+  entryStepId: string,
+): WorkflowStep[] {
   const byId = new Map(steps.map((s) => [s.id, s]));
   const outgoing = groupBy(
-    [...edges].sort((a, b) => cmpStr(a.source, b.source) || cmpStr(a.target, b.target) || cmpStr(a.id, b.id)),
+    [...edges].sort(
+      (a, b) => cmpStr(a.source, b.source) || cmpStr(a.target, b.target) || cmpStr(a.id, b.id),
+    ),
     (e) => e.source,
   );
   const ordered: WorkflowStep[] = [];
@@ -826,7 +1027,10 @@ function topoSteps(steps: WorkflowStep[], edges: WorkflowEdge[], entryStepId: st
 function renderStepsTable(steps: WorkflowStep[]): string {
   if (steps.length === 0) return '';
   const rows = steps
-    .map((s) => `| ${s.id} | ${esc(s.name)} | ${s.executorType} | ${esc(s.executorRef)} | ${s.mode ?? ''} |`)
+    .map(
+      (s) =>
+        `| ${s.id} | ${esc(s.name)} | ${s.executorType} | ${esc(s.executorRef)} | ${s.mode ?? ''} |`,
+    )
     .join('\n');
   return `| id | name | executorType | executorRef | mode |\n|----|------|--------------|-------------|------|\n${rows}`;
 }
@@ -837,7 +1041,9 @@ function renderEdgesTable(edges: WorkflowEdge[], steps: WorkflowStep[]): string 
   const rows = [...edges]
     .sort((a, b) => cmpStr(a.source, b.source) || cmpStr(a.target, b.target) || cmpStr(a.id, b.id))
     .map((e) => {
-      const cond = e.condition ? `${e.condition.field} ${e.condition.operator} ${JSON.stringify(e.condition.value)}` : '';
+      const cond = e.condition
+        ? `${e.condition.field} ${e.condition.operator} ${JSON.stringify(e.condition.value)}`
+        : '';
       const src = name.get(e.source) ?? e.source;
       const tgt = name.get(e.target) ?? e.target;
       return `| ${esc(src)} | ${esc(tgt)} | ${esc(cond)} | ${e.isDefault} |`;

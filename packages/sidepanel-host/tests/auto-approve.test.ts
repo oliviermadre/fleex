@@ -1,9 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+import {
+  applyConfirm,
+  applySetAutoApprove,
+  disarmForPage,
+  type PendingConfirm,
+} from '../src/auto-approve.ts';
 import { SessionStore } from '../src/sessions.ts';
-import { applyConfirm, applySetAutoApprove, disarmForPage, type PendingConfirm } from '../src/auto-approve.ts';
 
 let dir: string;
 let store: SessionStore;
@@ -15,7 +22,10 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function pendingFor(sessionId: string, name: string): { map: Map<string, PendingConfirm>; resolve: ReturnType<typeof vi.fn> } {
+function pendingFor(
+  sessionId: string,
+  name: string,
+): { map: Map<string, PendingConfirm>; resolve: ReturnType<typeof vi.fn> } {
   const resolve = vi.fn();
   const map = new Map<string, PendingConfirm>([['call-1', { sessionId, name, resolve }]]);
   return { map, resolve };
@@ -74,12 +84,21 @@ describe('applyConfirm', () => {
     const { map } = pendingFor(target.id, 'fleex_ticket_create');
 
     applyConfirm(
-      { id: 'call-1', approved: true, always: 'tool', sessionId: victim.id, name: 'fleex_ticket_delete' },
+      {
+        id: 'call-1',
+        approved: true,
+        always: 'tool',
+        sessionId: victim.id,
+        name: 'fleex_ticket_delete',
+      },
       map,
       store,
     );
 
-    expect(store.get(target.id)!.autoApprove).toEqual({ all: false, tools: ['fleex_ticket_create'] });
+    expect(store.get(target.id)!.autoApprove).toEqual({
+      all: false,
+      tools: ['fleex_ticket_create'],
+    });
     expect(store.get(victim.id)!.autoApprove).toEqual({ all: false, tools: [] });
   });
 
@@ -87,7 +106,9 @@ describe('applyConfirm', () => {
     const s = store.create();
     const { map } = pendingFor(s.id, 'fleex_ticket_create');
 
-    expect(applyConfirm({ id: 'unknown', approved: true, always: 'session' }, map, store)).toBeNull();
+    expect(
+      applyConfirm({ id: 'unknown', approved: true, always: 'session' }, map, store),
+    ).toBeNull();
     expect(store.get(s.id)!.autoApprove).toEqual({ all: false, tools: [] });
     expect(map.size).toBe(1); // the real pending call is untouched
   });

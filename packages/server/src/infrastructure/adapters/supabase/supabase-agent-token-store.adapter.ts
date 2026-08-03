@@ -1,6 +1,7 @@
 import { ApiTokenEntity } from '../../../domain/entities/api-token.entity.js';
-import type { AgentTokenStorePort } from '../../../application/ports/agent-token-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { AgentTokenStorePort } from '../../../application/ports/agent-token-store.port.js';
 
 interface ApiTokenRow {
   id: string;
@@ -26,9 +27,7 @@ export class SupabaseAgentTokenStore implements AgentTokenStorePort {
   constructor(private readonly conn: SupabaseConnection) {}
 
   async getAll(): Promise<ApiTokenEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('api_tokens')
-      .select('*');
+    const { data, error } = await this.conn.client.from('api_tokens').select('*');
     if (error) throw new Error(`SupabaseAgentTokenStore.getAll failed: ${error.message}`);
     return (data as ApiTokenRow[]).map(rowToEntity);
   }
@@ -56,10 +55,7 @@ export class SupabaseAgentTokenStore implements AgentTokenStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('api_tokens')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('api_tokens').delete().eq('id', id);
     if (error) throw new Error(`SupabaseAgentTokenStore.remove failed: ${error.message}`);
   }
 }

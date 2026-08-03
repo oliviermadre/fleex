@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+
 import type { DomainEventLog } from '@fleex/shared';
-import { useAuditTrailStore } from '../../stores/auditTrailStore';
+
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
+import { useAuditTrailStore } from '../../stores/auditTrailStore';
 
 const EVENT_DOMAIN_COLORS: Record<string, string> = {
   ticket: tint('blue'),
@@ -22,10 +24,17 @@ function getEventDomain(eventType: string): string {
 
 function EventTypeBadge({ eventType }: { eventType: string }) {
   const domain = getEventDomain(eventType);
-  const colorClass = EVENT_DOMAIN_COLORS[domain] ?? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)]';
+  const colorClass =
+    EVENT_DOMAIN_COLORS[domain] ??
+    'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)]';
 
   return (
-    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', colorClass)}>
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+        colorClass,
+      )}
+    >
       {eventType}
     </span>
   );
@@ -42,7 +51,8 @@ function ExpandablePayload({ payload }: { payload: Record<string, unknown> }) {
         className="max-w-[300px] truncate text-left font-mono text-[11px] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
         onClick={() => setExpanded(true)}
       >
-        {preview}{preview.length >= 80 ? '...' : ''}
+        {preview}
+        {preview.length >= 80 ? '...' : ''}
       </button>
     );
   }
@@ -64,7 +74,11 @@ function ExpandablePayload({ payload }: { payload: Record<string, unknown> }) {
 
 function EventRow({ event }: { event: DomainEventLog }) {
   const date = new Date(event.occurredAt);
-  const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const timeStr = date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
   const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   return (
@@ -134,7 +148,9 @@ export function AuditTrailView() {
         >
           <option value="">All event types</option>
           {eventTypes.map((t) => (
-            <option key={t} value={t}>{t}</option>
+            <option key={t} value={t}>
+              {t}
+            </option>
           ))}
         </select>
 
@@ -145,7 +161,9 @@ export function AuditTrailView() {
         >
           <option value="">All instances</option>
           {instances.map((i) => (
-            <option key={i} value={i}>{i}</option>
+            <option key={i} value={i}>
+              {i}
+            </option>
           ))}
         </select>
 
@@ -153,12 +171,12 @@ export function AuditTrailView() {
           type="date"
           className="rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 text-xs text-[var(--theme-text-secondary)]"
           value={filters.since ? filters.since.split('T')[0] : ''}
-          onChange={(e) => setFilter('since', e.target.value ? new Date(e.target.value).toISOString() : '')}
+          onChange={(e) =>
+            setFilter('since', e.target.value ? new Date(e.target.value).toISOString() : '')
+          }
         />
 
-        {loading && (
-          <span className="text-xs text-[var(--theme-text-faint)]">Loading...</span>
-        )}
+        {loading && <span className="text-xs text-[var(--theme-text-faint)]">Loading...</span>}
 
         <span className="ml-auto text-xs text-[var(--theme-text-faint)]">
           {events.length} event{events.length !== 1 ? 's' : ''}
@@ -170,10 +188,18 @@ export function AuditTrailView() {
         <table className="w-full">
           <thead className="sticky top-0 z-10 bg-[var(--theme-bg-primary)]">
             <tr className="border-b border-[var(--theme-border)]">
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Timestamp</th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Event Type</th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Instance</th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Payload</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                Timestamp
+              </th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                Event Type
+              </th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                Instance
+              </th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                Payload
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -188,7 +214,17 @@ export function AuditTrailView() {
 
         {events.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center py-20 text-[var(--theme-text-faint)]">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4 opacity-30">
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mb-4 opacity-30"
+            >
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>

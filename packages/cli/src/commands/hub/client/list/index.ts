@@ -1,14 +1,23 @@
-import type { CommandDef } from '../../../../core/types.ts';
 import { c, info } from '../../../../core/colors.ts';
 import { readClientsFile, readHubState } from '../../_state.ts';
 
+import type { CommandDef } from '../../../../core/types.ts';
+
 interface HubHealth {
-  servers?: Array<{ clientName: string; serverId: string | null; pid: number | null; hostname: string | null; connectedAt: number }>;
+  servers?: Array<{
+    clientName: string;
+    serverId: string | null;
+    pid: number | null;
+    hostname: string | null;
+    connectedAt: number;
+  }>;
 }
 
 async function fetchHealth(port: number): Promise<HubHealth | null> {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+      signal: AbortSignal.timeout(1500),
+    });
     if (!res.ok) return null;
     return (await res.json()) as HubHealth;
   } catch {
@@ -43,10 +52,14 @@ async function runClientList(): Promise<void> {
   const connected = new Set((health?.servers ?? []).map((s) => s.clientName));
 
   process.stdout.write('\n');
-  process.stdout.write(`  ${c.bold('NAME'.padEnd(28))} ${c.bold('CREATED'.padEnd(18))} ${c.bold('STATUS')}\n`);
+  process.stdout.write(
+    `  ${c.bold('NAME'.padEnd(28))} ${c.bold('CREATED'.padEnd(18))} ${c.bold('STATUS')}\n`,
+  );
   for (const entry of file.clients) {
     const status = connected.has(entry.name) ? c.green('connected') : c.dim('offline');
-    process.stdout.write(`  ${entry.name.padEnd(28)} ${relativeTime(entry.createdAt).padEnd(18)} ${status}\n`);
+    process.stdout.write(
+      `  ${entry.name.padEnd(28)} ${relativeTime(entry.createdAt).padEnd(18)} ${status}\n`,
+    );
   }
   process.stdout.write('\n');
   if (!hub) {

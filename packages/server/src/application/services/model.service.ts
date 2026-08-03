@@ -1,5 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { FALLBACK_MODELS, inferModelCapabilities, type ModelFamily, type ModelOption } from '@fleex/shared';
+
+import {
+  FALLBACK_MODELS,
+  inferModelCapabilities,
+  type ModelFamily,
+  type ModelOption,
+} from '@fleex/shared';
+
 import type { LoggerPort } from '../ports/logger.port.js';
 
 const FAMILY_ORDER: Record<ModelFamily, number> = {

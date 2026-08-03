@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Modal } from './Modal';
-import { Input } from './Input';
+
 import { Button } from './Button';
+import { Input } from './Input';
+import { Modal } from './Modal';
 
 interface NameInputModalProps {
   open: boolean;
@@ -45,9 +46,7 @@ export function NameInputModal({
 
   return (
     <Modal open={open} onClose={onClose} maxWidth="max-w-sm">
-      <h2 className="mb-4 text-sm font-semibold text-[var(--theme-text-primary)]">
-        {title}
-      </h2>
+      <h2 className="mb-4 text-sm font-semibold text-[var(--theme-text-primary)]">{title}</h2>
 
       <Input
         autoFocus
@@ -61,12 +60,7 @@ export function NameInputModal({
         <Button variant="ghost" size="sm" onClick={onClose}>
           Annuler
         </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={!isValid}
-          onClick={handleConfirm}
-        >
+        <Button variant="primary" size="sm" disabled={!isValid} onClick={handleConfirm}>
           {confirmLabel}
         </Button>
       </div>

@@ -1,4 +1,5 @@
 import type { Session } from '@fleex/shared';
+
 import { useUIStore } from '../../stores/uiStore';
 
 interface Props {

@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
+
 import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { tintText, tintClasses } from '../../lib/tints';
+import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 
 export function TreeContextMenu() {
   const contextMenu = useClaudeConfigStore((s) => s.contextMenu);

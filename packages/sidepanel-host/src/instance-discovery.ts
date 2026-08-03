@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+
 import { defaultWorkspace } from './workspaces.ts';
 
 export interface RunningInstance {
@@ -22,7 +23,10 @@ function runDir(): string {
 }
 
 /** Instances with a ports.json whose slug is `<workspace>@…`. */
-export function listWorkspaceInstances(workspace: string, dir: string = runDir()): RunningInstance[] {
+export function listWorkspaceInstances(
+  workspace: string,
+  dir: string = runDir(),
+): RunningInstance[] {
   let names: string[];
   try {
     names = fs.readdirSync(dir);
@@ -46,7 +50,10 @@ export function listWorkspaceInstances(workspace: string, dir: string = runDir()
 function isListening(port: number, timeoutMs = 300): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = net.connect({ port, host: '127.0.0.1' });
-    const done = (v: boolean) => { sock.destroy(); resolve(v); };
+    const done = (v: boolean) => {
+      sock.destroy();
+      resolve(v);
+    };
     sock.setTimeout(timeoutMs);
     sock.once('connect', () => done(true));
     sock.once('timeout', () => done(false));

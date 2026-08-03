@@ -1,6 +1,9 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
+
 import { ApiTokenEntity } from '../../domain/entities/api-token.entity.js';
+
 import type { AgentTokenStorePort } from '../../application/ports/agent-token-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
@@ -70,7 +73,10 @@ export class JsonAgentTokenStore implements AgentTokenStorePort {
       const data = JSON.parse(raw) as SerializedToken[];
       for (const t of data) {
         const entity = new ApiTokenEntity(
-          t.id, t.name, t.prefix, t.hashedSecret,
+          t.id,
+          t.name,
+          t.prefix,
+          t.hashedSecret,
           t.lastUsedAt ? new Date(t.lastUsedAt) : null,
           new Date(t.createdAt),
         );
@@ -88,7 +94,9 @@ export class JsonAgentTokenStore implements AgentTokenStorePort {
   private async syncToDisk(): Promise<void> {
     try {
       const data: SerializedToken[] = Array.from(this.tokens.values()).map((t) => ({
-        id: t.id, name: t.name, prefix: t.prefix,
+        id: t.id,
+        name: t.name,
+        prefix: t.prefix,
         hashedSecret: t.hashedSecret,
         lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
         createdAt: t.createdAt.toISOString(),

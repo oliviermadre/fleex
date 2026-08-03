@@ -16,8 +16,9 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { FLEEX_HOME, DEFAULT_REPO_DIR, resolveInstance } from './instance.ts';
+
 import { parseDotEnv } from './env.ts';
+import { FLEEX_HOME, DEFAULT_REPO_DIR, resolveInstance } from './instance.ts';
 import { isAlive, killGroup, killTree, killByPort, sleep } from './process.ts';
 
 /** Fixed port the extension hard-codes; overridable for tests/parallel hosts. */
@@ -104,7 +105,10 @@ export interface CompanionHealth {
 }
 
 /** Probe /health; null if nothing answers on `port`. */
-export async function probeCompanion(port: number = COMPANION_PORT, timeoutMs = 1500): Promise<CompanionHealth | null> {
+export async function probeCompanion(
+  port: number = COMPANION_PORT,
+  timeoutMs = 1500,
+): Promise<CompanionHealth | null> {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -121,7 +125,10 @@ export async function probeCompanion(port: number = COMPANION_PORT, timeoutMs = 
 }
 
 /** True if the companion answers /health on `port`. */
-export async function isCompanionHealthy(port: number = COMPANION_PORT, timeoutMs = 1500): Promise<boolean> {
+export async function isCompanionHealthy(
+  port: number = COMPANION_PORT,
+  timeoutMs = 1500,
+): Promise<boolean> {
   return (await probeCompanion(port, timeoutMs)) !== null;
 }
 

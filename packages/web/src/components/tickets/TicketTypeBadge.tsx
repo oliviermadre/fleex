@@ -1,5 +1,6 @@
 import type { TicketType } from '@fleex/shared';
 import { TICKET_TYPE_LABELS, TICKET_TYPE_EMOJIS } from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { tint, tintText, type TintHue } from '../../lib/tints';
 
@@ -48,7 +49,13 @@ export function TicketTypeIcon({ type }: { type: TicketType | null }) {
   return <span className="text-xs leading-none">{TYPE_ICONS[type]}</span>;
 }
 
-export function TicketTypeBadge({ type, size = 'sm' }: { type: TicketType | null; size?: 'sm' | 'md' }) {
+export function TicketTypeBadge({
+  type,
+  size = 'sm',
+}: {
+  type: TicketType | null;
+  size?: 'sm' | 'md';
+}) {
   if (!type) return null;
 
   if (size === 'sm') {

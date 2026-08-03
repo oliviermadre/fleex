@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { slugify, instanceSlug } from '../../src/core/instance.ts';
 
 describe('slugify', () => {

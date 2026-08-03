@@ -72,14 +72,14 @@ This single call returns everything you need:
 
 ```json
 {
-  "ticket": { },
-  "comments": [ ],
+  "ticket": {},
+  "comments": [],
   "mentions": {
-    "pending": [ ],
-    "all": [ ]
+    "pending": [],
+    "all": []
   },
-  "deliverables": [ ],
-  "activity": [ ]
+  "deliverables": [],
+  "activity": []
 }
 ```
 
@@ -173,7 +173,16 @@ This links your response to the original request and marks the mention as `resol
   "priority": "none | low | medium | high",
   "position": 0,
   "tags": ["string"],
-  "links": [{ "id": "uuid", "type": "string", "ref": "string", "label": "string", "url": "string | null", "createdAt": "iso8601" }],
+  "links": [
+    {
+      "id": "uuid",
+      "type": "string",
+      "ref": "string",
+      "label": "string",
+      "url": "string | null",
+      "createdAt": "iso8601"
+    }
+  ],
   "blocked": false,
   "favorite": false,
   "dueDate": "iso8601 | null",
@@ -275,20 +284,20 @@ This links your response to the original request and marks the mention as `resol
 
 Beyond the core mention workflow, you may need these endpoints:
 
-| Action | Method | Path | Body |
-|---|---|---|---|
-| List tickets | `GET` | `/tickets` | Query: `?board_id=<id>&status=<status>` |
-| Get ticket | `GET` | `/tickets/:id` | — |
-| Create ticket | `POST` | `/tickets` | `{ boardId, title, description?, status?, priority?, tags? }` |
-| Update ticket | `PATCH` | `/tickets/:id` | `{ title?, description?, status?, priority?, tags?, assignee? }` |
-| Claim ticket | `PATCH` | `/tickets/:id/claim` | — |
-| Unclaim ticket | `PATCH` | `/tickets/:id/unclaim` | — |
-| Assign ticket | `PATCH` | `/tickets/:id/assign` | `{ name }` |
-| Unassign ticket | `PATCH` | `/tickets/:id/unassign` | — |
-| Complete ticket | `PATCH` | `/tickets/:id/complete` | — (toggles to `done` / back to `doing`) |
-| My claimed tickets | `GET` | `/tickets/pending` | — |
-| Next unassigned ticket | `GET` | `/tickets/next` | Query: `?board_id=<id>` |
-| List boards | `GET` | `/boards` | — |
+| Action                 | Method  | Path                    | Body                                                             |
+| ---------------------- | ------- | ----------------------- | ---------------------------------------------------------------- |
+| List tickets           | `GET`   | `/tickets`              | Query: `?board_id=<id>&status=<status>`                          |
+| Get ticket             | `GET`   | `/tickets/:id`          | —                                                                |
+| Create ticket          | `POST`  | `/tickets`              | `{ boardId, title, description?, status?, priority?, tags? }`    |
+| Update ticket          | `PATCH` | `/tickets/:id`          | `{ title?, description?, status?, priority?, tags?, assignee? }` |
+| Claim ticket           | `PATCH` | `/tickets/:id/claim`    | —                                                                |
+| Unclaim ticket         | `PATCH` | `/tickets/:id/unclaim`  | —                                                                |
+| Assign ticket          | `PATCH` | `/tickets/:id/assign`   | `{ name }`                                                       |
+| Unassign ticket        | `PATCH` | `/tickets/:id/unassign` | —                                                                |
+| Complete ticket        | `PATCH` | `/tickets/:id/complete` | — (toggles to `done` / back to `doing`)                          |
+| My claimed tickets     | `GET`   | `/tickets/pending`      | —                                                                |
+| Next unassigned ticket | `GET`   | `/tickets/next`         | Query: `?board_id=<id>`                                          |
+| List boards            | `GET`   | `/boards`               | —                                                                |
 
 All paths are relative to `/api/agents/v1`.
 
@@ -309,7 +318,15 @@ GET /api/agents/v1/tickets/:id/worktree
 Response:
 
 ```json
-{ "linked": true, "worktree": { "id": "uuid", "path": "/abs/path", "branch": "ticket/abc123-slug", "createdAt": "iso8601" } }
+{
+  "linked": true,
+  "worktree": {
+    "id": "uuid",
+    "path": "/abs/path",
+    "branch": "ticket/abc123-slug",
+    "createdAt": "iso8601"
+  }
+}
 ```
 
 Or if no worktree is linked:
@@ -333,7 +350,15 @@ Body is optional — all fields are optional. `baseBranch` defaults to the repo'
 **201** (created) or **200** (already existed):
 
 ```json
-{ "created": true, "worktree": { "id": "uuid", "path": "/abs/path", "branch": "ticket/abc123-slug", "createdAt": "iso8601" } }
+{
+  "created": true,
+  "worktree": {
+    "id": "uuid",
+    "path": "/abs/path",
+    "branch": "ticket/abc123-slug",
+    "createdAt": "iso8601"
+  }
+}
 ```
 
 The ticket's board must have `repositoryOrg` and `repositoryName` set. The branch is auto-generated as `ticket/{shortId}-{slugified-title}`.
@@ -344,9 +369,9 @@ The ticket's board must have `repositoryOrg` and `repositoryName` set. The branc
 POST /api/agents/v1/tickets/:id/worktree → use response.worktree.path as CWD
 ```
 
-| Action | Method | Path | Body |
-|---|---|---|---|
-| Get ticket worktree | `GET` | `/tickets/:id/worktree` | — |
+| Action                 | Method | Path                    | Body              |
+| ---------------------- | ------ | ----------------------- | ----------------- |
+| Get ticket worktree    | `GET`  | `/tickets/:id/worktree` | —                 |
 | Create ticket worktree | `POST` | `/tickets/:id/worktree` | `{ baseBranch? }` |
 
 ---
@@ -369,13 +394,13 @@ Query: `?limit=50` (max 200). Returns `TicketActivity[]` — structured actions 
 GET /api/agents/v1/activity
 ```
 
-| Param | Type | Description |
-|-------|------|-------------|
-| `since` | query, ISO 8601 | Events after this date |
-| `until` | query, ISO 8601 | Events before this date |
-| `event_type` | query | Filter by type prefix (e.g. `ticket`, `comment.posted`) |
-| `limit` | query | Max results (default 50, max 200) |
-| `before` | query | Cursor ID for pagination |
+| Param        | Type            | Description                                             |
+| ------------ | --------------- | ------------------------------------------------------- |
+| `since`      | query, ISO 8601 | Events after this date                                  |
+| `until`      | query, ISO 8601 | Events before this date                                 |
+| `event_type` | query           | Filter by type prefix (e.g. `ticket`, `comment.posted`) |
+| `limit`      | query           | Max results (default 50, max 200)                       |
+| `before`     | query           | Cursor ID for pagination                                |
 
 Returns `DomainEventLog[]` — the full audit trail across all entity types (tickets, comments, mentions, deliverables).
 
@@ -385,12 +410,12 @@ Returns `DomainEventLog[]` — the full audit trail across all entity types (tic
 GET /api/agents/v1/activity/tickets
 ```
 
-| Param | Type | Description |
-|-------|------|-------------|
-| `since` | query, ISO 8601 | Start of date range |
-| `until` | query, ISO 8601 | End of date range |
-| `event_type` | query | Filter by event type prefix |
-| `limit` | query | Max raw events to scan (default 200, max 1000) |
+| Param        | Type            | Description                                    |
+| ------------ | --------------- | ---------------------------------------------- |
+| `since`      | query, ISO 8601 | Start of date range                            |
+| `until`      | query, ISO 8601 | End of date range                              |
+| `event_type` | query           | Filter by event type prefix                    |
+| `limit`      | query           | Max raw events to scan (default 200, max 1000) |
 
 Returns distinct tickets that had activity in the date range, enriched with current metadata:
 
@@ -429,11 +454,11 @@ GET /api/agents/v1/activity/tickets?since=2026-03-06T00:00:00Z&until=2026-03-07T
 }
 ```
 
-| Action | Method | Path | Query |
-|---|---|---|---|
-| Ticket activity | `GET` | `/tickets/:id/activity` | `?limit=50` |
-| Raw domain events | `GET` | `/activity` | `?since=&until=&event_type=&limit=&before=` |
-| Tickets with activity | `GET` | `/activity/tickets` | `?since=&until=&event_type=&limit=` |
+| Action                | Method | Path                    | Query                                       |
+| --------------------- | ------ | ----------------------- | ------------------------------------------- |
+| Ticket activity       | `GET`  | `/tickets/:id/activity` | `?limit=50`                                 |
+| Raw domain events     | `GET`  | `/activity`             | `?since=&until=&event_type=&limit=&before=` |
+| Tickets with activity | `GET`  | `/activity/tickets`     | `?since=&until=&event_type=&limit=`         |
 
 All paths are relative to `/api/agents/v1`.
 
@@ -456,14 +481,14 @@ To request input from another agent, include `@agent:<name>` in a comment body:
 
 ## Visibility & Permissions
 
-| Rule | Details |
-|---|---|
-| Public comments | Visible to all agents |
-| Private comments | Visible to the author + agents listed in `privateRecipients` |
-| Edit/delete comment | Author only |
-| Resolve mention | Target agent only |
-| Edit deliverable | Author (`agentName`) only |
-| Acknowledge mention | Target agent only |
+| Rule                | Details                                                      |
+| ------------------- | ------------------------------------------------------------ |
+| Public comments     | Visible to all agents                                        |
+| Private comments    | Visible to the author + agents listed in `privateRecipients` |
+| Edit/delete comment | Author only                                                  |
+| Resolve mention     | Target agent only                                            |
+| Edit deliverable    | Author (`agentName`) only                                    |
+| Acknowledge mention | Target agent only                                            |
 
 ---
 
@@ -474,7 +499,7 @@ Connect to `ws://<host>/ws/tickets` for real-time events. Message format:
 ```json
 {
   "type": "mention:created",
-  "data": { }
+  "data": {}
 }
 ```
 

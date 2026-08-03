@@ -1,9 +1,17 @@
 import { useMemo } from 'react';
-import type { OverlayFileStatus, OverlaySyncFilePreview, OverlaySyncPreviewResponse } from '@fleex/shared';
+
+import type {
+  OverlayFileStatus,
+  OverlaySyncFilePreview,
+  OverlaySyncPreviewResponse,
+} from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { tint, tintText } from '../../lib/tints';
-import type { TintHue } from '../../lib/tints';
+
 import { computeLineDiff } from './lineDiff';
+
+import type { TintHue } from '../../lib/tints';
 
 export interface FilePreviewPaneProps {
   /** relPath currently selected for preview (null → empty state). */
@@ -57,7 +65,9 @@ function formatMtime(ms: number | null): string {
 function SideMeta({ label, side }: { label: string; side: OverlaySyncFilePreview | null }) {
   return (
     <div className="flex items-baseline justify-between gap-2 px-2 py-1 text-[10px] text-[var(--theme-text-faint)]">
-      <span className="font-medium uppercase tracking-wide text-[var(--theme-text-secondary)]">{label}</span>
+      <span className="font-medium uppercase tracking-wide text-[var(--theme-text-secondary)]">
+        {label}
+      </span>
       {side ? (
         <span className="truncate">
           {formatBytes(side.size)} · {formatMtime(side.mtimeMs)}
@@ -101,20 +111,34 @@ export function FilePreviewPane({ relPath, loading, preview }: FilePreviewPanePr
     <div className="flex h-full min-h-0 flex-col">
       {/* Header: path + status */}
       <div className="flex items-center gap-2 border-b border-[var(--theme-border)] px-2 py-1.5">
-        <span className="truncate font-mono text-xs text-[var(--theme-text-primary)]" title={relPath}>
+        <span
+          className="truncate font-mono text-xs text-[var(--theme-text-primary)]"
+          title={relPath}
+        >
           {relPath}
         </span>
         <span
-          className={cn('ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium', tint(STATUS_HUE[preview.status]))}
+          className={cn(
+            'ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
+            tint(STATUS_HUE[preview.status]),
+          )}
         >
           {STATUS_LABEL[preview.status]}
         </span>
       </div>
 
       {secret && (
-        <div className={cn('flex items-center gap-1.5 border-b border-[var(--theme-border)] px-2 py-1 text-[10px]', tintText('orange'))}>
+        <div
+          className={cn(
+            'flex items-center gap-1.5 border-b border-[var(--theme-border)] px-2 py-1 text-[10px]',
+            tintText('orange'),
+          )}
+        >
           <span>⚠</span>
-          <span>Ce fichier ressemble à un secret. Vérifiez son contenu avant de le copier dans l'overlay.</span>
+          <span>
+            Ce fichier ressemble à un secret. Vérifiez son contenu avant de le copier dans
+            l'overlay.
+          </span>
         </div>
       )}
 
@@ -132,7 +156,12 @@ export function FilePreviewPane({ relPath, loading, preview }: FilePreviewPanePr
           </div>
 
           {truncated && (
-            <div className={cn('border-b border-[var(--theme-border)] px-2 py-1 text-[10px]', tintText('yellow'))}>
+            <div
+              className={cn(
+                'border-b border-[var(--theme-border)] px-2 py-1 text-[10px]',
+                tintText('yellow'),
+              )}
+            >
               ⚠ Contenu tronqué pour l'aperçu.
             </div>
           )}

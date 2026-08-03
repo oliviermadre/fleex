@@ -6,13 +6,25 @@
  * A "Fleex session" is one whose cwd — or any ancestor — contains a
  * `.fleex.json` (`{ "ticketId": "<uuid>" }`), written at the workspace root.
  */
-import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 // ── Pricing (USD per token, public list / standard tier) ────────────────────
-export interface Price { inp: number; out: number; read: number; w5: number; w1: number }
-const price = (inp: number, out: number): Price => ({ inp, out, read: inp * 0.1, w5: inp * 1.25, w1: inp * 2 });
+export interface Price {
+  inp: number;
+  out: number;
+  read: number;
+  w5: number;
+  w1: number;
+}
+const price = (inp: number, out: number): Price => ({
+  inp,
+  out,
+  read: inp * 0.1,
+  w5: inp * 1.25,
+  w1: inp * 2,
+});
 export const MODEL_PRICING: Record<string, Price> = {
   'claude-opus-5': price(5e-6, 25e-6),
   'claude-opus-4-8': price(5e-6, 25e-6),
@@ -74,16 +86,28 @@ export interface SessionCost {
 export async function computeSessionCost(transcriptPath: string): Promise<SessionCost> {
   const raw = await readFile(transcriptPath, 'utf-8');
   const r: SessionCost = {
-    entrypoint: null, model: null, cost: 0,
-    inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
-    startedAt: null, completedAt: null, hasUnknownModel: false,
+    entrypoint: null,
+    model: null,
+    cost: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    startedAt: null,
+    completedAt: null,
+    hasUnknownModel: false,
   };
   const modelTokens = new Map<string, number>();
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
     let d: Record<string, unknown>;
-    try { d = JSON.parse(line); } catch { continue; }
-    if (!r.entrypoint && typeof d['entrypoint'] === 'string') r.entrypoint = d['entrypoint'] as string;
+    try {
+      d = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!r.entrypoint && typeof d['entrypoint'] === 'string')
+      r.entrypoint = d['entrypoint'] as string;
     const ts = typeof d['timestamp'] === 'string' ? (d['timestamp'] as string) : null;
     if (ts) {
       if (!r.startedAt || ts < r.startedAt) r.startedAt = ts;
@@ -100,15 +124,26 @@ export async function computeSessionCost(transcriptPath: string): Promise<Sessio
     let w5 = cc['ephemeral_5m_input_tokens'] ?? 0;
     const w1 = cc['ephemeral_1h_input_tokens'] ?? 0;
     if (!w5 && !w1) w5 = (u['cache_creation_input_tokens'] as number) ?? 0;
-    r.inputTokens += inp; r.outputTokens += out; r.cacheReadTokens += rd; r.cacheCreationTokens += w5 + w1;
-    if (model !== '<synthetic>') modelTokens.set(model, (modelTokens.get(model) ?? 0) + inp + out + rd + w5 + w1);
+    r.inputTokens += inp;
+    r.outputTokens += out;
+    r.cacheReadTokens += rd;
+    r.cacheCreationTokens += w5 + w1;
+    if (model !== '<synthetic>')
+      modelTokens.set(model, (modelTokens.get(model) ?? 0) + inp + out + rd + w5 + w1);
     const p = priceFor(model);
-    if (!p) { r.hasUnknownModel = true; continue; }
+    if (!p) {
+      r.hasUnknownModel = true;
+      continue;
+    }
     r.cost += inp * p.inp + out * p.out + rd * p.read + w5 * p.w5 + w1 * p.w1;
   }
   // Dominant model by token volume.
   let best = -1;
-  for (const [m, tok] of modelTokens) if (tok > best) { best = tok; r.model = m; }
+  for (const [m, tok] of modelTokens)
+    if (tok > best) {
+      best = tok;
+      r.model = m;
+    }
   return r;
 }
 
@@ -141,7 +176,11 @@ export async function reconstructTranscript(transcriptPath: string): Promise<Tra
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
     let d: Record<string, unknown>;
-    try { d = JSON.parse(line); } catch { continue; }
+    try {
+      d = JSON.parse(line);
+    } catch {
+      continue;
+    }
     const type = d['type'];
     if (type !== 'user' && type !== 'assistant') continue;
     // Not part of the human↔LLM exchange: subagent sidechains and system-injected
@@ -180,9 +219,10 @@ function extractText(content: unknown): string {
   const parts: string[] = [];
   for (const block of content) {
     if (
-      block && typeof block === 'object'
-      && (block as { type?: unknown }).type === 'text'
-      && typeof (block as { text?: unknown }).text === 'string'
+      block &&
+      typeof block === 'object' &&
+      (block as { type?: unknown }).type === 'text' &&
+      typeof (block as { text?: unknown }).text === 'string'
     ) {
       parts.push((block as { text: string }).text);
     }

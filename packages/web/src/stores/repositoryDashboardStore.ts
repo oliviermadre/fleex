@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { RepositorySummary, RepositoryDashboardData, RepositoryWsMessage, RepositoryStats } from '@fleex/shared';
+
+import type {
+  RepositorySummary,
+  RepositoryDashboardData,
+  RepositoryWsMessage,
+  RepositoryStats,
+} from '@fleex/shared';
+
 import * as api from '../services/api';
 
 interface RepositoryDashboardState {

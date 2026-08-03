@@ -1,13 +1,12 @@
-import type { KvStorePort } from '../../../application/ports/kv-store.port.js';
 import type { SqliteConnection } from './connection.js';
+import type { KvStorePort } from '../../../application/ports/kv-store.port.js';
 
 export class SqliteKvStoreAdapter implements KvStorePort {
   constructor(private readonly connection: SqliteConnection) {}
 
   async get(key: string): Promise<string | null> {
-    const row = this.connection.db
-      .prepare('SELECT value FROM kv_store WHERE key = ?')
-      .get(key) as { value: string } | undefined;
+    const row = this.connection.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as
+      { value: string } | undefined;
     return row?.value ?? null;
   }
 
@@ -25,7 +24,7 @@ export class SqliteKvStoreAdapter implements KvStorePort {
 
   async listByPrefix(prefix: string): Promise<{ key: string; value: string }[]> {
     const rows = this.connection.db
-      .prepare('SELECT key, value FROM kv_store WHERE key LIKE ? || \'%\'')
+      .prepare("SELECT key, value FROM kv_store WHERE key LIKE ? || '%'")
       .all(prefix) as { key: string; value: string }[];
     return rows;
   }

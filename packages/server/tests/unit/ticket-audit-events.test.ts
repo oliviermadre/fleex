@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { deriveTicketUpdateEvents } from '../../src/domain/services/ticket-audit-events.js';
 
 const NOW = new Date('2026-06-14T12:00:00.000Z');
@@ -16,10 +17,12 @@ describe('deriveTicketUpdateEvents', () => {
   });
 
   it('maps blocked transitions to ticket.blocked / ticket.unblocked', () => {
-    expect(deriveTicketUpdateEvents('T1', { blocked: { from: false, to: true } }, NOW)[0]?.type)
-      .toBe('ticket.blocked');
-    expect(deriveTicketUpdateEvents('T1', { blocked: { from: true, to: false } }, NOW)[0]?.type)
-      .toBe('ticket.unblocked');
+    expect(
+      deriveTicketUpdateEvents('T1', { blocked: { from: false, to: true } }, NOW)[0]?.type,
+    ).toBe('ticket.blocked');
+    expect(
+      deriveTicketUpdateEvents('T1', { blocked: { from: true, to: false } }, NOW)[0]?.type,
+    ).toBe('ticket.unblocked');
   });
 
   it('emits ticket.tagsChanged with the computed added/removed delta', () => {

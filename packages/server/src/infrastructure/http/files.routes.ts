@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+
 import { FileMetadataEntity } from '../../domain/entities/file-metadata.entity.js';
+
 import { MAX_FILE_SIZE, validateFileMime } from './file-validation.js';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function fileRoutes(container: Container) {
   return async function (app: FastifyInstance) {
@@ -68,9 +71,7 @@ export function fileRoutes(container: Container) {
       }
 
       const isImage = meta.mimeType.startsWith('image/');
-      const disposition = isImage
-        ? 'inline'
-        : `attachment; filename="${meta.originalName}"`;
+      const disposition = isImage ? 'inline' : `attachment; filename="${meta.originalName}"`;
 
       return reply
         .type(meta.mimeType)

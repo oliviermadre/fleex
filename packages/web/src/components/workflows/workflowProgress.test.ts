@@ -1,12 +1,10 @@
 import { describe, it, expect } from 'vitest';
+
 import type { StepRun } from '@fleex/shared';
+
 import { countCompletedSteps } from './workflowProgress';
 
-function stepRun(
-  stepId: string,
-  attempt: number,
-  status: StepRun['status'],
-): StepRun {
+function stepRun(stepId: string, attempt: number, status: StepRun['status']): StepRun {
   return {
     id: `${stepId}-${attempt}`,
     workflowRunId: 'run1',

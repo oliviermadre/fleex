@@ -8,7 +8,9 @@ interface EpicProgressBarProps {
 
 export function EpicProgressBar({ tickets, showLabel = true }: EpicProgressBarProps) {
   const total = tickets.length;
-  const doneCount = tickets.filter((t) => t.status === TICKET_STATUS.DONE || t.status === TICKET_STATUS.CANCELLED).length;
+  const doneCount = tickets.filter(
+    (t) => t.status === TICKET_STATUS.DONE || t.status === TICKET_STATUS.CANCELLED,
+  ).length;
 
   const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
@@ -23,9 +25,7 @@ export function EpicProgressBar({ tickets, showLabel = true }: EpicProgressBarPr
       )}
       {/* Label inside the bar */}
       {showLabel && (
-        <span
-          className="absolute inset-0 flex items-center justify-center text-xs font-bold tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-        >
+        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
           {percent}%&nbsp;&nbsp;{doneCount}/{total}
         </span>
       )}

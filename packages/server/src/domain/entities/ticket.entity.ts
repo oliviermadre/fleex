@@ -1,4 +1,14 @@
-import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
+import type {
+  Ticket,
+  TicketStatus,
+  TicketPriority,
+  TicketType,
+  TicketLink,
+  TicketLinkType,
+  GitHubIssueMetadata,
+  ConversationMode,
+  EffortLevel,
+} from '@fleex/shared';
 import { DEFAULT_CONVERSATION_MODE, isEffortLevel } from '@fleex/shared';
 
 export class TicketEntity {
@@ -188,7 +198,10 @@ export class TicketEntity {
   }): Record<string, { from: unknown; to: unknown }> {
     const diff: Record<string, { from: unknown; to: unknown }> = {};
 
-    if (changes.conversationMode !== undefined && changes.conversationMode !== this.conversationMode) {
+    if (
+      changes.conversationMode !== undefined &&
+      changes.conversationMode !== this.conversationMode
+    ) {
       diff['conversationMode'] = { from: this.conversationMode, to: changes.conversationMode };
       this.conversationMode = changes.conversationMode;
     }
@@ -201,7 +214,9 @@ export class TicketEntity {
     // level is still resolved against the model at execution time, since a model
     // change can leave a perfectly valid level above the new model's ceiling.
     const nextEffort =
-      changes.effortOverride === undefined || changes.effortOverride === null || isEffortLevel(changes.effortOverride)
+      changes.effortOverride === undefined ||
+      changes.effortOverride === null ||
+      isEffortLevel(changes.effortOverride)
         ? changes.effortOverride
         : undefined;
     if (nextEffort !== undefined && nextEffort !== this.effortOverride) {
@@ -224,7 +239,13 @@ export class TicketEntity {
     this.updatedAt = new Date();
   }
 
-  addLink(type: TicketLinkType, ref: string, label: string, url: string | null, linkId: string): TicketLink {
+  addLink(
+    type: TicketLinkType,
+    ref: string,
+    label: string,
+    url: string | null,
+    linkId: string,
+  ): TicketLink {
     const link: TicketLink = {
       id: linkId,
       type,

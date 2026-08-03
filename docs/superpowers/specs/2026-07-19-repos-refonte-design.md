@@ -10,13 +10,13 @@ Supprimer l'écran Settings → Repositories (TagInput de patterns) et intégrer
 
 ## Décisions actées
 
-| Décision | Choix |
-|---|---|
-| Stockage config repos | **Liste explicite** de `owner/repo`. Les patterns `org/*` disparaissent du stockage ; « Select all · org/* » dans la modal = ajout en masse (snapshot). On perd le suivi automatique des nouveaux repos d'une org (assumé). |
-| Couleurs | **Système de thème Fleex** (`--theme-*` + `lib/tints.ts`). Structure/espacements/hiérarchie fidèles aux maquettes, hex exacts non repris. Pas d'exemption au lint `check-raw-palette.mjs`. |
-| Config par repo (hook post-checkout) | **Onglet « Config » conservé** dans le dashboard repo (`RepoConfigPanel` restylé). |
-| Langue UI | **Anglais** (Overview, Created by me, Clean up, already tracked…). |
-| Approche | **Refonte en place, incrémentale** : transformation des composants existants, app fonctionnelle à chaque étape. |
+| Décision                             | Choix                                                                                                                                                                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stockage config repos                | **Liste explicite** de `owner/repo`. Les patterns `org/*` disparaissent du stockage ; « Select all · org/* » dans la modal = ajout en masse (snapshot). On perd le suivi automatique des nouveaux repos d'une org (assumé). |
+| Couleurs                             | **Système de thème Fleex** (`--theme-*` + `lib/tints.ts`). Structure/espacements/hiérarchie fidèles aux maquettes, hex exacts non repris. Pas d'exemption au lint `check-raw-palette.mjs`.                                  |
+| Config par repo (hook post-checkout) | **Onglet « Config » conservé** dans le dashboard repo (`RepoConfigPanel` restylé).                                                                                                                                          |
+| Langue UI                            | **Anglais** (Overview, Created by me, Clean up, already tracked…).                                                                                                                                                          |
+| Approche                             | **Refonte en place, incrémentale** : transformation des composants existants, app fonctionnelle à chaque étape.                                                                                                             |
 
 ## 1. Données & serveur
 
@@ -43,13 +43,13 @@ Supprimer l'écran Settings → Repositories (TagInput de patterns) et intégrer
 
 Pure dérivation client dans `packages/web/src/lib/worktreeVerdict.ts` (nouveau, testé), depuis `DiffStats` (ahead/behind), `mergedAt` des PRs et le statut du ticket lié :
 
-| Verdict | Condition | Teinte |
-|---|---|---|
-| Ready to push | ahead > 0, behind = 0, non mergé | purple |
-| Needs rebase | behind > 0, non mergé | yellow |
-| Up to date | ahead = 0, behind = 0, non mergé | gray |
-| Merged · removable | PR liée mergée | green |
-| Stale · removable | ticket lié en statut `done`/`cancelled`, ou introuvable | red |
+| Verdict            | Condition                                               | Teinte |
+| ------------------ | ------------------------------------------------------- | ------ |
+| Ready to push      | ahead > 0, behind = 0, non mergé                        | purple |
+| Needs rebase       | behind > 0, non mergé                                   | yellow |
+| Up to date         | ahead = 0, behind = 0, non mergé                        | gray   |
+| Merged · removable | PR liée mergée                                          | green  |
+| Stale · removable  | ticket lié en statut `done`/`cancelled`, ou introuvable | red    |
 
 Aucun nouveau champ serveur.
 

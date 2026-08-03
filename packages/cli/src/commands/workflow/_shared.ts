@@ -1,5 +1,5 @@
-import { die, err } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
+import { die, err } from '../../core/colors.ts';
 import { matchById } from '../../core/match.ts';
 import { resolveTicketId } from '../ticket/_shared.ts';
 
@@ -56,7 +56,9 @@ export async function resolveRunId(input: string, ticket?: string): Promise<stri
     if (result.kind === 'ambiguous') {
       err(`"${input}" matches multiple runs — use a longer prefix or the full UUID:`);
       for (const r of result.matches) {
-        process.stderr.write(`  ${r.id.slice(0, 8)}  ${r.status}  ${r.templateSnapshot?.name ?? ''}\n`);
+        process.stderr.write(
+          `  ${r.id.slice(0, 8)}  ${r.status}  ${r.templateSnapshot?.name ?? ''}\n`,
+        );
       }
       process.exit(1);
     }
@@ -65,7 +67,9 @@ export async function resolveRunId(input: string, ticket?: string): Promise<stri
 
   // No ticket scope: a short prefix can't be resolved (nothing to match against).
   if (isFullUuid(needle)) return needle;
-  die(`"${input}" looks like a short id. Pass --ticket <id> to resolve a run prefix, or use the full run UUID.`);
+  die(
+    `"${input}" looks like a short id. Pass --ticket <id> to resolve a run prefix, or use the full run UUID.`,
+  );
 }
 
 /**

@@ -78,7 +78,11 @@ export interface HookCheckResult {
 export function checkClaudeHooks(): HookCheckResult {
   const { settings, corrupted } = readSettings();
   if (corrupted) {
-    return { ok: false, missing: HOOKS_TO_INSTALL.map((h) => h.claudeEvent), settingsCorrupted: true };
+    return {
+      ok: false,
+      missing: HOOKS_TO_INSTALL.map((h) => h.claudeEvent),
+      settingsCorrupted: true,
+    };
   }
   const hooks = settings.hooks ?? {};
   const missing: string[] = [];
@@ -128,8 +132,8 @@ export function installClaudeHooks(): HookInstallResult {
   for (const { claudeEvent, fleexArg } of HOOKS_TO_INSTALL) {
     const list = (settings.hooks[claudeEvent] ?? []) as HookEntry[];
     // Idempotency: drop any existing Fleex entries before reinserting the canonical one.
-    const cleaned = list.filter((entry) =>
-      !(entry.hooks ?? []).some((h) => isFleexHookCommand(h.command)),
+    const cleaned = list.filter(
+      (entry) => !(entry.hooks ?? []).some((h) => isFleexHookCommand(h.command)),
     );
     cleaned.push({
       hooks: [{ type: 'command', command: `${bin} hook ${fleexArg} || true` }],

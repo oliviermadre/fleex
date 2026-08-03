@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+
 import { logInfo, logDebug } from './logger';
 
 const execFileAsync = promisify(execFile);
@@ -35,7 +36,8 @@ function isPollingCommand(command: string, args: string[], shell?: boolean): boo
 export async function handleExec(body: ExecRequest): Promise<ExecResponse> {
   const { command, args = [], cwd, timeout = 30_000, maxBuffer = 10 * 1024 * 1024, shell } = body;
 
-  const line = `[exec] ${shell ? 'shell' : 'exec'} ${command} ${shell ? '' : JSON.stringify(args)} ${cwd ?? ''}`.trimEnd();
+  const line =
+    `[exec] ${shell ? 'shell' : 'exec'} ${command} ${shell ? '' : JSON.stringify(args)} ${cwd ?? ''}`.trimEnd();
   if (isPollingCommand(command, args, shell)) {
     logDebug(line);
   } else {

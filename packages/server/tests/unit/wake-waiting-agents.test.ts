@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
+
 import { WakeWaitingAgentsUseCase } from '../../src/application/use-cases/wake-waiting-agents.js';
 import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
 
 function waitingMention(id: string, agent: string): TicketMentionEntity {
   const m = TicketMentionEntity.create({
-    id, ticketId: 'T', commentId: `c-${id}`, targetAgent: agent, sourceAgent: 'user', targetType: 'agent',
+    id,
+    ticketId: 'T',
+    commentId: `c-${id}`,
+    targetAgent: agent,
+    sourceAgent: 'user',
+    targetType: 'agent',
   });
   m.status = 'waiting_for_info';
   return m;
@@ -13,7 +19,11 @@ function waitingMention(id: string, agent: string): TicketMentionEntity {
 function makeUseCase(waiting: TicketMentionEntity[]) {
   const woken: string[] = [];
   const mentionStore = { getWaitingByTicket: async () => waiting } as never;
-  const executeAgent = { wakeUp: async (m: TicketMentionEntity) => { woken.push(m.targetAgent); } } as never;
+  const executeAgent = {
+    wakeUp: async (m: TicketMentionEntity) => {
+      woken.push(m.targetAgent);
+    },
+  } as never;
   const logger = { info() {}, warn() {}, error() {}, debug() {} } as never;
   return { useCase: new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger), woken };
 }
@@ -35,7 +45,9 @@ describe('WakeWaitingAgentsUseCase — exclusion', () => {
 
   it('excludes multiple agents (author + freshly mentioned)', async () => {
     const { useCase, woken } = makeUseCase([
-      waitingMention('m1', 'A'), waitingMention('m2', 'B'), waitingMention('m3', 'C'),
+      waitingMention('m1', 'A'),
+      waitingMention('m2', 'B'),
+      waitingMention('m3', 'C'),
     ]);
     await useCase.execute('T', ['A', 'C']);
     expect(woken).toEqual(['B']);

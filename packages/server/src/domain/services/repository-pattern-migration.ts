@@ -1,7 +1,9 @@
 import type { ConfigPort } from '../../application/ports/config.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 
-interface ResolverLike { resolve(patterns: string[]): Promise<string[]>; }
+interface ResolverLike {
+  resolve(patterns: string[]): Promise<string[]>;
+}
 
 /**
  * One-time (idempotent) migration of `repositories` from wildcard patterns

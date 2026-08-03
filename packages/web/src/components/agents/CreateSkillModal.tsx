@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { useSkillStore } from '../../stores/skillStore';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+
 import { cn } from '../../lib/cn';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSkillStore } from '../../stores/skillStore';
 
 interface CreateSkillModalProps {
   open: boolean;
@@ -57,7 +58,10 @@ export function CreateSkillModal({ open, onClose }: CreateSkillModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-md rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -72,7 +76,9 @@ export function CreateSkillModal({ open, onClose }: CreateSkillModalProps) {
             <input
               type="text"
               value={commandName}
-              onChange={(e) => setCommandName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+              onChange={(e) =>
+                setCommandName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))
+              }
               placeholder="pr-review"
               className="w-full rounded border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
               autoFocus
@@ -111,9 +117,7 @@ export function CreateSkillModal({ open, onClose }: CreateSkillModalProps) {
           </div>
         </div>
 
-        {error && (
-          <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>
-        )}
+        {error && <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">
           <button

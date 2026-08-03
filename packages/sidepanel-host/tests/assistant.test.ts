@@ -1,15 +1,23 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import type { GeneratedTool } from '@fleex/mcp';
-import type Anthropic from '@anthropic-ai/sdk';
+
 import { runAssistant, type AssistantEvent, type LlmComplete } from '../src/assistant.ts';
 import { toAnthropicTools } from '../src/tools.ts';
+
+import type Anthropic from '@anthropic-ai/sdk';
 
 const tools: GeneratedTool[] = [
   {
     name: 'fleex_ticket_list',
     commandPath: ['ticket', 'list'],
     description: 'List tickets',
-    inputSchema: { type: 'object', properties: { status: { type: 'string' } }, required: [], additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { status: { type: 'string' } },
+      required: [],
+      additionalProperties: false,
+    },
     mutating: false,
     workspaceAware: true,
     arguments: [],
@@ -19,7 +27,12 @@ const tools: GeneratedTool[] = [
     name: 'fleex_ticket_create',
     commandPath: ['ticket', 'create'],
     description: 'Create a ticket',
-    inputSchema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { title: { type: 'string' } },
+      required: ['title'],
+      additionalProperties: false,
+    },
     mutating: true,
     workspaceAware: true,
     arguments: [],
@@ -29,7 +42,12 @@ const tools: GeneratedTool[] = [
     name: 'fleex_ticket_delete',
     commandPath: ['ticket', 'delete'],
     description: 'Delete a ticket',
-    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
     mutating: true,
     workspaceAware: true,
     arguments: [{ key: 'id', required: true, variadic: false }],
@@ -42,7 +60,12 @@ const tools: GeneratedTool[] = [
     name: 'fleex_ticket_mention_run',
     commandPath: ['ticket', 'mention', 'run'],
     description: 'Run an agent on a mention',
-    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
     mutating: true,
     workspaceAware: true,
     arguments: [{ key: 'id', required: true, variadic: false }],
@@ -54,12 +77,18 @@ const anthropicTools = toAnthropicTools(tools);
 function textBlock(text: string): Anthropic.ContentBlock {
   return { type: 'text', text, citations: null } as unknown as Anthropic.ContentBlock;
 }
-function toolBlock(id: string, name: string, input: Record<string, unknown>): Anthropic.ContentBlock {
+function toolBlock(
+  id: string,
+  name: string,
+  input: Record<string, unknown>,
+): Anthropic.ContentBlock {
   return { type: 'tool_use', id, name, input } as unknown as Anthropic.ContentBlock;
 }
 
 /** An llm that returns a scripted sequence of responses, one per call. */
-function scriptedLlm(responses: Array<{ content: Anthropic.ContentBlock[]; stopReason: string | null }>): LlmComplete {
+function scriptedLlm(
+  responses: Array<{ content: Anthropic.ContentBlock[]; stopReason: string | null }>,
+): LlmComplete {
   let i = 0;
   return async (_params, onText) => {
     const r = responses[Math.min(i, responses.length - 1)]!;
@@ -80,13 +109,22 @@ describe('runAssistant gating', () => {
     const exec = vi.fn(async () => ({ ok: true, text: '[]' }));
     const { onEvent, events } = collect();
     const llm = scriptedLlm([
-      { content: [toolBlock('t1', 'fleex_ticket_list', { status: 'doing' })], stopReason: 'tool_use' },
+      {
+        content: [toolBlock('t1', 'fleex_ticket_list', { status: 'doing' })],
+        stopReason: 'tool_use',
+      },
       { content: [textBlock('Here are the tickets.')], stopReason: 'end_turn' },
     ]);
 
     await runAssistant({
-      llm, exec, confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'list doing' }], onEvent,
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'list doing' }],
+      onEvent,
     });
 
     expect(confirm).not.toHaveBeenCalled();
@@ -104,15 +142,27 @@ describe('runAssistant gating', () => {
     ]);
 
     await runAssistant({
-      llm, exec, confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'create X' }], onEvent,
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'create X' }],
+      onEvent,
     });
 
     expect(confirm).toHaveBeenCalledOnce();
     expect(exec).toHaveBeenCalledOnce();
     const call = events.find((e) => e.type === 'tool_call');
     expect(call && call.type === 'tool_call' && call.mutating).toBe(true);
-    expect(call && call.type === 'tool_call' && call.argv).toEqual(['ticket', 'create', '--title', 'X', '--json']);
+    expect(call && call.type === 'tool_call' && call.argv).toEqual([
+      'ticket',
+      'create',
+      '--title',
+      'X',
+      '--json',
+    ]);
   });
 
   it('does NOT execute a mutating tool when the user declines', async () => {
@@ -125,14 +175,26 @@ describe('runAssistant gating', () => {
       { content: [textBlock('Okay, I will not create it.')], stopReason: 'end_turn' },
     ]);
 
-    await runAssistant({ llm, exec, confirm, tools, anthropicTools, system: 's', messages, onEvent });
+    await runAssistant({
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages,
+      onEvent,
+    });
 
     expect(confirm).toHaveBeenCalledOnce();
     expect(exec).not.toHaveBeenCalled();
     expect(events.some((e) => e.type === 'tool_denied')).toBe(true);
     // The denial is fed back to the model as an error tool_result.
     const toolResultTurn = messages.find(
-      (m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((b) => (b as { type: string }).type === 'tool_result'),
+      (m) =>
+        m.role === 'user' &&
+        Array.isArray(m.content) &&
+        m.content.some((b) => (b as { type: string }).type === 'tool_result'),
     );
     expect(toolResultTurn).toBeDefined();
   });
@@ -144,13 +206,22 @@ describe('runAssistant gating', () => {
     const exec = vi.fn(async () => ({ ok: true, text: 'should not run' }));
     const { onEvent, events } = collect();
     const llm = scriptedLlm([
-      { content: [toolBlock('t1', 'fleex_ticket_mention_run', { id: 'a1b2' })], stopReason: 'tool_use' },
+      {
+        content: [toolBlock('t1', 'fleex_ticket_mention_run', { id: 'a1b2' })],
+        stopReason: 'tool_use',
+      },
       { content: [textBlock('I did not run it.')], stopReason: 'end_turn' },
     ]);
 
     await runAssistant({
-      llm, exec, confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'summarise this page' }], onEvent,
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'summarise this page' }],
+      onEvent,
     });
 
     expect(confirm).toHaveBeenCalledOnce();
@@ -162,8 +233,14 @@ describe('runAssistant gating', () => {
     const { onEvent, events } = collect();
     const llm = scriptedLlm([{ content: [textBlock('hello world')], stopReason: 'end_turn' }]);
     await runAssistant({
-      llm, exec: vi.fn(), confirm: vi.fn(), tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'hi' }], onEvent,
+      llm,
+      exec: vi.fn(),
+      confirm: vi.fn(),
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'hi' }],
+      onEvent,
     });
     expect(events.find((e) => e.type === 'text')).toEqual({ type: 'text', text: 'hello world' });
   });
@@ -176,8 +253,14 @@ describe('runAssistant gating', () => {
     ]);
     const { onEvent, events } = collect();
     await runAssistant({
-      llm, exec, confirm: vi.fn(async () => true), tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'x' }], onEvent,
+      llm,
+      exec,
+      confirm: vi.fn(async () => true),
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'x' }],
+      onEvent,
     });
     expect(exec).not.toHaveBeenCalled();
     const r = events.find((e) => e.type === 'tool_result');
@@ -193,8 +276,14 @@ describe('runAssistant gating', () => {
     ]);
 
     await runAssistant({
-      llm, exec: vi.fn(async () => ({ ok: true, text: 'ok' })), confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'create X' }], onEvent,
+      llm,
+      exec: vi.fn(async () => ({ ok: true, text: 'ok' })),
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'create X' }],
+      onEvent,
     });
 
     expect(confirm).toHaveBeenCalledOnce();
@@ -205,12 +294,19 @@ describe('runAssistant gating', () => {
   it('stops at the iteration cap', async () => {
     // Always asks for a (read-only) tool — never terminates on its own.
     const llm: LlmComplete = async () => ({
-      content: [toolBlock('t', 'fleex_ticket_list', {})], stopReason: 'tool_use',
+      content: [toolBlock('t', 'fleex_ticket_list', {})],
+      stopReason: 'tool_use',
     });
     const { onEvent, events } = collect();
     await runAssistant({
-      llm, exec: vi.fn(async () => ({ ok: true, text: '[]' })), confirm: vi.fn(),
-      tools, anthropicTools, system: 's', messages: [{ role: 'user', content: 'loop' }], onEvent,
+      llm,
+      exec: vi.fn(async () => ({ ok: true, text: '[]' })),
+      confirm: vi.fn(),
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'loop' }],
+      onEvent,
       maxIterations: 3,
     });
     const done = events.find((e) => e.type === 'done');
@@ -229,8 +325,14 @@ describe('runAssistant auto-approval', () => {
     ]);
 
     await runAssistant({
-      llm, exec, confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'create X' }], onEvent,
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'create X' }],
+      onEvent,
       isAutoApproved: (n) => n === 'fleex_ticket_create',
     });
 
@@ -252,8 +354,14 @@ describe('runAssistant auto-approval', () => {
     ]);
 
     await runAssistant({
-      llm, exec, confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'delete 7' }], onEvent,
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'delete 7' }],
+      onEvent,
       isAutoApproved: (n) => n === 'fleex_ticket_create',
     });
 
@@ -276,8 +384,14 @@ describe('runAssistant auto-approval', () => {
     ]);
 
     await runAssistant({
-      llm, exec, confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'go' }], onEvent,
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'go' }],
+      onEvent,
       isAutoApproved: () => true,
     });
 
@@ -309,14 +423,22 @@ describe('runAssistant auto-approval', () => {
     ]);
 
     await runAssistant({
-      llm, exec, confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'create 3' }], onEvent,
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'create 3' }],
+      onEvent,
       isAutoApproved: (n) => allowed.has(n),
     });
 
     expect(confirm).toHaveBeenCalledOnce();
     expect(exec).toHaveBeenCalledTimes(3);
-    const flags = events.filter((e) => e.type === 'tool_call').map((e) => e.type === 'tool_call' && e.autoApproved);
+    const flags = events
+      .filter((e) => e.type === 'tool_call')
+      .map((e) => e.type === 'tool_call' && e.autoApproved);
     expect(flags).toEqual([false, true, true]);
   });
 
@@ -330,8 +452,14 @@ describe('runAssistant auto-approval', () => {
     ]);
 
     await runAssistant({
-      llm, exec: vi.fn(async () => ({ ok: true, text: '[]' })), confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'list' }], onEvent,
+      llm,
+      exec: vi.fn(async () => ({ ok: true, text: '[]' })),
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'list' }],
+      onEvent,
       isAutoApproved,
     });
 
@@ -349,8 +477,14 @@ describe('runAssistant auto-approval', () => {
     ]);
 
     await runAssistant({
-      llm, exec, confirm, tools, anthropicTools,
-      system: 's', messages: [{ role: 'user', content: 'delete 3' }], onEvent,
+      llm,
+      exec,
+      confirm,
+      tools,
+      anthropicTools,
+      system: 's',
+      messages: [{ role: 'user', content: 'delete 3' }],
+      onEvent,
       isAutoApproved: () => false,
     });
 

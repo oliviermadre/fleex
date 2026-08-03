@@ -17,15 +17,16 @@ import type {
   ThroughputWipBucket,
   WorkflowLeaderboardEntry,
 } from '@fleex/shared';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { CommentStorePort } from '../ports/comment-store.port.js';
-import type { MentionStorePort } from '../ports/mention-store.port.js';
-import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
+
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { CommentStorePort } from '../ports/comment-store.port.js';
+import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
+import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
+import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
-import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 
 interface CacheEntry {
@@ -125,9 +126,13 @@ export class GetStatisticsUseCase {
     const prLinks = filteredTickets.flatMap((t) =>
       t.toDTO().links.filter((l: TicketLink) => l.type === 'github_pr'),
     );
-    const mergedTickets = tickets.filter(
-      (t) => t.toDTO().status === 'done' && t.toDTO().links.some((l: TicketLink) => l.type === 'github_pr'),
-    ).filter((t) => inRange(t.toDTO().statusChangedAt));
+    const mergedTickets = tickets
+      .filter(
+        (t) =>
+          t.toDTO().status === 'done' &&
+          t.toDTO().links.some((l: TicketLink) => l.type === 'github_pr'),
+      )
+      .filter((t) => inRange(t.toDTO().statusChangedAt));
 
     const userComments = filteredComments.filter((c) => c.toDTO().authorType === 'user');
     const agentComments = filteredComments.filter((c) => c.toDTO().authorType === 'agent');
@@ -136,9 +141,10 @@ export class GetStatisticsUseCase {
     const durations = filteredExecutions
       .filter((e) => e.completedAt)
       .map((e) => new Date(e.completedAt!).getTime() - new Date(e.startedAt).getTime());
-    const avgDuration = durations.length > 0
-      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-      : null;
+    const avgDuration =
+      durations.length > 0
+        ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+        : null;
 
     const skillExecutions = filteredExecutions.filter((e) => e.mentionId.startsWith('skill:'));
 
@@ -275,17 +281,24 @@ export class GetStatisticsUseCase {
           personaName: persona?.name ?? personaId,
           personaDisplayName: persona?.displayName ?? personaId,
           spawnCount: execs.length,
-          avgDurationMs: durations.length > 0
-            ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-            : null,
+          avgDurationMs:
+            durations.length > 0
+              ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+              : null,
           completedCount: completed.length,
           failedCount: failed.length,
           totalCostUsd: costs.reduce((a, b) => a + b, 0),
           avgCostUsd: costs.length > 0 ? costs.reduce((a, b) => a + b, 0) / costs.length : null,
           totalInputTokens: inToks.reduce((a, b) => a + b, 0),
           totalOutputTokens: outToks.reduce((a, b) => a + b, 0),
-          avgInputTokens: inToks.length > 0 ? Math.round(inToks.reduce((a, b) => a + b, 0) / inToks.length) : null,
-          avgOutputTokens: outToks.length > 0 ? Math.round(outToks.reduce((a, b) => a + b, 0) / outToks.length) : null,
+          avgInputTokens:
+            inToks.length > 0
+              ? Math.round(inToks.reduce((a, b) => a + b, 0) / inToks.length)
+              : null,
+          avgOutputTokens:
+            outToks.length > 0
+              ? Math.round(outToks.reduce((a, b) => a + b, 0) / outToks.length)
+              : null,
         };
       })
       .sort((a, b) => b.spawnCount - a.spawnCount);
@@ -328,7 +341,10 @@ export class GetStatisticsUseCase {
       });
       panelExecutionCount = panelEvents.length;
 
-      const execByPanel = new Map<string, Array<{ status: string; durationMs: number; respondedMembers: number }>>();
+      const execByPanel = new Map<
+        string,
+        Array<{ status: string; durationMs: number; respondedMembers: number }>
+      >();
       for (const event of panelEvents) {
         const p = event.payload;
         const panelId = (p['panelId'] as string) ?? 'unknown';
@@ -356,12 +372,14 @@ export class GetStatisticsUseCase {
             executionCount: execs.length,
             completedCount: completed.length,
             failedCount: execs.filter((e) => e.status === 'failed').length,
-            avgDurationMs: durations.length > 0
-              ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-              : null,
-            avgRespondedMembers: responded.length > 0
-              ? Math.round((responded.reduce((a, b) => a + b, 0) / responded.length) * 10) / 10
-              : null,
+            avgDurationMs:
+              durations.length > 0
+                ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+                : null,
+            avgRespondedMembers:
+              responded.length > 0
+                ? Math.round((responded.reduce((a, b) => a + b, 0) / responded.length) * 10) / 10
+                : null,
           };
         })
         .sort((a, b) => b.executionCount - a.executionCount);
@@ -530,7 +548,9 @@ export class GetStatisticsUseCase {
       }
 
       // Cycle time: time held in each (non-terminal) status until the done.
-      const seq: Array<{ at: Date; status: string }> = [{ at: new Date(t.createdAt), status: 'backlog' }];
+      const seq: Array<{ at: Date; status: string }> = [
+        { at: new Date(t.createdAt), status: 'backlog' },
+      ];
       for (const mv of moves) seq.push({ at: mv.at, status: mv.to });
       seq.sort((a, b) => a.at.getTime() - b.at.getTime());
       for (let i = 0; i < seq.length; i++) {
@@ -549,19 +569,22 @@ export class GetStatisticsUseCase {
     const leadMs = leadPoints.map((p) => p.leadTimeMs).sort((a, b) => a - b);
     const leadTime: LeadTimeStats = {
       points: leadPoints,
-      avgMs: leadMs.length > 0 ? Math.round(leadMs.reduce((a, b) => a + b, 0) / leadMs.length) : null,
+      avgMs:
+        leadMs.length > 0 ? Math.round(leadMs.reduce((a, b) => a + b, 0) / leadMs.length) : null,
       medianMs: percentile(leadMs, 50),
       p85Ms: percentile(leadMs, 85),
     };
 
-    const cycleTimeByStatus: CycleTimeStatus[] = FLOW_STATUSES.filter((s) => s !== 'done').map((status) => {
-      const acc = cycleAccum.get(status);
-      return {
-        status,
-        avgMs: acc && acc.count > 0 ? Math.round(acc.total / acc.count) : null,
-        count: acc?.count ?? 0,
-      };
-    });
+    const cycleTimeByStatus: CycleTimeStatus[] = FLOW_STATUSES.filter((s) => s !== 'done').map(
+      (status) => {
+        const acc = cycleAccum.get(status);
+        return {
+          status,
+          avgMs: acc && acc.count > 0 ? Math.round(acc.total / acc.count) : null,
+          count: acc?.count ?? 0,
+        };
+      },
+    );
 
     // Workflow leaderboard — runs started in range, grouped by template.
     const runsByTemplate = new Map<string, typeof filteredRuns>();
@@ -584,7 +607,10 @@ export class GetStatisticsUseCase {
           executionCount: runs.length,
           completedCount: runs.filter((r) => r.status === 'completed').length,
           failedCount: runs.filter((r) => r.status === 'failed').length,
-          avgDurationMs: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null,
+          avgDurationMs:
+            durations.length > 0
+              ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+              : null,
         };
       })
       .sort((a, b) => b.executionCount - a.executionCount);

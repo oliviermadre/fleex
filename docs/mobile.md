@@ -14,7 +14,7 @@ exécutions. Les terminaux CLI, dashboards et éditeurs restent sur desktop.
 ## Setup (une fois)
 
 1. Note le port **web** affiché par `fleex start` (ligne `Allocated ports —
-   gateway:… server:… web:…`).
+gateway:… server:… web:…`).
 
 2. Sur le laptop, expose le port web en HTTPS sur le tailnet :
 
@@ -113,6 +113,7 @@ puis `bun run start`, sans passer par `fleex start`), rien ne proxie
 ```bash
 tailscale serve --bg --https=443 --set-path=/companion http://localhost:4399
 ```
+
 </details>
 
 ## Dépannage

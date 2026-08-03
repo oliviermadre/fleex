@@ -190,7 +190,10 @@ export class ExecutionCancelledError extends DomainError {
 
 export class InvalidGateOutcomeError extends DomainError {
   constructor(outcome: string, allowed: string[]) {
-    super(`Invalid gate outcome "${outcome}". Allowed: ${allowed.join(', ')}`, 'INVALID_GATE_OUTCOME');
+    super(
+      `Invalid gate outcome "${outcome}". Allowed: ${allowed.join(', ')}`,
+      'INVALID_GATE_OUTCOME',
+    );
   }
 }
 
@@ -207,7 +210,10 @@ export type SlackImportErrorCode =
  * empty conversation).
  */
 export class SlackImportError extends DomainError {
-  constructor(message: string, public readonly slackCode: SlackImportErrorCode) {
+  constructor(
+    message: string,
+    public readonly slackCode: SlackImportErrorCode,
+  ) {
     super(message, slackCode);
   }
 }
@@ -261,7 +267,11 @@ export class ActionMissingContextError extends DomainError {
 }
 
 export class ActionTimeoutError extends DomainError {
-  constructor(id: string, timeoutMs: number, public readonly runId: string) {
+  constructor(
+    id: string,
+    timeoutMs: number,
+    public readonly runId: string,
+  ) {
     super(`Action timed out after ${timeoutMs}ms: ${id}`, 'ACTION_TIMEOUT');
   }
 }

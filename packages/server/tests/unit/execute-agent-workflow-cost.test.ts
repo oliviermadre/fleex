@@ -7,8 +7,8 @@ vi.mock('../../src/application/utils/stream-sdk-query.js', () => ({
   streamSdkQuery: vi.fn(),
 }));
 
-import { streamSdkQuery } from '../../src/application/utils/stream-sdk-query.js';
 import { ExecuteAgentUseCase } from '../../src/application/use-cases/execute-agent.js';
+import { streamSdkQuery } from '../../src/application/utils/stream-sdk-query.js';
 
 const mockedStream = streamSdkQuery as unknown as ReturnType<typeof vi.fn>;
 
@@ -23,7 +23,12 @@ const METRICS = {
 
 function makeUseCase() {
   // executionMode 'message' → effectiveMode 'talk' → skips worktree creation.
-  const persona = { id: 'p1', name: 'Builder', executionMode: 'message', model: 'claude-opus-4-8' } as never;
+  const persona = {
+    id: 'p1',
+    name: 'Builder',
+    executionMode: 'message',
+    model: 'claude-opus-4-8',
+  } as never;
 
   const completeExecution = vi.fn(async () => {});
   const updateSessionId = vi.fn(async () => {});
@@ -51,20 +56,20 @@ function makeUseCase() {
   const config = { get: () => ({}) } as never;
 
   const useCase = new ExecuteAgentUseCase(
-    personaStore,   // 1 personaStore
-    stub,           // 2 mentionStore
-    stub,           // 3 postComment
-    stub,           // 4 resolveMention
-    stub,           // 5 submitDeliverable
+    personaStore, // 1 personaStore
+    stub, // 2 mentionStore
+    stub, // 3 postComment
+    stub, // 4 resolveMention
+    stub, // 5 submitDeliverable
     getTicketContext, // 6 getTicketContext
-    agentEventStore,  // 7 agentEventStore
-    stub,           // 8 ticketStore
-    stub,           // 9 createWorktree
-    config,         // 10 config
-    logger,         // 11 logger
-    stub,           // 12 autoReviewWorkflow
-    sdkLimiter,     // 13 sdkLimiter
-    stub,           // 14 skillStore
+    agentEventStore, // 7 agentEventStore
+    stub, // 8 ticketStore
+    stub, // 9 createWorktree
+    config, // 10 config
+    logger, // 11 logger
+    stub, // 12 autoReviewWorkflow
+    sdkLimiter, // 13 sdkLimiter
+    stub, // 14 skillStore
   );
 
   // Stub the prompt-composition internals so the test isolates the metrics

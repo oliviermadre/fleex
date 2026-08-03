@@ -1,12 +1,13 @@
 import { SessionEntity } from '../../domain/entities.js';
-import { SessionNamingService } from '../../domain/services/session-naming.js';
 import { sessionIdFromTmuxName } from '../../domain/services/session-id.js';
+
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
-import type { TmuxPort, TmuxSessionInfo } from '../ports/tmux.port.js';
+import type { SessionNamingService } from '../../domain/services/session-naming.js';
 import type { GitPort } from '../ports/git.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
+import type { TmuxPort, TmuxSessionInfo } from '../ports/tmux.port.js';
 
 export class DiscoverExistingSessionsUseCase {
   constructor(
@@ -20,7 +21,7 @@ export class DiscoverExistingSessionsUseCase {
   ) {}
 
   async execute(prefetchedSessions?: TmuxSessionInfo[]): Promise<void> {
-    const managed = prefetchedSessions ?? await this.tmux.listManagedSessions();
+    const managed = prefetchedSessions ?? (await this.tmux.listManagedSessions());
 
     for (const tmuxSession of managed) {
       const existing = await this.sessionStore.getByTmuxName(tmuxSession.name);

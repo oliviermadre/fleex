@@ -51,7 +51,9 @@ const migration: Migration = {
     for (const table of ['users', 'user_kv']) {
       await ctx.exec(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
       await ctx.exec(`DROP POLICY IF EXISTS "service_role_${table}" ON ${table}`);
-      await ctx.exec(`CREATE POLICY "service_role_${table}" ON ${table} FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_${table}" ON ${table} FOR ALL USING (true) WITH CHECK (true)`,
+      );
     }
   },
 

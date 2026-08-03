@@ -1,10 +1,15 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, warn, die, present, c } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { ok, warn, die, present, c } from '../../../core/colors.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 import type { Token } from '../_shared.ts';
 
-interface CreateOptions { name?: string }
-interface CreatedToken extends Token { secret: string }
+interface CreateOptions {
+  name?: string;
+}
+interface CreatedToken extends Token {
+  secret: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

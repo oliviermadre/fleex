@@ -1,7 +1,8 @@
-import { die, err } from '../../core/colors.ts';
-import { apiBase, apiGet } from '../../core/api.ts';
-import { matchById } from '../../core/match.ts';
 import chalk from 'chalk';
+
+import { apiBase, apiGet } from '../../core/api.ts';
+import { die, err } from '../../core/colors.ts';
+import { matchById } from '../../core/match.ts';
 
 export interface Epic {
   id: string;
@@ -35,7 +36,7 @@ export async function resolveEpicId(input: string): Promise<string> {
 }
 
 export const VALID_TIMEFRAMES = ['now', 'next', 'later'] as const;
-export type Timeframe = typeof VALID_TIMEFRAMES[number];
+export type Timeframe = (typeof VALID_TIMEFRAMES)[number];
 
 export function assertValidTimeframe(t: string): asserts t is Timeframe {
   if (!VALID_TIMEFRAMES.includes(t as Timeframe)) {

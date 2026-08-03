@@ -14,7 +14,9 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts';
+
 import type { StatisticsResponse } from '@fleex/shared';
+
 import {
   AXIS_TICK,
   ChartCard,
@@ -68,8 +70,24 @@ function DualAxisComposed({
       <ComposedChart data={rows} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
         <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
-        <YAxis yAxisId="left" tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => formatCompact(Number(v))} />
-        <YAxis yAxisId="right" orientation="right" tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} domain={rightDomain} tickFormatter={(v) => rightFormat(Number(v))} />
+        <YAxis
+          yAxisId="left"
+          tick={AXIS_TICK}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          tickFormatter={(v) => formatCompact(Number(v))}
+        />
+        <YAxis
+          yAxisId="right"
+          orientation="right"
+          tick={AXIS_TICK}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          domain={rightDomain}
+          tickFormatter={(v) => rightFormat(Number(v))}
+        />
         <Tooltip content={<StatTooltip hideZero />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
         {meanLines?.map((m, i) => (
           <ReferenceLine
@@ -78,13 +96,40 @@ function DualAxisComposed({
             y={m.value}
             stroke={m.color}
             strokeDasharray="5 4"
-            label={m.label ? { value: m.label, position: m.axis === 'right' ? 'insideTopRight' : 'insideTopLeft', fontSize: 9, fill: m.color } : undefined}
+            label={
+              m.label
+                ? {
+                    value: m.label,
+                    position: m.axis === 'right' ? 'insideTopRight' : 'insideTopLeft',
+                    fontSize: 9,
+                    fill: m.color,
+                  }
+                : undefined
+            }
           />
         ))}
         {bars.map((s) => (
-          <Bar key={s.key} yAxisId="left" dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+          <Bar
+            key={s.key}
+            yAxisId="left"
+            dataKey={s.key}
+            name={s.label}
+            fill={s.color}
+            radius={[3, 3, 0, 0]}
+            maxBarSize={36}
+            isAnimationActive={false}
+          />
         ))}
-        <Line yAxisId="right" type="monotone" dataKey={line.key} name={line.label} stroke={line.color} strokeWidth={2.5} dot={{ r: 2, fill: line.color }} isAnimationActive={false} />
+        <Line
+          yAxisId="right"
+          type="monotone"
+          dataKey={line.key}
+          name={line.label}
+          stroke={line.color}
+          strokeWidth={2.5}
+          dot={{ r: 2, fill: line.color }}
+          isAnimationActive={false}
+        />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -101,12 +146,20 @@ interface ScatterPoint {
   extra?: string;
 }
 
-function ScatterTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ScatterPoint }> }) {
+function ScatterTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: ScatterPoint }>;
+}) {
   if (!active || !payload || payload.length === 0) return null;
   const p = payload[0]!.payload;
   return (
     <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-glass-surface-dense)] px-3 py-2 shadow-xl backdrop-blur-md">
-      <div className="mb-1 text-[11px] font-semibold text-[var(--theme-text-primary)]">{p.label}</div>
+      <div className="mb-1 text-[11px] font-semibold text-[var(--theme-text-primary)]">
+        {p.label}
+      </div>
       <div className="space-y-0.5 text-[11px] text-[var(--theme-text-secondary)]">
         <div>{p.xDisplay}</div>
         <div>{p.yDisplay}</div>
@@ -154,7 +207,13 @@ function BubbleScatter({
           axisLine={false}
           domain={xType === 'time' ? ['dataMin', 'dataMax'] : [0, 'dataMax']}
           tickFormatter={(v) => xFormat(Number(v))}
-          label={{ value: xLabel, position: 'insideBottom', offset: -8, fontSize: 10, fill: 'var(--theme-text-muted)' }}
+          label={{
+            value: xLabel,
+            position: 'insideBottom',
+            offset: -8,
+            fontSize: 10,
+            fill: 'var(--theme-text-muted)',
+          }}
         />
         <YAxis
           type="number"
@@ -182,7 +241,13 @@ function BubbleScatter({
         ))}
         <Scatter data={points} isAnimationActive={false}>
           {points.map((p, i) => (
-            <Cell key={i} fill={p.color} fillOpacity={0.78} stroke="var(--theme-bg-surface)" strokeWidth={1} />
+            <Cell
+              key={i}
+              fill={p.color}
+              fillOpacity={0.78}
+              stroke="var(--theme-bg-surface)"
+              strokeWidth={1}
+            />
           ))}
         </Scatter>
       </ScatterChart>
@@ -223,7 +288,9 @@ export function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHe
           ))}
           {DOW_ROWS.map(({ label, dow }) => (
             <div key={dow} className="contents">
-              <div className="flex items-center text-[9px] text-[var(--theme-text-muted)]">{label}</div>
+              <div className="flex items-center text-[9px] text-[var(--theme-text-muted)]">
+                {label}
+              </div>
               {Array.from({ length: 24 }, (_, h) => {
                 const v = grid.get(`${dow}:${h}`) ?? 0;
                 const intensity = max > 0 ? v / max : 0;
@@ -245,7 +312,11 @@ export function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHe
         <div className="mt-3 flex items-center justify-end gap-1.5 text-[9px] text-[var(--theme-text-muted)]">
           <span>less</span>
           {[0.15, 0.4, 0.65, 0.9].map((o) => (
-            <span key={o} className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: 'var(--theme-accent)', opacity: o }} />
+            <span
+              key={o}
+              className="h-2.5 w-2.5 rounded-sm"
+              style={{ backgroundColor: 'var(--theme-accent)', opacity: o }}
+            />
           ))}
           <span>more</span>
         </div>
@@ -283,12 +354,18 @@ export const CANDIDATES: Candidate[] = [
     title: 'Cost Pareto by agent',
     desc: 'Spend per agent (desc) with cumulative %. The 80/20 of your budget.',
     render: (data) => {
-      const sorted = data.agentLeaderboard.filter((a) => a.totalCostUsd > 0).sort((a, b) => b.totalCostUsd - a.totalCostUsd);
+      const sorted = data.agentLeaderboard
+        .filter((a) => a.totalCostUsd > 0)
+        .sort((a, b) => b.totalCostUsd - a.totalCostUsd);
       const total = sorted.reduce((s, a) => s + a.totalCostUsd, 0);
       let run = 0;
       const rows: Row[] = sorted.map((a) => {
         run += a.totalCostUsd;
-        return { label: a.personaDisplayName, cost: a.totalCostUsd, cumulative: total > 0 ? (run / total) * 100 : 0 };
+        return {
+          label: a.personaDisplayName,
+          cost: a.totalCostUsd,
+          cumulative: total > 0 ? (run / total) * 100 : 0,
+        };
       });
       return (
         <DualAxisComposed
@@ -316,7 +393,9 @@ export const CANDIDATES: Candidate[] = [
         perTicket: b.ticketsCompleted > 0 ? b.totalCostUsd / b.ticketsCompleted : 0,
       }));
       // Average over buckets that actually completed tickets (ignore empty days).
-      const vals = data.timeSeries.filter((b) => b.ticketsCompleted > 0).map((b) => b.totalCostUsd / b.ticketsCompleted);
+      const vals = data.timeSeries
+        .filter((b) => b.ticketsCompleted > 0)
+        .map((b) => b.totalCostUsd / b.ticketsCompleted);
       const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
       return (
         <TimeLineChart
@@ -324,7 +403,17 @@ export const CANDIDATES: Candidate[] = [
           xKey="label"
           format={formatUsd}
           series={[{ key: 'perTicket', label: '$ / ticket', color: colorAt(1) }]}
-          meanLines={avg != null ? [{ value: avg, color: 'var(--theme-text-secondary)', label: `avg ${formatUsd(avg)}` }] : undefined}
+          meanLines={
+            avg != null
+              ? [
+                  {
+                    value: avg,
+                    color: 'var(--theme-text-secondary)',
+                    label: `avg ${formatUsd(avg)}`,
+                  },
+                ]
+              : undefined
+          }
         />
       );
     },
@@ -343,8 +432,11 @@ export const CANDIDATES: Candidate[] = [
       const n = data.timeSeries.length || 1;
       const avgCreated = data.timeSeries.reduce((s, b) => s + b.ticketsCreated, 0) / n;
       const avgCompleted = data.timeSeries.reduce((s, b) => s + b.ticketsCompleted, 0) / n;
-      const rateVals = data.timeSeries.filter((b) => b.ticketsCreated > 0).map((b) => (b.ticketsCompleted / b.ticketsCreated) * 100);
-      const avgRate = rateVals.length > 0 ? rateVals.reduce((a, b) => a + b, 0) / rateVals.length : null;
+      const rateVals = data.timeSeries
+        .filter((b) => b.ticketsCreated > 0)
+        .map((b) => (b.ticketsCompleted / b.ticketsCreated) * 100);
+      const avgRate =
+        rateVals.length > 0 ? rateVals.reduce((a, b) => a + b, 0) / rateVals.length : null;
       return (
         <DualAxisComposed
           rows={rows}
@@ -354,9 +446,28 @@ export const CANDIDATES: Candidate[] = [
           ]}
           line={{ key: 'rate', label: 'Completion %', color: colorAt(6) }}
           meanLines={[
-            { value: avgCreated, color: colorAt(0), axis: 'left', label: `x̄ ${avgCreated.toFixed(1)}` },
-            { value: avgCompleted, color: colorAt(1), axis: 'left', label: `x̄ ${avgCompleted.toFixed(1)}` },
-            ...(avgRate != null ? [{ value: avgRate, color: colorAt(6), axis: 'right' as const, label: `x̄ ${avgRate.toFixed(0)}%` }] : []),
+            {
+              value: avgCreated,
+              color: colorAt(0),
+              axis: 'left',
+              label: `x̄ ${avgCreated.toFixed(1)}`,
+            },
+            {
+              value: avgCompleted,
+              color: colorAt(1),
+              axis: 'left',
+              label: `x̄ ${avgCompleted.toFixed(1)}`,
+            },
+            ...(avgRate != null
+              ? [
+                  {
+                    value: avgRate,
+                    color: colorAt(6),
+                    axis: 'right' as const,
+                    label: `x̄ ${avgRate.toFixed(0)}%`,
+                  },
+                ]
+              : []),
           ]}
         />
       );
@@ -388,7 +499,8 @@ export const CANDIDATES: Candidate[] = [
     title: 'Iterations per ticket',
     desc: 'Distribution of conversation length (comments + mentions + workflows) before a ticket is done. Left-heavy = good one-shot rate.',
     render: (data) => {
-      if (data.ticketIterations.length === 0) return <EmptyChart message="No tickets completed in this period" />;
+      if (data.ticketIterations.length === 0)
+        return <EmptyChart message="No tickets completed in this period" />;
       const bins = [
         { name: '1', test: (n: number) => n <= 1 },
         { name: '2–3', test: (n: number) => n >= 2 && n <= 3 },
@@ -404,10 +516,37 @@ export const CANDIDATES: Candidate[] = [
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={rows} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
-            <XAxis dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={false} label={{ value: 'interactions / ticket', position: 'insideBottom', offset: -2, fontSize: 9, fill: 'var(--theme-text-muted)' }} />
-            <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} allowDecimals={false} />
-            <Tooltip content={<StatTooltip format={(v) => `${v} tickets`} />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
-            <Bar dataKey="count" name="Tickets" radius={[3, 3, 0, 0]} maxBarSize={64} isAnimationActive={false}>
+            <XAxis
+              dataKey="name"
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              label={{
+                value: 'interactions / ticket',
+                position: 'insideBottom',
+                offset: -2,
+                fontSize: 9,
+                fill: 'var(--theme-text-muted)',
+              }}
+            />
+            <YAxis
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              width={44}
+              allowDecimals={false}
+            />
+            <Tooltip
+              content={<StatTooltip format={(v) => `${v} tickets`} />}
+              cursor={{ fill: 'var(--theme-bg-hover)' }}
+            />
+            <Bar
+              dataKey="count"
+              name="Tickets"
+              radius={[3, 3, 0, 0]}
+              maxBarSize={64}
+              isAnimationActive={false}
+            >
               {rows.map((_, i) => (
                 <Cell key={i} fill={ITERATION_BIN_COLORS[i] ?? '#ef4444'} />
               ))}
@@ -423,7 +562,8 @@ export const CANDIDATES: Candidate[] = [
     desc: 'One point per ticket: x = date done, y = days from first “doing” to done. Mean & upper control limit flag outliers/drift. Y axis is √-scaled to spread the dense low band.',
     render: (data) => {
       const pts = data.leadTime.points;
-      if (pts.length === 0) return <EmptyChart message="No tickets with a doing→done history in this period" />;
+      if (pts.length === 0)
+        return <EmptyChart message="No tickets with a doing→done history in this period" />;
       const days = pts.map((p) => p.leadTimeMs / 86_400_000);
       const mean = days.reduce((a, b) => a + b, 0) / days.length;
       const variance = days.reduce((a, b) => a + (b - mean) ** 2, 0) / days.length;
@@ -451,7 +591,9 @@ export const CANDIDATES: Candidate[] = [
           yScale="sqrt"
           xLabel="Done date"
           yLabel="Lead time (days)"
-          xFormat={(v) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          xFormat={(v) =>
+            new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          }
           yFormat={(v) => `${v.toFixed(0)}d`}
           zRange={[44, 44]}
           refLines={[
@@ -468,7 +610,8 @@ export const CANDIDATES: Candidate[] = [
     title: 'Cumulative flow (CFD)',
     desc: 'Tickets in each status over time. Widening bands reveal bottlenecks and growing WIP.',
     render: (data) => {
-      if (data.cumulativeFlow.length === 0) return <EmptyChart message="No ticket history in this period" />;
+      if (data.cumulativeFlow.length === 0)
+        return <EmptyChart message="No ticket history in this period" />;
       const rows: Row[] = data.cumulativeFlow.map((b) => ({ ...b, label: shortLabel(b.date) }));
       return (
         <TimeAreaChart
@@ -492,7 +635,11 @@ export const CANDIDATES: Candidate[] = [
     render: (data) => {
       const rows = data.cycleTimeByStatus
         .filter((c) => c.avgMs != null && c.avgMs > 0)
-        .map((c) => ({ name: c.status, value: c.avgMs as number, color: STATUS_BAR_COLOR[c.status] }));
+        .map((c) => ({
+          name: c.status,
+          value: c.avgMs as number,
+          color: STATUS_BAR_COLOR[c.status],
+        }));
       return <HBarChart data={rows} format={formatDays} />;
     },
   },
@@ -501,7 +648,8 @@ export const CANDIDATES: Candidate[] = [
     title: 'Throughput vs WIP',
     desc: 'Tickets completed per bucket (bars) against work-in-progress (line). Little’s law sanity check.',
     render: (data) => {
-      if (data.throughputWip.length === 0) return <EmptyChart message="No ticket history in this period" />;
+      if (data.throughputWip.length === 0)
+        return <EmptyChart message="No ticket history in this period" />;
       const rows: Row[] = data.throughputWip.map((b) => ({ ...b, label: shortLabel(b.date) }));
       return (
         <DualAxisComposed
@@ -521,8 +669,9 @@ export function CandidateGallery({ data }: { data: StatisticsResponse }) {
   return (
     <div>
       <div className="mb-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3 text-xs text-[var(--theme-text-secondary)]">
-        <span className="font-semibold text-[var(--theme-text-primary)]">10 retained dataviz.</span> Each is independent and keeps its
-        ID (C3, C4, C6, C11, C13–C18) so we can discuss it by name. Filter the time range above — everything reacts.
+        <span className="font-semibold text-[var(--theme-text-primary)]">10 retained dataviz.</span>{' '}
+        Each is independent and keeps its ID (C3, C4, C6, C11, C13–C18) so we can discuss it by
+        name. Filter the time range above — everything reacts.
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         {CANDIDATES.map((c) => (

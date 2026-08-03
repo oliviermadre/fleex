@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import { render, cleanup, fireEvent, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
+
 import { ToolbarMultiSelect } from './ToolbarSelect';
 
 /**
@@ -33,7 +34,12 @@ describe('ToolbarMultiSelect', () => {
   it('keeps the menu open across toggles and reports each one (multi-select)', () => {
     const onToggle = vi.fn();
     render(
-      <ToolbarMultiSelect label="Status" values={['doing']} options={statusOptions} onToggle={onToggle} />,
+      <ToolbarMultiSelect
+        label="Status"
+        values={['doing']}
+        options={statusOptions}
+        onToggle={onToggle}
+      />,
     );
     fireEvent.click(screen.getByText('Status'));
     fireEvent.click(screen.getByText('Reviewing'));
@@ -55,7 +61,9 @@ describe('ToolbarMultiSelect', () => {
     );
     fireEvent.click(screen.getByText('Status'));
     const items = screen.getAllByRole('menuitemcheckbox');
-    const byLabel = Object.fromEntries(items.map((el) => [el.textContent, el.getAttribute('aria-checked')]));
+    const byLabel = Object.fromEntries(
+      items.map((el) => [el.textContent, el.getAttribute('aria-checked')]),
+    );
     expect(byLabel['Doing']).toBe('true');
     expect(byLabel['Reviewing']).toBe('false');
     expect(byLabel['Done']).toBe('true');

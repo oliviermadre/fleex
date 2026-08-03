@@ -1,7 +1,9 @@
 import { WebSocket } from 'ws';
+
 import type { PtyHandle, TerminalDimensions } from '@fleex/shared';
-import type { PtyPort } from '../../application/ports/pty.port.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { PtyPort } from '../../application/ports/pty.port.js';
 
 export class RemotePtyAdapter implements PtyPort {
   constructor(
@@ -22,11 +24,13 @@ export class RemotePtyAdapter implements PtyPort {
 
     ws.on('open', () => {
       // Send JSON init message
-      ws.send(JSON.stringify({
-        tmuxSessionName,
-        cols: dims.cols,
-        rows: dims.rows,
-      }));
+      ws.send(
+        JSON.stringify({
+          tmuxSessionName,
+          cols: dims.cols,
+          rows: dims.rows,
+        }),
+      );
     });
 
     ws.on('message', (data: Buffer | string, isBinary: boolean) => {

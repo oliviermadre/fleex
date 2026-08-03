@@ -1,7 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present, c } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
-import { assertValidRenderer, resolveColor, COLOR_KEYS, type DeliverableTypesView } from '../_shared.ts';
+import { ok, die, present, c } from '../../../core/colors.ts';
+import {
+  assertValidRenderer,
+  resolveColor,
+  COLOR_KEYS,
+  type DeliverableTypesView,
+} from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface CreateOptions {
   id?: string;
@@ -15,7 +21,8 @@ const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
   aliases: ['new'],
-  description: 'Create a deliverable type (create --id diagram --label Diagram [--renderer html] [--color violet])',
+  description:
+    'Create a deliverable type (create --id diagram --label Diagram [--renderer html] [--color violet])',
   setup(cmd) {
     cmd.requiredOption('--id <id>', 'Stable slug stored on deliverables (e.g. diagram)');
     cmd.requiredOption('--label <label>', 'Human-friendly label');

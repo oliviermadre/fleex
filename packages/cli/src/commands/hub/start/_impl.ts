@@ -1,7 +1,9 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+
 import { Option } from 'commander';
+
 import { c, info, ok, warn, die } from '../../../core/colors.ts';
 import { resolveInstance, ensureDirs } from '../../../core/instance.ts';
 import { findFreePort } from '../../../core/ports.ts';
@@ -26,7 +28,9 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
   const existing = readHubState();
   if (existing && isAlive(existing.pid)) {
     warn(`Event hub already running on port ${existing.port} (PID ${existing.pid}).`);
-    info(`Use ${c.bold('fleex hub status')} for details, ${c.bold('fleex hub stop')} to shut down.`);
+    info(
+      `Use ${c.bold('fleex hub status')} for details, ${c.bold('fleex hub stop')} to shut down.`,
+    );
     return;
   }
   if (existing) {
@@ -95,10 +99,17 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
   if (clientCount === 0) {
     warn(`No clients authorized yet. Provision one with: ${c.bold('fleex hub client add <name>')}`);
   } else {
-    info(`Use ${c.bold('fleex hub client list')} to see who's allowed, ${c.bold('fleex hub status')} for live state.`);
+    info(
+      `Use ${c.bold('fleex hub client list')} to see who's allowed, ${c.bold('fleex hub status')} for live state.`,
+    );
   }
 }
 
 export function setupOptions(cmd: import('commander').Command): void {
-  cmd.addOption(new Option('--port <port>', 'Force the hub to listen on a specific port (default: random free port)'));
+  cmd.addOption(
+    new Option(
+      '--port <port>',
+      'Force the hub to listen on a specific port (default: random free port)',
+    ),
+  );
 }

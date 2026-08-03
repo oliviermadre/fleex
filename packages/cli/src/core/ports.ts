@@ -1,5 +1,6 @@
-import net from 'node:net';
 import fs from 'node:fs';
+import net from 'node:net';
+
 import { die } from './colors.ts';
 import { resolveInstance, type InstanceContext } from './instance.ts';
 import { defaultWorkspaceName } from './workspaces.ts';
@@ -21,23 +22,24 @@ export interface Ports {
  * for environments without IPv6 (containers, CI sandboxes).
  */
 export function findFreePort(): Promise<number> {
-  const tryHost = (host: string | undefined) => new Promise<number>((resolve, reject) => {
-    const srv = net.createServer();
-    srv.unref();
-    srv.on('error', reject);
-    const cb = () => {
-      const addr = srv.address();
-      if (!addr || typeof addr === 'string') {
-        srv.close();
-        reject(new Error('Could not determine free port'));
-        return;
-      }
-      const port = addr.port;
-      srv.close(() => resolve(port));
-    };
-    if (host === undefined) srv.listen(0, cb);
-    else srv.listen(0, host, cb);
-  });
+  const tryHost = (host: string | undefined) =>
+    new Promise<number>((resolve, reject) => {
+      const srv = net.createServer();
+      srv.unref();
+      srv.on('error', reject);
+      const cb = () => {
+        const addr = srv.address();
+        if (!addr || typeof addr === 'string') {
+          srv.close();
+          reject(new Error('Could not determine free port'));
+          return;
+        }
+        const port = addr.port;
+        srv.close(() => resolve(port));
+      };
+      if (host === undefined) srv.listen(0, cb);
+      else srv.listen(0, host, cb);
+    });
   return tryHost(undefined).catch(() => tryHost('127.0.0.1'));
 }
 
@@ -86,7 +88,9 @@ export function stackNotRunningMessage(ctx: InstanceContext = resolveInstance())
   const lines: string[] = [];
 
   if (workspace) {
-    lines.push(`Stack not running for workspace '${workspace}' (branch '${branch}', instance '${instanceSlug}').`);
+    lines.push(
+      `Stack not running for workspace '${workspace}' (branch '${branch}', instance '${instanceSlug}').`,
+    );
   } else {
     lines.push(`Stack not running for branch '${branch}' (instance '${instanceSlug}').`);
   }

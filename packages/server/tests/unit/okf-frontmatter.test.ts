@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { frontmatter } from '../../src/scripts/okf/frontmatter.js';
 
 describe('frontmatter', () => {

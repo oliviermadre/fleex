@@ -19,7 +19,11 @@ function workspacesFile(): string {
 export function listWorkspaces(): WorkspaceInfo[] {
   try {
     const raw = JSON.parse(fs.readFileSync(workspacesFile(), 'utf8'));
-    const arr: unknown[] = Array.isArray(raw) ? raw : Array.isArray(raw?.workspaces) ? raw.workspaces : [];
+    const arr: unknown[] = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw?.workspaces)
+        ? raw.workspaces
+        : [];
     return arr
       .map((w): WorkspaceInfo | null => {
         if (!w || typeof w !== 'object') return null;

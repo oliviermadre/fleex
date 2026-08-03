@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiCall } from '../../../core/api.ts';
+import { c, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { resolveTicketId, colorizeCost } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface ShowOptions {
   board?: string;
@@ -10,7 +11,12 @@ interface ShowOptions {
   full?: boolean;
 }
 
-interface Link { type: string; label?: string; url?: string; ref?: string }
+interface Link {
+  type: string;
+  label?: string;
+  url?: string;
+  ref?: string;
+}
 interface Ticket {
   id: string;
   displayId: number;
@@ -28,10 +34,29 @@ interface Ticket {
   favorite?: boolean;
   links?: Link[];
 }
-interface Epic { id: string; name?: string; emoji?: string }
-interface Comment { authorType: string; authorName: string; createdAt: string; body: string }
-interface Deliverable { title: string; type: string; agentName: string; status: string; version: number | string; content: string }
-interface AgentActivity { ticketId: string; cumulativeCostUsd: number }
+interface Epic {
+  id: string;
+  name?: string;
+  emoji?: string;
+}
+interface Comment {
+  authorType: string;
+  authorName: string;
+  createdAt: string;
+  body: string;
+}
+interface Deliverable {
+  title: string;
+  type: string;
+  agentName: string;
+  status: string;
+  version: number | string;
+  content: string;
+}
+interface AgentActivity {
+  ticketId: string;
+  cumulativeCostUsd: number;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -54,24 +79,31 @@ const def: CommandDef = {
       // Cumulative agentic cost (#404) rides on the same endpoint the Kanban
       // board uses. It's a secondary detail — a failure here must not sink the
       // whole `show`, so recover to null and render it as "-".
-      apiCall<AgentActivity[]>('GET', `${base}/api/tickets/agent-activity?ticketIds=${encodeURIComponent(uuid)}`)
-        .catch(() => null),
+      apiCall<AgentActivity[]>(
+        'GET',
+        `${base}/api/tickets/agent-activity?ticketIds=${encodeURIComponent(uuid)}`,
+      ).catch(() => null),
     ]);
     const cumulativeCostUsd = activity?.[0]?.cumulativeCostUsd ?? null;
 
-    const epicLabel = ticketEpics.length === 0
-      ? '-'
-      : ticketEpics
-          .map((e) => `${e.emoji ? e.emoji + ' ' : ''}${e.name ?? ''}`.trim())
-          .filter((s) => s !== '')
-          .join(', ') || '-';
+    const epicLabel =
+      ticketEpics.length === 0
+        ? '-'
+        : ticketEpics
+            .map((e) => `${e.emoji ? e.emoji + ' ' : ''}${e.name ?? ''}`.trim())
+            .filter((s) => s !== '')
+            .join(', ') || '-';
 
     if (isJsonMode()) {
       const includeComments = opts.withComments || opts.full;
       const includeDeliverables = opts.withDeliverables || opts.full;
       const [comments, deliverables] = await Promise.all([
-        includeComments ? apiGet<Comment[]>(`${base}/api/tickets/${uuid}/comments`) : Promise.resolve(undefined),
-        includeDeliverables ? apiGet<Deliverable[]>(`${base}/api/tickets/${uuid}/deliverables`) : Promise.resolve(undefined),
+        includeComments
+          ? apiGet<Comment[]>(`${base}/api/tickets/${uuid}/comments`)
+          : Promise.resolve(undefined),
+        includeDeliverables
+          ? apiGet<Deliverable[]>(`${base}/api/tickets/${uuid}/deliverables`)
+          : Promise.resolve(undefined),
       ]);
       const payload = {
         ...ticket,
@@ -87,13 +119,19 @@ const def: CommandDef = {
 
     const colored = statusColor(ticket.status)(ticket.status);
     process.stdout.write('\n');
-    process.stdout.write(`  ${c.bold(`Ticket #${ticket.displayId}`)}  ${colored} | ${ticket.priority}\n`);
+    process.stdout.write(
+      `  ${c.bold(`Ticket #${ticket.displayId}`)}  ${colored} | ${ticket.priority}\n`,
+    );
     process.stdout.write(`  ─────────────────────────────────────────────────────────\n`);
     process.stdout.write(`  ${c.bold('Title:')}       ${ticket.title}\n`);
     process.stdout.write(`  ${c.bold('Type:')}        ${ticket.type ?? '-'}\n`);
-    process.stdout.write(`  ${c.bold('Cost:')}        ${cumulativeCostUsd === null ? '-' : colorizeCost(cumulativeCostUsd)}\n`);
+    process.stdout.write(
+      `  ${c.bold('Cost:')}        ${cumulativeCostUsd === null ? '-' : colorizeCost(cumulativeCostUsd)}\n`,
+    );
     process.stdout.write(`  ${c.bold('Assignee:')}    ${ticket.assignee ?? '-'}\n`);
-    process.stdout.write(`  ${c.bold('Tags:')}        ${ticket.tags?.length ? ticket.tags.join(', ') : '-'}\n`);
+    process.stdout.write(
+      `  ${c.bold('Tags:')}        ${ticket.tags?.length ? ticket.tags.join(', ') : '-'}\n`,
+    );
     process.stdout.write(`  ${c.bold('Epic:')}        ${epicLabel}\n`);
     process.stdout.write(`  ${c.bold('Blocked:')}     ${ticket.blocked ?? false}\n`);
     process.stdout.write(`  ${c.bold('Favorite:')}    ${ticket.favorite ?? false}\n`);
@@ -139,9 +177,16 @@ const def: CommandDef = {
         process.stdout.write(`\n    ${c.dim('No comments.')}\n`);
       }
       for (const cm of comments) {
-        const color = cm.authorType === 'agent' ? c.cyan : cm.authorType === 'user' ? c.green : (s: string) => s;
+        const color =
+          cm.authorType === 'agent'
+            ? c.cyan
+            : cm.authorType === 'user'
+              ? c.green
+              : (s: string) => s;
         process.stdout.write('\n');
-        process.stdout.write(`    ${color(c.bold(cm.authorName))} ${c.dim(`(${cm.authorType})`)}  ${c.dim(cm.createdAt)}\n`);
+        process.stdout.write(
+          `    ${color(c.bold(cm.authorName))} ${c.dim(`(${cm.authorType})`)}  ${c.dim(cm.createdAt)}\n`,
+        );
         for (const line of cm.body.split('\n')) {
           process.stdout.write(`      ${line}\n`);
         }
@@ -160,7 +205,9 @@ const def: CommandDef = {
       for (const d of deliverables) {
         const sc = d.status === 'final' ? c.green : c.yellow;
         process.stdout.write('\n');
-        process.stdout.write(`    ${c.bold(d.title)}  ${c.dim(`[${d.type}]`)}  by ${c.cyan(d.agentName)}  ${sc(d.status)}  ${c.dim(`v${d.version}`)}\n`);
+        process.stdout.write(
+          `    ${c.bold(d.title)}  ${c.dim(`[${d.type}]`)}  by ${c.cyan(d.agentName)}  ${sc(d.status)}  ${c.dim(`v${d.version}`)}\n`,
+        );
         process.stdout.write('    ────────────────────────────────────────────────────────\n');
         for (const line of String(d.content).split('\n')) {
           process.stdout.write(`      ${line}\n`);

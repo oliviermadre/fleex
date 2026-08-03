@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import pg from 'pg';
+
 import type { LoggerPort } from '../../../application/ports/logger.port.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 const { Pool } = pg;
 
@@ -55,7 +56,7 @@ export class SupabaseConnection {
     if (!this._pool) {
       throw new Error(
         'SupabaseConnection has no direct PostgreSQL connection. ' +
-        'Set FLEEX_SUPABASE_DB_URL to your Supabase PostgreSQL connection string to run migrations.',
+          'Set FLEEX_SUPABASE_DB_URL to your Supabase PostgreSQL connection string to run migrations.',
       );
     }
     return this._pool.query(text, params);

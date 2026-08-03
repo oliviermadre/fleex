@@ -66,7 +66,12 @@ const migration: Migration = {
 
     await ctx.exec(`DROP INDEX IF EXISTS idx_sessions_hook_status`);
 
-    const cols = ['hook_status_updated_at', 'hook_last_message', 'hook_waiting_reason', 'hook_status'];
+    const cols = [
+      'hook_status_updated_at',
+      'hook_last_message',
+      'hook_waiting_reason',
+      'hook_status',
+    ];
     for (const col of cols) {
       const sql = ctx.dialect({
         sqlite: `ALTER TABLE sessions DROP COLUMN ${col}`,

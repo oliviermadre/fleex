@@ -1,9 +1,12 @@
-import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest';
 import { render, cleanup, fireEvent, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest';
+
 import type { Board, Ticket, TicketUnreadCounts } from '@fleex/shared';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
+
 import { useTicketStore } from '../../stores/ticketStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+
 import { ListFocusRow } from './ListFocusRow';
 
 // floating-ui popovers (priority/type pickers) need observers jsdom lacks.
@@ -22,7 +25,10 @@ const originalOpenSession = useTicketStore.getState().openSessionFromTicket;
 beforeEach(() => {
   // SmartSessionButton fires workflowTemplateStore.refresh() on mount — stub it
   // so no network is hit (same setup as SmartSessionButton.test.tsx).
-  useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
+  useWorkflowTemplateStore.setState({
+    templates: [],
+    refresh: vi.fn().mockResolvedValue(undefined),
+  });
 });
 afterEach(() => {
   cleanup();

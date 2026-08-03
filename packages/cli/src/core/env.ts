@@ -12,7 +12,10 @@ export function parseDotEnv(filePath: string): Record<string, string> {
     const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
     if (m) {
       let val = m[2] ?? '';
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
         val = val.slice(1, -1);
       }
       vars[m[1]!] = val;

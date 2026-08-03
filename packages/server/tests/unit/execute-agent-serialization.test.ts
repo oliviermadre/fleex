@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { ExecuteAgentUseCase } from '../../src/application/use-cases/execute-agent.js';
 import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
 
@@ -8,13 +9,20 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
-  const promise = new Promise<void>((r) => { resolve = r; });
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
   return { promise, resolve };
 }
 
 function makeMention(id: string, ticketId = 'T', agent = 'A'): TicketMentionEntity {
   return TicketMentionEntity.create({
-    id, ticketId, commentId: `c-${id}`, targetAgent: agent, sourceAgent: 'user', targetType: 'agent',
+    id,
+    ticketId,
+    commentId: `c-${id}`,
+    targetAgent: agent,
+    sourceAgent: 'user',
+    targetType: 'agent',
   });
 }
 
@@ -34,7 +42,9 @@ function makeUseCase() {
       [...mentions.values()].filter((m) => m.ticketId === ticketId),
     getPendingForAgent: async (name: string) =>
       [...mentions.values()].filter((m) => m.targetAgent === name && m.status === 'pending'),
-    save: async (m: TicketMentionEntity) => { mentions.set(m.id, m); },
+    save: async (m: TicketMentionEntity) => {
+      mentions.set(m.id, m);
+    },
   } as never;
 
   const personaStore = { getById: async () => persona, getByName: async () => persona } as never;
@@ -43,7 +53,20 @@ function makeUseCase() {
   const stub = {} as never;
 
   const useCase = new ExecuteAgentUseCase(
-    personaStore, mentionStore, stub, stub, stub, stub, stub, stub, stub, stub, logger, stub, sdkLimiter, stub,
+    personaStore,
+    mentionStore,
+    stub,
+    stub,
+    stub,
+    stub,
+    stub,
+    stub,
+    stub,
+    stub,
+    logger,
+    stub,
+    sdkLimiter,
+    stub,
   );
 
   const dispatched: string[] = [];
@@ -51,15 +74,18 @@ function makeUseCase() {
   const gates = new Map<string, { promise: Promise<void>; resolve: () => void }>();
 
   // Replace the SDK-driven method with a deterministic stub.
-  (useCase as unknown as { executeForMention: (p: unknown, m: TicketMentionEntity) => Promise<void> })
-    .executeForMention = async (_persona, mention) => {
-      dispatched.push(mention.id);
-      const gate = gates.get(mention.id);
-      if (gate) await gate.promise; // lets a test hold a run "in flight" (mention stays pending)
-      const m = mentions.get(mention.id)!;
-      m.status = outcomes.get(mention.id) === 'waiting' ? 'waiting_for_info' : 'resolved';
-      mentions.set(m.id, m);
-    };
+  (
+    useCase as unknown as {
+      executeForMention: (p: unknown, m: TicketMentionEntity) => Promise<void>;
+    }
+  ).executeForMention = async (_persona, mention) => {
+    dispatched.push(mention.id);
+    const gate = gates.get(mention.id);
+    if (gate) await gate.promise; // lets a test hold a run "in flight" (mention stays pending)
+    const m = mentions.get(mention.id)!;
+    m.status = outcomes.get(mention.id) === 'waiting' ? 'waiting_for_info' : 'resolved';
+    mentions.set(m.id, m);
+  };
 
   return { useCase, mentions, dispatched, outcomes, gates };
 }
@@ -71,7 +97,7 @@ describe('ExecuteAgentUseCase — per-(agent,ticket) serialization', () => {
     const m2 = makeMention('m2');
     mentions.set('m1', m1);
     mentions.set('m2', m2);
-    outcomes.set('m1', 'waiting');   // m1 parks in waiting_for_info
+    outcomes.set('m1', 'waiting'); // m1 parks in waiting_for_info
     outcomes.set('m2', 'resolved');
 
     await useCase.execute('p1');

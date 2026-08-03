@@ -1,6 +1,7 @@
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash, randomBytes } from 'node:crypto';
+
 import { FLEEX_HOME } from '../../core/instance.ts';
 
 export interface HubState {
@@ -40,7 +41,9 @@ export function readClientsFile(): ClientsFile {
     const raw = fs.readFileSync(HUB_CLIENTS_FILE, 'utf8');
     const j = JSON.parse(raw);
     if (j && j.version === 1 && Array.isArray(j.clients)) return j as ClientsFile;
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return { version: 1, clients: [] };
 }
 
@@ -78,7 +81,11 @@ export function writeHubState(state: HubState): void {
 }
 
 export function clearHubState(): void {
-  try { fs.unlinkSync(HUB_STATE_FILE); } catch { /* ignore */ }
+  try {
+    fs.unlinkSync(HUB_STATE_FILE);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function isAlive(pid: number): boolean {

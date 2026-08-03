@@ -1,5 +1,6 @@
-import type { FastifyInstance } from 'fastify';
 import { DomainError } from '../../domain/errors.js';
+
+import type { FastifyInstance } from 'fastify';
 
 const CODE_TO_STATUS: Record<string, number> = {
   SESSION_NOT_FOUND: 404,

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+
 import type { StepRun, StepRunStatus, WorkflowRun, WorkflowStep } from '@fleex/shared';
-import { useWorkflowRunStore, ACTIVE_STATUSES } from '../stores/workflowRunStore';
-import { postTicketComment } from '../services/api';
+
 import { countCompletedSteps } from '../components/workflows/workflowProgress';
 import { tint, tintText } from '../lib/tints';
+import { postTicketComment } from '../services/api';
+import { useWorkflowRunStore, ACTIVE_STATUSES } from '../stores/workflowRunStore';
 
 /**
  * Mobile workflow run view: the desktop DAG (xyflow) doesn't fit a phone, so
@@ -83,7 +85,8 @@ export function MobileWorkflow({ ticketId }: { ticketId: string }) {
         >
           {history.map((r) => (
             <option key={r.id} value={r.id}>
-              {r.templateSnapshot.emoji} {r.templateSnapshot.name} — {new Date(r.startedAt).toLocaleString('fr-FR')}
+              {r.templateSnapshot.emoji} {r.templateSnapshot.name} —{' '}
+              {new Date(r.startedAt).toLocaleString('fr-FR')}
             </option>
           ))}
         </select>
@@ -93,7 +96,9 @@ export function MobileWorkflow({ ticketId }: { ticketId: string }) {
           run={d.run}
           stepRuns={d.stepRuns}
           onCancel={() => cancel(d.run.id)}
-          onResolveGate={(stepRunId, outcome, notes) => resolveGate(d.run.id, stepRunId, outcome, notes)}
+          onResolveGate={(stepRunId, outcome, notes) =>
+            resolveGate(d.run.id, stepRunId, outcome, notes)
+          }
           onRespondReview={async (response, stepRunId) => {
             // Same flow as desktop: the response becomes a ticket comment the
             // agent reads on the next run, then the step is retried.
@@ -159,9 +164,13 @@ function MobileRunView({
           <p className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
             {run.templateSnapshot.name}
           </p>
-          <p className="text-[11px] text-[var(--theme-text-faint)]">{completed}/{total} étapes</p>
+          <p className="text-[11px] text-[var(--theme-text-faint)]">
+            {completed}/{total} étapes
+          </p>
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${RUN_STATUS_BADGE[run.status]}`}>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${RUN_STATUS_BADGE[run.status]}`}
+        >
           {run.status}
         </span>
         {isActive && (
@@ -193,7 +202,9 @@ function MobileRunView({
                 onClick={() => setExpandedId(isOpen ? 'none' : step.id)}
                 className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
               >
-                <span className={`w-5 shrink-0 text-center text-sm ${badge.className}`}>{badge.icon}</span>
+                <span className={`w-5 shrink-0 text-center text-sm ${badge.className}`}>
+                  {badge.icon}
+                </span>
                 <span className="min-w-0 flex-1 truncate text-sm text-[var(--theme-text-primary)]">
                   {step.name}
                 </span>
@@ -252,10 +263,9 @@ function MobileStepDetail({
 
   const comment = stepRun?.output?.comment;
   const isGate = step.executorType === 'human_gate';
-  const gateOutcomes =
-    ((stepRun?.output?.schemaFields?.['outcomes'] as string[] | undefined) ??
-      step.humanGateOutcomes ??
-      []) as string[];
+  const gateOutcomes = ((stepRun?.output?.schemaFields?.['outcomes'] as string[] | undefined) ??
+    step.humanGateOutcomes ??
+    []) as string[];
 
   return (
     <div className="space-y-2.5">

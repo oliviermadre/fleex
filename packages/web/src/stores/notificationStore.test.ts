@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+
 import { useNotificationStore } from './notificationStore';
+
 import type { PulseNotification } from '../notifications/types';
 
-function makeNotification(id: string, overrides: Partial<PulseNotification> = {}): PulseNotification {
+function makeNotification(
+  id: string,
+  overrides: Partial<PulseNotification> = {},
+): PulseNotification {
   return {
     id,
     emoji: '🔔',
@@ -125,10 +130,12 @@ describe('notificationStore', () => {
 
   describe('hydrate', () => {
     it('seeds history as already-seen (no badge spike) and without toasts', () => {
-      useNotificationStore.getState().hydrate([
-        makeNotification('h1', { createdAt: '2026-06-01T00:00:00.000Z' }),
-        makeNotification('h2', { createdAt: '2026-06-02T00:00:00.000Z' }),
-      ]);
+      useNotificationStore
+        .getState()
+        .hydrate([
+          makeNotification('h1', { createdAt: '2026-06-01T00:00:00.000Z' }),
+          makeNotification('h2', { createdAt: '2026-06-02T00:00:00.000Z' }),
+        ]);
       const s = useNotificationStore.getState();
       expect(s.notifications).toHaveLength(2);
       expect(s.notifications.every((n) => n.seen)).toBe(true);
@@ -137,10 +144,12 @@ describe('notificationStore', () => {
     });
 
     it('orders the merged list newest-first by createdAt', () => {
-      useNotificationStore.getState().hydrate([
-        makeNotification('older', { createdAt: '2026-06-01T00:00:00.000Z' }),
-        makeNotification('newer', { createdAt: '2026-06-03T00:00:00.000Z' }),
-      ]);
+      useNotificationStore
+        .getState()
+        .hydrate([
+          makeNotification('older', { createdAt: '2026-06-01T00:00:00.000Z' }),
+          makeNotification('newer', { createdAt: '2026-06-03T00:00:00.000Z' }),
+        ]);
       expect(useNotificationStore.getState().notifications[0]!.id).toBe('newer');
     });
 
@@ -165,7 +174,9 @@ describe('notificationStore', () => {
 
     it('caps the merged history at MAX_NOTIFICATIONS', () => {
       const many = Array.from({ length: 60 }, (_, i) =>
-        makeNotification(`h${i}`, { createdAt: `2026-06-04T00:00:${String(i).padStart(2, '0')}.000Z` }),
+        makeNotification(`h${i}`, {
+          createdAt: `2026-06-04T00:00:${String(i).padStart(2, '0')}.000Z`,
+        }),
       );
       useNotificationStore.getState().hydrate(many);
       expect(useNotificationStore.getState().notifications).toHaveLength(50);

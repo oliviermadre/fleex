@@ -1,6 +1,7 @@
 import { FileMetadataEntity } from '../../../domain/entities/file-metadata.entity.js';
-import type { FileMetaStorePort } from '../../../application/ports/file-meta-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { FileMetaStorePort } from '../../../application/ports/file-meta-store.port.js';
 
 interface FileRow {
   id: string;
@@ -45,18 +46,13 @@ export class SupabaseFileMetaStore implements FileMetaStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('files')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('files').delete().eq('id', id);
     if (error) throw new Error(`SupabaseFileMetaStore.remove failed: ${error.message}`);
   }
 
   async getTotalSizeBytes(): Promise<number> {
     // Supabase doesn't support SUM via the JS client — use RPC or raw query
-    const { data, error } = await this.conn.client
-      .from('files')
-      .select('size_bytes');
+    const { data, error } = await this.conn.client.from('files').select('size_bytes');
     if (error) throw new Error(`SupabaseFileMetaStore.getTotalSizeBytes failed: ${error.message}`);
     return (data as { size_bytes: number }[]).reduce((sum, r) => sum + r.size_bytes, 0);
   }

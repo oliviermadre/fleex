@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.entity.js';
 
 const UUID = '05d50f27-b12e-4338-8c36-e840fd288222';

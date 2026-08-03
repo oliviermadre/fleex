@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
+
 import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
-import { useUIStore } from '../../stores/uiStore';
+
 import { appWs } from '../../services/websocket';
+import { useUIStore } from '../../stores/uiStore';
+
 import { FloatingDeliverablePanel } from './FloatingDeliverablePanel';
 
 export function FloatingDeliverableOverlay() {

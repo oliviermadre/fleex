@@ -3,7 +3,13 @@ import {
   normalizeDeliverableTypes,
   isValidDeliverableTypeId,
 } from '@fleex/shared';
-import type { DeliverableTypeDef, DeliverableRenderer, DeliverableTypeColor, TicketDeliverable } from '@fleex/shared';
+import type {
+  DeliverableTypeDef,
+  DeliverableRenderer,
+  DeliverableTypeColor,
+  TicketDeliverable,
+} from '@fleex/shared';
+
 import {
   InvalidDeliverableTypeError,
   DeliverableTypeNotFoundError,
@@ -11,10 +17,11 @@ import {
   DeliverableTypeInUseError,
   DeliverableNotFoundError,
 } from '../../domain/errors.js';
+
+import type { EventBus } from '../event-bus.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
-import type { EventBus } from '../event-bus.js';
 
 export interface DeliverableTypesView {
   types: DeliverableTypeDef[];
@@ -58,7 +65,13 @@ export class ManageDeliverableTypesUseCase {
     return { types: this.current(), usage: await this.usage() };
   }
 
-  async create(input: { id: string; label: string; description?: string; renderer: DeliverableRenderer; color?: DeliverableTypeColor | null }): Promise<DeliverableTypesView> {
+  async create(input: {
+    id: string;
+    label: string;
+    description?: string;
+    renderer: DeliverableRenderer;
+    color?: DeliverableTypeColor | null;
+  }): Promise<DeliverableTypesView> {
     const id = input.id.trim();
     if (!isValidDeliverableTypeId(id)) {
       throw new InvalidDeliverableTypeError(id);
@@ -84,11 +97,20 @@ export class ManageDeliverableTypesUseCase {
     return { types, usage: await this.usage() };
   }
 
-  async update(id: string, patch: { label?: string; description?: string; renderer?: DeliverableRenderer; color?: DeliverableTypeColor | null }): Promise<DeliverableTypesView> {
+  async update(
+    id: string,
+    patch: {
+      label?: string;
+      description?: string;
+      renderer?: DeliverableRenderer;
+      color?: DeliverableTypeColor | null;
+    },
+  ): Promise<DeliverableTypesView> {
     const types = this.current();
     const target = types.find((t) => t.id === id);
     if (!target) throw new DeliverableTypeNotFoundError(id);
-    if (target.system) throw new DeliverableTypeConflictError(`System type "${id}" cannot be edited`);
+    if (target.system)
+      throw new DeliverableTypeConflictError(`System type "${id}" cannot be edited`);
 
     if (patch.label !== undefined) {
       if (!patch.label.trim()) throw new DeliverableTypeConflictError('Label is required');
@@ -112,14 +134,18 @@ export class ManageDeliverableTypesUseCase {
   }
 
   /** Rename a type id, migrating all existing deliverables from old → new. */
-  async rename(oldId: string, newId: string): Promise<{ view: DeliverableTypesView; migrated: number }> {
+  async rename(
+    oldId: string,
+    newId: string,
+  ): Promise<{ view: DeliverableTypesView; migrated: number }> {
     const target = newId.trim();
     if (!isValidDeliverableTypeId(target)) throw new InvalidDeliverableTypeError(target);
 
     const types = this.current();
     const existing = types.find((t) => t.id === oldId);
     if (!existing) throw new DeliverableTypeNotFoundError(oldId);
-    if (existing.system) throw new DeliverableTypeConflictError(`System type "${oldId}" cannot be renamed`);
+    if (existing.system)
+      throw new DeliverableTypeConflictError(`System type "${oldId}" cannot be renamed`);
     if (target !== oldId && types.some((t) => t.id === target)) {
       throw new DeliverableTypeConflictError(`A type with id "${target}" already exists`);
     }
@@ -136,7 +162,8 @@ export class ManageDeliverableTypesUseCase {
     const types = this.current();
     const target = types.find((t) => t.id === id);
     if (!target) throw new DeliverableTypeNotFoundError(id);
-    if (target.system) throw new DeliverableTypeConflictError(`System type "${id}" cannot be deleted`);
+    if (target.system)
+      throw new DeliverableTypeConflictError(`System type "${id}" cannot be deleted`);
 
     const usage = await this.usage();
     const count = usage[id] ?? 0;
@@ -204,7 +231,9 @@ export class ManageDeliverableTypesUseCase {
   }
 
   /** Coerce arbitrary input into a valid color pair, or null to clear it. */
-  private normalizeColor(color: DeliverableTypeColor | null | undefined): DeliverableTypeColor | null {
+  private normalizeColor(
+    color: DeliverableTypeColor | null | undefined,
+  ): DeliverableTypeColor | null {
     if (!color) return null;
     const bg = typeof color.bg === 'string' ? color.bg.trim() : '';
     const text = typeof color.text === 'string' ? color.text.trim() : '';

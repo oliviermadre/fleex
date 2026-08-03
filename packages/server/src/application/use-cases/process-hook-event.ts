@@ -1,11 +1,13 @@
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
+
 import type { HookEventPayload, HookStatusUpdate } from '@fleex/shared';
 import { mapHookEventToStatus } from '@fleex/shared';
-import type { SessionStorePort } from '../ports/session-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
+
 import type { EventBus } from '../event-bus.js';
-import type { IngestCliSessionUseCase } from './ingest-cli-session.js';
 import type { GenerateCliSessionSummaryUseCase } from './generate-cli-session-summary.js';
+import type { IngestCliSessionUseCase } from './ingest-cli-session.js';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { SessionStorePort } from '../ports/session-store.port.js';
 
 /** Result returned to `POST /api/hook`. Always 200, never bubbles errors back to Claude. */
 export interface ProcessHookEventResult {
@@ -44,12 +46,12 @@ export class ProcessHookEventUseCase {
     this.logger.info('Hook event received', {
       event: event.event,
       cwd: event.cwd,
-      notification_type: typeof event.payload?.['notification_type'] === 'string'
-        ? event.payload['notification_type']
-        : undefined,
-      tool_name: typeof event.payload?.['tool_name'] === 'string'
-        ? event.payload['tool_name']
-        : undefined,
+      notification_type:
+        typeof event.payload?.['notification_type'] === 'string'
+          ? event.payload['notification_type']
+          : undefined,
+      tool_name:
+        typeof event.payload?.['tool_name'] === 'string' ? event.payload['tool_name'] : undefined,
     });
 
     // Real-time CLI cost ingestion: at session end, record a finished manual
@@ -59,28 +61,43 @@ export class ProcessHookEventUseCase {
     if (event.event === 'sessionEnd' && this.ingestCliSession) {
       const p = event.payload ?? {};
       const sessionId = typeof p['session_id'] === 'string' ? (p['session_id'] as string) : '';
-      const transcriptPath = typeof p['transcript_path'] === 'string' ? (p['transcript_path'] as string) : '';
+      const transcriptPath =
+        typeof p['transcript_path'] === 'string' ? (p['transcript_path'] as string) : '';
       try {
-        const res = await this.ingestCliSession.execute({ sessionId, transcriptPath, cwd: event.cwd });
+        const res = await this.ingestCliSession.execute({
+          sessionId,
+          transcriptPath,
+          cwd: event.cwd,
+        });
         if (res.ingested) {
-          this.logger.info('CLI session cost ingested', { sessionId, ticketId: res.ticketId, costUsd: res.costUsd });
+          this.logger.info('CLI session cost ingested', {
+            sessionId,
+            ticketId: res.ticketId,
+            costUsd: res.costUsd,
+          });
           // The session is a confirmed CLI session owned by this workspace's
           // ticket — also persist its decision trail as a deliverable. Isolated
           // try/catch: a summary failure must never affect cost ingestion or the
           // hook response (best-effort, non-blocking).
           if (this.generateCliSessionSummary && res.ticketId) {
             try {
-              await this.generateCliSessionSummary.execute({ sessionId, ticketId: res.ticketId, transcriptPath });
+              await this.generateCliSessionSummary.execute({
+                sessionId,
+                ticketId: res.ticketId,
+                transcriptPath,
+              });
             } catch (err) {
               this.logger.warn('CLI session summary generation failed (ignored)', {
-                error: err instanceof Error ? err.message : String(err), sessionId,
+                error: err instanceof Error ? err.message : String(err),
+                sessionId,
               });
             }
           }
         }
       } catch (err) {
         this.logger.warn('CLI session ingestion failed (ignored)', {
-          error: err instanceof Error ? err.message : String(err), sessionId,
+          error: err instanceof Error ? err.message : String(err),
+          sessionId,
         });
       }
     }
@@ -93,7 +110,10 @@ export class ProcessHookEventUseCase {
     const allSessions = await this.sessionStore.getAll();
     const matched = allSessions.filter((s) => isCwdMatch(event.cwd, s.cwd));
     if (matched.length === 0) {
-      this.logger.info('Hook event has no matching session', { cwd: event.cwd, event: event.event });
+      this.logger.info('Hook event has no matching session', {
+        cwd: event.cwd,
+        event: event.event,
+      });
       return { matched: false, sessionsTouched: 0, decisions: [] };
     }
 

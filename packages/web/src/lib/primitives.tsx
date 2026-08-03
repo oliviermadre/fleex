@@ -1,6 +1,11 @@
+import {
+  MENTION_TYPE_META,
+  MentionTypeBadge,
+  type MentionTargetType,
+} from '../components/ui/MentionTypeBadge';
+
 import { cn } from './cn';
 import { tintText, type TintHue } from './tints';
-import { MENTION_TYPE_META, MentionTypeBadge, type MentionTargetType } from '../components/ui/MentionTypeBadge';
 
 /**
  * A "primitive" is one of the four launchable building blocks the product is
@@ -150,12 +155,7 @@ export function PrimitiveIcon({
   tinted?: boolean;
 }) {
   const meta = PRIMITIVE_META[kind];
-  return (
-    <meta.Glyph
-      size={size}
-      className={cn(tinted && tintText(meta.hue), className)}
-    />
-  );
+  return <meta.Glyph size={size} className={cn(tinted && tintText(meta.hue), className)} />;
 }
 
 /**

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+
 import { REPO_REFRESH_INTERVALS, REPO_REFRESH_LABELS } from '@fleex/shared';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { tintSolid } from '../../lib/tints';
@@ -52,10 +54,13 @@ export function RefreshControl({
     return () => clearInterval(interval);
   }, [lastRefreshedAt]);
 
-  const handleIntervalSelect = useCallback((ms: number) => {
-    onIntervalChange(ms);
-    setDropdownOpen(false);
-  }, [onIntervalChange, setDropdownOpen]);
+  const handleIntervalSelect = useCallback(
+    (ms: number) => {
+      onIntervalChange(ms);
+      setDropdownOpen(false);
+    },
+    [onIntervalChange, setDropdownOpen],
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -89,7 +94,10 @@ export function RefreshControl({
 
       {/* Rate limit warning */}
       {rateLimitWarning && rateLimitWarning.remaining < 500 && (
-        <span className={cn('h-2 w-2 rounded-full', tintSolid('yellow'))} title={`Rate limit: ${rateLimitWarning.remaining} remaining`} />
+        <span
+          className={cn('h-2 w-2 rounded-full', tintSolid('yellow'))}
+          title={`Rate limit: ${rateLimitWarning.remaining} remaining`}
+        />
       )}
 
       {/* Auto-refresh dropdown */}
@@ -100,7 +108,7 @@ export function RefreshControl({
           {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
         >
           {refreshIntervalMs > 0
-            ? REPO_REFRESH_LABELS[refreshIntervalMs] ?? `${refreshIntervalMs / 1000}s`
+            ? (REPO_REFRESH_LABELS[refreshIntervalMs] ?? `${refreshIntervalMs / 1000}s`)
             : 'Auto'}
           <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
             <path d="M2 3l2 2.5L6 3H2z" />
@@ -120,14 +128,21 @@ export function RefreshControl({
                   key={ms}
                   className={cn(
                     'flex w-full items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-[var(--theme-bg-overlay)]',
-                    ms === refreshIntervalMs ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]',
+                    ms === refreshIntervalMs
+                      ? 'text-[var(--theme-accent)]'
+                      : 'text-[var(--theme-text-secondary)]',
                   )}
                   onClick={() => handleIntervalSelect(ms)}
                 >
                   <span>{REPO_REFRESH_LABELS[ms]}</span>
                   {ms === refreshIntervalMs && (
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                      <path d="M1.5 5.5l2.5 2.5 5-5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                      <path
+                        d="M1.5 5.5l2.5 2.5 5-5"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        fill="none"
+                      />
                     </svg>
                   )}
                 </button>

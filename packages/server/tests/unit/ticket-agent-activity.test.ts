@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   deriveTicketAgentActivity,
   deriveActivitySince,
@@ -68,12 +69,20 @@ describe('deriveTicketAgentActivity', () => {
   });
 
   it('returns an empty array when no tickets are requested', () => {
-    expect(deriveTicketAgentActivity([], { ...EMPTY, runningExecutionTicketIds: ['T1'] })).toEqual([]);
+    expect(deriveTicketAgentActivity([], { ...EMPTY, runningExecutionTicketIds: ['T1'] })).toEqual(
+      [],
+    );
   });
 
   it('attaches a human-readable detail for non-idle states (drives the card tooltip)', () => {
-    const [running] = deriveTicketAgentActivity(['T1'], { ...EMPTY, runningExecutionTicketIds: ['T1'] });
-    const [waiting] = deriveTicketAgentActivity(['T2'], { ...EMPTY, waitingMentionTicketIds: ['T2'] });
+    const [running] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+    });
+    const [waiting] = deriveTicketAgentActivity(['T2'], {
+      ...EMPTY,
+      waitingMentionTicketIds: ['T2'],
+    });
     expect(running?.detail).toBeTruthy();
     expect(waiting?.detail).toBeTruthy();
   });
@@ -91,7 +100,9 @@ describe('deriveTicketAgentActivity', () => {
       runningExecutionTicketIds: ['T1'],
       lastSdkActivityAtByTicket,
     });
-    expect(result.find((r) => r.ticketId === 'T1')?.lastActivityAt).toBe('2026-07-17T10:00:00.000Z');
+    expect(result.find((r) => r.ticketId === 'T1')?.lastActivityAt).toBe(
+      '2026-07-17T10:00:00.000Z',
+    );
     const idle = result.find((r) => r.ticketId === 'T2');
     expect(idle?.activity).toBe('idle');
     expect(idle?.lastActivityAt).toBe('2026-07-16T08:00:00.000Z');
@@ -148,7 +159,10 @@ describe('deriveTicketAgentActivity', () => {
   });
 
   it('omits since when the state start is unknown (no maps provided)', () => {
-    const [running] = deriveTicketAgentActivity(['T1'], { ...EMPTY, runningExecutionTicketIds: ['T1'] });
+    const [running] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+    });
     expect(running?.since).toBeUndefined();
     const [idle] = deriveTicketAgentActivity(['T2'], EMPTY);
     expect(idle?.since).toBeUndefined();

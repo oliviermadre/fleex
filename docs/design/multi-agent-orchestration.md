@@ -6,17 +6,17 @@ Le Kanban Fleex est un **receptacle passif**. Il ne prescrit aucun workflow, auc
 
 ## Ce qui existe deja
 
-| Capacite | API | Detail |
-|----------|-----|--------|
-| Auth agent | `Bearer token` + `X-Agent-Name` | Token SHA256, header identite |
-| CRUD tickets | `GET/POST/PATCH/DELETE /api/agents/v1/tickets` | Complet |
-| Assignation | `PATCH /tickets/:id/assign` | Label assignee, pas de changement statut |
-| Claim/Unclaim | `PATCH /tickets/:id/claim` | Self-assignment + auto-move doing + timestamp |
-| Statut | `PATCH /tickets/:id` | L'agent change le statut librement |
-| WebSocket | `/ws/tickets` | Broadcast de tous les events tickets (non auth) |
-| Activity log | `GET /tickets/:id/activity` | Audit trail des changements |
-| Next ticket | `GET /tickets/next` | Prochain ticket non assigne |
-| Pending | `GET /tickets/pending` | Tickets reclames par l'agent appelant |
+| Capacite      | API                                            | Detail                                          |
+| ------------- | ---------------------------------------------- | ----------------------------------------------- |
+| Auth agent    | `Bearer token` + `X-Agent-Name`                | Token SHA256, header identite                   |
+| CRUD tickets  | `GET/POST/PATCH/DELETE /api/agents/v1/tickets` | Complet                                         |
+| Assignation   | `PATCH /tickets/:id/assign`                    | Label assignee, pas de changement statut        |
+| Claim/Unclaim | `PATCH /tickets/:id/claim`                     | Self-assignment + auto-move doing + timestamp   |
+| Statut        | `PATCH /tickets/:id`                           | L'agent change le statut librement              |
+| WebSocket     | `/ws/tickets`                                  | Broadcast de tous les events tickets (non auth) |
+| Activity log  | `GET /tickets/:id/activity`                    | Audit trail des changements                     |
+| Next ticket   | `GET /tickets/next`                            | Prochain ticket non assigne                     |
+| Pending       | `GET /tickets/pending`                         | Tickets reclames par l'agent appelant           |
 
 **Ce qui manque** : discussion interne, mentions, livrables, notifications ciblees, contexte agrege.
 
@@ -38,11 +38,11 @@ export interface TicketComment {
   readonly ticketId: string;
   readonly authorType: 'user' | 'agent';
   readonly authorName: string;
-  readonly body: string;                    // markdown, peut contenir des @agent:xxx
-  readonly visibility: CommentVisibility;   // public = tout le monde, private = destinataires seulement
-  readonly privateRecipients: string[];     // si private : noms des agents destinataires
-  readonly mentions: string[];              // extrait auto du body : noms des agents mentionnes
-  readonly parentId: string | null;         // reponse threadee (null = top-level)
+  readonly body: string; // markdown, peut contenir des @agent:xxx
+  readonly visibility: CommentVisibility; // public = tout le monde, private = destinataires seulement
+  readonly privateRecipients: string[]; // si private : noms des agents destinataires
+  readonly mentions: string[]; // extrait auto du body : noms des agents mentionnes
+  readonly parentId: string | null; // reponse threadee (null = top-level)
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -62,9 +62,9 @@ export type MentionStatus = 'pending' | 'acknowledged' | 'resolved';
 export interface TicketMention {
   readonly id: string;
   readonly ticketId: string;
-  readonly commentId: string;               // commentaire source (celui qui contient le @agent:xxx)
-  readonly targetAgent: string;             // agent mentionne
-  readonly sourceAgent: string;             // agent qui a mentionne
+  readonly commentId: string; // commentaire source (celui qui contient le @agent:xxx)
+  readonly targetAgent: string; // agent mentionne
+  readonly sourceAgent: string; // agent qui a mentionne
   readonly status: MentionStatus;
   readonly resolvedAt: string | null;
   readonly resolvedCommentId: string | null; // le commentaire qui repond a la mention
@@ -75,6 +75,7 @@ export interface TicketMention {
 **Stockage** : `~/.fleex/projects/mentions.json`
 
 **Cycle de vie** :
+
 - `pending` : l'agent est mentionne, il n'a pas encore reagi
 - `acknowledged` : l'agent a vu la mention (optionnel, utile pour le monitoring)
 - `resolved` : l'agent a fourni sa reponse — pointe vers le commentaire de reponse
@@ -89,13 +90,13 @@ Un livrable est un **output structure** produit par un agent. Pas de type impose
 export interface TicketDeliverable {
   readonly id: string;
   readonly ticketId: string;
-  readonly agentName: string;               // qui l'a produit
-  readonly type: string;                    // type libre choisi par l'agent : 'prd', 'wireframe', 'code-review', ...
+  readonly agentName: string; // qui l'a produit
+  readonly type: string; // type libre choisi par l'agent : 'prd', 'wireframe', 'code-review', ...
   readonly title: string;
-  readonly content: string;                 // markdown ou JSON stringifie
-  readonly version: number;                 // auto-incremente a chaque mise a jour du content
-  readonly status: 'draft' | 'final';       // l'agent marque final quand il considere que c'est pret
-  readonly mentionId: string | null;        // optionnel : lien vers la mention qui a demande ce livrable
+  readonly content: string; // markdown ou JSON stringifie
+  readonly version: number; // auto-incremente a chaque mise a jour du content
+  readonly status: 'draft' | 'final'; // l'agent marque final quand il considere que c'est pret
+  readonly mentionId: string | null; // optionnel : lien vers la mention qui a demande ce livrable
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -112,7 +113,7 @@ Ajout minimal au `Ticket` existant :
 ```typescript
 export interface Ticket {
   // ... champs existants inchanges ...
-  readonly pendingMentionCount: number;     // denormalise : nombre de mentions non resolues sur ce ticket
+  readonly pendingMentionCount: number; // denormalise : nombre de mentions non resolues sur ce ticket
 }
 ```
 
@@ -195,14 +196,14 @@ Retourne tout le contexte du ticket en un appel :
 
 ```typescript
 interface TicketContext {
-  ticket: Ticket;                           // le ticket avec ses champs existants
-  comments: TicketComment[];                // N derniers commentaires publics (default 50) + tous les private pour l'agent
+  ticket: Ticket; // le ticket avec ses champs existants
+  comments: TicketComment[]; // N derniers commentaires publics (default 50) + tous les private pour l'agent
   mentions: {
-    pending: TicketMention[];               // mentions en attente pour l'agent appelant sur ce ticket
-    all: TicketMention[];                   // toutes les mentions du ticket (overview)
+    pending: TicketMention[]; // mentions en attente pour l'agent appelant sur ce ticket
+    all: TicketMention[]; // toutes les mentions du ticket (overview)
   };
-  deliverables: TicketDeliverable[];        // tous les livrables du ticket
-  activity: TicketActivity[];               // N dernieres entrees d'activite
+  deliverables: TicketDeliverable[]; // tous les livrables du ticket
+  activity: TicketActivity[]; // N dernieres entrees d'activite
 }
 ```
 
@@ -220,11 +221,19 @@ Extension des types existants pour l'UI web :
 
 ```typescript
 export type TicketWsMessageType =
-  | 'ticket:created' | 'ticket:updated' | 'ticket:deleted' | 'ticket:moved'  // existants
-  | 'board:updated'                                                           // existant
-  | 'comment:created' | 'comment:updated' | 'comment:deleted'                // nouveau
-  | 'mention:created' | 'mention:acknowledged' | 'mention:resolved'          // nouveau
-  | 'deliverable:created' | 'deliverable:updated';                           // nouveau
+  | 'ticket:created'
+  | 'ticket:updated'
+  | 'ticket:deleted'
+  | 'ticket:moved' // existants
+  | 'board:updated' // existant
+  | 'comment:created'
+  | 'comment:updated'
+  | 'comment:deleted' // nouveau
+  | 'mention:created'
+  | 'mention:acknowledged'
+  | 'mention:resolved' // nouveau
+  | 'deliverable:created'
+  | 'deliverable:updated'; // nouveau
 ```
 
 ### 3.2 WebSocket agent authentifie (nouveau endpoint)
@@ -234,6 +243,7 @@ export type TicketWsMessageType =
 ```
 
 Comportement :
+
 - **Authentification** : valide le token a la connexion, rejette si invalide
 - **Filtrage** : l'agent ne recoit que les events qui le concernent :
   - `mention:created` ou il est `targetAgent`
@@ -250,7 +260,7 @@ Message format :
 
 ```typescript
 interface AgentWsMessage {
-  type: string;                // ex: 'mention:created', 'comment:created'
+  type: string; // ex: 'mention:created', 'comment:created'
   ticketId: string;
   data: TicketMention | TicketComment | TicketDeliverable | Ticket;
 }
@@ -259,6 +269,7 @@ interface AgentWsMessage {
 ### 3.3 Fallback polling
 
 Pour les agents sans WebSocket permanent :
+
 - `GET /mentions/pending` — "ai-je des demandes en attente ?"
 - `GET /tickets/pending` — "quels tickets ai-je claim ?"
 - Polling recommande : toutes les 10-30s
@@ -270,28 +281,30 @@ Pour les agents sans WebSocket permanent :
 ### 4.1 Pas de changement d'auth
 
 On reutilise le systeme existant tel quel :
+
 - Bearer token pour l'authentification
 - `X-Agent-Name` pour l'identite
 - Pas de roles, pas de permissions par role
 
 ### 4.2 Regles de scope (simples)
 
-| Action | Qui peut |
-|--------|----------|
-| Lire commentaires publics | Tout agent authentifie |
-| Lire commentaires prives | Auteur + agents dans `privateRecipients` |
-| Editer/supprimer commentaire | Auteur seulement |
-| Resoudre une mention | Agent cible (`targetAgent`) seulement |
-| Editer un livrable | Auteur (`agentName`) seulement |
-| Changer statut ticket | Tout agent authentifie |
-| Assigner un ticket | Tout agent authentifie |
-| Claim un ticket | Tout agent authentifie (self-assign) |
+| Action                       | Qui peut                                 |
+| ---------------------------- | ---------------------------------------- |
+| Lire commentaires publics    | Tout agent authentifie                   |
+| Lire commentaires prives     | Auteur + agents dans `privateRecipients` |
+| Editer/supprimer commentaire | Auteur seulement                         |
+| Resoudre une mention         | Agent cible (`targetAgent`) seulement    |
+| Editer un livrable           | Auteur (`agentName`) seulement           |
+| Changer statut ticket        | Tout agent authentifie                   |
+| Assigner un ticket           | Tout agent authentifie                   |
+| Claim un ticket              | Tout agent authentifie (self-assign)     |
 
 Pas de restriction par role. Tout agent authentifie peut tout lire (sauf private) et tout faire sur les tickets. La discipline vient de l'orchestrateur externe (le chef de projet agent), pas du systeme.
 
 ### 4.3 Audit
 
 Toutes les actions sont tracees dans l'activity log existant avec de nouvelles actions :
+
 - `'commented'` — commentaire poste
 - `'mentioned'` — mention creee
 - `'mention_resolved'` — mention resolue
@@ -307,6 +320,7 @@ Toutes les actions sont tracees dans l'activity log existant avec de nouvelles a
 **Demande humain sur Telegram** : "Je veux que dans Fleex, quand on cree une session Claude, si le repo n'existe pas sur le filesystem, il soit automatiquement clone. Les regles habituelles de creation s'appliquent (main, PR, issue, fresh worktree)."
 
 Tous les headers sont omis pour lisibilite. Chaque agent envoie :
+
 - `Authorization: Bearer fleex_<token>`
 - `X-Agent-Name: <nom>`
 
@@ -379,17 +393,17 @@ X-Agent-Name: <chaque-agent>
 
 **Reponses :**
 
-| Agent | Reponse |
-|-------|---------|
-| pm | `[{ "id": "mention-001", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager", "status": "pending" }]` |
-| archi | `[]` |
-| dev | `[]` |
-| qa | `[]` |
-| designer | `[]` |
-| user-researcher | `[]` |
-| business | `[]` |
-| marketing | `[]` |
-| project-manager | `[]` |
+| Agent           | Reponse                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| pm              | `[{ "id": "mention-001", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager", "status": "pending" }]` |
+| archi           | `[]`                                                                                                             |
+| dev             | `[]`                                                                                                             |
+| qa              | `[]`                                                                                                             |
+| designer        | `[]`                                                                                                             |
+| user-researcher | `[]`                                                                                                             |
+| business        | `[]`                                                                                                             |
+| marketing       | `[]`                                                                                                             |
+| project-manager | `[]`                                                                                                             |
 
 Seul **pm** a du travail. Les 8 autres agents voient `[]`, **leur cron s'arrete la** — 1 seul call API, 0 travail.
 
@@ -491,10 +505,10 @@ GET /api/agents/v1/mentions/pending
 X-Agent-Name: <chaque-agent>
 ```
 
-| Agent | Mentions pending |
-|-------|-----------------|
+| Agent           | Mentions pending                                                               |
+| --------------- | ------------------------------------------------------------------------------ |
 | project-manager | `[{ "id": "mention-002", "ticketId": "ticket-abc-001", "sourceAgent": "pm" }]` |
-| tous les autres | `[]` |
+| tous les autres | `[]`                                                                           |
 
 **project-manager** charge le contexte :
 
@@ -536,10 +550,10 @@ X-Agent-Name: project-manager
 
 ### T+15min — cron de tous les agents
 
-| Agent | Mentions pending |
-|-------|-----------------|
-| archi | `[{ "id": "mention-003", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager" }]` |
-| tous les autres | `[]` |
+| Agent           | Mentions pending                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| archi           | `[{ "id": "mention-003", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager" }]` |
+| tous les autres | `[]`                                                                                        |
 
 **archi** charge le contexte :
 
@@ -594,10 +608,10 @@ X-Agent-Name: archi
 
 ### T+20min — cron
 
-| Agent | Mentions pending |
-|-------|-----------------|
+| Agent           | Mentions pending                                    |
+| --------------- | --------------------------------------------------- |
 | project-manager | `[{ "id": "mention-004", "sourceAgent": "archi" }]` |
-| tous les autres | `[]` |
+| tous les autres | `[]`                                                |
 
 **project-manager** charge le contexte, voit la tech-spec, decide de lancer le dev :
 
@@ -627,9 +641,9 @@ X-Agent-Name: project-manager
 
 ### T+25min — cron
 
-| Agent | Mentions pending |
-|-------|-----------------|
-| dev | `[{ "id": "mention-005", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager" }]` |
+| Agent | Mentions pending                                                                            |
+| ----- | ------------------------------------------------------------------------------------------- |
+| dev   | `[{ "id": "mention-005", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager" }]` |
 
 **dev** charge le contexte :
 
@@ -639,6 +653,7 @@ X-Agent-Name: dev
 ```
 
 Le dev recoit dans sa context window :
+
 - Le ticket original avec la description du besoin
 - Tous les commentaires (project-manager → pm → project-manager → archi → project-manager → dev)
 - Les 2 livrables (spec fonctionnelle + tech spec)
@@ -712,8 +727,8 @@ X-Agent-Name: dev
 
 ### T+35min — cron
 
-| Agent | Mentions pending |
-|-------|-----------------|
+| Agent           | Mentions pending                                  |
+| --------------- | ------------------------------------------------- |
 | project-manager | `[{ "id": "mention-006", "sourceAgent": "dev" }]` |
 
 **project-manager** charge le contexte, voit la PR, decide d'envoyer au QA :
@@ -751,9 +766,9 @@ X-Agent-Name: project-manager
 
 ### T+40min — cron
 
-| Agent | Mentions pending |
-|-------|-----------------|
-| qa | `[{ "id": "mention-007", "ticketId": "ticket-abc-001" }]` |
+| Agent | Mentions pending                                          |
+| ----- | --------------------------------------------------------- |
+| qa    | `[{ "id": "mention-007", "ticketId": "ticket-abc-001" }]` |
 
 **qa** charge le contexte. Il voit tout l'historique : besoin → spec → tech spec → PR. Il teste.
 
@@ -787,9 +802,9 @@ Note : le QA n'a PAS resolu sa mention (mention-007). Il a toujours du travail �
 
 ### T+45min — cron
 
-| Agent | Mentions pending |
-|-------|-----------------|
-| dev | `[{ "id": "mention-008", "sourceAgent": "qa" }]` |
+| Agent | Mentions pending                                 |
+| ----- | ------------------------------------------------ |
+| dev   | `[{ "id": "mention-008", "sourceAgent": "qa" }]` |
 
 **dev** charge le contexte, voit le bug report du QA :
 
@@ -820,9 +835,9 @@ X-Agent-Name: dev
 
 ### T+50min — cron
 
-| Agent | Mentions pending |
-|-------|-----------------|
-| qa | la mention-007 est toujours `acknowledged` (pas resolue) + il a mention-009 du dev en `pending` |
+| Agent | Mentions pending                                                                                |
+| ----- | ----------------------------------------------------------------------------------------------- |
+| qa    | la mention-007 est toujours `acknowledged` (pas resolue) + il a mention-009 du dev en `pending` |
 
 **qa** recharge le contexte, voit le fix du dev, re-teste, tout passe :
 
@@ -859,8 +874,8 @@ X-Agent-Name: qa
 
 ### T+55min — cron
 
-| Agent | Mentions pending |
-|-------|-----------------|
+| Agent           | Mentions pending                                 |
+| --------------- | ------------------------------------------------ |
 | project-manager | `[{ "id": "mention-010", "sourceAgent": "qa" }]` |
 
 **project-manager** charge le contexte. Voit : spec OK, tech spec OK, PR OK, QA 8/8 OK. Ferme le ticket :
@@ -892,20 +907,20 @@ Le project-manager envoie un message a l'humain sur Telegram : "L'auto-clone est
 
 ### Resume temporel
 
-| Temps | Qui bosse | Quoi | Calls API |
-|-------|-----------|------|-----------|
-| T+0 | project-manager | Cree ticket + mentionne pm | `POST /tickets`, `POST /comments` |
-| T+5 | pm | Lit contexte, redige spec, resout | `GET /mentions/pending`, `GET /context`, `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
-| T+10 | project-manager | Lit spec, mentionne archi | `GET /mentions/pending`, `GET /context`, `POST /comments`, `PATCH /resolve` |
-| T+15 | archi | Lit contexte, tech spec, resout | `GET /mentions/pending`, `GET /context`, `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
-| T+20 | project-manager | Lit tech spec, mentionne dev | idem |
-| T+25 | dev | Lit contexte, acknowledge | `GET /mentions/pending`, `GET /context`, `PATCH /acknowledge` |
-| T+30 | dev | Code fini, PR, resout | `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
-| T+35 | project-manager | Passe en reviewing, mentionne qa | idem |
-| T+40 | qa | Teste, trouve bug, mentionne dev | `GET /mentions/pending`, `GET /context`, `POST /comments` |
-| T+45 | dev | Fixe, resout mention qa | `GET /mentions/pending`, `GET /context`, `POST /comments`, `PATCH /resolve` |
-| T+50 | qa | Re-teste, OK, resout | `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
-| T+55 | project-manager | Ferme ticket | `PATCH /tickets`, `POST /comments`, `PATCH /resolve` |
+| Temps | Qui bosse       | Quoi                              | Calls API                                                                                         |
+| ----- | --------------- | --------------------------------- | ------------------------------------------------------------------------------------------------- |
+| T+0   | project-manager | Cree ticket + mentionne pm        | `POST /tickets`, `POST /comments`                                                                 |
+| T+5   | pm              | Lit contexte, redige spec, resout | `GET /mentions/pending`, `GET /context`, `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
+| T+10  | project-manager | Lit spec, mentionne archi         | `GET /mentions/pending`, `GET /context`, `POST /comments`, `PATCH /resolve`                       |
+| T+15  | archi           | Lit contexte, tech spec, resout   | `GET /mentions/pending`, `GET /context`, `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
+| T+20  | project-manager | Lit tech spec, mentionne dev      | idem                                                                                              |
+| T+25  | dev             | Lit contexte, acknowledge         | `GET /mentions/pending`, `GET /context`, `PATCH /acknowledge`                                     |
+| T+30  | dev             | Code fini, PR, resout             | `POST /deliverables`, `POST /comments`, `PATCH /resolve`                                          |
+| T+35  | project-manager | Passe en reviewing, mentionne qa  | idem                                                                                              |
+| T+40  | qa              | Teste, trouve bug, mentionne dev  | `GET /mentions/pending`, `GET /context`, `POST /comments`                                         |
+| T+45  | dev             | Fixe, resout mention qa           | `GET /mentions/pending`, `GET /context`, `POST /comments`, `PATCH /resolve`                       |
+| T+50  | qa              | Re-teste, OK, resout              | `POST /deliverables`, `POST /comments`, `PATCH /resolve`                                          |
+| T+55  | project-manager | Ferme ticket                      | `PATCH /tickets`, `POST /comments`, `PATCH /resolve`                                              |
 
 **Total** : ~55 minutes, 12 cycles de cron, 5 agents impliques, 4 livrables produits.
 Les 4 agents non impliques (designer, user-researcher, business, marketing) ont fait **1 call API par cycle** (`GET /mentions/pending` → `[]`) et n'ont rien fait d'autre.
@@ -938,54 +953,54 @@ Les 4 agents non impliques (designer, user-researcher, business, marketing) ont 
 
 ### Phase 1 — Fondations (entites + stockage)
 
-| Action | Fichier |
-|--------|---------|
+| Action   | Fichier                                                                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Modifier | `packages/shared/src/types/ticket.ts` — ajouter `TicketComment`, `TicketMention`, `TicketDeliverable`, `CommentVisibility`, `MentionStatus`, `pendingMentionCount` au `Ticket` |
-| Creer | `packages/server/src/domain/entities/ticket-comment.entity.ts` |
-| Creer | `packages/server/src/domain/entities/ticket-mention.entity.ts` |
-| Creer | `packages/server/src/domain/entities/ticket-deliverable.entity.ts` |
-| Creer | `packages/server/src/infrastructure/adapters/json-comment-store.adapter.ts` |
-| Creer | `packages/server/src/infrastructure/adapters/json-mention-store.adapter.ts` |
-| Creer | `packages/server/src/infrastructure/adapters/json-deliverable-store.adapter.ts` |
-| Modifier | `packages/server/src/domain/entities/ticket.entity.ts` — ajouter `pendingMentionCount` |
-| Modifier | `packages/server/src/infrastructure/container.ts` — injecter les 3 nouveaux stores |
+| Creer    | `packages/server/src/domain/entities/ticket-comment.entity.ts`                                                                                                                 |
+| Creer    | `packages/server/src/domain/entities/ticket-mention.entity.ts`                                                                                                                 |
+| Creer    | `packages/server/src/domain/entities/ticket-deliverable.entity.ts`                                                                                                             |
+| Creer    | `packages/server/src/infrastructure/adapters/json-comment-store.adapter.ts`                                                                                                    |
+| Creer    | `packages/server/src/infrastructure/adapters/json-mention-store.adapter.ts`                                                                                                    |
+| Creer    | `packages/server/src/infrastructure/adapters/json-deliverable-store.adapter.ts`                                                                                                |
+| Modifier | `packages/server/src/domain/entities/ticket.entity.ts` — ajouter `pendingMentionCount`                                                                                         |
+| Modifier | `packages/server/src/infrastructure/container.ts` — injecter les 3 nouveaux stores                                                                                             |
 
 ### Phase 2 — Use cases
 
-| Action | Fichier |
-|--------|---------|
-| Creer | `packages/server/src/application/use-cases/post-comment.ts` — parse `@agent:xxx`, cree les mentions, met a jour `pendingMentionCount` |
-| Creer | `packages/server/src/application/use-cases/resolve-mention.ts` — lie le commentaire/livrable de reponse, decremente `pendingMentionCount` |
-| Creer | `packages/server/src/application/use-cases/submit-deliverable.ts` |
-| Creer | `packages/server/src/application/use-cases/get-ticket-context.ts` — agrege ticket + comments + mentions + deliverables + activity |
+| Action | Fichier                                                                                                                                   |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Creer  | `packages/server/src/application/use-cases/post-comment.ts` — parse `@agent:xxx`, cree les mentions, met a jour `pendingMentionCount`     |
+| Creer  | `packages/server/src/application/use-cases/resolve-mention.ts` — lie le commentaire/livrable de reponse, decremente `pendingMentionCount` |
+| Creer  | `packages/server/src/application/use-cases/submit-deliverable.ts`                                                                         |
+| Creer  | `packages/server/src/application/use-cases/get-ticket-context.ts` — agrege ticket + comments + mentions + deliverables + activity         |
 
 ### Phase 3 — Routes API agent
 
-| Action | Fichier |
-|--------|---------|
-| Creer | `packages/server/src/infrastructure/http/agent-comments.routes.ts` |
-| Creer | `packages/server/src/infrastructure/http/agent-mentions.routes.ts` |
-| Creer | `packages/server/src/infrastructure/http/agent-deliverables.routes.ts` |
-| Creer | `packages/server/src/infrastructure/http/agent-context.routes.ts` |
+| Action   | Fichier                                                                                 |
+| -------- | --------------------------------------------------------------------------------------- |
+| Creer    | `packages/server/src/infrastructure/http/agent-comments.routes.ts`                      |
+| Creer    | `packages/server/src/infrastructure/http/agent-mentions.routes.ts`                      |
+| Creer    | `packages/server/src/infrastructure/http/agent-deliverables.routes.ts`                  |
+| Creer    | `packages/server/src/infrastructure/http/agent-context.routes.ts`                       |
 | Modifier | `packages/server/src/main.ts` — enregistrer les nouvelles routes sous `/api/agents/v1/` |
 
 ### Phase 4 — WebSocket agent authentifie
 
-| Action | Fichier |
-|--------|---------|
-| Creer | `packages/server/src/infrastructure/ws/agent-ws.ts` — auth, filtrage, subscription dynamique |
-| Modifier | `packages/server/src/infrastructure/ws/ticket-ws.ts` — emettre les nouveaux types d'events |
-| Modifier | `packages/shared/src/types/websocket.ts` — nouveaux types |
-| Modifier | `packages/shared/src/constants.ts` — nouveau path WS |
-| Modifier | `packages/server/src/main.ts` — enregistrer le plugin WS agent |
+| Action   | Fichier                                                                                      |
+| -------- | -------------------------------------------------------------------------------------------- |
+| Creer    | `packages/server/src/infrastructure/ws/agent-ws.ts` — auth, filtrage, subscription dynamique |
+| Modifier | `packages/server/src/infrastructure/ws/ticket-ws.ts` — emettre les nouveaux types d'events   |
+| Modifier | `packages/shared/src/types/websocket.ts` — nouveaux types                                    |
+| Modifier | `packages/shared/src/constants.ts` — nouveau path WS                                         |
+| Modifier | `packages/server/src/main.ts` — enregistrer le plugin WS agent                               |
 
 ### Phase 5 — Frontend (monitoring, optionnel)
 
-| Action | Fichier |
-|--------|---------|
+| Action   | Fichier                                                |
+| -------- | ------------------------------------------------------ |
 | Modifier | Vue ticket — onglet "Discussion" avec les commentaires |
-| Modifier | Vue ticket — section "Livrables" |
-| Modifier | Vue ticket — indicateur de mentions pendantes |
+| Modifier | Vue ticket — section "Livrables"                       |
+| Modifier | Vue ticket — indicateur de mentions pendantes          |
 
 ---
 

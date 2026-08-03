@@ -1,5 +1,6 @@
 import type { TicketStatus } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { STATUS_COLORS } from '../../lib/statusColors';
 import { tintSolid } from '../../lib/tints';
@@ -20,7 +21,11 @@ const ABBREVS: Record<string, string> = {
  * `w-[250px]`), never a height — forcing a tall box would center the columns and
  * leave a gap above the band.
  */
-export function NanoKanban({ status, onStatusChange, size = 'md' }: {
+export function NanoKanban({
+  status,
+  onStatusChange,
+  size = 'md',
+}: {
   status: TicketStatus;
   onStatusChange: (status: TicketStatus) => void;
   size?: 'sm' | 'md';
@@ -40,12 +45,17 @@ export function NanoKanban({ status, onStatusChange, size = 'md' }: {
               sm ? 'gap-px pb-0.5' : 'gap-1 pb-1.5',
               active ? colors.bg : colors.hoverBg,
             )}
-            onClick={(e) => { e.stopPropagation(); onStatusChange(s); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onStatusChange(s);
+            }}
           >
             <div
               className={cn(
                 'w-full transition-all',
-                active ? cn(sm ? 'h-[2px]' : 'h-[3px]', colors.bar) : cn(sm ? 'h-[1px]' : 'h-[2px]', 'opacity-60', colors.bar),
+                active
+                  ? cn(sm ? 'h-[2px]' : 'h-[3px]', colors.bar)
+                  : cn(sm ? 'h-[1px]' : 'h-[2px]', 'opacity-60', colors.bar),
               )}
             />
             <div className="flex flex-col items-center gap-px">

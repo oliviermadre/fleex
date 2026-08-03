@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+
 import { stripHtmlCodeFence } from '@fleex/shared';
-import { useUIStore } from '../../stores/uiStore';
+
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { useUIStore } from '../../stores/uiStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+
 import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { TicketPickerModal } from './TicketPickerModal';
 
@@ -76,13 +79,25 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="deliverable-overlay-panel" style={isHtml ? { height: '85vh' } : undefined} onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className="deliverable-overlay-panel"
+        style={isHtml ? { height: '85vh' } : undefined}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {/* Title bar */}
-        <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
-          <DeliverableTypePicker deliverable={deliverable} onChanged={(u) => useUIStore.getState().openDeliverableOverlay(u)}>
+        <div
+          className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3"
+          style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}
+        >
+          <DeliverableTypePicker
+            deliverable={deliverable}
+            onChanged={(u) => useUIStore.getState().openDeliverableOverlay(u)}
+          >
             <span
               className={`flex-shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${typeColor ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
-              style={typeColor ? { backgroundColor: typeColor.bg, color: typeColor.text } : undefined}
+              style={
+                typeColor ? { backgroundColor: typeColor.bg, color: typeColor.text } : undefined
+              }
             >
               {labelForType(deliverable.type)}
             </span>
@@ -93,10 +108,14 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
           </span>
 
           {deliverable.version > 1 && (
-            <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">v{deliverable.version}</span>
+            <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">
+              v{deliverable.version}
+            </span>
           )}
           {deliverable.status === 'draft' && (
-            <span className="flex-shrink-0 rounded-full bg-[var(--theme-warning)]/15 px-1.5 py-px text-[10px] font-medium text-[var(--theme-warning)]">draft</span>
+            <span className="flex-shrink-0 rounded-full bg-[var(--theme-warning)]/15 px-1.5 py-px text-[10px] font-medium text-[var(--theme-warning)]">
+              draft
+            </span>
           )}
 
           <div className="flex-1" />
@@ -108,14 +127,30 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
           >
             {copied ? (
               <>
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  className="h-3 w-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
                 Copied!
               </>
             ) : (
               <>
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  className="h-3 w-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                 </svg>
@@ -129,7 +164,15 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
             onClick={() => setShowCopyPicker(true)}
             className="flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-[var(--theme-text-primary)]"
           >
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
             </svg>
@@ -141,8 +184,18 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
             onClick={handleDetach}
             className="flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-[var(--theme-text-primary)]"
           >
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            <svg
+              className="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+              />
             </svg>
             Detach
           </button>
@@ -160,7 +213,10 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
         {/* Content */}
         {isHtml ? (
           <iframe
-            srcDoc={stripHtmlCodeFence(deliverable.content).replace(/<\\\/script\s*>/gi, '</script>')}
+            srcDoc={stripHtmlCodeFence(deliverable.content).replace(
+              /<\\\/script\s*>/gi,
+              '</script>',
+            )}
             className="flex-1"
             style={{
               width: '100%',
@@ -178,7 +234,10 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
         )}
 
         {/* Footer */}
-        <div className="flex items-center gap-2 border-t border-white/[0.06] px-5 py-2 text-[10px] text-[var(--theme-text-faint)]" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
+        <div
+          className="flex items-center gap-2 border-t border-white/[0.06] px-5 py-2 text-[10px] text-[var(--theme-text-faint)]"
+          style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}
+        >
           <span className="text-[var(--theme-accent)]">{deliverable.agentName}</span>
           <span>&middot;</span>
           <span>{relativeTime(deliverable.createdAt)}</span>

@@ -1,8 +1,10 @@
-import type { ExecuteAgentUseCase } from '../../use-cases/execute-agent.js';
-import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
-import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
-import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
 import type { StepOutput, MentionExecutionMode } from '@fleex/shared';
+
+import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
+import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
+
+import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
+import type { ExecuteAgentUseCase } from '../../use-cases/execute-agent.js';
 
 const STANDARD_KEYS = new Set(['deliverable', 'comment', 'mentionStatus']);
 
@@ -22,14 +24,15 @@ export class AgentStepExecutor implements StepExecutor {
 
     const mode: MentionExecutionMode = input.step.mode ?? 'edit';
 
-    const { structuredOutput, rawText, executionId } = await this.executeAgent.executeForWorkflowStep({
-      personaName: input.step.executorRef,
-      ticketId: input.ticketId,
-      outputFormat,
-      workflowContextPrompt,
-      mode,
-      onExecutionStarted: input.onExecutionStarted,
-    });
+    const { structuredOutput, rawText, executionId } =
+      await this.executeAgent.executeForWorkflowStep({
+        personaName: input.step.executorRef,
+        ticketId: input.ticketId,
+        outputFormat,
+        workflowContextPrompt,
+        mode,
+        onExecutionStarted: input.onExecutionStarted,
+      });
 
     return { output: this.toStepOutput(structuredOutput, rawText), executionId };
   }

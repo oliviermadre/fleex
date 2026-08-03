@@ -1,8 +1,11 @@
-import type { ExecFn } from '../../infrastructure/host/types.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { ExecFn } from '../../infrastructure/host/types.js';
 
 export class RepositoryResolver {
-  constructor(private readonly execFn: ExecFn, private readonly logger: LoggerPort) {}
+  constructor(
+    private readonly execFn: ExecFn,
+    private readonly logger: LoggerPort,
+  ) {}
 
   async resolve(patterns: string[]): Promise<string[]> {
     const resolved: string[] = [];
@@ -10,9 +13,11 @@ export class RepositoryResolver {
       if (pattern.includes('*')) {
         const org = pattern.replace('/*', '').replace('*', '');
         try {
-          const { stdout } = await this.execFn('gh', [
-            'repo', 'list', org, '--json', 'nameWithOwner', '--limit', '200',
-          ], { timeout: 15_000 });
+          const { stdout } = await this.execFn(
+            'gh',
+            ['repo', 'list', org, '--json', 'nameWithOwner', '--limit', '200'],
+            { timeout: 15_000 },
+          );
           const repos = JSON.parse(stdout) as { nameWithOwner: string }[];
           resolved.push(...repos.map((r) => r.nameWithOwner.toLowerCase()));
         } catch (err) {

@@ -7,9 +7,7 @@
  * truth the agent sees. Do not reword casually — tests lock the wording.
  */
 import chalk from 'chalk';
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, warn, present, isJsonMode } from '../../../core/colors.ts';
-import { apiBase, apiPatch } from '../../../core/api.ts';
+
 import {
   fetchPersonas,
   personaHandleName,
@@ -17,6 +15,8 @@ import {
   resolveFromList,
   type Persona,
 } from '../../../core/agentic.ts';
+import { apiBase, apiPatch } from '../../../core/api.ts';
+import { ok, die, warn, present, isJsonMode } from '../../../core/colors.ts';
 import {
   appendMemory,
   assertInlineFileExclusive,
@@ -27,6 +27,8 @@ import {
   noneToNull,
   readTextInput,
 } from '../../../core/update-helpers.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -58,7 +60,10 @@ const def: CommandDef = {
       '<agent>',
       `Persona to update: exact name (e.g. "catalyst") or UUID, as shown by 'fleex agent list'`,
     );
-    cmd.option('--display-name <text>', 'Set the display name (human-facing label shown in the UI)');
+    cmd.option(
+      '--display-name <text>',
+      'Set the display name (human-facing label shown in the UI)',
+    );
     cmd.option(
       '--name <name>',
       `Rename the persona's machine name, used in @agent:<name> mentions. Existing mentions are NOT rewritten and will stop resolving — a warning is printed.`,

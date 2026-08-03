@@ -1,5 +1,4 @@
 import type { ClaudeUsage, ClaudeUsageMetric } from '@fleex/shared';
-import { useTooltip, FloatingPortal } from '../../hooks/usePopover';
 import {
   MS_IN_MINUTE,
   MINUTES_IN_HOUR,
@@ -7,6 +6,8 @@ import {
   USAGE_WARN_THRESHOLD_PCT,
   USAGE_DANGER_THRESHOLD_PCT,
 } from '@fleex/shared';
+
+import { useTooltip, FloatingPortal } from '../../hooks/usePopover';
 
 function parseTimeLeft(resetsAt: string): string {
   // resetsAt is an ISO 8601 timestamp from the OAuth usage endpoint.
@@ -47,7 +48,9 @@ interface TooltipProps {
 }
 
 function Tooltip({ children, content }: TooltipProps) {
-  const { open, refs, floatingStyles, getReferenceProps, getFloatingProps } = useTooltip({ placement: 'bottom' });
+  const { open, refs, floatingStyles, getReferenceProps, getFloatingProps } = useTooltip({
+    placement: 'bottom',
+  });
 
   return (
     <>
@@ -90,19 +93,34 @@ function Gauge({ metric, label }: GaugeProps) {
       </span>
       <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
         <rect
-          x="1" y="2" width="8" height="12" rx="1"
-          stroke="var(--theme-border-input, #3f3f46)" strokeWidth="0.8" fill="none"
+          x="1"
+          y="2"
+          width="8"
+          height="12"
+          rx="1"
+          stroke="var(--theme-border-input, #3f3f46)"
+          strokeWidth="0.8"
+          fill="none"
         />
-        <line x1="0" y1="2" x2="10" y2="2" stroke="var(--theme-border-input, #3f3f46)" strokeWidth="0.8" />
+        <line
+          x1="0"
+          y1="2"
+          x2="10"
+          y2="2"
+          stroke="var(--theme-border-input, #3f3f46)"
+          strokeWidth="0.8"
+        />
         <rect
-          x="1.4" y={2.4 + 11.2 * (1 - fillHeight)} width="7.2" height={11.2 * fillHeight}
-          rx="0.5" fill={fillColor} opacity="0.8"
+          x="1.4"
+          y={2.4 + 11.2 * (1 - fillHeight)}
+          width="7.2"
+          height={11.2 * fillHeight}
+          rx="0.5"
+          fill={fillColor}
+          opacity="0.8"
         />
       </svg>
-      <span
-        className="leading-none text-[var(--theme-text-secondary)]"
-        style={{ fontSize: '9px' }}
-      >
+      <span className="leading-none text-[var(--theme-text-secondary)]" style={{ fontSize: '9px' }}>
         {remaining}%
       </span>
     </div>
@@ -128,9 +146,7 @@ function UsageTooltipRow({ metric, label }: { metric: ClaudeUsageMetric; label: 
           style={{ width: `${remaining}%`, backgroundColor: fillColor }}
         />
       </div>
-      <div className="text-[10px] text-[var(--theme-text-muted)]">
-        Resets in {timeLeft}
-      </div>
+      <div className="text-[10px] text-[var(--theme-text-muted)]">Resets in {timeLeft}</div>
     </div>
   );
 }
@@ -156,8 +172,10 @@ export function UsageGauges({ usage, loading }: UsageGaugesProps) {
 
   const tooltipRows: Array<{ metric: ClaudeUsageMetric; label: string }> = [];
   if (usage.session) tooltipRows.push({ metric: usage.session, label: 'Current session (5h)' });
-  if (usage.weeklyAllModels) tooltipRows.push({ metric: usage.weeklyAllModels, label: 'Weekly — all models' });
-  if (usage.weeklySonnet) tooltipRows.push({ metric: usage.weeklySonnet, label: 'Weekly — Sonnet' });
+  if (usage.weeklyAllModels)
+    tooltipRows.push({ metric: usage.weeklyAllModels, label: 'Weekly — all models' });
+  if (usage.weeklySonnet)
+    tooltipRows.push({ metric: usage.weeklySonnet, label: 'Weekly — Sonnet' });
 
   const tooltipContent = (
     <div className="space-y-2.5">

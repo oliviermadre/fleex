@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, warn, info, die, c } from '../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../core/api.ts';
+import { ok, warn, info, die, c } from '../../../core/colors.ts';
 import { canPrompt, promptYesNo, closePrompts } from '../../../core/prompt.ts';
 import { resolveSession } from '../_shared.ts';
 
-interface KillOptions { force?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface KillOptions {
+  force?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

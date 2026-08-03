@@ -1,5 +1,5 @@
-import { die, err, c } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
+import { die, err, c } from '../../core/colors.ts';
 import { matchById } from '../../core/match.ts';
 
 export interface Session {
@@ -17,7 +17,7 @@ export interface Session {
 export const VALID_SESSION_TYPES = ['shell', 'claude'] as const;
 
 export function assertValidSessionType(t: string): void {
-  if (!VALID_SESSION_TYPES.includes(t as typeof VALID_SESSION_TYPES[number])) {
+  if (!VALID_SESSION_TYPES.includes(t as (typeof VALID_SESSION_TYPES)[number])) {
     die(`Invalid session type: ${t} (valid: ${VALID_SESSION_TYPES.join(', ')})`);
   }
 }

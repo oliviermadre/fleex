@@ -1,12 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { AutoReviewWorkflowUseCase } from '../../src/application/use-cases/auto-review-workflow.js';
-import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+
+import type { ConfigPort } from '../../src/application/ports/config.port.js';
+import type { LoggerPort } from '../../src/application/ports/logger.port.js';
 import type { MentionStorePort } from '../../src/application/ports/mention-store.port.js';
 import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
-import type { LoggerPort } from '../../src/application/ports/logger.port.js';
-import type { ConfigPort } from '../../src/application/ports/config.port.js';
 
 describe('AutoReviewWorkflowUseCase', () => {
   let useCase: AutoReviewWorkflowUseCase;

@@ -1,9 +1,11 @@
-import type { ExecuteAgentUseCase } from '../../use-cases/execute-agent.js';
-import type { SkillStorePort } from '../../ports/skill-store.port.js';
-import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
-import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
-import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
 import type { StepOutput } from '@fleex/shared';
+
+import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
+import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
+
+import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
+import type { SkillStorePort } from '../../ports/skill-store.port.js';
+import type { ExecuteAgentUseCase } from '../../use-cases/execute-agent.js';
 
 const STANDARD_KEYS = new Set(['deliverable', 'comment', 'mentionStatus']);
 
@@ -37,7 +39,9 @@ export class SkillStepExecutor implements StepExecutor {
     });
 
     if (!result || !('structuredOutput' in result)) {
-      throw new Error('executeForSkill did not return structured output (returnStructured flag ignored?)');
+      throw new Error(
+        'executeForSkill did not return structured output (returnStructured flag ignored?)',
+      );
     }
 
     return { output: this.toStepOutput(result.structuredOutput), executionId: result.executionId };

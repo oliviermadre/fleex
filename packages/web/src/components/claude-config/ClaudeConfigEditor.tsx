@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
-import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
+
 import { cn } from '../../lib/cn';
+import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 
 const MonacoWrapper = lazy(() => import('./MonacoWrapper'));
 
@@ -34,7 +35,9 @@ export function ClaudeConfigEditor() {
               <span
                 className={cn(
                   'truncate',
-                  i === breadcrumbs.length - 1 ? 'text-[var(--theme-text-primary)] font-medium' : ''
+                  i === breadcrumbs.length - 1
+                    ? 'text-[var(--theme-text-primary)] font-medium'
+                    : '',
                 )}
               >
                 {segment}
@@ -54,7 +57,7 @@ export function ClaudeConfigEditor() {
             'rounded px-3 py-1 text-xs font-medium transition-colors',
             isDirty
               ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:opacity-90'
-              : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)] cursor-default'
+              : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)] cursor-default',
           )}
           disabled={!isDirty || fileSaving}
           onClick={() => saveFile()}
@@ -88,7 +91,17 @@ export function ClaudeConfigEditor() {
 function ClaudeConfigEmptyState() {
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 text-[var(--theme-text-muted)]">
-      <svg width="48" height="48" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+      <svg
+        width="48"
+        height="48"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="0.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="opacity-40"
+      >
         <path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" />
         <polyline points="9,1.5 9,5.5 13,5.5" />
         <line x1="5.5" y1="8.5" x2="10.5" y2="8.5" />

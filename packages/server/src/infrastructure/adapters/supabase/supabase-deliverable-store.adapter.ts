@@ -1,8 +1,11 @@
 import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
+
 import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliverable.entity.js';
-import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
-import type { SupabaseConnection } from './connection.js';
+
 import { chunkIds } from './supabase-chunk.js';
+
+import type { SupabaseConnection } from './connection.js';
+import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
 
 interface DeliverableRow {
   id: string;
@@ -65,7 +68,8 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
           .order('created_at', { ascending: true })
           .order('id', { ascending: true })
           .range(from, from + PAGE - 1);
-        if (error) throw new Error(`SupabaseDeliverableStore.getByTicketIds failed: ${error.message}`);
+        if (error)
+          throw new Error(`SupabaseDeliverableStore.getByTicketIds failed: ${error.message}`);
         const page = data as DeliverableRow[];
         rows.push(...page);
         if (page.length < PAGE) break;
@@ -93,14 +97,18 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     return (data as DeliverableRow[]).map(rowToEntity);
   }
 
-  async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
+  async getByTicketAndType(
+    ticketId: string,
+    type: string,
+  ): Promise<TicketDeliverableEntity | null> {
     const { data, error } = await this.conn.client
       .from('deliverables')
       .select('*')
       .eq('ticket_id', ticketId)
       .eq('type', type)
       .maybeSingle();
-    if (error) throw new Error(`SupabaseDeliverableStore.getByTicketAndType failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseDeliverableStore.getByTicketAndType failed: ${error.message}`);
     return data ? rowToEntity(data as DeliverableRow) : null;
   }
 
@@ -132,10 +140,7 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('deliverables')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('deliverables').delete().eq('id', id);
     if (error) throw new Error(`SupabaseDeliverableStore.remove failed: ${error.message}`);
   }
 }

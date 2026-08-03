@@ -1,4 +1,5 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
+
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 
 const LANGUAGE_MAP: Record<string, string> = {

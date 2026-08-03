@@ -1,9 +1,12 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR, SESSIONS_FILE } from '@fleex/shared';
-import { SessionEntity } from '../../domain/entities.js';
-import type { SessionStorePort } from '../../application/ports/session-store.port.js';
-import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { SessionType, SessionStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
+
+import { SessionEntity } from '../../domain/entities.js';
+
+import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { SessionStorePort } from '../../application/ports/session-store.port.js';
 import type { HostFs } from '../host/types.js';
 
 interface SerializedSession {

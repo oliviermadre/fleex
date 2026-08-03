@@ -1,11 +1,13 @@
 import type { TicketContext, TicketContextEpic } from '@fleex/shared';
+
 import { TicketNotFoundError } from '../../domain/errors.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { CommentStorePort } from '../ports/comment-store.port.js';
-import type { MentionStorePort } from '../ports/mention-store.port.js';
-import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
-import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
+
 import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
+import type { CommentStorePort } from '../ports/comment-store.port.js';
+import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
+import type { MentionStorePort } from '../ports/mention-store.port.js';
+import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 export class GetTicketContextUseCase {
   constructor(
@@ -65,15 +67,13 @@ export class GetTicketContextUseCase {
         const groups = await Promise.all(
           memberships.map((m) => this.ticketGroupStore!.getTicketGroupById(m.groupId)),
         );
-        epics = groups
-          .filter(Boolean)
-          .map((g) => ({
-            name: g!.name,
-            emoji: g!.emoji,
-            description: g!.description,
-            timeframe: g!.timeframe,
-            groupStatus: g!.groupStatus,
-          }));
+        epics = groups.filter(Boolean).map((g) => ({
+          name: g!.name,
+          emoji: g!.emoji,
+          description: g!.description,
+          timeframe: g!.timeframe,
+          groupStatus: g!.groupStatus,
+        }));
       } catch {
         // Non-critical — proceed without epics
       }

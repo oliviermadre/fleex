@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+
 import { ApiTokenEntity } from '../../domain/entities/api-token.entity.js';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function agentTokenRoutes(container: Container) {
   return async function (app: FastifyInstance) {

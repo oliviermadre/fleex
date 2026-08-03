@@ -1,13 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { RenameSessionUseCase } from '../../src/application/use-cases/rename-session.js';
-import { SessionNamingService } from '../../src/domain/services/session-naming.js';
 import { SessionEntity } from '../../src/domain/entities.js';
 import { SessionNotFoundError } from '../../src/domain/errors.js';
-import {
-  FakeTmuxPort,
-  FakeSessionStore,
-  FakeLoggerPort,
-} from '../helpers/fakes.js';
+import { SessionNamingService } from '../../src/domain/services/session-naming.js';
+import { FakeTmuxPort, FakeSessionStore, FakeLoggerPort } from '../helpers/fakes.js';
 
 describe('RenameSessionUseCase', () => {
   let tmux: FakeTmuxPort;
@@ -19,20 +16,20 @@ describe('RenameSessionUseCase', () => {
     tmux = new FakeTmuxPort();
     store = new FakeSessionStore();
     logger = new FakeLoggerPort();
-    useCase = new RenameSessionUseCase(
-      tmux, store, new SessionNamingService(), logger,
-    );
+    useCase = new RenameSessionUseCase(tmux, store, new SessionNamingService(), logger);
   });
 
-  function createSession(overrides: Partial<{
-    id: string;
-    tmuxName: string;
-    type: 'shell' | 'claude';
-    org: string | null;
-    repo: string | null;
-    worktree: string | null;
-    displayName: string;
-  }> = {}) {
+  function createSession(
+    overrides: Partial<{
+      id: string;
+      tmuxName: string;
+      type: 'shell' | 'claude';
+      org: string | null;
+      repo: string | null;
+      worktree: string | null;
+      displayName: string;
+    }> = {},
+  ) {
     const session = new SessionEntity(
       overrides.id ?? 'sess-1',
       overrides.tmuxName ?? 'fleex_claude_org_repo_main_claude',
@@ -67,8 +64,16 @@ describe('RenameSessionUseCase', () => {
   });
 
   it('should auto-dedup when name conflicts with sibling', async () => {
-    createSession({ id: 'sess-1', tmuxName: 'fleex_claude_org_repo_main_claude', displayName: 'Claude' });
-    createSession({ id: 'sess-2', tmuxName: 'fleex_claude_org_repo_main_worker', displayName: 'worker' });
+    createSession({
+      id: 'sess-1',
+      tmuxName: 'fleex_claude_org_repo_main_claude',
+      displayName: 'Claude',
+    });
+    createSession({
+      id: 'sess-2',
+      tmuxName: 'fleex_claude_org_repo_main_worker',
+      displayName: 'worker',
+    });
 
     await useCase.execute('sess-1', 'worker');
 

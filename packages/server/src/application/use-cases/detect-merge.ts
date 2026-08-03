@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+
 import type { PullRequest } from '@fleex/shared';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
+
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 export class DetectMergeUseCase {
   constructor(
@@ -16,9 +19,7 @@ export class DetectMergeUseCase {
     for (const pr of mergedPRs) {
       // Find tickets linked to this PR's branch via worktree link
       const byWorktree = (await this.ticketStore.getTicketsLinkedTo('worktree', '')).filter((t) =>
-        t.links.some(
-          (l) => l.type === 'worktree' && l.ref.includes(pr.headRefName),
-        ),
+        t.links.some((l) => l.type === 'worktree' && l.ref.includes(pr.headRefName)),
       );
 
       // Find tickets with github_pr link matching PR number
@@ -27,7 +28,7 @@ export class DetectMergeUseCase {
         `${repoKey}#${pr.number}`,
       );
 
-      const allMatches = new Map<string, typeof byWorktree[0]>();
+      const allMatches = new Map<string, (typeof byWorktree)[0]>();
       for (const t of [...byWorktree, ...byPR]) {
         allMatches.set(t.id, t);
       }
@@ -53,14 +54,16 @@ export class DetectMergeUseCase {
         }
 
         await this.ticketStore.saveTicket(ticket);
-        await this.ticketStore.saveActivity(TicketActivityEntity.create({
-          id: randomUUID(),
-          ticketId: ticket.id,
-          action: 'moved',
-          changes: diff,
-          source: 'api',
-          actorName: 'merge-detector',
-        }));
+        await this.ticketStore.saveActivity(
+          TicketActivityEntity.create({
+            id: randomUUID(),
+            ticketId: ticket.id,
+            action: 'moved',
+            changes: diff,
+            source: 'api',
+            actorName: 'merge-detector',
+          }),
+        );
 
         movedTicketIds.push(ticket.id);
         this.logger.info('Ticket auto-moved to done via merge', {

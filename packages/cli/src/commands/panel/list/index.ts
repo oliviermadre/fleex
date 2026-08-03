@@ -1,5 +1,3 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { info } from '../../../core/colors.ts';
 import {
   fetchPanels,
   handle,
@@ -8,8 +6,14 @@ import {
   renderTable,
   trunc,
 } from '../../../core/agentic.ts';
+import { info } from '../../../core/colors.ts';
 
-interface ListOptions { json?: boolean; enabled?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface ListOptions {
+  json?: boolean;
+  enabled?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

@@ -33,9 +33,7 @@ const TICKET_ID = String.raw`[0-9a-fA-F-]{36}|\d+`;
  */
 const TICKET_ONLY_MENTION = new RegExp(
   // 1: code span (verbatim) · 2: struck ticket (verbatim) · 3: active ticket
-  '(```[\\s\\S]*?```|`[^`]*`)' +
-    `|(~~@ticket:(?:${TICKET_ID})~~)` +
-    `|(@ticket:(?:${TICKET_ID}))`,
+  '(```[\\s\\S]*?```|`[^`]*`)' + `|(~~@ticket:(?:${TICKET_ID})~~)` + `|(@ticket:(?:${TICKET_ID}))`,
   'g',
 );
 
@@ -105,19 +103,30 @@ export function preprocessMentions(body: string): string {
       activeHuman: string | undefined,
     ) => {
       if (codeSpan !== undefined) return codeSpan;
-      if (struckAgent !== undefined) return `[${struckAgent}](#fleex-struck:${struckAgent.slice(1)})`;
-      if (struckPanel !== undefined) return `[${struckPanel}](#fleex-struck:${struckPanel.slice(1)})`;
-      if (struckSkill !== undefined) return `[${struckSkill}](#fleex-struck:${struckSkill.slice(1)})`;
-      if (struckWorkflow !== undefined) return `[${struckWorkflow}](#fleex-struck:${struckWorkflow.slice(1)})`;
-      if (struckTicket !== undefined) return `[${struckTicket}](#fleex-struck:${struckTicket.slice(1)})`;
-      if (struckHuman !== undefined) return `[${struckHuman}](#fleex-struck:${struckHuman.slice(1)})`;
-      if (activeAgent !== undefined) return `[${activeAgent}](#fleex-agent:${activeAgent.slice(1)})`;
-      if (activePanel !== undefined) return `[${activePanel}](#fleex-panel:${activePanel.slice(1)})`;
-      if (activeSkill !== undefined) return `[${activeSkill}](#fleex-skill:${activeSkill.slice(1)})`;
-      if (activeWorkflow !== undefined) return `[${activeWorkflow}](#fleex-workflow:${activeWorkflow.slice(1)})`;
+      if (struckAgent !== undefined)
+        return `[${struckAgent}](#fleex-struck:${struckAgent.slice(1)})`;
+      if (struckPanel !== undefined)
+        return `[${struckPanel}](#fleex-struck:${struckPanel.slice(1)})`;
+      if (struckSkill !== undefined)
+        return `[${struckSkill}](#fleex-struck:${struckSkill.slice(1)})`;
+      if (struckWorkflow !== undefined)
+        return `[${struckWorkflow}](#fleex-struck:${struckWorkflow.slice(1)})`;
+      if (struckTicket !== undefined)
+        return `[${struckTicket}](#fleex-struck:${struckTicket.slice(1)})`;
+      if (struckHuman !== undefined)
+        return `[${struckHuman}](#fleex-struck:${struckHuman.slice(1)})`;
+      if (activeAgent !== undefined)
+        return `[${activeAgent}](#fleex-agent:${activeAgent.slice(1)})`;
+      if (activePanel !== undefined)
+        return `[${activePanel}](#fleex-panel:${activePanel.slice(1)})`;
+      if (activeSkill !== undefined)
+        return `[${activeSkill}](#fleex-skill:${activeSkill.slice(1)})`;
+      if (activeWorkflow !== undefined)
+        return `[${activeWorkflow}](#fleex-workflow:${activeWorkflow.slice(1)})`;
       if (activeTicket !== undefined)
         return `[${activeTicket}](${TICKET_MENTION_HREF_PREFIX}${activeTicket.slice('@ticket:'.length)})`;
-      if (activeHuman !== undefined) return `[${activeHuman}](#fleex-human:${activeHuman.slice(1)})`;
+      if (activeHuman !== undefined)
+        return `[${activeHuman}](#fleex-human:${activeHuman.slice(1)})`;
       return match;
     },
   );

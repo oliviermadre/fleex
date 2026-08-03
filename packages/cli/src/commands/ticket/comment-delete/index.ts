@@ -1,12 +1,21 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, info, err, die, c } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiDelete } from '../../../core/api.ts';
-import { canPrompt, promptYesNo, closePrompts } from '../../../core/prompt.ts';
+import { ok, info, err, die, c } from '../../../core/colors.ts';
 import { matchById } from '../../../core/match.ts';
+import { canPrompt, promptYesNo, closePrompts } from '../../../core/prompt.ts';
 import { resolveTicketId } from '../_shared.ts';
 
-interface Comment { id: string; authorName: string; authorType: string; body: string }
-interface DeleteOptions { board?: string; force?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface Comment {
+  id: string;
+  authorName: string;
+  authorType: string;
+  body: string;
+}
+interface DeleteOptions {
+  board?: string;
+  force?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -26,7 +35,9 @@ const def: CommandDef = {
 
     const result = matchById(comments, commentArg);
     if (result.kind === 'none') {
-      die(`No comment on this ticket matches "${commentArg}". List them with \`fleex ticket comments ${ticketArg}\`.`);
+      die(
+        `No comment on this ticket matches "${commentArg}". List them with \`fleex ticket comments ${ticketArg}\`.`,
+      );
     }
     if (result.kind === 'ambiguous') {
       err(`"${commentArg}" matches multiple comments — use a longer id prefix:`);
@@ -40,9 +51,14 @@ const def: CommandDef = {
 
     if (!opts.force) {
       if (!canPrompt()) {
-        die(`Refusing to delete comment ${comment.id.slice(0, 8)} by ${label} without confirmation. Re-run with -f to force.`);
+        die(
+          `Refusing to delete comment ${comment.id.slice(0, 8)} by ${label} without confirmation. Re-run with -f to force.`,
+        );
       }
-      const confirmed = await promptYesNo(`Delete comment ${comment.id.slice(0, 8)} by ${label}?`, false);
+      const confirmed = await promptYesNo(
+        `Delete comment ${comment.id.slice(0, 8)} by ${label}?`,
+        false,
+      );
       closePrompts();
       if (!confirmed) {
         info('Cancelled.');

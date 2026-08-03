@@ -1,5 +1,5 @@
-import { die, err, info, c, isJsonMode } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
+import { die, err, info, c, isJsonMode } from '../../core/colors.ts';
 import { matchById, type MatchResult } from '../../core/match.ts';
 
 export interface Board {
@@ -30,13 +30,19 @@ export async function listBoardsWithCounts(): Promise<void> {
     return;
   }
   process.stdout.write('\n');
-  process.stdout.write(`  ${c.bold('Board                       Backlog   Todo  Doing Review   Done  Canc.  ID')}\n`);
-  process.stdout.write('  ──────────────────────────  ───────  ─────  ───── ──────  ─────  ─────  ────────────────────────────────────\n');
+  process.stdout.write(
+    `  ${c.bold('Board                       Backlog   Todo  Doing Review   Done  Canc.  ID')}\n`,
+  );
+  process.stdout.write(
+    '  ──────────────────────────  ───────  ─────  ───── ──────  ─────  ─────  ────────────────────────────────────\n',
+  );
   for (const b of boards) {
     const label = `${b.emoji ?? ''} ${b.name}`.trim().slice(0, 26).padEnd(26);
     const cnt = b.ticketCounts ?? {};
     const n = (k: StatusKey) => String(cnt[k] ?? 0).padStart(6);
-    process.stdout.write(`  ${label} ${n('backlog')}  ${n('todo')}  ${n('doing')} ${n('reviewing')}  ${n('done')}  ${n('cancelled')}  ${c.dim(b.id)}\n`);
+    process.stdout.write(
+      `  ${label} ${n('backlog')}  ${n('todo')}  ${n('doing')} ${n('reviewing')}  ${n('done')}  ${n('cancelled')}  ${c.dim(b.id)}\n`,
+    );
   }
   process.stdout.write('\n');
 }

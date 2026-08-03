@@ -1,9 +1,12 @@
 import { useEffect, useMemo } from 'react';
+
 import type { TicketDeliverable } from '@fleex/shared';
+
 import { useDocumentsStore } from '../../stores/documentsStore';
-import { DocumentsFilterSidebar } from './DocumentsFilterSidebar';
-import { DocumentRow } from './DocumentRow';
 import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
+
+import { DocumentRow } from './DocumentRow';
+import { DocumentsFilterSidebar } from './DocumentsFilterSidebar';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -32,7 +35,13 @@ function groupByRecency(docs: TicketDeliverable[]): DocGroup[] {
 
   const groups: DocGroup[] = [
     { label: 'Today', docs: docs.filter((d) => new Date(d.updatedAt) >= todayStart) },
-    { label: 'This week', docs: docs.filter((d) => { const dt = new Date(d.updatedAt); return dt >= weekStart && dt < todayStart; }) },
+    {
+      label: 'This week',
+      docs: docs.filter((d) => {
+        const dt = new Date(d.updatedAt);
+        return dt >= weekStart && dt < todayStart;
+      }),
+    },
     { label: 'Older', docs: docs.filter((d) => new Date(d.updatedAt) < weekStart) },
   ].filter((g) => g.docs.length > 0);
 
@@ -68,7 +77,9 @@ export function DocumentsPage() {
     if (filterAgentNames.size > 0) result = result.filter((d) => filterAgentNames.has(d.agentName));
     if (filterStatuses.size > 0) result = result.filter((d) => filterStatuses.has(d.status));
     // Sort by updatedAt desc
-    return [...result].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    return [...result].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
   }, [deliverables, filterTypes, filterAgentNames, filterStatuses]);
 
   const groups = useMemo(() => groupByRecency(filtered), [filtered]);
@@ -113,7 +124,9 @@ export function DocumentsPage() {
             ) : filtered.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <span className="text-xs text-[var(--theme-text-faint)]">
-                  {deliverables.length === 0 ? 'No documents yet' : 'No documents match your filters'}
+                  {deliverables.length === 0
+                    ? 'No documents yet'
+                    : 'No documents match your filters'}
                 </span>
               </div>
             ) : (

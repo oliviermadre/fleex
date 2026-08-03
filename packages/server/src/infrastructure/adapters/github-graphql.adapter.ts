@@ -1,4 +1,5 @@
 import type { PullRequest, GitHubIssue, GitHubIssueDetail } from '@fleex/shared';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn } from '../host/types.js';
 
@@ -150,14 +151,18 @@ export class GitHubGraphQLAdapter {
       }
     }`;
 
-    const { stdout } = await this.execFn('gh', [
-      'api', 'graphql',
-      '-f', `query=${query}`,
-      '--jq', '.data.repository.issue',
-    ], { timeout: 15_000 });
+    const { stdout } = await this.execFn(
+      'gh',
+      ['api', 'graphql', '-f', `query=${query}`, '--jq', '.data.repository.issue'],
+      { timeout: 15_000 },
+    );
 
     const raw = JSON.parse(stdout) as {
-      number: number; title: string; body: string; url: string; state: string;
+      number: number;
+      title: string;
+      body: string;
+      url: string;
+      state: string;
       author: { login: string } | null;
       assignees: { nodes: { login: string }[] };
       labels: { nodes: { name: string }[] };
@@ -187,7 +192,9 @@ export class GitHubGraphQLAdapter {
    * Fetch the state of multiple PRs in a single GraphQL call.
    * Returns a map of "org/name#number" → "OPEN" | "MERGED" | "CLOSED".
    */
-  async fetchPRStates(prs: { org: string; name: string; number: number }[]): Promise<Map<string, string>> {
+  async fetchPRStates(
+    prs: { org: string; name: string; number: number }[],
+  ): Promise<Map<string, string>> {
     const result = new Map<string, string>();
     if (prs.length === 0) return result;
 
@@ -199,13 +206,16 @@ export class GitHubGraphQLAdapter {
 
     try {
       const query = `{ ${prQueries.join('\n')} }`;
-      const { stdout } = await this.execFn('gh', [
-        'api', 'graphql',
-        '-f', `query=${query}`,
-        '--jq', '.data',
-      ], { timeout: 15_000 });
+      const { stdout } = await this.execFn(
+        'gh',
+        ['api', 'graphql', '-f', `query=${query}`, '--jq', '.data'],
+        { timeout: 15_000 },
+      );
 
-      const data = JSON.parse(stdout) as Record<string, { pullRequest: { state: string } | null } | null>;
+      const data = JSON.parse(stdout) as Record<
+        string,
+        { pullRequest: { state: string } | null } | null
+      >;
       prs.forEach((pr, idx) => {
         const entry = data[`pr${idx}`];
         const state = entry?.pullRequest?.state;
@@ -222,11 +232,18 @@ export class GitHubGraphQLAdapter {
 
   async getRateLimit(): Promise<RateLimitInfo> {
     try {
-      const { stdout } = await this.execFn('gh', [
-        'api', 'graphql',
-        '-f', 'query={ rateLimit { remaining resetAt } }',
-        '--jq', '.data.rateLimit',
-      ], { timeout: 10_000 });
+      const { stdout } = await this.execFn(
+        'gh',
+        [
+          'api',
+          'graphql',
+          '-f',
+          'query={ rateLimit { remaining resetAt } }',
+          '--jq',
+          '.data.rateLimit',
+        ],
+        { timeout: 10_000 },
+      );
       const data = JSON.parse(stdout) as { remaining: number; resetAt: string };
       return {
         remaining: data.remaining,
@@ -303,11 +320,11 @@ export class GitHubGraphQLAdapter {
     const query = `{ ${repoQueries.join('\n')} }`;
 
     try {
-      const { stdout } = await this.execFn('gh', [
-        'api', 'graphql',
-        '-f', `query=${query}`,
-        '--jq', '.data',
-      ], { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 });
+      const { stdout } = await this.execFn(
+        'gh',
+        ['api', 'graphql', '-f', `query=${query}`, '--jq', '.data'],
+        { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 },
+      );
 
       const data = JSON.parse(stdout) as Record<string, GraphQLRepoResult>;
 
@@ -389,16 +406,32 @@ export class GitHubGraphQLAdapter {
     const repoSlug = `${org}/${name}`;
 
     // Fetch open PRs
-    const { stdout: prOut } = await this.execFn('gh', [
-      'pr', 'list', '--repo', repoSlug,
-      '--json', 'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
-      '--limit', '50', '--state', 'open',
-    ], { timeout: 15_000 });
+    const { stdout: prOut } = await this.execFn(
+      'gh',
+      [
+        'pr',
+        'list',
+        '--repo',
+        repoSlug,
+        '--json',
+        'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
+        '--limit',
+        '50',
+        '--state',
+        'open',
+      ],
+      { timeout: 15_000 },
+    );
 
     const rawPRs = JSON.parse(prOut) as {
-      number: number; title: string; headRefName: string; isDraft: boolean;
-      author: { login: string }; assignees: { login: string }[];
-      createdAt: string; updatedAt: string;
+      number: number;
+      title: string;
+      headRefName: string;
+      isDraft: boolean;
+      author: { login: string };
+      assignees: { login: string }[];
+      createdAt: string;
+      updatedAt: string;
     }[];
 
     const pulls: PullRequest[] = rawPRs.map((pr) => ({
@@ -416,16 +449,34 @@ export class GitHubGraphQLAdapter {
     // Fetch merged PRs
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const dateStr = sevenDaysAgo.toISOString().split('T')[0];
-    const { stdout: mergedOut } = await this.execFn('gh', [
-      'pr', 'list', '--repo', repoSlug,
-      '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt,mergedAt',
-      '--limit', '20', '--state', 'merged', '--search', `merged:>${dateStr}`,
-    ], { timeout: 15_000 });
+    const { stdout: mergedOut } = await this.execFn(
+      'gh',
+      [
+        'pr',
+        'list',
+        '--repo',
+        repoSlug,
+        '--json',
+        'number,title,headRefName,author,assignees,createdAt,updatedAt,mergedAt',
+        '--limit',
+        '20',
+        '--state',
+        'merged',
+        '--search',
+        `merged:>${dateStr}`,
+      ],
+      { timeout: 15_000 },
+    );
 
     const rawMerged = JSON.parse(mergedOut) as {
-      number: number; title: string; headRefName: string;
-      author: { login: string }; assignees: { login: string }[];
-      createdAt: string; updatedAt: string; mergedAt: string;
+      number: number;
+      title: string;
+      headRefName: string;
+      author: { login: string };
+      assignees: { login: string }[];
+      createdAt: string;
+      updatedAt: string;
+      mergedAt: string;
     }[];
 
     const mergedPRs: PullRequest[] = rawMerged.map((pr) => ({
@@ -441,12 +492,24 @@ export class GitHubGraphQLAdapter {
     }));
 
     // Fetch open issues
-    const issueJsonFields = 'number,title,state,author,assignees,labels,comments,createdAt,updatedAt,closedAt';
-    const { stdout: issueOut } = await this.execFn('gh', [
-      'issue', 'list', '--repo', repoSlug,
-      '--json', issueJsonFields,
-      '--state', 'open', '--limit', '50',
-    ], { timeout: 15_000 });
+    const issueJsonFields =
+      'number,title,state,author,assignees,labels,comments,createdAt,updatedAt,closedAt';
+    const { stdout: issueOut } = await this.execFn(
+      'gh',
+      [
+        'issue',
+        'list',
+        '--repo',
+        repoSlug,
+        '--json',
+        issueJsonFields,
+        '--state',
+        'open',
+        '--limit',
+        '50',
+      ],
+      { timeout: 15_000 },
+    );
 
     const rawIssues = JSON.parse(issueOut) as CliIssue[];
     const issues: GitHubIssue[] = rawIssues.map(mapCliIssue);
@@ -454,11 +517,24 @@ export class GitHubGraphQLAdapter {
     // Fetch recently closed issues (last 30 days), symmetric with the batch/GraphQL path.
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const closedDateStr = thirtyDaysAgo.toISOString().split('T')[0];
-    const { stdout: closedIssueOut } = await this.execFn('gh', [
-      'issue', 'list', '--repo', repoSlug,
-      '--json', issueJsonFields,
-      '--state', 'closed', '--limit', '20', '--search', `closed:>${closedDateStr}`,
-    ], { timeout: 15_000 });
+    const { stdout: closedIssueOut } = await this.execFn(
+      'gh',
+      [
+        'issue',
+        'list',
+        '--repo',
+        repoSlug,
+        '--json',
+        issueJsonFields,
+        '--state',
+        'closed',
+        '--limit',
+        '20',
+        '--search',
+        `closed:>${closedDateStr}`,
+      ],
+      { timeout: 15_000 },
+    );
 
     const rawClosedIssues = JSON.parse(closedIssueOut) as CliIssue[];
     const closedIssues: GitHubIssue[] = rawClosedIssues.map(mapCliIssue);

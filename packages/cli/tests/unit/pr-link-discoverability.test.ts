@@ -12,15 +12,17 @@
  * These tests lock the wording that fixes both halves so it can't silently
  * regress. They build each CommandDef exactly like program.ts attaches it.
  */
-import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
-import type { CommandDef } from '../../src/core/types.ts';
-import { recordExtraHelp } from '../../src/core/help.ts';
+import { describe, it, expect } from 'vitest';
+
 import { describeCommand, type CommandDoc } from '../../src/commands/documentation/index.ts';
-import linkDef from '../../src/commands/ticket/link/index.ts';
-import unlinkDef from '../../src/commands/ticket/unlink/index.ts';
 import repoDef from '../../src/commands/repo/index.ts';
 import repoPrDef from '../../src/commands/repo/pr/index.ts';
+import linkDef from '../../src/commands/ticket/link/index.ts';
+import unlinkDef from '../../src/commands/ticket/unlink/index.ts';
+import { recordExtraHelp } from '../../src/core/help.ts';
+
+import type { CommandDef } from '../../src/core/types.ts';
 
 function doc(def: CommandDef, breadcrumb: string[]): CommandDoc {
   const cmd = new Command(def.name).description(def.description ?? '');

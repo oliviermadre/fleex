@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { FakeHostFs, FakeLoggerPort } from '../helpers/fakes.js';
 
 // ---------------------------------------------------------------------------
@@ -122,7 +123,10 @@ async function cloneLogic(
     hostFs.addExistingPath(repoPath);
     return { status: 200, body: { success: true } };
   } else {
-    return { status: 422, body: { code: 'CLONE_FAILED', message: 'Permission denied (publickey).' } };
+    return {
+      status: 422,
+      body: { code: 'CLONE_FAILED', message: 'Permission denied (publickey).' },
+    };
   }
 }
 
@@ -139,32 +143,46 @@ describe('Clone route logic', () => {
   });
 
   it('rejects repos not in configured list', async () => {
-    const result = await cloneLogic(hostFs, execCalls, {
-      org: 'hacker',
-      name: 'evil',
-      basePath,
-      gitHost,
-      configuredRepos,
-    }, true);
+    const result = await cloneLogic(
+      hostFs,
+      execCalls,
+      {
+        org: 'hacker',
+        name: 'evil',
+        basePath,
+        gitHost,
+        configuredRepos,
+      },
+      true,
+    );
     expect(result.status).toBe(403);
     expect(result.body.code).toBe('REPO_NOT_CONFIGURED');
     expect(execCalls).toHaveLength(0);
   });
 
   it('creates parent directory if missing, then clones', async () => {
-    const result = await cloneLogic(hostFs, execCalls, {
-      org: 'myorg',
-      name: 'myrepo',
-      basePath,
-      gitHost,
-      configuredRepos,
-    }, true);
+    const result = await cloneLogic(
+      hostFs,
+      execCalls,
+      {
+        org: 'myorg',
+        name: 'myrepo',
+        basePath,
+        gitHost,
+        configuredRepos,
+      },
+      true,
+    );
 
     expect(result.status).toBe(200);
     expect(result.body.success).toBe(true);
     expect(hostFs.createdDirs.has('/repos/myorg')).toBe(true);
     expect(execCalls).toHaveLength(1);
-    expect(execCalls[0]!.args).toEqual(['clone', 'git@github.com:myorg/myrepo', '/repos/myorg/myrepo']);
+    expect(execCalls[0]!.args).toEqual([
+      'clone',
+      'git@github.com:myorg/myrepo',
+      '/repos/myorg/myrepo',
+    ]);
     // Repo path should now exist
     expect(await hostFs.exists('/repos/myorg/myrepo')).toBe(true);
   });
@@ -172,25 +190,35 @@ describe('Clone route logic', () => {
   it('does not mkdir if parent already exists', async () => {
     hostFs.addExistingPath('/repos/myorg');
 
-    await cloneLogic(hostFs, execCalls, {
-      org: 'myorg',
-      name: 'myrepo',
-      basePath,
-      gitHost,
-      configuredRepos,
-    }, true);
+    await cloneLogic(
+      hostFs,
+      execCalls,
+      {
+        org: 'myorg',
+        name: 'myrepo',
+        basePath,
+        gitHost,
+        configuredRepos,
+      },
+      true,
+    );
 
     expect(hostFs.createdDirs.has('/repos/myorg')).toBe(false);
   });
 
   it('returns CLONE_FAILED on git error', async () => {
-    const result = await cloneLogic(hostFs, execCalls, {
-      org: 'myorg',
-      name: 'myrepo',
-      basePath,
-      gitHost,
-      configuredRepos,
-    }, false);
+    const result = await cloneLogic(
+      hostFs,
+      execCalls,
+      {
+        org: 'myorg',
+        name: 'myrepo',
+        basePath,
+        gitHost,
+        configuredRepos,
+      },
+      false,
+    );
 
     expect(result.status).toBe(422);
     expect(result.body.code).toBe('CLONE_FAILED');
@@ -201,13 +229,18 @@ describe('Clone route logic', () => {
 
   it('builds correct SSH remote from gitHost', async () => {
     const customGitHost = 'gitlab.com';
-    await cloneLogic(hostFs, execCalls, {
-      org: 'myorg',
-      name: 'myrepo',
-      basePath,
-      gitHost: customGitHost,
-      configuredRepos,
-    }, true);
+    await cloneLogic(
+      hostFs,
+      execCalls,
+      {
+        org: 'myorg',
+        name: 'myrepo',
+        basePath,
+        gitHost: customGitHost,
+        configuredRepos,
+      },
+      true,
+    );
 
     expect(execCalls[0]!.args[1]).toBe('git@gitlab.com:myorg/myrepo');
   });

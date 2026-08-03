@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { c, info, present } from '../../../core/colors.ts';
 import { fetchDeliverableTypes, typeLine } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -15,7 +16,9 @@ const def: CommandDef = {
         return;
       }
       process.stdout.write('\n');
-      process.stdout.write(`  ${c.bold('ID                       LABEL                RENDERER   USAGE')}\n`);
+      process.stdout.write(
+        `  ${c.bold('ID                       LABEL                RENDERER   USAGE')}\n`,
+      );
       process.stdout.write('  ────────────────────────  ────────────────────  ──────────  ─────\n');
       for (const t of view.types) {
         process.stdout.write(`${typeLine(t, view.usage)}\n`);

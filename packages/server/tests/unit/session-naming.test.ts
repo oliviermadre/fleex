@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { SessionNamingService } from '../../src/domain/services/session-naming.js';
+
 import { slugify } from '@fleex/shared';
+
+import { SessionNamingService } from '../../src/domain/services/session-naming.js';
 
 describe('slugify', () => {
   it('should lowercase and replace non-alphanum with hyphens', () => {
@@ -129,12 +131,7 @@ describe('SessionNamingService', () => {
     });
 
     it('should work without git context', () => {
-      const result = service.resolveUniqueName(
-        'Shell',
-        'shell',
-        {},
-        ['fleex_shell_shell'],
-      );
+      const result = service.resolveUniqueName('Shell', 'shell', {}, ['fleex_shell_shell']);
       expect(result.displayName).toBe('Shell-1');
       expect(result.tmuxName).toBe('fleex_shell_shell-1');
     });
@@ -214,7 +211,9 @@ describe('SessionNamingService', () => {
 
     it('parses real-world sidebar names', () => {
       expect(
-        service.parseSidebarParentId('fleex_sidebar_244_7107eecd-fdb4-410b-9b7d-a20acd5c8772_kswkd'),
+        service.parseSidebarParentId(
+          'fleex_sidebar_244_7107eecd-fdb4-410b-9b7d-a20acd5c8772_kswkd',
+        ),
       ).toBe('7107eecd-fdb4-410b-9b7d-a20acd5c8772');
     });
 

@@ -1,9 +1,11 @@
 import type { MentionStatus } from '@fleex/shared';
-import type { CommandDef } from '../../../core/types.ts';
-import { die, err, ok, present } from '../../../core/colors.ts';
+
 import { apiBase, apiGet, apiPatch } from '../../../core/api.ts';
+import { die, err, ok, present } from '../../../core/colors.ts';
 import { matchById } from '../../../core/match.ts';
 import { resolveTicketId } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 export interface Mention {
   id: string;
@@ -29,11 +31,17 @@ export async function resolveMention(ticketUuid: string, input: string): Promise
     }
     process.exit(1);
   }
-  die(`No mention on this ticket matches "${input}". List them with \`fleex ticket mentions <ticket>\`.`);
+  die(
+    `No mention on this ticket matches "${input}". List them with \`fleex ticket mentions <ticket>\`.`,
+  );
 }
 
 /** Resolve the ticket then the mention in one step (shared by every mention command). */
-export async function getMention(ticketArg: string, mentionArg: string, board?: string): Promise<Mention> {
+export async function getMention(
+  ticketArg: string,
+  mentionArg: string,
+  board?: string,
+): Promise<Mention> {
   const ticketUuid = await resolveTicketId(ticketArg, board);
   return resolveMention(ticketUuid, mentionArg);
 }
@@ -59,8 +67,12 @@ export function makeStatusCommand(opts: {
     },
     action: async (ticketArg: string, mentionArg: string, cmdOpts: { board?: string }) => {
       const mention = await getMention(ticketArg, mentionArg, cmdOpts.board);
-      const updated = await apiPatch<Mention>(`${apiBase()}/api/mentions/${mention.id}/status`, { status: opts.status });
-      present(updated, () => ok(`${opts.pastTense} mention ${mentionLabel(mention)} (${mention.id.slice(0, 8)})`));
+      const updated = await apiPatch<Mention>(`${apiBase()}/api/mentions/${mention.id}/status`, {
+        status: opts.status,
+      });
+      present(updated, () =>
+        ok(`${opts.pastTense} mention ${mentionLabel(mention)} (${mention.id.slice(0, 8)})`),
+      );
     },
   };
 }

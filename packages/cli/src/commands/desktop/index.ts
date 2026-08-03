@@ -1,19 +1,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CommandDef } from '../../core/types.ts';
+
 import { info, die, warn } from '../../core/colors.ts';
 import { FLEEX_HOME, resolveInstance, ensureDirs, slugify } from '../../core/instance.ts';
-import { activateWorkspace, assertValidWorkspacesConfig } from '../../core/workspaces.ts';
 import { loadPorts } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
-import { launchDesktop } from './_impl.ts';
+import { activateWorkspace, assertValidWorkspacesConfig } from '../../core/workspaces.ts';
 import { runStart } from '../start/_impl.ts';
+
+import { launchDesktop } from './_impl.ts';
+
+import type { CommandDef } from '../../core/types.ts';
 
 const def: CommandDef = {
   name: 'desktop',
   description: 'Open the Electron desktop window (starts stack if not running)',
   setup(cmd) {
-    cmd.option('--workspace <name>', 'Use the named workspace from ~/.fleex/workspaces.json (defaults to the is_default workspace)');
+    cmd.option(
+      '--workspace <name>',
+      'Use the named workspace from ~/.fleex/workspaces.json (defaults to the is_default workspace)',
+    );
   },
   action: async (opts: { workspace?: string } = {}) => {
     assertValidWorkspacesConfig();

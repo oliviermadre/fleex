@@ -1,4 +1,5 @@
 import { useState } from 'react';
+
 import { Button } from '../ui/Button';
 
 interface Props {
@@ -35,8 +36,8 @@ export function CancelledStepRestartPanel({ onRestart }: Props) {
           Step cancelled
         </div>
         <div className="mt-2 text-xs text-[var(--theme-text-secondary)]">
-          This step was terminated. Restart it to spawn a fresh attempt and
-          resume the workflow from here.
+          This step was terminated. Restart it to spawn a fresh attempt and resume the workflow from
+          here.
         </div>
       </div>
       {error && <div className="text-xs text-[var(--theme-danger)]">{error}</div>}

@@ -20,7 +20,7 @@
 - Test: `npx vitest run <file>` (workspace config picks the right package). Full: `bun run test`. Typecheck+palette: `bun run lint`.
 - Commit after each task. Message style: `feat(web): …` / `feat(server): …` / `refactor(web): …` / `docs: …`, ending with a blank line then `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
 - TypeScript strict; workspace imports: web/server import shared types from `@fleex/shared`. Server-internal imports use `.js` extensions.
-- **Known spec deviation** (accepted): the "Orphaned worktrees" rows omit the worktree *age* from the prototype — no creation-date data exists client-side and adding one is out of scope. Rows show branch, `↓n` and the Remove button.
+- **Known spec deviation** (accepted): the "Orphaned worktrees" rows omit the worktree _age_ from the prototype — no creation-date data exists client-side and adding one is out of scope. Rows show branch, `↓n` and the Remove button.
 
 ---
 
@@ -29,6 +29,7 @@
 The current `GitHubIssue` has no state/labels/comments and the server only fetches open issues assigned to `@me`. The redesigned Issues tab needs all open issues + recently closed (30 d) with labels and comment counts.
 
 **Files:**
+
 - Modify: `packages/shared/src/types/repository.ts:69-76` (GitHubIssue)
 - Modify: `packages/shared/src/types/repository-dashboard.ts:15-25` (RepositoryDashboardData)
 - Modify: `packages/server/src/infrastructure/adapters/github-graphql.adapter.ts` (issue query + both mapping sites + `RepoFetchResult`)
@@ -36,7 +37,9 @@ The current `GitHubIssue` has no state/labels/comments and the server only fetch
 - Modify: any `RepositoryDashboardData` construction site found by `grep -rn "recentlyMergedPullRequests" packages/server/src` (the refresh scheduler builds the same payload)
 
 **Interfaces:**
+
 - Produces (used by Tasks 11, 12):
+
   ```ts
   export interface GitHubLabel { readonly name: string; readonly color: string; } // color = hex WITHOUT '#'
   export interface GitHubIssue {
@@ -62,8 +65,10 @@ In `packages/shared/src/types/repository.ts`, replace the `GitHubIssue` interfac
 - [ ] **Step 2: Update the GraphQL adapter**
 
 In `github-graphql.adapter.ts`:
+
 1. Extend `GraphQLIssueNode` (top of file) with `state: string; closedAt: string | null; labels?: { nodes: { name: string; color: string }[] }; comments?: { totalCount: number };`.
 2. In the per-repo query template (~line 229), replace the `issues(...)` block with:
+
 ```graphql
 issues(first: 50, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
   totalCount
@@ -87,8 +92,9 @@ closedIssues: issues(first: 20, states: CLOSED, orderBy: {field: UPDATED_AT, dir
   }
 }
 ```
-and add `closedIssues: { nodes: GraphQLIssueNode[] }` to `GraphQLRepoResult`.
-3. Add one shared mapper near the top of the class file (module scope):
+
+and add `closedIssues: { nodes: GraphQLIssueNode[] }` to `GraphQLRepoResult`. 3. Add one shared mapper near the top of the class file (module scope):
+
 ```ts
 function mapIssueNode(issue: GraphQLIssueNode): GitHubIssue {
   return {
@@ -105,18 +111,22 @@ function mapIssueNode(issue: GraphQLIssueNode): GitHubIssue {
   };
 }
 ```
+
 4. Replace **both** existing `GitHubIssue` mapping sites (`grep -n "issues.nodes.map\|rawIssues.map" …github-graphql.adapter.ts`) with `mapIssueNode`, and compute `closedIssues` filtered to the last 30 days: `const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString(); const closedIssues = repoData.closedIssues.nodes.map(mapIssueNode).filter((i) => i.closedAt && i.closedAt >= thirtyDaysAgo);`.
 5. Add `closedIssues: GitHubIssue[]` to `RepoFetchResult` and return it from both fetch paths (the non-batch fallback path can return `[]` if it has no query to get them — check whether it runs the same GraphQL; if it uses `gh issue list`, add `--state closed --search "closed:>…"` symmetry only if trivial, else `[]` with a `// closed issues only via batch path` comment).
 
 - [ ] **Step 3: Update the gh-CLI issues endpoint**
 
 In `repositories.routes.ts` issues endpoint (~line 213): change the `gh issue list` args to
+
 ```ts
 '--json', 'number,title,state,author,assignees,labels,comments,createdAt,updatedAt,closedAt',
 '--state', 'open',
 '--limit', '50',
 ```
+
 (remove `--assignee @me`), update the raw type accordingly (`labels: { name: string; color: string }[]`, `comments: unknown[]`, `state: string`, `closedAt: string | null`) and map:
+
 ```ts
 return raw.map((issue): GitHubIssue => ({
   number: issue.number,
@@ -139,6 +149,7 @@ In the dashboard endpoint (~line 351): cache/read `closedIssues:${key}` with `Re
 - [ ] **Step 5: Typecheck + tests + commit**
 
 Run: `bun run lint` → expected: PASS. Run: `bun run test` → expected: PASS (no behavioral test exists on these paths; compile is the gate).
+
 ```bash
 git add -A && git commit -m "feat(server): extend GitHub issues with state, labels, comments and recently-closed list"
 ```
@@ -148,11 +159,13 @@ git add -A && git commit -m "feat(server): extend GitHub issues with state, labe
 ### Task 2: Config migration — `org/*` patterns → explicit repo list
 
 **Files:**
+
 - Create: `packages/server/src/domain/services/repository-pattern-migration.ts`
 - Test: `packages/server/tests/unit/repository-pattern-migration.test.ts`
 - Modify: `packages/server/src/main.ts` (after `const container = await createContainer();`, ~line 54)
 
 **Interfaces:**
+
 - Produces: `migrateRepositoryPatterns(config: ConfigPort, resolver: { resolve(patterns: string[]): Promise<string[]> }, logger: LoggerPort): Promise<void>` — idempotent; keeps unresolvable patterns intact.
 - Consumes: `ConfigPort.get()/update()` (`packages/server/src/application/ports/config.port.ts`), `RepositoryResolver.resolve` (returns `[]` on gh failure for a wildcard).
 
@@ -165,13 +178,21 @@ import { migrateRepositoryPatterns } from '../../src/domain/services/repository-
 import type { AppConfig, ConfigPort } from '../../src/application/ports/config.port.js';
 
 function fakeConfig(initial: Partial<AppConfig>): ConfigPort & { updates: Partial<AppConfig>[] } {
-  let data: AppConfig = { basePath: '/tmp', defaultShell: '/bin/zsh', repositoryRefreshIntervalMs: 0, ...initial };
+  let data: AppConfig = {
+    basePath: '/tmp',
+    defaultShell: '/bin/zsh',
+    repositoryRefreshIntervalMs: 0,
+    ...initial,
+  };
   const updates: Partial<AppConfig>[] = [];
   return {
     updates,
     init: async () => {},
     get: () => ({ ...data }),
-    update: async (partial) => { updates.push(partial); data = { ...data, ...partial }; },
+    update: async (partial) => {
+      updates.push(partial);
+      data = { ...data, ...partial };
+    },
     getClaudeCommand: () => 'claude',
   };
 }
@@ -228,7 +249,9 @@ Expected: FAIL — module not found.
 import type { ConfigPort } from '../../application/ports/config.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 
-interface ResolverLike { resolve(patterns: string[]): Promise<string[]>; }
+interface ResolverLike {
+  resolve(patterns: string[]): Promise<string[]>;
+}
 
 /**
  * One-time (idempotent) migration of `repositories` from wildcard patterns
@@ -280,17 +303,21 @@ Expected: PASS (4 tests).
 - [ ] **Step 5: Hook into startup**
 
 In `packages/server/src/main.ts`, right after `const container = await createContainer();` add (import at top with the other infra imports):
+
 ```ts
 import { migrateRepositoryPatterns } from './domain/services/repository-pattern-migration.js';
 // …
-migrateRepositoryPatterns(container.config, container.repositoryResolver, container.logger)
-  .catch((err) => container.logger.warn('Repository pattern migration failed', { error: String(err) }));
+migrateRepositoryPatterns(container.config, container.repositoryResolver, container.logger).catch(
+  (err) => container.logger.warn('Repository pattern migration failed', { error: String(err) }),
+);
 ```
+
 Fire-and-forget on purpose: startup must not block on `gh` (15 s timeout per pattern); failure retries next boot.
 
 - [ ] **Step 6: Lint + commit**
 
 Run: `bun run lint` → PASS.
+
 ```bash
 git add -A && git commit -m "feat(server): migrate repository patterns to explicit repo list at startup"
 ```
@@ -300,6 +327,7 @@ git add -A && git commit -m "feat(server): migrate repository patterns to explic
 ### Task 3: GitHub discovery service + endpoints (for the add modal)
 
 **Files:**
+
 - Create: `packages/server/src/domain/services/github-discovery.ts`
 - Test: `packages/server/tests/unit/github-discovery.test.ts`
 - Modify: `packages/shared/src/types/repository.ts` (discovery types)
@@ -308,12 +336,23 @@ git add -A && git commit -m "feat(server): migrate repository patterns to explic
 - Modify: `packages/server/src/infrastructure/http/repositories.routes.ts` (two routes)
 
 **Interfaces:**
+
 - Produces (used by Tasks 5 and 8):
   ```ts
   // shared/types/repository.ts
-  export interface DiscoveredRepo { readonly nameWithOwner: string; readonly visibility: string; readonly updatedAt: string; }
-  export interface RepoDiscoveryOwner { readonly login: string; readonly repos: DiscoveredRepo[]; }
-  export interface RepoDiscovery { readonly owners: RepoDiscoveryOwner[]; readonly totalRepos: number; }
+  export interface DiscoveredRepo {
+    readonly nameWithOwner: string;
+    readonly visibility: string;
+    readonly updatedAt: string;
+  }
+  export interface RepoDiscoveryOwner {
+    readonly login: string;
+    readonly repos: DiscoveredRepo[];
+  }
+  export interface RepoDiscovery {
+    readonly owners: RepoDiscoveryOwner[];
+    readonly totalRepos: number;
+  }
   ```
   - `GET /api/github/discovery` → `RepoDiscovery` (502 `{error}` when gh unauthenticated)
   - `GET /api/github/verify-repo?repo=owner/repo` → `{ exists: boolean; nameWithOwner?: string }` (400 on malformed input)
@@ -346,14 +385,22 @@ describe('GithubDiscovery', () => {
     const exec = execStub({
       'api user --jq .login': 'Olivier\n',
       'api user/orgs': 'acme\nBigCorp\n',
-      'repo list olivier': JSON.stringify([{ nameWithOwner: 'Olivier/Tool', visibility: 'PRIVATE', updatedAt: '2026-07-01T00:00:00Z' }]),
-      'repo list acme': JSON.stringify([{ nameWithOwner: 'acme/app', visibility: 'PUBLIC', updatedAt: '2026-07-02T00:00:00Z' }]),
+      'repo list olivier': JSON.stringify([
+        { nameWithOwner: 'Olivier/Tool', visibility: 'PRIVATE', updatedAt: '2026-07-01T00:00:00Z' },
+      ]),
+      'repo list acme': JSON.stringify([
+        { nameWithOwner: 'acme/app', visibility: 'PUBLIC', updatedAt: '2026-07-02T00:00:00Z' },
+      ]),
       'repo list bigcorp': JSON.stringify([]),
     });
     const d = new GithubDiscovery(exec as never, logger);
     const result = await d.discover();
     expect(result.owners.map((o) => o.login)).toEqual(['olivier', 'acme', 'bigcorp']);
-    expect(result.owners[0]!.repos[0]).toEqual({ nameWithOwner: 'olivier/tool', visibility: 'private', updatedAt: '2026-07-01T00:00:00Z' });
+    expect(result.owners[0]!.repos[0]).toEqual({
+      nameWithOwner: 'olivier/tool',
+      visibility: 'private',
+      updatedAt: '2026-07-01T00:00:00Z',
+    });
     expect(result.totalRepos).toBe(2);
   });
 
@@ -378,11 +425,16 @@ describe('GithubDiscovery', () => {
 
   it('verifyRepo returns the canonical name or exists:false', async () => {
     const exec = execStub({
-      'repo view anthropics/claude-code': JSON.stringify({ nameWithOwner: 'Anthropics/Claude-Code' }),
+      'repo view anthropics/claude-code': JSON.stringify({
+        nameWithOwner: 'Anthropics/Claude-Code',
+      }),
       'repo view nope/nope': new Error('not found'),
     });
     const d = new GithubDiscovery(exec as never, logger);
-    expect(await d.verifyRepo('anthropics/claude-code')).toEqual({ exists: true, nameWithOwner: 'anthropics/claude-code' });
+    expect(await d.verifyRepo('anthropics/claude-code')).toEqual({
+      exists: true,
+      nameWithOwner: 'anthropics/claude-code',
+    });
     expect(await d.verifyRepo('nope/nope')).toEqual({ exists: false });
   });
 });
@@ -401,16 +453,28 @@ import type { ExecFn } from '../../infrastructure/host/types.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 
 export class GithubDiscovery {
-  constructor(private readonly execFn: ExecFn, private readonly logger: LoggerPort) {}
+  constructor(
+    private readonly execFn: ExecFn,
+    private readonly logger: LoggerPort,
+  ) {}
 
   async discover(): Promise<RepoDiscovery> {
-    const { stdout: userOut } = await this.execFn('gh', ['api', 'user', '--jq', '.login'], { timeout: 15_000 });
+    const { stdout: userOut } = await this.execFn('gh', ['api', 'user', '--jq', '.login'], {
+      timeout: 15_000,
+    });
     const login = userOut.trim().toLowerCase();
 
     let orgs: string[] = [];
     try {
-      const { stdout } = await this.execFn('gh', ['api', 'user/orgs', '--paginate', '--jq', '.[].login'], { timeout: 15_000 });
-      orgs = stdout.split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const { stdout } = await this.execFn(
+        'gh',
+        ['api', 'user/orgs', '--paginate', '--jq', '.[].login'],
+        { timeout: 15_000 },
+      );
+      orgs = stdout
+        .split('\n')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
     } catch (err) {
       this.logger.warn('Failed to list GitHub orgs', { error: String(err) });
     }
@@ -432,7 +496,11 @@ export class GithubDiscovery {
 
   async verifyRepo(repo: string): Promise<{ exists: boolean; nameWithOwner?: string }> {
     try {
-      const { stdout } = await this.execFn('gh', ['repo', 'view', repo, '--json', 'nameWithOwner'], { timeout: 15_000 });
+      const { stdout } = await this.execFn(
+        'gh',
+        ['repo', 'view', repo, '--json', 'nameWithOwner'],
+        { timeout: 15_000 },
+      );
       const parsed = JSON.parse(stdout) as { nameWithOwner: string };
       return { exists: true, nameWithOwner: parsed.nameWithOwner.toLowerCase() };
     } catch {
@@ -441,10 +509,16 @@ export class GithubDiscovery {
   }
 
   private async listRepos(owner: string): Promise<DiscoveredRepo[]> {
-    const { stdout } = await this.execFn('gh', [
-      'repo', 'list', owner, '--json', 'nameWithOwner,visibility,updatedAt', '--limit', '200',
-    ], { timeout: 20_000 });
-    const raw = JSON.parse(stdout) as { nameWithOwner: string; visibility: string; updatedAt: string }[];
+    const { stdout } = await this.execFn(
+      'gh',
+      ['repo', 'list', owner, '--json', 'nameWithOwner,visibility,updatedAt', '--limit', '200'],
+      { timeout: 20_000 },
+    );
+    const raw = JSON.parse(stdout) as {
+      nameWithOwner: string;
+      visibility: string;
+      updatedAt: string;
+    }[];
     return raw.map((r) => ({
       nameWithOwner: r.nameWithOwner.toLowerCase(),
       visibility: r.visibility.toLowerCase(),
@@ -453,6 +527,7 @@ export class GithubDiscovery {
   }
 }
 ```
+
 Note the test stubs match on lowercased owner (`repo list olivier`) — listing uses the lowercased login; gh treats owner names case-insensitively.
 
 - [ ] **Step 5: Run test to verify it passes** → PASS (4 tests).
@@ -462,6 +537,7 @@ Note the test stubs match on lowercased owner (`repo list olivier`) — listing 
 1. `container.ts`: add `githubDiscovery: GithubDiscovery` to the Container type and instantiate `new GithubDiscovery(execFn, logger)` next to `repositoryResolver` (mirror its constructor args style).
 2. `repository-cache.ts`: add `static readonly TTL_DISCOVERY = 5 * 60 * 1000;` next to the other TTL constants.
 3. `repositories.routes.ts`, after the `/api/github/user` route:
+
 ```ts
 app.get('/api/github/discovery', async (_request, reply) => {
   const cached = container.repositoryCache.get<RepoDiscovery>('github:discovery');
@@ -484,11 +560,13 @@ app.get<{ Querystring: { repo?: string } }>('/api/github/verify-repo', async (re
   return container.githubDiscovery.verifyRepo(repo);
 });
 ```
+
 Add `RepoDiscovery` to the shared-type import at the top of the file.
 
 - [ ] **Step 7: Lint + commit**
 
 Run: `bun run lint` → PASS.
+
 ```bash
 git add -A && git commit -m "feat(server): GitHub org/repo discovery and repo verification endpoints"
 ```
@@ -498,23 +576,28 @@ git add -A && git commit -m "feat(server): GitHub org/repo discovery and repo ve
 ### Task 4: Per-repo cost stats (use case + endpoint)
 
 **Files:**
+
 - Modify: `packages/shared/src/types/repository.ts` (stats types)
 - Create: `packages/server/src/application/use-cases/get-repository-stats.ts`
 - Test: `packages/server/tests/unit/get-repository-stats.test.ts`
 - Modify: `packages/server/src/infrastructure/http/repositories.routes.ts` (route)
 
 **Interfaces:**
+
 - Produces (used by Tasks 5, 12):
   ```ts
   // shared/types/repository.ts
-  export interface RepoDailyCost { readonly date: string; readonly costUsd: number; } // date = YYYY-MM-DD
+  export interface RepoDailyCost {
+    readonly date: string;
+    readonly costUsd: number;
+  } // date = YYYY-MM-DD
   export interface RepositoryStats {
-    readonly totalCostUsd: number;          // window [now-days, now]
-    readonly previousTotalCostUsd: number;  // window [now-2*days, now-days]
-    readonly costPerTicketUsd: number;      // total / #tickets with cost in window
+    readonly totalCostUsd: number; // window [now-days, now]
+    readonly previousTotalCostUsd: number; // window [now-2*days, now-days]
+    readonly costPerTicketUsd: number; // total / #tickets with cost in window
     readonly ticketsWithCostCount: number;
     readonly days: number;
-    readonly dailyCosts: RepoDailyCost[];   // one entry per day, oldest first, zero-filled
+    readonly dailyCosts: RepoDailyCost[]; // one entry per day, oldest first, zero-filled
   }
   ```
   - `GET /api/repositories/:org/:name/stats?days=30` → `RepositoryStats`
@@ -540,7 +623,10 @@ function exec(costUsd: number | null, startedAt: string) {
   return { costUsd, startedAt } as never;
 }
 
-function makeUseCase(ticketsByRef: Record<string, unknown[]>, execsByTicket: Record<string, unknown[]>) {
+function makeUseCase(
+  ticketsByRef: Record<string, unknown[]>,
+  execsByTicket: Record<string, unknown[]>,
+) {
   return new GetRepositoryStatsUseCase(
     { getTicketsLinkedTo: async (_type, ref) => (ticketsByRef[ref] ?? []) as never },
     { getExecutionsByTicket: async (id) => (execsByTicket[id] ?? []) as never },
@@ -608,7 +694,9 @@ export class GetRepositoryStatsUseCase {
   async execute(org: string, name: string, days = 30, now = new Date()): Promise<RepositoryStats> {
     const ref = `${org}/${name}`;
     const refs = [...new Set([ref, ref.toLowerCase()])];
-    const ticketLists = await Promise.all(refs.map((r) => this.ticketStore.getTicketsLinkedTo('repository', r)));
+    const ticketLists = await Promise.all(
+      refs.map((r) => this.ticketStore.getTicketsLinkedTo('repository', r)),
+    );
     const tickets = [...new Map(ticketLists.flat().map((t) => [t.id, t])).values()];
 
     const windowStart = now.getTime() - days * DAY_MS;
@@ -660,12 +748,18 @@ export class GetRepositoryStatsUseCase {
 - [ ] **Step 6: Register the route**
 
 In `repositories.routes.ts`, at the top of `repositoryRoutes` (before `return async function`), instantiate like `statistics.routes.ts` does:
+
 ```ts
 import { GetRepositoryStatsUseCase } from '../../application/use-cases/get-repository-stats.js';
 // inside repositoryRoutes(container):
-const getRepositoryStats = new GetRepositoryStatsUseCase(container.ticketStore, container.agentEventStore);
+const getRepositoryStats = new GetRepositoryStatsUseCase(
+  container.ticketStore,
+  container.agentEventStore,
+);
 ```
+
 and add the route next to the dashboard endpoint:
+
 ```ts
 app.get<{ Params: { org: string; name: string }; Querystring: { days?: string } }>(
   '/api/repositories/:org/:name/stats',
@@ -677,11 +771,13 @@ app.get<{ Params: { org: string; name: string }; Querystring: { days?: string } 
   },
 );
 ```
+
 (Confirm `container.ticketStore` / `container.agentEventStore` property names via `grep -n "ticketStore\|agentEventStore" packages/server/src/infrastructure/container.ts` — `statistics.routes.ts` already consumes both.)
 
 - [ ] **Step 7: Lint + commit**
 
 Run: `bun run lint` → PASS.
+
 ```bash
 git add -A && git commit -m "feat(server): per-repo 30-day cost statistics endpoint"
 ```
@@ -691,24 +787,32 @@ git add -A && git commit -m "feat(server): per-repo 30-day cost statistics endpo
 ### Task 5: Web plumbing — API client + store extensions
 
 **Files:**
+
 - Modify: `packages/web/src/services/api.ts`
 - Modify: `packages/web/src/stores/settingsStore.ts`
 - Modify: `packages/web/src/stores/repositoryDashboardStore.ts`
 - Test: `packages/web/src/stores/settingsStore.repos.test.ts`
 
 **Interfaces:**
+
 - Produces (used by Tasks 8, 9, 12):
   ```ts
   // api.ts
-  export async function fetchGithubDiscovery(): Promise<RepoDiscovery>
-  export async function verifyGithubRepo(repo: string): Promise<{ exists: boolean; nameWithOwner?: string }>
-  export async function fetchRepositoryStats(org: string, name: string, days?: number): Promise<RepositoryStats>
+  export async function fetchGithubDiscovery(): Promise<RepoDiscovery>;
+  export async function verifyGithubRepo(
+    repo: string,
+  ): Promise<{ exists: boolean; nameWithOwner?: string }>;
+  export async function fetchRepositoryStats(
+    org: string,
+    name: string,
+    days?: number,
+  ): Promise<RepositoryStats>;
   // settingsStore
-  addRepositories: (repos: string[]) => Promise<void>   // lowercase, dedupe, sort, saveSettings
-  removeRepository: (repo: string) => Promise<void>
+  addRepositories: (repos: string[]) => Promise<void>; // lowercase, dedupe, sort, saveSettings
+  removeRepository: (repo: string) => Promise<void>;
   // repositoryDashboardStore
-  repoStats: Record<string, RepositoryStats>            // key = "org/name"
-  fetchRepoStats: (org: string, name: string) => Promise<void>
+  repoStats: Record<string, RepositoryStats>; // key = "org/name"
+  fetchRepoStats: (org: string, name: string) => Promise<void>;
   ```
 - Consumes: `request<T>` helper in api.ts, `saveSettings` in settingsStore, Task 3/4 endpoints.
 
@@ -721,13 +825,20 @@ import { useSettingsStore } from './settingsStore';
 
 describe('settingsStore repository list helpers', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({}) })),
+    );
     useSettingsStore.setState((s) => ({ settings: { ...s.settings, repositories: ['acme/app'] } }));
   });
 
   it('addRepositories lowercases, dedupes and sorts', async () => {
     await useSettingsStore.getState().addRepositories(['Acme/Lib', 'acme/app', 'zeta/tool']);
-    expect(useSettingsStore.getState().settings.repositories).toEqual(['acme/app', 'acme/lib', 'zeta/tool']);
+    expect(useSettingsStore.getState().settings.repositories).toEqual([
+      'acme/app',
+      'acme/lib',
+      'zeta/tool',
+    ]);
   });
 
   it('removeRepository removes case-insensitively', async () => {
@@ -744,20 +855,29 @@ Run: `npx vitest run packages/web/src/stores/settingsStore.repos.test.ts` → FA
 - [ ] **Step 3: Implement**
 
 1. `api.ts` — add the three functions with the other repository functions (~line 235), plus `RepoDiscovery`, `RepositoryStats` in the shared import:
+
 ```ts
 export async function fetchGithubDiscovery(): Promise<RepoDiscovery> {
   return request('/github/discovery');
 }
 
-export async function verifyGithubRepo(repo: string): Promise<{ exists: boolean; nameWithOwner?: string }> {
+export async function verifyGithubRepo(
+  repo: string,
+): Promise<{ exists: boolean; nameWithOwner?: string }> {
   return request(`/github/verify-repo?repo=${encodeURIComponent(repo)}`);
 }
 
-export async function fetchRepositoryStats(org: string, name: string, days = 30): Promise<RepositoryStats> {
+export async function fetchRepositoryStats(
+  org: string,
+  name: string,
+  days = 30,
+): Promise<RepositoryStats> {
   return request(`/repositories/${org}/${name}/stats?days=${days}`);
 }
 ```
+
 2. `settingsStore.ts` — add to `SettingsState` and implement using the existing `saveSettings`:
+
 ```ts
 addRepositories: async (repos) => {
   const current = get().settings.repositories;
@@ -771,7 +891,9 @@ removeRepository: async (repo) => {
   await get().saveSettings({ repositories: filtered });
 },
 ```
+
 3. `repositoryDashboardStore.ts` — add `repoStats: {}` to state, the field to the interface, and:
+
 ```ts
 fetchRepoStats: async (org, name) => {
   try {
@@ -782,6 +904,7 @@ fetchRepoStats: async (org, name) => {
   }
 },
 ```
+
 (import `RepositoryStats` from `@fleex/shared`).
 
 - [ ] **Step 4: Run test to verify it passes** → PASS (2 tests).
@@ -789,6 +912,7 @@ fetchRepoStats: async (org, name) => {
 - [ ] **Step 5: Lint + commit**
 
 Run: `bun run lint` → PASS.
+
 ```bash
 git add -A && git commit -m "feat(web): API client and store plumbing for discovery, repo list edits and repo stats"
 ```
@@ -798,24 +922,29 @@ git add -A && git commit -m "feat(web): API client and store plumbing for discov
 ### Task 6: `lib/worktreeVerdict.ts` (pure verdict derivation)
 
 **Files:**
+
 - Create: `packages/web/src/lib/worktreeVerdict.ts`
 - Test: `packages/web/src/lib/worktreeVerdict.test.ts`
 
 **Interfaces:**
+
 - Produces (used by Task 12):
+
   ```ts
-  export type WorktreeVerdict = 'ready_to_push' | 'needs_rebase' | 'up_to_date' | 'merged_removable' | 'stale_removable';
+  export type WorktreeVerdict =
+    'ready_to_push' | 'needs_rebase' | 'up_to_date' | 'merged_removable' | 'stale_removable';
   export interface WorktreeVerdictInput {
     commitsAhead: number;
     commitsBehind: number;
     prState?: 'open' | 'merged' | 'closed';
-    ticketStatus?: TicketStatus;   // status of the linked ticket, if resolvable
-    ticketMissing?: boolean;       // true when no ticket could be linked
+    ticketStatus?: TicketStatus; // status of the linked ticket, if resolvable
+    ticketMissing?: boolean; // true when no ticket could be linked
   }
-  export function deriveWorktreeVerdict(input: WorktreeVerdictInput): WorktreeVerdict
-  export function isRemovableVerdict(v: WorktreeVerdict): boolean
-  export const VERDICT_META: Record<WorktreeVerdict, { label: string; hue: TintHue }>
+  export function deriveWorktreeVerdict(input: WorktreeVerdictInput): WorktreeVerdict;
+  export function isRemovableVerdict(v: WorktreeVerdict): boolean;
+  export const VERDICT_META: Record<WorktreeVerdict, { label: string; hue: TintHue }>;
   ```
+
   Labels/hues: `ready_to_push` → "Ready to push"/purple · `needs_rebase` → "Needs rebase"/yellow · `up_to_date` → "Up to date"/gray · `merged_removable` → "Merged · removable"/green · `stale_removable` → "Stale · removable"/red.
 
 - [ ] **Step 1: Write the failing test**
@@ -829,7 +958,9 @@ const base = { commitsAhead: 0, commitsBehind: 0 };
 
 describe('deriveWorktreeVerdict', () => {
   it('merged PR wins over everything', () => {
-    expect(deriveWorktreeVerdict({ ...base, commitsBehind: 5, prState: 'merged', ticketStatus: 'done' })).toBe('merged_removable');
+    expect(
+      deriveWorktreeVerdict({ ...base, commitsBehind: 5, prState: 'merged', ticketStatus: 'done' }),
+    ).toBe('merged_removable');
   });
   it('closed/missing ticket → stale (unless merged)', () => {
     expect(deriveWorktreeVerdict({ ...base, ticketStatus: 'done' })).toBe('stale_removable');
@@ -837,10 +968,19 @@ describe('deriveWorktreeVerdict', () => {
     expect(deriveWorktreeVerdict({ ...base, ticketMissing: true })).toBe('stale_removable');
   });
   it('behind → needs rebase (even when also ahead)', () => {
-    expect(deriveWorktreeVerdict({ commitsAhead: 2, commitsBehind: 3, ticketStatus: 'doing' })).toBe('needs_rebase');
+    expect(
+      deriveWorktreeVerdict({ commitsAhead: 2, commitsBehind: 3, ticketStatus: 'doing' }),
+    ).toBe('needs_rebase');
   });
   it('ahead only → ready to push', () => {
-    expect(deriveWorktreeVerdict({ commitsAhead: 2, commitsBehind: 0, ticketStatus: 'doing', prState: 'open' })).toBe('ready_to_push');
+    expect(
+      deriveWorktreeVerdict({
+        commitsAhead: 2,
+        commitsBehind: 0,
+        ticketStatus: 'doing',
+        prState: 'open',
+      }),
+    ).toBe('ready_to_push');
   });
   it('clean → up to date', () => {
     expect(deriveWorktreeVerdict({ ...base, ticketStatus: 'doing' })).toBe('up_to_date');
@@ -871,7 +1011,8 @@ describe('helpers', () => {
 import type { TicketStatus } from '@fleex/shared';
 import type { TintHue } from './tints';
 
-export type WorktreeVerdict = 'ready_to_push' | 'needs_rebase' | 'up_to_date' | 'merged_removable' | 'stale_removable';
+export type WorktreeVerdict =
+  'ready_to_push' | 'needs_rebase' | 'up_to_date' | 'merged_removable' | 'stale_removable';
 
 export interface WorktreeVerdictInput {
   commitsAhead: number;
@@ -885,7 +1026,10 @@ const CLOSED_TICKET_STATUSES: TicketStatus[] = ['done', 'cancelled'];
 
 export function deriveWorktreeVerdict(input: WorktreeVerdictInput): WorktreeVerdict {
   if (input.prState === 'merged') return 'merged_removable';
-  if (input.ticketMissing || (input.ticketStatus && CLOSED_TICKET_STATUSES.includes(input.ticketStatus))) {
+  if (
+    input.ticketMissing ||
+    (input.ticketStatus && CLOSED_TICKET_STATUSES.includes(input.ticketStatus))
+  ) {
     return 'stale_removable';
   }
   if (input.commitsBehind > 0) return 'needs_rebase';
@@ -920,23 +1064,25 @@ git commit -m "feat(web): worktree verdict derivation"
 ### Task 7: `ConfirmModal` UI component
 
 **Files:**
+
 - Create: `packages/web/src/components/ui/ConfirmModal.tsx`
 - Test: `packages/web/src/components/ui/ConfirmModal.test.tsx`
 
 **Interfaces:**
+
 - Produces (used by Tasks 9, 11, 12):
   ```tsx
   interface ConfirmModalProps {
     open: boolean;
     title: string;
     message: React.ReactNode;
-    confirmLabel?: string;   // default 'Confirm'
-    danger?: boolean;        // default true → danger Button
-    busy?: boolean;          // disables buttons while the action runs
+    confirmLabel?: string; // default 'Confirm'
+    danger?: boolean; // default true → danger Button
+    busy?: boolean; // disables buttons while the action runs
     onConfirm: () => void;
     onCancel: () => void;
   }
-  export function ConfirmModal(props: ConfirmModalProps)
+  export function ConfirmModal(props: ConfirmModalProps);
   ```
 - Consumes: `ui/Modal.tsx` (`open`, `onClose`, `maxWidth`), `ui/Button.tsx` (`variant: 'danger' | 'secondary'`).
 
@@ -952,14 +1098,31 @@ afterEach(cleanup);
 
 describe('ConfirmModal', () => {
   it('renders nothing when closed', () => {
-    render(<ConfirmModal open={false} title="Remove repo" message="Sure?" onConfirm={() => {}} onCancel={() => {}} />);
+    render(
+      <ConfirmModal
+        open={false}
+        title="Remove repo"
+        message="Sure?"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
     expect(screen.queryByText('Remove repo')).toBeNull();
   });
 
   it('calls onConfirm / onCancel', () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
-    render(<ConfirmModal open title="Remove repo" message="Sure?" confirmLabel="Remove" onConfirm={onConfirm} onCancel={onCancel} />);
+    render(
+      <ConfirmModal
+        open
+        title="Remove repo"
+        message="Sure?"
+        confirmLabel="Remove"
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    );
     fireEvent.click(screen.getByText('Remove'));
     expect(onConfirm).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByText('Cancel'));
@@ -967,7 +1130,17 @@ describe('ConfirmModal', () => {
   });
 
   it('disables both buttons while busy', () => {
-    render(<ConfirmModal open busy title="t" message="m" confirmLabel="Remove" onConfirm={() => {}} onCancel={() => {}} />);
+    render(
+      <ConfirmModal
+        open
+        busy
+        title="t"
+        message="m"
+        confirmLabel="Remove"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
     expect((screen.getByText('Remove') as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByText('Cancel') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -995,15 +1168,29 @@ interface ConfirmModalProps {
 }
 
 export function ConfirmModal({
-  open, title, message, confirmLabel = 'Confirm', danger = true, busy = false, onConfirm, onCancel,
+  open,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  danger = true,
+  busy = false,
+  onConfirm,
+  onCancel,
 }: ConfirmModalProps) {
   return (
     <Modal open={open} onClose={onCancel} maxWidth="max-w-sm">
       <h2 className="text-sm font-semibold text-[var(--theme-text-primary)]">{title}</h2>
       <div className="mt-2 text-xs text-[var(--theme-text-secondary)]">{message}</div>
       <div className="mt-5 flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>
-        <Button variant={danger ? 'danger' : 'primary'} size="sm" disabled={busy} onClick={onConfirm}>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          variant={danger ? 'danger' : 'primary'}
+          size="sm"
+          disabled={busy}
+          onClick={onConfirm}
+        >
           {confirmLabel}
         </Button>
       </div>
@@ -1026,14 +1213,17 @@ git commit -m "feat(web): ConfirmModal primitive"
 ### Task 8: `AddRepositoriesModal`
 
 **Files:**
+
 - Create: `packages/web/src/components/repositories/AddRepositoriesModal.tsx`
 - Test: `packages/web/src/components/repositories/AddRepositoriesModal.test.tsx`
 
 **Interfaces:**
+
 - Produces (used by Task 9): `export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose: () => void })`
 - Consumes: `api.fetchGithubDiscovery`, `api.verifyGithubRepo` (Task 5), `useSettingsStore` (`settings.repositories`, `addRepositories`), `ui/Modal`, `ui/Button`.
 
 Behavior (from mockup `05-modal-ajout.png` / prototype):
+
 - Header: "Add repositories" + subtitle "Organizations detected via `gh` — {owners} orgs, {totalRepos} accessible repos".
 - Live search input filtering repos by `nameWithOwner` (case-insensitive) + result count on the right.
 - One group per owner: header `OWNER` + "{tracked}/{total} tracked" + right-aligned link "Select all · `owner/*`" (adds every not-yet-tracked, not-yet-selected repo of that owner to the selection).
@@ -1061,10 +1251,13 @@ vi.mock('../../services/api', async (importOriginal) => ({
 
 const discovery = {
   owners: [
-    { login: 'acme', repos: [
-      { nameWithOwner: 'acme/app', visibility: 'private', updatedAt: '2026-07-18T00:00:00Z' },
-      { nameWithOwner: 'acme/lib', visibility: 'public', updatedAt: '2026-07-01T00:00:00Z' },
-    ] },
+    {
+      login: 'acme',
+      repos: [
+        { nameWithOwner: 'acme/app', visibility: 'private', updatedAt: '2026-07-18T00:00:00Z' },
+        { nameWithOwner: 'acme/lib', visibility: 'public', updatedAt: '2026-07-01T00:00:00Z' },
+      ],
+    },
   ],
   totalRepos: 2,
 };
@@ -1074,7 +1267,10 @@ describe('AddRepositoriesModal', () => {
     vi.mocked(api.fetchGithubDiscovery).mockResolvedValue(discovery);
     useSettingsStore.setState((s) => ({ settings: { ...s.settings, repositories: ['acme/app'] } }));
   });
-  afterEach(() => { cleanup(); vi.clearAllMocks(); });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
 
   it('marks tracked repos and lets you select the rest', async () => {
     render(<AddRepositoriesModal open onClose={() => {}} />);
@@ -1146,7 +1342,17 @@ function formatRelativeTime(dateStr: string): string {
   return `${Math.floor(diff / 60000)}m ago`;
 }
 
-function Toggle({ on, disabled, label, onChange }: { on: boolean; disabled?: boolean; label: string; onChange?: () => void }) {
+function Toggle({
+  on,
+  disabled,
+  label,
+  onChange,
+}: {
+  on: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange?: () => void;
+}) {
   return (
     <button
       type="button"
@@ -1161,10 +1367,12 @@ function Toggle({ on, disabled, label, onChange }: { on: boolean; disabled?: boo
         disabled && 'cursor-not-allowed opacity-50',
       )}
     >
-      <span className={cn(
-        'absolute top-[2.5px] h-[14px] w-[14px] rounded-full bg-white transition-[left] duration-150',
-        on ? 'left-[17px]' : 'left-[3px]',
-      )} />
+      <span
+        className={cn(
+          'absolute top-[2.5px] h-[14px] w-[14px] rounded-full bg-white transition-[left] duration-150',
+          on ? 'left-[17px]' : 'left-[3px]',
+        )}
+      />
     </button>
   );
 }
@@ -1185,18 +1393,29 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
 
   const loadDiscovery = useCallback(() => {
     setDiscoveryError(false);
-    api.fetchGithubDiscovery().then(setDiscovery).catch(() => setDiscoveryError(true));
+    api
+      .fetchGithubDiscovery()
+      .then(setDiscovery)
+      .catch(() => setDiscoveryError(true));
   }, []);
 
   useEffect(() => {
-    if (open) { loadDiscovery(); setSelection(new Set()); setQuery(''); setFreeform(''); setFreeformHint(null); }
+    if (open) {
+      loadDiscovery();
+      setSelection(new Set());
+      setQuery('');
+      setFreeform('');
+      setFreeformHint(null);
+    }
   }, [open, loadDiscovery]);
 
   // filtered owners (query on nameWithOwner), toggle/selectAll/handleVerify/handleSubmit …
   // …full JSX per the Behavior list above…
 }
 ```
+
 Implementation notes:
+
 - `toggle(repo)`: new Set, add/delete; ignore tracked repos.
 - `selectAll(owner)`: add every `repo.nameWithOwner` of that owner not in `trackedSet`.
 - `handleVerify`: `setVerifying(true)`; `verifyGithubRepo(freeform.toLowerCase())`; on `exists` → if `trackedSet.has(nameWithOwner)` → `setFreeformHint('already tracked')` else add to selection + `setFreeform('')` + clear hint; on `!exists` → `setFreeformHint('Repository not found')`; finally `setVerifying(false)`. Free-form repos not present in discovery render in the footer recap only.
@@ -1212,6 +1431,7 @@ Run: `npx vitest run packages/web/src/components/repositories/AddRepositoriesMod
 - [ ] **Step 5: Lint + commit**
 
 Run: `bun run lint` → PASS.
+
 ```bash
 git add -A && git commit -m "feat(web): add-repositories modal driven by GitHub discovery"
 ```
@@ -1221,21 +1441,35 @@ git add -A && git commit -m "feat(web): add-repositories modal driven by GitHub 
 ### Task 9: Sidebar redesign (search, filter chips, ACTIVE section, add/remove)
 
 **Files:**
+
 - Modify: `packages/web/src/components/sidebar/RepositoriesContent.tsx` (full rewrite)
 - Modify: `packages/web/src/components/sidebar/RepoItem.tsx` (two-line layout + wt badge + trash)
 - Modify: `packages/web/src/components/sidebar/OrgGroup.tsx` (pass-through props)
 - Modify: `packages/web/src/components/sidebar/RepositoriesSidebarHeader.tsx` (add `+` button)
 
 **Interfaces:**
+
 - Consumes: `AddRepositoriesModal` (Task 8), `ConfirmModal` (Task 7), `useSettingsStore().removeRepository` (Task 5), `useSessionStore((s) => s.sessionGroups)` (`SessionGroup { repositoryOrg, repositoryName, worktrees: WorktreeSessionGroup[] }`).
 - Produces: new props —
+
   ```ts
   // RepoItem
-  interface Props { summary: RepositorySummary; wtCount: number; onRemove: (key: string) => void; }
+  interface Props {
+    summary: RepositorySummary;
+    wtCount: number;
+    onRemove: (key: string) => void;
+  }
   // OrgGroup
-  interface Props { org: string; repos: RepositorySummary[]; wtCounts: Record<string, number>; onRemove: (key: string) => void; }
+  interface Props {
+    org: string;
+    repos: RepositorySummary[];
+    wtCounts: Record<string, number>;
+    onRemove: (key: string) => void;
+  }
   // RepositoriesSidebarHeader
-  interface Props { onAdd: () => void; }
+  interface Props {
+    onAdd: () => void;
+  }
   ```
 
 - [ ] **Step 1: RepositoriesContent rewrite**
@@ -1243,6 +1477,7 @@ git add -A && git commit -m "feat(web): add-repositories modal driven by GitHub 
 State: `const [query, setQuery] = useState(''); const [filter, setFilter] = useState<'all' | 'active' | string>('all'); const [modalOpen, setModalOpen] = useState(false); const [pendingRemove, setPendingRemove] = useState<string | null>(null); const [removing, setRemoving] = useState(false);`
 
 Derived data:
+
 ```tsx
 const sessionGroups = useSessionStore((s) => s.sessionGroups);
 const removeRepository = useSettingsStore((s) => s.removeRepository);
@@ -1265,15 +1500,18 @@ const activeKeys = useMemo(() => {
   return keys;
 }, [sessionGroups]);
 ```
+
 Filtering: start from `Object.values(summaries)`; apply `query` on `name` and `org/name` (case-insensitive); apply `filter` (`'active'` → key in `activeKeys`; an org string → `summary.org === filter`). Org chips = sorted distinct orgs with their counts; chips render `All {total}`, `Active {activeKeys.size}`, then one per org. Chip classes: active → `bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]`; inactive → `bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]`; both `rounded-full px-3 py-0.5 text-[11px]`.
 
 Layout (top to bottom): `<RepositoriesSidebarHeader onAdd={() => setModalOpen(true)} />`, search input (`w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-xs …` in a `px-3 pt-3` wrapper, with an inline magnifier SVG), chips row (`flex flex-wrap gap-1.5 px-3 py-2`), then the scrollable list:
+
 - When `query === '' && filter === 'all'`: an **ACTIVE** section first — label `<div className={cn('px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider', tintText('yellow'))}>Active</div>` followed by `RepoItem`s for `activeKeys` (sorted), then the org groups (each org's full list, unchanged ordering).
 - Otherwise: flat org groups over the filtered list (no ACTIVE section).
 - Empty tracked list: dashed-border `+` icon, "No repositories tracked yet", `<Button variant="primary" size="sm" onClick={() => setModalOpen(true)}>+ Add repositories</Button>` — **the "Configure repositories in Settings" copy is deleted**.
 - Empty filter result: "No repos match" muted line.
 
 Removal flow: `onRemove={(key) => setPendingRemove(key)}` threaded to items; render
+
 ```tsx
 <ConfirmModal
   open={pendingRemove !== null}
@@ -1294,17 +1532,28 @@ Removal flow: `onRemove={(key) => setPendingRemove(key)}` threaded to items; ren
 - [ ] **Step 2: RepoItem two-line layout**
 
 Replace the five `BadgeIcon` counters (delete `BadgeIcon`, `CircleDotIcon`, `GitPullRequestArrowIcon`, `UserCheckIcon`, `GitPullRequestIcon`, `GitMergeIcon`) with:
+
 - Line 1: git-branch SVG (20px, strokeWidth 1.5, `text-[var(--theme-text-muted)]`, selected → `text-[var(--theme-accent)]`) + `summary.name` (`text-sm font-semibold`), then `ml-auto`: `wtCount > 0` badge `<span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--theme-text-muted)]">{wtCount} wt</span>`, the existing not-cloned `CloudDownloadIcon` (keep), and a trash button:
+
 ```tsx
 <button
-  className={cn('ml-1 flex-shrink-0 rounded p-0.5 opacity-25 transition-opacity group-hover:opacity-100', tintText('red'), 'hover:bg-[var(--tint-red-bg)]')}
+  className={cn(
+    'ml-1 flex-shrink-0 rounded p-0.5 opacity-25 transition-opacity group-hover:opacity-100',
+    tintText('red'),
+    'hover:bg-[var(--tint-red-bg)]',
+  )}
   title="Stop tracking this repo"
-  onClick={(e) => { e.stopPropagation(); onRemove(key); }}
+  onClick={(e) => {
+    e.stopPropagation();
+    onRemove(key);
+  }}
 >
   <TrashIcon />
 </button>
 ```
+
 with `function TrashIcon()` = 12px SVG (lid + can, strokeWidth 1.5). Keep the GitHub + scratchpad hover icons.
+
 - Line 2: `<span className="truncate font-mono text-[11px] text-[var(--theme-text-muted)]">{key}</span>`.
 - The root stays a `button` with the same selected/border-left treatment. Note: nested interactive elements — use `<span role="button">` (as the existing scratchpad affordance does) for the trash if the nesting warns.
 
@@ -1313,13 +1562,24 @@ with `function TrashIcon()` = 12px SVG (lid + can, strokeWidth 1.5). Keep the Gi
 `OrgGroup`: accept and forward `wtCounts`/`onRemove` to `RepoItem` (`wtCount={wtCounts[`${repo.org}/${repo.name}`] ?? 0}`). Highlight the org of the selected repo: `useUIStore((s) => s.selectedRepoKey)`, if `selectedRepoKey?.startsWith(org + '/')` add `text-[var(--theme-accent)]` on the label.
 
 `RepositoriesSidebarHeader`: add prop `onAdd: () => void`; render before `RefreshControl`:
+
 ```tsx
 <button
   onClick={onAdd}
   title="Add repositories"
   className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:opacity-90"
 >
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10" /></svg>
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+  >
+    <path d="M8 3v10M3 8h10" />
+  </svg>
 </button>
 ```
 
@@ -1338,23 +1598,36 @@ git add -A && git commit -m "feat(web): redesigned repositories sidebar with sea
 ### Task 10: Pull Requests tab — segments, "me" toggles, card rows, merged cleanup
 
 **Files:**
+
 - Create: `packages/web/src/components/repository-dashboard/prFilters.ts`
 - Test: `packages/web/src/components/repository-dashboard/prFilters.test.ts`
 - Modify: `packages/web/src/components/repository-dashboard/PullRequestsSection.tsx` (rewrite)
 - Delete: `packages/web/src/components/repository-dashboard/MergedPRsSection.tsx`
 
 **Interfaces:**
+
 - Produces:
   ```ts
   // prFilters.ts
   export type PrSegment = 'all' | 'open' | 'merged';
-  export function filterPulls(open: PullRequest[], merged: PullRequest[], segment: PrSegment, mine: boolean, assigned: boolean, user: string | null): PullRequest[]
+  export function filterPulls(
+    open: PullRequest[],
+    merged: PullRequest[],
+    segment: PrSegment,
+    mine: boolean,
+    assigned: boolean,
+    user: string | null,
+  ): PullRequest[];
   // PullRequestsSection new props (consumed by Task 12's wiring)
   interface Props {
-    org: string; name: string;
-    openPRs: PullRequest[]; mergedPRs: PullRequest[];
-    worktrees: Worktree[]; diffStats: Record<string, DiffStats>;
-    githubUser: string | null; loading: boolean;
+    org: string;
+    name: string;
+    openPRs: PullRequest[];
+    mergedPRs: PullRequest[];
+    worktrees: Worktree[];
+    diffStats: Record<string, DiffStats>;
+    githubUser: string | null;
+    loading: boolean;
   }
   ```
 - Consumes: `ConfirmModal`, `api.deleteWorktree(org, name, path)`, `useTicketActivityStore((s) => s.costByTicket)`, existing `SmartSessionButton` / `ImportTaskButton` / `DiffStatsBadge` / `findSessionsForTicketId`, ticket-by-PR mapping via `ticket.links` (`type === 'github_pr'`, `ref === "org/name#number"`).
@@ -1369,8 +1642,14 @@ import type { PullRequest } from '@fleex/shared';
 
 function pr(number: number, over: Partial<PullRequest> = {}): PullRequest {
   return {
-    number, title: `PR ${number}`, headRefName: `b${number}`, state: 'open',
-    author: 'alice', assignees: [], createdAt: '2026-07-01T00:00:00Z', updatedAt: `2026-07-${String(10 + number).padStart(2, '0')}T00:00:00Z`,
+    number,
+    title: `PR ${number}`,
+    headRefName: `b${number}`,
+    state: 'open',
+    author: 'alice',
+    assignees: [],
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: `2026-07-${String(10 + number).padStart(2, '0')}T00:00:00Z`,
     ...over,
   };
 }
@@ -1380,17 +1659,27 @@ const merged = [pr(3, { state: 'merged', mergedAt: '2026-07-15T00:00:00Z', autho
 
 describe('filterPulls', () => {
   it('segment open / merged / all', () => {
-    expect(filterPulls(open, merged, 'open', false, false, null).map((p) => p.number)).toEqual([2, 1]);
-    expect(filterPulls(open, merged, 'merged', false, false, null).map((p) => p.number)).toEqual([3]);
+    expect(filterPulls(open, merged, 'open', false, false, null).map((p) => p.number)).toEqual([
+      2, 1,
+    ]);
+    expect(filterPulls(open, merged, 'merged', false, false, null).map((p) => p.number)).toEqual([
+      3,
+    ]);
     expect(filterPulls(open, merged, 'all', false, false, null)).toHaveLength(3);
   });
   it('sorts all by updatedAt desc', () => {
     // factory dates: pr1 → 2026-07-11, pr2 → 2026-07-12, pr3 → 2026-07-13
-    expect(filterPulls(open, merged, 'all', false, false, null).map((p) => p.number)).toEqual([3, 2, 1]);
+    expect(filterPulls(open, merged, 'all', false, false, null).map((p) => p.number)).toEqual([
+      3, 2, 1,
+    ]);
   });
   it('mine AND assigned combine with AND', () => {
-    expect(filterPulls(open, merged, 'all', true, false, 'alice').map((p) => p.number)).toEqual([3, 1]);
-    expect(filterPulls(open, merged, 'all', false, true, 'alice').map((p) => p.number)).toEqual([2]);
+    expect(filterPulls(open, merged, 'all', true, false, 'alice').map((p) => p.number)).toEqual([
+      3, 1,
+    ]);
+    expect(filterPulls(open, merged, 'all', false, true, 'alice').map((p) => p.number)).toEqual([
+      2,
+    ]);
     expect(filterPulls(open, merged, 'all', true, true, 'alice')).toEqual([]);
   });
   it('ignores the toggles when the user is unknown', () => {
@@ -1398,6 +1687,7 @@ describe('filterPulls', () => {
   });
 });
 ```
+
 - [ ] **Step 2: Run test to verify it fails** → FAIL (module not found).
 
 - [ ] **Step 3: Implement `prFilters.ts`**
@@ -1419,7 +1709,9 @@ export function filterPulls(
   if (segment === 'open') {
     base = [...open].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   } else if (segment === 'merged') {
-    base = [...merged].sort((a, b) => (b.mergedAt ?? b.updatedAt).localeCompare(a.mergedAt ?? a.updatedAt));
+    base = [...merged].sort((a, b) =>
+      (b.mergedAt ?? b.updatedAt).localeCompare(a.mergedAt ?? a.updatedAt),
+    );
   } else {
     base = [...open, ...merged].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
@@ -1454,6 +1746,7 @@ Delete `MergedPRsSection.tsx` (`git rm`). `RepositoryDashboard` still references
 - [ ] **Step 6: Verify + commit**
 
 Run: `npx vitest run packages/web/src/components/repository-dashboard/prFilters.test.ts` → PASS. Run: `bun run lint` → PASS. Run: `bun run test` → PASS. Visual check in `bun run dev`: segments switch, toggles AND-combine, merged rows show cleanup state.
+
 ```bash
 git add -A && git commit -m "feat(web): PR tab with state segments, me-filters and merged worktree cleanup"
 ```
@@ -1463,11 +1756,13 @@ git add -A && git commit -m "feat(web): PR tab with state segments, me-filters a
 ### Task 11: Issues tab — segments + labels
 
 **Files:**
+
 - Create: `packages/web/src/components/repository-dashboard/IssuesSection.tsx`
 - Delete: `packages/web/src/components/repository-dashboard/IssuesBanner.tsx`
 - Modify: `packages/web/src/components/repository-dashboard/RepositoryDashboard.tsx` (swap import; full tab rework lands in Task 12)
 
 **Interfaces:**
+
 - Produces: `export function IssuesSection({ org, name, openIssues, closedIssues, loading }: { org: string; name: string; openIssues: GitHubIssue[]; closedIssues: GitHubIssue[]; loading: boolean })`
 - Consumes: extended `GitHubIssue` (Task 1: `state`, `labels`, `commentsCount`), `dashboardData.recentlyClosedIssues`, existing `ImportTaskButton`/`SmartSessionButton` flow (copy the `ticketByIssue` / `handleImportIssue` logic from `IssuesBanner` verbatim).
 
@@ -1478,6 +1773,7 @@ Same grammar as Task 10 (reuse literally the same segmented-control classes): se
 Row card (same card classes as PR rows): line 1 `#num` mono + title `text-sm font-semibold truncate` + label chips; line 2 `{author} · {formatRelativeTime(createdAt)} ago{commentsCount > 0 ? ` · ${commentsCount} comment${commentsCount === 1 ? '' : 's'}` : ''}` in `text-[11px] text-[var(--theme-text-muted)]`. Closed issues get a muted title (`text-[var(--theme-text-secondary)]`).
 
 Label chip — GitHub colors are arbitrary API hex, so inline styles (never palette classes):
+
 ```tsx
 function LabelChip({ label }: { label: GitHubLabel }) {
   const color = `#${label.color}`;
@@ -1491,6 +1787,7 @@ function LabelChip({ label }: { label: GitHubLabel }) {
   );
 }
 ```
+
 Right action: identical branch to the old `IssuesBanner` (`ImportTaskButton` when no linked ticket, else `SmartSessionButton`); on closed issues without ticket, show the ghost "Open" button (GitHub link) instead of Import. Row click opens the issue on GitHub.
 
 - [ ] **Step 2: Swap the usage**
@@ -1500,6 +1797,7 @@ In `RepositoryDashboard.tsx`: replace the `IssuesBanner` import/render with `Iss
 - [ ] **Step 3: Verify + commit**
 
 Run: `bun run lint` → PASS. Run: `bun run test` → PASS. Visual check: segments, label chips with GitHub colors, comment counts.
+
 ```bash
 git add -A && git commit -m "feat(web): issues tab with state segments and GitHub labels"
 ```
@@ -1509,6 +1807,7 @@ git add -A && git commit -m "feat(web): issues tab with state segments and GitHu
 ### Task 12: Overview tab + tab wiring + header badge
 
 **Files:**
+
 - Create: `packages/web/src/components/repository-dashboard/overview-helpers.ts`
 - Test: `packages/web/src/components/repository-dashboard/overview-helpers.test.ts`
 - Create: `packages/web/src/components/repository-dashboard/Sparkline.tsx`
@@ -1519,6 +1818,7 @@ git add -A && git commit -m "feat(web): issues tab with state segments and GitHu
 - Modify: `packages/web/src/components/repository-dashboard/DashboardHeader.tsx`
 
 **Interfaces:**
+
 - Produces:
   ```ts
   // overview-helpers.ts
@@ -1534,17 +1834,32 @@ git add -A && git commit -m "feat(web): issues tab with state segments and GitHu
     diffStats: Record<string, DiffStats>,
     sessionGroup: SessionGroup | undefined,
     tickets: Ticket[],
-    pulls: PullRequest[],           // open + merged concatenated
-  ): { active: WorktreeRow[]; orphaned: WorktreeRow[] }
+    pulls: PullRequest[], // open + merged concatenated
+  ): { active: WorktreeRow[]; orphaned: WorktreeRow[] };
   // Sparkline.tsx
-  export function Sparkline({ values, width = 120, height = 36 }: { values: number[]; width?: number; height?: number })
+  export function Sparkline({
+    values,
+    width = 120,
+    height = 36,
+  }: {
+    values: number[];
+    width?: number;
+    height?: number;
+  });
   // OverviewTab.tsx
-  export function OverviewTab({ org, name, data, stats, onNavigate }: {
-    org: string; name: string;
+  export function OverviewTab({
+    org,
+    name,
+    data,
+    stats,
+    onNavigate,
+  }: {
+    org: string;
+    name: string;
     data: RepositoryDashboardData;
     stats: RepositoryStats | null;
     onNavigate: (tab: 'pulls' | 'issues') => void;
-  })
+  });
   ```
 - Consumes: `deriveWorktreeVerdict`/`VERDICT_META`/`isRemovableVerdict` (Task 6), `fetchRepoStats`/`repoStats` (Task 5), `ConfirmModal` (Task 7), `api.deleteWorktree`, `useTicketStore().tickets`, `useSessionStore().sessionGroups`, `useTicketActivityStore().costByTicket`.
 
@@ -1555,21 +1870,42 @@ git add -A && git commit -m "feat(web): issues tab with state segments and GitHu
 import { describe, it, expect } from 'vitest';
 import { buildWorktreeRows } from './overview-helpers';
 
-const wt = (branch: string, over = {}) => ({ path: `/wt/${branch}`, branch, isMain: false, isBare: false, ...over });
-const ticket = (id: string, status: string, links: unknown[] = []) => ({ id, status, links, displayId: 1, title: 't' }) as never;
+const wt = (branch: string, over = {}) => ({
+  path: `/wt/${branch}`,
+  branch,
+  isMain: false,
+  isBare: false,
+  ...over,
+});
+const ticket = (id: string, status: string, links: unknown[] = []) =>
+  ({ id, status, links, displayId: 1, title: 't' }) as never;
 
 describe('buildWorktreeRows', () => {
   it('skips bare and main worktrees', () => {
     const { active, orphaned } = buildWorktreeRows(
-      [wt('main', { isMain: true }), wt('x', { isBare: true })] as never, {}, undefined, [], [],
+      [wt('main', { isMain: true }), wt('x', { isBare: true })] as never,
+      {},
+      undefined,
+      [],
+      [],
     );
     expect(active).toEqual([]);
     expect(orphaned).toEqual([]);
   });
 
   it('links a ticket via the session group path and buckets open tickets as active', () => {
-    const group = { repositoryOrg: 'a', repositoryName: 'b', worktrees: [{ branch: 'f1', path: '/wt/f1', sessions: [], ticketId: 't1' }] } as never;
-    const { active, orphaned } = buildWorktreeRows([wt('f1')] as never, { f1: { commitsAhead: 1, commitsBehind: 0, filesChanged: 0, additions: 0, deletions: 0 } }, group, [ticket('t1', 'doing')], []);
+    const group = {
+      repositoryOrg: 'a',
+      repositoryName: 'b',
+      worktrees: [{ branch: 'f1', path: '/wt/f1', sessions: [], ticketId: 't1' }],
+    } as never;
+    const { active, orphaned } = buildWorktreeRows(
+      [wt('f1')] as never,
+      { f1: { commitsAhead: 1, commitsBehind: 0, filesChanged: 0, additions: 0, deletions: 0 } },
+      group,
+      [ticket('t1', 'doing')],
+      [],
+    );
     expect(active).toHaveLength(1);
     expect(orphaned).toHaveLength(0);
     expect(active[0]!.ticket).not.toBeNull();
@@ -1578,8 +1914,11 @@ describe('buildWorktreeRows', () => {
 
   it('buckets done/missing tickets as orphaned with removable verdicts', () => {
     const { active, orphaned } = buildWorktreeRows(
-      [wt('f1'), wt('f2')] as never, {}, undefined,
-      [ticket('t1', 'done', [{ type: 'worktree', ref: '/wt/f1' }])], [],
+      [wt('f1'), wt('f2')] as never,
+      {},
+      undefined,
+      [ticket('t1', 'done', [{ type: 'worktree', ref: '/wt/f1' }])],
+      [],
     );
     expect(active).toHaveLength(0);
     expect(orphaned.map((r) => r.worktree.branch).sort()).toEqual(['f1', 'f2']);
@@ -1589,7 +1928,13 @@ describe('buildWorktreeRows', () => {
   it('attaches the matching PR and lets merged win', () => {
     const pr = { number: 9, headRefName: 'f1', state: 'merged' } as never;
     const group = { worktrees: [{ path: '/wt/f1', ticketId: 't1', sessions: [] }] } as never;
-    const { active } = buildWorktreeRows([wt('f1')] as never, {}, group, [ticket('t1', 'doing')], [pr]);
+    const { active } = buildWorktreeRows(
+      [wt('f1')] as never,
+      {},
+      group,
+      [ticket('t1', 'doing')],
+      [pr],
+    );
     expect(active[0]!.pr).toBe(pr);
     expect(active[0]!.verdict).toBe('merged_removable');
   });
@@ -1630,7 +1975,13 @@ export function buildWorktreeRows(
     const grouped = sessionGroup?.worktrees.find((w) => w.path === worktree.path);
     const ticket =
       (grouped?.ticketId ? tickets.find((t) => t.id === grouped.ticketId) : undefined) ??
-      tickets.find((t) => t.links.some((l) => l.type === 'worktree' && (l.ref === worktree.path || l.ref.endsWith(`/${worktree.branch}`)))) ??
+      tickets.find((t) =>
+        t.links.some(
+          (l) =>
+            l.type === 'worktree' &&
+            (l.ref === worktree.path || l.ref.endsWith(`/${worktree.branch}`)),
+        ),
+      ) ??
       null;
     const pr = pulls.find((p) => p.headRefName === worktree.branch) ?? null;
     const diff = diffStats[worktree.branch];
@@ -1657,15 +2008,35 @@ export function buildWorktreeRows(
 - [ ] **Step 5: `Sparkline.tsx`**
 
 ```tsx
-export function Sparkline({ values, width = 120, height = 36 }: { values: number[]; width?: number; height?: number }) {
+export function Sparkline({
+  values,
+  width = 120,
+  height = 36,
+}: {
+  values: number[];
+  width?: number;
+  height?: number;
+}) {
   if (values.length < 2 || values.every((v) => v === 0)) return null;
   const max = Math.max(...values);
   const points = values
     .map((v, i) => `${(i / (values.length - 1)) * width},${height - 2 - (v / max) * (height - 6)}`)
     .join(' ');
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
-      <polyline points={points} fill="none" stroke="var(--tint-yellow-solid)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className="overflow-visible"
+    >
+      <polyline
+        points={points}
+        fill="none"
+        stroke="var(--tint-yellow-solid)"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -1676,6 +2047,7 @@ export function Sparkline({ values, width = 120, height = 36 }: { values: number
 Props: `{ org: string; name: string; rows: { active: WorktreeRow[]; orphaned: WorktreeRow[] }; onDeleted: () => void }`. Panel shell: `rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]`; header row "Tickets & worktrees" `px-5 py-3 text-sm font-semibold border-b border-[var(--theme-border)]`.
 
 Per active row (2 lines, `px-5 py-3 border-b border-[var(--theme-border-subtle)] last:border-0`):
+
 - Ticket line: `#displayId` mono muted → type chip (`tint(hue)` with hue map `const TYPE_HUE: Record<TicketType, TintHue> = { fix: 'red', build: 'green', ops: 'teal', think: 'indigo', review: 'purple', lead: 'orange' }`) → title `text-[13.5px] font-semibold truncate`, clickable → `navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)` → status chip (map: backlog/todo → gray, doing → yellow, reviewing → purple, done → green, cancelled → red) → cost chip when `costByTicket[ticket.id]` (`tintClasses('pink').bg/.text`, mono, `$x.xx`) → PR chip when `row.pr` (`tint('green')`, mono, `⎇`-like branch SVG + `{name}#{pr.number}`).
 - Worktree line: `└ {branch}` mono 12px secondary → `↑{commitsAhead}` in `tintText('green')` and `↓{commitsBehind}` in `tintText('red')` (only when > 0) → verdict badge `cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(VERDICT_META[row.verdict].hue))` → trash button (same `TrashIcon` pattern as Task 9) → sets `pendingDelete = row`.
 
@@ -1688,19 +2060,27 @@ Empty panel (no rows at all): centered muted "No active worktrees".
 - [ ] **Step 7: `OverviewTab.tsx`**
 
 ```tsx
-export function OverviewTab({ org, name, data, stats, onNavigate }: { /* see Interfaces */ }) {
+export function OverviewTab({ org, name, data, stats, onNavigate }: {/* see Interfaces */}) {
   const key = `${org}/${name}`;
   const tickets = useTicketStore((s) => s.tickets);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const costByTicket = useTicketActivityStore((s) => s.costByTicket);
   const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
 
-  const sessionGroup = sessionGroups.find((g) => g.repositoryOrg === org && g.repositoryName === name);
+  const sessionGroup = sessionGroups.find(
+    (g) => g.repositoryOrg === org && g.repositoryName === name,
+  );
   const linkedTickets = useMemo(
-    () => tickets.filter((t) => t.links.some((l) => l.type === 'repository' && l.ref.toLowerCase() === key.toLowerCase())),
+    () =>
+      tickets.filter((t) =>
+        t.links.some((l) => l.type === 'repository' && l.ref.toLowerCase() === key.toLowerCase()),
+      ),
     [tickets, key],
   );
-  const pulls = useMemo(() => [...data.openPullRequests, ...data.recentlyMergedPullRequests], [data]);
+  const pulls = useMemo(
+    () => [...data.openPullRequests, ...data.recentlyMergedPullRequests],
+    [data],
+  );
   const rows = useMemo(
     () => buildWorktreeRows(data.worktrees, data.diffStats, sessionGroup, tickets, pulls),
     [data, sessionGroup, tickets, pulls],
@@ -1708,7 +2088,9 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: { /* see Int
   // …
 }
 ```
+
 Layout `flex flex-col gap-5`:
+
 1. **KPI grid** `grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-4` — shared card shell `rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-5`; each card: header `flex items-center gap-2 text-xs text-[var(--theme-text-secondary)]` with a `h-2 w-2 rounded-full` dot (`tintSolid(hue)`), value `text-[28px] font-bold leading-tight`, subtext `text-[11px] text-[var(--theme-text-muted)]`:
    - **Fleex cost · 30 d** (dot yellow): `${(stats?.totalCostUsd ?? 0).toFixed(0)}`, `<Sparkline values={stats?.dailyCosts.map((d) => d.costUsd) ?? []} />` beside the value, subtext `${stats.costPerTicketUsd.toFixed(2)} / ticket` + trend when `stats.previousTotalCostUsd > 0`: `▲/▼ {pct}%` (`tintText(pct >= 0 ? 'red' : 'green')` — cost going up is bad) where `pct = Math.round(((stats.totalCostUsd - stats.previousTotalCostUsd) / stats.previousTotalCostUsd) * 100)`. Render the arrow as a tiny SVG triangle, not an emoji.
    - **Tickets** (dot indigo): value = `linkedTickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length` "in progress", subtext `{done} done · {activeSessions} active sessions` where `done` = linked done count, `activeSessions = sessionGroup?.worktrees.reduce((n, w) => n + w.sessions.length, 0) ?? 0`.
@@ -1720,6 +2102,7 @@ Layout `flex flex-col gap-5`:
 - [ ] **Step 8: Wire tabs + header badge**
 
 `RepositoryDashboard.tsx`:
+
 ```ts
 type Tab = 'overview' | 'pulls' | 'issues' | 'config';
 const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -1730,6 +2113,7 @@ const tabs: { key: Tab; label: string; count?: number }[] = [
   { key: 'config', label: 'Config' },
 ];
 ```
+
 - On repo change (`useEffect` on `[org, name]`): also `setActiveTab('overview')` and `fetchRepoStats(org, name)` (from `useRepositoryDashboardStore`).
 - Render: `overview` → `<OverviewTab org={org} name={name} data={data} stats={repoStats[repoKey] ?? null} onNavigate={(t) => setActiveTab(t)} />` (guard: render only when `data`; while loading show the existing spinner/skeleton pattern); `config` → `<RepoConfigPanel …/>` (unchanged).
 - `DashboardHeader`: add props `worktreeCount: number; isCloned: boolean` and render after the GitHub link: `isCloned` → `<span className={cn('rounded-full px-2 py-0.5 text-[10.5px]', tint('green'))}>cloned · {worktreeCount} worktrees</span>` else `tint('yellow')` "not cloned". Pass from `RepositoryDashboard` (`worktreeCount = data?.worktrees.filter((w) => !w.isBare && !w.isMain).length ?? 0`).
@@ -1746,9 +2130,16 @@ import { RepositoryDashboard } from './RepositoryDashboard';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 
 const data = {
-  org: 'acme', name: 'app',
-  openIssues: [], recentlyClosedIssues: [], openPullRequests: [], recentlyMergedPullRequests: [],
-  worktrees: [], diffStats: {}, githubUser: 'me', isClonedLocally: true,
+  org: 'acme',
+  name: 'app',
+  openIssues: [],
+  recentlyClosedIssues: [],
+  openPullRequests: [],
+  recentlyMergedPullRequests: [],
+  worktrees: [],
+  diffStats: {},
+  githubUser: 'me',
+  isClonedLocally: true,
 };
 
 describe('RepositoryDashboard tabs', () => {
@@ -1763,7 +2154,11 @@ describe('RepositoryDashboard tabs', () => {
   afterEach(cleanup);
 
   it('renders the four tabs with Overview as default', () => {
-    render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <RepositoryDashboard repoKey="acme/app" />
+      </MemoryRouter>,
+    );
     for (const label of ['Overview', 'Pull Requests', 'Issues', 'Config']) {
       expect(screen.getByText(label)).toBeTruthy();
     }
@@ -1771,12 +2166,17 @@ describe('RepositoryDashboard tabs', () => {
   });
 
   it('switches tabs', () => {
-    render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <RepositoryDashboard repoKey="acme/app" />
+      </MemoryRouter>,
+    );
     fireEvent.click(screen.getByText('Config'));
     expect(screen.getByText('Post-checkout hook')).toBeTruthy();
   });
 });
 ```
+
 If a child component pulls store state this setup doesn't provide (e.g. ticket/session stores default to empty arrays — they should), seed the minimal state rather than mocking the child.
 
 Run: `npx vitest run packages/web/src/components/repository-dashboard/RepositoryDashboard.test.tsx` → PASS (2 tests).
@@ -1784,6 +2184,7 @@ Run: `npx vitest run packages/web/src/components/repository-dashboard/Repository
 - [ ] **Step 10: Verify + commit**
 
 Run: `npx vitest run packages/web/src/components/repository-dashboard/overview-helpers.test.ts` → PASS. `bun run lint` → PASS. `bun run test` → PASS. Visual check in `bun run dev`: Overview default tab, 4 KPI cards (cost card fills once `/stats` responds), tickets & worktrees rows with verdict badges, worktree deletion works end-to-end, previews navigate to their tabs.
+
 ```bash
 git add -A && git commit -m "feat(web): per-repo overview dashboard with cost KPIs and worktree verdicts"
 ```
@@ -1793,6 +2194,7 @@ git add -A && git commit -m "feat(web): per-repo overview dashboard with cost KP
 ### Task 13: Remove Settings → Repositories
 
 **Files:**
+
 - Modify: `packages/web/src/stores/uiStore.ts:5` (`SettingsTab` union)
 - Modify: `packages/web/src/components/settings/SettingsNav.tsx` (icon map + tab list)
 - Modify: `packages/web/src/components/settings/SettingsPanel.tsx` (label map, `RepositoriesTab`, state, handlers)
@@ -1801,6 +2203,7 @@ git add -A && git commit -m "feat(web): per-repo overview dashboard with cost KP
 - Modify: `packages/web/src/router/RouterSync.test.ts` / `RouterSync.sync.test.tsx` (expectations)
 
 **Interfaces:**
+
 - Consumes: nothing new. `TagInput` stays (still used by `TicketMetaSidebar`, `StepConfigPanel`).
 
 - [ ] **Step 1: Strip the tab**
@@ -1813,12 +2216,14 @@ git add -A && git commit -m "feat(web): per-repo overview dashboard with cost KP
 - [ ] **Step 2: Router redirect**
 
 In `RouterSync.tsx`: remove `'repositories'` from `VALID_SETTINGS_TABS`; in `parseUrl`, just before the `VALID_SETTINGS_TABS.includes(rawTab)` check (~line 248), add:
+
 ```ts
 if ((settingsMatch[1] as string) === 'repositories') {
   // Legacy Settings → Repositories screen: config now lives in the Repos view.
   return { ...base, panel: 'repositories' };
 }
 ```
+
 (match the exact `base`/return shape used by the surrounding parse branches).
 
 - [ ] **Step 3: Update the router tests**
@@ -1828,6 +2233,7 @@ if ((settingsMatch[1] as string) === 'repositories') {
 - [ ] **Step 4: Verify + commit**
 
 Run: `npx vitest run packages/web/src/router/RouterSync.test.ts packages/web/src/router/RouterSync.sync.test.tsx` → PASS. `bun run lint` → PASS. `bun run test` → PASS. Visual check: Settings shows no Repositories entry; navigating to `/settings/repositories` lands on the Repos view.
+
 ```bash
 git add -A && git commit -m "refactor(web): remove Settings > Repositories, redirect legacy route to the Repos view"
 ```
@@ -1845,16 +2251,18 @@ Run: `bun run lint` → PASS (typecheck all packages + raw-palette check). Run: 
 - [ ] **Step 2: End-to-end manual verification** (use the `verify` skill / `bun run dev`)
 
 Walk the five prototype states against `../refonte/screenshots/`:
+
 1. `01-vue-ensemble.png` — sidebar (search, chips, ACTIVE, wt badges, trash on hover) + Overview (KPI cards, tickets & worktrees, previews).
 2. `02-prs-open.png` — segments + me-toggles + card rows + Import/Start buttons.
 3. `03-prs-merged.png` — merged segment, cost chips, "worktree still present" + Clean up.
 4. `04-issues.png` — issue segments + label chips + comment counts.
 5. `05-modal-ajout.png` — discovery groups, toggles, already-tracked, select-all, free-form verify, footer recap.
-Plus: repo removal round-trip (confirm → gone from sidebar → bare clone sync fires), `/settings/repositories` redirect, and a server restart with a hand-written `org/*` pattern in config to watch the migration expand it.
+   Plus: repo removal round-trip (confirm → gone from sidebar → bare clone sync fires), `/settings/repositories` redirect, and a server restart with a hand-written `org/*` pattern in config to watch the migration expand it.
 
 - [ ] **Step 3: Commit any fixes**
 
 ```bash
 git add -A && git commit -m "fix: post-verification adjustments for the repos redesign"
 ```
+
 (Skip if nothing changed.)

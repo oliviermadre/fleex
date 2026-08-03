@@ -1,13 +1,15 @@
 import { useEffect } from 'react';
-import { appWs } from '../services/websocket';
-import { fetchEvents } from '../services/api';
-import { useNotificationStore } from '../stores/notificationStore';
-import { useTicketStore } from '../stores/ticketStore';
-import { notificationRegistry } from '../notifications/registry';
-import { registerDefaultRenderers } from '../notifications/renderers';
-import { toNotification } from '../notifications/pipeline';
+
 import { pulseEventPrefixes, reconstructNotifications } from '../notifications/audit';
 import { ticketLink } from '../notifications/links';
+import { toNotification } from '../notifications/pipeline';
+import { notificationRegistry } from '../notifications/registry';
+import { registerDefaultRenderers } from '../notifications/renderers';
+import { fetchEvents } from '../services/api';
+import { appWs } from '../services/websocket';
+import { useNotificationStore } from '../stores/notificationStore';
+import { useTicketStore } from '../stores/ticketStore';
+
 import type { RendererContext, WsChannelMessage } from '../notifications/types';
 
 // Register the V1 renderers once, at module load (idempotent).
@@ -24,8 +26,7 @@ const AUDIT_FETCH_LIMIT = 100;
 function buildRendererContext(): RendererContext {
   return {
     ticketLink: (id, tab) => {
-      const board =
-        useTicketStore.getState().tickets.find((t) => t.id === id)?.boardId ?? null;
+      const board = useTicketStore.getState().tickets.find((t) => t.id === id)?.boardId ?? null;
       return ticketLink(id, tab, board);
     },
   };

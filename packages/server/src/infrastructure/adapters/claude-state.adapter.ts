@@ -1,4 +1,7 @@
 import * as path from 'node:path';
+
+import { encodePath } from '../../domain/services/claude-path-encoding.js';
+
 import type {
   ClaudeStatePort,
   ClaudeProcessInfo,
@@ -6,7 +9,6 @@ import type {
 } from '../../application/ports/claude-state.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ShellExecFn, HostFs } from '../host/types.js';
-import { encodePath } from '../../domain/services/claude-path-encoding.js';
 
 /** CWD never changes for a running PID — cache it. */
 const cwdCache = new Map<number, string>();
@@ -208,9 +210,12 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
     if (cached) return cached;
 
     try {
-      const { stdout } = await this.shellExecFn(`lsof -p ${pid} -Fn 2>/dev/null | grep '^n' | head -1`, {
-        timeout: 3000,
-      });
+      const { stdout } = await this.shellExecFn(
+        `lsof -p ${pid} -Fn 2>/dev/null | grep '^n' | head -1`,
+        {
+          timeout: 3000,
+        },
+      );
       const line = stdout.trim();
       if (line.startsWith('n')) {
         const cwd = line.slice(1);

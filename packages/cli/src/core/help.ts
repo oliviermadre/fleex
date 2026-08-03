@@ -12,9 +12,11 @@
  * Implementation note: we override Commander's `formatHelp` instead of relying
  * on v12's per-term style hooks (commander 12 doesn't expose them yet).
  */
-import { Command, Help, Option } from 'commander';
 import chalk from 'chalk';
+
 import { visibleLength } from './colors.ts';
+
+import type { Command, Help, Option } from 'commander';
 
 const SECTION = chalk.bold.yellow;
 const CMD_NAME = chalk.green;
@@ -97,7 +99,10 @@ function formatHelp(cmd: Command, helper: Help): string {
   const args = helper.visibleArguments(cmd);
   if (args.length > 0) {
     lines.push(SECTION('Arguments:'));
-    const rows: Array<[string, string]> = args.map((a) => [ARG(helper.argumentTerm(a)), helper.argumentDescription(a) || '']);
+    const rows: Array<[string, string]> = args.map((a) => [
+      ARG(helper.argumentTerm(a)),
+      helper.argumentDescription(a) || '',
+    ]);
     appendTwoColumn(lines, rows);
     lines.push('');
   }
@@ -130,7 +135,10 @@ function formatHelp(cmd: Command, helper: Help): string {
   const opts = helper.visibleOptions(cmd);
   if (opts.length > 0) {
     lines.push(SECTION('Options:'));
-    const rows: Array<[string, string]> = opts.map((o) => [colourOptionTerm(o, helper), helper.optionDescription(o) || '']);
+    const rows: Array<[string, string]> = opts.map((o) => [
+      colourOptionTerm(o, helper),
+      helper.optionDescription(o) || '',
+    ]);
     appendTwoColumn(lines, rows);
     lines.push('');
   }
@@ -160,8 +168,9 @@ function colourSubcommandTerm(sub: Command): string {
 function colourOptionTerm(opt: Option, helper: Help): string {
   const term = helper.optionTerm(opt);
   // Split "-h, --help <foo>" → colour flags cyan, argument placeholder magenta.
-  return term.replace(/(--?[\w-]+)/g, (m) => FLAG(m))
-             .replace(/(<[^>]+>|\[[^\]]+\])/g, (m) => ARG(m));
+  return term
+    .replace(/(--?[\w-]+)/g, (m) => FLAG(m))
+    .replace(/(<[^>]+>|\[[^\]]+\])/g, (m) => ARG(m));
 }
 
 function colourUsage(usage: string): string {

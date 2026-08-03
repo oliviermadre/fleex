@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { pickBoard, type Board } from '../../src/commands/board/_shared.ts';
 
 const boards: Board[] = [

@@ -1,10 +1,14 @@
-import type { CommandDef } from '../../../../core/types.ts';
-import { ok, warn, info, die, c } from '../../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../../core/api.ts';
+import { ok, warn, info, die, c } from '../../../../core/colors.ts';
 import { canPrompt, promptYesNo, closePrompts } from '../../../../core/prompt.ts';
 import { fetchRunDetail } from '../../_shared.ts';
 
-interface CancelOptions { force?: boolean; ticket?: string }
+import type { CommandDef } from '../../../../core/types.ts';
+
+interface CancelOptions {
+  force?: boolean;
+  ticket?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -13,7 +17,10 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<runId>', 'Workflow run UUID or short id prefix (needs --ticket)');
     cmd.option('-f, --force', 'Skip confirmation');
-    cmd.option('--ticket <id>', 'Ticket display ID (#42) or UUID — required to resolve a run prefix');
+    cmd.option(
+      '--ticket <id>',
+      'Ticket display ID (#42) or UUID — required to resolve a run prefix',
+    );
   },
   action: async (runId: string, opts: CancelOptions) => {
     // Resolve + verify the run exists BEFORE prompting, so a mistyped/prefix id

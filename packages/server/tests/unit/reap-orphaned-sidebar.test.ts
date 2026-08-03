@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { GetSessionGroupsUseCase } from '../../src/application/use-cases/get-session-groups.js';
+
 import { DiscoverExistingSessionsUseCase } from '../../src/application/use-cases/discover-existing-sessions.js';
+import { GetSessionGroupsUseCase } from '../../src/application/use-cases/get-session-groups.js';
 import { SessionGroupingService } from '../../src/domain/services/session-grouping.js';
-import { SessionNamingService } from '../../src/domain/services/session-naming.js';
 import { sessionIdFromTmuxName } from '../../src/domain/services/session-id.js';
+import { SessionNamingService } from '../../src/domain/services/session-naming.js';
 import { FakeTmuxPort, FakeSessionStore, FakeLoggerPort } from '../helpers/fakes.js';
 
 /**
@@ -63,8 +64,6 @@ describe('GetSessionGroupsUseCase — sidebar reaping vs re-discovered parent', 
     expect(await tmux.hasSession(sidebarTmuxName)).toBe(true);
     expect(store.getByTmuxName(sidebarTmuxName)).not.toBeNull();
     // And the reaper must not have logged a kill for it.
-    expect(
-      logger.logs.some((l) => l.msg === 'Reaped orphaned sidebar session'),
-    ).toBe(false);
+    expect(logger.logs.some((l) => l.msg === 'Reaped orphaned sidebar session')).toBe(false);
   });
 });

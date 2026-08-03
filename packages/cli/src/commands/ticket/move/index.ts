@@ -1,9 +1,12 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { ok } from '../../../core/colors.ts';
 import { assertValidStatus, resolveTicketId } from '../_shared.ts';
 
-interface MoveOptions { board?: string }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface MoveOptions {
+  board?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -19,7 +22,10 @@ const def: CommandDef = {
     assertValidStatus(statusArg);
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();
-    const result = await apiPost<{ displayId: number; status: string }>(`${base}/api/tickets/${uuid}/move`, { status: statusArg });
+    const result = await apiPost<{ displayId: number; status: string }>(
+      `${base}/api/tickets/${uuid}/move`,
+      { status: statusArg },
+    );
     ok(`Moved ticket #${result.displayId} to ${result.status}`);
   },
 };

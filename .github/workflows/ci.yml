@@ -21,8 +21,40 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Type check
+      - name: Lint & type check
         run: bun run lint
+
+      # The other direction of the ratchet. `Lint & type check` above compares the
+      # tree against the snapshot in THIS branch — but the branch can rewrite that
+      # file with `bun run lint:baseline`, which would launder any regression. So
+      # the reference here is the snapshot on main, which the branch cannot touch.
+      #
+      # No second ESLint run: once `bun run lint` has passed, the local snapshot is
+      # provably equal to the current counts, so the comparison is nearly free.
+      - name: Baseline not worse than main
+        if: >
+          github.event_name == 'pull_request' &&
+          !contains(github.event.pull_request.labels.*.name, 'lint-baseline-reset')
+        run: |
+          mkdir -p .ci
+          # actions/checkout clones at depth 1, so origin/main does not exist yet.
+          # Without this fetch the `git show` below fails, the __ABSENT__ fallback
+          # kicks in, and the step passes green having verified nothing.
+          git fetch --no-tags --depth=1 origin main
+          git show origin/main:scripts/lint-snapshot.json > .ci/main-lint-snapshot.json 2>/dev/null \
+            || echo '__ABSENT__' > .ci/main-lint-snapshot.json
+          # Two dots, not three: on a pull_request event the checkout is already the
+          # merge commit, and a shallow clone has no merge-base for three-dot syntax.
+          git diff --find-renames --diff-filter=R --name-status origin/main HEAD > .ci/renames.txt
+          bun run lint:ratchet:ci
+
+      # A ratchet only tightens if the improved snapshot is actually committed.
+      # `bun run lint` rewrites the snapshots in place when violation counts drop,
+      # so a dirty snapshot here means someone fixed code but left the ceiling high.
+      - name: Snapshots up to date
+        run: |
+          git diff --exit-code scripts/lint-snapshot.json scripts/raw-palette-snapshot.json \
+            || (echo "::error::Violations were fixed but the snapshots were not committed. Run 'bun run lint' and commit scripts/*-snapshot.json." && exit 1)
 
       - name: Build
         run: bun run build

@@ -1,5 +1,6 @@
-import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import * as readline from 'node:readline/promises';
+
 import { c } from './colors.ts';
 
 // Lazily-created shared readline interface. Call closePrompts() once the
@@ -99,9 +100,7 @@ export async function promptMultiSelect<T>(
   items.forEach((item, i) => {
     output.write(`  ${c.cyan(String(i + 1))}) ${render(item)}\n`);
   });
-  const answer = await io().question(
-    c.dim('  select (e.g. 1,3,5-7 · "all" · empty to skip): '),
-  );
+  const answer = await io().question(c.dim('  select (e.g. 1,3,5-7 · "all" · empty to skip): '));
   const picked = parseSelection(answer, items.length);
   return items.filter((_, i) => picked.has(i + 1));
 }

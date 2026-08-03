@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SessionGroupingService } from '../../src/domain/services/session-grouping.js';
+
+import type { TicketLink, TicketLinkType } from '@fleex/shared';
+
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import { SessionEntity } from '../../src/domain/entities.js';
 import { RepoPathResolver } from '../../src/domain/services/repo-path-resolver.js';
-import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+import { SessionGroupingService } from '../../src/domain/services/session-grouping.js';
+
 import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
-import type { TicketLink, TicketLinkType } from '@fleex/shared';
 
 describe('SessionGroupingService', () => {
   const service = new SessionGroupingService();
@@ -17,14 +20,28 @@ describe('SessionGroupingService', () => {
     cwd?: string,
   ): SessionEntity {
     return new SessionEntity(
-      id, `fleex_shell_${id}`, 'shell', 'running',
-      cwd ?? `/projects/${org}/${repo}`, new Date(), null,
-      org, repo, branch, null,
+      id,
+      `fleex_shell_${id}`,
+      'shell',
+      'running',
+      cwd ?? `/projects/${org}/${repo}`,
+      new Date(),
+      null,
+      org,
+      repo,
+      branch,
+      null,
     );
   }
 
   function makeRepoLink(orgRepo: string): TicketLink {
-    return { id: `lk-${orgRepo}`, type: 'repository' as TicketLinkType, ref: orgRepo, label: orgRepo, url: null };
+    return {
+      id: `lk-${orgRepo}`,
+      type: 'repository' as TicketLinkType,
+      ref: orgRepo,
+      label: orgRepo,
+      url: null,
+    };
   }
 
   /**
@@ -36,7 +53,9 @@ describe('SessionGroupingService', () => {
     const resolver = new RepoPathResolver('/base');
     vi.spyOn(resolver, 'workspacesRoot').mockReturnValue('/base/workspaces');
     vi.spyOn(resolver, 'resolveManifest').mockImplementation((cwd: string) =>
-      cwd.startsWith(`/base/workspaces/${workspaceTicketId}`) ? { ticketId: workspaceTicketId } : null,
+      cwd.startsWith(`/base/workspaces/${workspaceTicketId}`)
+        ? { ticketId: workspaceTicketId }
+        : null,
     );
     const ticketStore = {
       getTicketById: vi.fn(async (id: string) => (id === ticket.id ? ticket : null)),
@@ -71,9 +90,7 @@ describe('SessionGroupingService', () => {
   });
 
   it('should handle sessions without repo info', async () => {
-    const sessions = [
-      makeSession('1', null, null, null),
-    ];
+    const sessions = [makeSession('1', null, null, null)];
 
     const groups = await service.groupSessions(sessions);
     expect(groups).toHaveLength(1);

@@ -1,8 +1,8 @@
+import type { OverlayManager } from './overlay-manager.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import type { HostFs, ExecFn } from '../../infrastructure/host/types.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
-import type { HostFs, ExecFn } from '../../infrastructure/host/types.js';
-import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
-import type { OverlayManager } from './overlay-manager.js';
 
 export class BareCloneManager {
   constructor(
@@ -37,7 +37,8 @@ export class BareCloneManager {
     // Configure fetch refspec so that `origin/*` refs work properly.
     // By default, bare clones may not set up the remote tracking refspec.
     await this.execFn(
-      'git', ['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'],
+      'git',
+      ['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'],
       { cwd: barePath },
     );
 
@@ -64,7 +65,8 @@ export class BareCloneManager {
     try {
       // Ensure the fetch refspec is configured (may be missing on older bare clones)
       await this.execFn(
-        'git', ['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'],
+        'git',
+        ['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'],
         { cwd: barePath },
       );
       await this.execFn('git', ['fetch', '--prune', 'origin'], { cwd: barePath });
@@ -86,7 +88,9 @@ export class BareCloneManager {
         await this.ensureBareClone(org, name);
       } catch (err) {
         this.logger.warn('Failed to ensure bare clone during sync', {
-          org, name, error: err instanceof Error ? err.message : String(err),
+          org,
+          name,
+          error: err instanceof Error ? err.message : String(err),
         });
       }
     }
@@ -100,7 +104,9 @@ export class BareCloneManager {
           await this.removeBareClone(org, name);
         } catch (err) {
           this.logger.warn('Failed to remove stale bare clone', {
-            org, name, error: err instanceof Error ? err.message : String(err),
+            org,
+            name,
+            error: err instanceof Error ? err.message : String(err),
           });
         }
       }

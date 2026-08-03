@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
 
 /** In-memory localStorage (Node 22's experimental global shadows jsdom's). */

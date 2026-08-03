@@ -1,4 +1,5 @@
 import type { AgentEventType } from '@fleex/shared';
+
 import type { PromptContentBlock } from './resolve-file-references.js';
 
 /**
@@ -150,14 +151,19 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
           structuredOutput = msg['structured_output'] as Record<string, unknown>;
         }
 
-        if (typeof msg['duration_ms'] === 'number') metrics.durationMs = msg['duration_ms'] as number;
-        if (typeof msg['total_cost_usd'] === 'number') metrics.costUsd = msg['total_cost_usd'] as number;
+        if (typeof msg['duration_ms'] === 'number')
+          metrics.durationMs = msg['duration_ms'] as number;
+        if (typeof msg['total_cost_usd'] === 'number')
+          metrics.costUsd = msg['total_cost_usd'] as number;
         if (typeof msg['num_turns'] === 'number') metrics.numTurns = msg['num_turns'] as number;
 
         // modelUsage carries cumulative per-model token totals.
         const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
         if (modelUsage) {
-          let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
+          let totalIn = 0,
+            totalOut = 0,
+            totalCacheRead = 0,
+            totalCacheCreation = 0;
           for (const mu of Object.values(modelUsage)) {
             totalIn += mu['inputTokens'] ?? 0;
             totalOut += mu['outputTokens'] ?? 0;
@@ -189,5 +195,13 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
     throw err;
   }
 
-  return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount, stderr: stderrBuf };
+  return {
+    sessionId,
+    resultText,
+    structuredOutput,
+    resultSubtype,
+    metrics,
+    messageCount,
+    stderr: stderrBuf,
+  };
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { ListSessionsUseCase } from '../../src/application/use-cases/list-sessions.js';
 import { SessionEntity } from '../../src/domain/entities.js';
 import { FakeTmuxPort, FakeSessionStore, FakeLoggerPort } from '../helpers/fakes.js';
@@ -18,12 +19,30 @@ describe('ListSessionsUseCase', () => {
 
   it('should return alive sessions and remove dead ones', async () => {
     const alive = new SessionEntity(
-      'alive-id', 'fleex_shell_alive123', 'shell', 'running',
-      '/tmp/a', new Date(), null, null, null, null, null,
+      'alive-id',
+      'fleex_shell_alive123',
+      'shell',
+      'running',
+      '/tmp/a',
+      new Date(),
+      null,
+      null,
+      null,
+      null,
+      null,
     );
     const dead = new SessionEntity(
-      'dead-id', 'fleex_shell_dead1234', 'shell', 'running',
-      '/tmp/b', new Date(), null, null, null, null, null,
+      'dead-id',
+      'fleex_shell_dead1234',
+      'shell',
+      'running',
+      '/tmp/b',
+      new Date(),
+      null,
+      null,
+      null,
+      null,
+      null,
     );
     store.save(alive);
     store.save(dead);
@@ -40,12 +59,30 @@ describe('ListSessionsUseCase', () => {
 
   it('should return all stored sessions when tmux listing fails', async () => {
     const session1 = new SessionEntity(
-      'id-1', 'fleex_shell_abc12345', 'shell', 'running',
-      '/tmp/a', new Date(), null, 'myorg', 'myrepo', 'main', 'https://github.com/myorg/myrepo.git',
+      'id-1',
+      'fleex_shell_abc12345',
+      'shell',
+      'running',
+      '/tmp/a',
+      new Date(),
+      null,
+      'myorg',
+      'myrepo',
+      'main',
+      'https://github.com/myorg/myrepo.git',
     );
     const session2 = new SessionEntity(
-      'id-2', 'fleex_claude_def1234', 'claude', 'running',
-      '/tmp/b', new Date(), null, 'myorg', 'other', 'feat', 'https://github.com/myorg/other.git',
+      'id-2',
+      'fleex_claude_def1234',
+      'claude',
+      'running',
+      '/tmp/b',
+      new Date(),
+      null,
+      'myorg',
+      'other',
+      'feat',
+      'https://github.com/myorg/other.git',
     );
     store.save(session1);
     store.save(session2);
@@ -64,13 +101,24 @@ describe('ListSessionsUseCase', () => {
     expect(store.getById('id-2')).not.toBeNull();
 
     // Should have logged a warning
-    expect(logger.logs.some((l) => l.level === 'warn' && l.msg.includes('Failed to list tmux sessions'))).toBe(true);
+    expect(
+      logger.logs.some((l) => l.level === 'warn' && l.msg.includes('Failed to list tmux sessions')),
+    ).toBe(true);
   });
 
   it('should remove all sessions when tmux genuinely has none', async () => {
     const session = new SessionEntity(
-      'id-1', 'fleex_shell_abc12345', 'shell', 'running',
-      '/tmp/a', new Date(), null, null, null, null, null,
+      'id-1',
+      'fleex_shell_abc12345',
+      'shell',
+      'running',
+      '/tmp/a',
+      new Date(),
+      null,
+      null,
+      null,
+      null,
+      null,
     );
     store.save(session);
 

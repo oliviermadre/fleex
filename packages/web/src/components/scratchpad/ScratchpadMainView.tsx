@@ -1,8 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
+
+import { useScrollSync } from '../../hooks/useScrollSync';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
+
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { SaveStatus } from './SaveStatus';
-import { useScrollSync } from '../../hooks/useScrollSync';
 
 interface Props {
   scratchpadKey: string;
@@ -14,7 +16,13 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
   const load = useScratchpadStore((s) => s.load);
   const toggleCheckbox = useScratchpadStore((s) => s.toggleCheckbox);
 
-  const entry = entries[scratchpadKey] ?? { content: '', loaded: false, saving: false, savedAt: null, dirty: false };
+  const entry = entries[scratchpadKey] ?? {
+    content: '',
+    loaded: false,
+    saving: false,
+    savedAt: null,
+    dirty: false,
+  };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -51,7 +59,10 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
       {/* Title bar */}
-      <div className="flex items-center justify-between px-3 border-b border-[var(--theme-border)]" style={{ height: 'var(--header-height)' }}>
+      <div
+        className="flex items-center justify-between px-3 border-b border-[var(--theme-border)]"
+        style={{ height: 'var(--header-height)' }}
+      >
         <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
           {label}
         </span>
@@ -93,10 +104,7 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
             onScroll={handlePreviewScroll}
           >
             {entry.content.trim() ? (
-              <MarkdownRenderer
-                content={entry.content}
-                onToggleCheckbox={handleToggleCheckbox}
-              />
+              <MarkdownRenderer content={entry.content} onToggleCheckbox={handleToggleCheckbox} />
             ) : (
               <div className="flex items-center justify-center h-full text-[var(--theme-text-faint)] text-xs">
                 Preview will appear here

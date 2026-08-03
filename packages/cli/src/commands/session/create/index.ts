@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { ok, present } from '../../../core/colors.ts';
 import { assertValidSessionType, type Session } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface CreateOptions {
   type?: string;
@@ -29,7 +30,11 @@ const def: CommandDef = {
     if (opts.prompt !== undefined) body.claudePrompt = opts.prompt;
     // The server 422s when cwd does not exist — surfaced verbatim by the api layer.
     const session = await apiPost<Session>(`${apiBase()}/api/sessions`, body);
-    present(session, () => ok(`Created ${session.type} session ${session.displayName ?? ''} (${session.id.slice(0, 8)})`));
+    present(session, () =>
+      ok(
+        `Created ${session.type} session ${session.displayName ?? ''} (${session.id.slice(0, 8)})`,
+      ),
+    );
   },
 };
 

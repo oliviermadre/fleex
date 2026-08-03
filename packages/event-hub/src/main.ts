@@ -1,6 +1,7 @@
 import type { HubMessage } from '@fleex/shared';
-import { Hub, type HubClientData } from './hub';
+
 import { ClientsStore, CLIENTS_FILE } from './clients';
+import { Hub, type HubClientData } from './hub';
 
 const PORT = parseInt(process.env['FLEEX_EVENT_HUB_PORT'] ?? '3002', 10);
 
@@ -101,7 +102,9 @@ Bun.serve<HubClientData>({
 
         case 'event':
           if (!ws.data.serverId) {
-            log('warn', 'event received before hello — dropping', { clientName: ws.data.clientName });
+            log('warn', 'event received before hello — dropping', {
+              clientName: ws.data.clientName,
+            });
             return;
           }
           if (msg.originatorServerId !== ws.data.serverId) {

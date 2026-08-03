@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
+
 import type { AgentEvent } from '@fleex/shared';
-import { useAgentEventStore } from '../../stores/agentEventStore';
+
 import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses } from '../../lib/tints';
+import { useAgentEventStore } from '../../stores/agentEventStore';
 
 const EMPTY_EVENTS: AgentEvent[] = [];
 
@@ -98,7 +100,11 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
     <CollapsibleText
       text={thinking}
       previewLength={120}
-      className={cn('text-xs pl-2 border-l-2', tintText('purple'), tintClasses('purple').borderColor)}
+      className={cn(
+        'text-xs pl-2 border-l-2',
+        tintText('purple'),
+        tintClasses('purple').borderColor,
+      )}
       label="thinking"
     />
   );
@@ -106,9 +112,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
 
 function TextBlock({ text }: { text: string }) {
   return (
-    <div className="text-[var(--theme-text-primary)] whitespace-pre-wrap break-words">
-      {text}
-    </div>
+    <div className="text-[var(--theme-text-primary)] whitespace-pre-wrap break-words">{text}</div>
   );
 }
 
@@ -123,9 +127,9 @@ function summarizeToolInput(name: string, input: Record<string, unknown>): strin
     case 'Edit':
       return (input.file_path as string) ?? '';
     case 'Grep':
-      return `/${input.pattern as string ?? ''}/ ${input.path as string ?? ''}`;
+      return `/${(input.pattern as string) ?? ''}/ ${(input.path as string) ?? ''}`;
     case 'Glob':
-      return `${input.pattern as string ?? ''} ${input.path as string ?? ''}`.trim();
+      return `${(input.pattern as string) ?? ''} ${(input.path as string) ?? ''}`.trim();
     case 'Task':
       return (input.description as string) ?? (input.prompt as string)?.slice(0, 80) ?? '';
     case 'WebFetch':
@@ -172,17 +176,21 @@ function ToolCallBlock({ name, input }: { name: string; input: Record<string, un
 }
 
 function ToolResultBlock({ content }: { content: unknown }) {
-  const text = typeof content === 'string'
-    ? content
-    : Array.isArray(content)
-      ? content.map((c: { text?: string }) => c.text ?? '').join('\n')
-      : JSON.stringify(content);
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content.map((c: { text?: string }) => c.text ?? '').join('\n')
+        : JSON.stringify(content);
 
   return (
     <CollapsibleText
       text={text}
       previewLength={200}
-      className={cn('text-xs text-[var(--theme-text-faint)] pl-2 border-l-2', tintClasses('gray').borderColor)}
+      className={cn(
+        'text-xs text-[var(--theme-text-faint)] pl-2 border-l-2',
+        tintClasses('gray').borderColor,
+      )}
       label="result"
     />
   );
@@ -233,8 +241,8 @@ function UserMessageBlock({ content }: { content: ContentBlock[] }) {
 }
 
 function SystemEventBlock({ data }: { data: Record<string, unknown> }) {
-  const subtype = data.subtype as string ?? '';
-  const description = data.description as string ?? '';
+  const subtype = (data.subtype as string) ?? '';
+  const description = (data.description as string) ?? '';
 
   return (
     <div className="flex items-center gap-2 text-xs text-[var(--theme-text-faint)]">
@@ -252,16 +260,23 @@ function EventBlock({ event }: { event: AgentEvent }) {
 
   switch (event.eventType) {
     case 'execution_start': {
-      const personaName = data?.['personaName'] as string ?? 'Agent';
-      const model = data?.['model'] as string ?? '';
-      const execId = data?.['executionId'] as string ?? '';
+      const personaName = (data?.['personaName'] as string) ?? 'Agent';
+      const model = (data?.['model'] as string) ?? '';
+      const execId = (data?.['executionId'] as string) ?? '';
       const effectiveMode = data?.['effectiveMode'] as string | undefined;
       const resumeSessionId = data?.['resumeSessionId'] as string | null;
       const sdkSessionId = data?.['sdkSessionId'] as string | null; // backfilled for old events
       const ctx = data?.['context'] as Record<string, unknown> | undefined;
       const label = data?.['label'] as string | undefined;
       const startMaxTurns = data?.['maxTurns'] as number | undefined;
-      const modeBadge = effectiveMode === 'talk' ? '🗣 talk' : effectiveMode === 'plan' ? '📋 plan' : effectiveMode === 'edit' ? '📝 edit' : null;
+      const modeBadge =
+        effectiveMode === 'talk'
+          ? '🗣 talk'
+          : effectiveMode === 'plan'
+            ? '📋 plan'
+            : effectiveMode === 'edit'
+              ? '📝 edit'
+              : null;
       return (
         <div className="py-1 space-y-1">
           <div className="flex items-center gap-2 text-[var(--theme-accent)]">
@@ -303,9 +318,10 @@ function EventBlock({ event }: { event: AgentEvent }) {
               <>
                 <div>
                   <span className="text-[var(--theme-text-secondary)]">ticket:</span>{' '}
-                  {ctx['ticketTitle'] as string} ({ctx['ticketStatus'] as string})
-                  {' · '}{ctx['commentsCount'] as number} comments
-                  {' · '}{ctx['deliverablesCount'] as number} deliverables
+                  {ctx['ticketTitle'] as string} ({ctx['ticketStatus'] as string}){' · '}
+                  {ctx['commentsCount'] as number} comments
+                  {' · '}
+                  {ctx['deliverablesCount'] as number} deliverables
                 </div>
                 <div>
                   <span className="text-[var(--theme-text-secondary)]">context:</span>{' '}
@@ -326,7 +342,7 @@ function EventBlock({ event }: { event: AgentEvent }) {
       );
     }
     case 'execution_end': {
-      const status = data?.['status'] as string ?? 'unknown';
+      const status = (data?.['status'] as string) ?? 'unknown';
       const endMode = data?.['effectiveMode'] as string | undefined;
       const durationMs = data?.['durationMs'] as number | undefined;
       const costUsd = data?.['costUsd'] as number | undefined;
@@ -335,15 +351,22 @@ function EventBlock({ event }: { event: AgentEvent }) {
       const numTurns = data?.['numTurns'] as number | undefined;
       const endMaxTurns = data?.['maxTurns'] as number | undefined;
       const turnsExhausted = numTurns != null && endMaxTurns != null && numTurns >= endMaxTurns;
-      const endModeBadge = endMode === 'talk' ? '🗣' : endMode === 'plan' ? '📋' : endMode === 'edit' ? '📝' : '';
+      const endModeBadge =
+        endMode === 'talk' ? '🗣' : endMode === 'plan' ? '📋' : endMode === 'edit' ? '📝' : '';
       return (
         <div className="py-1 space-y-0.5">
-          <div className={cn(
-            'flex items-center gap-2 font-bold',
-            status === 'completed' ? tintText('green') : tintText('red')
-          )}>
+          <div
+            className={cn(
+              'flex items-center gap-2 font-bold',
+              status === 'completed' ? tintText('green') : tintText('red'),
+            )}
+          >
             {status === 'completed' ? '✓ Execution completed' : '✗ Execution failed'}
-            {endModeBadge && <span className="text-xs font-normal text-[var(--theme-text-faint)]">{endModeBadge}</span>}
+            {endModeBadge && (
+              <span className="text-xs font-normal text-[var(--theme-text-faint)]">
+                {endModeBadge}
+              </span>
+            )}
           </div>
           {(durationMs || costUsd || inputTokens || numTurns != null) && (
             <div className="text-[10px] text-[var(--theme-text-faint)] pl-4 flex gap-3">
@@ -352,16 +375,20 @@ function EventBlock({ event }: { event: AgentEvent }) {
                 <span
                   className={cn(turnsExhausted && tintText('yellow'))}
                   title={
-                    'Conversation turns consumed vs the configured budget. A turn is one '
-                    + 'user↔assistant round-trip — a single turn can carry many parallel tool '
-                    + 'calls, so the number of tool actions above is usually much higher.'
+                    'Conversation turns consumed vs the configured budget. A turn is one ' +
+                    'user↔assistant round-trip — a single turn can carry many parallel tool ' +
+                    'calls, so the number of tool actions above is usually much higher.'
                   }
                 >
                   {numTurns} turn{numTurns === 1 ? '' : 's'}
                   {endMaxTurns != null && ` / ${endMaxTurns}`}
                 </span>
               )}
-              {inputTokens != null && outputTokens != null && <span>{inputTokens.toLocaleString()}→{outputTokens.toLocaleString()} tokens</span>}
+              {inputTokens != null && outputTokens != null && (
+                <span>
+                  {inputTokens.toLocaleString()}→{outputTokens.toLocaleString()} tokens
+                </span>
+              )}
               {costUsd != null && <span>${costUsd.toFixed(4)}</span>}
             </div>
           )}
@@ -369,7 +396,7 @@ function EventBlock({ event }: { event: AgentEvent }) {
       );
     }
     case 'message_stop': {
-      const result = data?.['result'] as string ?? '';
+      const result = (data?.['result'] as string) ?? '';
       if (!result) return null;
       return (
         <div className="py-2 px-3 rounded bg-[var(--theme-bg-secondary)] text-[var(--theme-text-primary)] whitespace-pre-wrap">
@@ -378,13 +405,15 @@ function EventBlock({ event }: { event: AgentEvent }) {
       );
     }
     case 'error': {
-      const error = data?.['error'] as string ?? 'Unknown error';
+      const error = (data?.['error'] as string) ?? 'Unknown error';
       // Errors can carry multi-line CLI stderr — render it preformatted,
       // monospace and scrollable so the real reason is readable, not clipped.
       return (
         <div className={cn('py-2 px-3 rounded border', tint('red'))}>
           <div className="font-semibold mb-1">Error</div>
-          <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto m-0">{error}</pre>
+          <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto m-0">
+            {error}
+          </pre>
         </div>
       );
     }
@@ -406,8 +435,8 @@ function EventBlock({ event }: { event: AgentEvent }) {
           <span className="font-semibold">⚠ Turn budget exhausted</span>
           {' — '}
           the agent was stopped after {used ?? budget ?? '?'} turn{used === 1 ? '' : 's'}
-          {budget != null && ` (max ${budget})`}, so its answer may be incomplete.
-          {' '}Raise “Max Agent Turns” in Settings › General to let it run longer.
+          {budget != null && ` (max ${budget})`}, so its answer may be incomplete. Raise “Max Agent
+          Turns” in Settings › General to let it run longer.
         </div>
       );
     }
@@ -451,10 +480,6 @@ function EventBlock({ event }: { event: AgentEvent }) {
       );
     }
     default:
-      return (
-        <div className="text-xs text-[var(--theme-text-faint)]">
-          [{event.eventType}]
-        </div>
-      );
+      return <div className="text-xs text-[var(--theme-text-faint)]">[{event.eventType}]</div>;
   }
 }

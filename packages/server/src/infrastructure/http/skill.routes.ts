@@ -1,9 +1,11 @@
-import type { FastifyInstance } from 'fastify';
-import type { Container } from '../container.js';
 import { SkillNotFoundError } from '../../domain/errors.js';
 
+import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
+
 export function skillRoutes(container: Container) {
-  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) =>
+    container.eventBus.emit(...events);
 
   return async function (app: FastifyInstance) {
     // GET /api/skills — list all skills
@@ -53,10 +55,7 @@ export function skillRoutes(container: Container) {
         personaId?: string;
       };
     }>('/api/skills/:id', async (request) => {
-      const skill = await container.updateSkill.execute(
-        request.params.id,
-        request.body,
-      );
+      const skill = await container.updateSkill.execute(request.params.id, request.body);
       emit({ type: 'skill.updated', skillId: skill.id, occurredAt: new Date() });
       return skill.toDTO();
     });
@@ -90,7 +89,8 @@ export function skillRoutes(container: Container) {
       // Fire-and-forget — execution runs in background like mention execution
       container.executeAgent.executeForSkill(id, ticketId).catch((err) => {
         container.logger.error('Skill execution failed', {
-          skillId: id, ticketId,
+          skillId: id,
+          ticketId,
           error: err instanceof Error ? err.message : String(err),
         });
       });

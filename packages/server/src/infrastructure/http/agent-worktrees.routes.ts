@@ -1,13 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import {
+  buildTicketBranchName,
+  buildTicketWorkspaceId,
+} from '../../domain/services/branch-utils.js';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function agentWorktreesRoutes(container: Container) {
   return async function (app: FastifyInstance) {
-
     // Get worktree linked to a ticket
     app.get<{ Params: { id: string } }>('/tickets/:id/worktree', async (request) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
@@ -80,15 +84,17 @@ export function agentWorktreesRoutes(container: Container) {
         ticket.addLink('worktree', wtPath, branchName, null, linkId);
         await container.ticketStore.saveTicket(ticket);
 
-        await container.ticketStore.saveActivity(TicketActivityEntity.create({
-          id: randomUUID(),
-          ticketId: ticket.id,
-          action: 'linked',
-          changes: { worktree: { from: null, to: wtPath } },
-          source: 'api',
-          actorType: 'agent',
-          actorName: request.agent?.name,
-        }));
+        await container.ticketStore.saveActivity(
+          TicketActivityEntity.create({
+            id: randomUUID(),
+            ticketId: ticket.id,
+            action: 'linked',
+            changes: { worktree: { from: null, to: wtPath } },
+            source: 'api',
+            actorType: 'agent',
+            actorName: request.agent?.name,
+          }),
+        );
 
         const dto = ticket.toDTO();
         container.ticketBroadcast('ticket:updated', dto);

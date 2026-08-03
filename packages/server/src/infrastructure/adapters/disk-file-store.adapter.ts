@@ -1,9 +1,11 @@
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Readable } from 'node:stream';
+
 import { FLEEX_DIR } from '@fleex/shared';
+
 import type { FileStorePort } from '../../application/ports/file-store.port.js';
+import type { Readable } from 'node:stream';
 
 export class DiskFileStoreAdapter implements FileStorePort {
   private readonly dir: string;

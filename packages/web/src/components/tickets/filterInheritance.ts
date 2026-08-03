@@ -1,4 +1,9 @@
-import type { CreateTicketRequest, TicketPriority, TicketType, UpdateTicketRequest } from '@fleex/shared';
+import type {
+  CreateTicketRequest,
+  TicketPriority,
+  TicketType,
+  UpdateTicketRequest,
+} from '@fleex/shared';
 
 /**
  * Subset of the active board filters (`ticketStore.filters`) that a ticket can

@@ -1,8 +1,10 @@
 import type { ClaudeActivityStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
 import type { Session } from '@fleex/shared';
+
 import { tintSolid, tintText } from './tints';
 
-export type DisplayStatus = 'executing' | 'working' | 'needs-approval' | 'idle' | 'unknown' | 'error';
+export type DisplayStatus =
+  'executing' | 'working' | 'needs-approval' | 'idle' | 'unknown' | 'error';
 
 export interface DerivedStatus {
   label: string;
@@ -135,7 +137,13 @@ export function deriveDisplayStatus(session: Session): DerivedStatus {
   if (session.claudeActivity) {
     const activity = session.claudeActivity;
     if (activity === 'executing') {
-      return { label: 'Executing', status: 'executing', dotColor: tintSolid('blue'), textColor: tintText('blue'), warning: false };
+      return {
+        label: 'Executing',
+        status: 'executing',
+        dotColor: tintSolid('blue'),
+        textColor: tintText('blue'),
+        warning: false,
+      };
     }
     if (activity === 'working') return STATUS_WORKING;
     if (WAITING_STATUSES.includes(activity)) return STATUS_NEEDS_APPROVAL;
@@ -155,11 +163,11 @@ export function deriveDisplayStatus(session: Session): DerivedStatus {
 
 const STATUS_PRIORITY: Record<DisplayStatus, number> = {
   'needs-approval': 5,
-  'error': 4,
-  'executing': 3,
-  'working': 2,
-  'idle': 1,
-  'unknown': 0,
+  error: 4,
+  executing: 3,
+  working: 2,
+  idle: 1,
+  unknown: 0,
 };
 
 export function aggregateBranchStatus(sessions: Session[]): DerivedStatus {

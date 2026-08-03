@@ -1,8 +1,10 @@
-import type { RunPanelUseCase } from '../../use-cases/run-panel.js';
-import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
-import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
-import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
 import type { StepOutput } from '@fleex/shared';
+
+import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
+import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
+
+import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
+import type { RunPanelUseCase } from '../../use-cases/run-panel.js';
 
 const STANDARD_KEYS = new Set(['deliverable', 'comment', 'mentionStatus']);
 

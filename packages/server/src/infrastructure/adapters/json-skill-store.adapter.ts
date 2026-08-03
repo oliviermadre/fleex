@@ -1,8 +1,11 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
+
 import { SkillEntity } from '../../domain/entities/skill.entity.js';
-import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
 import type { HostFs } from '../host/types.js';
 
 interface SerializedSkill {
@@ -37,8 +40,7 @@ export class JsonSkillStore implements SkillStorePort {
   }
 
   async getAll(): Promise<SkillEntity[]> {
-    return Array.from(this.skills.values())
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return Array.from(this.skills.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async getById(id: string): Promise<SkillEntity | null> {
@@ -74,11 +76,20 @@ export class JsonSkillStore implements SkillStorePort {
       const raw = await this.hostFs.readFile(this.filePath);
       const data = JSON.parse(raw) as SerializedSkill[];
       for (const s of data) {
-        this.skills.set(s.id, new SkillEntity(
-          s.id, s.commandName, s.name, s.displayName,
-          s.markdownContent, s.enabled, s.personaId,
-          new Date(s.createdAt), new Date(s.updatedAt),
-        ));
+        this.skills.set(
+          s.id,
+          new SkillEntity(
+            s.id,
+            s.commandName,
+            s.name,
+            s.displayName,
+            s.markdownContent,
+            s.enabled,
+            s.personaId,
+            new Date(s.createdAt),
+            new Date(s.updatedAt),
+          ),
+        );
       }
       this.logger.info('Skill store loaded', { count: this.skills.size });
     } catch (err) {
@@ -91,9 +102,15 @@ export class JsonSkillStore implements SkillStorePort {
   private async syncToDisk(): Promise<void> {
     try {
       const data: SerializedSkill[] = Array.from(this.skills.values()).map((s) => ({
-        id: s.id, commandName: s.commandName, name: s.name, displayName: s.displayName,
-        markdownContent: s.markdownContent, enabled: s.enabled, personaId: s.personaId,
-        createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString(),
+        id: s.id,
+        commandName: s.commandName,
+        name: s.name,
+        displayName: s.displayName,
+        markdownContent: s.markdownContent,
+        enabled: s.enabled,
+        personaId: s.personaId,
+        createdAt: s.createdAt.toISOString(),
+        updatedAt: s.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {

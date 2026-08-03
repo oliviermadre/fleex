@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
+
 import type { Ticket } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { isMissingRepo, NO_REPO_TAG, topReposForBoard } from '../../lib/repoStatus';
+
 import { cn } from '../../lib/cn';
+import { isMissingRepo, NO_REPO_TAG, topReposForBoard } from '../../lib/repoStatus';
 import { tint, tintText } from '../../lib/tints';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { MissingRepoIcon } from '../sidebar/icons';
 
 /**
@@ -57,11 +59,18 @@ export function MissingRepoBanner({ ticket }: { ticket: Ticket }) {
   };
 
   return (
-    <div className={cn('mt-3 flex flex-shrink-0 flex-col gap-2 rounded-md border p-3 text-xs', tint('orange'))}>
+    <div
+      className={cn(
+        'mt-3 flex flex-shrink-0 flex-col gap-2 rounded-md border p-3 text-xs',
+        tint('orange'),
+      )}
+    >
       <div className="flex items-center gap-2">
         <MissingRepoIcon size={16} className={cn('flex-shrink-0', tintText('orange'))} />
         <span className="font-medium text-[var(--theme-text-primary)]">Aucun repository lié</span>
-        <span className="text-[var(--theme-text-muted)]">— sans repo, un agent tournera sans codebase.</span>
+        <span className="text-[var(--theme-text-muted)]">
+          — sans repo, un agent tournera sans codebase.
+        </span>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -88,7 +97,9 @@ export function MissingRepoBanner({ ticket }: { ticket: Ticket }) {
           >
             <option value="">Lier un repo…</option>
             {resolvedRepositories.map((r) => (
-              <option key={r} value={r}>{r}</option>
+              <option key={r} value={r}>
+                {r}
+              </option>
             ))}
           </select>
         )}

@@ -1,9 +1,17 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
-import type { TicketGroupTimeframe, TicketGroupStatus, TicketGroupMembership, TicketRelationship } from '@fleex/shared';
+import type {
+  TicketGroupTimeframe,
+  TicketGroupStatus,
+  TicketGroupMembership,
+  TicketRelationship,
+} from '@fleex/shared';
+
 import { TicketGroupEntity } from '../../domain/entities/ticket-group.entity.js';
-import type { TicketGroupStorePort } from '../../application/ports/ticket-group-store.port.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { TicketGroupStorePort } from '../../application/ports/ticket-group-store.port.js';
 import type { HostFs } from '../host/types.js';
 
 interface SerializedTicketGroup {
@@ -22,7 +30,10 @@ interface SerializedTicketGroup {
   updatedAt: string;
 }
 
-interface BoardAssoc { groupId: string; boardId: string }
+interface BoardAssoc {
+  groupId: string;
+  boardId: string;
+}
 
 export class JsonTicketGroupStore implements TicketGroupStorePort {
   private readonly groups = new Map<string, TicketGroupEntity>();
@@ -72,7 +83,9 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
   }
 
   async getTicketGroupsByBoard(boardId: string): Promise<TicketGroupEntity[]> {
-    const groupIds = new Set(this.boardAssociations.filter((a) => a.boardId === boardId).map((a) => a.groupId));
+    const groupIds = new Set(
+      this.boardAssociations.filter((a) => a.boardId === boardId).map((a) => a.groupId),
+    );
     const result: TicketGroupEntity[] = [];
     for (const g of this.groups.values()) {
       if (groupIds.has(g.id)) {
@@ -118,7 +131,9 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
   }
 
   async removeBoardFromGroup(groupId: string, boardId: string): Promise<void> {
-    this.boardAssociations = this.boardAssociations.filter((a) => !(a.groupId === groupId && a.boardId === boardId));
+    this.boardAssociations = this.boardAssociations.filter(
+      (a) => !(a.groupId === groupId && a.boardId === boardId),
+    );
     const g = this.groups.get(groupId);
     if (g) g.boardIds = g.boardIds.filter((id) => id !== boardId);
     await this.syncBoardAssocToDisk();
@@ -143,18 +158,25 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
 
   async removeMembership(ticketId: string, groupId: string): Promise<void> {
     const idx = this.memberships.findIndex((m) => m.ticketId === ticketId && m.groupId === groupId);
-    if (idx >= 0) { this.memberships.splice(idx, 1); await this.syncMembershipsToDisk(); }
+    if (idx >= 0) {
+      this.memberships.splice(idx, 1);
+      await this.syncMembershipsToDisk();
+    }
   }
 
   async removeMembershipsByGroup(groupId: string): Promise<void> {
     let i = this.memberships.length;
-    while (i--) { if (this.memberships[i]!.groupId === groupId) this.memberships.splice(i, 1); }
+    while (i--) {
+      if (this.memberships[i]!.groupId === groupId) this.memberships.splice(i, 1);
+    }
     await this.syncMembershipsToDisk();
   }
 
   async removeMembershipsByTicket(ticketId: string): Promise<void> {
     let i = this.memberships.length;
-    while (i--) { if (this.memberships[i]!.ticketId === ticketId) this.memberships.splice(i, 1); }
+    while (i--) {
+      if (this.memberships[i]!.ticketId === ticketId) this.memberships.splice(i, 1);
+    }
     await this.syncMembershipsToDisk();
   }
 
@@ -176,8 +198,13 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
   }
 
   async removeRelationship(parentId: string, childId: string): Promise<void> {
-    const idx = this.relationships.findIndex((r) => r.parentId === parentId && r.childId === childId);
-    if (idx >= 0) { this.relationships.splice(idx, 1); await this.syncRelationshipsToDisk(); }
+    const idx = this.relationships.findIndex(
+      (r) => r.parentId === parentId && r.childId === childId,
+    );
+    if (idx >= 0) {
+      this.relationships.splice(idx, 1);
+      await this.syncRelationshipsToDisk();
+    }
   }
 
   async removeRelationshipsByTicket(ticketId: string): Promise<void> {
@@ -203,13 +230,27 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
         const items: SerializedTicketGroup[] = JSON.parse(raw);
         for (const g of items) {
           const boardIds = g.boardIds ?? (g.boardId ? [g.boardId] : []);
-          this.groups.set(g.id, new TicketGroupEntity(
-            g.id, boardIds, g.name, g.emoji, g.color, g.description,
-            g.timeframe, g.groupStatus, g.blocked ?? false, g.favorite ?? false,
-            new Date(g.createdAt), new Date(g.updatedAt),
-          ));
+          this.groups.set(
+            g.id,
+            new TicketGroupEntity(
+              g.id,
+              boardIds,
+              g.name,
+              g.emoji,
+              g.color,
+              g.description,
+              g.timeframe,
+              g.groupStatus,
+              g.blocked ?? false,
+              g.favorite ?? false,
+              new Date(g.createdAt),
+              new Date(g.updatedAt),
+            ),
+          );
         }
-      } catch (err) { this.logger.warn('Failed to load ticket groups', { error: String(err) }); }
+      } catch (err) {
+        this.logger.warn('Failed to load ticket groups', { error: String(err) });
+      }
     }
 
     // Board associations
@@ -217,7 +258,9 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
       try {
         const raw = await this.hostFs.readFile(this.boardAssocFile);
         this.boardAssociations.push(...(JSON.parse(raw) as BoardAssoc[]));
-      } catch (err) { this.logger.warn('Failed to load board associations', { error: String(err) }); }
+      } catch (err) {
+        this.logger.warn('Failed to load board associations', { error: String(err) });
+      }
     } else {
       // Migrate: generate from groups' boardId
       for (const g of this.groups.values()) {
@@ -233,7 +276,9 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
       try {
         const raw = await this.hostFs.readFile(this.membershipsFile);
         this.memberships.push(...(JSON.parse(raw) as TicketGroupMembership[]));
-      } catch (err) { this.logger.warn('Failed to load memberships', { error: String(err) }); }
+      } catch (err) {
+        this.logger.warn('Failed to load memberships', { error: String(err) });
+      }
     }
 
     // Relationships
@@ -241,22 +286,35 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
       try {
         const raw = await this.hostFs.readFile(this.relationshipsFile);
         this.relationships.push(...(JSON.parse(raw) as TicketRelationship[]));
-      } catch (err) { this.logger.warn('Failed to load relationships', { error: String(err) }); }
+      } catch (err) {
+        this.logger.warn('Failed to load relationships', { error: String(err) });
+      }
     }
   }
 
   private async syncGroupsToDisk(): Promise<void> {
     const data: SerializedTicketGroup[] = Array.from(this.groups.values()).map((g) => ({
-      id: g.id, boardIds: g.boardIds, name: g.name, emoji: g.emoji, color: g.color,
-      description: g.description, timeframe: g.timeframe, groupStatus: g.groupStatus,
-      blocked: g.blocked, favorite: g.favorite,
-      createdAt: g.createdAt.toISOString(), updatedAt: g.updatedAt.toISOString(),
+      id: g.id,
+      boardIds: g.boardIds,
+      name: g.name,
+      emoji: g.emoji,
+      color: g.color,
+      description: g.description,
+      timeframe: g.timeframe,
+      groupStatus: g.groupStatus,
+      blocked: g.blocked,
+      favorite: g.favorite,
+      createdAt: g.createdAt.toISOString(),
+      updatedAt: g.updatedAt.toISOString(),
     }));
     await this.hostFs.writeFile(this.groupsFile, JSON.stringify(data, null, 2));
   }
 
   private async syncBoardAssocToDisk(): Promise<void> {
-    await this.hostFs.writeFile(this.boardAssocFile, JSON.stringify(this.boardAssociations, null, 2));
+    await this.hostFs.writeFile(
+      this.boardAssocFile,
+      JSON.stringify(this.boardAssociations, null, 2),
+    );
   }
 
   private async syncMembershipsToDisk(): Promise<void> {
@@ -264,6 +322,9 @@ export class JsonTicketGroupStore implements TicketGroupStorePort {
   }
 
   private async syncRelationshipsToDisk(): Promise<void> {
-    await this.hostFs.writeFile(this.relationshipsFile, JSON.stringify(this.relationships, null, 2));
+    await this.hostFs.writeFile(
+      this.relationshipsFile,
+      JSON.stringify(this.relationships, null, 2),
+    );
   }
 }

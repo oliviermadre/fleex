@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
+
 import type { TicketMention, MentionStatus, MentionTargetType } from '@fleex/shared';
-import { selectCrashedMentionCards, CRASH_FALLBACK_MESSAGE, crashReasonLabel } from './crashedMentionCards';
+
+import {
+  selectCrashedMentionCards,
+  CRASH_FALLBACK_MESSAGE,
+  crashReasonLabel,
+} from './crashedMentionCards';
 
 function mention(
   id: string,
@@ -25,17 +31,20 @@ function mention(
 
 describe('selectCrashedMentionCards', () => {
   it('returns [] when no mention has failed', () => {
-    const mentions = [mention('a', 'pending'), mention('b', 'acknowledged'), mention('c', 'resolved')];
+    const mentions = [
+      mention('a', 'pending'),
+      mention('b', 'acknowledged'),
+      mention('c', 'resolved'),
+    ];
     expect(selectCrashedMentionCards(mentions, {})).toEqual([]);
   });
 
   // WHY: the card is what tells the user a crash happened at all — it must appear
   // for every failed agent mention, carrying the live reason/message when known.
   it('surfaces a card for a failed agent mention with its live reason/message', () => {
-    const cards = selectCrashedMentionCards(
-      [mention('a', 'failed')],
-      { a: { reason: 'usage_limit', message: 'Quota épuisé.' } },
-    );
+    const cards = selectCrashedMentionCards([mention('a', 'failed')], {
+      a: { reason: 'usage_limit', message: 'Quota épuisé.' },
+    });
     expect(cards).toHaveLength(1);
     expect(cards[0]!.mention.id).toBe('a');
     expect(cards[0]!.reason).toBe('usage_limit');

@@ -1,7 +1,9 @@
+import { MigrationRunner } from './runner.js';
+
+import { allMigrations } from './index.js';
+
 import type { AdapterType, MigrationContext } from './types.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-import { MigrationRunner } from './runner.js';
-import { allMigrations } from './index.js';
 
 /**
  * Run all pending migrations for the given adapter.
@@ -45,7 +47,20 @@ export async function runPendingMigrations(
       });
     } else {
       // Supabase: use direct PG connection if available, otherwise fall back to REST client
-      const conn = connection as { canExecuteDDL?: boolean; query?(text: string): Promise<{ rows: { name: string }[] }>; client: { from(table: string): { select(cols: string): { order(col: string): Promise<{ data: { name: string }[] | null; error: { code?: string; message?: string } | null }> } } } };
+      const conn = connection as {
+        canExecuteDDL?: boolean;
+        query?(text: string): Promise<{ rows: { name: string }[] }>;
+        client: {
+          from(table: string): {
+            select(cols: string): {
+              order(col: string): Promise<{
+                data: { name: string }[] | null;
+                error: { code?: string; message?: string } | null;
+              }>;
+            };
+          };
+        };
+      };
       if (conn.canExecuteDDL) {
         runner.setQueryRowsFn(async (sql) => {
           const result = await conn.query!(sql);

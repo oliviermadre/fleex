@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
+
 import type { AgentPersona, ExecutionMode } from '@fleex/shared';
+
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+
 import { ModelSelect } from './ModelSelect';
 
 interface AgentConfigTabProps {

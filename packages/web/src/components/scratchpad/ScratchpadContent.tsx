@@ -1,8 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
+
+import { useScrollSync } from '../../hooks/useScrollSync';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
+
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { SaveStatus } from './SaveStatus';
-import { useScrollSync } from '../../hooks/useScrollSync';
 
 interface ScratchpadContentProps {
   /** Logical store key (e.g. 'org/name' for per-repo, '__global__' for global). */
@@ -40,9 +42,19 @@ export function ScratchpadContent({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  const entry = entries[storeKey] ?? { content: '', loaded: false, saving: false, savedAt: null, dirty: false };
+  const entry = entries[storeKey] ?? {
+    content: '',
+    loaded: false,
+    saving: false,
+    savedAt: null,
+    dirty: false,
+  };
 
-  const { handleTyping, handlePreviewScroll } = useScrollSync(textareaRef, previewRef, previewExpanded);
+  const { handleTyping, handlePreviewScroll } = useScrollSync(
+    textareaRef,
+    previewRef,
+    previewExpanded,
+  );
 
   useEffect(() => {
     if (!entry.loaded) load(storeKey);
@@ -81,13 +93,22 @@ export function ScratchpadContent({
       >
         <div className="flex items-center gap-2 min-w-0">
           {!compact && (
-            <svg className="w-4 h-4 text-[var(--theme-accent)] flex-shrink-0" viewBox="0 0 16 16" fill="none">
+            <svg
+              className="w-4 h-4 text-[var(--theme-accent)] flex-shrink-0"
+              viewBox="0 0 16 16"
+              fill="none"
+            >
               <path
                 d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11z"
                 stroke="currentColor"
                 strokeWidth="1.2"
               />
-              <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+              <path
+                d="M5.5 5h5M5.5 7.5h5M5.5 10h3"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinecap="round"
+              />
             </svg>
           )}
           {title && (
@@ -107,7 +128,15 @@ export function ScratchpadContent({
             onClick={togglePreview}
             title="Toggle preview"
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
               <circle cx="8" cy="8" r="2" />
             </svg>
@@ -137,10 +166,7 @@ export function ScratchpadContent({
               onScroll={handlePreviewScroll}
             >
               {entry.content.trim() ? (
-                <MarkdownRenderer
-                  content={entry.content}
-                  onToggleCheckbox={handleToggleCheckbox}
-                />
+                <MarkdownRenderer content={entry.content} onToggleCheckbox={handleToggleCheckbox} />
               ) : (
                 <div className="flex items-center justify-center h-full text-[var(--theme-text-faint)] text-xs">
                   Preview will appear here

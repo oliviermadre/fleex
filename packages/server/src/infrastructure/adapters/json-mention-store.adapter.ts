@@ -1,9 +1,12 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
 import type { MentionExecutionMode, MentionStatus, MentionTargetType } from '@fleex/shared';
+
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
-import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
 import type { HostFs } from '../host/types.js';
 
 interface SerializedMention {
@@ -82,9 +85,9 @@ export class JsonMentionStore implements MentionStorePort {
   }
 
   async getPendingCountForTicket(ticketId: string): Promise<number> {
-    return Array.from(this.mentions.values())
-      .filter((m) => m.ticketId === ticketId && m.status !== 'resolved')
-      .length;
+    return Array.from(this.mentions.values()).filter(
+      (m) => m.ticketId === ticketId && m.status !== 'resolved',
+    ).length;
   }
 
   async getWaitingByTicket(ticketId: string): Promise<TicketMentionEntity[]> {
@@ -109,14 +112,23 @@ export class JsonMentionStore implements MentionStorePort {
       const raw = await this.hostFs.readFile(this.filePath);
       const data = JSON.parse(raw) as SerializedMention[];
       for (const m of data) {
-        this.mentions.set(m.id, new TicketMentionEntity(
-          m.id, m.ticketId, m.commentId, m.targetAgent, m.sourceAgent,
-          m.targetType ?? 'agent',
-          m.executionMode ?? 'plan',
-          m.status, m.resolvedAt ? new Date(m.resolvedAt) : null,
-          m.resolvedCommentId, m.resolvedDeliverableId,
-          new Date(m.createdAt),
-        ));
+        this.mentions.set(
+          m.id,
+          new TicketMentionEntity(
+            m.id,
+            m.ticketId,
+            m.commentId,
+            m.targetAgent,
+            m.sourceAgent,
+            m.targetType ?? 'agent',
+            m.executionMode ?? 'plan',
+            m.status,
+            m.resolvedAt ? new Date(m.resolvedAt) : null,
+            m.resolvedCommentId,
+            m.resolvedDeliverableId,
+            new Date(m.createdAt),
+          ),
+        );
       }
       this.logger.info('Mention store loaded', { count: this.mentions.size });
     } catch (err) {
@@ -129,10 +141,15 @@ export class JsonMentionStore implements MentionStorePort {
   private async syncToDisk(): Promise<void> {
     try {
       const data: SerializedMention[] = Array.from(this.mentions.values()).map((m) => ({
-        id: m.id, ticketId: m.ticketId, commentId: m.commentId,
-        targetAgent: m.targetAgent, sourceAgent: m.sourceAgent,
-        targetType: m.targetType, executionMode: m.executionMode,
-        status: m.status, resolvedAt: m.resolvedAt?.toISOString() ?? null,
+        id: m.id,
+        ticketId: m.ticketId,
+        commentId: m.commentId,
+        targetAgent: m.targetAgent,
+        sourceAgent: m.sourceAgent,
+        targetType: m.targetType,
+        executionMode: m.executionMode,
+        status: m.status,
+        resolvedAt: m.resolvedAt?.toISOString() ?? null,
         resolvedCommentId: m.resolvedCommentId,
         resolvedDeliverableId: m.resolvedDeliverableId,
         createdAt: m.createdAt.toISOString(),

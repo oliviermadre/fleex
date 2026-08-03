@@ -1,12 +1,18 @@
-import { join } from 'node:path';
-import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
+
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+
 import type { SqliteConnection } from './connection.js';
+import type {
+  AgentEventStorePort,
+  CliExecutionUpsert,
+} from '../../../application/ports/agent-event-store.port.js';
 
 interface ExecutionRow {
   execution_id: string;
@@ -56,20 +62,24 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     effort?: string;
     fast?: boolean;
   }): Promise<void> {
-    this.conn.db.prepare(`
+    this.conn.db
+      .prepare(
+        `
       INSERT INTO agent_event_executions
         (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model, effort, fast_mode)
       VALUES (@execution_id, @persona_id, @ticket_id, @mention_id, 0, 'running', @started_at, @model, @effort, @fast_mode)
-    `).run({
-      execution_id: params.executionId,
-      persona_id: params.personaId,
-      ticket_id: params.ticketId,
-      mention_id: params.mentionId,
-      started_at: new Date().toISOString(),
-      model: params.model ?? null,
-      effort: params.effort ?? null,
-      fast_mode: params.fast == null ? null : params.fast ? 1 : 0,
-    });
+    `,
+      )
+      .run({
+        execution_id: params.executionId,
+        persona_id: params.personaId,
+        ticket_id: params.ticketId,
+        mention_id: params.mentionId,
+        started_at: new Date().toISOString(),
+        model: params.model ?? null,
+        effort: params.effort ?? null,
+        fast_mode: params.fast == null ? null : params.fast ? 1 : 0,
+      });
   }
 
   async appendEvent(event: AgentEventEntity): Promise<void> {
@@ -77,18 +87,34 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     const line = JSON.stringify(event.toDTO()) + '\n';
     await appendFile(filePath, line, 'utf-8');
 
-    this.conn.db.prepare(
-      'UPDATE agent_event_executions SET event_count = event_count + 1, last_event_at = ? WHERE execution_id = ?'
-    ).run(new Date().toISOString(), event.executionId);
+    this.conn.db
+      .prepare(
+        'UPDATE agent_event_executions SET event_count = event_count + 1, last_event_at = ? WHERE execution_id = ?',
+      )
+      .run(new Date().toISOString(), event.executionId);
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
-    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string;
-  }): Promise<void> {
-    this.conn.db.prepare(
-      `UPDATE agent_event_executions SET status = ?, completed_at = ?,
+  async completeExecution(
+    executionId: string,
+    status: 'completed' | 'failed' | 'interrupted',
+    metrics?: {
+      model?: string;
+      effectiveMode?: string;
+      effort?: string;
+      fast?: boolean;
+      durationMs?: number;
+      costUsd?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+      commentId?: string;
+      deliverableId?: string;
+    },
+  ): Promise<void> {
+    this.conn.db
+      .prepare(
+        `UPDATE agent_event_executions SET status = ?, completed_at = ?,
        model = COALESCE(?, model),
        effective_mode = COALESCE(?, effective_mode),
        effort = COALESCE(?, effort),
@@ -101,32 +127,39 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
        cache_creation_tokens = COALESCE(?, cache_creation_tokens),
        comment_id = COALESCE(?, comment_id),
        deliverable_id = COALESCE(?, deliverable_id)
-       WHERE execution_id = ?`
-    ).run(
-      status, new Date().toISOString(),
-      metrics?.model ?? null,
-      metrics?.effectiveMode ?? null,
-      metrics?.effort ?? null,
-      metrics?.fast == null ? null : metrics.fast ? 1 : 0,
-      metrics?.durationMs ?? null,
-      metrics?.costUsd ?? null,
-      metrics?.inputTokens ?? null,
-      metrics?.outputTokens ?? null,
-      metrics?.cacheReadTokens ?? null,
-      metrics?.cacheCreationTokens ?? null,
-      metrics?.commentId ?? null,
-      metrics?.deliverableId ?? null,
-      executionId,
-    );
+       WHERE execution_id = ?`,
+      )
+      .run(
+        status,
+        new Date().toISOString(),
+        metrics?.model ?? null,
+        metrics?.effectiveMode ?? null,
+        metrics?.effort ?? null,
+        metrics?.fast == null ? null : metrics.fast ? 1 : 0,
+        metrics?.durationMs ?? null,
+        metrics?.costUsd ?? null,
+        metrics?.inputTokens ?? null,
+        metrics?.outputTokens ?? null,
+        metrics?.cacheReadTokens ?? null,
+        metrics?.cacheCreationTokens ?? null,
+        metrics?.commentId ?? null,
+        metrics?.deliverableId ?? null,
+        executionId,
+      );
   }
 
-  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
-    this.conn.db.prepare(
-      `UPDATE agent_event_executions SET
+  async setExecutionOutputs(
+    executionId: string,
+    refs: { commentId?: string; deliverableId?: string },
+  ): Promise<void> {
+    this.conn.db
+      .prepare(
+        `UPDATE agent_event_executions SET
        comment_id = COALESCE(?, comment_id),
        deliverable_id = COALESCE(?, deliverable_id)
-       WHERE execution_id = ?`
-    ).run(refs.commentId ?? null, refs.deliverableId ?? null, executionId);
+       WHERE execution_id = ?`,
+      )
+      .run(refs.commentId ?? null, refs.deliverableId ?? null, executionId);
   }
 
   async getEventsByExecution(executionId: string): Promise<AgentEventEntity[]> {
@@ -139,10 +172,16 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       if (!line.trim()) continue;
       try {
         const dto = JSON.parse(line);
-        events.push(new AgentEventEntity(
-          dto.id, dto.executionId, dto.eventType,
-          dto.data, dto.sequence, new Date(dto.createdAt),
-        ));
+        events.push(
+          new AgentEventEntity(
+            dto.id,
+            dto.executionId,
+            dto.eventType,
+            dto.data,
+            dto.sequence,
+            new Date(dto.createdAt),
+          ),
+        );
       } catch {
         // Skip malformed lines
       }
@@ -159,7 +198,9 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
 
   async getExecutionsByPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
     const rows = this.conn.db
-      .prepare('SELECT * FROM agent_event_executions WHERE persona_id = ? ORDER BY started_at DESC LIMIT ?')
+      .prepare(
+        'SELECT * FROM agent_event_executions WHERE persona_id = ? ORDER BY started_at DESC LIMIT ?',
+      )
       .all(personaId, limit) as ExecutionRow[];
     return rows.map(rowToExecution);
   }
@@ -172,13 +213,15 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
   }
 
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
-    this.conn.db.prepare(
-      'UPDATE agent_event_executions SET sdk_session_id = ? WHERE execution_id = ?'
-    ).run(sdkSessionId, executionId);
+    this.conn.db
+      .prepare('UPDATE agent_event_executions SET sdk_session_id = ? WHERE execution_id = ?')
+      .run(sdkSessionId, executionId);
   }
 
   async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
-    this.conn.db.prepare(`
+    this.conn.db
+      .prepare(
+        `
       INSERT INTO agent_event_executions
         (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at,
          completed_at, sdk_session_id, model, duration_ms, cost_usd, input_tokens,
@@ -192,21 +235,23 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
         input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
         cache_read_tokens = excluded.cache_read_tokens,
         cache_creation_tokens = excluded.cache_creation_tokens, source = 'cli'
-    `).run({
-      execution_id: p.executionId,
-      ticket_id: p.ticketId,
-      mention_id: p.mentionId,
-      started_at: p.startedAt,
-      completed_at: p.completedAt,
-      sdk_session_id: p.sdkSessionId,
-      model: p.model,
-      duration_ms: p.durationMs,
-      cost_usd: p.costUsd,
-      input_tokens: p.inputTokens,
-      output_tokens: p.outputTokens,
-      cache_read_tokens: p.cacheReadTokens,
-      cache_creation_tokens: p.cacheCreationTokens,
-    });
+    `,
+      )
+      .run({
+        execution_id: p.executionId,
+        ticket_id: p.ticketId,
+        mention_id: p.mentionId,
+        started_at: p.startedAt,
+        completed_at: p.completedAt,
+        sdk_session_id: p.sdkSessionId,
+        model: p.model,
+        duration_ms: p.durationMs,
+        cost_usd: p.costUsd,
+        input_tokens: p.inputTokens,
+        output_tokens: p.outputTokens,
+        cache_read_tokens: p.cacheReadTokens,
+        cache_creation_tokens: p.cacheCreationTokens,
+      });
   }
 
   async markInterruptedExecutions(): Promise<string[]> {
@@ -214,28 +259,38 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       .prepare("SELECT mention_id FROM agent_event_executions WHERE status = 'running'")
       .all() as { mention_id: string }[];
 
-    this.conn.db.prepare(
-      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = ? WHERE status = 'running'"
-    ).run(new Date().toISOString());
+    this.conn.db
+      .prepare(
+        "UPDATE agent_event_executions SET status = 'interrupted', completed_at = ? WHERE status = 'running'",
+      )
+      .run(new Date().toISOString());
 
     return rows.map((r) => r.mention_id);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<
+    Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>
+  > {
     const rows = this.conn.db
-      .prepare(`
+      .prepare(
+        `
         SELECT persona_id, ticket_id, sdk_session_id
         FROM agent_event_executions
         WHERE sdk_session_id IS NOT NULL
         ORDER BY started_at DESC
-      `)
+      `,
+      )
       .all() as { persona_id: string; ticket_id: string; sdk_session_id: string }[];
 
     const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
     for (const row of rows) {
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
-        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });
+        result.set(key, {
+          sdkSessionId: row.sdk_session_id,
+          personaId: row.persona_id,
+          ticketId: row.ticket_id,
+        });
       }
     }
     return result;

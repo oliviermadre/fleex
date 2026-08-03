@@ -1,10 +1,20 @@
-import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
+import type {
+  TicketStatus,
+  TicketLinkType,
+  TicketLink,
+  TicketPriority,
+  TicketType,
+  GitHubIssueMetadata,
+  ConversationMode,
+} from '@fleex/shared';
 import { isEffortLevel } from '@fleex/shared';
+
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
-import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
-import type { TicketStorePort } from '../../../application/ports/ticket-store.port.js';
+import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { TicketStorePort } from '../../../application/ports/ticket-store.port.js';
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, none: 3 };
 const MAX_ACTIVITY_ENTRIES = 5000;
@@ -62,13 +72,7 @@ interface ActivityRow {
 // ── Row-to-entity mappers ───────────────────────────────────────────────────
 
 function boardRowToEntity(r: BoardRow): BoardEntity {
-  return new BoardEntity(
-    r.id,
-    r.name,
-    r.emoji,
-    new Date(r.created_at),
-    new Date(r.updated_at),
-  );
+  return new BoardEntity(r.id, r.name, r.emoji, new Date(r.created_at), new Date(r.updated_at));
 }
 
 function ticketRowToEntity(r: TicketRow): TicketEntity {
@@ -123,9 +127,7 @@ export class SupabaseTicketStore implements TicketStorePort {
   // ── Boards ──
 
   async getAllBoards(): Promise<BoardEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('boards')
-      .select('*');
+    const { data, error } = await this.conn.client.from('boards').select('*');
     if (error) throw new Error(`SupabaseTicketStore.getAllBoards failed: ${error.message}`);
     return (data as BoardRow[]).map(boardRowToEntity);
   }
@@ -152,10 +154,7 @@ export class SupabaseTicketStore implements TicketStorePort {
   }
 
   async removeBoard(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('boards')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('boards').delete().eq('id', id);
     if (error) throw new Error(`SupabaseTicketStore.removeBoard failed: ${error.message}`);
   }
 
@@ -218,9 +217,7 @@ export class SupabaseTicketStore implements TicketStorePort {
   async getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]> {
     // Supabase JS client doesn't easily support JSONB containment operators,
     // so we fetch all tickets and filter in JS.
-    const { data, error } = await this.conn.client
-      .from('tickets')
-      .select('*');
+    const { data, error } = await this.conn.client.from('tickets').select('*');
     if (error) throw new Error(`SupabaseTicketStore.getTicketsLinkedTo failed: ${error.message}`);
     return (data as TicketRow[])
       .map(ticketRowToEntity)
@@ -297,18 +294,12 @@ export class SupabaseTicketStore implements TicketStorePort {
   }
 
   async removeTicket(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('tickets')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('tickets').delete().eq('id', id);
     if (error) throw new Error(`SupabaseTicketStore.removeTicket failed: ${error.message}`);
   }
 
   async removeTicketsByBoard(boardId: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('tickets')
-      .delete()
-      .eq('board_id', boardId);
+    const { error } = await this.conn.client.from('tickets').delete().eq('board_id', boardId);
     if (error) throw new Error(`SupabaseTicketStore.removeTicketsByBoard failed: ${error.message}`);
   }
 
@@ -329,7 +320,8 @@ export class SupabaseTicketStore implements TicketStorePort {
     }
 
     const { data, error } = await query;
-    if (error) throw new Error(`SupabaseTicketStore.getNextTicketForAgent failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseTicketStore.getNextTicketForAgent failed: ${error.message}`);
 
     const candidates = (data as TicketRow[]).map(ticketRowToEntity);
 
@@ -411,10 +403,7 @@ export class SupabaseTicketStore implements TicketStorePort {
 
       const ids = oldest.map((r: { id: string }) => r.id);
       if (ids.length > 0) {
-        await this.conn.client
-          .from('ticket_activities')
-          .delete()
-          .in('id', ids);
+        await this.conn.client.from('ticket_activities').delete().in('id', ids);
       }
     }
   }
@@ -426,7 +415,8 @@ export class SupabaseTicketStore implements TicketStorePort {
       .eq('ticket_id', ticketId)
       .order('created_at', { ascending: false })
       .limit(limit);
-    if (error) throw new Error(`SupabaseTicketStore.getActivitiesByTicket failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseTicketStore.getActivitiesByTicket failed: ${error.message}`);
     return (data as ActivityRow[]).map(activityRowToEntity);
   }
 
@@ -453,7 +443,10 @@ export class SupabaseTicketStore implements TicketStorePort {
     }
 
     const { data, error } = await query;
-    if (error) throw new Error(`SupabaseTicketStore.searchTicketsByActivityFilters failed: ${error.message}`);
+    if (error)
+      throw new Error(
+        `SupabaseTicketStore.searchTicketsByActivityFilters failed: ${error.message}`,
+      );
     return (data as ActivityRow[]).map(activityRowToEntity);
   }
 }

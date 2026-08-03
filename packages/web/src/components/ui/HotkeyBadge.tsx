@@ -15,7 +15,12 @@ const positionClasses: Record<string, string> = {
   inline: 'relative ml-1.5',
 };
 
-export function HotkeyBadge({ hotkey, visible, position = 'top-right', className }: HotkeyBadgeProps) {
+export function HotkeyBadge({
+  hotkey,
+  visible,
+  position = 'top-right',
+  className,
+}: HotkeyBadgeProps) {
   const altHeld = useUIStore((s) => s.altHeld);
   const isVisible = visible !== undefined ? visible : altHeld;
 

@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { AddRepositoriesModal } from './AddRepositoriesModal';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import * as api from '../../services/api';
+import { useSettingsStore } from '../../stores/settingsStore';
+
+import { AddRepositoriesModal } from './AddRepositoriesModal';
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/api')>()),
@@ -12,10 +14,13 @@ vi.mock('../../services/api', async (importOriginal) => ({
 
 const discovery = {
   owners: [
-    { login: 'acme', repos: [
-      { nameWithOwner: 'acme/app', visibility: 'private', updatedAt: '2026-07-18T00:00:00Z' },
-      { nameWithOwner: 'acme/lib', visibility: 'public', updatedAt: '2026-07-01T00:00:00Z' },
-    ] },
+    {
+      login: 'acme',
+      repos: [
+        { nameWithOwner: 'acme/app', visibility: 'private', updatedAt: '2026-07-18T00:00:00Z' },
+        { nameWithOwner: 'acme/lib', visibility: 'public', updatedAt: '2026-07-01T00:00:00Z' },
+      ],
+    },
   ],
   totalRepos: 2,
 };
@@ -25,7 +30,10 @@ describe('AddRepositoriesModal', () => {
     vi.mocked(api.fetchGithubDiscovery).mockResolvedValue(discovery);
     useSettingsStore.setState((s) => ({ settings: { ...s.settings, repositories: ['acme/app'] } }));
   });
-  afterEach(() => { cleanup(); vi.clearAllMocks(); });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
 
   it('marks tracked repos and lets you select the rest', async () => {
     render(<AddRepositoriesModal open onClose={() => {}} />);

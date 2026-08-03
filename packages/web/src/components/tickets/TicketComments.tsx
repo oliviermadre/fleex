@@ -1,43 +1,62 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
-import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel, StepRun, WorkflowStep, WorkflowRun, MentionExecutionFailedPayload } from '@fleex/shared';
-import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
-import { tint, tintText, tintClasses } from '../../lib/tints';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import type { Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
+import type {
+  TicketComment,
+  TicketDeliverable,
+  TicketMention,
+  TicketWsMessage,
+  ConversationMode,
+  EffortLevel,
+  StepRun,
+  WorkflowStep,
+  WorkflowRun,
+  MentionExecutionFailedPayload,
+} from '@fleex/shared';
+
+import { useColorMode } from '../../hooks/useActiveTheme';
+import { useCommentDraft } from '../../hooks/useCommentDraft';
+import { useFileUpload } from '../../hooks/useFileUpload';
+import { useModels } from '../../hooks/useModels';
+import { useStickToBottom } from '../../hooks/useStickToBottom';
+import { MentionTypeIcon } from '../../lib/primitives';
+import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
+import { tint, tintText, tintClasses } from '../../lib/tints';
+import * as api from '../../services/api';
 import { appWs } from '../../services/websocket';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { usePanelStore } from '../../stores/panelStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useSkillStore } from '../../stores/skillStore';
-import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useToastStore } from '../../stores/toastStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { ModelSelect } from '../agents/ModelSelect';
+import { preprocessMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { TicketMentionChip } from '../markdown/TicketMentionChip';
+import {
+  ImageGalleryStrip,
+  ImagePlaceholder,
+  extractMarkdownImages,
+} from '../shared/ImageThumbnail';
+import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
 import { selectWaitingInputCards } from '../workflows/waitingInputCards';
+
 import { selectCrashedMentionCards, crashReasonLabel } from './crashedMentionCards';
-import { ModelSelect } from '../agents/ModelSelect';
-import { useTicketStore } from '../../stores/ticketStore';
-import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
-import { useModels } from '../../hooks/useModels';
-import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { FloatingExecutionPanel } from './ExecutionModal';
-import { useUnreadStore } from '../../stores/unreadStore';
-import { useUIStore } from '../../stores/uiStore';
-import { useToastStore } from '../../stores/toastStore';
-import { Modal } from '../ui/Modal';
-import { Button } from '../ui/Button';
-import { MentionTypeIcon } from '../../lib/primitives';
-import * as api from '../../services/api';
-import { useFileUpload } from '../../hooks/useFileUpload';
-import { useCommentDraft } from '../../hooks/useCommentDraft';
-import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
-import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
-import { useColorMode } from '../../hooks/useActiveTheme';
-import { preprocessMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
-import { TicketMentionChip } from '../markdown/TicketMentionChip';
+
+import type { Components } from 'react-markdown';
 
 /** Per-mode color for the conversation execution-mode pill. */
 const MODE_PILL_CLASS: Record<ConversationMode, string> = {
@@ -61,7 +80,12 @@ function InfoHint({ text }: { text: string }) {
         aria-label={text}
         className="inline-flex cursor-help items-center text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-secondary)] focus:outline-none focus-visible:text-[var(--theme-text-secondary)]"
       >
-        <svg className="h-[15px] w-[15px]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <svg
+          className="h-[15px] w-[15px]"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
           <path
             fillRule="evenodd"
             d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9zm1-4.25a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5z"
@@ -90,7 +114,14 @@ function buildMentionLookup(mentions: TicketMention[]): Map<string, Map<string, 
       map = new Map();
       lookup.set(m.commentId, map);
     }
-    const text = m.targetType === 'human' ? `@${m.targetAgent}` : m.targetType === 'panel' ? `@panel:${m.targetAgent}` : m.targetType === 'skill' ? `@skill:${m.targetAgent}` : `@agent:${m.targetAgent}`;
+    const text =
+      m.targetType === 'human'
+        ? `@${m.targetAgent}`
+        : m.targetType === 'panel'
+          ? `@panel:${m.targetAgent}`
+          : m.targetType === 'skill'
+            ? `@skill:${m.targetAgent}`
+            : `@agent:${m.targetAgent}`;
     map.set(text, m.id);
   }
   return lookup;
@@ -115,22 +146,38 @@ function parseAgentMentions(body: string): string[] {
 // MarkdownRenderer, which uses the ticket-only variant). It now also encodes
 // @ticket:<id> mentions, handled below in the `a` override via #fleex-ticket:.
 
-function MentionSpan({ text, mentionId, onRemove, className }: {
+function MentionSpan({
+  text,
+  mentionId,
+  onRemove,
+  className,
+}: {
   text: string;
   mentionId: string | undefined;
   onRemove: (id: string) => void;
   className: string;
 }) {
   return (
-    <span className={`group/mention relative inline-flex items-center rounded-sm px-1 py-px ${className}`}>
+    <span
+      className={`group/mention relative inline-flex items-center rounded-sm px-1 py-px ${className}`}
+    >
       {text}
       {mentionId && (
         <button
           className={`ml-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full opacity-0 transition-opacity group-hover/mention:opacity-100 ${tintClasses('red').hoverBg}`}
-          onClick={(e) => { e.stopPropagation(); onRemove(mentionId); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(mentionId);
+          }}
           title="Remove mention"
         >
-          <svg className="h-2 w-2 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <svg
+            className="h-2 w-2 text-current"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={3}
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
@@ -147,12 +194,18 @@ function isUrl(text: string): boolean {
 
 function deliverableTypeLabel(type: string): string {
   switch (type) {
-    case 'prd': return 'PRD';
-    case 'spec': return 'SPEC';
-    case 'url': return 'URL';
-    case 'pr': return 'PR';
-    case 'plan': return 'PLAN';
-    default: return type.toUpperCase().slice(0, 4);
+    case 'prd':
+      return 'PRD';
+    case 'spec':
+      return 'SPEC';
+    case 'url':
+      return 'URL';
+    case 'pr':
+      return 'PR';
+    case 'plan':
+      return 'PLAN';
+    default:
+      return type.toUpperCase().slice(0, 4);
   }
 }
 
@@ -161,28 +214,56 @@ function deliverableTypeLabel(type: string): string {
  * (via its mention's resolvedDeliverableId). Clicking opens the same overlay as
  * the Deliverables tab.
  */
-function DeliverableChip({ deliverable, onOpen }: {
+function DeliverableChip({
+  deliverable,
+  onOpen,
+}: {
   deliverable: TicketDeliverable;
   onOpen: (d: TicketDeliverable) => void;
 }) {
   return (
     <button
       type="button"
-      onClick={(e) => { e.stopPropagation(); onOpen(deliverable); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen(deliverable);
+      }}
       title={deliverable.title}
       className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
     >
       <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1 py-0.5 text-[10px] font-bold tracking-wider text-[var(--theme-accent)]">
         {deliverableTypeLabel(deliverable.type)}
       </span>
-      <span className="truncate font-medium text-[var(--theme-text-primary)]">{deliverable.title}</span>
+      <span className="truncate font-medium text-[var(--theme-text-primary)]">
+        {deliverable.title}
+      </span>
       {isUrl(deliverable.content) ? (
-        <svg className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        <svg
+          className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+          />
         </svg>
       ) : (
-        <svg className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        <svg
+          className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
         </svg>
       )}
     </button>
@@ -328,13 +409,19 @@ export const CommentMarkdown = memo(function CommentMarkdown({
       <h1 className="text-base font-bold mt-3 mb-1 text-[var(--theme-text-primary)]">{children}</h1>
     ),
     h2: ({ children }) => (
-      <h2 className="text-sm font-semibold mt-2 mb-0.5 text-[var(--theme-text-primary)]">{children}</h2>
+      <h2 className="text-sm font-semibold mt-2 mb-0.5 text-[var(--theme-text-primary)]">
+        {children}
+      </h2>
     ),
     h3: ({ children }) => (
-      <h3 className="text-sm font-medium mt-1.5 mb-0.5 text-[var(--theme-text-primary)]">{children}</h3>
+      <h3 className="text-sm font-medium mt-1.5 mb-0.5 text-[var(--theme-text-primary)]">
+        {children}
+      </h3>
     ),
     h4: ({ children }) => (
-      <h4 className="text-xs font-medium mt-1.5 mb-0.5 text-[var(--theme-text-secondary)]">{children}</h4>
+      <h4 className="text-xs font-medium mt-1.5 mb-0.5 text-[var(--theme-text-secondary)]">
+        {children}
+      </h4>
     ),
     h5: ({ children }) => (
       <h5 className="text-xs font-medium mt-1 text-[var(--theme-text-secondary)]">{children}</h5>
@@ -344,7 +431,9 @@ export const CommentMarkdown = memo(function CommentMarkdown({
     ),
 
     p: ({ children }) => (
-      <p className="py-0.5 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{children}</p>
+      <p className="py-0.5 text-sm leading-relaxed text-[var(--theme-text-secondary)]">
+        {children}
+      </p>
     ),
 
     blockquote: ({ children }) => (
@@ -427,7 +516,6 @@ export const CommentMarkdown = memo(function CommentMarkdown({
         {children}
       </td>
     ),
-
   };
 
   return (
@@ -504,7 +592,10 @@ function MentionAutocomplete({
               ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-text-primary)]'
               : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
           }`}
-          onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onSelect(opt);
+          }}
         >
           <MentionTypeIcon type={opt.type} />
           <span className="flex-1 truncate font-medium">{opt.label}</span>
@@ -538,7 +629,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   //  - 'busy'    : agent has a queued/in-flight run → supersede vs queue.
   //  - 'waiting' : agent is waiting_for_info → is this the answer, or a new subject?
   const [conflictModal, setConflictModal] = useState<
-    | { kind: 'busy'; agents: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> }
+    | {
+        kind: 'busy';
+        agents: Array<{ agent: string; displayName: string; status: TicketMention['status'] }>;
+      }
     | { kind: 'waiting'; agents: Array<{ agent: string; displayName: string }> }
     | null
   >(null);
@@ -580,14 +674,19 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   // reject xhigh/max, and an unsupported level is a 400. Fall back to local
   // inference if the model list predates the effortLevels field.
   const effortLevels = useMemo(
-    () => (modelOverride ? overriddenModel?.effortLevels ?? inferModelCapabilities(modelOverride).effortLevels : []),
+    () =>
+      modelOverride
+        ? (overriddenModel?.effortLevels ?? inferModelCapabilities(modelOverride).effortLevels)
+        : [],
     [modelOverride, overriddenModel],
   );
   const showEffort = effortLevels.length > 0;
   const showFast = overriddenModel?.supportsFastMode === true;
   // What will actually run: a stored level above this model's ceiling is clamped
   // down, so show the clamped value rather than a phantom selection.
-  const effectiveEffort = modelOverride ? resolveEffortLevel(modelOverride, effortOverride) ?? '' : '';
+  const effectiveEffort = modelOverride
+    ? (resolveEffortLevel(modelOverride, effortOverride) ?? '')
+    : '';
 
   const patchExecConfig = useCallback(
     (req: import('@fleex/shared').UpdateTicketExecutionConfigRequest) => {
@@ -624,7 +723,8 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
   const humanMentionName = useSettingsStore(
-    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
+    (s) =>
+      (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
   // All loaded tickets — powers the @ticket: autocomplete (filtered client-side).
   const allTickets = useTicketStore((s) => s.tickets);
@@ -636,7 +736,14 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     // when the comments mount. Cheap and avoids stale autocomplete data after
     // creating a new workflow elsewhere in the session.
     if (workflowTemplates.length === 0) void refreshWorkflowTemplates();
-  }, [panelsLoaded, loadPanels, skillsLoaded, loadSkills, workflowTemplates.length, refreshWorkflowTemplates]);
+  }, [
+    panelsLoaded,
+    loadPanels,
+    skillsLoaded,
+    loadSkills,
+    workflowTemplates.length,
+    refreshWorkflowTemplates,
+  ]);
 
   // Agent "is working" indicator
   const executionsByTicket = useAgentEventStore((s) => s.executionsByTicket);
@@ -647,7 +754,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   useEffect(() => {
     loadExecutionsForTicket(ticketId);
     subscribeTicket(ticketId);
-    return () => { unsubscribeTicket(ticketId); };
+    return () => {
+      unsubscribeTicket(ticketId);
+    };
   }, [ticketId, loadExecutionsForTicket, subscribeTicket, unsubscribeTicket]);
 
   const runningAgents = useMemo(() => {
@@ -665,7 +774,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       .filter((m) => m.status === 'waiting_for_info' && m.targetType === 'agent')
       .map((m) => {
         const persona = personas.find((p) => p.name === m.targetAgent);
-        return { name: persona?.displayName || persona?.name || m.targetAgent, mentionId: m.id, mode: m.executionMode };
+        return {
+          name: persona?.displayName || persona?.name || m.targetAgent,
+          mentionId: m.id,
+          mode: m.executionMode,
+        };
       });
   }, [mentions, personas]);
 
@@ -744,18 +857,28 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const seenDeliverables = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
   const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
 
-  const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
-    if (!seenDeliverables?.has(d.id)) {
-      toggleDeliverableSeen(ticketId, d.id, true).catch(() => {});
-    }
-    if (isUrl(d.content)) {
-      window.open(d.content.trim(), '_blank', 'noopener');
-    } else if (floatingDeliverableIds.includes(d.id)) {
-      bringDeliverableToFront(d.id);
-    } else {
-      openDeliverableOverlay(d);
-    }
-  }, [ticketId, seenDeliverables, toggleDeliverableSeen, floatingDeliverableIds, bringDeliverableToFront, openDeliverableOverlay]);
+  const handleOpenDeliverable = useCallback(
+    (d: TicketDeliverable) => {
+      if (!seenDeliverables?.has(d.id)) {
+        toggleDeliverableSeen(ticketId, d.id, true).catch(() => {});
+      }
+      if (isUrl(d.content)) {
+        window.open(d.content.trim(), '_blank', 'noopener');
+      } else if (floatingDeliverableIds.includes(d.id)) {
+        bringDeliverableToFront(d.id);
+      } else {
+        openDeliverableOverlay(d);
+      }
+    },
+    [
+      ticketId,
+      seenDeliverables,
+      toggleDeliverableSeen,
+      floatingDeliverableIds,
+      bringDeliverableToFront,
+      openDeliverableOverlay,
+    ],
+  );
 
   // Map each comment (the agent's resolved/result comment) to its linked deliverables.
   // Two link paths are unioned so chips appear regardless of what produced the comment:
@@ -768,7 +891,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     const map = new Map<string, TicketDeliverable[]>();
     const addLink = (commentId: string, d: TicketDeliverable) => {
       const arr = map.get(commentId);
-      if (!arr) { map.set(commentId, [d]); return; }
+      if (!arr) {
+        map.set(commentId, [d]);
+        return;
+      }
       if (!arr.some((x) => x.id === d.id)) arr.push(d); // dedup: both paths can name the same pair
     };
     for (const m of mentions) {
@@ -807,7 +933,6 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     }
     // workflowDetail intentionally excluded: loadWorkflowDetail writes to it, so
     // depending on it would re-fire this effect in a loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowRuns, loadWorkflowDetail]);
 
   interface GateCard {
@@ -845,7 +970,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         const exec = execById.get(sr.executionId);
         if (!exec?.deliverableId) continue;
         const del = deliverableById.get(exec.deliverableId);
-        if (del && !seen.has(del.id)) { seen.add(del.id); reviewDeliverables.push(del); }
+        if (del && !seen.has(del.id)) {
+          seen.add(del.id);
+          reviewDeliverables.push(del);
+        }
       }
 
       // Only the latest attempt of each step can be "awaiting" a decision.
@@ -858,8 +986,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         if (sr.status !== 'needs_review') continue;
         const step = stepById.get(sr.stepId);
         if (!step || step.executorType !== 'human_gate') continue;
-        const outcomes = (sr.output?.schemaFields?.outcomes as string[] | undefined)
-          ?? step.humanGateOutcomes ?? [];
+        const outcomes =
+          (sr.output?.schemaFields?.outcomes as string[] | undefined) ??
+          step.humanGateOutcomes ??
+          [];
         cards.push({ run, step, stepRun: sr, outcomes, reviewDeliverables });
       }
     }
@@ -896,7 +1026,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     const execs = executionsByTicket[ticketId] ?? [];
     for (const e of execs) {
       const prev = map[e.mentionId];
-      if (!prev) { map[e.mentionId] = e.id; continue; }
+      if (!prev) {
+        map[e.mentionId] = e.id;
+        continue;
+      }
       const prevExec = execs.find((x) => x.id === prev);
       if (prevExec && new Date(e.startedAt).getTime() >= new Date(prevExec.startedAt).getTime()) {
         map[e.mentionId] = e.id;
@@ -914,7 +1047,12 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     try {
       await api.runMention(mentionId);
     } catch (err) {
-      useToastStore.getState().addToast('error', `Échec du relancement : ${err instanceof Error ? err.message : String(err)}`);
+      useToastStore
+        .getState()
+        .addToast(
+          'error',
+          `Échec du relancement : ${err instanceof Error ? err.message : String(err)}`,
+        );
     } finally {
       setRelaunching((prev) => {
         const { [mentionId]: _drop, ...rest } = prev;
@@ -941,9 +1079,18 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const cursorPinnedRef = useRef(false);
 
   useEffect(() => {
-    api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
-    api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
-    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
+    api
+      .fetchTicketComments(ticketId)
+      .then(setComments)
+      .catch(() => {});
+    api
+      .fetchTicketMentions(ticketId)
+      .then(setMentions)
+      .catch(() => {});
+    api
+      .fetchTicketDeliverables(ticketId)
+      .then(setDeliverables)
+      .catch(() => {});
     loadCursors(ticketId).catch(() => {});
   }, [ticketId, loadCursors]);
 
@@ -995,11 +1142,19 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             setDeliverables((prev) => prev.map((x) => (x.id === d.id ? d : x)));
           }
         } else if (msg.type === 'deliverable:deleted') {
-          const { deliverableId, ticketId: tid } = msg.data as { deliverableId: string; ticketId: string };
+          const { deliverableId, ticketId: tid } = msg.data as {
+            deliverableId: string;
+            ticketId: string;
+          };
           if (tid === ticketId) {
             setDeliverables((prev) => prev.filter((x) => x.id !== deliverableId));
           }
-        } else if (msg.type === 'mention:updated' || msg.type === 'mention:acknowledged' || msg.type === 'mention:resolved' || msg.type === 'mention:waiting_for_info') {
+        } else if (
+          msg.type === 'mention:updated' ||
+          msg.type === 'mention:acknowledged' ||
+          msg.type === 'mention:resolved' ||
+          msg.type === 'mention:waiting_for_info'
+        ) {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) {
             setMentions((prev) => prev.map((x) => (x.id === m.id ? m : x)));
@@ -1022,7 +1177,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         } else if (msg.type === 'mention:execution_failed') {
           const d = msg.data as MentionExecutionFailedPayload;
           if (d.ticketId === ticketId) {
-            setFailures((prev) => ({ ...prev, [d.mentionId]: { reason: d.reason, message: d.message } }));
+            setFailures((prev) => ({
+              ...prev,
+              [d.mentionId]: { reason: d.reason, message: d.message },
+            }));
           }
         }
       } catch {
@@ -1072,26 +1230,32 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   }, [ticketId]);
 
   // Option+click (Alt+click) on a comment to pin read cursor just before that comment
-  const handleCommentClick = useCallback((e: React.MouseEvent, comment: TicketComment) => {
-    if (e.altKey) {
-      e.preventDefault();
-      cursorPinnedRef.current = true; // prevent auto-mark from overriding
-      // Set cursor to the previous comment's timestamp so the "new messages" line appears above the clicked one
-      const idx = comments.findIndex((c) => c.id === comment.id);
-      const cursorTimestamp = idx > 0 ? comments[idx - 1]!.createdAt : new Date(0).toISOString();
-      markCommentsRead(ticketId, cursorTimestamp).catch(() => {});
-    }
-  }, [ticketId, markCommentsRead, comments]);
+  const handleCommentClick = useCallback(
+    (e: React.MouseEvent, comment: TicketComment) => {
+      if (e.altKey) {
+        e.preventDefault();
+        cursorPinnedRef.current = true; // prevent auto-mark from overriding
+        // Set cursor to the previous comment's timestamp so the "new messages" line appears above the clicked one
+        const idx = comments.findIndex((c) => c.id === comment.id);
+        const cursorTimestamp = idx > 0 ? comments[idx - 1]!.createdAt : new Date(0).toISOString();
+        markCommentsRead(ticketId, cursorTimestamp).catch(() => {});
+      }
+    },
+    [ticketId, markCommentsRead, comments],
+  );
 
-  const handleDeleteComment = useCallback(async (commentId: string) => {
-    try {
-      await api.deleteTicketComment(ticketId, commentId);
-      // WS comment:deleted will update the list; optimistically remove too
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
-    } catch {
-      // ignore — comment stays visible on failure
-    }
-  }, [ticketId]);
+  const handleDeleteComment = useCallback(
+    async (commentId: string) => {
+      try {
+        await api.deleteTicketComment(ticketId, commentId);
+        // WS comment:deleted will update the list; optimistically remove too
+        setComments((prev) => prev.filter((c) => c.id !== commentId));
+      } catch {
+        // ignore — comment stays visible on failure
+      }
+    },
+    [ticketId],
+  );
 
   const handleRemoveMention = useCallback(async (mentionId: string) => {
     try {
@@ -1103,76 +1267,83 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
 
   // Actually post the comment. `mentionConflicts` tells the server how to
   // handle agents that already have an unresolved mention on this ticket.
-  const doPost = useCallback(async (mentionConflicts: api.MentionConflictResolution[]) => {
-    const trimmed = body.trim();
-    if (!trimmed) return;
+  const doPost = useCallback(
+    async (mentionConflicts: api.MentionConflictResolution[]) => {
+      const trimmed = body.trim();
+      if (!trimmed) return;
 
-    setSubmitting(true);
-    try {
-      // No per-message mode is sent: the effective mode/model/effort/fast are
-      // resolved from the ticket's conversation-scoped config at acknowledge.
-      const comment = await api.postTicketComment(
-        ticketId,
-        trimmed,
-        undefined,
-        mentionConflicts.length > 0 ? mentionConflicts : undefined,
-      );
-      // The user just posted: force the view to the bottom so they see their
-      // comment and the agent's "is working" acknowledgement without scrolling.
-      forceScrollRef.current = true;
-      setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
-      // Posting a comment means we're caught up — mark everything as read
-      markCommentsRead(ticketId, comment.createdAt).catch(() => {});
-      clearDraft();
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
+      setSubmitting(true);
+      try {
+        // No per-message mode is sent: the effective mode/model/effort/fast are
+        // resolved from the ticket's conversation-scoped config at acknowledge.
+        const comment = await api.postTicketComment(
+          ticketId,
+          trimmed,
+          undefined,
+          mentionConflicts.length > 0 ? mentionConflicts : undefined,
+        );
+        // The user just posted: force the view to the bottom so they see their
+        // comment and the agent's "is working" acknowledgement without scrolling.
+        forceScrollRef.current = true;
+        setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
+        // Posting a comment means we're caught up — mark everything as read
+        markCommentsRead(ticketId, comment.createdAt).catch(() => {});
+        clearDraft();
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+      } catch {
+        // keep body so user can retry
+      } finally {
+        setSubmitting(false);
+        textareaRef.current?.focus();
       }
-    } catch {
-      // keep body so user can retry
-    } finally {
-      setSubmitting(false);
-      textareaRef.current?.focus();
-    }
-  }, [body, ticketId, markCommentsRead, clearDraft]);
+    },
+    [body, ticketId, markCommentsRead, clearDraft],
+  );
 
   // The mention-conflict check + post pipeline. Shared by the normal path and
   // by the "send anyway" branch of the missing-repo guard, so both funnel
   // through the exact same disambiguation logic.
-  const proceedSubmit = useCallback(async (trimmed: string) => {
-    // Detect re-mentions of an agent that already has an unresolved mention, and
-    // disambiguate. A WAITING agent is ambiguous (answer vs new subject) → ask.
-    // A pending/acknowledged agent (queued/in-flight run) → supersede vs queue.
-    const mentioned = parseAgentMentions(trimmed);
-    if (mentioned.length > 0) {
-      const waiting: Array<{ agent: string; displayName: string }> = [];
-      const busy: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> = [];
-      for (const agent of mentioned) {
-        const unresolved = mentions.find(
-          (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status !== 'resolved',
-        );
-        if (!unresolved) continue;
-        const persona = personas.find((p) => p.name === agent);
-        const displayName = persona?.displayName || persona?.name || agent;
-        if (unresolved.status === 'waiting_for_info') {
-          waiting.push({ agent, displayName });
-        } else if (unresolved.status === 'pending' || unresolved.status === 'acknowledged') {
-          busy.push({ agent, displayName, status: unresolved.status });
+  const proceedSubmit = useCallback(
+    async (trimmed: string) => {
+      // Detect re-mentions of an agent that already has an unresolved mention, and
+      // disambiguate. A WAITING agent is ambiguous (answer vs new subject) → ask.
+      // A pending/acknowledged agent (queued/in-flight run) → supersede vs queue.
+      const mentioned = parseAgentMentions(trimmed);
+      if (mentioned.length > 0) {
+        const waiting: Array<{ agent: string; displayName: string }> = [];
+        const busy: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> =
+          [];
+        for (const agent of mentioned) {
+          const unresolved = mentions.find(
+            (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status !== 'resolved',
+          );
+          if (!unresolved) continue;
+          const persona = personas.find((p) => p.name === agent);
+          const displayName = persona?.displayName || persona?.name || agent;
+          if (unresolved.status === 'waiting_for_info') {
+            waiting.push({ agent, displayName });
+          } else if (unresolved.status === 'pending' || unresolved.status === 'acknowledged') {
+            busy.push({ agent, displayName, status: unresolved.status });
+          }
+        }
+
+        // Waiting takes priority: that's the ambiguity the user most needs to resolve.
+        if (waiting.length > 0) {
+          setConflictModal({ kind: 'waiting', agents: waiting });
+          return;
+        }
+        if (busy.length > 0) {
+          setConflictModal({ kind: 'busy', agents: busy });
+          return;
         }
       }
 
-      // Waiting takes priority: that's the ambiguity the user most needs to resolve.
-      if (waiting.length > 0) {
-        setConflictModal({ kind: 'waiting', agents: waiting });
-        return;
-      }
-      if (busy.length > 0) {
-        setConflictModal({ kind: 'busy', agents: busy });
-        return;
-      }
-    }
-
-    await doPost([]);
-  }, [mentions, personas, doPost]);
+      await doPost([]);
+    },
+    [mentions, personas, doPost],
+  );
 
   const handleSubmit = useCallback(async () => {
     const trimmed = body.trim();
@@ -1195,14 +1366,18 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     await proceedSubmit(body.trim());
   }, [body, proceedSubmit]);
 
-  const confirmConflict = useCallback(async (action: api.MentionConflictAction) => {
-    if (!conflictModal) return;
-    const conflicts: api.MentionConflictResolution[] = conflictModal.agents.map(
-      (a) => ({ agent: a.agent, action }),
-    );
-    setConflictModal(null);
-    await doPost(conflicts);
-  }, [conflictModal, doPost]);
+  const confirmConflict = useCallback(
+    async (action: api.MentionConflictAction) => {
+      if (!conflictModal) return;
+      const conflicts: api.MentionConflictResolution[] = conflictModal.agents.map((a) => ({
+        agent: a.agent,
+        action,
+      }));
+      setConflictModal(null);
+      await doPost(conflicts);
+    },
+    [conflictModal, doPost],
+  );
 
   const autoResize = useCallback(() => {
     const ta = textareaRef.current;
@@ -1218,54 +1393,60 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     setAcTriggerPos(-1);
   }, []);
 
-  const acceptMention = useCallback((opt: MentionOption) => {
-    const ta = textareaRef.current;
-    if (!ta || acTriggerPos < 0) return;
-    // Replace from '@' trigger to current cursor with the insert text + trailing space
-    const before = body.slice(0, acTriggerPos);
-    const after = body.slice(ta.selectionStart);
-    const newBody = before + opt.insertText + ' ' + after;
-    setBody(newBody);
-    closeMentionAc();
-    // Restore cursor position after React re-render
-    const newCursor = acTriggerPos + opt.insertText.length + 1;
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(newCursor, newCursor);
-      ta.style.height = 'auto';
-      ta.style.height = `${ta.scrollHeight}px`;
-    });
-  }, [body, setBody, acTriggerPos, closeMentionAc]);
+  const acceptMention = useCallback(
+    (opt: MentionOption) => {
+      const ta = textareaRef.current;
+      if (!ta || acTriggerPos < 0) return;
+      // Replace from '@' trigger to current cursor with the insert text + trailing space
+      const before = body.slice(0, acTriggerPos);
+      const after = body.slice(ta.selectionStart);
+      const newBody = before + opt.insertText + ' ' + after;
+      setBody(newBody);
+      closeMentionAc();
+      // Restore cursor position after React re-render
+      const newCursor = acTriggerPos + opt.insertText.length + 1;
+      requestAnimationFrame(() => {
+        ta.focus();
+        ta.setSelectionRange(newCursor, newCursor);
+        ta.style.height = 'auto';
+        ta.style.height = `${ta.scrollHeight}px`;
+      });
+    },
+    [body, setBody, acTriggerPos, closeMentionAc],
+  );
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    const cursor = e.target.selectionStart;
-    setBody(val);
-    autoResize();
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const val = e.target.value;
+      const cursor = e.target.selectionStart;
+      setBody(val);
+      autoResize();
 
-    // Detect mention trigger: scan backwards from cursor for '@'
-    const textBeforeCursor = val.slice(0, cursor);
-    // Find the last '@' that's either at the start or preceded by whitespace
-    const atIdx = textBeforeCursor.lastIndexOf('@');
-    if (atIdx >= 0 && (atIdx === 0 || /\s/.test(textBeforeCursor[atIdx - 1]!))) {
-      const fragment = textBeforeCursor.slice(atIdx + 1);
-      // Only trigger if there's no space after the @ (user is still typing the name)
-      if (!/\s/.test(fragment)) {
-        setAcOpen(true);
-        setAcTriggerPos(atIdx);
-        // Strip the type prefix for filtering so typing "@agent:cat" matches
-        // "catalyst" and "@ticket:37" matches ticket #37 by displayId/title.
-        const q = fragment.replace(/^(agent|panel|skill|workflow|ticket):/, '');
-        setAcQuery(q);
-        setAcIndex(0);
-        return;
+      // Detect mention trigger: scan backwards from cursor for '@'
+      const textBeforeCursor = val.slice(0, cursor);
+      // Find the last '@' that's either at the start or preceded by whitespace
+      const atIdx = textBeforeCursor.lastIndexOf('@');
+      if (atIdx >= 0 && (atIdx === 0 || /\s/.test(textBeforeCursor[atIdx - 1]!))) {
+        const fragment = textBeforeCursor.slice(atIdx + 1);
+        // Only trigger if there's no space after the @ (user is still typing the name)
+        if (!/\s/.test(fragment)) {
+          setAcOpen(true);
+          setAcTriggerPos(atIdx);
+          // Strip the type prefix for filtering so typing "@agent:cat" matches
+          // "catalyst" and "@ticket:37" matches ticket #37 by displayId/title.
+          const q = fragment.replace(/^(agent|panel|skill|workflow|ticket):/, '');
+          setAcQuery(q);
+          setAcIndex(0);
+          return;
+        }
       }
-    }
-    closeMentionAc();
-    // `setBody` is now identity-stable (see useDraft), but it is listed here so
-    // this handler stays correct under exhaustive-deps and can never re-capture
-    // a stale setter — the mechanism behind the Cockpit draft-collision bug.
-  }, [setBody, autoResize, closeMentionAc]);
+      closeMentionAc();
+      // `setBody` is now identity-stable (see useDraft), but it is listed here so
+      // this handler stays correct under exhaustive-deps and can never re-capture
+      // a stale setter — the mechanism behind the Cockpit draft-collision bug.
+    },
+    [setBody, autoResize, closeMentionAc],
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -1300,9 +1481,21 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       }
       // Execution mode toggle: Ctrl+1/2/3 (direct selection, conservés)
       if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
-        if (e.key === '1') { e.preventDefault(); setExecutionMode('talk'); return; }
-        if (e.key === '2') { e.preventDefault(); setExecutionMode('plan'); return; }
-        if (e.key === '3') { e.preventDefault(); setExecutionMode('edit'); return; }
+        if (e.key === '1') {
+          e.preventDefault();
+          setExecutionMode('talk');
+          return;
+        }
+        if (e.key === '2') {
+          e.preventDefault();
+          setExecutionMode('plan');
+          return;
+        }
+        if (e.key === '3') {
+          e.preventDefault();
+          setExecutionMode('edit');
+          return;
+        }
       }
       // Normal submit: Enter without shift
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1310,7 +1503,16 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         handleSubmit();
       }
     },
-    [acOpen, filteredOptions, acIndex, acceptMention, closeMentionAc, handleSubmit, cycleMode, setExecutionMode],
+    [
+      acOpen,
+      filteredOptions,
+      acIndex,
+      acceptMention,
+      closeMentionAc,
+      handleSubmit,
+      cycleMode,
+      setExecutionMode,
+    ],
   );
 
   return (
@@ -1321,7 +1523,8 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <p className="text-sm text-[var(--theme-text-muted)]">No comments yet</p>
             <p className="mt-1 text-xs text-[var(--theme-text-faint)]">
-              Use <span className="font-mono text-[var(--theme-accent)]">@agent:name</span> to mention an agent
+              Use <span className="font-mono text-[var(--theme-accent)]">@agent:name</span> to
+              mention an agent
             </p>
           </div>
         ) : (
@@ -1329,66 +1532,88 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             {comments.map((c, idx) => {
               // Show "New messages" divider before the first unseen comment
               const prevComment = idx > 0 ? comments[idx - 1] : null;
-              const showNewLine = commentLastSeenAt != null
-                && c.createdAt > commentLastSeenAt
-                && (prevComment == null || prevComment.createdAt <= commentLastSeenAt);
+              const showNewLine =
+                commentLastSeenAt != null &&
+                c.createdAt > commentLastSeenAt &&
+                (prevComment == null || prevComment.createdAt <= commentLastSeenAt);
 
               return (
                 <div key={c.id}>
                   {showNewLine && (
                     <div className="flex items-center gap-2 px-1 py-2">
                       <div className={`h-px flex-1 ${tintClasses('red').solid}`} />
-                      <span className={`text-[10px] font-semibold uppercase tracking-wider ${tintClasses('red').text}`}>New messages</span>
+                      <span
+                        className={`text-[10px] font-semibold uppercase tracking-wider ${tintClasses('red').text}`}
+                      >
+                        New messages
+                      </span>
                       <div className={`h-px flex-1 ${tintClasses('red').solid}`} />
                     </div>
                   )}
-                  <div className="group relative px-1 py-3 first:pt-0" onClick={(e) => handleCommentClick(e, c)}>
-                {/* Header: author + timestamp */}
-                <div className="mb-1.5 flex items-center gap-2">
-                  <span
-                    className={`text-xs font-semibold ${
-                      c.authorType === 'agent' ? tintText('purple') : tintText('blue')
-                    }`}
+                  <div
+                    className="group relative px-1 py-3 first:pt-0"
+                    onClick={(e) => handleCommentClick(e, c)}
                   >
-                    {c.authorName}
-                  </span>
-                  <span className="text-[10px] text-[var(--theme-text-faint)]">
-                    {c.authorType === 'agent' ? 'agent' : 'you'}
-                  </span>
-                  <span className="text-[10px] text-[var(--theme-text-faint)]">
-                    {relativeTime(c.createdAt)}
-                  </span>
-                </div>
-                {/* Body — rendered as markdown */}
-                <CommentMarkdown
-                  body={c.body}
-                  commentId={c.id}
-                  mentionLookup={mentionLookup}
-                  onRemoveMention={handleRemoveMention}
-                />
-                {/* Linked deliverables — Gmail-style attachment chips */}
-                {(() => {
-                  const linked = deliverablesByComment.get(c.id);
-                  if (!linked || linked.length === 0) return null;
-                  return (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {linked.map((d) => (
-                        <DeliverableChip key={d.id} deliverable={d} onOpen={handleOpenDeliverable} />
-                      ))}
+                    {/* Header: author + timestamp */}
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span
+                        className={`text-xs font-semibold ${
+                          c.authorType === 'agent' ? tintText('purple') : tintText('blue')
+                        }`}
+                      >
+                        {c.authorName}
+                      </span>
+                      <span className="text-[10px] text-[var(--theme-text-faint)]">
+                        {c.authorType === 'agent' ? 'agent' : 'you'}
+                      </span>
+                      <span className="text-[10px] text-[var(--theme-text-faint)]">
+                        {relativeTime(c.createdAt)}
+                      </span>
                     </div>
-                  );
-                })()}
-                {/* Delete button — all comments */}
-                <button
-                    className={`absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 text-[var(--theme-text-faint)] ${tintClasses('red').hoverBg} ${tintClasses('red').hoverText}`}
-                    onClick={() => handleDeleteComment(c.id)}
-                    title="Delete comment"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-              </div>
+                    {/* Body — rendered as markdown */}
+                    <CommentMarkdown
+                      body={c.body}
+                      commentId={c.id}
+                      mentionLookup={mentionLookup}
+                      onRemoveMention={handleRemoveMention}
+                    />
+                    {/* Linked deliverables — Gmail-style attachment chips */}
+                    {(() => {
+                      const linked = deliverablesByComment.get(c.id);
+                      if (!linked || linked.length === 0) return null;
+                      return (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {linked.map((d) => (
+                            <DeliverableChip
+                              key={d.id}
+                              deliverable={d}
+                              onOpen={handleOpenDeliverable}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    {/* Delete button — all comments */}
+                    <button
+                      className={`absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 text-[var(--theme-text-faint)] ${tintClasses('red').hoverBg} ${tintClasses('red').hoverText}`}
+                      onClick={() => handleDeleteComment(c.id)}
+                      title="Delete comment"
+                    >
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1396,25 +1621,39 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
               <button
                 key={agent.executionId}
                 className="flex w-full items-center gap-2 px-1 py-3 text-left transition-colors hover:bg-[var(--theme-bg-hover)] rounded"
-                onClick={() => { setModalTitle(`${agent.name} execution`); setModalExecutionId(agent.executionId); }}
+                onClick={() => {
+                  setModalTitle(`${agent.name} execution`);
+                  setModalExecutionId(agent.executionId);
+                }}
               >
                 <span className="flex items-center gap-1">
-                  <span className={`inline-block h-1.5 w-1.5 rounded-full animate-pulse ${tintClasses('purple').solid}`} />
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full animate-pulse ${tintClasses('purple').solid}`}
+                  />
                 </span>
                 <span className={`text-xs ${tintClasses('purple').text}`}>
                   {agent.name} is working…
                 </span>
-                <svg className="h-3 w-3 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                <svg
+                  className="h-3 w-3 text-[var(--theme-text-faint)]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
                 </svg>
               </button>
             ))}
             {waitingAgents.map((agent) => (
-              <div
-                key={agent.mentionId}
-                className="flex w-full items-center gap-2 px-1 py-3"
-              >
-                <span className={`inline-block h-1.5 w-1.5 rounded-full animate-pulse ${tintClasses('orange').solid}`} />
+              <div key={agent.mentionId} className="flex w-full items-center gap-2 px-1 py-3">
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full animate-pulse ${tintClasses('orange').solid}`}
+                />
                 <span className={`text-xs ${tintClasses('orange').text}`}>
                   {agent.name} is waiting for your reply…
                 </span>
@@ -1434,7 +1673,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   <span className="text-base leading-none">🚪</span>
                   <div className="text-xs font-semibold text-[var(--theme-text-primary)]">
                     Human Gate — {run.templateSnapshot.emoji} {run.templateSnapshot.name}
-                    <span className="font-normal text-[var(--theme-text-muted)]"> › {step.name}</span>
+                    <span className="font-normal text-[var(--theme-text-muted)]">
+                      {' '}
+                      › {step.name}
+                    </span>
                   </div>
                 </div>
                 {reviewDeliverables.length > 0 && (
@@ -1444,7 +1686,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {reviewDeliverables.map((d) => (
-                        <DeliverableChip key={d.id} deliverable={d} onOpen={handleOpenDeliverable} />
+                        <DeliverableChip
+                          key={d.id}
+                          deliverable={d}
+                          onOpen={handleOpenDeliverable}
+                        />
                       ))}
                     </div>
                   </div>
@@ -1474,11 +1720,18 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 className={`my-3 rounded-lg border ${tintClasses('orange').borderColor} ${tintClasses('orange').bg} p-3`}
               >
                 <div className="mb-3 flex items-center gap-2">
-                  <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full animate-pulse ${tintClasses('orange').solid}`} />
+                  <span
+                    className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full animate-pulse ${tintClasses('orange').solid}`}
+                  />
                   <div className="text-xs font-semibold text-[var(--theme-text-primary)]">
                     {run.templateSnapshot.emoji} {run.templateSnapshot.name}
-                    <span className="font-normal text-[var(--theme-text-muted)]"> › {step.name}</span>
-                    <span className={`ml-1 font-normal ${tintClasses('orange').text}`}>is waiting for your reply…</span>
+                    <span className="font-normal text-[var(--theme-text-muted)]">
+                      {' '}
+                      › {step.name}
+                    </span>
+                    <span className={`ml-1 font-normal ${tintClasses('orange').text}`}>
+                      is waiting for your reply…
+                    </span>
                   </div>
                 </div>
                 <NeedsReviewRespondPanel
@@ -1513,7 +1766,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   className={`my-3 rounded-lg border ${tintClasses('red').borderColor} ${tintClasses('red').bg} p-3`}
                 >
                   <div className="mb-2 flex items-center gap-2">
-                    <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses('red').solid}`} />
+                    <span
+                      className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses('red').solid}`}
+                    />
                     <div className="text-xs font-semibold text-[var(--theme-text-primary)]">
                       {agentName}
                       <span className={`ml-1 font-normal ${tintClasses('red').text}`}>
@@ -1521,7 +1776,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                       </span>
                     </div>
                   </div>
-                  <p className="mb-3 text-xs leading-snug text-[var(--theme-text-secondary)]">{message}</p>
+                  <p className="mb-3 text-xs leading-snug text-[var(--theme-text-secondary)]">
+                    {message}
+                  </p>
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
@@ -1535,7 +1792,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                       <button
                         type="button"
                         className="text-xs font-medium text-[var(--theme-text-muted)] underline-offset-2 hover:text-[var(--theme-accent)] hover:underline"
-                        onClick={() => { setModalTitle(`${agentName} execution`); setModalExecutionId(execId); }}
+                        onClick={() => {
+                          setModalTitle(`${agentName} execution`);
+                          setModalExecutionId(execId);
+                        }}
                       >
                         Voir les logs
                       </button>
@@ -1552,7 +1812,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       {/* Composer: line 1 = input + attach + send, line 2 = execution bar */}
       <div className="flex flex-shrink-0 flex-col gap-2 border-t border-[var(--theme-border)] pt-3">
         {/* Line 1 — input + actions */}
-        <div ref={inputWrapperRef} className="relative flex items-end gap-2" {...commentFileUpload.dragProps}>
+        <div
+          ref={inputWrapperRef}
+          className="relative flex items-end gap-2"
+          {...commentFileUpload.dragProps}
+        >
           {/* Mention autocomplete popup */}
           {acOpen && filteredOptions.length > 0 && (
             <MentionAutocomplete
@@ -1575,7 +1839,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={commentFileUpload.pasteHandler}
-            onBlur={() => { setTimeout(closeMentionAc, 150); }}
+            onBlur={() => {
+              setTimeout(closeMentionAc, 150);
+            }}
             disabled={submitting}
           />
           <button
@@ -1584,7 +1850,16 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             onClick={commentFileUpload.openFilePicker}
             title="Attach file"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
             </svg>
           </button>
@@ -1594,8 +1869,18 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             disabled={submitting || !body.trim()}
             title="Send (Enter)"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+              />
             </svg>
           </button>
         </div>
@@ -1638,7 +1923,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
               <span className="opacity-60">◐</span>
               <select
                 value={effectiveEffort}
-                onChange={(e) => patchExecConfig({ effortOverride: e.target.value === '' ? null : (e.target.value as EffortLevel) })}
+                onChange={(e) =>
+                  patchExecConfig({
+                    effortOverride: e.target.value === '' ? null : (e.target.value as EffortLevel),
+                  })
+                }
                 title={
                   effortOverride && effectiveEffort !== effortOverride
                     ? `Reasoning effort for the next agent run. "${effortOverride}" isn't available on this model — it will run at "${effectiveEffort || 'default'}".`
@@ -1648,7 +1937,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
               >
                 <option value="">Effort: default</option>
                 {effortLevels.map((lvl) => (
-                  <option key={lvl} value={lvl}>Effort: {lvl}</option>
+                  <option key={lvl} value={lvl}>
+                    Effort: {lvl}
+                  </option>
                 ))}
               </select>
             </label>
@@ -1719,8 +2010,8 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             {conflictModal.agents.map((c) => c.displayName).join(', ')}{' '}
             {conflictModal.agents.length > 1 ? 'ont' : 'a'} déjà une demande{' '}
             {conflictModal.agents.some((c) => c.status === 'acknowledged') ? 'en cours' : 'en file'}{' '}
-            sur ce ticket. Deux exécutions en parallèle sur le même worktree se gêneraient.
-            Comment veux-tu enchaîner&nbsp;?
+            sur ce ticket. Deux exécutions en parallèle sur le même worktree se gêneraient. Comment
+            veux-tu enchaîner&nbsp;?
           </p>
           <div className="mt-4 flex flex-col gap-2">
             <Button variant="primary" onClick={() => void confirmConflict('supersede')}>
@@ -1743,10 +2034,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             Aucun repository lié à ce ticket
           </h3>
           <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
-            Tu mentionnes un agent&nbsp;/&nbsp;skill&nbsp;/&nbsp;workflow, mais ce ticket n'a
-            pas de repository lié. La run démarrera <strong>sans codebase</strong> (pas de
-            worktree) — elle ne pourra pas modifier de code. Lie un repo (via la bannière en
-            haut du ticket) ou envoie quand même si c'est volontaire.
+            Tu mentionnes un agent&nbsp;/&nbsp;skill&nbsp;/&nbsp;workflow, mais ce ticket n'a pas de
+            repository lié. La run démarrera <strong>sans codebase</strong> (pas de worktree) — elle
+            ne pourra pas modifier de code. Lie un repo (via la bannière en haut du ticket) ou
+            envoie quand même si c'est volontaire.
           </p>
           <div className="mt-4 flex flex-col gap-2">
             <Button variant="secondary" onClick={() => void confirmRepoGuardAndSend()}>

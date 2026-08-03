@@ -68,7 +68,10 @@ export class SessionEntity {
    */
   applyHookUpdate(update: HookStatusUpdate): boolean {
     // Guard: `idle` (PTY exit / sessionEnd) must not override an agent-driven outcome.
-    if (update.status === 'idle' && (this.hookStatus === 'complete' || this.hookStatus === 'error')) {
+    if (
+      update.status === 'idle' &&
+      (this.hookStatus === 'complete' || this.hookStatus === 'error')
+    ) {
       return false;
     }
     // Guard: `notification/idle_prompt` is the sibling Notification of `Stop` — Claude fires

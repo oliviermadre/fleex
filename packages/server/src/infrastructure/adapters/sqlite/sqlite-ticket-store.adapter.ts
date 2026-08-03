@@ -1,10 +1,20 @@
-import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
+import type {
+  TicketStatus,
+  TicketPriority,
+  TicketType,
+  TicketLinkType,
+  TicketLink,
+  GitHubIssueMetadata,
+  ConversationMode,
+} from '@fleex/shared';
 import { isEffortLevel } from '@fleex/shared';
+
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
-import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
-import type { TicketStorePort } from '../../../application/ports/ticket-store.port.js';
+import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
+
 import type { SqliteConnection } from './connection.js';
+import type { TicketStorePort } from '../../../application/ports/ticket-store.port.js';
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, none: 3 };
 const MAX_ACTIVITY_ENTRIES = 5000;
@@ -68,7 +78,8 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   }
 
   async getBoardById(id: string): Promise<BoardEntity | null> {
-    const row = this.conn.db.prepare('SELECT * FROM boards WHERE id = ?').get(id) as BoardRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM boards WHERE id = ?').get(id) as
+      BoardRow | undefined;
     return row ? this.toBoardEntity(row) : null;
   }
 
@@ -148,34 +159,42 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     ticket.displayId = row.display_id;
   }
 
-
   async getAllTickets(): Promise<TicketEntity[]> {
-    const rows = this.conn.db.prepare('SELECT * FROM tickets WHERE archived_at IS NULL').all() as TicketRow[];
+    const rows = this.conn.db
+      .prepare('SELECT * FROM tickets WHERE archived_at IS NULL')
+      .all() as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
   }
 
   async getTicketById(id: string): Promise<TicketEntity | null> {
-    const row = this.conn.db.prepare('SELECT * FROM tickets WHERE id = ?').get(id) as TicketRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM tickets WHERE id = ?').get(id) as
+      TicketRow | undefined;
     return row ? this.toTicketEntity(row) : null;
   }
 
   async getTicketByDisplayId(displayId: number): Promise<TicketEntity | null> {
     // No `archived_at IS NULL` filter — display ids are globally unique and this
     // lookup must reach archived tickets (used by `ticket unarchive`).
-    const row = this.conn.db.prepare('SELECT * FROM tickets WHERE display_id = ?').get(displayId) as TicketRow | undefined;
+    const row = this.conn.db
+      .prepare('SELECT * FROM tickets WHERE display_id = ?')
+      .get(displayId) as TicketRow | undefined;
     return row ? this.toTicketEntity(row) : null;
   }
 
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     const rows = this.conn.db
-      .prepare('SELECT * FROM tickets WHERE board_id = ? AND archived_at IS NULL ORDER BY position ASC')
+      .prepare(
+        'SELECT * FROM tickets WHERE board_id = ? AND archived_at IS NULL ORDER BY position ASC',
+      )
       .all(boardId) as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
   }
 
   async getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]> {
     const rows = this.conn.db
-      .prepare('SELECT * FROM tickets WHERE board_id = ? AND status = ? AND archived_at IS NULL ORDER BY position ASC')
+      .prepare(
+        'SELECT * FROM tickets WHERE board_id = ? AND status = ? AND archived_at IS NULL ORDER BY position ASC',
+      )
       .all(boardId, status) as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
   }
@@ -276,7 +295,9 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
 
     if (boardId) {
       rows = this.conn.db
-        .prepare('SELECT * FROM tickets WHERE status = ? AND blocked = 0 AND archived_at IS NULL AND board_id = ?')
+        .prepare(
+          'SELECT * FROM tickets WHERE status = ? AND blocked = 0 AND archived_at IS NULL AND board_id = ?',
+        )
         .all('todo', boardId) as TicketRow[];
     } else {
       rows = this.conn.db
@@ -309,11 +330,15 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     let rows: TicketRow[];
     if (boardId) {
       rows = this.conn.db
-        .prepare('SELECT * FROM tickets WHERE archived_at IS NOT NULL AND board_id = ? ORDER BY archived_at DESC LIMIT ? OFFSET ?')
+        .prepare(
+          'SELECT * FROM tickets WHERE archived_at IS NOT NULL AND board_id = ? ORDER BY archived_at DESC LIMIT ? OFFSET ?',
+        )
         .all(boardId, limit, offset) as TicketRow[];
     } else {
       rows = this.conn.db
-        .prepare('SELECT * FROM tickets WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ? OFFSET ?')
+        .prepare(
+          'SELECT * FROM tickets WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ? OFFSET ?',
+        )
         .all(limit, offset) as TicketRow[];
     }
     return rows.map((r) => this.toTicketEntity(r));
@@ -323,7 +348,9 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     let row: { cnt: number };
     if (boardId) {
       row = this.conn.db
-        .prepare('SELECT COUNT(*) as cnt FROM tickets WHERE archived_at IS NOT NULL AND board_id = ?')
+        .prepare(
+          'SELECT COUNT(*) as cnt FROM tickets WHERE archived_at IS NOT NULL AND board_id = ?',
+        )
         .get(boardId) as { cnt: number };
     } else {
       row = this.conn.db
@@ -360,19 +387,25 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       .get() as { cnt: number };
 
     if (countRow.cnt > MAX_ACTIVITY_ENTRIES) {
-      this.conn.db.prepare(`
+      this.conn.db
+        .prepare(
+          `
         DELETE FROM ticket_activities WHERE id IN (
           SELECT id FROM ticket_activities
           ORDER BY created_at ASC
           LIMIT ?
         )
-      `).run(countRow.cnt - MAX_ACTIVITY_ENTRIES);
+      `,
+        )
+        .run(countRow.cnt - MAX_ACTIVITY_ENTRIES);
     }
   }
 
   async getActivitiesByTicket(ticketId: string, limit = 50): Promise<TicketActivityEntity[]> {
     const rows = this.conn.db
-      .prepare('SELECT * FROM ticket_activities WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?')
+      .prepare(
+        'SELECT * FROM ticket_activities WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?',
+      )
       .all(ticketId, limit) as ActivityRow[];
     return rows.map((r) => this.toActivityEntity(r));
   }

@@ -1,10 +1,15 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { TextBlockParam, ImageBlockParam } from '@anthropic-ai/sdk/resources/messages/messages';
+
 import { FLEEX_DIR } from '@fleex/shared';
+
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
+import type {
+  TextBlockParam,
+  ImageBlockParam,
+} from '@anthropic-ai/sdk/resources/messages/messages';
 
 export type PromptContentBlock = TextBlockParam | ImageBlockParam;
 
@@ -64,7 +69,8 @@ export function promptHasImageAttachment(blocks: PromptContentBlock[]): boolean 
 }
 
 // Matches ![alt](/api/files/{uuid}) or [text](/api/files/{uuid})
-const FILE_REF_PATTERN = /(!?)\[([^\]]*)\]\(\/api\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/g;
+const FILE_REF_PATTERN =
+  /(!?)\[([^\]]*)\]\(\/api\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/g;
 
 /**
  * Converts a markdown string containing `/api/files/{uuid}` references into
@@ -128,14 +134,20 @@ export async function resolveFileReferences(
           content = content.slice(0, MAX_TEXT_BYTES) + '\n... (truncated)';
         }
         const ext = meta.mimeType === 'text/csv' ? 'csv' : '';
-        blocks.push({ type: 'text', text: `**${meta.originalName}:**\n\`\`\`${ext}\n${content}\n\`\`\`` });
+        blocks.push({
+          type: 'text',
+          text: `**${meta.originalName}:**\n\`\`\`${ext}\n${content}\n\`\`\``,
+        });
         continue;
       }
     }
 
     // Fallback: textual description for unsupported/large files
     const sizeKB = Math.round(meta.sizeBytes / 1024);
-    blocks.push({ type: 'text', text: `[Attachment: ${meta.originalName} (${meta.mimeType}, ${sizeKB} KB)]` });
+    blocks.push({
+      type: 'text',
+      text: `[Attachment: ${meta.originalName} (${meta.mimeType}, ${sizeKB} KB)]`,
+    });
   }
 
   // Push remaining text after last match

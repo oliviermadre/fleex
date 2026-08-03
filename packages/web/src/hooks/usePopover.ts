@@ -1,4 +1,3 @@
-import { useCallback, useMemo, useState } from 'react';
 import {
   useFloating,
   autoUpdate,
@@ -18,6 +17,8 @@ import {
   type UseFloatingReturn,
   type UseInteractionsReturn,
 } from '@floating-ui/react';
+import { useCallback, useMemo, useState } from 'react';
+
 import type { CSSProperties } from 'react';
 
 // Re-export so call-sites import everything from one place.
@@ -137,7 +138,11 @@ export function usePopover({
   const dismiss = useDismiss(context, { enabled: enableDismiss });
   const roleInteraction = useRole(context, { role: role ?? undefined, enabled: role !== null });
 
-  const { getReferenceProps, getFloatingProps } = useInteractions([click, dismiss, roleInteraction]);
+  const { getReferenceProps, getFloatingProps } = useInteractions([
+    click,
+    dismiss,
+    roleInteraction,
+  ]);
 
   return { open, setOpen, refs, floatingStyles, context, getReferenceProps, getFloatingProps };
 }
@@ -246,7 +251,12 @@ export function useTooltip({
   const dismiss = useDismiss(context);
   const roleInteraction = useRole(context, { role: 'tooltip' });
 
-  const { getReferenceProps, getFloatingProps } = useInteractions([hover, focus, dismiss, roleInteraction]);
+  const { getReferenceProps, getFloatingProps } = useInteractions([
+    hover,
+    focus,
+    dismiss,
+    roleInteraction,
+  ]);
 
   return { open, refs, floatingStyles, context, getReferenceProps, getFloatingProps };
 }

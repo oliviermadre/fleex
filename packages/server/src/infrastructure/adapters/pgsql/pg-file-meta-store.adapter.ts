@@ -1,6 +1,7 @@
 import { FileMetadataEntity } from '../../../domain/entities/file-metadata.entity.js';
-import type { FileMetaStorePort } from '../../../application/ports/file-meta-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { FileMetaStorePort } from '../../../application/ports/file-meta-store.port.js';
 
 export class PgFileMetaStore implements FileMetaStorePort {
   constructor(private readonly db: PgConnection) {}
