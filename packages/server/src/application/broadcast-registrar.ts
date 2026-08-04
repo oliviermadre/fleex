@@ -190,6 +190,17 @@ export class BroadcastRegistrar {
         });
       }
     });
+    bus.on('workflow.awaiting_routing', (e) => {
+      if (e.type === 'workflow.awaiting_routing') {
+        this.ticketBroadcast('workflow:awaiting_routing', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+          candidateEdgeIds: e.candidateEdgeIds,
+        });
+      }
+    });
     bus.on('workflow.run_completed', (e) => {
       if (e.type === 'workflow.run_completed') {
         this.ticketBroadcast('workflow:run_completed', {

@@ -9,6 +9,19 @@ const edge = (overrides: Partial<WorkflowEdge> & { id: string; source: string; t
 /** Legacy call shape: only the step that just ran is in scope. */
 const ctx = (output: StepOutput): EdgeEvaluationContext => ({ current: output, steps: {} });
 
+/**
+ * The edge a run would actually follow, or null when there is none. An
+ * ambiguity is a distinct outcome with its own tests below, so it throws here
+ * rather than silently reading as "no edge".
+ */
+const taken = (context: EdgeEvaluationContext, edges: WorkflowEdge[]): string | null => {
+  const resolution = EdgeEvaluator.resolve(context, edges);
+  if (resolution.kind === 'ambiguous') {
+    throw new Error(`unexpected ambiguity: ${resolution.edges.map((e) => e.id).join(', ')}`);
+  }
+  return resolution.kind === 'single' ? resolution.edge.id : null;
+};
+
 /** Evaluate a single clause through the public API, so the wiring is covered too. */
 const check = (
   clause: EdgeConditionClause,
@@ -16,14 +29,14 @@ const check = (
   steps: Record<string, Record<string, unknown>> = {},
 ): boolean => {
   const edges = [edge({ id: 'e1', source: 's', target: 't', conditionGroup: { match: 'all', clauses: [clause] } })];
-  return EdgeEvaluator.resolve({ current: output, steps }, edges)?.id === 'e1';
+  return taken({ current: output, steps }, edges) === 'e1';
 };
 
 const out = (schemaFields: Record<string, unknown>): StepOutput => ({ schemaFields, result: 'ok' });
 
 describe('EdgeEvaluator', () => {
   it('returns null when no edges', () => {
-    expect(EdgeEvaluator.resolve(ctx({ schemaFields: {}, result: 'ok' }), [])).toBeNull();
+    expect(taken(ctx({ schemaFields: {}, result: 'ok' }), [])).toBeNull();
   });
 
   // ── Backwards compatibility: templates saved before condition groups ────────
@@ -34,7 +47,7 @@ describe('EdgeEvaluator', () => {
         edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'path', operator: 'eq', value: 'standard' } }),
         edge({ id: 'e2', source: 's', target: 't2', condition: { field: 'path', operator: 'eq', value: 'hotfix' } }),
       ];
-      expect(EdgeEvaluator.resolve(ctx(out({ path: 'hotfix' })), edges)?.id).toBe('e2');
+      expect(taken(ctx(out({ path: 'hotfix' })), edges)).toBe('e2');
     });
 
     it('returns the default edge when no condition matches', () => {
@@ -42,14 +55,14 @@ describe('EdgeEvaluator', () => {
         edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'path', operator: 'eq', value: 'standard' } }),
         edge({ id: 'e2', source: 's', target: 't2', isDefault: true }),
       ];
-      expect(EdgeEvaluator.resolve(ctx(out({ path: 'unknown' })), edges)?.id).toBe('e2');
+      expect(taken(ctx(out({ path: 'unknown' })), edges)).toBe('e2');
     });
 
     it('returns null when no condition matches and no default', () => {
       const edges = [
         edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'path', operator: 'eq', value: 'standard' } }),
       ];
-      expect(EdgeEvaluator.resolve(ctx(out({ path: 'other' })), edges)).toBeNull();
+      expect(taken(ctx(out({ path: 'other' })), edges)).toBeNull();
     });
 
     it('handles dotted paths (deliverable.status)', () => {
@@ -60,20 +73,22 @@ describe('EdgeEvaluator', () => {
         deliverable: { status: 'final', title: 'x', markdown: 'y', type: 'report' },
         schemaFields: {}, result: 'ok',
       };
-      expect(EdgeEvaluator.resolve(ctx(output), edges)?.id).toBe('e1');
+      expect(taken(ctx(output), edges)).toBe('e1');
     });
 
     it('outcome shorthand: edges can match on the outcome top-level field', () => {
       const edges = [edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'outcome', operator: 'eq', value: 'approve' } })];
-      expect(EdgeEvaluator.resolve(ctx({ schemaFields: {}, outcome: 'approve', result: 'ok' }), edges)?.id).toBe('e1');
+      expect(taken(ctx({ schemaFields: {}, outcome: 'approve', result: 'ok' }), edges)).toBe('e1');
     });
 
-    it('stable order: first matching conditional wins', () => {
+    it('two matching conditionals are ambiguous — the engine no longer picks the oldest', () => {
       const edges = [
         edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'x', operator: 'eq', value: 'a' } }),
         edge({ id: 'e2', source: 's', target: 't2', condition: { field: 'x', operator: 'eq', value: 'a' } }),
       ];
-      expect(EdgeEvaluator.resolve(ctx(out({ x: 'a' })), edges)?.id).toBe('e1');
+      const resolution = EdgeEvaluator.resolve(ctx(out({ x: 'a' })), edges);
+      expect(resolution.kind).toBe('ambiguous');
+      expect(resolution.kind === 'ambiguous' && resolution.edges.map((e) => e.id)).toEqual(['e1', 'e2']);
     });
 
     it('a conditionGroup takes precedence over a leftover legacy condition', () => {
@@ -82,8 +97,8 @@ describe('EdgeEvaluator', () => {
         condition: { field: 'x', operator: 'eq', value: 'stale' },
         conditionGroup: { match: 'all', clauses: [{ field: 'x', operator: 'eq', value: 'fresh' }] },
       })];
-      expect(EdgeEvaluator.resolve(ctx(out({ x: 'fresh' })), edges)?.id).toBe('e1');
-      expect(EdgeEvaluator.resolve(ctx(out({ x: 'stale' })), edges)).toBeNull();
+      expect(taken(ctx(out({ x: 'fresh' })), edges)).toBe('e1');
+      expect(taken(ctx(out({ x: 'stale' })), edges)).toBeNull();
     });
   });
 
@@ -102,13 +117,13 @@ describe('EdgeEvaluator', () => {
     })];
 
     it('match "all" needs every clause to hold', () => {
-      expect(EdgeEvaluator.resolve(ctx(out({ status: 'Doing', priority: 'High' })), group('all'))?.id).toBe('e1');
-      expect(EdgeEvaluator.resolve(ctx(out({ status: 'Doing', priority: 'Low' })), group('all'))).toBeNull();
+      expect(taken(ctx(out({ status: 'Doing', priority: 'High' })), group('all'))).toBe('e1');
+      expect(taken(ctx(out({ status: 'Doing', priority: 'Low' })), group('all'))).toBeNull();
     });
 
     it('match "any" needs a single clause to hold', () => {
-      expect(EdgeEvaluator.resolve(ctx(out({ status: 'Doing', priority: 'Low' })), group('any'))?.id).toBe('e1');
-      expect(EdgeEvaluator.resolve(ctx(out({ status: 'Todo', priority: 'Low' })), group('any'))).toBeNull();
+      expect(taken(ctx(out({ status: 'Doing', priority: 'Low' })), group('any'))).toBe('e1');
+      expect(taken(ctx(out({ status: 'Todo', priority: 'Low' })), group('any'))).toBeNull();
     });
 
     it('an empty clause list never routes — the run falls through to the default', () => {
@@ -116,7 +131,7 @@ describe('EdgeEvaluator', () => {
         edge({ id: 'e1', source: 's', target: 't1', conditionGroup: { match: 'all', clauses: [] } }),
         edge({ id: 'e2', source: 's', target: 't2', isDefault: true }),
       ];
-      expect(EdgeEvaluator.resolve(ctx(out({})), edges)?.id).toBe('e2');
+      expect(taken(ctx(out({})), edges)).toBe('e2');
     });
   });
 
@@ -145,8 +160,8 @@ describe('EdgeEvaluator', () => {
         'compute-status': { status: 'Doing' },
         'compute-priority': { priority: 'High' },
       };
-      expect(EdgeEvaluator.resolve({ current: out({ type: 'Fix' }), steps }, edges)?.id).toBe('e1');
-      expect(EdgeEvaluator.resolve({ current: out({ type: 'Chore' }), steps }, edges)?.id).toBeUndefined();
+      expect(taken({ current: out({ type: 'Fix' }), steps }, edges)).toBe('e1');
+      expect(taken({ current: out({ type: 'Chore' }), steps }, edges)).toBeNull();
     });
 
     it('a step that never ran makes the clause false rather than throwing', () => {
@@ -244,6 +259,38 @@ describe('EdgeEvaluator', () => {
       expect(check({ field: 'missing', operator: 'neq', value: 'x' }, out({}))).toBe(false);
       expect(check({ field: 'missing', operator: 'not_in', value: ['x'] }, out({}))).toBe(false);
       expect(check({ field: 'missing', operator: 'not_contains', value: 'x' }, out({}))).toBe(false);
+    });
+  });
+
+  // ── Ambiguity ──────────────────────────────────────────────────────────────
+
+  describe('ambiguous routing', () => {
+    it('reports every matching edge, not just the first two', () => {
+      const edges = ['e1', 'e2', 'e3'].map((id, i) => edge({
+        id, source: 's', target: `t${i}`,
+        condition: { field: 'x', operator: 'eq', value: 'a' },
+      }));
+      const resolution = EdgeEvaluator.resolve(ctx(out({ x: 'a' })), edges);
+      expect(resolution.kind === 'ambiguous' && resolution.edges.map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
+    });
+
+    it('a default never competes with a condition that matched', () => {
+      const edges = [
+        edge({ id: 'e1', source: 's', target: 't1', condition: { field: 'x', operator: 'eq', value: 'a' } }),
+        edge({ id: 'e2', source: 's', target: 't2', isDefault: true }),
+      ];
+      expect(taken(ctx(out({ x: 'a' })), edges)).toBe('e1');
+    });
+
+    it('two defaults with nothing else matching are ambiguous too', () => {
+      // Blocked at save time, but a template saved before that check still has to
+      // be handled: ask rather than pick one at random.
+      const edges = [
+        edge({ id: 'e1', source: 's', target: 't1', isDefault: true }),
+        edge({ id: 'e2', source: 's', target: 't2', isDefault: true }),
+      ];
+      const resolution = EdgeEvaluator.resolve(ctx(out({})), edges);
+      expect(resolution.kind === 'ambiguous' && resolution.edges.map((e) => e.id)).toEqual(['e1', 'e2']);
     });
   });
 });

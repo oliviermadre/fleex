@@ -279,6 +279,25 @@ export function formatEdgeCondition(
   return group.clauses.map((clause) => formatClause(clause, steps)).join(joiner);
 }
 
+/**
+ * One-line label for an edge — the target step plus what made it match.
+ *
+ * Shared because an ambiguity is arbitrated across three surfaces (the comment
+ * the engine posts, the resolve panel, the CLI): if they described the same edge
+ * differently, a reviewer picking "Fix (status = Doing)" in the thread could not
+ * tell it apart from the entry the panel offers.
+ */
+export function describeEdge(
+  edge: WorkflowEdge,
+  steps: { id: string; name?: string }[],
+): string {
+  const targetName = steps.find((s) => s.id === edge.target)?.name || edge.target;
+  if (edge.isDefault) return `${targetName} (default)`;
+  const condition = formatEdgeCondition(normalizeEdgeCondition(edge), steps);
+  const parts = [edge.label, condition].filter(Boolean).join(' — ');
+  return parts ? `${targetName} (${parts})` : targetName;
+}
+
 export function formatClause(
   clause: EdgeConditionClause,
   steps?: { id: string; name?: string }[],

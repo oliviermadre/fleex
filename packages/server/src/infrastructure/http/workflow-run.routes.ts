@@ -5,11 +5,14 @@ import {
   WorkflowRunNotFoundError,
   StepRunNotFoundError,
   InvalidGateOutcomeError,
+  InvalidRouteEdgeError,
+  StepNotAwaitingRoutingError,
 } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
 import type { CreateWorkflowRunUseCase } from '../../application/use-cases/create-workflow-run.js';
 import type { ResolveHumanGateUseCase } from '../../application/use-cases/resolve-human-gate.js';
+import type { ResolveAmbiguousRouteUseCase } from '../../application/use-cases/resolve-ambiguous-route.js';
 import type { RetryStepUseCase } from '../../application/use-cases/retry-step.js';
 import type { CancelWorkflowRunUseCase } from '../../application/use-cases/cancel-workflow-run.js';
 
@@ -74,6 +77,28 @@ function parseResolveGateBody(body: unknown): { ok: true; data: ResolveGateBody 
   };
 }
 
+interface ResolveRouteBody {
+  edgeId: string;
+  notes?: string;
+}
+
+function parseResolveRouteBody(body: unknown): { ok: true; data: ResolveRouteBody } | { ok: false; error: string } {
+  if (!isObject(body)) return { ok: false, error: 'body must be an object' };
+  if (!isString(body['edgeId']) || body['edgeId'].length === 0) {
+    return { ok: false, error: 'edgeId must be a non-empty string' };
+  }
+  if (body['notes'] !== undefined && !isString(body['notes'])) {
+    return { ok: false, error: 'notes must be a string' };
+  }
+  return {
+    ok: true,
+    data: {
+      edgeId: body['edgeId'],
+      ...(isString(body['notes']) ? { notes: body['notes'] } : {}),
+    },
+  };
+}
+
 // ── Route registration ─────────────────────────────────────────────────────
 
 interface WorkflowRunRouteDeps {
@@ -81,6 +106,7 @@ interface WorkflowRunRouteDeps {
   stepRunStore: StepRunStorePort;
   createWorkflowRun: CreateWorkflowRunUseCase;
   resolveHumanGate: ResolveHumanGateUseCase;
+  resolveAmbiguousRoute: ResolveAmbiguousRouteUseCase;
   retryStep: RetryStepUseCase;
   cancelWorkflowRun: CancelWorkflowRunUseCase;
   authorNameResolver: () => string;
@@ -161,6 +187,40 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
             return reply.code(404).send({ error: (err as WorkflowRunNotFoundError | StepRunNotFoundError).code, message: err.message });
           }
           if (err instanceof InvalidGateOutcomeError) {
+            return reply.code(400).send({ error: err.code, message: err.message });
+          }
+          throw err;
+        }
+      },
+    );
+
+    // POST /api/workflows/runs/:id/steps/:stepRunId/route — pick the edge to
+    // follow when several matched at once
+    app.post<{ Params: { id: string; stepRunId: string } }>(
+      '/api/workflows/runs/:id/steps/:stepRunId/route',
+      async (request, reply) => {
+        const parsed = parseResolveRouteBody(request.body);
+        if (!parsed.ok) return reply.code(400).send({ error: 'INVALID_BODY', message: parsed.error });
+
+        try {
+          await deps.resolveAmbiguousRoute.execute({
+            workflowRunId: request.params.id,
+            stepRunId: request.params.stepRunId,
+            edgeId: parsed.data.edgeId,
+            decidedBy: deps.authorNameResolver(),
+            notes: parsed.data.notes,
+          });
+          return reply.code(204).send();
+        } catch (err) {
+          if (err instanceof WorkflowRunNotFoundError || err instanceof StepRunNotFoundError) {
+            return reply.code(404).send({ error: (err as WorkflowRunNotFoundError | StepRunNotFoundError).code, message: err.message });
+          }
+          // Already routed (or never ambiguous): a second click, or two people
+          // deciding at once. 409 rather than 400 — the request was well-formed.
+          if (err instanceof StepNotAwaitingRoutingError) {
+            return reply.code(409).send({ error: err.code, message: err.message });
+          }
+          if (err instanceof InvalidRouteEdgeError) {
             return reply.code(400).send({ error: err.code, message: err.message });
           }
           throw err;

@@ -149,7 +149,9 @@ export interface PanelMemberSummary {
 export interface WorkflowStepSummary {
   readonly stepId: string;
   readonly name: string;
-  readonly status: 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
+  readonly status:
+    | 'pending' | 'queued' | 'running' | 'completed'
+    | 'failed' | 'needs_review' | 'awaiting_routing' | 'cancelled' | 'skipped';
   readonly isCurrent: boolean;
 }
 

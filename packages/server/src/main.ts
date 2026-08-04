@@ -132,6 +132,7 @@ async function main() {
     container.stepRunStore &&
     container.createWorkflowRun &&
     container.resolveHumanGate &&
+    container.resolveAmbiguousRoute &&
     container.retryStep &&
     container.cancelWorkflowRun
   ) {
@@ -140,6 +141,7 @@ async function main() {
       stepRunStore: container.stepRunStore,
       createWorkflowRun: container.createWorkflowRun,
       resolveHumanGate: container.resolveHumanGate,
+      resolveAmbiguousRoute: container.resolveAmbiguousRoute,
       retryStep: container.retryStep,
       cancelWorkflowRun: container.cancelWorkflowRun,
       authorNameResolver: () => 'workflow-trigger',

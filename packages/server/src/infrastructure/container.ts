@@ -75,6 +75,7 @@ import { WorkflowOrchestrator } from '../application/services/workflow-orchestra
 import { RunWorkflowStepUseCase } from '../application/use-cases/run-workflow-step.js';
 import { CreateWorkflowRunUseCase } from '../application/use-cases/create-workflow-run.js';
 import { ResolveHumanGateUseCase } from '../application/use-cases/resolve-human-gate.js';
+import { ResolveAmbiguousRouteUseCase } from '../application/use-cases/resolve-ambiguous-route.js';
 import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
 import { CancelWorkflowRunUseCase } from '../application/use-cases/cancel-workflow-run.js';
 import { RecoverOrphanedWorkflowStepsUseCase } from '../application/use-cases/recover-orphaned-workflow-steps.js';
@@ -405,6 +406,7 @@ export async function createContainer() {
   // Stores are non-null for sqlite and supabase adapters, null for json/pgsql.
   let createWorkflowRun: CreateWorkflowRunUseCase | null = null;
   let resolveHumanGate: ResolveHumanGateUseCase | null = null;
+  let resolveAmbiguousRoute: ResolveAmbiguousRouteUseCase | null = null;
   let retryStep: RetryStepUseCase | null = null;
   let cancelWorkflowRun: CancelWorkflowRunUseCase | null = null;
   let workflowOrchestrator: WorkflowOrchestrator | null = null;
@@ -440,6 +442,7 @@ export async function createContainer() {
       submitDeliverable,
       postComment,
       agentEventStore: agentEventStore_,
+      logger,
     });
 
     workflowOrchestrator = new WorkflowOrchestrator(runWorkflowStep, logger);
@@ -449,6 +452,7 @@ export async function createContainer() {
 
     createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment);
     resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
+    resolveAmbiguousRoute = new ResolveAmbiguousRouteUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
     retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, executeAgent);
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
 
@@ -564,6 +568,7 @@ export async function createContainer() {
     workflowOrchestrator,
     createWorkflowRun,
     resolveHumanGate,
+    resolveAmbiguousRoute,
     retryStep,
     cancelWorkflowRun,
     eventBus,

@@ -300,6 +300,7 @@ export type {
   StepRun,
   CreateWorkflowRunInput,
   ResolveHumanGateInput,
+  ResolveAmbiguousRouteInput,
 } from './types/workflow.js';
 
 export type {
@@ -332,6 +333,7 @@ export {
   getByPath,
   formatEdgeCondition,
   formatClause,
+  describeEdge,
 } from './workflow/edge-conditions.js';
 export { computeAncestors, computeDominators } from './workflow/graph.js';
 export type { EdgeValidationResult, EdgeFieldSuggestion } from './workflow/edge-validation.js';

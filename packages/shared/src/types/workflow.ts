@@ -143,9 +143,16 @@ export interface WorkflowRun {
   updatedAt: string;
 }
 
+/**
+ * `awaiting_routing` is deliberately NOT a flavour of `needs_review`: the step
+ * itself succeeded, only the *edge to take* is undecided. Keeping it distinct
+ * makes the three "waiting on a human" selectors (gate / needs_review /
+ * ambiguous routing) disjoint by construction, and keeps `result` meaningful
+ * for the conditions that run after the human picked a route.
+ */
 export type StepRunStatus =
   | 'queued' | 'running' | 'completed'
-  | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
+  | 'failed' | 'needs_review' | 'awaiting_routing' | 'cancelled' | 'skipped';
 
 export type StepRunResult = 'ok' | 'needs_review' | 'ko';
 
@@ -161,6 +168,18 @@ export interface StepOutput {
   schemaFields: Record<string, unknown>;
   outcome?: string;
   result: StepRunResult;
+  /**
+   * Set when several outgoing edges matched at once and a human had to arbitrate.
+   * `candidateEdgeIds` is persisted (never recomputed) so the choice offered to
+   * the human stays the one the engine actually saw, even if the template is
+   * edited in between.
+   */
+  routing?: {
+    candidateEdgeIds: string[];
+    chosenEdgeId?: string;
+    decidedBy?: string;
+    notes?: string;
+  };
 }
 
 export interface StepRun {
@@ -187,5 +206,10 @@ export interface CreateWorkflowRunInput {
 
 export interface ResolveHumanGateInput {
   outcome: string;
+  notes?: string;
+}
+
+export interface ResolveAmbiguousRouteInput {
+  edgeId: string;
   notes?: string;
 }

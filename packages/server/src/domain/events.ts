@@ -369,6 +369,16 @@ export interface WorkflowNeedsReviewEvent extends DomainEvent {
   ticketId: string;
 }
 
+/** Several outgoing edges matched: the run is parked until a human picks one. */
+export interface WorkflowAwaitingRoutingEvent extends DomainEvent {
+  type: 'workflow.awaiting_routing';
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+  candidateEdgeIds: string[];
+}
+
 export interface WorkflowStepCancelledEvent extends DomainEvent {
   type: 'workflow.step_cancelled';
   workflowRunId: string;
@@ -564,6 +574,7 @@ export type AnyDomainEvent =
   | WorkflowStepCompletedEvent
   | WorkflowStepCancelledEvent
   | WorkflowNeedsReviewEvent
+  | WorkflowAwaitingRoutingEvent
   | WorkflowRunCompletedEvent
   | WorkflowRunFailedEvent
   | WorkflowRunCancelledEvent;

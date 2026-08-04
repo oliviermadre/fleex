@@ -1,4 +1,5 @@
 import { EdgeEvaluator } from '../services/edge-evaluator.js';
+import { pauseForRouting } from '../services/ambiguous-routing.js';
 import {
   WorkflowRunNotFoundError, StepRunNotFoundError, InvalidGateOutcomeError,
 } from '../../domain/errors.js';
@@ -59,7 +60,23 @@ export class ResolveHumanGateUseCase {
         previousOutputs[sr.stepId] = (sr.output.schemaFields as Record<string, unknown>) ?? {};
       }
     }
-    const nextEdge = EdgeEvaluator.resolve({ current: stepRun.output!, steps: previousOutputs }, edges);
+    const resolution = EdgeEvaluator.resolve({ current: stepRun.output!, steps: previousOutputs }, edges);
+
+    // A gate's outgoing edges can be ambiguous just like any other step's — the
+    // outcome the reviewer picked may satisfy two conditions at once. Park and
+    // ask a second time rather than guess.
+    if (resolution.kind === 'ambiguous') {
+      await pauseForRouting(
+        {
+          runStore: this.runStore, stepRunStore: this.stepRunStore,
+          eventBus: this.eventBus, postComment: this.postComment, logger: this.logger,
+        },
+        { run, step, stepRun, output: stepRun.output!, candidates: resolution.edges },
+      );
+      return;
+    }
+
+    const nextEdge = resolution.kind === 'single' ? resolution.edge : null;
     stepRun.nextEdgeId = nextEdge?.id ?? null;
     await this.stepRunStore.save(stepRun);
 
