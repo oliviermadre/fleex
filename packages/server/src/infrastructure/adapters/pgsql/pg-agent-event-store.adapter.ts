@@ -24,7 +24,7 @@ export class PgAgentEventStore implements AgentEventStorePort {
   async startExecution(params: {
     executionId: string;
     personaId: string;
-    ticketId: string;
+    ticketId: string | null;
     mentionId: string;
     model?: string;
     effort?: string;

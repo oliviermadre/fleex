@@ -74,6 +74,9 @@ import { CreateTicketUseCase } from '../application/use-cases/create-ticket.js';
 import { WorkflowOrchestrator } from '../application/services/workflow-orchestrator.js';
 import { RunWorkflowStepUseCase } from '../application/use-cases/run-workflow-step.js';
 import { CreateWorkflowRunUseCase } from '../application/use-cases/create-workflow-run.js';
+import { CreateRoutineUseCase } from '../application/use-cases/create-routine.js';
+import { UpdateRoutineUseCase, DeleteRoutineUseCase } from '../application/use-cases/update-routine.js';
+import { RunRoutineUseCase } from '../application/use-cases/run-routine.js';
 import { ResolveHumanGateUseCase } from '../application/use-cases/resolve-human-gate.js';
 import { ResolveAmbiguousRouteUseCase } from '../application/use-cases/resolve-ambiguous-route.js';
 import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
@@ -138,6 +141,7 @@ export async function createContainer() {
     workflowTemplateStore,
     workflowRunStore,
     stepRunStore,
+    routineStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
@@ -410,6 +414,12 @@ export async function createContainer() {
   let retryStep: RetryStepUseCase | null = null;
   let cancelWorkflowRun: CancelWorkflowRunUseCase | null = null;
   let workflowOrchestrator: WorkflowOrchestrator | null = null;
+  // Routines ride on the same stores as workflows: no routine without a
+  // workflow engine to run it.
+  let createRoutine: CreateRoutineUseCase | null = null;
+  let updateRoutine: UpdateRoutineUseCase | null = null;
+  let deleteRoutine: DeleteRoutineUseCase | null = null;
+  let runRoutine: RunRoutineUseCase | null = null;
 
   if (workflowTemplateStore && workflowRunStore && stepRunStore) {
     // Step executors
@@ -456,6 +466,13 @@ export async function createContainer() {
     resolveAmbiguousRoute = new ResolveAmbiguousRouteUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
     retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, executeAgent);
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
+
+    if (routineStore) {
+      createRoutine = new CreateRoutineUseCase(routineStore, workflowTemplateStore, logger);
+      updateRoutine = new UpdateRoutineUseCase(routineStore, workflowTemplateStore);
+      deleteRoutine = new DeleteRoutineUseCase(routineStore);
+      runRoutine = new RunRoutineUseCase(routineStore, createWorkflowRun);
+    }
 
     logger.info('Workflow orchestration wired', { driver });
   } else {
@@ -566,6 +583,11 @@ export async function createContainer() {
     workflowTemplateStore,
     workflowRunStore,
     stepRunStore,
+    routineStore,
+    createRoutine,
+    updateRoutine,
+    deleteRoutine,
+    runRoutine,
     workflowOrchestrator,
     createWorkflowRun,
     resolveHumanGate,

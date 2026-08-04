@@ -1,11 +1,14 @@
 import { WorkflowRunEntity } from '../../../domain/entities/workflow-run.entity.js';
 import type { WorkflowRunStorePort } from '../../../application/ports/workflow-run-store.port.js';
 import type { SupabaseConnection } from './connection.js';
-import type { WorkflowRunStatus, WorkflowTemplateSnapshot } from '@fleex/shared';
+import type { WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject } from '@fleex/shared';
 
 interface WorkflowRunRow {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
+  routine_id: string | null;
+  subject_snapshot: RunSubject | null;
+  workspace_path: string | null;
   template_id: string;
   template_snapshot: WorkflowTemplateSnapshot;
   status: string;
@@ -34,6 +37,9 @@ function rowToEntity(r: WorkflowRunRow): WorkflowRunEntity {
     r.completed_at ? new Date(r.completed_at) : null,
     new Date(r.created_at),
     new Date(r.updated_at),
+    r.routine_id ?? null,
+    r.subject_snapshot ?? null,
+    r.workspace_path ?? null,
   );
 }
 
@@ -72,6 +78,28 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
     return data ? rowToEntity(data as WorkflowRunRow) : null;
   }
 
+  async getByRoutine(routineId: string): Promise<WorkflowRunEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('workflow_runs')
+      .select('*')
+      .eq('routine_id', routineId)
+      .order('started_at', { ascending: false });
+    if (error) throw new Error(`SupabaseWorkflowRunStore.getByRoutine failed: ${error.message}`);
+    return (data as WorkflowRunRow[]).map(rowToEntity);
+  }
+
+  async getActiveByRoutine(routineId: string): Promise<WorkflowRunEntity | null> {
+    const { data, error } = await this.conn.client
+      .from('workflow_runs')
+      .select('*')
+      .eq('routine_id', routineId)
+      .in('status', ACTIVE)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`SupabaseWorkflowRunStore.getActiveByRoutine failed: ${error.message}`);
+    return data ? rowToEntity(data as WorkflowRunRow) : null;
+  }
+
   async getByStatus(status: WorkflowRunStatus): Promise<WorkflowRunEntity[]> {
     const { data, error } = await this.conn.client
       .from('workflow_runs')
@@ -94,6 +122,9 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
     const { error } = await this.conn.client.from('workflow_runs').upsert({
       id: run.id,
       ticket_id: run.ticketId,
+      routine_id: run.routineId,
+      subject_snapshot: run.subjectSnapshot,
+      workspace_path: run.workspacePath,
       template_id: run.templateId,
       template_snapshot: run.templateSnapshot,
       status: run.status,

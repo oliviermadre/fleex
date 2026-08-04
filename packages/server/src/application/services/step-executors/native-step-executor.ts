@@ -20,10 +20,19 @@ export class NativeStepExecutor implements StepExecutor {
     if (actions.length === 0) {
       throw new Error(`native step ${input.step.id}: must have at least one action`);
     }
+    // Every native action available in Lot 1 writes to a ticket (status, type,
+    // labels, links…). A routine run has none, so the step is rejected instead
+    // of no-op'ing silently. Lot 2's `workflow.trigger` op lifts this.
+    if (!input.ticketId) {
+      throw new Error(
+        `native step ${input.step.id}: native actions operate on a ticket, which a routine run does not have.`,
+      );
+    }
+    const ticketId = input.ticketId;
 
     try {
       const result = await this.applyNativeActions.execute({
-        ticketId: input.ticketId,
+        ticketId,
         actions,
         workflowName: input.workflowContext.workflowName,
         references: {
@@ -43,7 +52,7 @@ export class NativeStepExecutor implements StepExecutor {
       // failure needs to know the ticket was in fact touched.
       const committed = err instanceof NativeActionsPartialFailure
         ? fields(err.committed)
-        : { ticketId: input.ticketId, actionsApplied: 0, changed: [], changedFields: '' };
+        : { ticketId, actionsApplied: 0, changed: [], changedFields: '' };
 
       return { output: { schemaFields: { ...committed, error: message }, result: 'ko' } };
     }

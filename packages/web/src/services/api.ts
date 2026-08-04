@@ -37,6 +37,10 @@ import type {
   OverlaySyncApplyResponse,
   OverlaySyncRemoveRequest,
   OverlaySyncRemoveResponse,
+  Routine,
+  CreateRoutineInput,
+  UpdateRoutineInput,
+  TicketDeliverable,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -1046,4 +1050,55 @@ export async function overlaySyncRemove(
     method: 'POST',
     body: JSON.stringify(req),
   });
+}
+
+// ── Routines ──────────────────────────────────────────────────────────────
+// A routine's run history ships its step runs and deliverables inline: the
+// detail screen mounts the existing WorkflowRunView per run, and a routine run
+// has no ticket to fetch deliverables from.
+
+export interface RoutineRunDetail {
+  run: WorkflowRun;
+  stepRuns: StepRun[];
+  deliverables: TicketDeliverable[];
+}
+
+/**
+ * List item = the routine plus its active run's status, so the list and the nav
+ * badge can show "waiting for you" without a second round-trip per routine.
+ */
+export interface RoutineListItem extends Routine {
+  activeRunId: string | null;
+  activeRunStatus: string | null;
+  awaitingAttention: boolean;
+}
+
+export async function fetchRoutines(): Promise<RoutineListItem[]> {
+  return request<RoutineListItem[]>('/routines');
+}
+
+export async function fetchRoutine(idOrSlug: string): Promise<Routine> {
+  return request<Routine>(`/routines/${encodeURIComponent(idOrSlug)}`);
+}
+
+export async function createRoutine(input: CreateRoutineInput): Promise<Routine> {
+  return request<Routine>('/routines', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function updateRoutine(id: string, changes: UpdateRoutineInput): Promise<Routine> {
+  return request<Routine>(`/routines/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify(changes),
+  });
+}
+
+export async function deleteRoutine(id: string): Promise<void> {
+  await request<void>(`/routines/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function launchRoutine(id: string): Promise<WorkflowRun> {
+  return request<WorkflowRun>(`/routines/${encodeURIComponent(id)}/run`, { method: 'POST' });
+}
+
+export async function fetchRoutineRuns(id: string): Promise<RoutineRunDetail[]> {
+  return request<RoutineRunDetail[]>(`/routines/${encodeURIComponent(id)}/runs`);
 }

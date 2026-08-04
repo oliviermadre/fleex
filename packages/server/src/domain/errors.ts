@@ -217,6 +217,45 @@ export class StepNotAwaitingRoutingError extends DomainError {
   }
 }
 
+// ── Routines ───────────────────────────────────────────────────────────────
+
+export class RoutineNotFoundError extends DomainError {
+  constructor(slugOrId: string) {
+    super(`Routine not found: ${slugOrId}`, 'ROUTINE_NOT_FOUND');
+  }
+}
+
+/**
+ * A routine already has a run in flight. Mirrors
+ * {@link WorkflowRunAlreadyActiveError} for tickets: two concurrent runs of the
+ * same routine would race on the same workspace and the same subject.
+ */
+export class RoutineRunAlreadyActiveError extends DomainError {
+  constructor(routineId: string) {
+    super(`A workflow run is already active on routine ${routineId}`, 'ROUTINE_RUN_ALREADY_ACTIVE');
+  }
+}
+
+/** A routine's slug collides with an existing one. */
+export class RoutineSlugConflictError extends DomainError {
+  constructor(slug: string) {
+    super(`A routine with slug "${slug}" already exists`, 'ROUTINE_SLUG_CONFLICT');
+  }
+}
+
+/**
+ * Scheduling (`once` / `cron` triggers) is not wired yet — accepting one would
+ * persist a routine that silently never fires. Rejected loudly instead.
+ */
+export class RoutineTriggerNotSupportedError extends DomainError {
+  constructor(kind: string) {
+    super(
+      `Routine trigger "${kind}" is not supported yet — only "manual" is. Scheduling ships with the routine scheduler.`,
+      'ROUTINE_TRIGGER_NOT_SUPPORTED',
+    );
+  }
+}
+
 export type SlackImportErrorCode =
   | 'SLACK_INVALID_URL'
   | 'SLACK_INTEGRATION_UNAVAILABLE'

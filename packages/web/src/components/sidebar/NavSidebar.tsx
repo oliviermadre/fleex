@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
+import { useRoutineStore } from '../../stores/routineStore';
 import { cn } from '../../lib/cn';
 import { RepositoriesIcon } from './icons';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
@@ -34,6 +36,11 @@ export function NavSidebar() {
   const sessions = useSessionStore((s) => s.sessions);
   const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
+  const routinesAwaiting = useRoutineStore((s) => s.routines.filter((r) => r.awaitingAttention).length);
+  const loadRoutines = useRoutineStore((s) => s.load);
+  // The badge must be right before the user ever opens /routines, so the nav —
+  // always mounted — is what primes the list.
+  useEffect(() => { void loadRoutines(); }, [loadRoutines]);
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
@@ -136,6 +143,26 @@ export function NavSidebar() {
           collapsed={navCollapsed}
           badge={liveExecutionCount > 0 ? (liveExecutionCount > 9 ? '9+' : String(liveExecutionCount)) : undefined}
           onClick={() => navigate('/execution-log')}
+        />
+
+        {/* Routines — workflow runs with no ticket. The badge counts routines
+            whose active run is blocked on a gate or waiting for an answer:
+            those runs have no ticket, so nothing else in the nav surfaces them. */}
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 2l4 4-4 4" />
+              <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+              <path d="M7 22l-4-4 4-4" />
+              <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+            </svg>
+          }
+          label="Routines"
+          shortLabel="Routines"
+          active={activePanel === 'routines'}
+          collapsed={navCollapsed}
+          badge={routinesAwaiting > 0 ? String(routinesAwaiting) : undefined}
+          onClick={() => navigate('/routines')}
         />
 
         {/* === Content === */}

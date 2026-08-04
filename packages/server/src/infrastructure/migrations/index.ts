@@ -24,6 +24,7 @@ import migration022 from './migrations/021_add_ticket_execution_config.js';
 import migration023 from './migrations/022_add_execution_effort_and_fast.js';
 import migration024 from './migrations/023_add_execution_source.js';
 import migration025 from './migrations/024_add_execution_output_refs.js';
+import migration026 from './migrations/025_add_routines.js';
 
 /**
  * Ordered array of all migrations.
@@ -55,4 +56,5 @@ export const allMigrations: Migration[] = [
   migration023,
   migration024,
   migration025,
+  migration026,
 ];

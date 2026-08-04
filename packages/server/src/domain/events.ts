@@ -230,7 +230,9 @@ export interface ExecutionCancelledEvent extends DomainEvent {
 export interface DeliverableCreatedEvent extends DomainEvent {
   type: 'deliverable.created';
   deliverableId: string;
-  ticketId: string;
+  /** Null when the deliverable belongs to a routine run instead of a ticket. */
+  ticketId: string | null;
+  workflowRunId?: string | null;
   agentName: string;
   status: 'draft' | 'final';
   /** Deliverable title — carried in the payload so consumers (e.g. audit-trail
@@ -241,7 +243,9 @@ export interface DeliverableCreatedEvent extends DomainEvent {
 export interface DeliverableUpdatedEvent extends DomainEvent {
   type: 'deliverable.updated';
   deliverableId: string;
-  ticketId: string;
+  /** Null when the deliverable belongs to a routine run instead of a ticket. */
+  ticketId: string | null;
+  workflowRunId?: string | null;
   agentName: string;
   oldStatus: string;
   newStatus: string;
@@ -255,7 +259,9 @@ export interface DeliverableUpdatedEvent extends DomainEvent {
 export interface DeliverableDeletedEvent extends DomainEvent {
   type: 'deliverable.deleted';
   deliverableId: string;
-  ticketId: string;
+  /** Null when the deliverable belongs to a routine run instead of a ticket. */
+  ticketId: string | null;
+  workflowRunId?: string | null;
 }
 
 // ── Persona events ──
@@ -340,7 +346,9 @@ export interface PanelExecutedEvent extends DomainEvent {
 export interface WorkflowRunCreatedEvent extends DomainEvent {
   type: 'workflow.run_created';
   workflowRunId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
   templateId: string;
 }
 
@@ -349,7 +357,9 @@ export interface WorkflowStepStartedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 export interface WorkflowStepCompletedEvent extends DomainEvent {
@@ -357,7 +367,9 @@ export interface WorkflowStepCompletedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
   nextEdgeId: string | null;
 }
 
@@ -366,7 +378,9 @@ export interface WorkflowNeedsReviewEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 /** Several outgoing edges matched: the run is parked until a human picks one. */
@@ -375,7 +389,9 @@ export interface WorkflowAwaitingRoutingEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
   candidateEdgeIds: string[];
 }
 
@@ -384,13 +400,17 @@ export interface WorkflowStepCancelledEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 export interface WorkflowRunCompletedEvent extends DomainEvent {
   type: 'workflow.run_completed';
   workflowRunId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 export interface WorkflowRunFailedEvent extends DomainEvent {
@@ -398,14 +418,18 @@ export interface WorkflowRunFailedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
   error: string;
 }
 
 export interface WorkflowRunCancelledEvent extends DomainEvent {
   type: 'workflow.run_cancelled';
   workflowRunId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 // ── Worktree events ──

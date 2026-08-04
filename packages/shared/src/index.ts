@@ -304,6 +304,21 @@ export type {
 } from './types/workflow.js';
 
 export type {
+  RunSubject,
+  RoutineTriggerKind,
+  RoutineTrigger,
+  RoutineOverlapPolicy,
+  Routine,
+  CreateRoutineInput,
+  UpdateRoutineInput,
+} from './types/routine.js';
+export {
+  emptyRunSubject,
+  normalizeRunSubject,
+  parseRepoRef,
+} from './types/routine.js';
+
+export type {
   NativeParamType,
   NativeOperationParam,
   NativeOperationDescriptor,

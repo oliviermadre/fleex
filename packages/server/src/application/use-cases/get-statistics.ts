@@ -480,6 +480,8 @@ export class GetStatisticsUseCase {
     }
     const workflowRunsByTicket = new Map<string, number>();
     for (const r of allRuns) {
+      // Routine runs have no ticket: they never contribute to a per-ticket count.
+      if (r.ticketId === null) continue;
       workflowRunsByTicket.set(r.ticketId, (workflowRunsByTicket.get(r.ticketId) ?? 0) + 1);
     }
 

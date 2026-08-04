@@ -100,7 +100,8 @@ export class ResolveHumanGateUseCase {
   }
 
   private async postResolutionComment(
-    ticketId: string,
+    /** Null for a routine run: the decision trail lives in the step_run itself. */
+    ticketId: string | null,
     workflowName: string,
     stepName: string,
     outcome: string,

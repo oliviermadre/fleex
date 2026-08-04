@@ -25,6 +25,9 @@ export class AgentStepExecutor implements StepExecutor {
     const { structuredOutput, rawText, executionId } = await this.executeAgent.executeForWorkflowStep({
       personaName: input.step.executorRef,
       ticketId: input.ticketId,
+      routineId: input.routineId,
+      subject: input.subject,
+      workflowRunId: input.workflowRunId,
       outputFormat,
       workflowContextPrompt,
       mode,

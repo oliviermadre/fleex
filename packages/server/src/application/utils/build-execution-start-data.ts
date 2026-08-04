@@ -4,7 +4,7 @@ export interface BuildExecutionStartArgs {
   executionId: string;
   personaId: string;
   personaName: string;
-  ticketId: string;
+  ticketId: string | null;
   mentionId?: string;
   model: string;
   effectiveMode: MentionExecutionMode;
@@ -19,8 +19,8 @@ export interface BuildExecutionStartArgs {
   systemPromptSections: string[];
   systemPromptLength: number;
   userPromptLength: number;
-  ticketTitle: string;
-  ticketStatus: string;
+  ticketTitle?: string;
+  ticketStatus?: string;
   commentsCount: number;
   deliverablesCount: number;
 }

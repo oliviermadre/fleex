@@ -10,6 +10,15 @@ export class PanelStepExecutor implements StepExecutor {
   constructor(private readonly runPanel: RunPanelUseCase) {}
 
   async execute(input: StepExecutionInput): Promise<StepExecutorResult> {
+    // Panels debate a ticket: their whole prompt is the ticket thread. Rather
+    // than silently running one on an empty context, a routine run rejects the
+    // step so the template author sees it immediately.
+    if (!input.ticketId) {
+      throw new Error(
+        `Step "${input.workflowContext.stepName}": panel steps are not supported in a routine run (no ticket to deliberate on).`,
+      );
+    }
+    const ticketId = input.ticketId;
     const outputFormat = mergeOutputSchemas(STANDARD_OUTPUT_SCHEMA, input.step.outputSchema);
     const ctxPrompt = composeWorkflowContextPrompt({
       workflowName: input.workflowContext.workflowName,
@@ -21,7 +30,7 @@ export class PanelStepExecutor implements StepExecutor {
 
     const result = await this.runPanel.execute({
       panelName: input.step.executorRef,
-      ticketId: input.ticketId,
+      ticketId,
       extraContextPrompt: ctxPrompt,
       outputFormatOverride: outputFormat,
       returnStructured: true,

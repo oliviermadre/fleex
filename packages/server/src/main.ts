@@ -47,6 +47,7 @@ import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
+import { routineRoutes } from './infrastructure/http/routines.routes.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
 import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
@@ -148,6 +149,31 @@ async function main() {
     }));
   } else {
     container.logger.warn('workflowRunStore or use cases not available — /api/workflows/runs routes skipped');
+  }
+
+  // Routine routes — same adapter boundary as workflows (sqlite/supabase only).
+  if (
+    container.routineStore &&
+    container.workflowRunStore &&
+    container.stepRunStore &&
+    container.createRoutine &&
+    container.updateRoutine &&
+    container.deleteRoutine &&
+    container.runRoutine
+  ) {
+    await app.register(routineRoutes({
+      routineStore: container.routineStore,
+      runStore: container.workflowRunStore,
+      stepRunStore: container.stepRunStore,
+      deliverableStore: container.deliverableStore,
+      createRoutine: container.createRoutine,
+      updateRoutine: container.updateRoutine,
+      deleteRoutine: container.deleteRoutine,
+      runRoutine: container.runRoutine,
+      authorNameResolver: () => 'routine-trigger',
+    }));
+  } else {
+    container.logger.warn('routineStore or use cases not available — /api/routines routes skipped');
   }
 
   // Agent API with auth

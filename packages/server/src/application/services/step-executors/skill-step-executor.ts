@@ -14,6 +14,15 @@ export class SkillStepExecutor implements StepExecutor {
   ) {}
 
   async execute(input: StepExecutionInput): Promise<StepExecutorResult> {
+    // `executeForSkill` builds its prompt from the ticket thread. Lot 1 keeps
+    // skill steps ticket-only rather than half-porting that pipeline: a
+    // routine run rejects the step loudly instead of running it blind.
+    if (!input.ticketId) {
+      throw new Error(
+        `Step "${input.workflowContext.stepName}": skill steps are not supported in a routine run (no ticket context).`,
+      );
+    }
+    const ticketId = input.ticketId;
     const skill = await this.skillStore.getByCommandName(input.step.executorRef);
     if (!skill) throw new Error(`skill "${input.step.executorRef}" not found`);
 
@@ -26,7 +35,7 @@ export class SkillStepExecutor implements StepExecutor {
       previousOutputs: input.workflowContext.previousOutputs,
     });
 
-    const result = await this.executeAgent.executeForSkill(skill.id, input.ticketId, {
+    const result = await this.executeAgent.executeForSkill(skill.id, ticketId, {
       outputFormatOverride: outputFormat,
       workflowContextPrompt,
       returnStructured: true,

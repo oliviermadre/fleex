@@ -1,5 +1,5 @@
 import type {
-  WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot,
+  WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject,
 } from '@fleex/shared';
 
 const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'needs_review'];
@@ -7,7 +7,7 @@ const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'needs_review'];
 export class WorkflowRunEntity {
   constructor(
     public readonly id: string,
-    public readonly ticketId: string,
+    public readonly ticketId: string | null,
     public readonly templateId: string,
     public readonly templateSnapshot: WorkflowTemplateSnapshot,
     public status: WorkflowRunStatus,
@@ -18,11 +18,31 @@ export class WorkflowRunEntity {
     public completedAt: Date | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
-  ) {}
+    // Trailing + defaulted so the 12 existing positional call sites keep
+    // compiling; only the code that actually needs an anchor other than a
+    // ticket has to change.
+    public readonly routineId: string | null = null,
+    public readonly subjectSnapshot: RunSubject | null = null,
+    public workspacePath: string | null = null,
+  ) {
+    // Exactly one anchor. A run with neither would be unreachable from every
+    // screen (kanban, cockpit, routines); a run with both would have two
+    // conflicting sources of context — ticket context vs routine subject —
+    // for its agent steps. Enforced here rather than only in the DB because
+    // SQLite cannot express the CHECK constraint.
+    if ((ticketId === null) === (routineId === null)) {
+      throw new Error(
+        `workflow run ${id}: exactly one of ticketId / routineId must be set `
+        + `(got ticketId=${ticketId}, routineId=${routineId})`,
+      );
+    }
+  }
 
   static create(params: {
     id: string;
-    ticketId: string;
+    ticketId?: string | null;
+    routineId?: string | null;
+    subjectSnapshot?: RunSubject | null;
     templateId: string;
     templateSnapshot: WorkflowTemplateSnapshot;
     triggeredBy: string;
@@ -31,7 +51,7 @@ export class WorkflowRunEntity {
     const now = new Date();
     return new WorkflowRunEntity(
       params.id,
-      params.ticketId,
+      params.ticketId ?? null,
       params.templateId,
       params.templateSnapshot,
       'running',
@@ -42,7 +62,24 @@ export class WorkflowRunEntity {
       null,
       now,
       now,
+      params.routineId ?? null,
+      params.subjectSnapshot ?? null,
+      null,
     );
+  }
+
+  /** True when this run is anchored to a routine instead of a ticket. */
+  isRoutineRun(): boolean {
+    return this.routineId !== null;
+  }
+
+  /**
+   * Recorded the first time a step provisions a workspace, so subsequent steps
+   * of the same routine run reuse the worktree instead of forking a new one.
+   */
+  setWorkspacePath(path: string | null): void {
+    this.workspacePath = path;
+    this.updatedAt = new Date();
   }
 
   advanceTo(stepId: string): void {
@@ -92,6 +129,9 @@ export class WorkflowRunEntity {
     return {
       id: this.id,
       ticketId: this.ticketId,
+      routineId: this.routineId,
+      subjectSnapshot: this.subjectSnapshot,
+      workspacePath: this.workspacePath,
       templateId: this.templateId,
       templateSnapshot: this.templateSnapshot,
       status: this.status,

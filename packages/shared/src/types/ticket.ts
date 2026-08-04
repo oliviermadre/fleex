@@ -433,7 +433,10 @@ export function stripHtmlCodeFence(content: string): string {
 
 export interface TicketDeliverable {
   readonly id: string;
-  readonly ticketId: string;
+  /** Null when the deliverable was produced by a routine run rather than on a ticket. */
+  readonly ticketId: string | null;
+  /** Set instead of `ticketId` for routine runs — the run is the anchor. */
+  readonly workflowRunId?: string | null;
   readonly agentName: string;
   readonly type: DeliverableType;
   readonly title: string;

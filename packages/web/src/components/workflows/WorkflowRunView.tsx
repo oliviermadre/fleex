@@ -222,8 +222,9 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   onSubmit={async (response) => {
                     // Post the user's response as a regular ticket comment so the
                     // agent picks it up from the ticket context on the next run,
-                    // then retry the step.
-                    await postTicketComment(run.ticketId, response);
+                    // then retry the step. A routine run has no ticket to post to —
+                    // the retry alone carries the step forward.
+                    if (run.ticketId) await postTicketComment(run.ticketId, response);
                     await retry(run.id, selectedStepRun.id);
                   }}
                 />

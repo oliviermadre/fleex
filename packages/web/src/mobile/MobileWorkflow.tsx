@@ -101,7 +101,8 @@ export function MobileWorkflow({ ticketId }: { ticketId: string }) {
           onRespondReview={async (response, stepRunId) => {
             // Same flow as desktop: the response becomes a ticket comment the
             // agent reads on the next run, then the step is retried.
-            await postTicketComment(d.run.ticketId, response);
+            // Routine runs have no ticket: the retry alone carries the step.
+            if (d.run.ticketId) await postTicketComment(d.run.ticketId, response);
             await retry(d.run.id, stepRunId);
           }}
           onRetry={(stepRunId) => retry(d.run.id, stepRunId)}

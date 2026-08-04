@@ -22,7 +22,7 @@ export interface AgentEventStorePort {
   startExecution(params: {
     executionId: string;
     personaId: string;
-    ticketId: string;
+    ticketId: string | null;
     mentionId: string;
     /**
      * The model that will run this execution (conversation override or persona

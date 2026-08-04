@@ -87,6 +87,7 @@ export async function computeUnreadCounts(
   }
   const deliverablesByTicket = new Map<string, typeof allDeliverables>();
   for (const d of allDeliverables) {
+    if (!d.ticketId) continue;
     let arr = deliverablesByTicket.get(d.ticketId);
     if (!arr) { arr = []; deliverablesByTicket.set(d.ticketId, arr); }
     arr.push(d);
@@ -127,14 +128,20 @@ export async function computeAgentActivity(
     deps.workflowRunStore?.getByStatus('blocked') ?? Promise.resolve([]),
   ]);
 
-  const runningExecutions = executions.filter(
+  // Routine-anchored executions and runs have a null ticketId — they belong to
+  // no ticket, so they can never contribute to a ticket's activity. Narrowing
+  // here keeps every downstream map keyed by a real ticket id.
+  const withTicket = <T extends { ticketId: string | null }>(x: T): x is T & { ticketId: string } =>
+    x.ticketId !== null;
+
+  const runningExecutions = executions.filter(withTicket).filter(
     (e) => e.status === 'running' && requested.has(e.ticketId),
   );
   const waitingMentions = mentions.filter(
     (m) => m.status === 'waiting_for_info' && requested.has(m.ticketId),
   );
-  const scopedRunningRuns = runningRuns.filter((r) => requested.has(r.ticketId));
-  const gateRuns = [...needsReviewRuns, ...blockedRuns].filter((r) =>
+  const scopedRunningRuns = runningRuns.filter(withTicket).filter((r) => requested.has(r.ticketId));
+  const gateRuns = [...needsReviewRuns, ...blockedRuns].filter(withTicket).filter((r) =>
     requested.has(r.ticketId),
   );
 
@@ -174,7 +181,7 @@ export async function computeAgentActivity(
   // NULL source reads as sdk. Freshest signal wins: completedAt, else the
   // last streamed event, else the start.
   const lastSdkActivityAtByTicket = new Map<string, string>();
-  for (const e of executions) {
+  for (const e of executions.filter(withTicket)) {
     if (e.source === 'cli' || !requested.has(e.ticketId)) continue;
     const ts = e.completedAt ?? e.lastEventAt ?? e.startedAt;
     const prev = lastSdkActivityAtByTicket.get(e.ticketId);
@@ -186,7 +193,7 @@ export async function computeAgentActivity(
   // accumulation get-statistics uses for totalCostUsd. "Cumulé" = every
   // dollar an agent spent on the ticket.
   const costByTicket = new Map<string, number>();
-  for (const e of executions) {
+  for (const e of executions.filter(withTicket)) {
     if (!requested.has(e.ticketId)) continue;
     costByTicket.set(e.ticketId, (costByTicket.get(e.ticketId) ?? 0) + (e.costUsd ?? 0));
   }

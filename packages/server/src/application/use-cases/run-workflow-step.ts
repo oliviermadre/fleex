@@ -80,7 +80,8 @@ export class RunWorkflowStepUseCase {
       });
 
       const input: StepExecutionInput = {
-        ticketId: run.ticketId, workflowRunId: run.id, stepRunId: stepRun.id, step,
+        ticketId: run.ticketId, routineId: run.routineId, subject: run.subjectSnapshot,
+        workflowRunId: run.id, stepRunId: stepRun.id, step,
         workflowContext: {
           workflowName: run.templateSnapshot.name, stepName: step.name,
           outgoingEdges, previousOutputs,
@@ -210,6 +211,9 @@ export class RunWorkflowStepUseCase {
     if (output.deliverable) {
       const deliverable = await this.deps.submitDeliverable.execute({
         ticketId: run.ticketId,
+        // Routine runs have no ticket: the deliverable hangs off the run, which
+        // the routine detail screen reads back.
+        workflowRunId: run.ticketId ? null : run.id,
         agentName: author,
         type: output.deliverable.type,
         title: output.deliverable.title,
@@ -224,15 +228,21 @@ export class RunWorkflowStepUseCase {
         type: 'deliverable.created',
         deliverableId: deliverable.id,
         ticketId: run.ticketId,
+        workflowRunId: run.ticketId ? null : run.id,
         agentName: author,
         status: (output.deliverable.status ?? 'final') as 'draft' | 'final',
         title: deliverable.title,
         occurredAt: now,
       });
     }
-    if (output.comment && output.comment.trim().length > 0) {
+    // A step comment is a ticket-timeline artifact. A routine run has no
+    // timeline — its step_runs ARE its timeline (cf. the Routines PRD, which
+    // deliberately introduces no run-comments table), so the comment stays in
+    // the step output and is rendered from there.
+    if (run.ticketId && output.comment && output.comment.trim().length > 0) {
+      const ticketId = run.ticketId;
       const { comment } = await this.deps.postComment.execute({
-        ticketId: run.ticketId,
+        ticketId,
         authorType: 'agent',
         authorName: author,
         body: output.comment,
@@ -244,7 +254,7 @@ export class RunWorkflowStepUseCase {
       this.deps.eventBus.emit({
         type: 'comment.posted',
         commentId: comment.id,
-        ticketId: run.ticketId,
+        ticketId,
         authorType: 'agent',
         authorName: author,
         createdMentions: [],

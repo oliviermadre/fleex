@@ -1517,7 +1517,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                     // workflowRuns store, so the card here and the panel there stay
                     // in sync and this card disappears once the step leaves
                     // needs_review.
-                    await api.postTicketComment(run.ticketId, response);
+                    // This card only ever renders inside a ticket, so ticketId is
+                    // set — the guard is for the shared nullable run type.
+                    if (run.ticketId) await api.postTicketComment(run.ticketId, response);
                     await retryStep(run.id, stepRun.id);
                   }}
                 />

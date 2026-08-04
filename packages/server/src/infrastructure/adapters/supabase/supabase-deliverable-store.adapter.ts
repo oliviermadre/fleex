@@ -6,7 +6,8 @@ import { chunkIds } from './supabase-chunk.js';
 
 interface DeliverableRow {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
+  workflow_run_id: string | null;
   agent_name: string;
   type: DeliverableType;
   title: string;
@@ -31,6 +32,7 @@ function rowToEntity(r: DeliverableRow): TicketDeliverableEntity {
     r.mention_id,
     new Date(r.created_at),
     new Date(r.updated_at),
+    r.workflow_run_id ?? null,
   );
 }
 
@@ -93,6 +95,16 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     return (data as DeliverableRow[]).map(rowToEntity);
   }
 
+  async getByWorkflowRun(workflowRunId: string): Promise<TicketDeliverableEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('deliverables')
+      .select('*')
+      .eq('workflow_run_id', workflowRunId)
+      .order('created_at');
+    if (error) throw new Error(`SupabaseDeliverableStore.getByWorkflowRun failed: ${error.message}`);
+    return (data as DeliverableRow[]).map(rowToEntity);
+  }
+
   async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
     const { data, error } = await this.conn.client
       .from('deliverables')
@@ -118,6 +130,7 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     const { error } = await this.conn.client.from('deliverables').upsert({
       id: deliverable.id,
       ticket_id: deliverable.ticketId,
+      workflow_run_id: deliverable.workflowRunId,
       agent_name: deliverable.agentName,
       type: deliverable.type,
       title: deliverable.title,

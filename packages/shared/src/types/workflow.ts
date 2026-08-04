@@ -1,4 +1,5 @@
 import type { DeliverableType, DeliverableStatus } from './ticket.js';
+import type { RunSubject } from './routine.js';
 
 export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route';
 
@@ -130,7 +131,21 @@ export interface WorkflowTemplateSnapshot {
 
 export interface WorkflowRun {
   id: string;
-  ticketId: string;
+  /**
+   * Null iff the run belongs to a routine. Exactly one of `ticketId` /
+   * `routineId` is set — enforced in the DB — so a run is always reachable
+   * either from its ticket or from its routine, and never orphaned.
+   */
+  ticketId: string | null;
+  /** Set iff the run has no ticket. See `Routine`. Absent on pre-routines rows. */
+  routineId?: string | null;
+  /**
+   * The routine's subject, frozen when the run started — same rationale as
+   * `templateSnapshot`: editing a routine must not rewrite its history.
+   */
+  subjectSnapshot?: RunSubject | null;
+  /** Workspace directory the run's agent steps ran in, when one was created. */
+  workspacePath?: string | null;
   templateId: string;
   templateSnapshot: WorkflowTemplateSnapshot;
   status: WorkflowRunStatus;
@@ -198,7 +213,10 @@ export interface StepRun {
 }
 
 export interface CreateWorkflowRunInput {
-  ticketId: string;
+  /** Omit when starting a routine run. */
+  ticketId?: string;
+  /** Omit when starting a ticket run. Exactly one of the two must be present. */
+  routineId?: string;
   templateId: string;
   triggeredBy: string;
   triggeredFrom: string;

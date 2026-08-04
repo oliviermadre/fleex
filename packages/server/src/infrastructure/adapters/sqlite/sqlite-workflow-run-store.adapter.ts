@@ -1,13 +1,16 @@
 import { WorkflowRunEntity } from '../../../domain/entities/workflow-run.entity.js';
 import type { WorkflowRunStorePort } from '../../../application/ports/workflow-run-store.port.js';
 import type { SqliteConnection } from './connection.js';
-import type { WorkflowRunStatus, WorkflowTemplateSnapshot } from '@fleex/shared';
+import type { WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject } from '@fleex/shared';
 
 const ACTIVE = "('running','needs_review')";
 
 interface Row {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
+  routine_id: string | null;
+  subject_snapshot: string | null;
+  workspace_path: string | null;
   template_id: string;
   template_snapshot: string;
   status: string;
@@ -38,6 +41,16 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
     return r ? this.toEntity(r) : null;
   }
 
+  async getByRoutine(routineId: string): Promise<WorkflowRunEntity[]> {
+    const rows = this.conn.db.prepare('SELECT * FROM workflow_runs WHERE routine_id = ? ORDER BY started_at DESC').all(routineId) as Row[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
+  async getActiveByRoutine(routineId: string): Promise<WorkflowRunEntity | null> {
+    const r = this.conn.db.prepare(`SELECT * FROM workflow_runs WHERE routine_id = ? AND status IN ${ACTIVE} LIMIT 1`).get(routineId) as Row | undefined;
+    return r ? this.toEntity(r) : null;
+  }
+
   async getByStatus(status: WorkflowRunStatus): Promise<WorkflowRunEntity[]> {
     const rows = this.conn.db.prepare('SELECT * FROM workflow_runs WHERE status = ?').all(status) as Row[];
     return rows.map((r) => this.toEntity(r));
@@ -55,13 +68,18 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
     // ON CONFLICT DO UPDATE performs an in-place UPDATE: no row is deleted, no cascade fires.
     this.conn.db.prepare(`
       INSERT INTO workflow_runs
-        (id, ticket_id, template_id, template_snapshot, status, current_step_id,
+        (id, ticket_id, routine_id, subject_snapshot, workspace_path,
+         template_id, template_snapshot, status, current_step_id,
          triggered_by, triggered_from, started_at, completed_at, created_at, updated_at)
       VALUES
-        (@id, @ticket_id, @template_id, @template_snapshot, @status, @current_step_id,
+        (@id, @ticket_id, @routine_id, @subject_snapshot, @workspace_path,
+         @template_id, @template_snapshot, @status, @current_step_id,
          @triggered_by, @triggered_from, @started_at, @completed_at, @created_at, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
         ticket_id = excluded.ticket_id,
+        routine_id = excluded.routine_id,
+        subject_snapshot = excluded.subject_snapshot,
+        workspace_path = excluded.workspace_path,
         template_id = excluded.template_id,
         template_snapshot = excluded.template_snapshot,
         status = excluded.status,
@@ -75,6 +93,9 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
     `).run({
       id: run.id,
       ticket_id: run.ticketId,
+      routine_id: run.routineId,
+      subject_snapshot: run.subjectSnapshot ? JSON.stringify(run.subjectSnapshot) : null,
+      workspace_path: run.workspacePath,
       template_id: run.templateId,
       template_snapshot: JSON.stringify(run.templateSnapshot),
       status: run.status,
@@ -102,6 +123,9 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       r.completed_at ? new Date(r.completed_at) : null,
       new Date(r.created_at),
       new Date(r.updated_at),
+      r.routine_id ?? null,
+      r.subject_snapshot ? JSON.parse(r.subject_snapshot) as RunSubject : null,
+      r.workspace_path ?? null,
     );
   }
 }

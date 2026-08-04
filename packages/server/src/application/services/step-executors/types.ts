@@ -3,10 +3,18 @@ import type {
   StepOutput,
   WorkflowEdgeCondition,
   WorkflowEdgeConditionGroup,
+  RunSubject,
 } from '@fleex/shared';
 
 export interface StepExecutionInput {
-  ticketId: string;
+  /** Null for a routine run — `routineId` + `subject` carry the context instead. */
+  ticketId: string | null;
+  routineId?: string | null;
+  /**
+   * The run's frozen subject (repos / brief / documents / board). Replaces the
+   * ticket as the agent's "what am I working on" when there is no ticket.
+   */
+  subject?: RunSubject | null;
   workflowRunId: string;
   stepRunId: string;
   step: WorkflowStep;

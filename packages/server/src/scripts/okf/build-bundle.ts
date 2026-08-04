@@ -125,7 +125,10 @@ export function buildBundle(input: OkfInput): OkfFile[] {
   );
   for (const list of publicCommentsByTicket.values()) list.sort(cmpCreated());
 
-  const deliverablesByTicket = groupBy(input.deliverables, (d) => d.ticketId);
+  const deliverablesByTicket = groupBy(
+    input.deliverables.filter((d): d is typeof d & { ticketId: string } => d.ticketId !== null),
+    (d) => d.ticketId,
+  );
   for (const list of deliverablesByTicket.values()) list.sort(cmpCreated());
   // ordinal (01, 02, …) and slug per deliverable, derived from the sorted order.
   const deliverableMeta = new Map<string, { ordinal: string; slug: string }>();
