@@ -115,22 +115,32 @@ const def: CommandDef = {
     }
 
     // Epic membership lives on a separate endpoint, not the ticket PATCH.
+    // Collect first, report once: printing here would put a bare `[fleex] …`
+    // line ahead of the JSON payload, and the tool layer parses the whole of
+    // stdout — one stray sentence and the caller loses `changed` entirely.
+    const epicOps: Array<{ op: 'added' | 'removed'; epic: string }> = [];
     for (const epic of addEpics) {
       const epicId = await resolveEpicId(epic);
       await apiPost(`${base}/api/epics/${epicId}/tickets/${uuid}`, undefined);
-      info(`Added to epic ${epic}`);
+      epicOps.push({ op: 'added', epic });
     }
     for (const epic of removeEpics) {
       const epicId = await resolveEpicId(epic);
       await apiDelete(`${base}/api/epics/${epicId}/tickets/${uuid}`);
-      info(`Removed from epic ${epic}`);
+      epicOps.push({ op: 'removed', epic });
     }
+
+    const renderEpicOps = () => {
+      for (const e of epicOps) {
+        info(e.op === 'added' ? `Added to epic ${e.epic}` : `Removed from epic ${e.epic}`);
+      }
+    };
 
     // A PATCH that changed nothing must not claim it did: an agent that trusts
     // "Updated" on a no-op reports work it never performed.
     if (changed !== null && changed.length === 0 && !hasTagOps && !hasEpicOps) {
       present(
-        { ok: true, changed: [], ...(displayId !== undefined ? { ticketId: displayId } : {}) },
+        { ok: true, changed: [], epics: epicOps, ...(displayId !== undefined ? { ticketId: displayId } : {}) },
         () => warn(
           displayId !== undefined
             ? `No changes applied to ticket #${displayId} — values already match.`
@@ -142,8 +152,11 @@ const def: CommandDef = {
 
     const suffix = changed && changed.length > 0 ? ` (${changed.join(', ')})` : '';
     present(
-      { ok: true, changed: changed ?? [], ...(displayId !== undefined ? { ticketId: displayId } : {}) },
-      () => ok(displayId !== undefined ? `Updated ticket #${displayId}: ${title}${suffix}` : 'Updated ticket'),
+      { ok: true, changed: changed ?? [], epics: epicOps, ...(displayId !== undefined ? { ticketId: displayId } : {}) },
+      () => {
+        renderEpicOps();
+        ok(displayId !== undefined ? `Updated ticket #${displayId}: ${title}${suffix}` : 'Updated ticket');
+      },
     );
   },
 };

@@ -414,8 +414,16 @@ export function ticketRoutes(container: Container) {
           }
         }
 
+        // Was it already there? `addLink` is idempotent, so no duplicate row is
+        // created either way — but we must remember, because a repeat link is a
+        // no-op and a no-op must not write an activity entry or emit an event.
+        // The side effects below still run: re-linking a repo whose worktree is
+        // missing has always recreated it, and that stays true.
+        const linkType = request.body.type as Parameters<TicketEntity['addLink']>[0];
+        const already = ticket.findLink(linkType, ref) !== undefined;
+
         const link = ticket.addLink(
-          request.body.type as Parameters<TicketEntity['addLink']>[0],
+          linkType,
           ref,
           request.body.label,
           request.body.url ?? null,
@@ -479,7 +487,12 @@ export function ticketRoutes(container: Container) {
           }
         }
 
+        // Still saved: the block above may have attached a worktree link even
+        // when the requested link already existed.
         await container.ticketStore.saveTicket(ticket);
+
+        if (already) return { ...link, created: false };
+
         await container.ticketStore.saveActivity(TicketActivityEntity.create({
           id: randomUUID(),
           ticketId: ticket.id,
@@ -496,7 +509,7 @@ export function ticketRoutes(container: Container) {
           label: link.label,
           occurredAt: new Date(),
         });
-        return link;
+        return { ...link, created: true };
       },
     );
 

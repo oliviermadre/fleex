@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, err, c, present } from '../../../core/colors.ts';
+import { ok, die, err, info, c, present } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiPost } from '../../../core/api.ts';
 import { accumulate, resolvePrRef, resolveIssueRef, resolveTicketId } from '../_shared.ts';
 
@@ -64,23 +64,29 @@ const def: CommandDef = {
       }
     }
 
+    // Each entry: the link type, the ref, and the request body to send.
+    const targets: Array<{ type: string; ref: string; body: Record<string, unknown> }> = [
+      ...repos.map((r) => ({ type: 'repository', ref: r, body: { type: 'repository', ref: r, label: r } })),
+      ...prRefs.map((p) => ({ type: 'github_pr', ref: p.ref, body: { type: 'github_pr', ref: p.ref, label: p.ref, url: p.url } })),
+      ...issueRefs.map((i) => ({ type: 'github_issue', ref: i.ref, body: { type: 'github_issue', ref: i.ref, label: i.ref, url: i.url } })),
+    ];
+
     // Collect first, report once: under --json a caller needs one payload, not a
-    // stream of human sentences.
+    // stream of human sentences — and it must be able to tell what was actually
+    // linked from what was already there. `created === undefined` means an older
+    // server that does not report it; we then fall back to the optimistic
+    // message rather than wrongly claiming a no-op.
     const linked: Array<{ type: string; ref: string }> = [];
-    for (const r of repos) {
-      await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'repository', ref: r, label: r });
-      linked.push({ type: 'repository', ref: r });
-    }
-    for (const p of prRefs) {
-      await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'github_pr', ref: p.ref, label: p.ref, url: p.url });
-      linked.push({ type: 'github_pr', ref: p.ref });
-    }
-    for (const i of issueRefs) {
-      await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'github_issue', ref: i.ref, label: i.ref, url: i.url });
-      linked.push({ type: 'github_issue', ref: i.ref });
+    const skipped: Array<{ type: string; ref: string }> = [];
+    for (const t of targets) {
+      const link = await apiPost<{ created?: boolean }>(`${base}/api/tickets/${uuid}/links`, t.body);
+      const entry = { type: t.type, ref: t.ref };
+      if (link?.created === false) skipped.push(entry);
+      else linked.push(entry);
     }
 
-    present({ ok: true, ticketId: uuid, linked }, () => {
+    present({ ok: true, ticketId: uuid, linked, skipped }, () => {
+      for (const s of skipped) info(`${s.type} ${s.ref} is already linked to this ticket — skipping`);
       for (const l of linked) ok(`Linked ${l.type} ${l.ref} to ticket`);
     });
   },
