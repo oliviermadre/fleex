@@ -1,5 +1,6 @@
 import { die, err, c } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
+import { resolveBoard } from '../board/_shared.ts';
 
 export const VALID_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled'] as const;
 export const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
@@ -199,7 +200,8 @@ export async function resolveTicketId(input: string, boardId?: string): Promise<
   const did = parseInt(cleaned, 10);
 
   const base = apiBase();
-  const url = boardId ? `${base}/api/tickets?boardId=${encodeURIComponent(boardId)}` : `${base}/api/tickets`;
+  const resolvedBoard = boardId ? await resolveBoardRef(boardId) : undefined;
+  const url = resolvedBoard ? `${base}/api/tickets?boardId=${encodeURIComponent(resolvedBoard)}` : `${base}/api/tickets`;
   const tickets = await apiGet<Ticket[]>(url);
   const matches = tickets.filter((t) => t.displayId === did);
 
@@ -238,12 +240,25 @@ export async function resolveAnyTicketUuid(input: string): Promise<string> {
 }
 
 /**
- * Resolve a board ID. If `specified` is provided, return it. Otherwise:
+ * Resolve any user-supplied board reference to a UUID: name, UUID, or unique
+ * id prefix. One contract for every `--board` in the CLI.
+ */
+export async function resolveBoardRef(input: string): Promise<string> {
+  return (await resolveBoard(input)).id;
+}
+
+/**
+ * Resolve a board reference to its UUID.
+ *
+ * When `specified` is given it goes through the same resolver as the `board`
+ * and `epic` commands (UUID, unique id prefix, or exact name) — `ticket` used
+ * to pass the string straight to the API, so a prefix copied from `board list`
+ * failed here while working everywhere else. When omitted:
  *   - If exactly one board exists, auto-select it.
  *   - Otherwise print the list and exit.
  */
 export async function resolveBoardId(specified?: string): Promise<string> {
-  if (specified) return specified;
+  if (specified) return resolveBoardRef(specified);
   const base = apiBase();
   const boards = await apiGet<Board[]>(`${base}/api/boards`);
   if (boards.length === 0) die('No boards found. Create one in the web UI first.');

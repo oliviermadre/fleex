@@ -1,6 +1,6 @@
 import readline from 'node:readline/promises';
 import type { CommandDef } from '../../../../core/types.ts';
-import { c, info, ok } from '../../../../core/colors.ts';
+import { c, info, ok, present } from '../../../../core/colors.ts';
 import { apiBase, apiGet, apiDelete } from '../../../../core/api.ts';
 import { resolveTicketId } from '../../_shared.ts';
 import type { DeliverableDTO } from '../_shared.ts';
@@ -16,7 +16,7 @@ const def: CommandDef = {
     cmd.argument('<ticket-id>', 'Ticket display ID or UUID');
     cmd.argument('<deliverable-id>', 'Deliverable UUID');
     cmd.option('-f, --force', 'Skip confirmation');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
   },
   action: async (ticketIdArg: string, delivId: string, opts: DeleteOptions) => {
     const uuid = await resolveTicketId(ticketIdArg, opts.board);
@@ -34,7 +34,7 @@ const def: CommandDef = {
     }
 
     await apiDelete(`${base}/api/tickets/${uuid}/deliverables/${delivId}`);
-    ok('Deleted deliverable');
+    present({ ok: true, deleted: true, deliverableId: delivId }, () => ok('Deleted deliverable'));
   },
 };
 

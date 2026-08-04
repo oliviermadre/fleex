@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, info } from '../../../core/colors.ts';
+import { ok, die, info, present } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiDelete } from '../../../core/api.ts';
 import { accumulate, resolvePrRef, resolveIssueRef, resolveTicketId } from '../_shared.ts';
 
@@ -23,7 +23,7 @@ const def: CommandDef = {
     cmd.option('--repo <org/name>', 'Repository to unlink (repeatable)', accumulate, [] as string[]);
     cmd.option('--pr <url|org/name#n>', 'GitHub PR to unlink — full PR URL or org/name#N (repeatable)', accumulate, [] as string[]);
     cmd.option('--issue <url|org/name#n>', 'GitHub issue to unlink — full issue URL or org/name#N (repeatable)', accumulate, [] as string[]);
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
   },
   action: async (idArg: string, opts: UnlinkOptions) => {
     const repos = opts.repo ?? [];
@@ -55,15 +55,32 @@ const def: CommandDef = {
       ...issueRefs.map((i) => ({ type: 'github_issue', ref: i.ref, kind: 'issue' })),
     ];
 
+    // Collect first, report once: under --json a caller needs one payload, and
+    // it must be able to tell what was actually unlinked from what was skipped.
+    const unlinked: Array<{ type: string; ref: string; kind: string }> = [];
+    const skipped: Array<{ type: string; ref: string; kind: string }> = [];
     for (const t of targets) {
       const link = ticket.links.find((l) => l.type === t.type && l.ref === t.ref);
       if (!link) {
-        info(`${t.kind} ${t.ref} is not linked to this ticket — skipping`);
+        skipped.push(t);
         continue;
       }
       await apiDelete(`${base}/api/tickets/${uuid}/links/${link.id}`);
-      ok(`Unlinked ${t.kind} ${t.ref} from ticket`);
+      unlinked.push(t);
     }
+
+    present(
+      {
+        ok: true,
+        ticketId: uuid,
+        unlinked: unlinked.map(({ type, ref }) => ({ type, ref })),
+        skipped: skipped.map(({ type, ref }) => ({ type, ref })),
+      },
+      () => {
+        for (const t of skipped) info(`${t.kind} ${t.ref} is not linked to this ticket — skipping`);
+        for (const t of unlinked) ok(`Unlinked ${t.kind} ${t.ref} from ticket`);
+      },
+    );
   },
 };
 

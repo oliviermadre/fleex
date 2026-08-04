@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../../core/types.ts';
-import { ok, die } from '../../../../core/colors.ts';
+import { ok, die, present } from '../../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../../core/api.ts';
 import { resolveTicketId } from '../../_shared.ts';
 import { assertValidType, assertValidStatus, resolveContent, type DeliverableDTO } from '../_shared.ts';
@@ -27,7 +27,7 @@ const def: CommandDef = {
     cmd.option('--content <content>', 'Inline content (Markdown or HTML)');
     cmd.option('--file <path>', 'Read content from file (Markdown or HTML)');
     cmd.option('--agent-name <name>', 'Override the agent name attached to this deliverable (default: cli)');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
   },
   action: async (ticketIdArg: string, opts: AddOptions) => {
     if (!opts.title) die('Missing --title');
@@ -49,7 +49,7 @@ const def: CommandDef = {
         agentName: opts.agentName ?? 'cli',
       },
     );
-    ok(`Deliverable created: ${created.id}`);
+    present(created, () => ok(`Deliverable created: ${created.id}`));
   },
 };
 

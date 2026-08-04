@@ -77,16 +77,28 @@ export class TicketGroupEntity {
     groupStatus?: TicketGroupStatus;
     blocked?: boolean;
     favorite?: boolean;
-  }): void {
-    if (changes.name !== undefined) this.name = changes.name;
-    if (changes.emoji !== undefined) this.emoji = changes.emoji;
-    if (changes.color !== undefined) this.color = changes.color;
-    if (changes.description !== undefined) this.description = changes.description;
-    if (changes.timeframe !== undefined) this.timeframe = changes.timeframe;
-    if (changes.groupStatus !== undefined) this.groupStatus = changes.groupStatus;
-    if (changes.blocked !== undefined) this.blocked = changes.blocked;
-    if (changes.favorite !== undefined) this.favorite = changes.favorite;
-    this.updatedAt = new Date();
+  }): Record<string, { from: unknown; to: unknown }> {
+    const diff: Record<string, { from: unknown; to: unknown }> = {};
+    const apply = <K extends 'name' | 'emoji' | 'color' | 'description' | 'timeframe' | 'groupStatus' | 'blocked' | 'favorite'>(
+      key: K,
+    ): void => {
+      const next = changes[key];
+      if (next === undefined || next === this[key]) return;
+      diff[key] = { from: this[key], to: next };
+      (this[key] as unknown) = next;
+    };
+    apply('name');
+    apply('emoji');
+    apply('color');
+    apply('description');
+    apply('timeframe');
+    apply('groupStatus');
+    apply('blocked');
+    apply('favorite');
+
+    // Only a real change moves the clock — a no-op PATCH must stay invisible.
+    if (Object.keys(diff).length > 0) this.updatedAt = new Date();
+    return diff;
   }
 
   archive(): void {

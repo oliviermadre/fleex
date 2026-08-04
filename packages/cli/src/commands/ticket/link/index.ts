@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, err, c } from '../../../core/colors.ts';
+import { ok, die, err, c, present } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiPost } from '../../../core/api.ts';
 import { accumulate, resolvePrRef, resolveIssueRef, resolveTicketId } from '../_shared.ts';
 
@@ -24,7 +24,7 @@ const def: CommandDef = {
     cmd.option('--repo <org/name>', 'Repository to link (repeatable)', accumulate, [] as string[]);
     cmd.option('--pr <url|org/name#n>', 'GitHub PR to link — full PR URL or org/name#N (repeatable)', accumulate, [] as string[]);
     cmd.option('--issue <url|org/name#n>', 'GitHub issue to link — full issue URL or org/name#N (repeatable)', accumulate, [] as string[]);
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
   },
   action: async (idArg: string, opts: LinkOptions) => {
     const repos = opts.repo ?? [];
@@ -64,18 +64,25 @@ const def: CommandDef = {
       }
     }
 
+    // Collect first, report once: under --json a caller needs one payload, not a
+    // stream of human sentences.
+    const linked: Array<{ type: string; ref: string }> = [];
     for (const r of repos) {
       await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'repository', ref: r, label: r });
-      ok(`Linked repo ${r} to ticket`);
+      linked.push({ type: 'repository', ref: r });
     }
     for (const p of prRefs) {
       await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'github_pr', ref: p.ref, label: p.ref, url: p.url });
-      ok(`Linked PR ${p.ref} to ticket`);
+      linked.push({ type: 'github_pr', ref: p.ref });
     }
     for (const i of issueRefs) {
       await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'github_issue', ref: i.ref, label: i.ref, url: i.url });
-      ok(`Linked issue ${i.ref} to ticket`);
+      linked.push({ type: 'github_issue', ref: i.ref });
     }
+
+    present({ ok: true, ticketId: uuid, linked }, () => {
+      for (const l of linked) ok(`Linked ${l.type} ${l.ref} to ticket`);
+    });
   },
 };
 

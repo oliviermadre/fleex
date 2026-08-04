@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
+import { ok, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
 import { resolveTicketId } from '../_shared.ts';
 
@@ -12,13 +12,13 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.argument('<body>', 'Comment body');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
   },
   action: async (idArg: string, bodyArg: string, opts: CommentOptions) => {
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();
     await apiPost(`${base}/api/tickets/${uuid}/comments`, { body: bodyArg });
-    ok(`Comment added to ticket #${idArg}`);
+    present({ ok: true, ticketId: uuid }, () => ok(`Comment added to ticket #${idArg}`));
   },
 };
 

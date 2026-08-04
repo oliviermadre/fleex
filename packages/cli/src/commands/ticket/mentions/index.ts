@@ -23,7 +23,7 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.option('--status <status>', 'Filter by status (pending, acknowledged, waiting_for_info, resolved)');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
     cmd.option('--json', 'Output raw JSON');
   },
   action: async (idArg: string, opts: MentionsOptions) => {

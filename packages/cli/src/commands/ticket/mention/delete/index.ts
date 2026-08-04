@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../../core/types.ts';
-import { ok, info, die } from '../../../../core/colors.ts';
+import { ok, info, die, present } from '../../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../../core/api.ts';
 import { canPrompt, promptYesNo, closePrompts } from '../../../../core/prompt.ts';
 import { getMention, mentionLabel } from '../_shared.ts';
@@ -34,7 +34,7 @@ const def: CommandDef = {
     }
 
     await apiDelete(`${apiBase()}/api/mentions/${mention.id}`);
-    ok(`Deleted mention ${label}`);
+    present({ ok: true, deleted: true, mentionId: mention.id }, () => ok(`Deleted mention ${label}`));
   },
 };
 

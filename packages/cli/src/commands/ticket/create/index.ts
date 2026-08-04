@@ -21,7 +21,7 @@ const def: CommandDef = {
   description: 'Create a new ticket (--title required)',
   setup(cmd) {
     cmd.requiredOption('--title <title>', 'Ticket title (required)');
-    cmd.option('--board <id>', 'Board ID (auto-detected if only one)');
+    cmd.option('--board <id>', 'Board: name, UUID, or unique id prefix (auto-detected if only one)');
     cmd.option('--description <description>', 'Ticket description');
     cmd.option('--priority <priority>', 'Priority: none | low | medium | high');
     cmd.option('--status <status>', 'Initial status (default: backlog)');

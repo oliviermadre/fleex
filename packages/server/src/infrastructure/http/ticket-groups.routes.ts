@@ -52,11 +52,12 @@ export function ticketGroupRoutes(container: Container) {
     app.patch<{ Params: { id: string }; Body: UpdateTicketGroupRequest }>('/api/epics/:id', async (request) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
-      group.update(request.body);
+      const diff = group.update(request.body);
       await container.ticketGroupStore.saveTicketGroup(group);
       emit({ type: 'ticketGroup.updated', groupId: group.id, changes: { ...request.body }, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:updated', group.toDTO());
-      return group.toDTO();
+      // `changed` lets a caller tell a real write from a no-op (see tickets.routes).
+      return { ...group.toDTO(), changed: Object.keys(diff) };
     });
 
     app.post<{ Params: { id: string } }>('/api/epics/:id/archive', async (request) => {

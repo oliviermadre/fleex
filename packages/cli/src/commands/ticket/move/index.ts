@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
+import { ok, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
 import { assertValidStatus, resolveTicketId } from '../_shared.ts';
 
@@ -13,14 +13,17 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.argument('<status>', 'Target status (backlog|todo|doing|reviewing|done|cancelled)');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
   },
   action: async (idArg: string, statusArg: string, opts: MoveOptions) => {
     assertValidStatus(statusArg);
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();
     const result = await apiPost<{ displayId: number; status: string }>(`${base}/api/tickets/${uuid}/move`, { status: statusArg });
-    ok(`Moved ticket #${result.displayId} to ${result.status}`);
+    present(
+      { ok: true, ticketId: result.displayId, status: result.status },
+      () => ok(`Moved ticket #${result.displayId} to ${result.status}`),
+    );
   },
 };
 

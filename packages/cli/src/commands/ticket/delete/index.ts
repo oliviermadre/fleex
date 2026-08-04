@@ -1,6 +1,6 @@
 import readline from 'node:readline/promises';
 import type { CommandDef } from '../../../core/types.ts';
-import { c, info, ok } from '../../../core/colors.ts';
+import { c, info, ok, present } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiDelete } from '../../../core/api.ts';
 import { resolveTicketId } from '../_shared.ts';
 
@@ -17,7 +17,7 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.option('-f, --force', 'Skip confirmation');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
   },
   action: async (idArg: string, opts: DeleteOptions) => {
     const uuid = await resolveTicketId(idArg, opts.board);
@@ -35,7 +35,7 @@ const def: CommandDef = {
     }
 
     await apiDelete(`${base}/api/tickets/${uuid}`);
-    ok('Deleted ticket');
+    present({ ok: true, deleted: true, ticketId: uuid }, () => ok('Deleted ticket'));
   },
 };
 

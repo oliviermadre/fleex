@@ -267,7 +267,9 @@ export function ticketRoutes(container: Container) {
       for (const event of deriveTicketUpdateEvents(ticket.id, diff, new Date())) {
         emit(event);
       }
-      return ticket.toDTO();
+      // `changed` lets a caller tell a real write from a no-op. Additive on top
+      // of the DTO — existing consumers simply ignore the extra key.
+      return { ...ticket.toDTO(), changed: Object.keys(diff) };
     });
 
     // PATCH /api/tickets/:id/execution-config — conversation-scoped execution

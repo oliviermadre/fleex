@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, warn, info, die, c } from '../../../core/colors.ts';
+import { ok, warn, info, die, c, present } from '../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../core/api.ts';
 import { canPrompt, promptYesNo, closePrompts } from '../../../core/prompt.ts';
 import { resolveEpic } from '../_shared.ts';
@@ -34,7 +34,7 @@ const def: CommandDef = {
     }
 
     await apiDelete(`${apiBase()}/api/epics/${epic.id}`);
-    ok(`Deleted epic ${c.bold(label)}`);
+    present({ ok: true, deleted: true, epicId: epic.id }, () => ok(`Deleted epic ${c.bold(label)}`));
   },
 };
 

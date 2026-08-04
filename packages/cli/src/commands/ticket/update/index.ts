@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, info } from '../../../core/colors.ts';
+import { ok, die, info, warn, present } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiPost, apiPatch, apiDelete } from '../../../core/api.ts';
 import {
   assertValidStatus,
@@ -9,6 +9,7 @@ import {
   accumulate,
   resolveTicketId,
   resolveEpicId,
+  resolveBoardRef,
 } from '../_shared.ts';
 
 interface UpdateOptions {
@@ -37,7 +38,7 @@ const def: CommandDef = {
   description: 'Update a ticket (PATCH, only provided fields are sent)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
     cmd.option('--title <title>', 'New title');
     cmd.option('--description <description>', 'New description');
     cmd.option('--status <status>', 'New status');
@@ -50,7 +51,7 @@ const def: CommandDef = {
     cmd.option('--no-blocked', 'Unmark blocked');
     cmd.option('--due <date>', 'Set due date (YYYY-MM-DD or ISO 8601)');
     cmd.option('--clear-due', 'Clear the due date');
-    cmd.option('--to-board <id>', 'Move the ticket to another board');
+    cmd.option('--to-board <id>', 'Move the ticket to another board: name, UUID, or unique id prefix');
     cmd.option('--add-tag <tag>', 'Add a tag (repeatable)', accumulate, [] as string[]);
     cmd.option('--rm-tag <tag>', 'Remove a tag (repeatable)', accumulate, [] as string[]);
     cmd.option('--add-epic <epic>', 'Add the ticket to an epic (id/prefix, repeatable)', accumulate, [] as string[]);
@@ -80,7 +81,7 @@ const def: CommandDef = {
     if (opts.blocked !== undefined) body.blocked = opts.blocked;
     if (opts.due !== undefined) body.dueDate = normalizeDueDate(opts.due);
     if (opts.clearDue) body.dueDate = null;
-    if (opts.toBoard !== undefined) body.boardId = opts.toBoard;
+    if (opts.toBoard !== undefined) body.boardId = await resolveBoardRef(opts.toBoard);
 
     if (Object.keys(body).length === 0 && !hasTagOps && !hasEpicOps) {
       die('No updates specified. Use --title, --description, --status, --priority, --type, --assignee, --favorite/--no-favorite, --blocked/--no-blocked, --due/--clear-due, --to-board, --add-tag/--rm-tag, or --add-epic/--remove-epic.');
@@ -100,10 +101,17 @@ const def: CommandDef = {
 
     let displayId: number | undefined;
     let title: string | undefined;
+    // `null` = the server did not report a diff (older server); we then can't
+    // claim a no-op, so we fall back to the previous, optimistic message.
+    let changed: string[] | null = null;
     if (Object.keys(body).length > 0) {
-      const result = await apiPatch<{ displayId: number; title: string }>(`${base}/api/tickets/${uuid}`, body);
+      const result = await apiPatch<{ displayId: number; title: string; changed?: string[] }>(
+        `${base}/api/tickets/${uuid}`,
+        body,
+      );
       displayId = result.displayId;
       title = result.title;
+      changed = result.changed ?? null;
     }
 
     // Epic membership lives on a separate endpoint, not the ticket PATCH.
@@ -118,7 +126,25 @@ const def: CommandDef = {
       info(`Removed from epic ${epic}`);
     }
 
-    ok(displayId !== undefined ? `Updated ticket #${displayId}: ${title}` : 'Updated ticket');
+    // A PATCH that changed nothing must not claim it did: an agent that trusts
+    // "Updated" on a no-op reports work it never performed.
+    if (changed !== null && changed.length === 0 && !hasTagOps && !hasEpicOps) {
+      present(
+        { ok: true, changed: [], ...(displayId !== undefined ? { ticketId: displayId } : {}) },
+        () => warn(
+          displayId !== undefined
+            ? `No changes applied to ticket #${displayId} — values already match.`
+            : 'No changes applied — values already match.',
+        ),
+      );
+      return;
+    }
+
+    const suffix = changed && changed.length > 0 ? ` (${changed.join(', ')})` : '';
+    present(
+      { ok: true, changed: changed ?? [], ...(displayId !== undefined ? { ticketId: displayId } : {}) },
+      () => ok(displayId !== undefined ? `Updated ticket #${displayId}: ${title}${suffix}` : 'Updated ticket'),
+    );
   },
 };
 
