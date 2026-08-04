@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, MarkerType, Position, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
 import type { WorkflowRun, StepRun, WorkflowStep } from '@fleex/shared';
 import { StepRunNode, type StepRunNodeData } from './StepRunNode';
 import { WorkflowDagEdge } from './WorkflowDagEdge';
@@ -80,16 +81,16 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
         source: e.source,
         target: e.target,
         type: 'workflow',
-        label:
-          e.label ??
-          (e.condition
-            ? `${e.condition.field} ${e.condition.operator} ${String(e.condition.value)}`
-            : ''),
+        // Same renderer as the editor: the hand-rolled fallback this replaces
+        // only understood the legacy single `condition`, so every edge built
+        // with a condition *group* (the norm since assisted authoring) rendered
+        // with no label at all.
+        label: e.label ?? formatEdgeCondition(normalizeEdgeCondition(e), run.templateSnapshot.steps),
         animated: latestPerStep.get(e.source)?.nextEdgeId === e.id,
         style: { strokeDasharray: e.isDefault ? undefined : '5,5' },
         markerEnd: { type: MarkerType.ArrowClosed },
       })),
-    [run.templateSnapshot.edges, latestPerStep],
+    [run.templateSnapshot.edges, run.templateSnapshot.steps, latestPerStep],
   );
 
   const selectedStep: WorkflowStep | undefined = selectedStepId
