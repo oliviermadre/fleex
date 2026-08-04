@@ -128,7 +128,6 @@ export function MarkdownEditor({
     if (controlledMode) onModeChange?.(nextMarkdownMode(mode, allowSplit));
     else cycleUncontrolledMode();
   }, [controlledMode, onModeChange, mode, allowSplit, cycleUncontrolledMode]);
-  const [focused, setFocused] = useState(false);
   const [grown, setGrown] = useState(false);
 
   const valueRef = useRef(value);
@@ -261,14 +260,6 @@ export function MarkdownEditor({
         handleTyping();
         textareaProps?.onChange?.(e);
       }}
-      onFocus={(e) => {
-        setFocused(true);
-        textareaProps?.onFocus?.(e);
-      }}
-      onBlur={(e) => {
-        setFocused(false);
-        textareaProps?.onBlur?.(e);
-      }}
       onPaste={(e) => {
         if (enableFileUpload) fileUpload.pasteHandler(e);
         textareaProps?.onPaste?.(e);
@@ -296,8 +287,15 @@ export function MarkdownEditor({
     </>
   );
 
+  // `collapsible` only in `panel`: there the toggle is overlaid on the text.
+  // The composer's lives in the bottom bar, where it covers nothing.
   const toggle = (
-    <MarkdownModeToggle mode={mode} onChange={setMode} allowSplit={allowSplit} />
+    <MarkdownModeToggle
+      mode={mode}
+      onChange={setMode}
+      allowSplit={allowSplit}
+      collapsible={variant === 'panel'}
+    />
   );
 
   const dragProps = enableFileUpload ? fileUpload.dragProps : {};
@@ -323,13 +321,14 @@ export function MarkdownEditor({
           {attachButton}
         </div>
         {mode !== 'write' && previewPane}
-        {/* Overlaid on the content, dimmed until the editor is hovered or focused. */}
-        <div
-          className={cn(
-            'absolute right-2 top-2 z-10 transition-opacity',
-            focused ? 'opacity-100' : 'opacity-35 group-hover:opacity-100',
-          )}
-        >
+        {/*
+          Overlaid on the content: at rest it is dim *and* collapsed to the
+          active mode alone, so it stops competing with the text underneath.
+          Focus deliberately doesn't open it — focus means "I'm typing", which
+          is exactly when the toggle is least useful and most in the way.
+          Hover, and only hover, expands it.
+        */}
+        <div className="absolute right-2 top-2 z-10 opacity-35 transition-opacity group-hover:opacity-100">
           {toggle}
         </div>
       </div>

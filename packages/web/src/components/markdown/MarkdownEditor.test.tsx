@@ -195,3 +195,43 @@ describe('MarkdownEditor — narrow viewport', () => {
     expect(readMarkdownMode('unit_narrow')).toBe('split');
   });
 });
+
+/**
+ * The panel toggle is overlaid *on* the text. At rest it must collapse to the
+ * active mode alone, otherwise the ~90px chip sits across a line and costs the
+ * readability the transparency was meant to buy. The composer's toggle lives
+ * in the bottom bar, covers nothing, and must keep all its segments.
+ *
+ * jsdom evaluates no media query, so this asserts the contract at the class
+ * level: which buttons opt into the hover-guarded collapse.
+ */
+describe('MarkdownEditor — overlaid toggle collapse', () => {
+  const collapsed = (label: string) =>
+    screen.getByLabelText(label).className.includes('[@media(hover:hover)]:hidden');
+
+  it('collapses the panel toggle to the active mode only', () => {
+    render(<Harness surfaceKind="unit_collapse" initial="hello" defaultMode="write" />);
+
+    expect(collapsed('Write')).toBe(false);
+    expect(collapsed('Preview')).toBe(true);
+    expect(collapsed('Split')).toBe(true);
+  });
+
+  it('follows the active mode rather than a fixed segment', () => {
+    render(<Harness surfaceKind="unit_collapse_move" initial="hello" defaultMode="write" />);
+
+    fireEvent.click(screen.getByLabelText('Split'));
+
+    expect(collapsed('Split')).toBe(false);
+    expect(collapsed('Write')).toBe(true);
+  });
+
+  it('never collapses the composer toggle, which overlays nothing', () => {
+    render(
+      <Harness surfaceKind="unit_no_collapse" variant="composer" initial={'a\nb'} defaultMode="write" />,
+    );
+
+    expect(collapsed('Preview')).toBe(false);
+    expect(collapsed('Split')).toBe(false);
+  });
+});

@@ -32,6 +32,16 @@ interface MarkdownModeToggleProps {
   onChange: (mode: MarkdownMode) => void;
   /** Hidden on narrow viewports, where a side-by-side split is unreadable. */
   allowSplit?: boolean;
+  /**
+   * Collapse to the active mode alone until an ancestor `.group` is hovered.
+   * For the overlaid toggle of the `panel` variant: the chip sits *on* the
+   * text, so at rest it shrinks to a third of its width instead of covering
+   * a whole line.
+   *
+   * Guarded by `@media (hover: hover)` — on a touch screen nothing ever
+   * hovers, and a toggle collapsed to its active mode would be a dead end.
+   */
+  collapsible?: boolean;
   className?: string;
 }
 
@@ -43,6 +53,7 @@ export function MarkdownModeToggle({
   mode,
   onChange,
   allowSplit = true,
+  collapsible = false,
   className,
 }: MarkdownModeToggleProps) {
   const modes: MarkdownMode[] = allowSplit ? ['write', 'preview', 'split'] : ['write', 'preview'];
@@ -71,6 +82,10 @@ export function MarkdownModeToggle({
             mode === m
               ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
               : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]',
+            // Pure CSS: no state, no measurement, no re-render on hover.
+            // `group-hover:flex` outranks the hidden rule on specificity, so
+            // the source order of the two utilities doesn't matter.
+            collapsible && mode !== m && '[@media(hover:hover)]:hidden group-hover:flex',
           )}
         >
           {ICONS[m]}
