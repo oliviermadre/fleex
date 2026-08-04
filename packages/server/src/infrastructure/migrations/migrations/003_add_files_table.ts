@@ -29,7 +29,6 @@ const migration: Migration = {
         size_bytes INTEGER NOT NULL,
         created_at TIMESTAMPTZ NOT NULL
       )`,
-      json: null,
     });
     if (filesSql) await ctx.exec(filesSql);
 
@@ -62,7 +61,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
     await ctx.exec('DROP TABLE IF EXISTS files');
   },
 };

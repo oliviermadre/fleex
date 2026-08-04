@@ -1,18 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { JsonMentionStore } from '../../src/infrastructure/adapters/json-mention-store.adapter.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { SqliteConnection } from '../../src/infrastructure/adapters/sqlite/connection.js';
+import { SqliteMentionStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-mention-store.adapter.js';
+import { runPendingMigrations } from '../../src/infrastructure/migrations/run-migrations.js';
 import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
-import type { HostFs } from '../../src/infrastructure/host/types.js';
-import type { LoggerPort } from '../../src/application/ports/logger.port.js';
 
-// In-memory HostFs: getPendingForAgent never touches disk, and save() only needs
-// writeFile to be a no-op, so a minimal stub is enough to exercise the real query.
-const fakeFs = {
-  exists: async () => false,
-  readFile: async () => '[]',
-  writeFile: async () => {},
-} as unknown as HostFs;
-
-const logger = { info() {}, warn() {}, error() {}, debug() {} } as unknown as LoggerPort;
+const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 
 function mention(id: string, agent: string): TicketMentionEntity {
   return TicketMentionEntity.create({
@@ -24,7 +16,21 @@ function mention(id: string, agent: string): TicketMentionEntity {
   });
 }
 
-describe('JsonMentionStore.getPendingForAgent', () => {
+let conn: SqliteConnection;
+let store: SqliteMentionStoreAdapter;
+
+beforeEach(async () => {
+  conn = new SqliteConnection(':memory:');
+  await conn.init();
+  await runPendingMigrations('sqlite', conn, silent as never);
+  store = new SqliteMentionStoreAdapter(conn);
+});
+
+afterEach(() => {
+  conn.close();
+});
+
+describe('SqliteMentionStore.getPendingForAgent', () => {
   // WHY: getPendingForAgent feeds the persona-scoped auto-trigger
   // (handleAutoTriggerAgent → execute()). A `failed` mention must be excluded
   // exactly like `resolved`/`waiting_for_info`, otherwise creating any new mention
@@ -32,9 +38,6 @@ describe('JsonMentionStore.getPendingForAgent', () => {
   // unresolved cause, which is the explicit non-goal of ticket #443. A crashed
   // mention is only ever relaunched by the user via the crash card (runMention).
   it('excludes failed mentions so the auto-trigger never re-runs a crashed one', async () => {
-    const store = new JsonMentionStore(fakeFs, '/tmp', logger);
-    await store.init();
-
     const pending = mention('pending', 'builder');
 
     const acknowledged = mention('ack', 'builder');

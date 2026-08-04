@@ -28,7 +28,7 @@ Browser (React 19)  ←→  Server (Fastify)  ←→  Host Gateway (Bun)
 
 4 packages: `web`, `server`, `shared`, `host-gateway`
 
-Storage: SQLite (default), JSON, PostgreSQL
+Storage: SQLite (default), PostgreSQL, Supabase
 
 ## Prerequisites
 
@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/oliviermadre/fleex/main/install.sh 
 
 The interactive setup wizard will walk you through:
 - Display name and base worktree path
-- Storage driver selection (SQLite, JSON, or PostgreSQL)
+- SQLite database file path (SQLite is the only backend offered at install time)
 
 It seeds 3 default agent personas and a Personal board to get you started.
 
@@ -184,7 +184,7 @@ Earlier versions stored config in a per-repo `.env` file. No manual migration is
 | Frontend | React 19, Zustand, xterm.js, Tailwind CSS 4, Vite |
 | Backend | Fastify 5, WebSocket, Pino |
 | Gateway | Bun, PTY |
-| Storage | SQLite / PostgreSQL / JSON |
+| Storage | SQLite / PostgreSQL / Supabase |
 | Runtime | Bun (dev + gateway), Node.js (server) |
 
 ## Development

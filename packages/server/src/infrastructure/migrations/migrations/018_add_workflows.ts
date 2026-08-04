@@ -8,7 +8,6 @@ const migration: Migration = {
   name: '018_add_workflows',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return;
 
     const jsonType = ctx.dialect({ sqlite: 'TEXT', pgsql: 'JSONB', supabase: 'JSONB' });
     const tsType = ctx.dialect({ sqlite: 'TEXT', pgsql: 'TIMESTAMPTZ', supabase: 'TIMESTAMPTZ' });
@@ -87,7 +86,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
     await ctx.exec('DROP TABLE IF EXISTS step_runs');
     await ctx.exec('DROP TABLE IF EXISTS workflow_runs');
     await ctx.exec('DROP TABLE IF EXISTS workflow_templates');

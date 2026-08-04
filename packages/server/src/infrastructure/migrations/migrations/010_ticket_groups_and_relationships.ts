@@ -4,7 +4,6 @@ const migration: Migration = {
   name: '010_ticket_groups_and_relationships',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return;
 
     // ── ticket_groups ──
     const createTicketGroups = ctx.dialect({
@@ -115,7 +114,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
 
     const tables = ['ticket_relationships', 'ticket_group_memberships', 'ticket_groups'];
     for (const table of tables) {

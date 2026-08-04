@@ -20,7 +20,7 @@ import type { StepRunStorePort } from '../../application/ports/step-run-store.po
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
-export type StorageDriver = 'json' | 'sqlite' | 'pgsql' | 'supabase';
+export type StorageDriver = 'sqlite' | 'pgsql' | 'supabase';
 
 export interface StorageStores {
   configStore: ConfigPort;
@@ -45,8 +45,8 @@ export interface StorageStores {
 }
 
 export function resolveStorageDriver(): StorageDriver {
-  const raw = process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'json';
-  const valid: StorageDriver[] = ['json', 'sqlite', 'pgsql', 'supabase'];
+  const raw = process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'sqlite';
+  const valid: StorageDriver[] = ['sqlite', 'pgsql', 'supabase'];
   if (!valid.includes(raw as StorageDriver)) {
     throw new Error(
       `Invalid FLEEX_STORAGE_DRIVER="${raw}". Must be one of: ${valid.join(', ')}`,
@@ -59,13 +59,9 @@ export async function createStores(
   driver: StorageDriver,
   deps: { execFn: ExecFn; hostFs: HostFs; homedir: string; logger: LoggerPort },
 ): Promise<StorageStores> {
-  if (driver === 'json') {
-    return createJsonStores(deps);
-  }
-
-  // Sessions are always stored locally (JSON) — they are ephemeral tmux data,
+  // Sessions are always stored locally — they are ephemeral tmux data,
   // not ticketing data. Using a remote store causes network-race flickering.
-  const sessionStore = await createJsonSessionStore(deps);
+  const sessionStore = await createLocalSessionStore(deps);
 
   switch (driver) {
     case 'sqlite':
@@ -77,72 +73,13 @@ export async function createStores(
   }
 }
 
-async function createJsonStores(deps: {
-  execFn: ExecFn;
-  hostFs: HostFs;
-  homedir: string;
-  logger: LoggerPort;
-}): Promise<StorageStores> {
-  const { JsonConfigAdapter } = await import('./json-config.adapter.js');
-  const { JsonSessionStore } = await import('./json-session-store.adapter.js');
-  const { JsonTicketStore } = await import('./json-ticket-store.adapter.js');
-  const { JsonAgentTokenStore } = await import('./json-agent-token-store.adapter.js');
-  const { JsonCommentStore } = await import('./json-comment-store.adapter.js');
-  const { JsonMentionStore } = await import('./json-mention-store.adapter.js');
-  const { JsonDeliverableStore } = await import('./json-deliverable-store.adapter.js');
-  const { JsonPersonaStore } = await import('./json-persona-store.adapter.js');
-  const { JsonAgentEventStore } = await import('./json-agent-event-store.adapter.js');
-  const { JsonDomainEventLogStore } = await import('./json-domain-event-log-store.adapter.js');
-  const { JsonSkillStore } = await import('./json-skill-store.adapter.js');
-  const { JsonPanelStore } = await import('./json-panel-store.adapter.js');
-  const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
-  const { JsonFileMetaStore } = await import('./json-file-meta-store.adapter.js');
-  const { JsonTicketGroupStore } = await import('./json-ticket-group-store.adapter.js');
-
-  // Run pending migrations (JSON adapter — tracking via _migrations.json)
-  const { runPendingMigrations } = await import('../migrations/run-migrations.js');
-  await runPendingMigrations('json', null, deps.logger, { homedir: deps.homedir });
-
-  const configStore = new JsonConfigAdapter(deps.execFn, deps.hostFs, deps.homedir);
-  await configStore.init();
-  const sessionStore = new JsonSessionStore(deps.hostFs, deps.homedir, deps.logger);
-  await sessionStore.init();
-  const ticketStore = new JsonTicketStore(deps.hostFs, deps.homedir, deps.logger);
-  await ticketStore.init();
-  const agentTokenStore = new JsonAgentTokenStore(deps.hostFs, deps.homedir, deps.logger);
-  await agentTokenStore.init();
-  const commentStore = new JsonCommentStore(deps.hostFs, deps.homedir, deps.logger);
-  await commentStore.init();
-  const mentionStore = new JsonMentionStore(deps.hostFs, deps.homedir, deps.logger);
-  await mentionStore.init();
-  const deliverableStore = new JsonDeliverableStore(deps.hostFs, deps.homedir, deps.logger);
-  await deliverableStore.init();
-  const personaStore = new JsonPersonaStore(deps.hostFs, deps.homedir, deps.logger);
-  await personaStore.init();
-  const agentEventStore = new JsonAgentEventStore(deps.hostFs, deps.homedir, deps.logger);
-  await agentEventStore.init();
-  const domainEventLogStore = new JsonDomainEventLogStore(deps.hostFs, deps.homedir, deps.logger);
-  await domainEventLogStore.init();
-  const skillStore = new JsonSkillStore(deps.hostFs, deps.homedir, deps.logger);
-  await skillStore.init();
-  const panelStore = new JsonPanelStore(deps.hostFs, deps.homedir, deps.logger);
-  await panelStore.init();
-  const fileStore = new DiskFileStoreAdapter(deps.homedir);
-  const fileMetaStore = new JsonFileMetaStore(deps.hostFs, deps.homedir, deps.logger);
-  await fileMetaStore.init();
-  const ticketGroupStore = new JsonTicketGroupStore(deps.hostFs, deps.homedir, deps.logger);
-  await ticketGroupStore.init();
-
-  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore, ticketGroupStore, workflowTemplateStore: null, workflowRunStore: null, stepRunStore: null };
-}
-
-async function createJsonSessionStore(deps: {
+async function createLocalSessionStore(deps: {
   hostFs: HostFs;
   homedir: string;
   logger: LoggerPort;
 }): Promise<SessionStorePort> {
-  const { JsonSessionStore } = await import('./json-session-store.adapter.js');
-  const store = new JsonSessionStore(deps.hostFs, deps.homedir, deps.logger);
+  const { LocalSessionStore } = await import('./local-session-store.adapter.js');
+  const store = new LocalSessionStore(deps.hostFs, deps.homedir, deps.logger);
   await store.init();
   return store;
 }

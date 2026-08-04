@@ -12,7 +12,6 @@ const migration: Migration = {
   name: '021_add_ticket_execution_config',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return;
 
     const cols: { name: string; sql: { sqlite: string; pgsql: string; supabase: string } }[] = [
       {
@@ -50,7 +49,7 @@ const migration: Migration = {
     ];
 
     for (const col of cols) {
-      const stmt = ctx.dialect({ ...col.sql, json: null });
+      const stmt = ctx.dialect({ ...col.sql });
       if (!stmt) continue;
       try {
         await ctx.exec(stmt);
@@ -61,7 +60,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
     // SQLite doesn't support DROP COLUMN in older versions; skip for safety.
     if (ctx.adapter === 'sqlite') return;
     for (const name of ['conversation_mode', 'model_override', 'effort_override', 'fast_mode']) {

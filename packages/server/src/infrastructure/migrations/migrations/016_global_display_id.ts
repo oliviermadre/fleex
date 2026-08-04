@@ -24,7 +24,6 @@ const migration: Migration = {
   name: '016_global_display_id',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return; // JSON adapter computes display_id at runtime
 
     // ── Step 1: Renumber tickets by created_at ASC (tie-break on id) ──
     const renumberSql = ctx.dialect({
@@ -50,7 +49,6 @@ const migration: Migration = {
         )
         UPDATE tickets t SET display_id = o.rn FROM ordered o WHERE t.id = o.id
       `,
-      json: null,
     });
     if (renumberSql) await ctx.exec(renumberSql);
 
@@ -79,7 +77,6 @@ const migration: Migration = {
       sqlite: `ALTER TABLE boards DROP COLUMN next_display_id`,
       pgsql: `ALTER TABLE boards DROP COLUMN IF EXISTS next_display_id`,
       supabase: `ALTER TABLE boards DROP COLUMN IF EXISTS next_display_id`,
-      json: null,
     });
     if (dropColSql) {
       try {
@@ -92,7 +89,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
 
     // Drop UNIQUE index
     await ctx.exec(`DROP INDEX IF EXISTS idx_tickets_display_id_unique`);
@@ -102,7 +98,6 @@ const migration: Migration = {
       sqlite: `ALTER TABLE boards ADD COLUMN next_display_id INTEGER NOT NULL DEFAULT 1`,
       pgsql: `ALTER TABLE boards ADD COLUMN IF NOT EXISTS next_display_id INT NOT NULL DEFAULT 1`,
       supabase: `ALTER TABLE boards ADD COLUMN IF NOT EXISTS next_display_id INT NOT NULL DEFAULT 1`,
-      json: null,
     });
     if (reAddColSql) {
       try {
@@ -132,7 +127,6 @@ const migration: Migration = {
           1
         )
       `,
-      json: null,
     });
     if (restoreCounterSql) await ctx.exec(restoreCounterSql);
 

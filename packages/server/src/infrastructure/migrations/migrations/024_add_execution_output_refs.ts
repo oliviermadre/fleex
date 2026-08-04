@@ -21,7 +21,6 @@ const migration: Migration = {
   name: '024_add_execution_output_refs',
 
   async up(ctx) {
-    if (ctx.adapter === 'json') return;
 
     const cols = [
       {
@@ -37,7 +36,7 @@ const migration: Migration = {
     ];
 
     for (const col of cols) {
-      const stmt = ctx.dialect({ ...col, json: null });
+      const stmt = ctx.dialect({ ...col });
       if (!stmt) continue;
       try {
         await ctx.exec(stmt);
@@ -60,7 +59,6 @@ const migration: Migration = {
   },
 
   async down(ctx) {
-    if (ctx.adapter === 'json') return;
     // SQLite doesn't support DROP COLUMN in older versions; skip for safety.
     if (ctx.adapter === 'sqlite') return;
     for (const name of ['comment_id', 'deliverable_id']) {

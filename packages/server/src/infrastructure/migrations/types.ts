@@ -1,4 +1,4 @@
-export type AdapterType = 'json' | 'sqlite' | 'pgsql' | 'supabase';
+export type AdapterType = 'sqlite' | 'pgsql' | 'supabase';
 
 export interface MigrationContext {
   adapter: AdapterType;

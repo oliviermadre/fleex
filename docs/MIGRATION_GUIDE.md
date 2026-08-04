@@ -12,7 +12,7 @@ OAuth SSO (GitHub / Google) and WebSocket reverse tunnel for NAT traversal.
 2. [Prerequisites](#2-prerequisites)
 3. [PostgreSQL setup](#3-postgresql-setup)
 4. [Environment variables reference](#4-environment-variables-reference)
-5. [Migrating from local JSON storage](#5-migrating-from-local-json-storage)
+5. [Storage drivers](#5-storage-drivers)
 6. [Host gateway setup](#6-host-gateway-setup)
 7. [Central server setup](#7-central-server-setup)
 8. [OAuth SSO — GitHub](#8-oauth-sso--github)
@@ -123,7 +123,7 @@ A default local user is seeded automatically:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `PORT` | No | `3000` | HTTP port for the Fastify server |
-| `DATABASE_URL` | For Postgres | — | PostgreSQL connection URL. If omitted, JSON file storage is used |
+| `DATABASE_URL` | For Postgres | — | PostgreSQL connection URL. If omitted, SQLite storage is used |
 | `HOST_GATEWAY_URL` | No | `http://localhost:3001` | URL of the default host gateway |
 | `HOST_HOMEDIR` | No | OS homedir | Override the home directory path on the gateway host |
 | `GITHUB_CLIENT_ID` | For GitHub SSO | — | GitHub OAuth App client ID |
@@ -151,36 +151,22 @@ A default local user is seeded automatically:
 
 ---
 
-## 5. Migrating from local JSON storage
+## 5. Storage drivers
 
-If you were running Fleex in local-only mode (no PostgreSQL), your data lives
-in JSON files on the host filesystem (under `~/.fleex/`). To migrate:
+`FLEEX_STORAGE_DRIVER` accepts three values:
 
-1. **Set up PostgreSQL** (section 3 above).
-2. **Start the server** with `DATABASE_URL` set — migrations run
-   automatically, creating all tables.
-3. **Export existing JSON data** (optional — if you want to preserve tickets,
-   scratchpads, etc.):
+| Driver | When |
+|---|---|
+| `sqlite` | Default. The only backend offered at install time — single machine, zero setup. |
+| `pgsql` | Self-hosted PostgreSQL — see §3. Configured manually. |
+| `supabase` | Hosted PostgreSQL — see §3. Configured manually. |
 
-```bash
-# Example: read existing tickets JSON
-cat ~/.fleex/tickets.json | jq .
+Any other value fails fast at boot. Switching driver is a manual operation:
+there is no cross-driver data migrator, so a new driver starts on an empty
+database.
 
-# Insert into PostgreSQL (you'd write a small script, or re-create
-# tickets through the UI).
-```
-
-There is no automatic JSON → PostgreSQL migrator at this time. For most
-teams, starting fresh is simpler. The host gateway still stores its identity
-in `~/.fleex/gateway.json` — this is intentional and separate from the
-application data.
-
-4. **Remove the local JSON files** once you've verified everything works:
-
-```bash
-rm -f ~/.fleex/sessions.json ~/.fleex/tickets.json ~/.fleex/tokens.json
-# Keep ~/.fleex/gateway.json — it's the gateway identity!
-```
+> `~/.fleex/gateway.json` is the gateway identity, not application data — it is
+> unrelated to the storage driver and must be kept.
 
 ---
 

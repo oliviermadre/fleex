@@ -2,8 +2,8 @@
  * Driver-agnostic loader for the OKF export.
  *
  * Reads the full Fleex knowledge base through the existing storage adapters —
- * whichever driver `FLEEX_STORAGE_DRIVER` selects (supabase | sqlite | pgsql |
- * json) — and returns an {@link OkfInput} snapshot plus a `close()` to release
+ * whichever driver `FLEEX_STORAGE_DRIVER` selects (supabase | sqlite | pgsql)
+ * — and returns an {@link OkfInput} snapshot plus a `close()` to release
  * the connection. The rendering (`buildBundle`) stays a pure DTO→string
  * transform; this module is the only place that touches a database.
  *
@@ -14,16 +14,6 @@
  * uniformly through the per-group / per-ticket port methods — this works for
  * every driver instead of reaching into one driver's REST client.
  */
-import {
-  appendFile,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
@@ -38,7 +28,6 @@ import type { PersonaStorePort } from '../../application/ports/persona-store.por
 import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
 import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
-import type { HostFs } from '../../infrastructure/host/types.js';
 import type { StorageDriver } from '../../infrastructure/adapters/storage-factory.js';
 import type { OkfInput } from './build-bundle.js';
 
@@ -150,8 +139,6 @@ async function createKnowledgeStores(
       return createSqliteStores();
     case 'pgsql':
       return createPgsqlStores();
-    case 'json':
-      return createJsonStores(logger);
   }
 }
 
@@ -256,107 +243,3 @@ async function createPgsqlStores(): Promise<KnowledgeStores> {
   };
 }
 
-async function createJsonStores(logger: LoggerPort): Promise<KnowledgeStores> {
-  const { JsonTicketStore } = await import('../../infrastructure/adapters/json-ticket-store.adapter.js');
-  const { JsonTicketGroupStore } = await import('../../infrastructure/adapters/json-ticket-group-store.adapter.js');
-  const { JsonCommentStore } = await import('../../infrastructure/adapters/json-comment-store.adapter.js');
-  const { JsonDeliverableStore } = await import('../../infrastructure/adapters/json-deliverable-store.adapter.js');
-  const { JsonMentionStore } = await import('../../infrastructure/adapters/json-mention-store.adapter.js');
-  const { JsonPersonaStore } = await import('../../infrastructure/adapters/json-persona-store.adapter.js');
-  const { JsonPanelStore } = await import('../../infrastructure/adapters/json-panel-store.adapter.js');
-  const { JsonSkillStore } = await import('../../infrastructure/adapters/json-skill-store.adapter.js');
-
-  const fs = nodeHostFs();
-  const home = homedir();
-  const ticketStore = new JsonTicketStore(fs, home, logger);
-  const groupStore = new JsonTicketGroupStore(fs, home, logger);
-  const commentStore = new JsonCommentStore(fs, home, logger);
-  const deliverableStore = new JsonDeliverableStore(fs, home, logger);
-  const mentionStore = new JsonMentionStore(fs, home, logger);
-  const personaStore = new JsonPersonaStore(fs, home, logger);
-  const panelStore = new JsonPanelStore(fs, home, logger);
-  const skillStore = new JsonSkillStore(fs, home, logger);
-  await Promise.all([
-    ticketStore.init(),
-    groupStore.init(),
-    commentStore.init(),
-    deliverableStore.init(),
-    mentionStore.init(),
-    personaStore.init(),
-    panelStore.init(),
-    skillStore.init(),
-  ]);
-
-  return {
-    ticketStore,
-    groupStore,
-    commentStore,
-    deliverableStore,
-    mentionStore,
-    personaStore,
-    panelStore,
-    skillStore,
-    workflowStore: null, // JSON driver ships no workflow-template store
-    close: async () => {},
-  };
-}
-
-/**
- * Minimal local {@link HostFs} backed by `node:fs` — the JSON stores read
- * `~/.fleex/projects/*.json` directly off disk. (The server normally talks to
- * the remote host-gateway; a standalone export script has no gateway.)
- */
-function nodeHostFs(): HostFs {
-  return {
-    readFile: (path) => readFile(path, 'utf8'),
-    writeFile: async (path, content) => {
-      await writeFile(path, content, 'utf8');
-    },
-    appendFile: async (path, content) => {
-      await appendFile(path, content, 'utf8');
-    },
-    readdir: async (path) => {
-      const entries = await readdir(path, { withFileTypes: true });
-      return entries.map((e) => ({
-        name: e.name,
-        isFile: e.isFile(),
-        isDirectory: e.isDirectory(),
-      }));
-    },
-    stat: async (path) => {
-      try {
-        const s = await stat(path);
-        return { size: s.size, mtimeMs: s.mtimeMs };
-      } catch {
-        return null;
-      }
-    },
-    exists: async (path) => {
-      try {
-        await stat(path);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    mkdir: async (path) => {
-      await mkdir(path, { recursive: true });
-    },
-    rm: async (path, options) => {
-      await rm(path, { recursive: options?.recursive ?? false, force: true });
-    },
-    readTail: async (path, bytes) => {
-      const s = await stat(path);
-      const start = Math.max(0, s.size - bytes);
-      const length = s.size - start;
-      const fh = await open(path, 'r');
-      try {
-        const buf = Buffer.alloc(length);
-        await fh.read(buf, 0, length, start);
-        return buf.toString('utf8');
-      } finally {
-        await fh.close();
-      }
-    },
-  };
-}
