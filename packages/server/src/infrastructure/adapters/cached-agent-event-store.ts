@@ -1,6 +1,6 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert, StaleExecution } from '../../application/ports/agent-event-store.port.js';
 
 /**
  * Write-through in-memory cache over any AgentEventStorePort.
@@ -184,6 +184,10 @@ export class CachedAgentEventStore implements AgentEventStorePort {
   }
 
   // ── Passthrough (not on hot path) ──
+
+  async findStaleRunningExecutions(cutoffIso: string): Promise<StaleExecution[]> {
+    return this.inner.findStaleRunningExecutions(cutoffIso);
+  }
 
   async getEventsByExecution(executionId: string): Promise<AgentEventEntity[]> {
     return this.inner.getEventsByExecution(executionId);

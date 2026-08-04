@@ -7,8 +7,18 @@ import { AppearanceTab } from './AppearanceTab';
 import { DeliverableTypesTab } from './DeliverableTypesTab';
 import { cn } from '../../lib/cn';
 import type { AgentToken } from '@fleex/shared';
-import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from '@fleex/shared';
+import {
+  DEFAULT_AGENT_MAX_TURNS,
+  AGENT_MAX_TURNS_MIN,
+  AGENT_MAX_TURNS_MAX,
+  DEFAULT_AGENT_EXECUTION_TIMEOUT_MS,
+  AGENT_EXECUTION_TIMEOUT_MIN_MINUTES,
+  AGENT_EXECUTION_TIMEOUT_MAX_MINUTES,
+  MS_IN_MINUTE,
+} from '@fleex/shared';
 import * as api from '../../services/api';
+
+const DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES = DEFAULT_AGENT_EXECUTION_TIMEOUT_MS / MS_IN_MINUTE;
 
 const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
@@ -29,6 +39,10 @@ export function SettingsPanel() {
   const [humanMentionName, setHumanMentionName] = useState('');
   const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
   const [agentMaxTurns, setAgentMaxTurns] = useState(DEFAULT_AGENT_MAX_TURNS);
+  // Edited in minutes — the config stores milliseconds.
+  const [agentExecutionTimeoutMinutes, setAgentExecutionTimeoutMinutes] = useState(
+    DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES,
+  );
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
   const [workspaceActions, setWorkspaceActions] = useState<WorkspaceAction[]>([]);
 
@@ -38,6 +52,9 @@ export function SettingsPanel() {
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setAgentMaxTurns(settings.agentMaxTurns ?? DEFAULT_AGENT_MAX_TURNS);
+    setAgentExecutionTimeoutMinutes(
+      (settings.agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS) / MS_IN_MINUTE,
+    );
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
     setWorkspaceActions((settings.workspaceActions ?? []).map((a) => ({ ...a })));
   }, [settings]);
@@ -51,6 +68,7 @@ export function SettingsPanel() {
       ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
       agentMaxConcurrency,
       agentMaxTurns,
+      agentExecutionTimeout: agentExecutionTimeoutMinutes * MS_IN_MINUTE,
     } as Partial<AppSettings> & Record<string, unknown>);
   };
 
@@ -126,6 +144,8 @@ export function SettingsPanel() {
               setAgentMaxConcurrency={setAgentMaxConcurrency}
               agentMaxTurns={agentMaxTurns}
               setAgentMaxTurns={setAgentMaxTurns}
+              agentExecutionTimeoutMinutes={agentExecutionTimeoutMinutes}
+              setAgentExecutionTimeoutMinutes={setAgentExecutionTimeoutMinutes}
             />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
@@ -175,6 +195,8 @@ function GeneralTab({
   setAgentMaxConcurrency,
   agentMaxTurns,
   setAgentMaxTurns,
+  agentExecutionTimeoutMinutes,
+  setAgentExecutionTimeoutMinutes,
 }: {
   basePath: string;
   setBasePath: (v: string) => void;
@@ -186,6 +208,8 @@ function GeneralTab({
   setAgentMaxConcurrency: (v: number) => void;
   agentMaxTurns: number;
   setAgentMaxTurns: (v: number) => void;
+  agentExecutionTimeoutMinutes: number;
+  setAgentExecutionTimeoutMinutes: (v: number) => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -251,6 +275,38 @@ function GeneralTab({
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
           Maximum number of agents that can run simultaneously. Additional mentions are queued.
+        </p>
+      </div>
+
+      <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+        <Input
+          id="agentExecutionTimeout"
+          label="Agent Execution Timeout (minutes)"
+          type="number"
+          min={AGENT_EXECUTION_TIMEOUT_MIN_MINUTES}
+          max={AGENT_EXECUTION_TIMEOUT_MAX_MINUTES}
+          value={String(agentExecutionTimeoutMinutes)}
+          onChange={(e) =>
+            setAgentExecutionTimeoutMinutes(
+              Math.min(
+                AGENT_EXECUTION_TIMEOUT_MAX_MINUTES,
+                Math.max(
+                  AGENT_EXECUTION_TIMEOUT_MIN_MINUTES,
+                  parseInt(e.target.value, 10) || DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES,
+                ),
+              ),
+            )
+          }
+        />
+        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+          Wall-clock budget for a single agent run (mention, skill, workflow step or panel). This is a{' '}
+          <strong>total duration</strong> cap, not an inactivity timeout: a run that is still working is
+          stopped just the same once it expires. Raise it for long sessions that dispatch fleets of
+          subagents; lower it to free execution slots faster. Default{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+            {DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES}
+          </code>{' '}
+          minutes.
         </p>
       </div>
 

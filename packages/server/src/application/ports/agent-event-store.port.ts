@@ -18,6 +18,16 @@ export interface CliExecutionUpsert {
   cacheCreationTokens: number | null;
 }
 
+/** A `running` execution row that has gone quiet past the staleness cutoff. */
+export interface StaleExecution {
+  executionId: string;
+  personaId: string;
+  ticketId: string;
+  mentionId: string;
+  /** Last event timestamp, or the start time when the run never emitted one. */
+  lastActivityAt: string;
+}
+
 export interface AgentEventStorePort {
   startExecution(params: {
     executionId: string;
@@ -75,6 +85,18 @@ export interface AgentEventStorePort {
 
   /** Mark all 'running' executions as 'interrupted'. Returns affected mention IDs. */
   markInterruptedExecutions(): Promise<string[]>;
+
+  /**
+   * Executions still flagged `running` that haven't produced an event since
+   * `cutoffIso` — i.e. ghost runs whose process died or hung without ever
+   * writing a terminal status. Read-only: the caller decides how to reap each
+   * one (an in-process run is aborted through the execution registry, a truly
+   * orphaned row is closed via `completeExecution`).
+   *
+   * Rows with no `last_event_at` at all fall back to `started_at`, so an
+   * execution that hung before its first event is still reaped.
+   */
+  findStaleRunningExecutions(cutoffIso: string): Promise<StaleExecution[]>;
 
   /** Returns a map of "personaId:ticketId" → sdkSessionId from latest executions. */
   getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>>;

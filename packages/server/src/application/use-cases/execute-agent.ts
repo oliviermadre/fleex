@@ -20,6 +20,7 @@ import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.j
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
+import { armExecutionTimeout, DEFAULT_AGENT_EXECUTION_TIMEOUT_MS } from '../utils/execution-timeout.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
@@ -53,6 +54,24 @@ interface QueueItem {
   persona: AgentPersonaEntity;
   mention: TicketMentionEntity;
 }
+
+/** How often the stale-execution watchdog scans for ghost runs. */
+export const STALE_WATCHDOG_INTERVAL_MS = 60 * 1000;
+
+/**
+ * Margin added on top of `agentExecutionTimeout` before a silent `running` row
+ * is considered a ghost. A healthy run that is merely slow gets aborted by its
+ * own timeout first; the watchdog must only ever catch runs that escaped it.
+ */
+export const STALE_EXECUTION_GRACE_MS = 5 * 60 * 1000;
+
+/**
+ * If wall-clock time jumped by more than this multiple of the tick interval
+ * between two scans, the process was suspended (laptop sleep) or the clock was
+ * corrected. Every in-flight run then *looks* ancient while its subprocess was
+ * merely frozen, so the scan is skipped once to let activity resume.
+ */
+const CLOCK_JUMP_TICK_FACTOR = 5;
 
 /**
  * Build the structured-output instructions, enumerating the workspace's
@@ -141,6 +160,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
   /** Set by WS plugin to broadcast agent events in real-time */
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
+
+  /** Handle for the stale-execution watchdog interval (see `init`). */
+  private staleWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** Wall-clock of the previous watchdog scan — drives clock-jump detection. */
+  private lastWatchdogTickAt: number | null = null;
 
   /** Set by WS plugin to broadcast execution completion */
   public onExecutionComplete: ((personaId: string, status: 'completed' | 'failed', mentionId: string) => void) | null = null;
@@ -236,6 +261,132 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       interruptedExecutions: interruptedMentionIds.length,
       restoredSessions: this.sessionHistory.size,
     });
+
+    this.startStaleExecutionWatchdog();
+  }
+
+  /**
+   * Periodically reap ghost runs: rows still flagged `running` whose agent has
+   * gone silent well past its execution timeout. Startup recovery only runs at
+   * boot, so without this a run that hangs mid-flight keeps "X is working." and
+   * the Terminate button on screen — and its mention unresolved — until the
+   * server is restarted.
+   *
+   * The timer is unref'd: a pending scan must never keep the process alive.
+   */
+  startStaleExecutionWatchdog(intervalMs: number = STALE_WATCHDOG_INTERVAL_MS): void {
+    if (this.staleWatchdogTimer) return;
+    this.staleWatchdogTimer = setInterval(() => {
+      void this.reapStaleExecutions().catch((err) => {
+        this.logger.warn('Stale execution watchdog scan failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }, intervalMs);
+    this.staleWatchdogTimer.unref?.();
+  }
+
+  stopStaleExecutionWatchdog(): void {
+    if (!this.staleWatchdogTimer) return;
+    clearInterval(this.staleWatchdogTimer);
+    this.staleWatchdogTimer = null;
+  }
+
+  /**
+   * True while this process still owns a live SDK query for that execution.
+   *
+   * `last_event_at` only tracks "an SDK message arrived recently", which is a
+   * poor proxy for liveness: a single long tool call (test suite, build, a
+   * fleet of subagents being awaited) emits nothing for as long as it runs.
+   * Ownership is the honest signal — and a run we own that is genuinely stuck
+   * is already bounded by its own execution timeout (`armExecutionTimeout`),
+   * which aborts the SDK query and frees the concurrency slot.
+   */
+  private ownsLiveExecution(executionId: string): boolean {
+    for (const exec of this.activeExecutions.values()) {
+      if (exec.executionId === executionId) return exec.status === 'running';
+    }
+    return false;
+  }
+
+  /**
+   * One watchdog pass. Returns how many executions were reaped.
+   *
+   * The watchdog exists for ORPHANED rows only — a row left `running` by a
+   * process that no longer owns it (crash, restart, or a run that leaked out of
+   * the registry). A run this process still owns is never reaped, however
+   * silent it has been: killing a live agent that is merely working slowly is
+   * strictly worse than leaving a wrong row a little longer, and the original
+   * hang this watchdog was written for is now fixed at the source in
+   * `streamSdkQuery` (break on `result` + a genuinely propagated abort).
+   */
+  async reapStaleExecutions(): Promise<number> {
+    const now = Date.now();
+    const previousTickAt = this.lastWatchdogTickAt;
+    this.lastWatchdogTickAt = now;
+
+    // Laptop sleep / clock correction: timers were suspended while wall-clock
+    // advanced, so every in-flight run looks ancient although its subprocess
+    // was only frozen. Skip one scan and re-baseline.
+    if (previousTickAt !== null && now - previousTickAt > CLOCK_JUMP_TICK_FACTOR * STALE_WATCHDOG_INTERVAL_MS) {
+      this.logger.warn('Skipping stale execution scan after a clock jump', {
+        jumpMs: now - previousTickAt,
+      });
+      return 0;
+    }
+
+    const timeoutMs = this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS;
+    const cutoff = new Date(now - timeoutMs - STALE_EXECUTION_GRACE_MS).toISOString();
+
+    const stale = await this.agentEventStore.findStaleRunningExecutions(cutoff);
+    if (stale.length === 0) return 0;
+
+    let reaped = 0;
+    for (const exec of stale) {
+      if (this.ownsLiveExecution(exec.executionId)) {
+        this.logger.debug('Skipping stale scan for a live execution owned by this process', {
+          executionId: exec.executionId,
+          lastActivityAt: exec.lastActivityAt,
+        });
+        continue;
+      }
+
+      this.logger.warn('Reaping stale agent execution', {
+        executionId: exec.executionId,
+        personaId: exec.personaId,
+        ticketId: exec.ticketId,
+        mentionId: exec.mentionId,
+        lastActivityAt: exec.lastActivityAt,
+      });
+
+      try {
+        // Orphaned row: there is no SDK query left to abort here, so close it
+        // directly and let the UI and the mention recover.
+        const endEvent = AgentEventEntity.create({
+          executionId: exec.executionId,
+          eventType: 'execution_end',
+          data: { status: 'interrupted', reason: 'stale', ticketId: exec.ticketId },
+          sequence: 999999,
+        });
+        await this.agentEventStore.appendEvent(endEvent);
+        this.onEvent?.(endEvent);
+        await this.agentEventStore.completeExecution(exec.executionId, 'interrupted');
+
+        const mention = await this.mentionStore.getById(exec.mentionId);
+        if (mention) {
+          mention.resetToPending();
+          await this.mentionStore.save(mention);
+        }
+        reaped++;
+      } catch (err) {
+        this.logger.error('Failed to reap stale agent execution', {
+          executionId: exec.executionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return reaped;
   }
 
   async execute(personaId: string): Promise<AgentExecutionResult> {
@@ -697,6 +848,29 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // event so the UI never silently hangs in Pending.
     let acknowledged = false;
 
+    // Single funnel for writing the execution's terminal status, so that (a) no
+    // exit path can forget to close the row — the `finally` below backstops it —
+    // and (b) a store write that fails is loud instead of swallowed. A row left
+    // in `running` is what keeps "X is working." and the Terminate button on
+    // screen forever, so a silent failure here is never acceptable.
+    let statusWritten = false;
+    const writeTerminalStatus = async (
+      status: 'completed' | 'failed' | 'interrupted',
+      metrics?: Parameters<AgentEventStorePort['completeExecution']>[2],
+    ): Promise<void> => {
+      try {
+        await this.agentEventStore.completeExecution(executionId, status, metrics);
+        statusWritten = true;
+      } catch (storeErr) {
+        this.logger.error('Failed to persist execution terminal status', {
+          executionId,
+          mentionId: mention.id,
+          status,
+          error: storeErr instanceof Error ? storeErr.message : String(storeErr),
+        });
+      }
+    };
+
     try {
       // 0. Resolve the conversation-scoped execution config at acknowledge time.
       // Mode is min(persona ceiling, ticket.conversationMode); model/effort/fast
@@ -839,11 +1013,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }));
 
       // 9. Setup execution timeout
-      const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
-      const timeoutHandle = setTimeout(() => {
-        this.logger.warn('Agent execution timed out', { executionId, persona: persona.name, timeoutMs });
-        abortController.abort(new Error('timeout'));
-      }, timeoutMs);
+      const disarmTimeout = armExecutionTimeout(
+        this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS,
+        abortController,
+        (timeoutMs) => this.logger.warn('Agent execution timed out', { executionId, persona: persona.name, timeoutMs }),
+      );
 
       // 10. Call Claude Agent SDK
       let sdkSessionId: string | undefined;
@@ -899,7 +1073,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         } catch (queryErr) {
           if (abortController.signal.aborted) {
             // Abort was triggered — handled below.
-            streamResult = { resultText: '', structuredOutput: null, metrics: {}, messageCount: 0, stderr: '' };
+            streamResult = { resultText: '', structuredOutput: null, metrics: {}, messageCount: 0, stderr: '', exitReason: 'abort' };
           } else if (previousSessionId) {
             // Stale resume — clear session and retry fresh
             this.logger.warn('SDK query failed with resume, retrying without resume', {
@@ -930,6 +1104,17 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         cliStderr = streamResult.stderr ?? '';
         resultSubtype = streamResult.resultSubtype;
 
+        // How the stream ended is the single most diagnostic fact when a run
+        // misbehaves: `result` is nominal, `generator-end` without messages
+        // means the subprocess died, `abort` means timeout/Terminate won.
+        this.logger.info('SDK stream ended', {
+          executionId,
+          persona: persona.name,
+          exitReason: streamResult.exitReason,
+          messageCount: streamResult.messageCount,
+          resultSubtype: streamResult.resultSubtype ?? null,
+        });
+
         // The SDK stops with this subtype when the turn budget runs out. Say so
         // explicitly: an agent that ran out of turns produces a truncated answer
         // that otherwise looks like a normal (if unfinished) completion.
@@ -955,21 +1140,23 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         }
       }
 
-      clearTimeout(timeoutHandle);
+      disarmTimeout();
 
       // Handle abort (cancel or timeout)
       if (abortController.signal.aborted) {
         // Check if cancelExecution() already did the cleanup
         const currentExec = this.activeExecutions.get(mention.id);
         if (currentExec && currentExec.status !== 'running') {
-          // Already cleaned up by cancelExecution()
+          // Already cleaned up by cancelExecution() — it wrote `interrupted`
+          // itself, so tell the finally-backstop not to overwrite it.
+          statusWritten = true;
           return;
         }
         // Timeout path — cancelExecution didn't run, we need to do cleanup
         const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
           ? 'timeout' : 'cancelled';
         await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        await writeTerminalStatus('interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.resetToPending();
         await this.mentionStore.save(mention);
@@ -995,7 +1182,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         // Emit execution_end so every log view flips out of "running" and shows
         // the failed state (the store keys failure off execution_end).
         await emitEvent('execution_end', { status: 'failed', reason: 'subprocess_crash', ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        await writeTerminalStatus('failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         // markFailed (not resetToPending): a silent subprocess crash sent back to
         // `pending` is exactly the "invisible crash" bug this ticket fixes. Mark it
@@ -1031,7 +1218,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
         await emitEvent('error', { error: message, ticketId: mention.ticketId });
         await emitEvent('execution_end', { status: 'failed', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        await writeTerminalStatus('failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         // Persist the session so the relaunch can resume from where it stopped.
         if (sdkSessionId) {
           this.sessionHistory.set(sessionKey, sdkSessionId);
@@ -1275,7 +1462,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // Persist the *resolved* model (conversation override or persona default)
       // that actually ran — not persona.model — so cost tracking and the audit
       // trail reflect which model executed on this run.
-      await this.agentEventStore.completeExecution(executionId, 'completed', {
+      await writeTerminalStatus('completed', {
         model: resolved.model,
         effectiveMode,
         effort: resolved.effort,
@@ -1329,10 +1516,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
         await this.agentEventStore.appendEvent(endEvent);
         this.onEvent?.(endEvent);
-        await this.agentEventStore.completeExecution(executionId, 'failed');
-      } catch {
-        // Don't let event store errors mask the original error
+      } catch (eventErr) {
+        // Don't let event store errors mask the original error — but never stay
+        // silent about them either: a lost execution_end is invisible in the UI.
+        this.logger.error('Failed to persist crash events for execution', {
+          executionId,
+          mentionId: mention.id,
+          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+        });
       }
+      await writeTerminalStatus('failed');
 
       // Persist the `failed` status so the crash card survives a reload. A
       // `resolved`/`waiting_for_info` mention is never failed retroactively
@@ -1374,6 +1567,34 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       });
       throw err;
     } finally {
+      // Last-resort closure. Every branch above is supposed to write a terminal
+      // status, but an unforeseen exit (a throw between `execution_end` and
+      // `completeExecution`, an early return added later) would otherwise leave
+      // the row `running` forever — the exact ghost-run symptom this fixes.
+      if (!statusWritten) {
+        this.logger.error('Execution ended without a terminal status — forcing failed', {
+          executionId,
+          mentionId: mention.id,
+          persona: persona.name,
+        });
+        try {
+          const endEvent = AgentEventEntity.create({
+            executionId,
+            eventType: 'execution_end',
+            data: { status: 'failed', reason: 'unfinalized', ticketId: mention.ticketId },
+            sequence: 999999,
+          });
+          await this.agentEventStore.appendEvent(endEvent);
+          this.onEvent?.(endEvent);
+        } catch (eventErr) {
+          this.logger.error('Failed to emit fallback execution_end', {
+            executionId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          });
+        }
+        await writeTerminalStatus('failed');
+      }
+
       // The global SDK slot is released by the sdkLimiter.run() wrapper in
       // drainQueue once this method settles. Clean up completed/failed
       // executions after a delay.
@@ -1557,11 +1778,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const releaseSdkSlot = await this.sdkLimiter.acquire();
 
     // 7. Setup timeout + abort
-    const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
-    const timeoutHandle = setTimeout(() => {
-      this.logger.warn('Skill execution timed out', { executionId, persona: persona.name, timeoutMs });
-      abortController.abort(new Error('timeout'));
-    }, timeoutMs);
+    const disarmTimeout = armExecutionTimeout(
+      this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS,
+      abortController,
+      (timeoutMs) => this.logger.warn('Skill execution timed out', { executionId, persona: persona.name, timeoutMs }),
+    );
 
     try {
       // 8. Call Claude Agent SDK
@@ -1611,7 +1832,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         await emitEvent('max_turns_reached', { numTurns: sdkNumTurns, maxTurns: skillMaxTurns, ticketId });
       }
 
-      clearTimeout(timeoutHandle);
+      disarmTimeout();
 
       if (abortController.signal.aborted) {
         await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
@@ -1815,7 +2036,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         resultLength: resultText.length,
       });
     } catch (err) {
-      clearTimeout(timeoutHandle);
+      disarmTimeout();
       try {
         const errorEvent = AgentEventEntity.create({
           executionId,
@@ -1916,6 +2137,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       mentionId: workflowExecKey, executionId, personaId: persona.id,
       ticketId: params.ticketId, status: 'running', abortController,
     });
+    // Same wall-clock budget as the mention and skill paths. Without it this
+    // path had no bound of its own, which left the stale watchdog as its only
+    // limit — and the watchdog cannot tell a stuck step from a slow one.
+    const disarmTimeout = armExecutionTimeout(
+      this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS,
+      abortController,
+      (timeoutMs) => this.logger.warn('Workflow step execution timed out', {
+        executionId, persona: persona.name, timeoutMs,
+      }),
+    );
     let finalStatus: 'completed' | 'failed' = 'completed';
     try {
       const humanName = this.resolveHumanMentionName(persona);
@@ -2090,6 +2321,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       if (!(err instanceof ExecutionCancelledError)) finalStatus = 'failed';
       throw err;
     } finally {
+      disarmTimeout();
       // Parity with mention/skill paths: leave a terminal in-memory marker so
       // getStatus()/cancelExecution() never treat a finished step as running.
       const exec = this.activeExecutions.get(workflowExecKey);

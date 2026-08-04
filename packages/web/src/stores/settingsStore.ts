@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { DEFAULT_AGENT_MAX_TURNS } from '@fleex/shared';
+import { DEFAULT_AGENT_MAX_TURNS, DEFAULT_AGENT_EXECUTION_TIMEOUT_MS } from '@fleex/shared';
 import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, STORAGE_KEY_SETTINGS } from '../lib/constants';
 import { resolveTemplate, type WorkspaceContext } from '../lib/templateUtils';
 import type { Theme } from '../lib/themes';
@@ -57,6 +57,11 @@ export interface AppSettings {
   agentMaxConcurrency: number;
   /** Agentic loop cap for plan/edit executions (talk mode has no loop). */
   agentMaxTurns: number;
+  /**
+   * Wall-clock budget in ms for one agent run. Total duration, not inactivity:
+   * a run still making progress is aborted once it expires.
+   */
+  agentExecutionTimeout: number;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**
@@ -108,6 +113,7 @@ const defaultSettings: AppSettings = {
   terminalFontThicken: false,
   agentMaxConcurrency: 1,
   agentMaxTurns: DEFAULT_AGENT_MAX_TURNS,
+  agentExecutionTimeout: DEFAULT_AGENT_EXECUTION_TIMEOUT_MS,
   humanDisplayName: '',
   repoConfigs: {},
   workspace: '',
