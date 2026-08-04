@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { computeInitials, type PanelMemberSummary, type ExecutionLogEntry, type AgentExecution, type WorkflowStepSummary } from '@fleex/shared';
+import { computeInitials, type PanelMemberSummary, type ExecutionLogEntry, type AgentExecution, type WorkflowStepSummary, type ExecutionScope } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { StepRunEntity } from '../../domain/entities/step-run.entity.js';
@@ -8,6 +8,7 @@ import type { Container } from '../container.js';
 
 const VALID_STATUSES = new Set<AgentExecution['status']>(['running', 'completed', 'failed', 'interrupted']);
 const VALID_TYPES = new Set<ExecutionLogEntry['type']>(['agent', 'panel', 'skill', 'workflow']);
+const VALID_SCOPES = new Set<ExecutionScope>(['tickets', 'routines']);
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 100;
 const MAX_Q_LENGTH = 200;
@@ -33,6 +34,7 @@ export function agentEventsRoutes(container: Container) {
       Querystring: {
         status?: string;
         type?: string;
+        scope?: string;
         q?: string;
         limit?: string;
         offset?: string;
@@ -41,6 +43,7 @@ export function agentEventsRoutes(container: Container) {
       // ── Query param validation (defensive) ──────────────────────────────
       const statusFilter = parseCsvWhitelist<AgentExecution['status']>(request.query.status, VALID_STATUSES);
       const typeFilter = parseCsvWhitelist<ExecutionLogEntry['type']>(request.query.type, VALID_TYPES);
+      const scopeFilter = parseCsvWhitelist<ExecutionScope>(request.query.scope, VALID_SCOPES);
       const q = request.query.q ? request.query.q.slice(0, MAX_Q_LENGTH).toLowerCase() : undefined;
       const limit = clampInt(request.query.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
       const offset = clampInt(request.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
@@ -484,6 +487,9 @@ export function agentEventsRoutes(container: Container) {
           // fields empty so the row UI knows not to render persona/model columns.
           personaId: '',
           ticketId: run.ticketId,
+          // Anchor. Exactly one of ticketId / routineId is set (entity invariant);
+          // the UI keys the routine chip and the CTA set off this.
+          routineId: run.routineId ?? null,
           mentionId: `workflow:${run.id}`,
           eventCount: stepRuns.length,
           status: mappedStatus,
@@ -540,8 +546,24 @@ export function agentEventsRoutes(container: Container) {
         entries = entries.filter(
           (e) =>
             (e.ticketTitle && e.ticketTitle.toLowerCase().includes(q)) ||
+            (e.routineName && e.routineName.toLowerCase().includes(q)) ||
             e.executorName.toLowerCase().includes(q),
         );
+      }
+
+      // Scope counts BEFORE the scope filter, same rationale as typeCounts.
+      const scopeCounts = { all: entries.length, tickets: 0, routines: 0 };
+      for (const e of entries) {
+        if (e.routineId) scopeCounts.routines += 1;
+        else scopeCounts.tickets += 1;
+      }
+
+      // Filter by scope. Scope is the coarser cut (what a run is anchored to),
+      // so it is applied BEFORE the type counts — the type tab badges then
+      // describe the scope the user is actually looking at.
+      if (scopeFilter) {
+        const scopes = new Set(scopeFilter);
+        entries = entries.filter((e) => scopes.has(e.routineId ? 'routines' : 'tickets'));
       }
 
       // Compute per-type counts BEFORE applying the type filter, so tab badges
@@ -575,7 +597,7 @@ export function agentEventsRoutes(container: Container) {
       // Pagination — limit/offset are pre-validated and clamped (limit ≤ 500).
       entries = entries.slice(offset, offset + limit);
 
-      return { entries, total, liveCount, historyCount, typeCounts };
+      return { entries, total, liveCount, historyCount, typeCounts, scopeCounts };
     });
 
     // GET /api/personas/:id/executions — list executions for a persona

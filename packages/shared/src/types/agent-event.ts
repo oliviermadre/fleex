@@ -213,6 +213,14 @@ export function computeInitials(displayName: string): string {
   return trimmed.slice(0, 2).toUpperCase();
 }
 
+/**
+ * What a run is anchored to. Orthogonal to `ExecutionLogEntry['type']` (which
+ * says *what executed*): a workflow run can be anchored to a ticket or to a
+ * routine, and the two need very different affordances — a routine run has no
+ * ticket, so no comments/deliverables/ticket CTAs.
+ */
+export type ExecutionScope = 'tickets' | 'routines';
+
 export interface ExecutionLogResponse {
   readonly entries: ExecutionLogEntry[];
   readonly total: number;
@@ -224,6 +232,11 @@ export interface ExecutionLogResponse {
     readonly panel: number;
     readonly skill: number;
     readonly workflow: number;
+  };
+  readonly scopeCounts: {
+    readonly all: number;
+    readonly tickets: number;
+    readonly routines: number;
   };
 }
 

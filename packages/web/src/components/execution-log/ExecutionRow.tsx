@@ -1,8 +1,10 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ExecutionLogEntry, TicketType, PanelMemberSummary, WorkflowStepSummary } from '@fleex/shared';
 import { cancelExecution } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useRoutineStore } from '../../stores/routineStore';
 import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
@@ -21,13 +23,40 @@ const EXEC_TYPE_TO_KIND: Record<ExecutionLogEntry['type'], PrimitiveKind> = {
   workflow: 'workflow',
 };
 
-function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
+/** Nav-sidebar routine glyph, reused so the log and the nav agree visually. */
+function RoutineIcon({ size = 14, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M17 2l4 4-4 4" />
+      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+      <path d="M7 22l-4-4 4-4" />
+      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+    </svg>
+  );
+}
+
+/**
+ * A routine-anchored run reads as its own kind in the log: it has no ticket,
+ * no comments, no deliverables — showing it as a plain WORKFLOW row invites
+ * exactly the CTAs that lead nowhere. `type` stays 'workflow' (the type tabs
+ * describe *what executed*); the badge describes what it is anchored to.
+ */
+function TypeBadge({ type, isRoutine }: { type: ExecutionLogEntry['type']; isRoutine: boolean }) {
   return (
     <div className="flex w-[92px] flex-shrink-0 items-center gap-1.5">
       {/* `shrink-0` is required: without it the flex row squeezes the SVG for the
           widest label ("WORKFLOW"), which is why that glyph rendered tiny. */}
-      <PrimitiveIcon kind={EXEC_TYPE_TO_KIND[type]} size={14} className="shrink-0" />
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">{type}</span>
+      {isRoutine ? (
+        <RoutineIcon size={14} className={cn('shrink-0', tintText('purple'))} />
+      ) : (
+        <PrimitiveIcon kind={EXEC_TYPE_TO_KIND[type]} size={14} className="shrink-0" />
+      )}
+      <span className={cn(
+        'text-[11px] font-semibold uppercase tracking-wide',
+        isRoutine ? tintText('purple') : 'text-[var(--theme-text-secondary)]',
+      )}>
+        {isRoutine ? 'routine' : type}
+      </span>
     </div>
   );
 }
@@ -387,6 +416,8 @@ export const ExecutionRow = memo(function ExecutionRow({
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const setTicketTab = useTicketStore((s) => s.setTicketTab);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const selectRoutine = useRoutineStore((s) => s.select);
+  const navigate = useNavigate();
 
   const handleCancel = useCallback(
     async (e: React.MouseEvent) => {
@@ -411,9 +442,22 @@ export const ExecutionRow = memo(function ExecutionRow({
     setActivePanel('tickets');
   }, [entry.ticketId, selectTicket, setTicketTab, setActivePanel]);
 
+  const navigateToRoutine = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!entry.routineId) return;
+    // Fire-and-forget: `select` loads the run history, the view renders as
+    // soon as the id is set.
+    void selectRoutine(entry.routineId);
+    navigate('/routines');
+  }, [entry.routineId, selectRoutine, navigate]);
+
   const isPanelRun = entry.type === 'panel' && !!entry.panelMembers && entry.panelMembers.length > 0;
   const isWorkflow = entry.type === 'workflow';
-  const title = entry.ticketTitle || entry.executorName;
+  // A run is anchored to exactly one of ticket / routine (entity invariant).
+  // Everything ticket-shaped below — the chip, the three CTAs — is gated on
+  // this: on a routine run those buttons have nowhere to go.
+  const isRoutineRun = !!entry.routineId;
+  const title = (isRoutineRun ? entry.routineName : entry.ticketTitle) || entry.executorName;
   const referenceTime = live ? entry.startedAt : (entry.completedAt ?? entry.startedAt);
 
   // Subtitle: mode · ticketType (ticketType colored per Kanban palette)
@@ -426,12 +470,19 @@ export const ExecutionRow = memo(function ExecutionRow({
         className="group flex w-full items-center gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-4 py-3 transition-colors hover:bg-[var(--theme-bg-hover)]"
       >
         {/* Col 1: Type badge */}
-        <TypeBadge type={entry.type} />
+        <TypeBadge type={entry.type} isRoutine={isRoutineRun} />
 
         {/* Col 2: Title block (ticket icon + title / mode + agent + ticket type) */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <TicketIcon priority={entry.ticketPriority} />
+            {/* Routine chip where a ticket-bound run shows its ticket chip. */}
+            {isRoutineRun ? (
+              entry.routineEmoji
+                ? <span className="flex-shrink-0 text-sm leading-none">{entry.routineEmoji}</span>
+                : <RoutineIcon size={14} className={cn('flex-shrink-0', tintText('purple'))} />
+            ) : (
+              <TicketIcon priority={entry.ticketPriority} />
+            )}
             <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{title}</span>
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
@@ -586,6 +637,21 @@ export const ExecutionRow = memo(function ExecutionRow({
 
         {/* Col 8: CTAs — comments / deliverables / ticket / execution log */}
         <div className="flex w-[188px] flex-shrink-0 items-center justify-end gap-1.5">
+          {/* A routine run has no ticket: comments, deliverables and the ticket
+              link would all navigate nowhere. Offer the routine instead. */}
+          {isRoutineRun && (
+            <button
+              onClick={navigateToRoutine}
+              className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 text-[11px] font-medium text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
+              title="Open routine"
+            >
+              <RoutineIcon size={12} className="shrink-0" />
+              <span>Routine</span>
+            </button>
+          )}
+          {/* Ticket CTAs, only when there IS a ticket to open. */}
+          {entry.ticketId && (
+          <>
           {/* Comment CTA */}
           <button
             onClick={(e) => navigateToTicket(e, 'comments')}
@@ -614,6 +680,8 @@ export const ExecutionRow = memo(function ExecutionRow({
           >
             <TicketLinkIcon />
           </button>
+          </>
+          )}
 
           {/* Execution log CTA (open floating panel) — workflow runs are
               aggregates over multiple agent executions, so there's no single

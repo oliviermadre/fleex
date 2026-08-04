@@ -765,6 +765,7 @@ export async function cancelExecution(executionId: string): Promise<{ cancelled:
 export async function fetchAllExecutions(params?: {
   status?: string;
   type?: string;
+  scope?: string;
   q?: string;
   limit?: number;
   offset?: number;
@@ -772,6 +773,7 @@ export async function fetchAllExecutions(params?: {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
   if (params?.type) qs.set('type', params.type);
+  if (params?.scope) qs.set('scope', params.scope);
   if (params?.q) qs.set('q', params.q);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));

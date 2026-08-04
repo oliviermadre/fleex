@@ -220,6 +220,7 @@ export type {
   AgentEventWsMessage,
   ExecutionLogEntry,
   ExecutionLogResponse,
+  ExecutionScope,
   PanelMemberSummary,
   WorkflowStepSummary,
   ExecutionKind,
