@@ -5,6 +5,7 @@ import type { WorkflowRun, StepRun, WorkflowStep } from '@fleex/shared';
 import { StepRunNode, type StepRunNodeData } from './StepRunNode';
 import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
+import { AmbiguousRouteResolvePanel } from './AmbiguousRouteResolvePanel';
 import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
@@ -29,6 +30,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
   const cancel = useWorkflowRunStore((s) => s.cancel);
   const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
   const retry = useWorkflowRunStore((s) => s.retry);
+  const resolveRoute = useWorkflowRunStore((s) => s.resolveRoute);
 
   const stepIndex = useMemo(
     () => new Map(run.templateSnapshot.steps.map((s) => [s.id, s])),
@@ -225,6 +227,21 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   }}
                 />
               )}
+            {selectedStepRun?.status === 'awaiting_routing' && (
+              // Candidates come from what was persisted when the run paused, not
+              // from the template — the same set the engine actually saw.
+              <AmbiguousRouteResolvePanel
+                runId={run.id}
+                stepRunId={selectedStepRun.id}
+                candidates={run.templateSnapshot.edges.filter((e) =>
+                  (selectedStepRun.output?.routing?.candidateEdgeIds ?? []).includes(e.id),
+                )}
+                steps={run.templateSnapshot.steps}
+                onResolve={(edgeId, notes) =>
+                  resolveRoute(run.id, selectedStepRun.id, edgeId, notes)
+                }
+              />
+            )}
             {selectedStepRun?.status === 'failed' && (
               <FailedStepRetryPanel
                 error={

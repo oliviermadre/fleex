@@ -16,6 +16,8 @@ import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunSt
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
 import { selectWaitingInputCards } from '../workflows/waitingInputCards';
+import { selectAmbiguousRoutingCards } from '../workflows/ambiguousRoutingCards';
+import { AmbiguousRouteResolvePanel } from '../workflows/AmbiguousRouteResolvePanel';
 import { selectFailedStepCards } from '../workflows/failedStepCards';
 import { FailedStepRetryPanel } from '../workflows/FailedStepRetryPanel';
 import { selectCrashedMentionCards, crashReasonLabel } from './crashedMentionCards';
@@ -804,6 +806,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const loadWorkflowDetail = useWorkflowRunStore((s) => s.loadDetail);
   const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
   const retryStep = useWorkflowRunStore((s) => s.retry);
+  const resolveRoute = useWorkflowRunStore((s) => s.resolveRoute);
 
   // Ensure the step-run detail is loaded for every active run on this ticket.
   // Detection (like WorkflowRunView) reads step-run status, which lives in the
@@ -892,6 +895,16 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   // signal. Detection lives in a pure helper (mirrors gateCards; see its doc).
   const waitingInputCards = useMemo(
     () => selectWaitingInputCards(workflowRuns, workflowDetail),
+    [workflowRuns, workflowDetail],
+  );
+
+  // ── Inline "which branch?" card ─────────────────────────────────────────────
+  // Third member of the family: a step that succeeded but whose *exit* is
+  // undecided because several outgoing edges matched. Rendered here (rather than
+  // only in the Workflow tab) so the decision is reachable from the cockpit and
+  // mobile, which show comments but not the DAG. See the selector's doc.
+  const ambiguousRoutingCards = useMemo(
+    () => selectAmbiguousRoutingCards(workflowRuns, workflowDetail),
     [workflowRuns, workflowDetail],
   );
 
@@ -1520,6 +1533,31 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                     await api.postTicketComment(run.ticketId, response);
                     await retryStep(run.id, stepRun.id);
                   }}
+                />
+              </div>
+            ))}
+            {/* Inline "which branch?" card(s) — arbitrate an ambiguous route
+                without leaving Comments. Accent-tinted like the gate card: both
+                are a decision only a human can make, as opposed to the orange
+                "waiting for your reply" and red "it crashed" cards. */}
+            {ambiguousRoutingCards.map(({ run, step, stepRun, candidates }) => (
+              <div
+                key={stepRun.id}
+                className="my-3 rounded-lg border border-[var(--theme-accent)]/40 bg-[var(--theme-accent)]/5 p-3"
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-base leading-none">🔀</span>
+                  <div className="text-xs font-semibold text-[var(--theme-text-primary)]">
+                    Ambiguous routing — {run.templateSnapshot.emoji} {run.templateSnapshot.name}
+                    <span className="font-normal text-[var(--theme-text-muted)]"> › {step.name}</span>
+                  </div>
+                </div>
+                <AmbiguousRouteResolvePanel
+                  runId={run.id}
+                  stepRunId={stepRun.id}
+                  candidates={candidates}
+                  steps={run.templateSnapshot.steps}
+                  onResolve={(edgeId, notes) => resolveRoute(run.id, stepRun.id, edgeId, notes)}
                 />
               </div>
             ))}

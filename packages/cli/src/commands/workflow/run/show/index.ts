@@ -36,7 +36,14 @@ const def: CommandDef = {
         for (const s of stepRuns) {
           const name = stepName.get(s.stepId) ?? s.stepId;
           const res = s.result ? ` → ${s.result}` : '';
-          process.stdout.write(`    ${c.dim(s.id)}  ${s.status.padEnd(12)} attempt ${s.attempt}  ${name}${res}\n`);
+          process.stdout.write(`    ${c.dim(s.id)}  ${s.status.padEnd(16)} attempt ${s.attempt}  ${name}${res}\n`);
+          // A parked step is the one thing in this list that needs an action and
+          // whose next command isn't obvious — spell it out rather than leaving
+          // the reader to discover `workflow route`.
+          if (s.status === 'awaiting_routing') {
+            const n = s.output?.routing?.candidateEdgeIds?.length ?? 0;
+            process.stdout.write(`      ${c.dim(`${n} branches matched — fleex workflow route ${run.id.slice(0, 8)} ${s.id.slice(0, 8)}`)}\n`);
+          }
         }
       }
       process.stdout.write('\n');

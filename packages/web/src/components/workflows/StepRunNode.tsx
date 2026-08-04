@@ -127,6 +127,9 @@ function StatusIcon({ status }: { status: StepRunStatus | 'pending' }) {
     case 'running': return <Loader2Icon className={`w-4 h-4 ${tintClasses('blue').text} animate-spin`} />;
     case 'failed': return <XCircleIcon className={`w-4 h-4 ${tintClasses('red').text}`} />;
     case 'needs_review': return <AlertTriangleIcon className={`w-4 h-4 ${tintClasses('yellow').text}`} />;
+    // Same "waiting on a human" hue as needs_review, but a fork rather than a
+    // warning: the step succeeded, only its exit is undecided.
+    case 'awaiting_routing': return <SplitIcon className={`w-4 h-4 ${tintClasses('yellow').text}`} />;
     case 'queued': return <ClockIcon className={`w-4 h-4 ${tintClasses('green').text}`} />;
     case 'cancelled':
     case 'skipped': return <SkipForwardIcon className="w-4 h-4 opacity-40" />;

@@ -992,6 +992,17 @@ export async function resolveWorkflowGate(
   );
 }
 
+export async function resolveWorkflowRoute(
+  runId: string,
+  stepRunId: string,
+  body: { edgeId: string; notes?: string },
+): Promise<void> {
+  await request<void>(
+    `/workflows/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepRunId)}/route`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
 export async function retryWorkflowStep(runId: string, stepRunId: string): Promise<void> {
   await request<void>(
     `/workflows/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepRunId)}/retry`,
