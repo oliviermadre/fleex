@@ -26,6 +26,7 @@ import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { streamSdkQuery } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
+import { armExecutionTimeout, DEFAULT_AGENT_EXECUTION_TIMEOUT_MS } from '../utils/execution-timeout.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
@@ -552,6 +553,15 @@ export class RunPanelUseCase {
     // get this member's report). Registered before the SDK loop starts.
     const abortController = new AbortController();
     this.executionRegistry?.registerExecution({ executionId, personaId: persona.id, ticketId, abortController });
+    // Same wall-clock budget as the mention/skill/workflow paths — without it a
+    // member run has no bound of its own.
+    const disarmTimeout = armExecutionTimeout(
+      this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS,
+      abortController,
+      (timeoutMs) => this.logger.warn('Panel member execution timed out', {
+        executionId, persona: persona.name, timeoutMs,
+      }),
+    );
 
     let sequence = 0;
     const emitEvent = async (eventType: AgentEventType, data: unknown) => {
@@ -684,6 +694,7 @@ export class RunPanelUseCase {
         error: errorMsg,
       };
     } finally {
+      disarmTimeout();
       this.executionRegistry?.finalizeExecution(executionId);
     }
   }
@@ -760,6 +771,11 @@ Be concise and decision-oriented. Write in the same language as the panel member
     // Register the orchestrator session so it too can be terminated from the UI.
     const abortController = new AbortController();
     this.executionRegistry?.registerExecution({ executionId, personaId: orchestratorPersonaId, ticketId, abortController });
+    const disarmTimeout = armExecutionTimeout(
+      this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS,
+      abortController,
+      (timeoutMs) => this.logger.warn('Panel synthesis execution timed out', { executionId, timeoutMs }),
+    );
 
     // Single sequence counter spanning start → stream → end so the
     // orchestrator's atomic log streams the same rich content as a persona.
@@ -845,6 +861,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
       const fallbackText = `**🏛️ ${panel.displayName} — Synthesis (auto-generated)**\n\n⚠️ Synthesis generation failed. Individual member responses are available in the full transcript deliverable.\n\n${validResponses.map((r) => `- **${r.emoji} ${r.personaDisplayName}** responded (${r.durationMs}ms)`).join('\n')}`;
       return { text: fallbackText, structuredOutput: null, executionId };
     } finally {
+      disarmTimeout();
       this.executionRegistry?.finalizeExecution(executionId);
     }
   }

@@ -148,6 +148,15 @@ export const MS_IN_MINUTE = 60_000;
 export const MINUTES_IN_HOUR = 60;
 export const HOURS_IN_DAY = 24;
 
+// Wall-clock budget for a single agent run (mention, skill, workflow step,
+// panel). A TOTAL duration cap, not an inactivity timeout: a run that is still
+// making progress is aborted just the same once it expires. Configurable per
+// workspace via Settings › General (`agentExecutionTimeout`, stored in ms);
+// this is the fallback when unset.
+export const DEFAULT_AGENT_EXECUTION_TIMEOUT_MS = 30 * MS_IN_MINUTE;
+export const AGENT_EXECUTION_TIMEOUT_MIN_MINUTES = 1;
+export const AGENT_EXECUTION_TIMEOUT_MAX_MINUTES = 12 * MINUTES_IN_HOUR;
+
 // Auto-review workflow activity actions
 export const AUTO_REVIEW_ACTIVITY_ACTIONS = [
   'unclaimed_and_assigned_human_via_mention',

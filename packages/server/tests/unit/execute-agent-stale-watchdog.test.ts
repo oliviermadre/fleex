@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ExecuteAgentUseCase, STALE_EXECUTION_GRACE_MS } from '../../src/application/use-cases/execute-agent.js';
 import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
 import type { StaleExecution } from '../../src/application/ports/agent-event-store.port.js';
@@ -87,20 +87,52 @@ describe('ExecuteAgentUseCase — stale execution watchdog', () => {
     expect(new Date(cutoff()!).getTime()).toBeLessThanOrEqual(expected + 1000);
   });
 
-  it('delegates to cancelExecution when the ghost is still tracked in this process', async () => {
-    const { useCase, completed, appended } = makeUseCase([staleRow()]);
-    const cancelled: string[] = [];
-    // Only cancelExecution can abort the live SDK query, which is what actually
-    // releases the shared SDK concurrency slot the ghost run is squatting.
-    (useCase as unknown as { cancelExecution: (id: string) => Promise<boolean> }).cancelExecution =
-      async (id) => { cancelled.push(id); return true; };
+  it('never reaps an execution this process still owns, however long it has been silent', async () => {
+    const { useCase, mention, completed, appended, broadcast } = makeUseCase([staleRow()]);
+    const abortController = new AbortController();
+    useCase.registerExecution({ executionId: 'e1', personaId: 'p1', ticketId: 'T1', abortController });
 
-    const reaped = await useCase.reapStaleExecutions();
+    // `last_event_at` only says "an SDK message arrived recently", which a live
+    // agent can legitimately starve: one long tool call, or a lead agent waiting
+    // on a fleet of subagents, emits nothing for as long as it runs. Killing it
+    // would abort the subprocess mid-work. Ownership is the honest liveness
+    // signal — and an owned run that is genuinely stuck is already bounded by
+    // its own execution timeout.
+    for (let tick = 0; tick < 5; tick++) {
+      expect(await useCase.reapStaleExecutions()).toBe(0);
+    }
 
-    expect(reaped).toBe(1);
-    expect(cancelled).toEqual(['e1']);
-    // No duplicate teardown: cancelExecution already wrote the status + event.
+    expect(abortController.signal.aborted).toBe(false);
     expect(completed).toEqual([]);
     expect(appended).toEqual([]);
+    expect(broadcast).toEqual([]);
+    expect(mention.status).toBe('acknowledged');
+
+    // Once the run settles and leaves the registry, the row is fair game again:
+    // this is the orphan case the watchdog actually exists for.
+    useCase.finalizeExecution('e1');
+    expect(await useCase.reapStaleExecutions()).toBe(1);
+    expect(completed).toEqual([{ executionId: 'e1', status: 'interrupted' }]);
+  });
+
+  it('skips a scan after a clock jump rather than reaping everything at once', async () => {
+    const { useCase, completed } = makeUseCase([staleRow()]);
+    vi.useFakeTimers();
+    try {
+      // Baseline tick. Nothing is owned here, so this one legitimately reaps.
+      expect(await useCase.reapStaleExecutions()).toBe(1);
+      completed.length = 0;
+
+      // Laptop sleep: timers were frozen while wall-clock advanced, so every
+      // in-flight run now *looks* ancient although its subprocess merely paused.
+      vi.setSystemTime(new Date(Date.now() + 60 * 60_000));
+      expect(await useCase.reapStaleExecutions()).toBe(0);
+      expect(completed).toEqual([]);
+
+      // Baseline is re-established, so the next normal tick works as usual.
+      expect(await useCase.reapStaleExecutions()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
