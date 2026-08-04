@@ -3,6 +3,7 @@ import type { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import type { CreateTicketInput } from '../../use-cases/create-ticket.js';
 import type { TicketFieldPatch, TicketMutationActor } from '../../use-cases/apply-ticket-mutation.js';
 import type { PostCommentUseCase } from '../../use-cases/post-comment.js';
+import type { EventBus } from '../../event-bus.js';
 
 /**
  * What an operation *declares* it wants done. Planning is separate from
@@ -23,7 +24,11 @@ export interface NativeEffectContext {
   /** The step's subject — the run's ticket, or the one `ticket.create` just made. */
   ticketId: string;
   actor: TicketMutationActor & { workflowName: string };
-  deps: { postComment: PostCommentUseCase };
+  /**
+   * `eventBus` is what makes an effect observable while it happens: persisting a
+   * comment is not enough, the WebSocket push is driven by the emitted event.
+   */
+  deps: { postComment: PostCommentUseCase; eventBus: EventBus };
 }
 
 export interface NativeOperationPlanInput {

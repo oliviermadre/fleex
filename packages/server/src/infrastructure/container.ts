@@ -423,6 +423,7 @@ export async function createContainer() {
       createTicket,
       applyTicketMutation,
       postComment,
+      eventBus,
     }));
 
     // RunWorkflowStep — orchestrator dep resolved below (circular dep pattern)

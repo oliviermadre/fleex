@@ -1,5 +1,6 @@
 import type { TicketStatus, TicketPriority, TicketType } from '@fleex/shared';
 import type { NativeOperationImpl } from './types.js';
+import { postWorkflowComment } from '../workflow-comment.js';
 
 /**
  * Server-side behaviour of the native operations. Each entry is keyed by the
@@ -99,14 +100,14 @@ export const TICKET_OPERATIONS: readonly NativeOperationImpl[] = [
     plan: ({ params }) => ({
       kind: 'effect',
       run: async (ctx) => {
-        const { comment } = await ctx.deps.postComment.execute({
+        // Posts *and* announces: without the event the comment lands in the
+        // database but never reaches an open thread, so a reader watching the
+        // ticket sees the workflow finish with nothing to show for it.
+        // Mentions stay empty — workflows advance through edges, not mentions.
+        const comment = await postWorkflowComment(ctx.deps.postComment, ctx.deps.eventBus, {
           ticketId: ctx.ticketId,
-          authorType: 'agent',
           authorName: ctx.actor.workflowName,
           body: str(params['body']),
-          // Workflows advance through edges, not mentions — never auto-trigger
-          // an agent from a step's comment.
-          humanMentionNames: [],
         });
         return { commentId: comment.id };
       },
