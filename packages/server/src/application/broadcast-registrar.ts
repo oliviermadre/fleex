@@ -229,6 +229,40 @@ export class BroadcastRegistrar {
       }
     });
 
+    // ── Routine broadcasts ──
+    // Routine runs have no ticketId, so they are invisible to every
+    // `workflow:*` push above. These three are what light up /routines live
+    // when the scheduler fires while nobody is looking at the screen.
+    bus.on('routine.run_started', (e) => {
+      if (e.type === 'routine.run_started') {
+        this.ticketBroadcast('routine:run_started', {
+          routineId: e.routineId,
+          routineSlug: e.routineSlug,
+          workflowRunId: e.workflowRunId,
+          triggerKind: e.triggerKind,
+        });
+      }
+    });
+    bus.on('routine.run_completed', (e) => {
+      if (e.type === 'routine.run_completed') {
+        this.ticketBroadcast('routine:run_completed', {
+          routineId: e.routineId,
+          workflowRunId: e.workflowRunId,
+          status: e.status,
+        });
+      }
+    });
+    bus.on('routine.run_skipped', (e) => {
+      if (e.type === 'routine.run_skipped') {
+        this.ticketBroadcast('routine:run_skipped', {
+          routineId: e.routineId,
+          routineSlug: e.routineSlug,
+          activeRunId: e.activeRunId,
+          reason: e.reason,
+        });
+      }
+    });
+
     // ── Persona broadcasts ──
     bus.on('persona.created', (e) => this.broadcastPersonaEntity(e, 'persona:created'));
     bus.on('persona.updated', (e) => this.broadcastPersonaEntity(e, 'persona:updated'));

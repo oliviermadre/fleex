@@ -27,6 +27,7 @@ const action = (operationId: string, params: Record<string, unknown> = {}): Nati
   ({ id: `a-${operationId}`, operationId, params });
 
 function harness(ticket: TicketEntity | null = makeTicket()) {
+  const triggerWorkflowRun = vi.fn().mockResolvedValue({ id: 'run-child' });
   const ticketStore = {
     getTicketById: vi.fn().mockResolvedValue(ticket),
     saveTicket: vi.fn(),
@@ -49,18 +50,23 @@ function harness(ticket: TicketEntity | null = makeTicket()) {
     applyTicketMutation,
     postComment: postComment as never,
     eventBus: eventBus as never,
+    triggerWorkflowRun,
   });
 
   const run = (actions: NativeAction[], refs?: {
     steps?: Record<string, Record<string, unknown>>;
     predecessorStepIds?: string[];
-  }) => uc.execute({
-    ticketId: 't-1',
+    item?: unknown;
+  }, extra?: { ticketId?: string | null; subjectBoardId?: string | null; workflowRunId?: string }) => uc.execute({
+    ticketId: extra && 'ticketId' in extra ? extra.ticketId : 't-1',
+    subjectBoardId: extra?.subjectBoardId ?? null,
+    workflowRunId: extra?.workflowRunId ?? 'run-1',
     actions,
     workflowName: 'Triage',
     references: {
       steps: refs?.steps ?? {},
       predecessorStepIds: refs?.predecessorStepIds ?? [],
+      ...(refs && 'item' in refs ? { item: refs.item } : {}),
     },
   });
 
@@ -68,7 +74,7 @@ function harness(ticket: TicketEntity | null = makeTicket()) {
     .map(([e]) => e as { type: string })
     .filter((e) => e.type === type);
 
-  return { uc, run, ticketStore, eventBus, postComment, createTicket, events };
+  return { uc, run, ticketStore, eventBus, postComment, createTicket, events, triggerWorkflowRun };
 }
 
 describe('ApplyNativeActionsUseCase', () => {
@@ -430,6 +436,197 @@ describe('ApplyNativeActionsUseCase', () => {
       ]).catch((e: unknown) => e) as NativeActionsPartialFailure;
 
       expect(error.committed.actionsApplied).toBe(2);
+    });
+  });
+
+  describe('{{ created.* }} — the two-pass resolution', () => {
+    const created = () => TicketEntity.create({
+      id: 't-new', boardId: 'b-2', displayId: 7, title: 'Spun off',
+      description: '', status: 'backlog', priority: 'medium', type: null,
+      position: 0, tags: [],
+    });
+
+    it('substitutes the identifiers of the ticket the step just created', async () => {
+      // Impossible in one pass: the id does not exist until the create commits,
+      // and the create cannot commit until everything has been validated.
+      const { run, postComment, createTicket } = harness();
+      createTicket.execute.mockResolvedValue(created());
+
+      await run([
+        action('ticket.create', { boardId: 'b-2', title: 'Spun off' }),
+        action('ticket.post_comment', { body: 'Spun off as #{{ created.displayId }} ({{ created.id }})' }),
+      ]);
+
+      expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
+        body: 'Spun off as #7 (t-new)',
+      }));
+    });
+
+    it('still rejects every *other* unresolvable reference before writing anything', async () => {
+      // Tolerating `created.*` in the pre-write pass must not turn that pass
+      // into a no-op: it is the only thing standing between a typo and a
+      // half-applied step.
+      const { run, createTicket } = harness();
+
+      await expect(run([
+        action('ticket.create', { boardId: 'b-2', title: 'Spun off' }),
+        action('ticket.post_comment', { body: '{{ created.id }} / {{ steps.ghost.x }}' }),
+      ])).rejects.toThrow(/ghost/);
+
+      expect(createTicket.execute).not.toHaveBeenCalled();
+    });
+
+    it('refuses a created reference when the step creates nothing', async () => {
+      const { run, ticketStore } = harness();
+
+      await expect(run([action('ticket.post_comment', { body: '{{ created.id }}' })]))
+        .rejects.toThrow(/no ticket was created/);
+
+      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+    });
+
+    it('refuses a created reference inside the create itself, rather than writing the raw token', async () => {
+      const { run, createTicket } = harness();
+
+      await expect(run([action('ticket.create', { boardId: 'b-2', title: '{{ created.id }}' })]))
+        .rejects.toThrow(/no ticket was created/);
+
+      expect(createTicket.execute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('runs without a subject ticket (routine runs)', () => {
+    const created = () => TicketEntity.create({
+      id: 't-new', boardId: 'b-routine', displayId: 7, title: 'From a routine',
+      description: '', status: 'backlog', priority: 'medium', type: null,
+      position: 0, tags: [],
+    });
+
+    it('falls back to the routine subject board when {{ ticket.boardId }} has no ticket', async () => {
+      // `boardId` defaults to `{{ ticket.boardId }}`. In a routine run that
+      // reference has nothing to read, so it is dropped and the subject's board
+      // answers — otherwise every routine template would need the board hard-coded.
+      const { run, createTicket, ticketStore } = harness();
+      createTicket.execute.mockResolvedValue(created());
+
+      await run(
+        [action('ticket.create', { boardId: '{{ ticket.boardId }}', title: 'From a routine' })],
+        {},
+        { ticketId: null, subjectBoardId: 'b-routine' },
+      );
+
+      expect(ticketStore.getTicketById).not.toHaveBeenCalled();
+      expect(createTicket.execute).toHaveBeenCalledWith(expect.objectContaining({ boardId: 'b-routine' }));
+    });
+
+    it('prefers an explicit board over the routine subject', async () => {
+      const { run, createTicket } = harness();
+      createTicket.execute.mockResolvedValue(created());
+
+      await run(
+        [action('ticket.create', { boardId: 'b-explicit', title: 'x' })],
+        {},
+        { ticketId: null, subjectBoardId: 'b-routine' },
+      );
+
+      expect(createTicket.execute).toHaveBeenCalledWith(expect.objectContaining({ boardId: 'b-explicit' }));
+    });
+
+    it('names the missing board instead of dropping the ticket into an arbitrary one', async () => {
+      const { run, createTicket } = harness();
+
+      await expect(run(
+        [action('ticket.create', { boardId: '{{ ticket.boardId }}', title: 'x' })],
+        {},
+        { ticketId: null, subjectBoardId: null },
+      )).rejects.toThrow(/has no board/);
+
+      expect(createTicket.execute).not.toHaveBeenCalled();
+    });
+
+    it('refuses an operation that needs a subject ticket, by name', async () => {
+      // Better than a null-deref inside a planner: the message tells the author
+      // which action cannot work in a routine and why.
+      const { run } = harness();
+
+      await expect(run(
+        [action('ticket.set_priority', { priority: 'high' })],
+        {},
+        { ticketId: null },
+      )).rejects.toThrow(/needs a subject ticket; a routine run has none/);
+    });
+  });
+
+  describe('{{ item.* }}', () => {
+    it('reads the element the fan-out bound for this iteration', async () => {
+      const { run, ticketStore } = harness();
+
+      await run(
+        [action('ticket.set_title', { title: 'Fix {{ item.file }}' })],
+        { item: { file: 'src/a.ts' } },
+      );
+
+      expect((ticketStore.saveTicket.mock.calls[0]?.[0] as TicketEntity).title).toBe('Fix src/a.ts');
+    });
+
+    it('fails the iteration when the element has no such field, rather than blanking it', async () => {
+      // A blanked title on 30 tickets is silent data loss; a failed iteration is
+      // one line in `failures` the author can act on.
+      const { run, ticketStore } = harness();
+
+      await expect(run(
+        [action('ticket.set_title', { title: '{{ item.missing }}' })],
+        { item: { file: 'src/a.ts' } },
+      )).rejects.toThrow(/item has no "missing"/);
+
+      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+    });
+
+    it('refuses an item reference outside a fan-out', async () => {
+      const { run } = harness();
+      await expect(run([action('ticket.set_title', { title: '{{ item }}' })]))
+        .rejects.toThrow(/no item in scope/);
+    });
+  });
+
+  describe('workflow.trigger', () => {
+    it('starts the workflow on the ticket the step just created', async () => {
+      // The composition Lot 2 exists for: create a ticket, then hand it to
+      // another workflow. It works because effects run after the create has
+      // rebound the subject.
+      const { run, createTicket, triggerWorkflowRun } = harness();
+      createTicket.execute.mockResolvedValue(TicketEntity.create({
+        id: 't-new', boardId: 'b-2', displayId: 7, title: 'Spun off',
+        description: '', status: 'backlog', priority: 'medium', type: null,
+        position: 0, tags: [],
+      }));
+
+      const result = await run([
+        action('ticket.create', { boardId: 'b-2', title: 'Spun off' }),
+        action('workflow.trigger', { templateSlug: 'auto-review' }),
+      ]);
+
+      expect(triggerWorkflowRun).toHaveBeenCalledWith({
+        templateSlug: 'auto-review', ticketId: 't-new',
+        triggeredBy: 'workflow:Triage', parentRunId: 'run-1',
+      });
+      // The child run id travels back so a downstream edge can route on it.
+      expect(result.triggeredRunIds).toEqual(['run-child']);
+    });
+
+    it('passes the current run as the parent, which is what bounds recursion', async () => {
+      const { run, triggerWorkflowRun } = harness();
+      await run([action('workflow.trigger', { templateSlug: 'auto-review' })]);
+      expect(triggerWorkflowRun.mock.calls[0]?.[0]).toMatchObject({ parentRunId: 'run-1' });
+    });
+
+    it('says there is nothing to run the workflow on rather than creating an orphan run', async () => {
+      const { run } = harness();
+      await expect(run(
+        [action('workflow.trigger', { templateSlug: 'auto-review' })],
+        {},
+        { ticketId: null },
+      )).rejects.toThrow(/no ticket to run "auto-review" on/);
     });
   });
 

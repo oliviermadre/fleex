@@ -1,11 +1,13 @@
 /**
  * `{{ … }}` references inside native action parameters.
  *
- * Four forms are understood:
+ * Six forms are understood:
  *   {{ steps.<stepId>.<field> }}  canonical — a schemaField of an upstream step
  *   {{ output.<field> }}          shorthand for the single direct predecessor
  *   {{ ticket.<field> }}          a field of the run's subject ticket
  *   {{ workflow }}                the workflow name
+ *   {{ item }} / {{ item.<path> }} the current element of a `forEach` fan-out
+ *   {{ created.<field> }}         the ticket this very step's `ticket.create` made
  *
  * Parsing lives in `shared` because both the editor (static validation) and the
  * server (runtime resolution) need exactly the same grammar.
@@ -13,7 +15,7 @@
 
 export const REFERENCE_PATTERN = /\{\{([^{}]*)\}\}/g;
 
-export type ReferenceKind = 'step' | 'output' | 'ticket' | 'workflow';
+export type ReferenceKind = 'step' | 'output' | 'ticket' | 'workflow' | 'item' | 'created';
 
 export interface ParsedReference {
   /** The whole `{{ … }}` occurrence, as written. */
@@ -21,7 +23,11 @@ export interface ParsedReference {
   kind: ReferenceKind;
   /** Set when `kind === 'step'`. */
   stepId?: string;
-  /** Set for `step` / `output` / `ticket`. */
+  /**
+   * Set for `step` / `output` / `ticket` / `created`, and for `item` when the
+   * reference digs into the element (`{{ item.repo.name }}` → `repo.name`).
+   * Absent for a bare `{{ item }}`, which is the element itself.
+   */
   field?: string;
 }
 
@@ -41,17 +47,31 @@ export const TICKET_REFERENCE_FIELDS = [
 
 export type TicketReferenceField = (typeof TICKET_REFERENCE_FIELDS)[number];
 
+/**
+ * Fields of the ticket a step's own `ticket.create` just made, exposed to
+ * `{{ created.* }}`. Whitelisted like `TICKET_REFERENCE_FIELDS` rather than
+ * mirroring it wholesale: the only values that are *new* information after the
+ * create are its identifiers — everything else the author already wrote into
+ * the create's own parameters, so offering it back would just be a rename.
+ */
+export const CREATED_REFERENCE_FIELDS = ['id', 'displayId'] as const;
+
+export type CreatedReferenceField = (typeof CREATED_REFERENCE_FIELDS)[number];
+
 export class ReferenceSyntaxError extends Error {}
 
 /**
  * Parse the inner text of one `{{ … }}` occurrence.
- * Throws `ReferenceSyntaxError` when the path is not one of the four forms.
+ * Throws `ReferenceSyntaxError` when the path is not one of the known forms.
  */
 export function parseReferencePath(inner: string, raw: string): ParsedReference {
   const path = inner.trim();
   if (path === '') throw new ReferenceSyntaxError(`empty reference "${raw}"`);
 
   if (path === 'workflow') return { raw, kind: 'workflow' };
+  // A bare `{{ item }}` is the element itself — the common case when a step
+  // iterates an array of plain strings (repo names, tags, ticket ids…).
+  if (path === 'item') return { raw, kind: 'item' };
 
   const parts = path.split('.');
 
@@ -81,8 +101,32 @@ export function parseReferencePath(inner: string, raw: string): ParsedReference 
     return { raw, kind: 'ticket', field: parts[1] };
   }
 
+  if (parts[0] === 'item') {
+    // Deliberately no depth limit: the array an agent step emits is arbitrary
+    // JSON, so `{{ item.repo.owner }}` has to work. The path is kept joined and
+    // walked at resolution time.
+    const field = parts.slice(1).join('.');
+    if (field === '' || parts.slice(1).some((p) => p === '')) {
+      throw new ReferenceSyntaxError(`"${raw}" must be {{ item }} or {{ item.<path> }}`);
+    }
+    return { raw, kind: 'item', field };
+  }
+
+  if (parts[0] === 'created') {
+    if (parts.length !== 2 || !parts[1]) {
+      throw new ReferenceSyntaxError(`"${raw}" must be {{ created.<field> }}`);
+    }
+    if (!(CREATED_REFERENCE_FIELDS as readonly string[]).includes(parts[1])) {
+      throw new ReferenceSyntaxError(
+        `"${raw}" — unknown created field "${parts[1]}" (allowed: ${CREATED_REFERENCE_FIELDS.join(', ')})`,
+      );
+    }
+    return { raw, kind: 'created', field: parts[1] };
+  }
+
   throw new ReferenceSyntaxError(
-    `"${raw}" — must start with steps. / output. / ticket. or be {{ workflow }}`,
+    `"${raw}" — must start with steps. / output. / ticket. / item. / created. `
+    + `or be {{ workflow }} or {{ item }}`,
   );
 }
 

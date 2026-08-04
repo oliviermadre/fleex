@@ -9,6 +9,7 @@ interface Row {
   id: string;
   ticket_id: string | null;
   routine_id: string | null;
+  parent_run_id: string | null;
   subject_snapshot: string | null;
   workspace_path: string | null;
   template_id: string;
@@ -68,16 +69,17 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
     // ON CONFLICT DO UPDATE performs an in-place UPDATE: no row is deleted, no cascade fires.
     this.conn.db.prepare(`
       INSERT INTO workflow_runs
-        (id, ticket_id, routine_id, subject_snapshot, workspace_path,
+        (id, ticket_id, routine_id, parent_run_id, subject_snapshot, workspace_path,
          template_id, template_snapshot, status, current_step_id,
          triggered_by, triggered_from, started_at, completed_at, created_at, updated_at)
       VALUES
-        (@id, @ticket_id, @routine_id, @subject_snapshot, @workspace_path,
+        (@id, @ticket_id, @routine_id, @parent_run_id, @subject_snapshot, @workspace_path,
          @template_id, @template_snapshot, @status, @current_step_id,
          @triggered_by, @triggered_from, @started_at, @completed_at, @created_at, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
         ticket_id = excluded.ticket_id,
         routine_id = excluded.routine_id,
+        parent_run_id = excluded.parent_run_id,
         subject_snapshot = excluded.subject_snapshot,
         workspace_path = excluded.workspace_path,
         template_id = excluded.template_id,
@@ -94,6 +96,7 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       id: run.id,
       ticket_id: run.ticketId,
       routine_id: run.routineId,
+      parent_run_id: run.parentRunId,
       subject_snapshot: run.subjectSnapshot ? JSON.stringify(run.subjectSnapshot) : null,
       workspace_path: run.workspacePath,
       template_id: run.templateId,
@@ -126,6 +129,7 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       r.routine_id ?? null,
       r.subject_snapshot ? JSON.parse(r.subject_snapshot) as RunSubject : null,
       r.workspace_path ?? null,
+      r.parent_run_id ?? null,
     );
   }
 }

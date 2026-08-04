@@ -85,6 +85,24 @@ export class RoutineEntity {
     this.updatedAt = new Date();
   }
 
+  /** Arms (or disarms, with null) the next scheduled fire time. */
+  schedule(nextRunAt: Date | null): void {
+    this.nextRunAt = nextRunAt;
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * A `once` routine has spent its single occurrence: disarm *and* disable it.
+   * Clearing `next_run_at` alone would be enough for this process, but the row
+   * outlives it — leaving `enabled = true` would let a future boot recompute
+   * arm the same one-shot again.
+   */
+  consumeOneShot(): void {
+    this.nextRunAt = null;
+    this.enabled = false;
+    this.updatedAt = new Date();
+  }
+
   recordRun(runId: string, at: Date = new Date()): void {
     this.lastRunId = runId;
     this.lastRunAt = at;

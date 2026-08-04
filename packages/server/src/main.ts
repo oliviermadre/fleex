@@ -48,6 +48,7 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { routineRoutes } from './infrastructure/http/routines.routes.js';
+import { ROUTINE_TICK_INTERVAL_MS } from './domain/services/routine-scheduler.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
 import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
@@ -242,6 +243,12 @@ async function main() {
     }
   }
 
+  // Start the routine scheduler. Only meaningful when the storage driver gave
+  // us routines at all (sqlite/supabase) — otherwise it would tick over nothing.
+  if (container.routineStore && container.runRoutine) {
+    container.routineScheduler.start(ROUTINE_TICK_INTERVAL_MS);
+  }
+
   // Wire repo-exists check so refresh summaries include isClonedLocally
   container.repositoryRefreshScheduler.setCheckRepoExists(async (org, name) => {
     const barePath = container.resolver.barePath(org, name);
@@ -303,6 +310,10 @@ async function main() {
     try {
       // Stop repository refresh scheduler
       container.repositoryRefreshScheduler.stop();
+
+      // Stop the routine scheduler — its interval would otherwise keep the
+      // event loop alive and could launch an agent run mid-shutdown.
+      container.routineScheduler.stop();
 
       // Stop WebSocket heartbeat
       heartbeat.stop();

@@ -54,6 +54,20 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
     return r ? toEntity(r) : null;
   }
 
+  async getDue(now: Date): Promise<RoutineEntity[]> {
+    const rows = this.conn.db.prepare(`
+      SELECT * FROM routines
+      WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?
+      ORDER BY next_run_at ASC
+    `).all(now.toISOString()) as Row[];
+    return rows.map(toEntity);
+  }
+
+  async getEnabled(): Promise<RoutineEntity[]> {
+    const rows = this.conn.db.prepare('SELECT * FROM routines WHERE enabled = 1').all() as Row[];
+    return rows.map(toEntity);
+  }
+
   async save(routine: RoutineEntity): Promise<void> {
     const t = routine.trigger;
     this.conn.db.prepare(`

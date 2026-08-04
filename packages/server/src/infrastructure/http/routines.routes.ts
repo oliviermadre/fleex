@@ -7,9 +7,10 @@ import {
   RoutineNotFoundError,
   RoutineSlugConflictError,
   RoutineRunAlreadyActiveError,
-  RoutineTriggerNotSupportedError,
+  InvalidRoutineTriggerError,
   WorkflowTemplateNotFoundError,
 } from '../../domain/errors.js';
+import { nextRunTimes } from '../../domain/services/routine-schedule.js';
 import type { RoutineStorePort } from '../../application/ports/routine-store.port.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
@@ -56,7 +57,7 @@ function sendDomainError(reply: { code: (n: number) => { send: (b: unknown) => u
   if (err instanceof WorkflowTemplateNotFoundError) return reply.code(404).send({ error: err.code, message: err.message });
   if (err instanceof RoutineSlugConflictError) return reply.code(409).send({ error: err.code, message: err.message });
   if (err instanceof RoutineRunAlreadyActiveError) return reply.code(409).send({ error: err.code, message: err.message });
-  if (err instanceof RoutineTriggerNotSupportedError) return reply.code(422).send({ error: err.code, message: err.message });
+  if (err instanceof InvalidRoutineTriggerError) return reply.code(422).send({ error: err.code, message: err.message });
   throw err;
 }
 
@@ -99,6 +100,25 @@ export function routineRoutes(deps: RoutineRouteDeps) {
         ?? await deps.routineStore.getBySlug(idOrSlug);
       if (!routine) return reply.code(404).send({ error: 'ROUTINE_NOT_FOUND' });
       return routine.toDTO();
+    });
+
+    // POST /api/routines/trigger-preview — "when would this actually fire?".
+    // The editor must not ask an author to trust a raw `*/15 * * * *`, and the
+    // preview is computed by the very code the scheduler uses rather than by a
+    // second client-side cron implementation that could drift from it.
+    app.post('/api/routines/trigger-preview', async (request, reply) => {
+      const body = request.body;
+      if (!isObject(body)) return reply.code(400).send({ error: 'INVALID_BODY', message: 'body must be an object' });
+      const trigger = parseTrigger(body['trigger']);
+      if (!trigger.ok) return reply.code(400).send({ error: 'INVALID_BODY', message: trigger.error });
+      if (!trigger.value) return reply.code(400).send({ error: 'INVALID_BODY', message: 'trigger is required' });
+
+      const count = typeof body['count'] === 'number' ? Math.min(Math.max(1, body['count']), 10) : 5;
+      try {
+        return { nextRuns: nextRunTimes(trigger.value, new Date(), count).map((d) => d.toISOString()) };
+      } catch (err) {
+        return sendDomainError(reply, err);
+      }
     });
 
     app.post('/api/routines', async (request, reply) => {

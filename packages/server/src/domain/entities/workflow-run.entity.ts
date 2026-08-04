@@ -24,6 +24,11 @@ export class WorkflowRunEntity {
     public readonly routineId: string | null = null,
     public readonly subjectSnapshot: RunSubject | null = null,
     public workspacePath: string | null = null,
+    /**
+     * The run whose `workflow.trigger` spawned this one. Only read to bound the
+     * depth of a chain of runs — see `CreateWorkflowRunUseCase`.
+     */
+    public readonly parentRunId: string | null = null,
   ) {
     // Exactly one anchor. A run with neither would be unreachable from every
     // screen (kanban, cockpit, routines); a run with both would have two
@@ -47,6 +52,7 @@ export class WorkflowRunEntity {
     templateSnapshot: WorkflowTemplateSnapshot;
     triggeredBy: string;
     triggeredFrom: string;
+    parentRunId?: string | null;
   }): WorkflowRunEntity {
     const now = new Date();
     return new WorkflowRunEntity(
@@ -65,6 +71,7 @@ export class WorkflowRunEntity {
       params.routineId ?? null,
       params.subjectSnapshot ?? null,
       null,
+      params.parentRunId ?? null,
     );
   }
 
@@ -130,6 +137,7 @@ export class WorkflowRunEntity {
       id: this.id,
       ticketId: this.ticketId,
       routineId: this.routineId,
+      parentRunId: this.parentRunId,
       subjectSnapshot: this.subjectSnapshot,
       workspacePath: this.workspacePath,
       templateId: this.templateId,

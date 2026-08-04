@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind } from '@fleex/shared';
 
 // ── Base ──
 
@@ -432,6 +432,37 @@ export interface WorkflowRunCancelledEvent extends DomainEvent {
   routineId?: string | null;
 }
 
+// ── Routine events ──
+//
+// A routine run has no ticket, so none of the `workflow.*` events above reach
+// the /routines screen (they are keyed on ticketId). These three are what make
+// a scheduled launch visible live instead of on the next manual refresh.
+
+export interface RoutineRunStartedEvent extends DomainEvent {
+  type: 'routine.run_started';
+  routineId: string;
+  routineSlug: string;
+  workflowRunId: string;
+  /** `once` / `cron` for a scheduled launch, `manual` for the Launch button. */
+  triggerKind: RoutineTriggerKind;
+}
+
+export interface RoutineRunCompletedEvent extends DomainEvent {
+  type: 'routine.run_completed';
+  routineId: string;
+  workflowRunId: string;
+  status: 'completed' | 'failed' | 'cancelled';
+}
+
+/** A tick fired while a run was still active and `overlapPolicy` said `skip`. */
+export interface RoutineRunSkippedEvent extends DomainEvent {
+  type: 'routine.run_skipped';
+  routineId: string;
+  routineSlug: string;
+  activeRunId: string;
+  reason: 'overlap';
+}
+
 // ── Worktree events ──
 
 export interface WorktreeCreatedEvent extends DomainEvent {
@@ -601,7 +632,10 @@ export type AnyDomainEvent =
   | WorkflowAwaitingRoutingEvent
   | WorkflowRunCompletedEvent
   | WorkflowRunFailedEvent
-  | WorkflowRunCancelledEvent;
+  | WorkflowRunCancelledEvent
+  | RoutineRunStartedEvent
+  | RoutineRunCompletedEvent
+  | RoutineRunSkippedEvent;
 
 // ── Event type string union ──
 

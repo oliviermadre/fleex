@@ -167,6 +167,25 @@ export class WorkflowRunAlreadyActiveError extends DomainError {
   }
 }
 
+/**
+ * A `workflow.trigger` chain got too deep.
+ *
+ * A workflow that triggers a workflow is a feature; a workflow that — directly
+ * or through two others — triggers itself is an incident: every run spawns
+ * another, forever, each one creating tickets. A depth cap is the cheap,
+ * always-correct guard (no cycle detection to get subtly wrong), and a chain
+ * that long is a modelling mistake in its own right.
+ */
+export class WorkflowRunDepthExceededError extends DomainError {
+  constructor(templateId: string, maxDepth: number) {
+    super(
+      `Refusing to start workflow ${templateId}: it would be nested more than ${maxDepth} `
+      + 'runs deep. A workflow triggering itself, directly or through others, is the usual cause.',
+      'WORKFLOW_RUN_DEPTH_EXCEEDED',
+    );
+  }
+}
+
 export class WorkflowTemplateNotFoundError extends DomainError {
   constructor(slugOrId: string) {
     super(`Workflow template not found: ${slugOrId}`, 'WORKFLOW_TEMPLATE_NOT_FOUND');
@@ -244,15 +263,16 @@ export class RoutineSlugConflictError extends DomainError {
 }
 
 /**
- * Scheduling (`once` / `cron` triggers) is not wired yet — accepting one would
- * persist a routine that silently never fires. Rejected loudly instead.
+ * A `once` / `cron` trigger the scheduler could not turn into a fire time: an
+ * unparseable cron expression, an unknown IANA timezone, a non-ISO `runAt`.
+ *
+ * Rejected at write time rather than at tick time: a malformed trigger stored
+ * now becomes a routine the scheduler silently never fires, and the author
+ * would keep believing it is armed.
  */
-export class RoutineTriggerNotSupportedError extends DomainError {
-  constructor(kind: string) {
-    super(
-      `Routine trigger "${kind}" is not supported yet — only "manual" is. Scheduling ships with the routine scheduler.`,
-      'ROUTINE_TRIGGER_NOT_SUPPORTED',
-    );
+export class InvalidRoutineTriggerError extends DomainError {
+  constructor(reason: string) {
+    super(`Invalid routine trigger: ${reason}`, 'INVALID_ROUTINE_TRIGGER');
   }
 }
 

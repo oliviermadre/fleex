@@ -20,15 +20,42 @@ export type OpPlan =
   /** Runs after the single write; not covered by its atomicity. */
   | { kind: 'effect'; run: (ctx: NativeEffectContext) => Promise<Record<string, unknown>> };
 
-export interface NativeEffectContext {
-  /** The step's subject — the run's ticket, or the one `ticket.create` just made. */
+/**
+ * Spawns a child workflow run — the port behind `workflow.trigger`.
+ *
+ * Injected as a function rather than the use-case itself because the dependency
+ * is circular: `CreateWorkflowRun` → orchestrator → step executors →
+ * `NativeStepExecutor` → `ApplyNativeActions` → back here. The container binds
+ * it lazily, once both ends exist.
+ */
+export type TriggerWorkflowRunPort = (params: {
+  templateSlug: string;
   ticketId: string;
+  triggeredBy: string;
+  /** The run that asked for this one — bounds recursion. */
+  parentRunId: string | null;
+}) => Promise<{ id: string }>;
+
+export interface NativeEffectContext {
+  /**
+   * The step's subject — the run's ticket, or the one `ticket.create` just made.
+   * Null in a routine run that created nothing; only operations declaring
+   * `requiresSubjectTicket: false` ever see that.
+   */
+  ticketId: string | null;
+  /** The run the step belongs to, so a child run can record its parent. */
+  workflowRunId: string | null;
   actor: TicketMutationActor & { workflowName: string };
   /**
    * `eventBus` is what makes an effect observable while it happens: persisting a
    * comment is not enough, the WebSocket push is driven by the emitted event.
    */
-  deps: { postComment: PostCommentUseCase; eventBus: EventBus };
+  deps: {
+    postComment: PostCommentUseCase;
+    eventBus: EventBus;
+    /** Absent on storage drivers with no workflow engine (json / pgsql). */
+    triggerWorkflowRun?: TriggerWorkflowRunPort | null;
+  };
 }
 
 export interface NativeOperationPlanInput {

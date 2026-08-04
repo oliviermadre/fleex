@@ -77,6 +77,25 @@ export class SupabaseRoutineStore implements RoutineStorePort {
     return data ? toEntity(data as Row) : null;
   }
 
+  async getDue(now: Date): Promise<RoutineEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('routines')
+      .select('*')
+      .eq('enabled', true)
+      .not('next_run_at', 'is', null)
+      .lte('next_run_at', now.toISOString())
+      .order('next_run_at', { ascending: true });
+    if (error) throw new Error(`SupabaseRoutineStore.getDue failed: ${error.message}`);
+    return (data as Row[]).map(toEntity);
+  }
+
+  async getEnabled(): Promise<RoutineEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('routines').select('*').eq('enabled', true);
+    if (error) throw new Error(`SupabaseRoutineStore.getEnabled failed: ${error.message}`);
+    return (data as Row[]).map(toEntity);
+  }
+
   async save(routine: RoutineEntity): Promise<void> {
     const t = routine.trigger;
     const { error } = await this.conn.client.from('routines').upsert({

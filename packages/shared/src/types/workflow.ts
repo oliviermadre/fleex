@@ -18,6 +18,12 @@ export interface JsonSchemaProperty {
   enum?: string[];
   description?: string;
   items?: JsonSchemaProperty;
+  /**
+   * Fields of an object — including the object an `array` iterates over. Without
+   * it `{ type: 'array', items: { type: 'object' } }` is a list of opaque blobs,
+   * and a `forEach` step has nothing to offer the author for `{{ item.* }}`.
+   */
+  properties?: Record<string, JsonSchemaProperty>;
 }
 
 export interface JsonSchema {
@@ -53,6 +59,13 @@ export interface WorkflowStep {
    * so pre-existing templates keep deserialising — mirrors `humanGateOutcomes`.
    */
   nativeActions?: NativeAction[];
+  /**
+   * Native steps only. A `{{ … }}` reference to an array in an upstream step's
+   * output; the step's actions run once per element, with `{{ item.* }}` bound.
+   * Optional on the type — like `nativeActions` — so pre-existing templates
+   * keep deserialising.
+   */
+  forEach?: string;
   position: { x: number; y: number };
 }
 
@@ -139,6 +152,12 @@ export interface WorkflowRun {
   ticketId: string | null;
   /** Set iff the run has no ticket. See `Routine`. Absent on pre-routines rows. */
   routineId?: string | null;
+  /**
+   * The run whose `workflow.trigger` action spawned this one. Null for a run a
+   * human (or a routine) started. Only there to bound recursion: a workflow
+   * that triggers itself would otherwise fan out forever.
+   */
+  parentRunId?: string | null;
   /**
    * The routine's subject, frozen when the run started — same rationale as
    * `templateSnapshot`: editing a routine must not rewrite its history.

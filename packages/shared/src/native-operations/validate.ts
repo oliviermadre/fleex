@@ -10,6 +10,7 @@ import {
   asFullValueReference,
   findReferences,
   ReferenceSyntaxError,
+  CREATED_REFERENCE_FIELDS,
   TICKET_REFERENCE_FIELDS,
   type ParsedReference,
 } from './references.js';
@@ -73,6 +74,10 @@ export function validateNativeSteps(
 
     const inboundCount = edges.filter((e) => e.target === step.id).length;
     const claimedFields = new Map<string, string>();
+    const forEachItems = step.forEach
+      ? validateForEach(step, byId, ancestors, where, errors)
+      : null;
+    const hasCreate = actions.some((a) => a.operationId === NATIVE_OP_CREATE_TICKET);
 
     for (const action of actions) {
       const op = getNativeOperation(action.operationId);
@@ -107,12 +112,86 @@ export function validateNativeSteps(
           edges,
           errors,
           warnings,
+          forEachItems,
+          hasCreate,
+          isCreateAction: action.operationId === NATIVE_OP_CREATE_TICKET,
         });
       }
     }
   }
 
   return flatten();
+}
+
+/**
+ * Checks the step's `forEach` expression and returns the schema of one element,
+ * so `{{ item.* }}` can be offered — and, eventually, type-checked.
+ *
+ * Returns `null` (having pushed an error) when the expression is unusable. A
+ * `forEach` that cannot be resolved statically would only surface at runtime,
+ * after the upstream agent step has already been paid for.
+ */
+function validateForEach(
+  step: WorkflowStep,
+  byId: Map<string, WorkflowStep>,
+  ancestors: Map<string, Set<string>>,
+  where: string,
+  errors: string[],
+): JsonSchemaProperty | null {
+  const expression = step.forEach ?? '';
+  let ref: ParsedReference | null;
+  try {
+    ref = asFullValueReference(expression);
+  } catch (e) {
+    errors.push(`${where}: forEach — ${e instanceof ReferenceSyntaxError ? e.message : String(e)}`);
+    return null;
+  }
+
+  if (!ref) {
+    errors.push(
+      `${where}: forEach must be a single reference to an upstream array `
+      + `(e.g. "{{ steps.<stepId>.items }}"), not ${JSON.stringify(expression)}`,
+    );
+    return null;
+  }
+
+  if (ref.kind !== 'step' && ref.kind !== 'output') {
+    errors.push(`${where}: forEach ${ref.raw} — only a step output can be iterated`);
+    return null;
+  }
+
+  // `{{ output.* }}` is resolved against the single predecessor at runtime;
+  // the generic reference validator below already checks that shape, so here we
+  // only follow explicit step references far enough to read the element schema.
+  if (ref.kind === 'output') return null;
+
+  const source = byId.get(ref.stepId ?? '');
+  if (!source) {
+    errors.push(`${where}: forEach ${ref.raw} points at unknown step "${ref.stepId}"`);
+    return null;
+  }
+  if (!(ancestors.get(step.id)?.has(source.id) ?? false)) {
+    errors.push(
+      `${where}: forEach ${ref.raw} points at "${source.name || source.id}", which does not run before this step`,
+    );
+    return null;
+  }
+
+  const property = source.outputSchema?.properties?.[ref.field ?? ''];
+  if (!property) {
+    errors.push(
+      `${where}: forEach ${ref.raw} — "${source.name || source.id}" declares no output field "${ref.field}"`,
+    );
+    return null;
+  }
+  if (property.type !== 'array') {
+    errors.push(
+      `${where}: forEach ${ref.raw} is ${property.type}, but only an array can be iterated`,
+    );
+    return null;
+  }
+
+  return property.items ?? null;
 }
 
 function validateCreatePlacement(actions: NativeAction[], where: string, errors: string[]): void {
@@ -141,6 +220,12 @@ interface ParamValidationCtx {
   edges: WorkflowEdge[];
   errors: string[];
   warnings: string[];
+  /** Element schema of the iterated array; `null` when the step has no `forEach`. */
+  forEachItems: JsonSchemaProperty | null;
+  /** Whether one of the step's actions is a `ticket.create` — gates `{{ created.* }}`. */
+  hasCreate: boolean;
+  /** The action being validated is that very `ticket.create`. */
+  isCreateAction: boolean;
 }
 
 function validateParam(ctx: ParamValidationCtx): void {
@@ -190,6 +275,31 @@ function validateReference(ctx: ParamValidationCtx, ref: ParsedReference, isFull
   const { param, label, step, byId, ancestors, dominators, inboundCount, edges, errors, warnings } = ctx;
 
   if (ref.kind === 'workflow' || ref.kind === 'ticket') return; // always available at runtime
+
+  if (ref.kind === 'item') {
+    // Outside a fan-out there is no element to bind, so the reference could only
+    // ever fail at runtime — after the step's other actions have already run.
+    if (!step.forEach) {
+      errors.push(
+        `${label}: ${ref.raw} — this step has no forEach, so there is no item to read `
+        + `(set the step's "For each" expression first)`,
+      );
+    }
+    return;
+  }
+
+  if (ref.kind === 'created') {
+    if (!ctx.hasCreate) {
+      errors.push(
+        `${label}: ${ref.raw} — this step creates no ticket, so nothing was created to reference`,
+      );
+    } else if (ctx.isCreateAction) {
+      errors.push(
+        `${label}: ${ref.raw} — "Create ticket" cannot reference the ticket it is about to create`,
+      );
+    }
+    return;
+  }
 
   let sourceStepId: string | undefined;
 
@@ -308,7 +418,7 @@ export interface ReferenceSuggestion {
   token: string;
   /** What the author reads, built from the step *name*. */
   label: string;
-  group: 'Steps' | 'Ticket' | 'Workflow';
+  group: 'Steps' | 'Ticket' | 'Workflow' | 'Item' | 'Created';
   /** The source step is on a branch that may not run — same condition as the warning. */
   conditional?: boolean;
 }
@@ -365,6 +475,22 @@ export function nativeReferenceSuggestions(
   }
   out.push({ token: '{{ workflow }}', label: 'workflow name', group: 'Workflow' });
 
+  // Only offered where they are legal — the picker must never build a reference
+  // that `validateNativeSteps` then rejects.
+  if (step.forEach) {
+    out.push({ token: '{{ item }}', label: 'item (the whole element)', group: 'Item' });
+    const items = validateForEach(step, new Map(steps.map((s) => [s.id, s])), computeAncestors(steps, edges), '', []);
+    for (const field of Object.keys(items?.properties ?? {})) {
+      out.push({ token: `{{ item.${field} }}`, label: `item.${field}`, group: 'Item' });
+    }
+  }
+
+  if ((step.nativeActions ?? []).some((a) => a.operationId === NATIVE_OP_CREATE_TICKET)) {
+    for (const field of CREATED_REFERENCE_FIELDS) {
+      out.push({ token: `{{ created.${field} }}`, label: `created.${field}`, group: 'Created' });
+    }
+  }
+
   return out;
 }
 
@@ -375,10 +501,17 @@ export function nativeReferenceSuggestions(
  * upstream schema may declare a plain string where an enum is expected), so the
  * resolved values are checked again before anything is written. Returns the
  * error messages; empty means good to run.
+ *
+ * `deferShapeFor` names the params whose value is still an unsubstituted
+ * `{{ created.* }}` placeholder. Their *presence* is checked here (a required
+ * param must still be filled before anything is written) but their *shape* is
+ * not, because the placeholder is a string whatever the param's declared type.
+ * They are re-checked in full once the create has run.
  */
 export function validateResolvedParams(
   operationId: string,
   params: Record<string, unknown>,
+  deferShapeFor: readonly string[] = [],
 ): string[] {
   const op = getNativeOperation(operationId);
   if (!op) return [`unknown operation "${operationId}"`];
@@ -392,6 +525,7 @@ export function validateResolvedParams(
       }
       continue;
     }
+    if (deferShapeFor.includes(param.name)) continue;
     validateLiteral(param, value, op.label, errors);
   }
   return errors;

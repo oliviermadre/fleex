@@ -40,6 +40,7 @@ import type {
   Routine,
   CreateRoutineInput,
   UpdateRoutineInput,
+  RoutineTrigger,
   TicketDeliverable,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
@@ -1101,4 +1102,18 @@ export async function launchRoutine(id: string): Promise<WorkflowRun> {
 
 export async function fetchRoutineRuns(id: string): Promise<RoutineRunDetail[]> {
   return request<RoutineRunDetail[]>(`/routines/${encodeURIComponent(id)}/runs`);
+}
+
+/**
+ * "When would this actually fire?" for the trigger editor.
+ *
+ * Computed server-side on purpose: the scheduler's own cron/timezone code
+ * answers, so the preview can never drift from what will really happen — which
+ * a second, client-side cron implementation eventually would.
+ */
+export async function previewRoutineTrigger(trigger: RoutineTrigger, count = 5): Promise<string[]> {
+  const res = await request<{ nextRuns: string[] }>('/routines/trigger-preview', {
+    method: 'POST', body: JSON.stringify({ trigger, count }),
+  });
+  return res.nextRuns;
 }

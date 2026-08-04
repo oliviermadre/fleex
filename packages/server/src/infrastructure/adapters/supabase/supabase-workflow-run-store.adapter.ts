@@ -7,6 +7,7 @@ interface WorkflowRunRow {
   id: string;
   ticket_id: string | null;
   routine_id: string | null;
+  parent_run_id: string | null;
   subject_snapshot: RunSubject | null;
   workspace_path: string | null;
   template_id: string;
@@ -40,6 +41,7 @@ function rowToEntity(r: WorkflowRunRow): WorkflowRunEntity {
     r.routine_id ?? null,
     r.subject_snapshot ?? null,
     r.workspace_path ?? null,
+    r.parent_run_id ?? null,
   );
 }
 
@@ -123,6 +125,7 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
       id: run.id,
       ticket_id: run.ticketId,
       routine_id: run.routineId,
+      parent_run_id: run.parentRunId,
       subject_snapshot: run.subjectSnapshot,
       workspace_path: run.workspacePath,
       template_id: run.templateId,
