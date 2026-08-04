@@ -12,6 +12,11 @@ export interface StepRunNodeData {
   summary?: string;
   isCurrent: boolean;
   onSelect: (stepId: string) => void;
+  /**
+   * Opens the Claude SDK session of this step. Absent when the step has no
+   * session to show (non-agentic step, or not started yet).
+   */
+  onOpenSession?: () => void;
 }
 
 // ── Inline SVG icons ──────────────────────────────────────────────────────────
@@ -78,6 +83,15 @@ function CircleDotIcon({ className }: IconProps) {
     <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <circle cx="12" cy="12" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function TerminalIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 17 10 11 4 5" />
+      <line x1="12" y1="19" x2="20" y2="19" />
     </svg>
   );
 }
@@ -160,6 +174,22 @@ export function StepRunNode({ data }: { data: StepRunNodeData }) {
         <div className="flex items-center gap-2 mb-1">
           <StepIcon type={data.step.executorType} className="w-4 h-4 shrink-0" />
           <span className="text-xs font-medium truncate flex-1 text-[var(--theme-text-primary)]">{data.step.name}</span>
+          {data.onOpenSession && (
+            // Direct access to the SDK turns from the canvas — one click, no
+            // detour through the sidebar. stopPropagation so it doesn't also
+            // select the node behind the popup.
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onOpenSession?.();
+              }}
+              title="View SDK session"
+              aria-label="View SDK session"
+              className="shrink-0 rounded p-0.5 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            >
+              <TerminalIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
           <StatusIcon status={data.status} />
         </div>
         <div className="text-[10px] truncate text-[var(--theme-text-muted)]">

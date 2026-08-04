@@ -11,6 +11,8 @@ import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
 import { CancelledStepRestartPanel } from './CancelledStepRestartPanel';
+import { StepSessionOverlay } from './StepSessionOverlay';
+import { stepSessionState } from './stepSession';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { countCompletedSteps } from './workflowProgress';
 import { postTicketComment } from '../../services/api';
@@ -26,6 +28,10 @@ interface Props {
 
 export function WorkflowRunView({ run, stepRuns }: Props) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  // The SDK session currently opened in the floating popup, if any.
+  const [openSession, setOpenSession] = useState<
+    { executionId: string; stepName: string } | null
+  >(null);
   const colorMode = useColorMode();
   const themeColors = useActiveTheme().colors;
   const cancel = useWorkflowRunStore((s) => s.cancel);
@@ -51,12 +57,18 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
     () =>
       run.templateSnapshot.steps.map((step) => {
         const sr = latestPerStep.get(step.id);
+        const session = stepSessionState(step, sr);
         const data: StepRunNodeData = {
           step,
           status: sr?.status ?? 'pending',
           summary: (sr?.output?.comment ?? undefined) as string | undefined,
           isCurrent: run.currentStepId === step.id,
           onSelect: setSelectedStepId,
+          onOpenSession:
+            session.kind === 'available'
+              ? () =>
+                  setOpenSession({ executionId: session.executionId, stepName: step.name })
+              : undefined,
         };
         return {
           id: step.id,
@@ -97,6 +109,9 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
     ? stepIndex.get(selectedStepId)
     : undefined;
   const selectedStepRun = selectedStepId ? latestPerStep.get(selectedStepId) : undefined;
+  const selectedSession = selectedStep
+    ? stepSessionState(selectedStep, selectedStepRun)
+    : ({ kind: 'none' } as const);
 
   const completed = countCompletedSteps(stepRuns);
   const total = run.templateSnapshot.steps.length;
@@ -188,6 +203,21 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                 </div>
               )}
             </div>
+            {/* The step's Claude SDK session. Available as soon as the agent
+                starts, so a step still running opens on a live stream. */}
+            {selectedSession.kind === 'available' && (
+              <button
+                onClick={() =>
+                  setOpenSession({
+                    executionId: selectedSession.executionId,
+                    stepName: selectedStep.name,
+                  })
+                }
+                className="w-full text-xs px-3 py-1.5 rounded border border-[var(--theme-border-input)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] transition-colors"
+              >
+                {selectedSession.live ? 'Watch SDK session (live)' : 'View SDK session'}
+              </button>
+            )}
             {selectedStepRun?.output && (
               <details className="text-xs">
                 <summary className="cursor-pointer text-[var(--theme-text-secondary)]">
@@ -267,6 +297,20 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
           </div>
         )}
       </div>
+
+      {openSession && (
+        <StepSessionOverlay
+          executionId={openSession.executionId}
+          stepName={openSession.stepName}
+          // Derived from the live step-runs rather than captured at open time,
+          // so the "live" badge clears on its own when the step finishes while
+          // the popup is still open.
+          live={stepRuns.some(
+            (sr) => sr.executionId === openSession.executionId && sr.status === 'running',
+          )}
+          onClose={() => setOpenSession(null)}
+        />
+      )}
     </div>
   );
 }
