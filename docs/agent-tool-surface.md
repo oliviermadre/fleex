@@ -72,6 +72,11 @@ parity test scopes its assertions to the allowlist accordingly.
 ## Related invariant — `--board` means the same thing everywhere
 
 Every `--board` accepts a **name, a UUID, or a unique id prefix**, resolved by
-`resolveBoard` (`commands/board/_shared.ts`), which reports ambiguity instead of
-picking the first match. `ticket` used to pass the string straight through, so a
-prefix copied from `board list` worked on `epic` and failed on `ticket create`.
+`resolveBoardId` / `resolveBoardIdOrDefault` (`commands/board/_shared.ts`),
+which report ambiguity instead of picking the first match. `ticket` used to
+pass the string straight through, so a prefix copied from `board list` worked
+on `epic` and failed on `ticket create` (fixed separately, #517).
+
+It matters here because the tool surface inherits it: an agent reads an id from
+one tool and passes it to another, so a `--board` that resolves differently per
+command is the same class of bug as an option that cannot be expressed at all.
