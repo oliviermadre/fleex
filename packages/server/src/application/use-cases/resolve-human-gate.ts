@@ -1,4 +1,5 @@
 import { EdgeEvaluator } from '../services/edge-evaluator.js';
+import { pauseForRouting } from '../services/ambiguous-routing.js';
 import {
   WorkflowRunNotFoundError, StepRunNotFoundError, InvalidGateOutcomeError,
 } from '../../domain/errors.js';
@@ -7,6 +8,7 @@ import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { PostCommentUseCase } from './post-comment.js';
+import { postWorkflowComment } from '../services/workflow-comment.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
 export class ResolveHumanGateUseCase {
@@ -49,7 +51,33 @@ export class ResolveHumanGateUseCase {
     await this.postResolutionComment(run.ticketId, run.templateSnapshot.name, step.name, params.outcome, params.notes, stepRun.id);
 
     const edges = run.outgoingEdges(step.id);
-    const nextEdge = EdgeEvaluator.resolve(stepRun.output!, edges);
+    // Same context as a normal step completion: a gate's outgoing edges may
+    // condition on any ancestor's output, not just on the chosen outcome.
+    const allStepRuns = await this.stepRunStore.getByWorkflowRun(run.id);
+    const previousOutputs: Record<string, Record<string, unknown>> = {};
+    for (const sr of allStepRuns) {
+      if (sr.stepId === step.id) continue;
+      if (sr.status === 'completed' && sr.output) {
+        previousOutputs[sr.stepId] = (sr.output.schemaFields as Record<string, unknown>) ?? {};
+      }
+    }
+    const resolution = EdgeEvaluator.resolve({ current: stepRun.output!, steps: previousOutputs }, edges);
+
+    // A gate's outgoing edges can be ambiguous just like any other step's — the
+    // outcome the reviewer picked may satisfy two conditions at once. Park and
+    // ask a second time rather than guess.
+    if (resolution.kind === 'ambiguous') {
+      await pauseForRouting(
+        {
+          runStore: this.runStore, stepRunStore: this.stepRunStore,
+          eventBus: this.eventBus, postComment: this.postComment, logger: this.logger,
+        },
+        { run, step, stepRun, output: stepRun.output!, candidates: resolution.edges },
+      );
+      return;
+    }
+
+    const nextEdge = resolution.kind === 'single' ? resolution.edge : null;
     stepRun.nextEdgeId = nextEdge?.id ?? null;
     await this.stepRunStore.save(stepRun);
 
@@ -97,16 +125,14 @@ export class ResolveHumanGateUseCase {
     ].join('\n');
 
     try {
-      await this.postComment.execute({
+      await postWorkflowComment(this.postComment, this.eventBus, {
         ticketId,
         // Attributed like every other workflow step comment, so it renders consistently
         // in the thread (e.g. "workflow:Spec Dev PR → Check Spec"). Agent authorship also
         // means any @mention a reviewer types inside their notes stays inert (no chaining).
         authorName: `workflow:${workflowName} → ${stepName}`,
-        authorType: 'agent',
         body,
         visibility: 'public',
-        parentId: null,
       });
     } catch (err) {
       this.logger.error('Failed to post human gate resolution comment', {

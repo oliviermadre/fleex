@@ -63,6 +63,49 @@ export class StepRunEntity {
     this.executionId = params.executionId ?? null;
   }
 
+  /**
+   * The step ran fine but several outgoing edges matched — park it until a human
+   * picks one. Unlike `markNeedsReview`, `result` is *preserved*: conditions on
+   * the chosen edge (and on every later edge reading this step) still need the
+   * real outcome once the route is resolved. `completedAt` stays null — the step
+   * is not done until the route is picked.
+   */
+  markAwaitingRouting(params: {
+    output: StepOutput;
+    executionId?: string | null;
+    candidateEdgeIds: string[];
+  }): void {
+    this.status = 'awaiting_routing';
+    this.result = params.output.result;
+    this.output = {
+      ...params.output,
+      routing: { ...params.output.routing, candidateEdgeIds: params.candidateEdgeIds },
+    };
+    // Keep any executionId already stamped (the human gate path resolves edges
+    // without one, and must not erase what an earlier attempt recorded).
+    this.executionId = params.executionId ?? this.executionId;
+    // Not done until the route is picked — matters for the human gate path,
+    // which stamps `completedAt` before its edges are resolved.
+    this.completedAt = null;
+  }
+
+  /** Human picked the edge to take: the step is now genuinely complete. */
+  resolveRoute(params: { edgeId: string; decidedBy: string; notes?: string }): void {
+    const prev = this.output ?? { schemaFields: {}, result: 'ok' as const };
+    this.output = {
+      ...prev,
+      routing: {
+        candidateEdgeIds: prev.routing?.candidateEdgeIds ?? [],
+        chosenEdgeId: params.edgeId,
+        decidedBy: params.decidedBy,
+        ...(params.notes ? { notes: params.notes } : {}),
+      },
+    };
+    this.status = 'completed';
+    this.nextEdgeId = params.edgeId;
+    this.completedAt = new Date();
+  }
+
   fail(error?: { message: string }): void {
     this.status = 'failed';
     this.result = 'ko';

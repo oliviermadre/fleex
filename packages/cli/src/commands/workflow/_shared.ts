@@ -1,3 +1,4 @@
+import type { WorkflowEdge } from '@fleex/shared';
 import { die, err } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
 import { matchById } from '../../core/match.ts';
@@ -12,7 +13,11 @@ export interface WorkflowRun {
   triggeredFrom?: string;
   startedAt?: string;
   completedAt?: string | null;
-  templateSnapshot?: { name?: string; steps?: { id: string; name?: string }[] };
+  templateSnapshot?: {
+    name?: string;
+    steps?: { id: string; name?: string }[];
+    edges?: WorkflowEdge[];
+  };
 }
 
 export interface StepRun {
@@ -21,6 +26,8 @@ export interface StepRun {
   attempt: number;
   status: string;
   result?: string | null;
+  /** Populated when the step parked on an ambiguity — holds the offered edges. */
+  output?: { routing?: { candidateEdgeIds?: string[] } } | null;
 }
 
 export interface RunDetail {

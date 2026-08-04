@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, MarkerType, Position, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
 import type { WorkflowRun, StepRun, WorkflowStep } from '@fleex/shared';
 import { StepRunNode, type StepRunNodeData } from './StepRunNode';
 import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
+import { AmbiguousRouteResolvePanel } from './AmbiguousRouteResolvePanel';
 import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
@@ -29,6 +31,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
   const cancel = useWorkflowRunStore((s) => s.cancel);
   const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
   const retry = useWorkflowRunStore((s) => s.retry);
+  const resolveRoute = useWorkflowRunStore((s) => s.resolveRoute);
 
   const stepIndex = useMemo(
     () => new Map(run.templateSnapshot.steps.map((s) => [s.id, s])),
@@ -78,16 +81,16 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
         source: e.source,
         target: e.target,
         type: 'workflow',
-        label:
-          e.label ??
-          (e.condition
-            ? `${e.condition.field} ${e.condition.operator} ${String(e.condition.value)}`
-            : ''),
+        // Same renderer as the editor: the hand-rolled fallback this replaces
+        // only understood the legacy single `condition`, so every edge built
+        // with a condition *group* (the norm since assisted authoring) rendered
+        // with no label at all.
+        label: e.label ?? formatEdgeCondition(normalizeEdgeCondition(e), run.templateSnapshot.steps),
         animated: latestPerStep.get(e.source)?.nextEdgeId === e.id,
         style: { strokeDasharray: e.isDefault ? undefined : '5,5' },
         markerEnd: { type: MarkerType.ArrowClosed },
       })),
-    [run.templateSnapshot.edges, latestPerStep],
+    [run.templateSnapshot.edges, run.templateSnapshot.steps, latestPerStep],
   );
 
   const selectedStep: WorkflowStep | undefined = selectedStepId
@@ -225,6 +228,21 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   }}
                 />
               )}
+            {selectedStepRun?.status === 'awaiting_routing' && (
+              // Candidates come from what was persisted when the run paused, not
+              // from the template — the same set the engine actually saw.
+              <AmbiguousRouteResolvePanel
+                runId={run.id}
+                stepRunId={selectedStepRun.id}
+                candidates={run.templateSnapshot.edges.filter((e) =>
+                  (selectedStepRun.output?.routing?.candidateEdgeIds ?? []).includes(e.id),
+                )}
+                steps={run.templateSnapshot.steps}
+                onResolve={(edgeId, notes) =>
+                  resolveRoute(run.id, selectedStepRun.id, edgeId, notes)
+                }
+              />
+            )}
             {selectedStepRun?.status === 'failed' && (
               <FailedStepRetryPanel
                 error={

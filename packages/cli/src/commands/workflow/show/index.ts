@@ -1,5 +1,6 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { c, die, info } from '../../../core/colors.ts';
+import { formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
 import {
   fetchWorkflows,
   handle,
@@ -41,6 +42,15 @@ const def: CommandDef = {
           ? c.dim(` [${s.executorType}${s.executorRef ? `:${s.executorRef}` : ''}]`)
           : '';
         process.stdout.write(`  - ${s.name ?? s.id}${executor}${entry}\n`);
+      }
+    }
+    if (w.edges?.length) {
+      const nameOf = (id: string) => w.steps?.find((s) => s.id === id)?.name ?? id;
+      process.stdout.write(`\n  ${c.bold('Branching')}\n`);
+      for (const e of w.edges) {
+        const condition = formatEdgeCondition(normalizeEdgeCondition(e), w.steps ?? []);
+        const rule = e.isDefault || !condition ? c.dim('default') : condition;
+        process.stdout.write(`  - ${nameOf(e.source)} → ${nameOf(e.target)}  ${rule}\n`);
       }
     }
     process.stdout.write('\n');

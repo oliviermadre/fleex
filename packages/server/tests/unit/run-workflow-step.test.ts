@@ -374,4 +374,90 @@ describe('RunWorkflowStepUseCase', () => {
     // completion save), i.e. at least one save saw the live id.
     expect(executionIdAtStart).toContain('exec-live');
   });
+
+  // ── Ambiguous routing ──────────────────────────────────────────────────────
+
+  /** Two edges out of `a`, both matching whatever the step returns. */
+  const makeAmbiguousRun = () => WorkflowRunEntity.create({
+    id: 'run-1', ticketId: 't-1', templateId: 'tmpl-1',
+    templateSnapshot: {
+      name: 'W', emoji: '🔧',
+      steps: [
+        { id: 'a', name: 'A', executorType: 'agent', executorRef: 'p1', position: { x: 0, y: 0 } },
+        { id: 'b', name: 'B', executorType: 'agent', executorRef: 'p2', position: { x: 200, y: 0 } },
+        { id: 'c', name: 'C', executorType: 'agent', executorRef: 'p3', position: { x: 200, y: 100 } },
+      ],
+      edges: [
+        { id: 'e1', source: 'a', target: 'b', isDefault: false, condition: { field: 'result', operator: 'eq', value: 'ok' } },
+        { id: 'e2', source: 'a', target: 'c', isDefault: false, condition: { field: 'x', operator: 'eq', value: '1' } },
+      ],
+      entryStepId: 'a',
+    },
+    triggeredBy: '@john', triggeredFrom: 'x',
+  });
+
+  const runAmbiguous = async () => {
+    const run = makeAmbiguousRun();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const saved: { status: string; output: unknown }[] = [];
+    const stepRunStore = {
+      save: vi.fn().mockImplementation((sr) => { saved.push({ status: sr.status, output: sr.output }); }),
+      getLatestForStep: vi.fn().mockResolvedValue(null),
+      getByWorkflowRun: vi.fn().mockResolvedValue([]),
+    };
+    const agentExecutor = { execute: vi.fn().mockResolvedValue({
+      output: { schemaFields: { x: '1' }, result: 'ok', comment: 'done' }, executionId: 'exec-1',
+    }) };
+    const orchestrator = { runStep: vi.fn() };
+    const eventBus = { emit: vi.fn() };
+    const artifacts = makeArtifactStubs();
+
+    const uc = new RunWorkflowStepUseCase({
+      runStore: runStore as never, stepRunStore: stepRunStore as never,
+      orchestrator: orchestrator as never, eventBus: eventBus as never,
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
+    });
+
+    await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
+    return { run, orchestrator, eventBus, artifacts, saved };
+  };
+
+  // WHY: silently taking the oldest matching edge means the run does the opposite
+  // of what the author meant, with nothing in the UI to say so. Parking the run
+  // makes the config mistake visible exactly once, then resolvable by hand.
+  it('parks the run instead of guessing when several edges match', async () => {
+    const { run, orchestrator, eventBus, saved } = await runAmbiguous();
+
+    // The run reuses the existing "waiting on a human" status rather than
+    // introducing a new one — it is blocked in exactly the same way as a gate.
+    expect(run.status).toBe('needs_review');
+    expect(run.currentStepId).toBe('a');
+    expect(orchestrator.runStep).not.toHaveBeenCalled();
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'workflow.awaiting_routing', candidateEdgeIds: ['e1', 'e2'],
+    }));
+    expect(eventBus.emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.step_completed' }));
+
+    const parked = saved.at(-1);
+    expect(parked?.status).toBe('awaiting_routing');
+    // WHY: the candidates are what the engine saw, persisted so the resolve
+    // endpoint never has to re-derive them from a template that may have changed.
+    expect((parked?.output as { routing?: { candidateEdgeIds: string[] } })?.routing?.candidateEdgeIds)
+      .toEqual(['e1', 'e2']);
+    // WHY: the step itself succeeded — only its exit is undecided.
+    expect((parked?.output as { result: string })?.result).toBe('ok');
+  });
+
+  // WHY: the human arbitrating the branch needs to read what the step produced.
+  // Holding the artifacts back until the route is picked would make the decision
+  // blind.
+  it('persists the step artifacts before parking on an ambiguity', async () => {
+    const { artifacts } = await runAmbiguous();
+    expect(artifacts.postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
+      body: 'done',
+    }));
+  });
 });

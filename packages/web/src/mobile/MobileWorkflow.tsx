@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { StepRun, StepRunStatus, WorkflowRun, WorkflowStep } from '@fleex/shared';
+import { describeEdge } from '@fleex/shared';
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../stores/workflowRunStore';
 import { postTicketComment } from '../services/api';
 import { countCompletedSteps } from '../components/workflows/workflowProgress';
@@ -20,6 +21,7 @@ const STEP_STATUS_ICON: Record<StepRunStatus | 'pending', { icon: string; classN
   completed: { icon: '✓', className: tintText('green') },
   failed: { icon: '✗', className: tintText('red') },
   needs_review: { icon: '✋', className: tintText('purple') },
+  awaiting_routing: { icon: '⑂', className: tintText('purple') },
   cancelled: { icon: '⊘', className: tintText('gray') },
   skipped: { icon: '↷', className: 'text-[var(--theme-text-faint)]' },
 };
@@ -39,6 +41,7 @@ export function MobileWorkflow({ ticketId }: { ticketId: string }) {
   const cancel = useWorkflowRunStore((s) => s.cancel);
   const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
   const retry = useWorkflowRunStore((s) => s.retry);
+  const resolveRoute = useWorkflowRunStore((s) => s.resolveRoute);
   const runs = useWorkflowRunStore((s) => s.runsByTicket[ticketId]);
   const detail = useWorkflowRunStore((s) => s.detail);
 
@@ -102,6 +105,7 @@ export function MobileWorkflow({ ticketId }: { ticketId: string }) {
             await retry(d.run.id, stepRunId);
           }}
           onRetry={(stepRunId) => retry(d.run.id, stepRunId)}
+          onResolveRoute={(stepRunId, edgeId, notes) => resolveRoute(d.run.id, stepRunId, edgeId, notes)}
         />
       ) : (
         <p className="py-8 text-center text-sm text-[var(--theme-text-faint)]">Chargement…</p>
@@ -117,6 +121,7 @@ function MobileRunView({
   onResolveGate,
   onRespondReview,
   onRetry,
+  onResolveRoute,
 }: {
   run: WorkflowRun;
   stepRuns: StepRun[];
@@ -124,6 +129,7 @@ function MobileRunView({
   onResolveGate: (stepRunId: string, outcome: string, notes?: string) => Promise<void>;
   onRespondReview: (response: string, stepRunId: string) => Promise<void>;
   onRetry: (stepRunId: string) => Promise<void>;
+  onResolveRoute: (stepRunId: string, edgeId: string, notes?: string) => Promise<void>;
 }) {
   const latestPerStep = useMemo(() => {
     const m = new Map<string, StepRun>();
@@ -138,7 +144,7 @@ function MobileRunView({
   const actionStepId = useMemo(() => {
     const needsHuman = run.templateSnapshot.steps.find((s) => {
       const st = latestPerStep.get(s.id)?.status;
-      return st === 'needs_review' || st === 'failed';
+      return st === 'needs_review' || st === 'awaiting_routing' || st === 'failed';
     });
     return needsHuman?.id ?? run.currentStepId ?? null;
   }, [run.templateSnapshot.steps, run.currentStepId, latestPerStep]);
@@ -199,7 +205,9 @@ function MobileRunView({
                   {step.name}
                 </span>
                 <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">
-                  {step.executorType === 'human_gate' ? '✋ gate' : step.executorType}
+                  {step.executorType === 'human_gate'
+                    ? '✋ gate'
+                    : step.executorType === 'route' ? '⑂ router' : step.executorType}
                 </span>
               </button>
               {isOpen && (
@@ -207,9 +215,11 @@ function MobileRunView({
                   <MobileStepDetail
                     step={step}
                     stepRun={sr}
+                    snapshot={run.templateSnapshot}
                     onResolveGate={onResolveGate}
                     onRespondReview={onRespondReview}
                     onRetry={onRetry}
+                    onResolveRoute={onResolveRoute}
                   />
                 </div>
               )}
@@ -224,15 +234,19 @@ function MobileRunView({
 function MobileStepDetail({
   step,
   stepRun,
+  snapshot,
   onResolveGate,
   onRespondReview,
   onRetry,
+  onResolveRoute,
 }: {
   step: WorkflowStep;
   stepRun: StepRun | undefined;
+  snapshot: WorkflowRun['templateSnapshot'];
   onResolveGate: (stepRunId: string, outcome: string, notes?: string) => Promise<void>;
   onRespondReview: (response: string, stepRunId: string) => Promise<void>;
   onRetry: (stepRunId: string) => Promise<void>;
+  onResolveRoute: (stepRunId: string, edgeId: string, notes?: string) => Promise<void>;
 }) {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -316,6 +330,34 @@ function MobileStepDetail({
           >
             Répondre et relancer
           </button>
+        </div>
+      )}
+
+      {/* Ambiguous routing: several edges matched, pick the branch to follow.
+          Candidates are the ones persisted at pause time, not recomputed. */}
+      {stepRun?.status === 'awaiting_routing' && (
+        <div className="space-y-2">
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Pourquoi cette branche ? (optionnel, posté en commentaire)"
+            rows={2}
+            className="w-full resize-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-2.5 text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
+          />
+          <div className="flex flex-col gap-2">
+            {snapshot.edges
+              .filter((e) => (stepRun.output?.routing?.candidateEdgeIds ?? []).includes(e.id))
+              .map((e) => (
+                <button
+                  key={e.id}
+                  disabled={busy}
+                  onClick={() => act(() => onResolveRoute(stepRun.id, e.id, notes.trim() || undefined))}
+                  className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-left text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+                >
+                  {describeEdge(e, snapshot.steps)}
+                </button>
+              ))}
+          </div>
         </div>
       )}
 

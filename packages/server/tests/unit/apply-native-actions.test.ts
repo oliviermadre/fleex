@@ -48,6 +48,7 @@ function harness(ticket: TicketEntity | null = makeTicket()) {
     createTicket: createTicket as never,
     applyTicketMutation,
     postComment: postComment as never,
+    eventBus: eventBus as never,
   });
 
   const run = (actions: NativeAction[], refs?: {
@@ -334,14 +335,33 @@ describe('ApplyNativeActionsUseCase', () => {
   describe('ticket.post_comment', () => {
     it('posts as the workflow and never creates mentions', async () => {
       // Mentions would auto-trigger agents; workflows advance through edges.
-      const { run, postComment } = harness();
+      const { run, postComment, events } = harness();
 
       await run([action('ticket.post_comment', { body: 'Triaged by {{ workflow }}' })]);
 
       expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
         ticketId: 't-1', authorType: 'agent', authorName: 'Triage',
-        body: 'Triaged by Triage', humanMentionNames: [],
+        body: 'Triaged by Triage',
       }));
+      expect(events('comment.posted')[0]).toMatchObject({ createdMentions: [] });
+    });
+
+    it('announces the comment so an open thread shows it without a remount', async () => {
+      // WHY: persisting is only half the job — the WebSocket push that inserts
+      // the comment into a thread the reader is already looking at is driven by
+      // `comment.posted`. Without it a multi-action step (set status + comment)
+      // ends with the run marked done and the comment nowhere to be seen until
+      // the reader switches tabs and comes back.
+      const { run, events } = harness();
+
+      await run([
+        action('ticket.set_status', { status: 'done' }),
+        action('ticket.post_comment', { body: 'QA passed' }),
+      ]);
+
+      expect(events('comment.posted')).toEqual([
+        expect.objectContaining({ commentId: 'c-1', ticketId: 't-1', authorName: 'Triage' }),
+      ]);
     });
 
     it('does not write the ticket when no action mutates it', async () => {

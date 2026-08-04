@@ -203,6 +203,20 @@ export class InvalidGateOutcomeError extends DomainError {
   }
 }
 
+/** The picked edge isn't one the engine offered — the candidates are persisted, never recomputed. */
+export class InvalidRouteEdgeError extends DomainError {
+  constructor(edgeId: string, allowed: string[]) {
+    super(`Edge "${edgeId}" is not a routing candidate. Allowed: ${allowed.join(', ')}`, 'INVALID_ROUTE_EDGE');
+  }
+}
+
+/** Routing was already resolved (or never ambiguous) — resolving again would fork the run. */
+export class StepNotAwaitingRoutingError extends DomainError {
+  constructor(stepRunId: string, status: string) {
+    super(`Step run ${stepRunId} is not awaiting routing (status: ${status})`, 'STEP_NOT_AWAITING_ROUTING');
+  }
+}
+
 export type SlackImportErrorCode =
   | 'SLACK_INVALID_URL'
   | 'SLACK_INTEGRATION_UNAVAILABLE'

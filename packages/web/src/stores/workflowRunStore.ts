@@ -18,6 +18,7 @@ interface State {
   start(ticketId: string, templateId: string): Promise<WorkflowRun>;
   cancel(runId: string): Promise<void>;
   resolveGate(runId: string, stepRunId: string, outcome: string, notes?: string): Promise<void>;
+  resolveRoute(runId: string, stepRunId: string, edgeId: string, notes?: string): Promise<void>;
   retry(runId: string, stepRunId: string): Promise<void>;
 
   activeByTicket(ticketId: string): WorkflowRun | undefined;
@@ -97,6 +98,10 @@ export const useWorkflowRunStore = create<State>((set, get) => ({
 
   resolveGate: async (runId, stepRunId, outcome, notes) => {
     await api.resolveWorkflowGate(runId, stepRunId, { outcome, notes });
+  },
+
+  resolveRoute: async (runId, stepRunId, edgeId, notes) => {
+    await api.resolveWorkflowRoute(runId, stepRunId, { edgeId, notes });
   },
 
   retry: async (runId, stepRunId) => {

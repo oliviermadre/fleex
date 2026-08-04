@@ -5,6 +5,7 @@ import type { WorkflowTemplateStorePort } from '../../application/ports/workflow
 import type {
   WorkflowStep, WorkflowEdge, JsonSchemaProperty,
 } from '@fleex/shared';
+import { EDGE_OPERATORS } from '@fleex/shared';
 
 // ── Manual validation helpers ──────────────────────────────────────────────
 
@@ -31,9 +32,9 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 const SLUG_PATTERN = /^[a-z0-9_-]+$/;
-const EXECUTOR_TYPES = ['agent', 'skill', 'panel', 'human_gate', 'native'] as const;
+const EXECUTOR_TYPES = ['agent', 'skill', 'panel', 'human_gate', 'native', 'route'] as const;
 const STEP_MODES = ['talk', 'plan', 'edit'] as const;
-const EDGE_OPERATORS = ['eq', 'neq', 'in', 'gt', 'lt', 'contains'] as const;
+const MATCH_MODES = ['all', 'any'] as const;
 const JSON_SCHEMA_PROP_TYPES = ['string', 'number', 'boolean', 'array', 'object'] as const;
 
 function validateJsonSchemaProperty(prop: unknown, path: string): ValidationResult {
@@ -122,6 +123,43 @@ function validateStep(step: unknown, idx: number): ValidationResult {
   return { ok: true };
 }
 
+function validateOperator(op: unknown, p: string): ValidationResult {
+  if (!isString(op) || !EDGE_OPERATORS.includes(op as never)) {
+    return { ok: false, error: `${p}.operator must be one of ${EDGE_OPERATORS.join(', ')}` };
+  }
+  return { ok: true };
+}
+
+function validateConditionGroup(group: unknown, p: string): ValidationResult {
+  if (!isObject(group)) return { ok: false, error: `${p} must be an object` };
+  if (!isString(group['match']) || !MATCH_MODES.includes(group['match'] as never)) {
+    return { ok: false, error: `${p}.match must be one of ${MATCH_MODES.join(', ')}` };
+  }
+  if (!isArray(group['clauses']) || group['clauses'].length === 0) {
+    return { ok: false, error: `${p}.clauses must be a non-empty array` };
+  }
+  for (let i = 0; i < group['clauses'].length; i++) {
+    const cp = `${p}.clauses[${i}]`;
+    const clause = group['clauses'][i];
+    if (!isObject(clause)) return { ok: false, error: `${cp} must be an object` };
+    if (clause['stepId'] !== undefined && !isString(clause['stepId'])) {
+      return { ok: false, error: `${cp}.stepId must be a string` };
+    }
+    if (!isString(clause['field'])) return { ok: false, error: `${cp}.field must be a string` };
+    const r = validateOperator(clause['operator'], cp);
+    if (!r.ok) return r;
+    if (clause['value'] !== undefined
+      && !isString(clause['value'])
+      && !(isArray(clause['value']) && (clause['value'] as unknown[]).every(isString))) {
+      return { ok: false, error: `${cp}.value must be a string or array of strings` };
+    }
+    if (clause['caseInsensitive'] !== undefined && !isBoolean(clause['caseInsensitive'])) {
+      return { ok: false, error: `${cp}.caseInsensitive must be a boolean` };
+    }
+  }
+  return { ok: true };
+}
+
 function validateEdge(edge: unknown, idx: number): ValidationResult {
   const p = `edges[${idx}]`;
   if (!isObject(edge)) return { ok: false, error: `${p} must be an object` };
@@ -133,12 +171,15 @@ function validateEdge(edge: unknown, idx: number): ValidationResult {
     const c = edge['condition'];
     if (!isObject(c)) return { ok: false, error: `${p}.condition must be an object` };
     if (!isString(c['field'])) return { ok: false, error: `${p}.condition.field must be a string` };
-    if (!isString(c['operator']) || !EDGE_OPERATORS.includes(c['operator'] as never)) {
-      return { ok: false, error: `${p}.condition.operator must be one of ${EDGE_OPERATORS.join(', ')}` };
-    }
+    const r = validateOperator(c['operator'], `${p}.condition`);
+    if (!r.ok) return r;
     if (!isString(c['value']) && !(isArray(c['value']) && (c['value'] as unknown[]).every(isString))) {
       return { ok: false, error: `${p}.condition.value must be a string or array of strings` };
     }
+  }
+  if (edge['conditionGroup'] !== undefined) {
+    const r = validateConditionGroup(edge['conditionGroup'], `${p}.conditionGroup`);
+    if (!r.ok) return r;
   }
   if (edge['label'] !== undefined && !isString(edge['label'])) {
     return { ok: false, error: `${p}.label must be a string` };

@@ -151,6 +151,9 @@ const STEP_DOT_CLASSES: Record<WorkflowStepSummary['status'], string> = {
   completed: `${tintSolid('green')} border ${tintClasses('green').borderColor}`,
   failed: `${tintSolid('red')} border ${tintClasses('red').borderColor}`,
   needs_review: `${tintSolid('yellow')} border ${tintClasses('yellow').borderColor}`,
+  // Same "waiting on a human" yellow as needs_review: from the log's point of
+  // view both mean the chain has stopped and someone has to act.
+  awaiting_routing: `${tintSolid('yellow')} border ${tintClasses('yellow').borderColor}`,
   cancelled: 'bg-[var(--theme-text-faint)]/30 border border-[var(--theme-text-faint)]/40',
   skipped: 'bg-[var(--theme-text-faint)]/30 border border-[var(--theme-text-faint)]/40',
 };
@@ -164,6 +167,7 @@ const STEP_LINE_CLASSES: Record<WorkflowStepSummary['status'], string> = {
   completed: tintSolid('green'),
   failed: tintSolid('red'),
   needs_review: tintSolid('yellow'),
+  awaiting_routing: tintSolid('yellow'),
   cancelled: 'bg-[var(--theme-text-faint)]/25',
   skipped: 'bg-[var(--theme-text-faint)]/25',
 };

@@ -38,7 +38,7 @@ describe('ResolveHumanGateUseCase', () => {
     const stepRun = makeResolvableStepRun();
 
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
-    const stepRunStore = { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) };
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
     const postComment = makePostComment();
@@ -64,7 +64,7 @@ describe('ResolveHumanGateUseCase', () => {
     const stepRun = makeResolvableStepRun();
     const uc = new ResolveHumanGateUseCase(
       { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
-      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) } as never,
       { runStep: vi.fn() } as never,
       { emit: vi.fn() } as never,
       makePostComment() as never,
@@ -78,7 +78,7 @@ describe('ResolveHumanGateUseCase', () => {
     const run = makeRun(); run.block();
     const stepRun = makeResolvableStepRun();
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
-    const stepRunStore = { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) };
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
     const uc = new ResolveHumanGateUseCase(
@@ -100,7 +100,7 @@ describe('ResolveHumanGateUseCase', () => {
     const postComment = makePostComment();
     const uc = new ResolveHumanGateUseCase(
       { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
-      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) } as never,
       { runStep: vi.fn() } as never,
       { emit: vi.fn() } as never,
       postComment as never,
@@ -132,7 +132,7 @@ describe('ResolveHumanGateUseCase', () => {
     const postComment = makePostComment();
     const uc = new ResolveHumanGateUseCase(
       { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
-      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) } as never,
       { runStep: vi.fn() } as never,
       { emit: vi.fn() } as never,
       postComment as never,
@@ -159,7 +159,7 @@ describe('ResolveHumanGateUseCase', () => {
     const postComment = makePostComment();
     const uc = new ResolveHumanGateUseCase(
       { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
-      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) } as never,
       { runStep: vi.fn() } as never,
       { emit: vi.fn() } as never,
       postComment as never,
@@ -183,7 +183,7 @@ describe('ResolveHumanGateUseCase', () => {
     const orchestrator = { runStep: vi.fn() };
     const uc = new ResolveHumanGateUseCase(
       { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
-      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) } as never,
       orchestrator as never,
       { emit: vi.fn() } as never,
       postComment as never,
@@ -207,7 +207,7 @@ describe('ResolveHumanGateUseCase', () => {
     const postComment = makePostComment();
     const uc = new ResolveHumanGateUseCase(
       { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
-      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) } as never,
       { runStep: vi.fn() } as never,
       { emit: vi.fn() } as never,
       postComment as never,
@@ -231,7 +231,7 @@ describe('ResolveHumanGateUseCase', () => {
     const postComment = makePostComment();
     const uc = new ResolveHumanGateUseCase(
       { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
-      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn(), getByWorkflowRun: vi.fn().mockResolvedValue([]) } as never,
       { runStep: vi.fn() } as never,
       { emit: vi.fn() } as never,
       postComment as never,

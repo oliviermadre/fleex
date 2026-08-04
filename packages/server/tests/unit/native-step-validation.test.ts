@@ -231,7 +231,10 @@ describe('native step validation', () => {
         nativeStep('n', [act('ticket.set_priority', { priority: '{{ steps.left.priority }}' })]),
       ];
       const edges = [
-        edge('e1', 'entry', 'left'),
+        // `entry` forks, so exactly one of its two edges can be the default —
+        // two would be rejected at save time for being unarbitrable.
+        { ...edge('e1', 'entry', 'left'), isDefault: false,
+          conditionGroup: { match: 'all' as const, clauses: [{ field: 'result', operator: 'eq' as const, value: 'ok' }] } },
         edge('e2', 'entry', 'n'),
         edge('e3', 'left', 'n'),
       ];

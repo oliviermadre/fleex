@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { StepRunEntity } from '../../domain/entities/step-run.entity.js';
 import { EdgeEvaluator } from '../services/edge-evaluator.js';
+import { pauseForRouting } from '../services/ambiguous-routing.js';
 import { WorkflowRunNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
@@ -10,6 +11,7 @@ import type { EventBus } from '../event-bus.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { WorkflowExecutorType, StepOutput, WorkflowStep } from '@fleex/shared';
 
@@ -27,6 +29,8 @@ export interface RunWorkflowStepDeps {
    * artifacts, so we stamp the refs here rather than at completion time.
    */
   agentEventStore: AgentEventStorePort;
+  /** Optional: only used to report best-effort side effects (e.g. a comment that failed to post). */
+  logger?: LoggerPort;
 }
 
 export class RunWorkflowStepUseCase {
@@ -70,7 +74,7 @@ export class RunWorkflowStepUseCase {
       const outgoingEdges = run.outgoingEdges(step.id).map((e) => {
         const target = run.findStep(e.target);
         return {
-          id: e.id, label: e.label, condition: e.condition,
+          id: e.id, label: e.label, condition: e.condition, conditionGroup: e.conditionGroup,
           targetName: target?.name ?? e.target,
         };
       });
@@ -80,6 +84,9 @@ export class RunWorkflowStepUseCase {
         workflowContext: {
           workflowName: run.templateSnapshot.name, stepName: step.name,
           outgoingEdges, previousOutputs,
+          stepNames: Object.fromEntries(
+            run.templateSnapshot.steps.map((s: WorkflowStep) => [s.id, s.name]),
+          ),
           predecessorStepIds: run.templateSnapshot.edges
             .filter((e) => e.target === step.id)
             .map((e) => e.source),
@@ -115,8 +122,23 @@ export class RunWorkflowStepUseCase {
 
       // 6. Resolve edges
       const edges = run.outgoingEdges(step.id);
-      const nextEdge = EdgeEvaluator.resolve(result.output, edges);
+      const resolution = EdgeEvaluator.resolve({ current: result.output, steps: previousOutputs }, edges);
+
+      // Artifacts are persisted before any branching: whatever the routing turns
+      // out to be, the step *did* produce that deliverable/comment and the human
+      // arbitrating an ambiguity needs to read it.
       await this.persistStepArtifacts(run, step, result.output, executionId);
+
+      // 6b. Several edges matched — the engine can't arbitrate a config problem.
+      // Park the run and let a human pick, instead of silently taking the oldest.
+      if (resolution.kind === 'ambiguous') {
+        await pauseForRouting(this.deps, {
+          run, step, stepRun, output: result.output, candidates: resolution.edges, executionId,
+        });
+        return;
+      }
+
+      const nextEdge = resolution.kind === 'single' ? resolution.edge : null;
       stepRun.complete({ output: result.output, nextEdgeId: nextEdge?.id ?? null, executionId });
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({

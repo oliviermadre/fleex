@@ -3,7 +3,7 @@ import type { WorkflowStep, StepRunStatus, WorkflowExecutorType } from '@fleex/s
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
-import { ListChecksIcon } from './executor-palette';
+import { ListChecksIcon, SplitIcon } from './executor-palette';
 import { nativeStepSummary } from './nativeStepSummary';
 
 export interface StepRunNodeData {
@@ -96,7 +96,7 @@ function SkipForwardIcon({ className }: IconProps) {
 // Executor types map onto the canonical primitive glyphs (lib/primitives.tsx),
 // so a step node on the canvas shows the SAME icon as the sidebar and the
 // palette. `human_gate` is not a primitive, so it keeps its dedicated glyph.
-const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native'>, PrimitiveKind> = {
+const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native' | 'route'>, PrimitiveKind> = {
   agent: 'persona',
   panel: 'panel',
   skill: 'skill',
@@ -105,6 +105,7 @@ const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' |
 function StepIcon({ type, className }: { type: WorkflowExecutorType; className?: string }) {
   if (type === 'human_gate') return <UserCheckIcon className={className} />;
   if (type === 'native') return <ListChecksIcon className={className} />;
+  if (type === 'route') return <SplitIcon className={className} />;
   // tinted={false}: the icon inherits the node's executor-type colour (border +
   // icon share one hue) instead of re-applying the tint, keeping each node
   // chromatically coherent.
@@ -117,6 +118,7 @@ const executorColor = {
   skill: `${tintClasses('green').text} ${tintClasses('green').borderColor}`,
   human_gate: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor} border-dashed`,
   native: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
+  route: `${tintClasses('orange').text} ${tintClasses('orange').borderColor} border-dashed`,
 };
 
 function StatusIcon({ status }: { status: StepRunStatus | 'pending' }) {
@@ -125,6 +127,9 @@ function StatusIcon({ status }: { status: StepRunStatus | 'pending' }) {
     case 'running': return <Loader2Icon className={`w-4 h-4 ${tintClasses('blue').text} animate-spin`} />;
     case 'failed': return <XCircleIcon className={`w-4 h-4 ${tintClasses('red').text}`} />;
     case 'needs_review': return <AlertTriangleIcon className={`w-4 h-4 ${tintClasses('yellow').text}`} />;
+    // Same "waiting on a human" hue as needs_review, but a fork rather than a
+    // warning: the step succeeded, only its exit is undecided.
+    case 'awaiting_routing': return <SplitIcon className={`w-4 h-4 ${tintClasses('yellow').text}`} />;
     case 'queued': return <ClockIcon className={`w-4 h-4 ${tintClasses('green').text}`} />;
     case 'cancelled':
     case 'skipped': return <SkipForwardIcon className="w-4 h-4 opacity-40" />;
@@ -158,7 +163,9 @@ export function StepRunNode({ data }: { data: StepRunNodeData }) {
           <StatusIcon status={data.status} />
         </div>
         <div className="text-[10px] truncate text-[var(--theme-text-muted)]">
-          {nativeStepSummary(data.step) ?? (data.step.executorRef || '—')}
+          {data.step.executorType === 'route'
+            ? 'routing only'
+            : nativeStepSummary(data.step) ?? (data.step.executorRef || '—')}
         </div>
         {data.summary && (
           <div className="mt-1 text-[10px] line-clamp-2 text-[var(--theme-text-muted)]">{data.summary}</div>

@@ -2,6 +2,7 @@ import type {
   WorkflowStep,
   StepOutput,
   WorkflowEdgeCondition,
+  WorkflowEdgeConditionGroup,
 } from '@fleex/shared';
 
 export interface StepExecutionInput {
@@ -16,9 +17,15 @@ export interface StepExecutionInput {
       id: string;
       label?: string;
       condition?: WorkflowEdgeCondition;
+      conditionGroup?: WorkflowEdgeConditionGroup;
       targetName: string;
     }[];
     previousOutputs: Record<string, Record<string, unknown>>;
+    /**
+     * Names of every step in the run snapshot, so an edge condition reading an
+     * earlier step renders as "Compute status.status" rather than a raw id.
+     */
+    stepNames?: Record<string, string>;
     /**
      * Direct predecessors of this step in the run snapshot. Native steps use it
      * to resolve the `{{ output.<field> }}` shorthand, which is only meaningful

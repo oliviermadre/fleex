@@ -20,6 +20,7 @@ import {
   type TicketMutationActor,
 } from './apply-ticket-mutation.js';
 import type { PostCommentUseCase } from './post-comment.js';
+import type { EventBus } from '../event-bus.js';
 
 export interface ApplyNativeActionsInput {
   /** The run's subject ticket. Ignored when the step starts with `ticket.create`. */
@@ -79,6 +80,7 @@ export class ApplyNativeActionsUseCase {
       createTicket: CreateTicketUseCase;
       applyTicketMutation: ApplyTicketMutationUseCase;
       postComment: PostCommentUseCase;
+      eventBus: EventBus;
     },
   ) {}
 
@@ -190,7 +192,7 @@ export class ApplyNativeActionsUseCase {
       const effectCtx: NativeEffectContext = {
         ticketId: subject.id,
         actor: { ...actor, workflowName: input.workflowName },
-        deps: { postComment: this.deps.postComment },
+        deps: { postComment: this.deps.postComment, eventBus: this.deps.eventBus },
       };
       for (const effect of effects) {
         await effect.run(effectCtx);

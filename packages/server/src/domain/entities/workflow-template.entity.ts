@@ -1,7 +1,7 @@
 import type {
   WorkflowTemplate, WorkflowStep, WorkflowEdge,
 } from '@fleex/shared';
-import { validateNativeSteps } from '@fleex/shared';
+import { validateNativeSteps, validateEdgeConditions } from '@fleex/shared';
 
 const SLUG_PATTERN = /^[a-z0-9_-]+$/;
 
@@ -85,6 +85,12 @@ export class WorkflowTemplateEntity {
     // the editor only — they don't block saving.
     const { errors } = validateNativeSteps(input.steps, input.edges, input.entryStepId);
     if (errors.length > 0) throw new Error(errors.join('\n'));
+
+    // Edge conditions get the same treatment: a clause pointing at a step that
+    // never runs before the edge would silently route every run to the default
+    // branch, which is exactly the kind of failure that is invisible at runtime.
+    const edgeIssues = validateEdgeConditions(input.steps, input.edges, input.entryStepId);
+    if (edgeIssues.errors.length > 0) throw new Error(edgeIssues.errors.join('\n'));
   }
 
   update(changes: {

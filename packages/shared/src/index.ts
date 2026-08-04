@@ -287,6 +287,8 @@ export type {
   WorkflowStep,
   NativeAction,
   WorkflowEdgeCondition,
+  EdgeConditionClause,
+  WorkflowEdgeConditionGroup,
   WorkflowEdge,
   WorkflowTemplate,
   WorkflowRunStatus,
@@ -298,6 +300,7 @@ export type {
   StepRun,
   CreateWorkflowRunInput,
   ResolveHumanGateInput,
+  ResolveAmbiguousRouteInput,
 } from './types/workflow.js';
 
 export type {
@@ -312,6 +315,29 @@ export {
   NATIVE_STEP_KIND_TICKET_ACTIONS,
   getNativeOperation,
 } from './native-operations/descriptors.js';
+
+export {
+  EDGE_OPERATORS,
+  UNARY_OPERATORS,
+  LIST_OPERATORS,
+  TEXT_OPERATORS,
+  MAX_REGEX_LENGTH,
+  isUnaryOperator,
+  isListOperator,
+  operatorLabel,
+  operatorsForType,
+  normalizeEdgeCondition,
+  evaluateConditionGroup,
+  evaluateClause,
+  compileRegex,
+  getByPath,
+  formatEdgeCondition,
+  formatClause,
+  describeEdge,
+} from './workflow/edge-conditions.js';
+export { computeAncestors, computeDominators } from './workflow/graph.js';
+export type { EdgeValidationResult, EdgeFieldSuggestion } from './workflow/edge-validation.js';
+export { validateEdgeConditions, edgeConditionSuggestions } from './workflow/edge-validation.js';
 
 export type { ParsedReference, ReferenceKind, TicketReferenceField } from './native-operations/references.js';
 export {
