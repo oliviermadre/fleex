@@ -4,14 +4,10 @@ import { useRoutineStore } from '../../stores/routineStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { WorkflowRunView } from '../workflows/WorkflowRunView';
-import { RoutineEditor } from './RoutineEditor';
-import { Button } from '../ui/Button';
-import { ConfirmModal } from '../ui/ConfirmModal';
+import type { RoutineRunDetail } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintSolid, tintText, type TintHue } from '../../lib/tints';
 import { PrimitiveIcon, RoutineIcon } from '../../lib/primitives';
-
-const CARD_SHELL = 'rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-5';
 
 /** Relative age of a timestamp — "2h ago", "3d ago". */
 export function formatRelativeTime(dateStr: string): string {
@@ -64,33 +60,35 @@ function runStatusHue(status: string): TintHue {
   return RUN_STATUS_HUE[status as WorkflowRunStatus] ?? 'gray';
 }
 
-function CardHeader({ hue, label, action }: { hue: TintHue; label: string; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 text-xs text-[var(--theme-text-secondary)]">
-      <span className={cn('h-2 w-2 rounded-full', tintSolid(hue))} />
-      {label}
-      {action && <span className="ml-auto">{action}</span>}
-    </div>
-  );
+/** A run the user may still have to act on (gate, review, or just watch). */
+function isActiveStatus(status: string): boolean {
+  return status === 'running' || status === 'blocked' || status === 'needs_review';
 }
 
 /**
- * Routine detail: subject + trigger summary, the Launch button, and the run
- * history. Each run mounts the existing `WorkflowRunView`, which is what makes
- * gates and needs_review resolvable from here without a second run screen.
+ * Routine detail. Layout priority is the run, not the routine's metadata:
+ *
+ * - a slim header bar (same geometry as the agentic detail view) with the
+ *   routine's identity chips and the Play button — edit/delete live on the
+ *   sidebar rows, not here;
+ * - the CURRENT run (active one, else the latest) mounted directly below,
+ *   taking all remaining height — the DAG and its gate/review panels are
+ *   visible with zero clicks instead of being buried three cards deep;
+ * - past runs in a separate, collapsed History section with its own scroll.
  */
 export function RoutineDetail({ routine }: { routine: Routine }) {
-  const { runs, runsLoading, launch, remove, refreshRuns } = useRoutineStore();
+  const { runs, runsLoading, launch, refreshRuns } = useRoutineStore();
   const templates = useWorkflowTemplateStore((s) => s.templates);
-  const openDeliverable = useUIStore((s) => s.openDeliverableOverlay);
-  const [editing, setEditing] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
-  const [openRunId, setOpenRunId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const template = templates.find((t) => t.id === routine.templateId);
+
+  // The run that deserves the screen: the one still moving, else the latest.
+  const current = runs.find(({ run }) => isActiveStatus(run.status)) ?? runs[0] ?? null;
+  const history = runs.filter(({ run }) => run.id !== current?.run.id);
+  const isActive = current !== null && isActiveStatus(current.run.status);
 
   const onLaunch = async () => {
     setLaunching(true);
@@ -106,174 +104,228 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
     }
   };
 
-  const onDelete = async () => {
-    setDeleting(true);
-    try {
-      await remove(routine.id);
-      setConfirmingDelete(false);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   return (
-    <div className="flex flex-col gap-5 p-6">
-      <section className={CARD_SHELL}>
-        <div className="flex items-start gap-3">
-          <RoutineIcon size={20} className="mt-0.5 flex-shrink-0" />
-          <div className="min-w-0 flex-1">
-            <h1 className="text-base font-semibold text-[var(--theme-text-primary)]">{routine.name}</h1>
-            {routine.description && (
-              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{routine.description}</p>
-            )}
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--theme-text-muted)]">
-              {/* The workflow this routine runs, carrying the canonical
-                  workflow glyph rather than the template's free-text emoji. */}
-              <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5', tint('purple'))}>
-                <PrimitiveIcon kind="workflow" size={12} tinted={false} className="shrink-0" />
-                {template ? template.name : routine.templateId}
-              </span>
-              <span className={cn('inline-flex items-center rounded px-1.5 py-0.5', tint('blue'))}>
-                {describeTrigger(routine.trigger)}
-              </span>
-              {routine.nextRunAt && routine.enabled && (
-                <span className={cn('inline-flex items-center rounded px-1.5 py-0.5', tint('teal'))}>
-                  next run {formatAbsolute(routine.nextRunAt, triggerTimezone(routine.trigger))}
-                </span>
-              )}
-              {!routine.enabled && (
-                <span className={cn('inline-flex items-center rounded px-1.5 py-0.5', tint('gray'))}>paused</span>
-              )}
-              <span className="font-mono">/{routine.slug}</span>
-              {routine.lastRunAt && <span>last run {formatRelativeTime(routine.lastRunAt)}</span>}
-            </div>
-          </div>
-          <div className="flex flex-shrink-0 items-center gap-2">
-            <Button variant="primary" size="sm" disabled={launching} onClick={() => void onLaunch()}>
-              {launching ? 'Launching…' : 'Launch'}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>Edit</Button>
-            <Button variant="danger" size="sm" onClick={() => setConfirmingDelete(true)}>Delete</Button>
-          </div>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Header — matches the AgentPersonaView / SessionHeader bar. */}
+      <div
+        className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3"
+        style={{ height: 'var(--header-height)' }}
+      >
+        <div className="flex min-w-0 items-center gap-1.5">
+          <RoutineIcon size={14} tinted={false} className="shrink-0 text-[var(--theme-text-secondary)]" />
+          <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+            {routine.name}
+          </span>
         </div>
 
-        {launchError && <p className={cn('mt-3 text-xs', tintText('red'))}>{launchError}</p>}
-      </section>
-
-      <section className={CARD_SHELL}>
-        <CardHeader hue="teal" label="Subject" />
-        <div className="mt-3 flex flex-col gap-3">
-          <div>
-            <div className="text-xs text-[var(--theme-text-muted)]">Repositories</div>
-            {routine.subject.repos.length > 0 ? (
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {routine.subject.repos.map((repo) => (
-                  <span
-                    key={repo}
-                    className="rounded bg-[var(--theme-accent-muted)] px-2 py-0.5 font-mono text-xs text-[var(--theme-accent)]"
-                  >
-                    {repo}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-1 text-sm text-[var(--theme-text-muted)]">No repository — the agent runs without a workspace.</p>
-            )}
-          </div>
-          <div>
-            <div className="text-xs text-[var(--theme-text-muted)]">Brief</div>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--theme-text-secondary)]">
-              {routine.subject.brief || '—'}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className={CARD_SHELL}>
-        <CardHeader
-          hue="indigo"
-          label={`Runs${runs.length > 0 ? ` · ${runs.length}` : ''}`}
-          action={
-            <Button variant="ghost" size="sm" onClick={() => void refreshRuns()}>Refresh</Button>
-          }
-        />
-
-        {runsLoading && <p className="mt-3 text-xs text-[var(--theme-text-muted)]">Loading runs…</p>}
-        {!runsLoading && runs.length === 0 && (
-          <p className="mt-3 text-sm text-[var(--theme-text-muted)]">No run yet. Hit Launch to start one.</p>
+        {/* The workflow this routine runs, with the canonical workflow glyph. */}
+        <span className={cn('inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs', tint('purple'))}>
+          <PrimitiveIcon kind="workflow" size={12} tinted={false} className="shrink-0" />
+          {template ? template.name : routine.templateId}
+        </span>
+        <span className={cn('inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-xs', tint('blue'))}>
+          {describeTrigger(routine.trigger)}
+        </span>
+        {routine.nextRunAt && routine.enabled && (
+          <span className={cn('hidden shrink-0 items-center rounded px-1.5 py-0.5 text-xs lg:inline-flex', tint('teal'))}>
+            next {formatAbsolute(routine.nextRunAt, triggerTimezone(routine.trigger))}
+          </span>
+        )}
+        {!routine.enabled && (
+          <span className={cn('inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-xs', tint('gray'))}>paused</span>
         )}
 
-        <div className="mt-3 flex flex-col gap-2">
-          {runs.map(({ run, stepRuns, deliverables }) => {
-            const isOpen = openRunId === run.id;
-            return (
-              <div key={run.id} className="overflow-hidden rounded-lg border border-[var(--theme-border)]">
-                <button
-                  type="button"
-                  onClick={() => setOpenRunId(isOpen ? null : run.id)}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
-                >
-                  <span className={cn('h-2 w-2 shrink-0 rounded-full', tintSolid(runStatusHue(run.status)))} />
-                  <span className={cn('text-xs font-medium', tintText(runStatusHue(run.status)))}>
-                    {run.status.replace('_', ' ')}
-                  </span>
-                  <span className="text-xs text-[var(--theme-text-muted)]">
-                    {formatRelativeTime(run.startedAt)}
-                  </span>
-                  {deliverables.length > 0 && (
-                    <span className="text-xs text-[var(--theme-text-muted)]">
-                      · {deliverables.length} deliverable{deliverables.length > 1 ? 's' : ''}
-                    </span>
-                  )}
-                  <span className="ml-auto text-xs text-[var(--theme-text-muted)]">{isOpen ? '▾' : '▸'}</span>
-                </button>
+        {isActive && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className={cn('h-2 w-2 animate-pulse rounded-full', tintSolid(runStatusHue(current.run.status)))} />
+            <span className={cn('text-[10px]', tintText(runStatusHue(current.run.status)))}>
+              {current.run.status.replace('_', ' ')}
+            </span>
+          </div>
+        )}
 
-                {isOpen && (
-                  <div className="border-t border-[var(--theme-border)]">
-                    <div className="h-[420px]">
-                      <WorkflowRunView run={run} stepRuns={stepRuns} />
-                    </div>
-                    {deliverables.length > 0 && (
-                      <div className="flex flex-col gap-1 border-t border-[var(--theme-border)] px-3 py-2">
-                        {deliverables.map((d) => (
-                          // A routine run has no ticket, so the Docs view used
-                          // to be the only place these were readable. They open
-                          // in the same overlay as everywhere else.
-                          <button
-                            key={d.id}
-                            type="button"
-                            onClick={() => openDeliverable(d)}
-                            className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-                          >
-                            <span className="text-[var(--theme-text-muted)]">{d.type}</span>
-                            <span className="truncate text-[var(--theme-text-primary)] group-hover:underline">{d.title}</span>
-                            <span className="ml-auto text-[var(--theme-text-muted)]">{d.status}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <span className="hidden shrink-0 truncate font-mono text-xs text-[var(--theme-text-faint)] md:inline">
+          /{routine.slug}
+        </span>
+
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => void onLaunch()}
+            disabled={launching || isActive}
+            className={cn(
+              'flex h-6 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors',
+              launching || isActive
+                ? 'cursor-not-allowed text-[var(--theme-text-faint)]'
+                : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
+            )}
+            title={isActive ? 'A run is already active' : 'Launch this routine now'}
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
+              <path d="M4 2l10 6-10 6V2z" />
+            </svg>
+            {launching ? 'Launching…' : 'Play'}
+          </button>
         </div>
-      </section>
+      </div>
 
-      {editing && (
-        <RoutineEditor routine={routine} templates={templates} onClose={() => setEditing(false)} />
+      {launchError && (
+        <p className={cn('border-b border-[var(--theme-border)] px-4 py-2 text-xs', tintText('red'))}>{launchError}</p>
       )}
 
-      <ConfirmModal
-        open={confirmingDelete}
-        title="Delete routine"
-        message={<>Delete <strong>{routine.name}</strong>? Its run history will no longer be reachable.</>}
-        confirmLabel="Delete"
-        danger
-        busy={deleting}
-        onConfirm={() => void onDelete()}
-        onCancel={() => setConfirmingDelete(false)}
-      />
+      {/* Subject strip — one compact line, not a card stack eating run space. */}
+      <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-4 py-2 text-xs">
+        {routine.description && (
+          <span className="shrink-0 text-[var(--theme-text-secondary)]">{routine.description}</span>
+        )}
+        {routine.subject.repos.length > 0 ? (
+          <span className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {routine.subject.repos.map((repo) => (
+              <span key={repo} className="rounded bg-[var(--theme-accent-muted)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--theme-accent)]">
+                {repo}
+              </span>
+            ))}
+          </span>
+        ) : (
+          <span className="shrink-0 text-[var(--theme-text-muted)]">no repo — the agent runs without a workspace</span>
+        )}
+        {routine.subject.brief && (
+          <span className="min-w-0 flex-1 truncate text-[var(--theme-text-muted)]" title={routine.subject.brief}>
+            {routine.subject.brief}
+          </span>
+        )}
+      </div>
+
+      {/* Current run — the main real estate, zero clicks to reach it. */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        {runsLoading && runs.length === 0 && (
+          <div className="flex flex-1 items-center justify-center text-xs text-[var(--theme-text-muted)]">
+            Loading runs…
+          </div>
+        )}
+        {!runsLoading && current === null && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--theme-text-muted)]">
+            <RoutineIcon size={32} strokeWidth={1} tinted={false} className="text-[var(--theme-text-faint)]" />
+            <p className="text-sm">No run yet. Hit Play to start one.</p>
+          </div>
+        )}
+        {current && (
+          <>
+            <div className="flex items-center gap-2 border-b border-[var(--theme-border)] px-4 py-1.5 text-xs">
+              <span className={cn('h-2 w-2 shrink-0 rounded-full', tintSolid(runStatusHue(current.run.status)))} />
+              <span className={cn('font-medium', tintText(runStatusHue(current.run.status)))}>
+                {current.run.status.replace('_', ' ')}
+              </span>
+              <span className="text-[var(--theme-text-muted)]">
+                {isActive ? 'current run' : 'latest run'} · started {formatRelativeTime(current.run.startedAt)}
+              </span>
+              <RunDeliverables deliverables={current.deliverables} />
+              <button
+                onClick={() => void refreshRuns()}
+                title="Refresh runs"
+                className="ml-auto flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <WorkflowRunView run={current.run} stepRuns={current.stepRuns} />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* History — separated from the current run, its own scroll, collapsed
+          by default so it never steals space from the run in progress. */}
+      {history.length > 0 && (
+        <div className="shrink-0 border-t border-[var(--theme-border)]">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
+          >
+            <svg
+              width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+              className={cn('shrink-0 text-[var(--theme-text-muted)] transition-transform', historyOpen && 'rotate-90')}
+            >
+              <path d="M6 4l4 4-4 4" />
+            </svg>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">History</span>
+            <span className="text-[10px] font-medium text-[var(--theme-text-faint)]">{history.length}</span>
+          </button>
+          {historyOpen && (
+            <div className="max-h-[40vh] overflow-y-auto border-t border-[var(--theme-border)]">
+              {history.map((detail) => (
+                <HistoryRun key={detail.run.id} detail={detail} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Deliverable chips for a run — open in the shared reading overlay. */
+function RunDeliverables({ deliverables }: { deliverables: RoutineRunDetail['deliverables'] }) {
+  const openDeliverable = useUIStore((s) => s.openDeliverableOverlay);
+  if (deliverables.length === 0) return null;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+      {deliverables.map((d) => (
+        <button
+          key={d.id}
+          type="button"
+          onClick={() => openDeliverable(d)}
+          title={d.title}
+          className="flex min-w-0 items-center gap-1 rounded border border-[var(--theme-border)] px-1.5 py-0.5 text-[11px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+        >
+          <span className="shrink-0 text-[var(--theme-text-muted)]">{d.type}</span>
+          <span className="truncate">{d.title}</span>
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/** One past run: a compact row, expandable to its full DAG when needed. */
+function HistoryRun({ detail }: { detail: RoutineRunDetail }) {
+  const { run, stepRuns, deliverables } = detail;
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-b border-[var(--theme-border)] last:border-b-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
+      >
+        <span className={cn('h-2 w-2 shrink-0 rounded-full', tintSolid(runStatusHue(run.status)))} />
+        <span className={cn('text-xs font-medium', tintText(runStatusHue(run.status)))}>
+          {run.status.replace('_', ' ')}
+        </span>
+        <span className="text-xs text-[var(--theme-text-muted)]">{formatRelativeTime(run.startedAt)}</span>
+        {deliverables.length > 0 && (
+          <span className="text-xs text-[var(--theme-text-muted)]">
+            · {deliverables.length} deliverable{deliverables.length > 1 ? 's' : ''}
+          </span>
+        )}
+        <span className="ml-auto text-xs text-[var(--theme-text-muted)]">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="border-t border-[var(--theme-border)]">
+          <div className="h-[360px]">
+            <WorkflowRunView run={run} stepRuns={stepRuns} />
+          </div>
+          {deliverables.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] px-4 py-2">
+              <RunDeliverables deliverables={deliverables} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
