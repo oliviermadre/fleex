@@ -12,8 +12,11 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
 /**
  * Top-level groups exposed by default.
  *
- * Inclusion criterion: **the command manipulates product data (tickets, epics)
- * through the API and has no effect on the local environment.** Infra commands
+ * Inclusion criterion: **the command manipulates product data (tickets, epics,
+ * routines, workflow runs) through the API and has no effect on the local
+ * environment.** `routine` and `workflow` are in for headless parity: a run
+ * paused on a human gate or a question must be resolvable from an MCP host,
+ * and routine runs have no ticket to reach it through. Infra commands
  * (`start`, `stop`, `logs`, `doctor`, `self-update`, `token`, shell helpers)
  * drive processes on the host machine and stay off the surface on purpose.
  *
@@ -22,7 +25,7 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * `tests/parity.bun.test.ts`). Narrowing the perimeter is a deliberate product
  * decision; silently dropping an option is a bug.
  */
-export const DEFAULT_INCLUDE = ['ticket', 'epic'] as const;
+export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow'] as const;
 
 /**
  * Leaf command names that mutate state. The host gates these (e.g. asks the
@@ -31,6 +34,8 @@ export const DEFAULT_INCLUDE = ['ticket', 'epic'] as const;
 const MUTATING_LEAVES = new Set([
   'create', 'new', 'update', 'move', 'delete', 'rm', 'remove',
   'add', 'link', 'unlink', 'import', 'comment', 'edit', 'archive', 'unarchive',
+  // routine / workflow-run verbs — they all write through the API
+  'run', 'enable', 'disable', 'resolve', 'retry', 'route', 'cancel',
 ]);
 
 /** Options we never expose as tool params (handled specially or noise). */

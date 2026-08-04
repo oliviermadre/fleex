@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Routine, RoutineTrigger, WorkflowTemplate } from '@fleex/shared';
+import type { Routine, RoutineOverlapPolicy, RoutineTrigger, WorkflowTemplate } from '@fleex/shared';
 import { useRoutineStore } from '../../stores/routineStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -23,6 +23,7 @@ export function RoutineEditor({ routine, templates, onClose }: {
   const [repos, setRepos] = useState<string[]>(routine?.subject.repos ?? []);
   const [brief, setBrief] = useState(routine?.subject.brief ?? '');
   const [trigger, setTrigger] = useState<RoutineTrigger>(routine?.trigger ?? { kind: 'manual' });
+  const [overlapPolicy, setOverlapPolicy] = useState<RoutineOverlapPolicy>(routine?.overlapPolicy ?? 'skip');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,9 +36,9 @@ export function RoutineEditor({ routine, templates, onClose }: {
     };
     try {
       if (routine) {
-        await update(routine.id, { name, description: description || null, templateId, subject, trigger });
+        await update(routine.id, { name, description: description || null, templateId, subject, trigger, overlapPolicy });
       } else {
-        const created = await create({ name, description: description || null, templateId, subject, trigger });
+        const created = await create({ name, description: description || null, templateId, subject, trigger, overlapPolicy });
         await select(created.id);
       }
       onClose();
@@ -112,6 +113,20 @@ export function RoutineEditor({ routine, templates, onClose }: {
         </div>
 
         <TriggerEditor value={trigger} onChange={setTrigger} />
+
+        {/* Overlap only exists for scheduled triggers: it decides what a tick
+            firing mid-run does. A manual routine has no ticks to arbitrate. */}
+        {trigger.kind !== 'manual' && (
+          <Select
+            label="If a tick fires while a run is still active"
+            options={[
+              { value: 'skip', label: 'Skip — drop the tick' },
+              { value: 'queue', label: 'Queue — run it right after' },
+            ]}
+            value={overlapPolicy}
+            onChange={(e) => setOverlapPolicy(e.target.value as RoutineOverlapPolicy)}
+          />
+        )}
 
         {error && <p className={cn('text-xs', tintText('red'))}>{error}</p>}
       </div>

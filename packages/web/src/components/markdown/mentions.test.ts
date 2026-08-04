@@ -80,6 +80,21 @@ describe('preprocessMentions (comments — every mention type incl. tickets)', (
     );
   });
 
+  // Routines are referenceable with the same `@type:slug` convention as every
+  // other primitive — but reference ONLY: no server-side extraction exists on
+  // purpose, so a routine mention must chip in the UI yet never trigger a run.
+  it('rewrites routine mentions (reference-only chip)', () => {
+    expect(preprocessMentions('@routine:amelioration-continue')).toBe(
+      '[@routine:amelioration-continue](#fleex-routine:routine:amelioration-continue)',
+    );
+  });
+
+  it('handles struck routine mentions', () => {
+    expect(preprocessMentions('~~@routine:daily-recap~~')).toBe(
+      '[@routine:daily-recap](#fleex-struck:routine:daily-recap)',
+    );
+  });
+
   it('still rewrites human mentions via the fallback', () => {
     expect(preprocessMentions('hi @olivier')).toBe('hi [@olivier](#fleex-human:olivier)');
   });

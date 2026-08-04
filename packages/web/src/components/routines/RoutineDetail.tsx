@@ -164,8 +164,10 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
           </div>
         )}
 
-        <span className="hidden shrink-0 truncate font-mono text-xs text-[var(--theme-text-faint)] md:inline">
-          /{routine.slug}
+        {/* The canonical Fleex reference — same `@type:slug` handle as
+            persona/skill/panel/workflow, highlighted like a mention chip. */}
+        <span className={cn('hidden shrink-0 truncate rounded px-1.5 py-0.5 font-mono text-xs md:inline', tint('purple'))}>
+          @routine:{routine.slug}
         </span>
 
         <div className="ml-auto flex items-center gap-2">
@@ -500,7 +502,11 @@ function CurrentRunTab({ current, isActive, loading, onRefresh }: {
             <span className="text-[var(--theme-text-muted)]">
               {isActive ? 'current run' : 'latest run'} · started {formatRelativeTime(current.run.startedAt)}
             </span>
-            <RunDeliverables deliverables={current.deliverables} />
+            {current.deliverables.length > 0 && (
+              <span className="text-[var(--theme-text-muted)]">
+                · {current.deliverables.length} deliverable{current.deliverables.length > 1 ? 's' : ''} — on the producing steps below
+              </span>
+            )}
             <button
               onClick={onRefresh}
               title="Refresh runs"
@@ -513,7 +519,7 @@ function CurrentRunTab({ current, isActive, loading, onRefresh }: {
             </button>
           </div>
           <div className="min-h-0 flex-1">
-            <WorkflowRunView run={current.run} stepRuns={current.stepRuns} />
+            <WorkflowRunView run={current.run} stepRuns={current.stepRuns} deliverables={current.deliverables} />
           </div>
         </>
       )}
@@ -543,7 +549,18 @@ function HistoryTab({ history }: { history: RoutineRunDetail[] }) {
 /** The full recipe, read-only — editing opens the shared RoutineEditor modal. */
 function ConfigTab({ routine, template }: { routine: Routine; template: WorkflowTemplate | undefined }) {
   const templates = useWorkflowTemplateStore((s) => s.templates);
+  const update = useRoutineStore((s) => s.update);
   const [editing, setEditing] = useState(false);
+  const [toggling, setToggling] = useState(false);
+
+  const onToggleEnabled = async () => {
+    setToggling(true);
+    try {
+      await update(routine.id, { enabled: !routine.enabled });
+    } finally {
+      setToggling(false);
+    }
+  };
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
@@ -561,7 +578,9 @@ function ConfigTab({ routine, template }: { routine: Routine; template: Workflow
         <div className="flex flex-col gap-3 px-5 py-4 text-xs">
           <ConfigRow label="Name">
             <span className="font-semibold text-[var(--theme-text-primary)]">{routine.name}</span>
-            <span className="ml-2 font-mono text-[var(--theme-text-faint)]">/{routine.slug}</span>
+            <span className={cn('ml-2 rounded px-1.5 py-0.5 font-mono text-[11px]', tint('purple'))}>
+              @routine:{routine.slug}
+            </span>
           </ConfigRow>
           <ConfigRow label="Description">
             <span className="text-[var(--theme-text-secondary)]">{routine.description || <span className="text-[var(--theme-text-muted)]">none</span>}</span>
@@ -613,6 +632,16 @@ function ConfigTab({ routine, template }: { routine: Routine; template: Workflow
             <span className={routine.enabled ? tintText('green') : 'text-[var(--theme-text-muted)]'}>
               {routine.enabled ? 'enabled' : 'paused'}
             </span>
+            {/* Re-enabling re-arms the schedule from now, server-side — a
+                routine paused for a week does not replay its missed slots. */}
+            <button
+              type="button"
+              disabled={toggling}
+              onClick={() => void onToggleEnabled()}
+              className="ml-3 rounded border border-[var(--theme-border)] px-2 py-0.5 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {toggling ? '…' : routine.enabled ? 'Pause' : 'Resume'}
+            </button>
           </ConfigRow>
           <ConfigRow label="Created">
             <span className="text-[var(--theme-text-muted)]">{formatAbsolute(routine.createdAt)}</span>
@@ -680,7 +709,7 @@ function HistoryRun({ detail }: { detail: RoutineRunDetail }) {
       {open && (
         <div className="border-t border-[var(--theme-border)]">
           <div className="h-[360px]">
-            <WorkflowRunView run={run} stepRuns={stepRuns} />
+            <WorkflowRunView run={run} stepRuns={stepRuns} deliverables={deliverables} />
           </div>
           {deliverables.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] px-4 py-2">

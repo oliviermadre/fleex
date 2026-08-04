@@ -299,6 +299,17 @@ export const CommentMarkdown = memo(function CommentMarkdown({
           />
         );
       }
+      if (href?.startsWith('#fleex-routine:')) {
+        // Routine reference — purely referential, like @ticket. Mentioning a
+        // routine never triggers anything (a routine has no ticket to run on);
+        // the chip only highlights the handle. Purple = the routine glyph hue.
+        const name = href.slice('#fleex-routine:'.length);
+        return (
+          <span className={`inline-flex items-center rounded-sm px-1 py-px ${tint('purple')}`}>
+            @{name}
+          </span>
+        );
+      }
       if (href?.startsWith('#fleex-human:')) {
         const name = href.slice('#fleex-human:'.length);
         const mentionText = `@${name}`;

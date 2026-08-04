@@ -152,10 +152,13 @@ function RoutineRow({ routine, selected, onClick, onEdit, onDelete }: {
           : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
       )}
     >
-      <RoutineIcon size={16} className="flex-shrink-0" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      {/* Paused state must survive hover (the old trailing "paused" text hid
+          behind the row actions): the icon dims and the subtitle says it. */}
+      <RoutineIcon size={16} className={cn('flex-shrink-0', !routine.enabled && 'opacity-40')} />
+      <div className={cn('flex min-w-0 flex-1 flex-col gap-0.5', !routine.enabled && 'opacity-60')}>
         <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{routine.name}</span>
         <span className="truncate text-[11px] text-[var(--theme-text-muted)]">
+          {!routine.enabled && 'paused · '}
           {describeTrigger(routine.trigger)}
           {routine.lastRunAt && ` · last run ${formatRelativeTime(routine.lastRunAt)}`}
         </span>
@@ -164,9 +167,6 @@ function RoutineRow({ routine, selected, onClick, onEdit, onDelete }: {
         <span className={cn('flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium group-hover:hidden', tint('yellow'))}>
           waiting
         </span>
-      )}
-      {!routine.awaitingAttention && !routine.enabled && (
-        <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)] group-hover:hidden">paused</span>
       )}
       {/* Hover-revealed actions — same affordances as the Agentic Catalog rows. */}
       <span
