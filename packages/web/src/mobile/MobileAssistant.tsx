@@ -8,6 +8,7 @@ import {
   type AssistantToolStatus,
 } from '../stores/assistantStore';
 import { tint, tintText } from '../lib/tints';
+import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 
 /**
  * Mobile client for the Fleex assistant — same companion host as the Chrome
@@ -209,12 +210,17 @@ export function MobileAssistant() {
           className="flex shrink-0 items-end gap-2 border-t border-[var(--theme-border)] px-3 pb-2 pt-2"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
         >
-          <textarea
+          <MarkdownEditor
+            variant="composer"
+            surfaceKind="assistant_message"
+            className="min-w-0 flex-1"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
+            minRows={2}
             placeholder={busy ? 'Assistant au travail…' : 'Demande quelque chose…'}
-            rows={2}
-            className="min-h-0 flex-1 resize-none rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-base leading-snug text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
+            textareaProps={{
+              className: 'rounded-xl bg-[var(--theme-bg-secondary)] p-3 text-base text-[var(--theme-text-primary)]',
+            }}
           />
           <button
             onClick={handleSend}

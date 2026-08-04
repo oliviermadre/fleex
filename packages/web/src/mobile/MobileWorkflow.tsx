@@ -4,6 +4,7 @@ import { useWorkflowRunStore, ACTIVE_STATUSES } from '../stores/workflowRunStore
 import { postTicketComment } from '../services/api';
 import { countCompletedSteps } from '../components/workflows/workflowProgress';
 import { tint, tintText } from '../lib/tints';
+import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 
 /**
  * Mobile workflow run view: the desktop DAG (xyflow) doesn't fit a phone, so
@@ -274,12 +275,13 @@ function MobileStepDetail({
       {/* Human gate: pick an outcome, optional notes for the next step */}
       {stepRun?.status === 'needs_review' && isGate && (
         <div className="space-y-2">
-          <textarea
+          <MarkdownEditor
+            variant="composer"
+            surfaceKind="workflow_gate_notes"
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={setNotes}
+            minRows={2}
             placeholder="Notes (optionnel, injecté dans l'étape suivante)"
-            rows={2}
-            className="w-full resize-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-2.5 text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
           />
           <div className="flex flex-wrap gap-2">
             {gateOutcomes.map((o) => (
@@ -299,12 +301,13 @@ function MobileStepDetail({
       {/* Agent step waiting for info: answer → comment + retry */}
       {stepRun?.status === 'needs_review' && !isGate && (
         <div className="space-y-2">
-          <textarea
+          <MarkdownEditor
+            variant="composer"
+            surfaceKind="workflow_review_response"
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={setNotes}
+            minRows={3}
             placeholder="Ta réponse (postée en commentaire, puis l'étape est relancée)"
-            rows={3}
-            className="w-full resize-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-2.5 text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
           />
           <button
             disabled={busy || !notes.trim()}

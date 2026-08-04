@@ -27,6 +27,7 @@ import { ModelSelect } from '../components/agents/ModelSelect';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
 import { MentionTypeIcon } from '../lib/primitives';
 import { tint } from '../lib/tints';
+import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 
 const MODES: { id: ConversationMode; label: string }[] = [
   { id: 'talk', label: '🗣 Talk' },
@@ -198,11 +199,11 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
 
   // Same trigger detection as desktop: last '@' before the cursor, at the
   // start or after whitespace, with no space typed after it yet.
-  const handleInputChange = useCallback(
+  // The editor owns the value; this handler only scans for the '@' trigger.
+  const handleMentionScan = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const val = e.target.value;
       const cursor = e.target.selectionStart;
-      setBody(val);
 
       const textBeforeCursor = val.slice(0, cursor);
       const atIdx = textBeforeCursor.lastIndexOf('@');
@@ -696,14 +697,20 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           </button>
         </div>
         <div className="flex items-end gap-2">
-          <textarea
-            ref={textareaRef}
+          <MarkdownEditor
+            variant="composer"
+            surfaceKind="comment"
+            className="min-w-0 flex-1"
             value={body}
-            onChange={handleInputChange}
-            onBlur={() => setTimeout(closeMentionAc, 200)}
+            onChange={setBody}
+            textareaRef={textareaRef}
+            minRows={2}
             placeholder="Message… (@ pour mentionner)"
-            rows={2}
-            className="min-h-0 flex-1 resize-none rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-base leading-snug text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
+            textareaProps={{
+              onChange: handleMentionScan,
+              onBlur: () => setTimeout(closeMentionAc, 200),
+              className: 'rounded-xl bg-[var(--theme-bg-secondary)] p-3 text-base text-[var(--theme-text-primary)]',
+            }}
           />
           <button
             onClick={handleSubmit}

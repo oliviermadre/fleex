@@ -9,6 +9,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useAssistantStore } from '../../stores/assistantStore';
 import { MentionTypeIcon } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 
 /**
  * The assistant input, isolated from the transcript (#518).
@@ -127,11 +128,11 @@ export function AssistantComposer({ sessionId, busy, onSent }: AssistantComposer
     setAcTriggerPos(-1);
   }, []);
 
-  const handleInputChange = useCallback(
+  // The editor owns the value; this handler only scans for the '@' trigger.
+  const handleMentionScan = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const val = e.target.value;
       const cursor = e.target.selectionStart;
-      setDraft(val);
       const textBeforeCursor = val.slice(0, cursor);
       const atIdx = textBeforeCursor.lastIndexOf('@');
       if (atIdx >= 0 && (atIdx === 0 || /\s/.test(textBeforeCursor[atIdx - 1]!))) {
@@ -253,20 +254,26 @@ export function AssistantComposer({ sessionId, busy, onSent }: AssistantComposer
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
             </svg>
           </button>
-          <textarea
-            ref={textareaRef}
+          <MarkdownEditor
+            variant="composer"
+            surfaceKind="assistant_message"
+            className="min-w-0 flex-1"
             value={draft}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onPaste={pasteHandler}
-            onBlur={() => setTimeout(closeMentionAc, 200)}
+            onChange={setDraft}
+            textareaRef={textareaRef}
+            minRows={2}
             placeholder={
               busy
                 ? 'Assistant au travail…'
                 : 'Demande quelque chose… (@ pour référencer agents, skills, panels, workflows, tickets — ⇧⏎ pour une nouvelle ligne)'
             }
-            rows={2}
-            className="min-h-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm leading-relaxed text-[var(--theme-text-primary)] outline-none placeholder:text-[var(--theme-text-faint)]"
+            textareaProps={{
+              onChange: handleMentionScan,
+              onKeyDown: handleKeyDown,
+              onPaste: pasteHandler,
+              onBlur: () => setTimeout(closeMentionAc, 200),
+              className: 'border-transparent bg-transparent leading-relaxed text-[var(--theme-text-primary)]',
+            }}
           />
           <button
             onClick={handleSend}

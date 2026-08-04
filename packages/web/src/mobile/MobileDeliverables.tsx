@@ -6,6 +6,7 @@ import { useDeliverableTypesStore } from '../stores/deliverableTypesStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
 import { tint, tintText } from '../lib/tints';
+import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 
 /** Deliverables tab: list, read, create and delete — desktop-parity writes. */
 export function MobileDeliverables({ ticketId }: { ticketId: string }) {
@@ -241,13 +242,15 @@ function CreateDeliverableSheet({
             ))}
           </div>
         </div>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Contenu (markdown)"
-          rows={6}
-          className="mb-3 w-full resize-y rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-sm leading-snug text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
-        />
+        <div className="mb-3 flex h-56">
+          <MarkdownEditor
+            surfaceKind="deliverable_content"
+            profile="doc"
+            value={content}
+            onChange={setContent}
+            placeholder="Contenu (markdown)"
+          />
+        </div>
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm text-[var(--theme-text-muted)]">
             Annuler

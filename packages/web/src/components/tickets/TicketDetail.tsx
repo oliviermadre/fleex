@@ -11,15 +11,12 @@ import { TicketComments } from './TicketComments';
 import { TicketDeliverables } from './TicketDeliverables';
 import { TicketMentions } from './TicketMentions';
 import { MissingRepoBanner } from './MissingRepoBanner';
-import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 import * as api from '../../services/api';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
-import { useFileUpload } from '../../hooks/useFileUpload';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
-
-type DescriptionMode = 'write' | 'preview' | 'split';
 
 export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedded?: boolean }) {
   const tickets = useTicketStore((s) => s.tickets);
@@ -33,7 +30,6 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [descMode, setDescMode] = useState<DescriptionMode>('split');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [commentCount, setCommentCount] = useState(0);
   const [deliverableCount, setDeliverableCount] = useState(0);
@@ -163,16 +159,14 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
     }
   }, []);
 
-  const fileUpload = useFileUpload({
-    textareaRef: descTextareaRef,
-    value: description,
-    onChange: (val: string) => {
+  const handleDescriptionChange = useCallback(
+    (val: string) => {
       setDescription(val);
       descriptionRef.current = val;
       debouncedSilentDescription(val);
     },
-    onFlushDebounce: flushDescDebounce,
-  });
+    [debouncedSilentDescription],
+  );
 
   const handleDescToggleCheckbox = useCallback(
     (lineIndex: number) => {
@@ -278,87 +272,23 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
               </button>
             ))}
 
-            {/* Description sub-tabs (only when description tab is active) */}
-            {mainTab === 'description' && (
-              <>
-                <div className="mx-2 h-3 w-px bg-[var(--theme-border)]" />
-                {(['write', 'preview', 'split'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    className={`px-2 py-1.5 text-[11px] transition-colors ${
-                      descMode === mode
-                        ? 'text-[var(--theme-text-primary)]'
-                        : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-muted)]'
-                    }`}
-                    onClick={() => setDescMode(mode)}
-                  >
-                    {mode === 'write' ? 'Write' : mode === 'preview' ? 'Preview' : 'Split'}
-                  </button>
-                ))}
-              </>
-            )}
           </div>
 
           {/* Tab content */}
           <div className="mt-3 flex min-h-0 flex-1 overflow-hidden">
             {/* Description tab */}
             {mainTab === 'description' && (
-              <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
-                {descMode !== 'preview' && (
-                  <div
-                    className={`relative ${descMode === 'split' ? 'w-1/2' : 'w-full'}`}
-                    {...fileUpload.dragProps}
-                  >
-                    <textarea
-                      ref={descTextareaRef}
-                      className={`h-full w-full resize-none rounded-md border bg-[var(--theme-bg-surface)] p-3 text-sm font-mono text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
-                        fileUpload.isDragOver
-                          ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
-                          : 'border-[var(--theme-border)]'
-                      }`}
-                      value={description}
-                      onChange={(e) => {
-                        setDescription(e.target.value);
-                        descriptionRef.current = e.target.value;
-                        debouncedSilentDescription(e.target.value);
-                      }}
-                      onPaste={fileUpload.pasteHandler}
-                      placeholder="Add a description (markdown supported)..."
-                    />
-                    <button
-                      type="button"
-                      onClick={fileUpload.openFilePicker}
-                      className="absolute bottom-2 right-2 rounded p-1 text-[var(--theme-text-muted)] opacity-50 hover:opacity-100 hover:text-[var(--theme-accent)] transition-opacity"
-                      title="Attach file"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-                      </svg>
-                    </button>
-                    {fileUpload.isUploading && (
-                      <div className="absolute bottom-2 left-3 text-xs text-[var(--theme-text-muted)]">
-                        Uploading...
-                      </div>
-                    )}
-                  </div>
-                )}
-                {descMode !== 'write' && (
-                  <div
-                    className={`overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 ${
-                      descMode === 'split' ? 'w-1/2' : 'w-full'
-                    }`}
-                  >
-                    {description.trim() ? (
-                      <MarkdownRenderer
-                        content={description}
-                        onToggleCheckbox={handleDescToggleCheckbox}
-                      />
-                    ) : (
-                      <p className="text-sm italic text-[var(--theme-text-muted)]">Nothing to preview</p>
-                    )}
-                  </div>
-                )}
-              </div>
+              <MarkdownEditor
+                surfaceKind="ticket_description"
+                defaultMode="split"
+                value={description}
+                onChange={handleDescriptionChange}
+                onToggleCheckbox={handleDescToggleCheckbox}
+                onFlushDebounce={flushDescDebounce}
+                textareaRef={descTextareaRef}
+                enableFileUpload
+                placeholder="Add a description (markdown supported)..."
+              />
             )}
 
             {/* Comments tab */}

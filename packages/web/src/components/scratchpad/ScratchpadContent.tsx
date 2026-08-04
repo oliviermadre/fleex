@@ -1,8 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
-import { MarkdownRenderer } from './MarkdownRenderer';
 import { SaveStatus } from './SaveStatus';
-import { useScrollSync } from '../../hooks/useScrollSync';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 
 interface ScratchpadContentProps {
   /** Logical store key (e.g. 'org/name' for per-repo, '__global__' for global). */
@@ -34,15 +33,12 @@ export function ScratchpadContent({
   const load = useScratchpadStore((s) => s.load);
   const flushSave = useScratchpadStore((s) => s.flushSave);
   const toggleCheckbox = useScratchpadStore((s) => s.toggleCheckbox);
-  const previewExpanded = useScratchpadStore((s) => s.previewExpanded);
-  const togglePreview = useScratchpadStore((s) => s.togglePreview);
+  const markdownMode = useScratchpadStore((s) => s.markdownMode);
+  const setMarkdownMode = useScratchpadStore((s) => s.setMarkdownMode);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
 
   const entry = entries[storeKey] ?? { content: '', loaded: false, saving: false, savedAt: null, dirty: false };
-
-  const { handleTyping, handlePreviewScroll } = useScrollSync(textareaRef, previewRef, previewExpanded);
 
   useEffect(() => {
     if (!entry.loaded) load(storeKey);
@@ -67,11 +63,8 @@ export function ScratchpadContent({
   );
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setContent(storeKey, e.target.value);
-      handleTyping();
-    },
-    [storeKey, setContent, handleTyping],
+    (value: string) => setContent(storeKey, value),
+    [storeKey, setContent],
   );
 
   return (
@@ -98,58 +91,22 @@ export function ScratchpadContent({
           <SaveStatus saving={entry.saving} savedAt={entry.savedAt} dirty={entry.dirty} />
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            className={`p-1 rounded transition-colors ${
-              previewExpanded
-                ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
-                : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] hover:bg-white/[0.06]'
-            }`}
-            onClick={togglePreview}
-            title="Toggle preview"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
-              <circle cx="8" cy="8" r="2" />
-            </svg>
-          </button>
           {trailing}
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0">
-        <div className="flex-1 min-w-0">
-          <textarea
-            ref={textareaRef}
-            className="w-full h-full p-3 bg-transparent text-sm text-[var(--theme-text-primary)] font-mono resize-none outline-none placeholder:text-[var(--theme-text-faint)]"
-            value={entry.content}
-            onChange={handleChange}
-            placeholder="# Scratchpad&#10;&#10;Write your notes here..."
-            spellCheck={false}
-          />
-        </div>
-
-        {previewExpanded && (
-          <>
-            <div className="w-px bg-white/[0.06] flex-shrink-0" />
-            <div
-              ref={previewRef}
-              className="flex-1 min-w-0 overflow-y-auto p-3"
-              onScroll={handlePreviewScroll}
-            >
-              {entry.content.trim() ? (
-                <MarkdownRenderer
-                  content={entry.content}
-                  onToggleCheckbox={handleToggleCheckbox}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full text-[var(--theme-text-faint)] text-xs">
-                  Preview will appear here
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+      <MarkdownEditor
+        surfaceKind="scratchpad"
+        mode={markdownMode}
+        onModeChange={setMarkdownMode}
+        value={entry.content}
+        onChange={handleChange}
+        onToggleCheckbox={handleToggleCheckbox}
+        textareaRef={textareaRef}
+        className="p-3"
+        placeholder={'# Scratchpad\n\nWrite your notes here...'}
+        textareaProps={{ spellCheck: false }}
+      />
     </div>
   );
 }

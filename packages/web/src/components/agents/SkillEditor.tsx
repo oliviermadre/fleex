@@ -4,6 +4,7 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 
 const TABS = [
   { key: 'config' as const, label: 'Config' },
@@ -152,12 +153,13 @@ function SkillMarkdownTab({ skill }: SkillEditorProps) {
       <p className="mb-2 text-xs text-[var(--theme-text-muted)]">
         Markdown instructions sent to the agent when this skill is executed against a ticket.
       </p>
-      <textarea
+      <MarkdownEditor
+        surfaceKind="skill_instructions"
+        defaultMode="write"
         value={content}
-        onChange={(e) => setContent(e.target.value)}
-        onBlur={handleBlur}
-        className="flex-1 resize-none rounded border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-3 font-mono text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
-        placeholder="# Skill Instructions&#10;&#10;Describe the workflow the agent should perform..."
+        onChange={setContent}
+        placeholder={'# Skill Instructions\n\nDescribe the workflow the agent should perform...'}
+        textareaProps={{ onBlur: handleBlur }}
       />
     </div>
   );

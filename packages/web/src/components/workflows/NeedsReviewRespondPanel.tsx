@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { useDraft } from '../../hooks/useDraft';
 import { tintClasses } from '../../lib/tints';
 import { userRemarkPlugins } from '../markdown/profiles';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 
 // Module-level so the references stay stable across renders.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,13 +63,14 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
           </div>
         )}
       </div>
-      <textarea
-        placeholder="Your response — will be posted as a ticket comment, then the step retries."
+      <MarkdownEditor
+        variant="composer"
+        surfaceKind="workflow_review_response"
         value={response}
-        onChange={(e) => setResponse(e.target.value)}
-        rows={4}
+        onChange={setResponse}
+        minRows={4}
         disabled={busy}
-        className="w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)] disabled:opacity-50"
+        placeholder="Your response — will be posted as a ticket comment, then the step retries."
       />
       {error && <div className="text-xs text-[var(--theme-danger)]">{error}</div>}
       <div className="flex justify-end">
