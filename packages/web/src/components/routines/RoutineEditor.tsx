@@ -5,8 +5,8 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
-import { TagInput } from '../ui/TagInput';
 import { TriggerEditor } from './TriggerEditor';
+import { RoutineRepoPicker } from './RoutineRepoPicker';
 import { cn } from '../../lib/cn';
 import { tintText } from '../../lib/tints';
 
@@ -107,13 +107,7 @@ export function RoutineEditor({ routine, templates, onClose }: {
           onChange={(e) => setTemplateId(e.target.value)}
         />
 
-        <TagInput
-          label="Repositories"
-          tags={repos}
-          onChange={setRepos}
-          placeholder="org/name"
-          helperText="Leave empty to run without a workspace."
-        />
+        <RoutineRepoPicker value={repos} onChange={setRepos} />
 
         <div className="flex flex-col gap-1">
           <label htmlFor="routine-brief" className="text-xs font-medium text-[var(--theme-text-secondary)]">

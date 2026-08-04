@@ -1952,12 +1952,19 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       await params.onExecutionStarted?.(executionId);
 
       // Compose prompts
-      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
       // A routine run has no ticket to read context from: the frozen subject
       // (brief + repos) is the whole "what am I working on".
       const context = params.ticketId
         ? await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name })
         : null;
+      // Known repo count so an empty workspace is stated rather than left for
+      // the agent to discover: a routine with no repo gets a workspace holding
+      // only `.fleex.json`, and without this note the agent explores it, finds
+      // nothing, and stalls instead of working from its brief.
+      const repoCount = context
+        ? context.ticket.links.filter((l) => l.type === 'repository').length
+        : (params.subject?.repos?.length ?? 0);
+      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount);
       const userPromptBlocks = context
         ? await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt)
         : await this.composeRoutineUserPrompt(params.subject ?? null, params.workflowContextPrompt);
@@ -2441,8 +2448,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     if (worktreePath) {
       const workdirNote = repoCount === 0
-        ? `\n\nNote: this ticket has **no repository attached**. The workspace is empty — there is no codebase to read, edit, or run git against. Rely on MCP tools, web search, and file operations within this workspace as appropriate.`
-        : '';
+        ? `\n\nNote: there is **no repository attached**. The workspace is empty — there is no codebase to read, edit, or run git against. Do not go looking for one: rely on MCP tools, web search, and file operations within this workspace as appropriate.`
+        : `\n\nEach attached repository is checked out as a **subdirectory** of that working directory, on a dedicated branch.`;
       parts.push(
         `## Working Directory\n\n`
         + `Your working directory is:\n\`${worktreePath}\`\n\n`
