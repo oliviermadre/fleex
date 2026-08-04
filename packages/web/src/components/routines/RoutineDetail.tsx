@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Routine, RoutineTrigger, WorkflowRunStatus } from '@fleex/shared';
 import { useRoutineStore } from '../../stores/routineStore';
+import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { WorkflowRunView } from '../workflows/WorkflowRunView';
 import { RoutineEditor } from './RoutineEditor';
@@ -80,6 +81,7 @@ function CardHeader({ hue, label, action }: { hue: TintHue; label: string; actio
 export function RoutineDetail({ routine }: { routine: Routine }) {
   const { runs, runsLoading, launch, remove, refreshRuns } = useRoutineStore();
   const templates = useWorkflowTemplateStore((s) => s.templates);
+  const openDeliverable = useUIStore((s) => s.openDeliverableOverlay);
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -230,11 +232,19 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
                     {deliverables.length > 0 && (
                       <div className="flex flex-col gap-1 border-t border-[var(--theme-border)] px-3 py-2">
                         {deliverables.map((d) => (
-                          <div key={d.id} className="flex items-center gap-2 text-xs text-[var(--theme-text-secondary)]">
+                          // A routine run has no ticket, so the Docs view used
+                          // to be the only place these were readable. They open
+                          // in the same overlay as everywhere else.
+                          <button
+                            key={d.id}
+                            type="button"
+                            onClick={() => openDeliverable(d)}
+                            className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                          >
                             <span className="text-[var(--theme-text-muted)]">{d.type}</span>
-                            <span className="truncate text-[var(--theme-text-primary)]">{d.title}</span>
+                            <span className="truncate text-[var(--theme-text-primary)] group-hover:underline">{d.title}</span>
                             <span className="ml-auto text-[var(--theme-text-muted)]">{d.status}</span>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}

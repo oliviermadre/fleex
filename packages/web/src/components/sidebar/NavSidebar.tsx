@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useRoutineStore } from '../../stores/routineStore';
+import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
 import { cn } from '../../lib/cn';
 import { RepositoriesIcon } from './icons';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
@@ -39,8 +40,11 @@ export function NavSidebar() {
   const routinesAwaiting = useRoutineStore((s) => s.routines.filter((r) => r.awaitingAttention).length);
   const loadRoutines = useRoutineStore((s) => s.load);
   // The badge must be right before the user ever opens /routines, so the nav —
-  // always mounted — is what primes the list.
+  // always mounted — is what primes the list…
   useEffect(() => { void loadRoutines(); }, [loadRoutines]);
+  // …and what keeps it live. A gate opening on a scheduled run must light the
+  // badge up wherever the user happens to be, not on their next page reload.
+  useRoutineLiveUpdates();
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />

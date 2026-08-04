@@ -28,6 +28,14 @@ interface RoutineStore {
   launch: (id: string) => Promise<void>;
 }
 
+/**
+ * Monotonic request counter per routine. Live workflow events fire a refresh
+ * per burst, so several requests for the same routine are in flight at once;
+ * without ordering the LAST response to resolve wins and a slow stale one can
+ * pin the UI on a step that already finished.
+ */
+const runsSeq = new Map<string, number>();
+
 export const useRoutineStore = create<RoutineStore>((set, get) => ({
   routines: [],
   loading: false,
@@ -53,11 +61,18 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
   refreshRuns: async () => {
     const id = get().selectedId;
     if (!id) return;
-    set({ runsLoading: true });
+    const seq = (runsSeq.get(id) ?? 0) + 1;
+    runsSeq.set(id, seq);
+    // Spinner only on a cold load. Live workflow events refresh this list on
+    // every step transition; flipping `runsLoading` there would blank the open
+    // run's DAG a dozen times per run.
+    if (get().runs.length === 0) set({ runsLoading: true });
     try {
       const runs = await api.fetchRoutineRuns(id);
-      // Guard against a late response for a routine the user already left.
-      if (get().selectedId === id) set({ runs, runsLoading: false });
+      // Guard against a late response for a routine the user already left, and
+      // against a slow response for THIS routine clobbering a fresher one.
+      if (get().selectedId !== id || runsSeq.get(id) !== seq) return;
+      set({ runs, runsLoading: false });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err), runsLoading: false });
     }

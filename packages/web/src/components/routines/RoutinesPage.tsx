@@ -5,7 +5,7 @@ import { RoutineDetail, formatRelativeTime, describeTrigger } from './RoutineDet
 import { RoutineEditor } from './RoutineEditor';
 import type { RoutineListItem as RoutineListItemDto } from '../../services/api';
 import { Button } from '../ui/Button';
-import { appWs } from '../../services/websocket';
+import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
 import { cn } from '../../lib/cn';
 import { tint, tintText } from '../../lib/tints';
 
@@ -16,7 +16,7 @@ import { tint, tintText } from '../../lib/tints';
  * itself is rendered by the existing WorkflowRunView inside the detail.
  */
 export function RoutinesPage() {
-  const { routines, loading, error, selectedId, load, select, refreshRuns } = useRoutineStore();
+  const { routines, loading, error, selectedId, load, select } = useRoutineStore();
   const templates = useWorkflowTemplateStore((s) => s.templates);
   const refreshTemplates = useWorkflowTemplateStore((s) => s.refresh);
   const [creating, setCreating] = useState(false);
@@ -28,19 +28,9 @@ export function RoutinesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A scheduled routine fires with nobody watching. Without this the screen
-  // would show a stale "last run 3d ago" until the user thought to reload —
-  // which is exactly the moment they stop trusting the scheduler.
-  useEffect(() => {
-    const unsub = appWs.onChannel('tickets', (raw) => {
-      const type = (raw as { type?: string }).type;
-      if (type === 'routine:run_started' || type === 'routine:run_completed' || type === 'routine:run_skipped') {
-        void load();
-        void refreshRuns();
-      }
-    });
-    return unsub;
-  }, [load, refreshRuns]);
+  // Live updates (scheduler firing, steps completing, gates opening) are wired
+  // once in the nav sidebar via `useRoutineLiveUpdates` — it is always mounted,
+  // so the badge stays honest even when this screen is closed.
 
   const selected = routines.find((r) => r.id === selectedId) ?? null;
 
@@ -90,6 +80,11 @@ export function RoutinesPage() {
           onClose={() => setCreating(false)}
         />
       )}
+
+      {/* A routine run's deliverables open here, in place. Same overlay as the
+          ticket and Docs views — a document produced by a routine must be
+          readable where it was produced, not only from the Docs list. */}
+      <DeliverableReadingOverlay />
     </div>
   );
 }

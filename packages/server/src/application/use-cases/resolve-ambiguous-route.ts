@@ -64,7 +64,8 @@ export class ResolveAmbiguousRouteUseCase {
 
     this.eventBus.emit({
       type: 'workflow.step_completed', workflowRunId: run.id, stepRunId: stepRun.id,
-      stepId: stepRun.stepId, ticketId: run.ticketId, nextEdgeId: edge.id, occurredAt: new Date(),
+      stepId: stepRun.stepId, ticketId: run.ticketId, routineId: run.routineId,
+      nextEdgeId: edge.id, occurredAt: new Date(),
     });
 
     run.advanceTo(edge.target);

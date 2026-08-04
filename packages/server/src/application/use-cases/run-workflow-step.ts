@@ -56,7 +56,7 @@ export class RunWorkflowStepUseCase {
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
         type: 'workflow.step_started', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, occurredAt: new Date(),
+        ticketId: run.ticketId, routineId: run.routineId, occurredAt: new Date(),
       });
 
       // 3. Build workflow context (previousOutputs from prior step_runs)
@@ -116,7 +116,7 @@ export class RunWorkflowStepUseCase {
         await this.deps.runStore.save(run);
         this.deps.eventBus.emit({
           type: 'workflow.needs_review', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-          ticketId: run.ticketId, occurredAt: new Date(),
+          ticketId: run.ticketId, routineId: run.routineId, occurredAt: new Date(),
         });
         return;
       }
@@ -144,7 +144,7 @@ export class RunWorkflowStepUseCase {
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
         type: 'workflow.step_completed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
+        ticketId: run.ticketId, routineId: run.routineId, nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
       });
 
       // 7. Advance or complete
@@ -156,7 +156,8 @@ export class RunWorkflowStepUseCase {
         run.complete();
         await this.deps.runStore.save(run);
         this.deps.eventBus.emit({
-          type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId, occurredAt: new Date(),
+          type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId,
+          routineId: run.routineId, occurredAt: new Date(),
         });
       }
     } catch (err) {
@@ -175,7 +176,7 @@ export class RunWorkflowStepUseCase {
         // manual page refresh (the DB is `cancelled`, but nothing was pushed).
         this.deps.eventBus.emit({
           type: 'workflow.step_cancelled', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-          ticketId: run.ticketId, occurredAt: new Date(),
+          ticketId: run.ticketId, routineId: run.routineId, occurredAt: new Date(),
         });
         return;
       }
@@ -185,7 +186,8 @@ export class RunWorkflowStepUseCase {
       await this.deps.runStore.save(run);
       this.deps.eventBus.emit({
         type: 'workflow.run_failed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
+        ticketId: run.ticketId, routineId: run.routineId,
+        error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
       });
     }
   }
