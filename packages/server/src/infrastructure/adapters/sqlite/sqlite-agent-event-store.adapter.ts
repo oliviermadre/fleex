@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert, StaleExecution } from '../../../application/ports/agent-event-store.port.js';
 import type { SqliteConnection } from './connection.js';
 
 interface ExecutionRow {
@@ -219,6 +219,28 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     ).run(new Date().toISOString());
 
     return rows.map((r) => r.mention_id);
+  }
+
+  async findStaleRunningExecutions(cutoffIso: string): Promise<StaleExecution[]> {
+    const rows = this.conn.db
+      .prepare(
+        `SELECT execution_id, persona_id, ticket_id, mention_id,
+                COALESCE(last_event_at, started_at) AS last_activity_at
+         FROM agent_event_executions
+         WHERE status = 'running' AND COALESCE(last_event_at, started_at) < ?`,
+      )
+      .all(cutoffIso) as {
+        execution_id: string; persona_id: string; ticket_id: string;
+        mention_id: string; last_activity_at: string;
+      }[];
+
+    return rows.map((r) => ({
+      executionId: r.execution_id,
+      personaId: r.persona_id,
+      ticketId: r.ticket_id,
+      mentionId: r.mention_id,
+      lastActivityAt: r.last_activity_at,
+    }));
   }
 
   async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {

@@ -35,6 +35,22 @@ export function summarizeStderr(raw: string, keep = 4096): string {
   return `${s.slice(0, keep)}\n\n…[${elidedKB} KB elided]…\n\n${s.slice(-keep)}`;
 }
 
+/**
+ * Why the message loop stopped. Logged by callers so a production hang can be
+ * told apart from a normal completion without guessing:
+ * - `result`  — the SDK emitted its terminal `result` message (nominal).
+ * - `generator-end` — the stream ended without a `result` (crash / empty run).
+ * - `abort`   — the caller's AbortSignal fired (Terminate or timeout).
+ */
+export type StreamExitReason = 'result' | 'generator-end' | 'abort';
+
+/**
+ * Grace period given to the SDK async generator to close itself after we break
+ * out of the loop. Past this we abort the query outright so the `claude`
+ * subprocess can't keep the run (and its SDK concurrency slot) alive forever.
+ */
+const GENERATOR_CLOSE_GRACE_MS = 5_000;
+
 export interface StreamSdkQueryResult {
   /** Session id captured from the SDK `init` message, if any. */
   sessionId?: string;
@@ -52,6 +68,8 @@ export interface StreamSdkQueryResult {
    * exit code. Empty string when the CLI wrote nothing to stderr.
    */
   stderr: string;
+  /** Why the loop stopped. See {@link StreamExitReason}. */
+  exitReason: StreamExitReason;
 }
 
 export interface StreamSdkQueryParams {
@@ -127,12 +145,70 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
       })()
     : prompt;
 
+  // The SDK only kills its `claude` subprocess when it owns an AbortController.
+  // Without this the caller's timeout / Terminate could abort our *loop* but
+  // left the child alive, so the generator never returned and the run stayed
+  // `running` forever. We always own one and forward the caller's signal into
+  // it, which also lets us force-kill the child if it lingers after `result`.
+  const sdkAbort = new AbortController();
+  queryOptions['abortController'] = sdkAbort;
+  const forwardAbort = () => sdkAbort.abort(abortSignal?.reason);
+  if (abortSignal) {
+    if (abortSignal.aborted) forwardAbort();
+    else abortSignal.addEventListener('abort', forwardAbort, { once: true });
+  }
+
+  // Resolves as soon as the caller aborts. Racing this against `next()` is what
+  // makes the timeout effective: checking `signal.aborted` at the top of the
+  // loop only ever runs when a NEW message arrives, so a stream that goes quiet
+  // (the exact failure mode here) would never observe the abort.
+  const ABORTED = Symbol('aborted');
+  let onAbort: (() => void) | undefined;
+  const abortPromise = abortSignal
+    ? new Promise<typeof ABORTED>((resolve) => {
+        onAbort = () => resolve(ABORTED);
+        if (abortSignal.aborted) onAbort();
+        else abortSignal.addEventListener('abort', onAbort, { once: true });
+      })
+    : undefined;
+
+  const stream = query({
+    prompt: promptArg,
+    options: queryOptions as Parameters<typeof query>[0]['options'],
+  });
+  const iterator = stream[Symbol.asyncIterator]();
+
+  /**
+   * Release the generator without ever blocking on it. `iterator.return()` is
+   * what a `for await` break calls implicitly — but it awaits the subprocess
+   * teardown, which is precisely what can hang. Bound it, then force the abort.
+   */
+  const closeStream = async () => {
+    if (typeof iterator.return !== 'function') {
+      sdkAbort.abort();
+      return;
+    }
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    const closed = await Promise.race([
+      Promise.resolve(iterator.return(undefined)).then(() => true, () => true),
+      new Promise<false>((resolve) => { graceTimer = setTimeout(() => resolve(false), GENERATOR_CLOSE_GRACE_MS); }),
+    ]);
+    if (graceTimer) clearTimeout(graceTimer);
+    if (!closed) sdkAbort.abort();
+  };
+
+  let exitReason: StreamExitReason = 'generator-end';
+
   try {
-    for await (const message of query({
-      prompt: promptArg,
-      options: queryOptions as Parameters<typeof query>[0]['options'],
-    })) {
-      if (abortSignal?.aborted) break;
+    for (;;) {
+      const next = abortPromise
+        ? await Promise.race([iterator.next(), abortPromise])
+        : await iterator.next();
+
+      if (next === ABORTED) { exitReason = 'abort'; break; }
+      if (next.done) { exitReason = 'generator-end'; break; }
+
+      const message = next.value;
       messageCount++;
       const msg = message as Record<string, unknown>;
 
@@ -171,6 +247,13 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
         }
 
         await emitEvent('message_stop', { result: resultText, subtype: resultSubtype });
+
+        // `result` is terminal by SDK contract — everything the caller needs is
+        // now captured. Staying in the loop only waits for the subprocess to
+        // close its stdout, which an orphaned MCP server or hook can defer
+        // indefinitely; that wait was what left runs stuck in `running`.
+        exitReason = 'result';
+        break;
       } else {
         await emitEvent('content_block_delta', msg);
       }
@@ -187,7 +270,13 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
       throw augmented;
     }
     throw err;
+  } finally {
+    if (abortSignal && onAbort) abortSignal.removeEventListener('abort', onAbort);
+    if (abortSignal) abortSignal.removeEventListener('abort', forwardAbort);
+    // Detached on purpose: teardown is exactly what can hang, and the caller's
+    // finalization (execution_end, comment, deliverable) must not wait on it.
+    void closeStream().catch(() => undefined);
   }
 
-  return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount, stderr: stderrBuf };
+  return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount, stderr: stderrBuf, exitReason };
 }

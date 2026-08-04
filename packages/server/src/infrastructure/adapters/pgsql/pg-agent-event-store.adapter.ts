@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert, StaleExecution } from '../../../application/ports/agent-event-store.port.js';
 import type { PgConnection } from './connection.js';
 
 export class PgAgentEventStore implements AgentEventStorePort {
@@ -160,6 +160,23 @@ export class PgAgentEventStore implements AgentEventStorePort {
       [new Date().toISOString()],
     );
     return rows.map((r: Record<string, unknown>) => r.mention_id as string);
+  }
+
+  async findStaleRunningExecutions(cutoffIso: string): Promise<StaleExecution[]> {
+    const { rows } = await this.db.query(
+      `SELECT execution_id, persona_id, ticket_id, mention_id,
+              COALESCE(last_event_at, started_at) AS last_activity_at
+       FROM agent_event_executions
+       WHERE status = 'running' AND COALESCE(last_event_at, started_at) < $1`,
+      [cutoffIso],
+    );
+    return (rows as Record<string, unknown>[]).map((r) => ({
+      executionId: r.execution_id as string,
+      personaId: r.persona_id as string,
+      ticketId: r.ticket_id as string,
+      mentionId: r.mention_id as string,
+      lastActivityAt: r.last_activity_at as string,
+    }));
   }
 
   async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {

@@ -54,6 +54,19 @@ interface QueueItem {
   mention: TicketMentionEntity;
 }
 
+/** Fallback agent execution timeout when none is configured. */
+const DEFAULT_AGENT_EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** How often the stale-execution watchdog scans for ghost runs. */
+export const STALE_WATCHDOG_INTERVAL_MS = 60 * 1000;
+
+/**
+ * Margin added on top of `agentExecutionTimeout` before a silent `running` row
+ * is considered a ghost. A healthy run that is merely slow gets aborted by its
+ * own timeout first; the watchdog must only ever catch runs that escaped it.
+ */
+export const STALE_EXECUTION_GRACE_MS = 5 * 60 * 1000;
+
 /**
  * Build the structured-output instructions, enumerating the workspace's
  * configured (agent-selectable) deliverable types with their descriptions.
@@ -141,6 +154,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
   /** Set by WS plugin to broadcast agent events in real-time */
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
+
+  /** Handle for the stale-execution watchdog interval (see `init`). */
+  private staleWatchdogTimer: ReturnType<typeof setInterval> | null = null;
 
   /** Set by WS plugin to broadcast execution completion */
   public onExecutionComplete: ((personaId: string, status: 'completed' | 'failed', mentionId: string) => void) | null = null;
@@ -236,6 +252,97 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       interruptedExecutions: interruptedMentionIds.length,
       restoredSessions: this.sessionHistory.size,
     });
+
+    this.startStaleExecutionWatchdog();
+  }
+
+  /**
+   * Periodically reap ghost runs: rows still flagged `running` whose agent has
+   * gone silent well past its execution timeout. Startup recovery only runs at
+   * boot, so without this a run that hangs mid-flight keeps "X is working." and
+   * the Terminate button on screen — and its mention unresolved — until the
+   * server is restarted.
+   *
+   * The timer is unref'd: a pending scan must never keep the process alive.
+   */
+  startStaleExecutionWatchdog(intervalMs: number = STALE_WATCHDOG_INTERVAL_MS): void {
+    if (this.staleWatchdogTimer) return;
+    this.staleWatchdogTimer = setInterval(() => {
+      void this.reapStaleExecutions().catch((err) => {
+        this.logger.warn('Stale execution watchdog scan failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }, intervalMs);
+    this.staleWatchdogTimer.unref?.();
+  }
+
+  stopStaleExecutionWatchdog(): void {
+    if (!this.staleWatchdogTimer) return;
+    clearInterval(this.staleWatchdogTimer);
+    this.staleWatchdogTimer = null;
+  }
+
+  /**
+   * One watchdog pass. Returns how many executions were reaped.
+   *
+   * Two cases, deliberately handled differently:
+   * - the execution is still tracked in this process → `cancelExecution` does
+   *   the full teardown *including aborting the SDK query*, which is what
+   *   actually frees the shared SDK concurrency slot the ghost was holding;
+   * - the row is orphaned (process restarted, or the run leaked out of the
+   *   registry) → close it directly so the UI and the mention recover.
+   */
+  async reapStaleExecutions(): Promise<number> {
+    const timeoutMs = this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS;
+    const cutoff = new Date(Date.now() - timeoutMs - STALE_EXECUTION_GRACE_MS).toISOString();
+
+    const stale = await this.agentEventStore.findStaleRunningExecutions(cutoff);
+    if (stale.length === 0) return 0;
+
+    let reaped = 0;
+    for (const exec of stale) {
+      this.logger.warn('Reaping stale agent execution', {
+        executionId: exec.executionId,
+        personaId: exec.personaId,
+        ticketId: exec.ticketId,
+        mentionId: exec.mentionId,
+        lastActivityAt: exec.lastActivityAt,
+      });
+
+      try {
+        // Live in this process: cancelExecution aborts the query, writes
+        // `interrupted`, resets the mention and notifies the UI.
+        if (await this.cancelExecution(exec.executionId)) {
+          reaped++;
+          continue;
+        }
+
+        const endEvent = AgentEventEntity.create({
+          executionId: exec.executionId,
+          eventType: 'execution_end',
+          data: { status: 'interrupted', reason: 'stale', ticketId: exec.ticketId },
+          sequence: 999999,
+        });
+        await this.agentEventStore.appendEvent(endEvent);
+        this.onEvent?.(endEvent);
+        await this.agentEventStore.completeExecution(exec.executionId, 'interrupted');
+
+        const mention = await this.mentionStore.getById(exec.mentionId);
+        if (mention) {
+          mention.resetToPending();
+          await this.mentionStore.save(mention);
+        }
+        reaped++;
+      } catch (err) {
+        this.logger.error('Failed to reap stale agent execution', {
+          executionId: exec.executionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return reaped;
   }
 
   async execute(personaId: string): Promise<AgentExecutionResult> {
@@ -697,6 +804,29 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // event so the UI never silently hangs in Pending.
     let acknowledged = false;
 
+    // Single funnel for writing the execution's terminal status, so that (a) no
+    // exit path can forget to close the row — the `finally` below backstops it —
+    // and (b) a store write that fails is loud instead of swallowed. A row left
+    // in `running` is what keeps "X is working." and the Terminate button on
+    // screen forever, so a silent failure here is never acceptable.
+    let statusWritten = false;
+    const writeTerminalStatus = async (
+      status: 'completed' | 'failed' | 'interrupted',
+      metrics?: Parameters<AgentEventStorePort['completeExecution']>[2],
+    ): Promise<void> => {
+      try {
+        await this.agentEventStore.completeExecution(executionId, status, metrics);
+        statusWritten = true;
+      } catch (storeErr) {
+        this.logger.error('Failed to persist execution terminal status', {
+          executionId,
+          mentionId: mention.id,
+          status,
+          error: storeErr instanceof Error ? storeErr.message : String(storeErr),
+        });
+      }
+    };
+
     try {
       // 0. Resolve the conversation-scoped execution config at acknowledge time.
       // Mode is min(persona ceiling, ticket.conversationMode); model/effort/fast
@@ -899,7 +1029,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         } catch (queryErr) {
           if (abortController.signal.aborted) {
             // Abort was triggered — handled below.
-            streamResult = { resultText: '', structuredOutput: null, metrics: {}, messageCount: 0, stderr: '' };
+            streamResult = { resultText: '', structuredOutput: null, metrics: {}, messageCount: 0, stderr: '', exitReason: 'abort' };
           } else if (previousSessionId) {
             // Stale resume — clear session and retry fresh
             this.logger.warn('SDK query failed with resume, retrying without resume', {
@@ -929,6 +1059,17 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         sdkNumTurns = streamResult.metrics.numTurns;
         cliStderr = streamResult.stderr ?? '';
         resultSubtype = streamResult.resultSubtype;
+
+        // How the stream ended is the single most diagnostic fact when a run
+        // misbehaves: `result` is nominal, `generator-end` without messages
+        // means the subprocess died, `abort` means timeout/Terminate won.
+        this.logger.info('SDK stream ended', {
+          executionId,
+          persona: persona.name,
+          exitReason: streamResult.exitReason,
+          messageCount: streamResult.messageCount,
+          resultSubtype: streamResult.resultSubtype ?? null,
+        });
 
         // The SDK stops with this subtype when the turn budget runs out. Say so
         // explicitly: an agent that ran out of turns produces a truncated answer
@@ -962,14 +1103,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         // Check if cancelExecution() already did the cleanup
         const currentExec = this.activeExecutions.get(mention.id);
         if (currentExec && currentExec.status !== 'running') {
-          // Already cleaned up by cancelExecution()
+          // Already cleaned up by cancelExecution() — it wrote `interrupted`
+          // itself, so tell the finally-backstop not to overwrite it.
+          statusWritten = true;
           return;
         }
         // Timeout path — cancelExecution didn't run, we need to do cleanup
         const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
           ? 'timeout' : 'cancelled';
         await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        await writeTerminalStatus('interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.resetToPending();
         await this.mentionStore.save(mention);
@@ -995,7 +1138,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         // Emit execution_end so every log view flips out of "running" and shows
         // the failed state (the store keys failure off execution_end).
         await emitEvent('execution_end', { status: 'failed', reason: 'subprocess_crash', ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        await writeTerminalStatus('failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         // markFailed (not resetToPending): a silent subprocess crash sent back to
         // `pending` is exactly the "invisible crash" bug this ticket fixes. Mark it
@@ -1031,7 +1174,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
         await emitEvent('error', { error: message, ticketId: mention.ticketId });
         await emitEvent('execution_end', { status: 'failed', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        await writeTerminalStatus('failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         // Persist the session so the relaunch can resume from where it stopped.
         if (sdkSessionId) {
           this.sessionHistory.set(sessionKey, sdkSessionId);
@@ -1275,7 +1418,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // Persist the *resolved* model (conversation override or persona default)
       // that actually ran — not persona.model — so cost tracking and the audit
       // trail reflect which model executed on this run.
-      await this.agentEventStore.completeExecution(executionId, 'completed', {
+      await writeTerminalStatus('completed', {
         model: resolved.model,
         effectiveMode,
         effort: resolved.effort,
@@ -1329,10 +1472,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
         await this.agentEventStore.appendEvent(endEvent);
         this.onEvent?.(endEvent);
-        await this.agentEventStore.completeExecution(executionId, 'failed');
-      } catch {
-        // Don't let event store errors mask the original error
+      } catch (eventErr) {
+        // Don't let event store errors mask the original error — but never stay
+        // silent about them either: a lost execution_end is invisible in the UI.
+        this.logger.error('Failed to persist crash events for execution', {
+          executionId,
+          mentionId: mention.id,
+          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+        });
       }
+      await writeTerminalStatus('failed');
 
       // Persist the `failed` status so the crash card survives a reload. A
       // `resolved`/`waiting_for_info` mention is never failed retroactively
@@ -1374,6 +1523,34 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       });
       throw err;
     } finally {
+      // Last-resort closure. Every branch above is supposed to write a terminal
+      // status, but an unforeseen exit (a throw between `execution_end` and
+      // `completeExecution`, an early return added later) would otherwise leave
+      // the row `running` forever — the exact ghost-run symptom this fixes.
+      if (!statusWritten) {
+        this.logger.error('Execution ended without a terminal status — forcing failed', {
+          executionId,
+          mentionId: mention.id,
+          persona: persona.name,
+        });
+        try {
+          const endEvent = AgentEventEntity.create({
+            executionId,
+            eventType: 'execution_end',
+            data: { status: 'failed', reason: 'unfinalized', ticketId: mention.ticketId },
+            sequence: 999999,
+          });
+          await this.agentEventStore.appendEvent(endEvent);
+          this.onEvent?.(endEvent);
+        } catch (eventErr) {
+          this.logger.error('Failed to emit fallback execution_end', {
+            executionId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          });
+        }
+        await writeTerminalStatus('failed');
+      }
+
       // The global SDK slot is released by the sdkLimiter.run() wrapper in
       // drainQueue once this method settles. Clean up completed/failed
       // executions after a delay.

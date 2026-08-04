@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert, StaleExecution } from '../../../application/ports/agent-event-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 
 interface ExecutionRow {
@@ -233,6 +233,32 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     }
 
     return mentionIds;
+  }
+
+  async findStaleRunningExecutions(cutoffIso: string): Promise<StaleExecution[]> {
+    // PostgREST has no COALESCE in filters, so the `last_event_at ?? started_at`
+    // fallback is applied client-side. `running` rows are few by construction
+    // (bounded by agent concurrency + leftovers), so fetching them all is cheap.
+    const { data, error } = await this.conn.client
+      .from('agent_event_executions')
+      .select('execution_id, persona_id, ticket_id, mention_id, last_event_at, started_at')
+      .eq('status', 'running');
+    if (error) throw new Error(`SupabaseAgentEventStore.findStaleRunningExecutions failed: ${error.message}`);
+
+    const rows = (data ?? []) as {
+      execution_id: string; persona_id: string; ticket_id: string;
+      mention_id: string; last_event_at: string | null; started_at: string;
+    }[];
+
+    return rows
+      .map((r) => ({
+        executionId: r.execution_id,
+        personaId: r.persona_id,
+        ticketId: r.ticket_id,
+        mentionId: r.mention_id,
+        lastActivityAt: r.last_event_at ?? r.started_at,
+      }))
+      .filter((r) => r.lastActivityAt < cutoffIso);
   }
 
   async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
