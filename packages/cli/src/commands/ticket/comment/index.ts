@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
+import { ok, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
 import { resolveTicketId } from '../_shared.ts';
 
@@ -18,7 +18,7 @@ const def: CommandDef = {
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();
     await apiPost(`${base}/api/tickets/${uuid}/comments`, { body: bodyArg });
-    ok(`Comment added to ticket #${idArg}`);
+    present({ ok: true, ticketId: uuid }, () => ok(`Comment added to ticket #${idArg}`));
   },
 };
 

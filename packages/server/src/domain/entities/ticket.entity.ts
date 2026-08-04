@@ -224,7 +224,18 @@ export class TicketEntity {
     this.updatedAt = new Date();
   }
 
+  /**
+   * Idempotent: `(type, ref)` identifies a link. Re-adding one that already
+   * exists returns the existing link untouched — no duplicate row, no
+   * `updatedAt` bump. Linking the same PR twice is a common accident (a failed
+   * read makes a caller retry a write that did land); it must not leave two
+   * rows behind. Callers that need to tell a create from a no-op compare the
+   * returned `id` against the one they passed in, or use `findLink` first.
+   */
   addLink(type: TicketLinkType, ref: string, label: string, url: string | null, linkId: string): TicketLink {
+    const existing = this.findLink(type, ref);
+    if (existing) return existing;
+
     const link: TicketLink = {
       id: linkId,
       type,
@@ -236,6 +247,11 @@ export class TicketEntity {
     this.links = [...this.links, link];
     this.updatedAt = new Date();
     return link;
+  }
+
+  /** Find an existing link by its identity pair `(type, ref)`. */
+  findLink(type: TicketLinkType, ref: string): TicketLink | undefined {
+    return this.links.find((l) => l.type === type && l.ref === ref);
   }
 
   removeLink(linkId: string): boolean {

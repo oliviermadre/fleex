@@ -1,6 +1,6 @@
 import readline from 'node:readline/promises';
 import type { CommandDef } from '../../../../core/types.ts';
-import { c, info, ok } from '../../../../core/colors.ts';
+import { c, info, ok, present } from '../../../../core/colors.ts';
 import { apiBase, apiGet, apiDelete } from '../../../../core/api.ts';
 import { resolveTicketId } from '../../_shared.ts';
 import type { DeliverableDTO } from '../_shared.ts';
@@ -34,7 +34,7 @@ const def: CommandDef = {
     }
 
     await apiDelete(`${base}/api/tickets/${uuid}/deliverables/${delivId}`);
-    ok('Deleted deliverable');
+    present({ ok: true, deleted: true, deliverableId: delivId }, () => ok('Deleted deliverable'));
   },
 };
 

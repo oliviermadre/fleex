@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, die } from '../../../core/colors.ts';
+import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
 import { assertValidStatus, assertValidType, parseGithubRef, parseGithubIssueUrl } from '../_shared.ts';
 import { resolveBoardIdOrDefault } from '../../board/_shared.ts';
@@ -54,8 +54,10 @@ const def: CommandDef = {
       `${base}/api/tickets/import-github-issue`,
       body,
     );
-    ok(`Created ticket #${result.displayId}: ${result.title} (${result.status})`);
-    ok(`Linked issue ${parsed.ref}`);
+    present({ ...result, linkedIssue: parsed.ref }, () => {
+      ok(`Created ticket #${result.displayId}: ${result.title} (${result.status})`);
+      ok(`Linked issue ${parsed.ref}`);
+    });
   },
 };
 

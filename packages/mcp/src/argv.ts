@@ -56,12 +56,31 @@ export function buildArgv(
     const value = input[opt.key];
     if (value === undefined || value === null) continue;
     if (!opt.takesValue) {
-      if (value === true) argv.push(opt.flag);
+      // A boolean has three states: set, unset, untouched. `false` must never be
+      // silently dropped — that used to make the call look empty to the CLI.
+      if (value === true) {
+        if (opt.negateOnly) {
+          throw new Error(`option ${opt.key} only accepts false (the CLI declares ${opt.flag})`);
+        }
+        argv.push(opt.flag);
+      } else if (value === false) {
+        if (!opt.negateFlag && !opt.negateOnly) {
+          throw new Error(`option ${opt.key} cannot be unset (the CLI declares no --no-… flag for it)`);
+        }
+        argv.push(opt.negateFlag ?? opt.flag);
+      } else {
+        throw new Error(`option ${opt.key} expects a boolean, got ${typeof value}`);
+      }
       continue;
     }
     if (opt.variadic) {
-      if (!Array.isArray(value)) throw new Error(`option ${opt.key} must be an array`);
-      for (const v of value) argv.push(opt.flag, asString(v));
+      // A repeatable option is an array, but a lone string is an unambiguous
+      // singleton — absorb it rather than failing the whole call.
+      const list = Array.isArray(value) ? value : typeof value === 'string' ? [value] : null;
+      if (!list) {
+        throw new Error(`option ${opt.key} expects a string or an array of strings, got ${typeof value}`);
+      }
+      for (const v of list) argv.push(opt.flag, asString(v));
     } else {
       argv.push(opt.flag, asString(value));
     }

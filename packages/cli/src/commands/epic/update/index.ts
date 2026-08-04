@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present } from '../../../core/colors.ts';
+import { ok, die, warn, present } from '../../../core/colors.ts';
 import { apiBase, apiPatch } from '../../../core/api.ts';
 import { assertValidTimeframe, resolveEpic, type Epic } from '../_shared.ts';
 
@@ -44,8 +44,23 @@ const def: CommandDef = {
     if (Object.keys(body).length === 0) die('Nothing to update. Pass at least one field to change.');
 
     const epic = await resolveEpic(idArg);
-    const updated = await apiPatch<Epic>(`${apiBase()}/api/epics/${epic.id}`, body);
-    present(updated, () => ok(`Updated epic ${updated.emoji ?? ''} ${updated.name} (${updated.id.slice(0, 8)})`));
+    const updated = await apiPatch<Epic & { changed?: string[] }>(`${apiBase()}/api/epics/${epic.id}`, body);
+    // `undefined` = older server that reports no diff; we then can't claim a
+    // no-op and fall back to the previous, optimistic message.
+    const changed = updated.changed;
+
+    // A PATCH that changed nothing must not claim it did (see ticket update).
+    if (changed !== undefined && changed.length === 0) {
+      present({ ...updated, changed }, () => warn(
+        `No changes applied to epic ${updated.name} (${updated.id.slice(0, 8)}) — values already match.`,
+      ));
+      return;
+    }
+
+    const suffix = changed && changed.length > 0 ? ` (${changed.join(', ')})` : '';
+    present({ ...updated, changed: changed ?? [] }, () => ok(
+      `Updated epic ${updated.emoji ?? ''} ${updated.name} (${updated.id.slice(0, 8)})${suffix}`,
+    ));
   },
 };
 

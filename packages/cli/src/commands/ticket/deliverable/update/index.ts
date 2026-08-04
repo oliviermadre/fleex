@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../../core/types.ts';
-import { ok, die } from '../../../../core/colors.ts';
+import { ok, die, present } from '../../../../core/colors.ts';
 import { apiBase, apiPatch } from '../../../../core/api.ts';
 import { resolveTicketId } from '../../_shared.ts';
 import { assertValidStatus, resolveContent, type DeliverableDTO } from '../_shared.ts';
@@ -46,7 +46,7 @@ const def: CommandDef = {
       `${base}/api/tickets/${uuid}/deliverables/${delivId}`,
       body,
     );
-    ok(`Deliverable updated: ${updated.id} (v${updated.version}, ${updated.status})`);
+    present(updated, () => ok(`Deliverable updated: ${updated.id} (v${updated.version}, ${updated.status})`));
   },
 };
 

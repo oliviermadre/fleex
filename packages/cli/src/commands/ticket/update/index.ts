@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, info } from '../../../core/colors.ts';
+import { ok, die, info, warn, present } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiPost, apiPatch, apiDelete } from '../../../core/api.ts';
 import {
   assertValidStatus,
@@ -101,25 +101,63 @@ const def: CommandDef = {
 
     let displayId: number | undefined;
     let title: string | undefined;
+    // `null` = the server did not report a diff (older server); we then can't
+    // claim a no-op, so we fall back to the previous, optimistic message.
+    let changed: string[] | null = null;
     if (Object.keys(body).length > 0) {
-      const result = await apiPatch<{ displayId: number; title: string }>(`${base}/api/tickets/${uuid}`, body);
+      const result = await apiPatch<{ displayId: number; title: string; changed?: string[] }>(
+        `${base}/api/tickets/${uuid}`,
+        body,
+      );
       displayId = result.displayId;
       title = result.title;
+      changed = result.changed ?? null;
     }
 
     // Epic membership lives on a separate endpoint, not the ticket PATCH.
+    // Collect first, report once: printing here would put a bare `[fleex] …`
+    // line ahead of the JSON payload, and the tool layer parses the whole of
+    // stdout — one stray sentence and the caller loses `changed` entirely.
+    const epicOps: Array<{ op: 'added' | 'removed'; epic: string }> = [];
     for (const epic of addEpics) {
       const epicId = await resolveEpicId(epic);
       await apiPost(`${base}/api/epics/${epicId}/tickets/${uuid}`, undefined);
-      info(`Added to epic ${epic}`);
+      epicOps.push({ op: 'added', epic });
     }
     for (const epic of removeEpics) {
       const epicId = await resolveEpicId(epic);
       await apiDelete(`${base}/api/epics/${epicId}/tickets/${uuid}`);
-      info(`Removed from epic ${epic}`);
+      epicOps.push({ op: 'removed', epic });
     }
 
-    ok(displayId !== undefined ? `Updated ticket #${displayId}: ${title}` : 'Updated ticket');
+    const renderEpicOps = () => {
+      for (const e of epicOps) {
+        info(e.op === 'added' ? `Added to epic ${e.epic}` : `Removed from epic ${e.epic}`);
+      }
+    };
+
+    // A PATCH that changed nothing must not claim it did: an agent that trusts
+    // "Updated" on a no-op reports work it never performed.
+    if (changed !== null && changed.length === 0 && !hasTagOps && !hasEpicOps) {
+      present(
+        { ok: true, changed: [], epics: epicOps, ...(displayId !== undefined ? { ticketId: displayId } : {}) },
+        () => warn(
+          displayId !== undefined
+            ? `No changes applied to ticket #${displayId} — values already match.`
+            : 'No changes applied — values already match.',
+        ),
+      );
+      return;
+    }
+
+    const suffix = changed && changed.length > 0 ? ` (${changed.join(', ')})` : '';
+    present(
+      { ok: true, changed: changed ?? [], epics: epicOps, ...(displayId !== undefined ? { ticketId: displayId } : {}) },
+      () => {
+        renderEpicOps();
+        ok(displayId !== undefined ? `Updated ticket #${displayId}: ${title}${suffix}` : 'Updated ticket');
+      },
+    );
   },
 };
 

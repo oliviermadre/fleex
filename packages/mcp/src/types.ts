@@ -38,6 +38,17 @@ export interface OptSpec {
   /** Whether the option consumes a value (`<v>`/`[v]`) vs. being a boolean. */
   takesValue: boolean;
   variadic: boolean;
+  /**
+   * Paired negative flag (e.g. `--no-blocked`) when the CLI declares one.
+   * Its presence is what makes a boolean *unsettable* from a tool call:
+   * `false` maps to this flag instead of being dropped.
+   */
+  negateFlag?: string;
+  /**
+   * True when the CLI only declares the negative form (e.g. `--no-color` with
+   * no `--color`). Such an option accepts `false` and rejects `true`.
+   */
+  negateOnly?: boolean;
 }
 
 export interface GeneratedTool {

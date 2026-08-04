@@ -9,7 +9,19 @@
 import type { Command, Option, Argument } from 'commander';
 import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaProp, OptSpec } from './types.ts';
 
-/** Top-level groups exposed by default. Infra commands stay off the surface. */
+/**
+ * Top-level groups exposed by default.
+ *
+ * Inclusion criterion: **the command manipulates product data (tickets, epics)
+ * through the API and has no effect on the local environment.** Infra commands
+ * (`start`, `stop`, `logs`, `doctor`, `self-update`, `token`, shell helpers)
+ * drive processes on the host machine and stay off the surface on purpose.
+ *
+ * The parity guarantee this package makes is about *options*, not perimeter:
+ * every option of an included command must be reachable from a tool call (see
+ * `tests/parity.bun.test.ts`). Narrowing the perimeter is a deliberate product
+ * decision; silently dropping an option is a bug.
+ */
 export const DEFAULT_INCLUDE = ['ticket', 'epic'] as const;
 
 /**
@@ -56,24 +68,94 @@ function readArguments(cmd: Command): ArgSpec[] {
   }));
 }
 
-function readOptions(cmd: Command): OptSpec[] {
-  const specs: OptSpec[] = [];
+/** An option spec enriched with what `buildSchema` needs. Internal to this module. */
+interface OptInfo extends OptSpec {
+  description?: string;
+  mandatory: boolean;
+}
+
+/**
+ * Read a command's options, pairing each `--no-x` with its positive `--x`.
+ *
+ * A boolean CLI option has three meaningful states from a tool call — set,
+ * unset, untouched — so a `--no-x` declaration is NOT redundant with `--x`:
+ * it is the only way to express "unset". Dropping it (as this function used
+ * to) made options like `--no-blocked` unreachable for an agent. Both the
+ * schema and the argv reconstruction derive from this single pass, so they
+ * cannot diverge.
+ */
+function readOptions(cmd: Command): OptInfo[] {
+  const positives = new Map<string, OptInfo>();
+  const negatives: Option[] = [];
+  const order: string[] = [];
+
   for (const o of cmd.options as Option[]) {
-    if (o.negate) continue; // `--no-x` is covered by the positive `--x` boolean
     if (o.long && HIDDEN_OPTION_LONGS.has(o.long)) continue;
     const flag = o.long ?? o.short;
     if (!flag) continue;
+    if (o.negate) {
+      negatives.push(o);
+      continue;
+    }
     const takesValue = Boolean(o.required || o.optional);
     // Commander marks `<v...>` as variadic, but the common repeatable pattern
     // `.option('--tag <t>', desc, collectFn, [])` is not — its only signal is an
     // array default. Treat either as array-valued.
     const variadic = Boolean(o.variadic) || Array.isArray((o as unknown as { defaultValue?: unknown }).defaultValue);
-    specs.push({ key: o.attributeName(), flag, takesValue, variadic });
+    const key = o.attributeName();
+    positives.set(key, {
+      key,
+      flag,
+      takesValue,
+      variadic,
+      mandatory: Boolean(o.mandatory),
+      ...(o.description ? { description: o.description } : {}),
+    });
+    order.push(key);
   }
-  return specs;
+
+  for (const o of negatives) {
+    const key = o.attributeName();
+    const flag = o.long ?? o.short;
+    if (!flag) continue;
+    const positive = positives.get(key);
+    if (positive) {
+      // Paired: one tri-state boolean param. Describe BOTH directions, otherwise
+      // the model reads "Mark as blocked" and never guesses it can pass false.
+      positive.negateFlag = flag;
+      positive.description = positive.description
+        ? `${positive.description} (false: ${lowerFirst(o.description || `pass ${flag}`)})`
+        : o.description || undefined;
+      continue;
+    }
+    // Declared only in negative form (e.g. `--no-color`): expose it as a boolean
+    // that accepts `false`. Without this the option vanishes from the surface.
+    positives.set(key, {
+      key,
+      flag,
+      takesValue: false,
+      variadic: false,
+      negateOnly: true,
+      mandatory: false,
+      description: `${o.description || `pass ${flag}`} (set false to apply)`,
+    });
+    order.push(key);
+  }
+
+  return order.map((k) => positives.get(k)!);
 }
 
-function buildSchema(cmd: Command, args: ArgSpec[], options: OptSpec[]): JsonSchema {
+function lowerFirst(s: string): string {
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+/** Drop the schema-only fields; `GeneratedTool.options` drives argv rebuilding. */
+function toSpec(o: OptInfo): OptSpec {
+  const { description: _d, mandatory: _m, ...spec } = o;
+  return spec;
+}
+
+function buildSchema(cmd: Command, args: ArgSpec[], options: OptInfo[]): JsonSchema {
   const properties: Record<string, JsonSchemaProp> = {};
   const required: string[] = [];
 
@@ -87,11 +169,9 @@ function buildSchema(cmd: Command, args: ArgSpec[], options: OptSpec[]): JsonSch
     if (a.required) required.push(a.key);
   });
 
-  for (const o of cmd.options as Option[]) {
-    if (o.negate || (o.long && HIDDEN_OPTION_LONGS.has(o.long))) continue;
-    const spec = options.find((s) => s.flag === (o.long ?? o.short));
-    if (!spec) continue;
-    const desc = o.description || undefined;
+  // Options come from the single `readOptions` pass — no second, divergent filter.
+  for (const spec of options) {
+    const desc = spec.description;
     if (!spec.takesValue) {
       properties[spec.key] = { type: 'boolean', ...(desc ? { description: desc } : {}) };
     } else if (spec.variadic) {
@@ -99,7 +179,7 @@ function buildSchema(cmd: Command, args: ArgSpec[], options: OptSpec[]): JsonSch
     } else {
       properties[spec.key] = { type: 'string', ...(desc ? { description: desc } : {}) };
     }
-    if (o.mandatory) required.push(spec.key);
+    if (spec.mandatory) required.push(spec.key);
   }
 
   return { type: 'object', properties, required, additionalProperties: false };
@@ -133,7 +213,7 @@ export function generateTools(root: Command, opts: GenerateOptions = {}): Genera
       workspaceAware: isWorkspaceAware(cmd),
       ...(confirmFlag ? { confirmFlag } : {}),
       arguments: args,
-      options,
+      options: options.map(toSpec),
     });
   }
 

@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
+import { ok, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
 import { assertValidStatus, resolveTicketId } from '../_shared.ts';
 
@@ -20,7 +20,10 @@ const def: CommandDef = {
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();
     const result = await apiPost<{ displayId: number; status: string }>(`${base}/api/tickets/${uuid}/move`, { status: statusArg });
-    ok(`Moved ticket #${result.displayId} to ${result.status}`);
+    present(
+      { ok: true, ticketId: result.displayId, status: result.status },
+      () => ok(`Moved ticket #${result.displayId} to ${result.status}`),
+    );
   },
 };
 

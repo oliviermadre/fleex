@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../../core/types.ts';
-import { ok, die } from '../../../../core/colors.ts';
+import { ok, die, present } from '../../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../../core/api.ts';
 import { resolveTicketId } from '../../_shared.ts';
 import { assertValidType, assertValidStatus, resolveContent, type DeliverableDTO } from '../_shared.ts';
@@ -49,7 +49,7 @@ const def: CommandDef = {
         agentName: opts.agentName ?? 'cli',
       },
     );
-    ok(`Deliverable created: ${created.id}`);
+    present(created, () => ok(`Deliverable created: ${created.id}`));
   },
 };
 

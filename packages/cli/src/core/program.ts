@@ -7,13 +7,18 @@
  * builder guarantees the introspected surface and the executed CLI never drift.
  */
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import type { CommandDef } from './types.ts';
 import { applyPrettyHelp, recordExtraHelp, setRootProgram } from './help.ts';
 import { activateWorkspace } from './workspaces.ts';
 import { isJsonMode, setJsonMode } from './colors.ts';
 
-const commandsDir = path.join(import.meta.dir, '..', 'commands');
+// `import.meta.dir` is a Bun runtime extra; it is erased when this module goes
+// through a bundler/transform (e.g. Vitest), so fall back to the standard
+// `import.meta.url`. Needed for the MCP parity test to load the real tree.
+const moduleDir = import.meta.dir ?? path.dirname(fileURLToPath(import.meta.url));
+const commandsDir = path.join(moduleDir, '..', 'commands');
 
 /**
  * Returns the relative path of every `index.ts` file under `src/commands/`,

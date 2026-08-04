@@ -30,6 +30,10 @@ function fakeProgram(): Command {
   const update = ticket.command('update').description('Update a ticket');
   update.argument('<id>', 'Ticket ID');
   update.option('--favorite', 'Mark as favorite');
+  update.option('--blocked', 'Mark as blocked');
+  update.option('--no-blocked', 'Unmark blocked');
+  // Declared only in negative form — must still reach the surface.
+  update.option('--no-color', 'Clear the badge colour');
   update.option('--to-board <id>', 'Move to another board');
 
   const del = ticket.command('delete').description('Delete a ticket');
@@ -114,6 +118,21 @@ describe('generateTools', () => {
     expect(toBoard?.flag).toBe('--to-board');
   });
 
+  it('pairs a negatable boolean into one tri-state param and says so', () => {
+    const update = byName(tools, 'fleex_ticket_update');
+    const blocked = update.options.find((o) => o.key === 'blocked');
+    expect(blocked?.flag).toBe('--blocked');
+    expect(blocked?.negateFlag).toBe('--no-blocked');
+    // A model reading only "Mark as blocked" never guesses it may pass false.
+    expect(update.inputSchema.properties.blocked?.description).toBe(
+      'Mark as blocked (false: unmark blocked)',
+    );
+    // Negative-only options still get a param, flagged as such.
+    const color = update.options.find((o) => o.key === 'color');
+    expect(color?.negateOnly).toBe(true);
+    expect(update.inputSchema.properties.color?.type).toBe('boolean');
+  });
+
   it('detects the confirmation-skip flag on destructive commands', () => {
     expect(byName(tools, 'fleex_ticket_delete').confirmFlag).toBe('--force');
     expect(byName(tools, 'fleex_ticket_create').confirmFlag).toBeUndefined();
@@ -152,14 +171,38 @@ describe('buildArgv', () => {
     ]);
   });
 
-  it('emits boolean flags only when true', () => {
+  it('maps a boolean to its positive or negative flag', () => {
     const update = byName(tools, 'fleex_ticket_update');
-    expect(buildArgv(update, { id: '7', favorite: true })).toEqual([
-      'ticket', 'update', '7', '--favorite',
+    expect(buildArgv(update, { id: '7', blocked: true })).toEqual([
+      'ticket', 'update', '7', '--blocked',
     ]);
-    expect(buildArgv(update, { id: '7', favorite: false })).toEqual([
-      'ticket', 'update', '7',
+    // The whole point of the negative form: `false` must reach the CLI. Dropping
+    // it made the call look empty and the CLI answered "No updates specified".
+    expect(buildArgv(update, { id: '7', blocked: false })).toEqual([
+      'ticket', 'update', '7', '--no-blocked',
     ]);
+  });
+
+  it('refuses to silently swallow an unsettable boolean', () => {
+    const update = byName(tools, 'fleex_ticket_update');
+    // `--favorite` has no `--no-favorite` here: failing loudly beats pretending.
+    expect(() => buildArgv(update, { id: '7', favorite: false })).toThrow(/cannot be unset/);
+  });
+
+  it('handles an option declared only in negative form', () => {
+    const update = byName(tools, 'fleex_ticket_update');
+    expect(buildArgv(update, { id: '7', color: false })).toEqual([
+      'ticket', 'update', '7', '--no-color',
+    ]);
+    expect(() => buildArgv(update, { id: '7', color: true })).toThrow(/only accepts false/);
+  });
+
+  it('accepts a lone string for a repeatable option', () => {
+    const create = byName(tools, 'fleex_ticket_create');
+    expect(buildArgv(create, { title: 'x', tag: 'urgent' })).toEqual([
+      'ticket', 'create', '--title', 'x', '--tag', 'urgent',
+    ]);
+    expect(() => buildArgv(create, { title: 'x', tag: 42 })).toThrow(/expects a string or an array/);
   });
 
   it('appends --json when requested', () => {
