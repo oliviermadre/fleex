@@ -58,6 +58,19 @@ export function ListChecksIcon({ className }: IconProps) {
   );
 }
 
+// Router — a split in the road (no action, only a branching point).
+export function SplitIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12h6" />
+      <path d="M9 12c4 0 4-6 8-6h4" />
+      <path d="M9 12c4 0 4 6 8 6h4" />
+      <polyline points="18 3 21 6 18 9" />
+      <polyline points="18 15 21 18 18 21" />
+    </svg>
+  );
+}
+
 // ── Palette data ──────────────────────────────────────────────────────────────
 
 type IconComponent = React.ComponentType<IconProps>;
@@ -105,6 +118,13 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     description: 'Deterministic ticket operations — no agent, no LLM',
     Icon: ListChecksIcon,
     colorClass: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
+  },
+  {
+    type: 'route',
+    label: 'Router',
+    description: 'Convergence point — no action, no agent, only branching',
+    Icon: SplitIcon,
+    colorClass: `${tintClasses('orange').text} ${tintClasses('orange').borderColor}`,
   },
 ];
 

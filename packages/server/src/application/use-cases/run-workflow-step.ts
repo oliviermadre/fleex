@@ -70,7 +70,7 @@ export class RunWorkflowStepUseCase {
       const outgoingEdges = run.outgoingEdges(step.id).map((e) => {
         const target = run.findStep(e.target);
         return {
-          id: e.id, label: e.label, condition: e.condition,
+          id: e.id, label: e.label, condition: e.condition, conditionGroup: e.conditionGroup,
           targetName: target?.name ?? e.target,
         };
       });
@@ -80,6 +80,9 @@ export class RunWorkflowStepUseCase {
         workflowContext: {
           workflowName: run.templateSnapshot.name, stepName: step.name,
           outgoingEdges, previousOutputs,
+          stepNames: Object.fromEntries(
+            run.templateSnapshot.steps.map((s: WorkflowStep) => [s.id, s.name]),
+          ),
           predecessorStepIds: run.templateSnapshot.edges
             .filter((e) => e.target === step.id)
             .map((e) => e.source),
@@ -115,7 +118,7 @@ export class RunWorkflowStepUseCase {
 
       // 6. Resolve edges
       const edges = run.outgoingEdges(step.id);
-      const nextEdge = EdgeEvaluator.resolve(result.output, edges);
+      const nextEdge = EdgeEvaluator.resolve({ current: result.output, steps: previousOutputs }, edges);
       await this.persistStepArtifacts(run, step, result.output, executionId);
       stepRun.complete({ output: result.output, nextEdgeId: nextEdge?.id ?? null, executionId });
       await this.deps.stepRunStore.save(stepRun);

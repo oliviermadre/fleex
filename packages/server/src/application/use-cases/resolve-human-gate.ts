@@ -49,7 +49,17 @@ export class ResolveHumanGateUseCase {
     await this.postResolutionComment(run.ticketId, run.templateSnapshot.name, step.name, params.outcome, params.notes, stepRun.id);
 
     const edges = run.outgoingEdges(step.id);
-    const nextEdge = EdgeEvaluator.resolve(stepRun.output!, edges);
+    // Same context as a normal step completion: a gate's outgoing edges may
+    // condition on any ancestor's output, not just on the chosen outcome.
+    const allStepRuns = await this.stepRunStore.getByWorkflowRun(run.id);
+    const previousOutputs: Record<string, Record<string, unknown>> = {};
+    for (const sr of allStepRuns) {
+      if (sr.stepId === step.id) continue;
+      if (sr.status === 'completed' && sr.output) {
+        previousOutputs[sr.stepId] = (sr.output.schemaFields as Record<string, unknown>) ?? {};
+      }
+    }
+    const nextEdge = EdgeEvaluator.resolve({ current: stepRun.output!, steps: previousOutputs }, edges);
     stepRun.nextEdgeId = nextEdge?.id ?? null;
     await this.stepRunStore.save(stepRun);
 

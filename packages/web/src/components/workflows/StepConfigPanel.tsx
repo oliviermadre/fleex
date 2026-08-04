@@ -32,9 +32,14 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
     setOutputSchemaError(null);
   }, [step.id]);
 
-  // `human_gate` and `native` are self-contained: neither points at a persona /
-  // skill / panel, and neither runs an agent, so neither has a ref or a mode.
-  const hasExecutorRef = step.executorType !== 'human_gate' && step.executorType !== 'native';
+  // `human_gate`, `native` and `route` are self-contained: none points at a
+  // persona / skill / panel, and none runs an agent, so none has a ref or a mode.
+  const hasExecutorRef = step.executorType !== 'human_gate'
+    && step.executorType !== 'native'
+    && step.executorType !== 'route';
+  // A router produces nothing, so an output schema would be a lie. Its whole
+  // configuration is its name — the routing lives on its outgoing edges.
+  const isRouter = step.executorType === 'route';
 
   const refOptions = (() => {
     switch (step.executorType) {
@@ -46,6 +51,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
         return panels.map((p) => ({ value: p.name, label: p.displayName || p.name }));
       case 'human_gate':
       case 'native':
+      case 'route':
         return [];
     }
   })();
@@ -179,7 +185,16 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
         </div>
       )}
 
+      {isRouter && (
+        <p className="text-[10px] leading-tight" style={{ color: 'var(--theme-text-muted)' }}>
+          A router performs no action. Use it to converge several branches, then
+          re-split them: its outgoing edges can read the output of any step that
+          runs before it.
+        </p>
+      )}
+
       {/* Output schema textarea */}
+      {!isRouter && (
       <label className="block text-xs space-y-1">
         <span style={{ color: 'var(--theme-text-muted)' }}>Output schema (JSON Schema)</span>
         <textarea
@@ -193,6 +208,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
           <div className="text-[var(--theme-danger)] text-[10px] mt-1">{outputSchemaError}</div>
         )}
       </label>
+      )}
 
       <button
         disabled={isEntry}

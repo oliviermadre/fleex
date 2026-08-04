@@ -198,7 +198,9 @@ function MobileRunView({
                   {step.name}
                 </span>
                 <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">
-                  {step.executorType === 'human_gate' ? '✋ gate' : step.executorType}
+                  {step.executorType === 'human_gate'
+                    ? '✋ gate'
+                    : step.executorType === 'route' ? '⑂ router' : step.executorType}
                 </span>
               </button>
               {isOpen && (

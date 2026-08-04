@@ -9,6 +9,7 @@
  * centralises fetching, the mapping primitive → mention handle, and the
  * validation/"did you mean" logic so each command file stays tiny.
  */
+import type { WorkflowEdge as SharedWorkflowEdge } from '@fleex/shared';
 import { apiBase, apiGet } from './api.ts';
 import { c, padEndVisible, visibleLength } from './colors.ts';
 
@@ -80,6 +81,7 @@ export interface Workflow {
   emoji?: string;
   description: string;
   steps: WorkflowStep[];
+  edges?: SharedWorkflowEdge[];
   entryStepId?: string;
   enabled: boolean;
 }

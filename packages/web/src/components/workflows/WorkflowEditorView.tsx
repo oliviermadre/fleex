@@ -14,7 +14,7 @@ import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
 import type { WorkflowExecutorType, WorkflowStep, WorkflowEdge as WfEdge, WorkflowTemplate } from '@fleex/shared';
-import { NATIVE_STEP_KIND_TICKET_ACTIONS } from '@fleex/shared';
+import { NATIVE_STEP_KIND_TICKET_ACTIONS, formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
 
 const nodeTypes = { editorStep: EditorStepNode };
 const edgeTypes = { workflow: WorkflowDagEdge };
@@ -22,6 +22,7 @@ const edgeTypes = { workflow: WorkflowDagEdge };
 const DEFAULT_STEP_NAME: Partial<Record<WorkflowExecutorType, string>> = {
   human_gate: 'Human Gate',
   native: 'Ticket Actions',
+  route: 'Router',
 };
 
 interface Props {
@@ -99,11 +100,13 @@ function EditorInner({ template, onBack }: Props) {
   const rfEdges: Edge[] = useMemo(() => edges.map((e) => ({
     id: e.id, source: e.source, target: e.target,
     type: 'workflow',
-    label: e.label ?? (e.condition ? `${e.condition.field} ${e.condition.operator} ${String(e.condition.value)}` : ''),
+    // Same renderer as the agent prompt and the run view, so an edge reads
+    // identically wherever it is displayed.
+    label: e.label ?? formatEdgeCondition(normalizeEdgeCondition(e), steps),
     style: { strokeDasharray: e.isDefault ? undefined : '5,5' },
     markerEnd: { type: MarkerType.ArrowClosed },
     selected: e.id === selectedEdgeId,
-  })), [edges, selectedEdgeId]);
+  })), [edges, selectedEdgeId, steps]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     // Capture position changes back to our local state
@@ -259,6 +262,9 @@ function EditorInner({ template, onBack }: Props) {
               edge={selectedEdge}
               onChange={(next) => setEdges((prev) => prev.map((e) => e.id === next.id ? next : e))}
               onDelete={() => { setEdges((prev) => prev.filter((e) => e.id !== selectedEdge.id)); setSelectedEdgeId(null); }}
+              steps={steps}
+              edges={edges}
+              entryStepId={entryStepId}
             />
           ) : (
             <div className="space-y-3">

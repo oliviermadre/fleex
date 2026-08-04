@@ -66,6 +66,7 @@ import { SkillStepExecutor } from '../application/services/step-executors/skill-
 import { PanelStepExecutor } from '../application/services/step-executors/panel-step-executor.js';
 import { HumanGateStepExecutor } from '../application/services/step-executors/human-gate-step-executor.js';
 import { NativeStepExecutor } from '../application/services/step-executors/native-step-executor.js';
+import { RouteStepExecutor } from '../application/services/step-executors/route-step-executor.js';
 import { NativeOperationRegistry } from '../application/services/native-operations/registry.js';
 import { ApplyNativeActionsUseCase } from '../application/use-cases/apply-native-actions.js';
 import { ApplyTicketMutationUseCase } from '../application/use-cases/apply-ticket-mutation.js';
@@ -434,6 +435,7 @@ export async function createContainer() {
         panel: panelStepExecutor,
         human_gate: humanGateStepExecutor,
         native: nativeStepExecutor,
+        route: new RouteStepExecutor(),
       },
       submitDeliverable,
       postComment,

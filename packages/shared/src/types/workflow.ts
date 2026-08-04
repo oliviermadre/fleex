@@ -1,8 +1,16 @@
 import type { DeliverableType, DeliverableStatus } from './ticket.js';
 
-export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native';
+export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route';
 
-export type EdgeOperator = 'eq' | 'neq' | 'in' | 'gt' | 'lt' | 'contains';
+export type EdgeOperator =
+  | 'eq' | 'neq'
+  | 'in' | 'not_in'
+  | 'gt' | 'gte' | 'lt' | 'lte'
+  | 'contains' | 'not_contains'
+  | 'starts_with' | 'ends_with'
+  | 'matches'                       // regex
+  | 'is_empty' | 'is_not_empty'     // unary
+  | 'is_true' | 'is_false';         // unary
 
 export interface JsonSchemaProperty {
   type: 'string' | 'number' | 'boolean' | 'array' | 'object';
@@ -53,12 +61,44 @@ export interface WorkflowEdgeCondition {
   value: string | string[];
 }
 
+/**
+ * One comparison inside an edge's condition group.
+ *
+ * `stepId` is what lifts routing beyond "the step I just came from": a clause
+ * may read the output of *any* ancestor of `edge.source`, so a workflow that
+ * computes status, then priority, then type can branch on the three of them at
+ * once instead of duplicating chains of steps.
+ */
+export interface EdgeConditionClause {
+  /** Step whose output is read. Absent = the edge's source step (legacy behaviour). */
+  stepId?: string;
+  /** Path inside the merged output: `priority`, `deliverable.status`, `outcome`… */
+  field: string;
+  operator: EdgeOperator;
+  /** Absent for unary operators. Array only for `in` / `not_in`. */
+  value?: string | string[];
+  /** Case-insensitive comparison (string operators only). Defaults to false. */
+  caseInsensitive?: boolean;
+}
+
+/**
+ * A flat AND/OR group. Nesting is deliberately out of scope — a `route` step
+ * lets an author split a nested expression into two hops instead.
+ */
+export interface WorkflowEdgeConditionGroup {
+  /** `all` = AND, `any` = OR. */
+  match: 'all' | 'any';
+  clauses: EdgeConditionClause[];
+}
+
 export interface WorkflowEdge {
   id: string;
   source: string;
   target: string;
   isDefault: boolean;
+  /** @deprecated legacy single condition — still read, never written by the editor. */
   condition?: WorkflowEdgeCondition;
+  conditionGroup?: WorkflowEdgeConditionGroup;
   label?: string;
 }
 

@@ -1,4 +1,5 @@
-import type { JsonSchema, WorkflowEdgeCondition, EdgeOperator } from '@fleex/shared';
+import type { JsonSchema, WorkflowEdgeCondition, WorkflowEdgeConditionGroup } from '@fleex/shared';
+import { formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
 
 export interface WorkflowContextInput {
   workflowName: string;
@@ -9,9 +10,12 @@ export interface WorkflowContextInput {
     id: string;
     label?: string;
     condition?: WorkflowEdgeCondition;
+    conditionGroup?: WorkflowEdgeConditionGroup;
     targetName: string;
   }[];
   previousOutputs: Record<string, Record<string, unknown>>;
+  /** Step id → name, so a condition on an earlier step names it readably. */
+  stepNames?: Record<string, string>;
 }
 
 export function composeWorkflowContextPrompt(input: WorkflowContextInput): string {
@@ -41,13 +45,16 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
     parts.push('This is a **terminal step** — the workflow will complete after your output.');
   } else {
     parts.push(`**Branching from this step**:`);
+    const steps = Object.entries(input.stepNames ?? {}).map(([id, name]) => ({ id, name }));
     for (const e of input.outgoingEdges) {
-      if (e.condition) {
-        const opSym = opSymbol(e.condition.operator);
-        const value = Array.isArray(e.condition.value) ? JSON.stringify(e.condition.value) : `"${e.condition.value}"`;
-        parts.push(`- If \`${e.condition.field}\` ${opSym} ${value} → next step: **${e.targetName}**${e.label ? ` (${e.label})` : ''}`);
+      // Both formats go through the shared normalizer, so a legacy
+      // single-condition edge and a multi-clause one read the same way.
+      const group = normalizeEdgeCondition({ id: e.id, source: '', target: '', isDefault: false, condition: e.condition, conditionGroup: e.conditionGroup });
+      const suffix = `→ next step: **${e.targetName}**${e.label ? ` (${e.label})` : ''}`;
+      if (group) {
+        parts.push(`- If ${formatEdgeCondition(group, steps)} ${suffix}`);
       } else {
-        parts.push(`- Default → next step: **${e.targetName}**${e.label ? ` (${e.label})` : ''}`);
+        parts.push(`- Default ${suffix}`);
       }
     }
   }
@@ -71,15 +78,4 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
   }
 
   return parts.join('\n');
-}
-
-function opSymbol(op: EdgeOperator): string {
-  switch (op) {
-    case 'eq': return '==';
-    case 'neq': return '!=';
-    case 'in': return 'in';
-    case 'gt': return '>';
-    case 'lt': return '<';
-    case 'contains': return 'contains';
-  }
 }
