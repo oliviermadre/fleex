@@ -1597,6 +1597,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           value={body}
           onChange={setBody}
           disabled={submitting}
+          // The drop target is the wrapper above, so the editor can't detect
+          // the drag itself — it just mirrors the highlight.
+          dragOver={commentFileUpload.isDragOver}
           placeholder="Write a comment... (@ to mention)"
           textareaRef={textareaRef}
           maxRows={10}

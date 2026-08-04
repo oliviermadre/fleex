@@ -20,6 +20,8 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
   const [status, setStatus] = useState<'draft' | 'final'>('final');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
+  // Saving mid-upload persists the `![Uploading …](fleex-upload-…)` placeholder.
+  const [uploading, setUploading] = useState(false);
   const [titleError, setTitleError] = useState('');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -140,6 +142,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
               onChange={setContent}
               textareaRef={textareaRef}
               enableFileUpload
+              onUploadingChange={setUploading}
               placeholder="Markdown content, URL, or HTML..."
             />
           </div>
@@ -158,7 +161,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || uploading}
             className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save deliverable'}

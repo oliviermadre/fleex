@@ -7,6 +7,7 @@ import {
   fetchScratchpadList,
 } from '../services/api';
 import {
+  isSplitAllowed,
   nextMarkdownMode,
   readMarkdownMode,
   writeMarkdownMode,
@@ -196,7 +197,11 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
     set({ markdownMode: mode });
   },
 
-  cycleMarkdownMode: () => get().setMarkdownMode(nextMarkdownMode(get().markdownMode)),
+  // `isSplitAllowed` keeps the hotkey in step with the toggle: without it the
+  // cycle can land on `split`, which a narrow viewport renders as `preview` —
+  // one press would appear to do nothing.
+  cycleMarkdownMode: () =>
+    get().setMarkdownMode(nextMarkdownMode(get().markdownMode, isSplitAllowed())),
 
   setSelectedScratchpadKey: (key) => set({ selectedScratchpadKey: key }),
 

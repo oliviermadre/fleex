@@ -185,8 +185,13 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
         <div className="flex min-h-0 flex-1 flex-col">
           {editingDesc ? (
             <>
+              {/* Own surface kind, defaulting to `write`: this is a dedicated
+                  edit screen, so it must never inherit the desktop `split`
+                  preference — narrow viewports degrade that to `preview`, and
+                  the screen would open with a Save button and no field. */}
               <MarkdownEditor
-                surfaceKind="ticket_description"
+                surfaceKind="ticket_description_mobile"
+                defaultMode="write"
                 className="px-4 py-3"
                 value={descDraft}
                 onChange={setDescDraft}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Skill } from '@fleex/shared';
 import { useSkillStore } from '../../stores/skillStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
@@ -140,13 +140,19 @@ function SkillMarkdownTab({ skill }: SkillEditorProps) {
     setContent(skill.markdownContent);
   }, [skill.markdownContent]);
 
-  const handleBlur = useCallback(() => {
+  const save = useCallback(() => {
     if (content !== skill.markdownContent) {
       updateSkill(skill.id, { markdownContent: content }).catch((err) =>
         console.error('Failed to save skill markdown:', err),
       );
     }
   }, [content, skill.id, skill.markdownContent, updateSkill]);
+
+  // Blur is not a reliable last chance: switching to preview or leaving the tab
+  // can take the textarea away without one. Keep a flush on unmount.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => () => saveRef.current(), []);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden p-4">
@@ -159,7 +165,7 @@ function SkillMarkdownTab({ skill }: SkillEditorProps) {
         value={content}
         onChange={setContent}
         placeholder={'# Skill Instructions\n\nDescribe the workflow the agent should perform...'}
-        textareaProps={{ onBlur: handleBlur }}
+        textareaProps={{ onBlur: save }}
       />
     </div>
   );

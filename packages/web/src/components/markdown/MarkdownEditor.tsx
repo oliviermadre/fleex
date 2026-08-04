@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, RefObject, TextareaHTMLAttributes } from 'react';
 import { cn } from '../../lib/cn';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
@@ -34,6 +34,16 @@ export interface MarkdownEditorProps {
   className?: string;
   /** Wires drag-drop / paste / picker uploads and renders the attach button. */
   enableFileUpload?: boolean;
+  /**
+   * Notifies the caller while an upload is in flight, so it can block a save
+   * that would persist the `![Uploading …](fleex-upload-…)` placeholder.
+   */
+  onUploadingChange?: (uploading: boolean) => void;
+  /**
+   * Drag-over state owned by the caller. For surfaces that run their own
+   * `useFileUpload` on an outer wrapper and just want the field highlighted.
+   */
+  dragOver?: boolean;
   /** Cancels the caller's pending debounced save before an upload rewrites the value. */
   onFlushDebounce?: () => void;
   /** Defaults to toggling the checkbox in `value` — override only if the source of truth is elsewhere. */
@@ -82,6 +92,8 @@ export function MarkdownEditor({
   disabled,
   className,
   enableFileUpload = false,
+  onUploadingChange,
+  dragOver = false,
   onFlushDebounce,
   onToggleCheckbox,
   profile,
@@ -96,22 +108,26 @@ export function MarkdownEditor({
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef ?? internalRef;
   const previewRef = useRef<HTMLDivElement>(null);
-  const internalMode = useMarkdownMode(surfaceKind, defaultMode);
-  const allowSplit = internalMode.allowSplit;
+  const {
+    mode: uncontrolledMode,
+    setMode: setUncontrolledMode,
+    cycleMode: cycleUncontrolledMode,
+    allowSplit,
+  } = useMarkdownMode(surfaceKind, defaultMode, { persistPreview: variant !== 'composer' });
   const mode = controlledMode
     ? (!allowSplit && controlledMode === 'split' ? 'preview' : controlledMode)
-    : internalMode.mode;
+    : uncontrolledMode;
   const setMode = useCallback(
     (next: MarkdownMode) => {
       if (controlledMode) onModeChange?.(next);
-      else internalMode.setMode(next);
+      else setUncontrolledMode(next);
     },
-    [controlledMode, onModeChange, internalMode],
+    [controlledMode, onModeChange, setUncontrolledMode],
   );
   const cycleMode = useCallback(() => {
     if (controlledMode) onModeChange?.(nextMarkdownMode(mode, allowSplit));
-    else internalMode.cycleMode();
-  }, [controlledMode, onModeChange, mode, allowSplit, internalMode]);
+    else cycleUncontrolledMode();
+  }, [controlledMode, onModeChange, mode, allowSplit, cycleUncontrolledMode]);
   const [focused, setFocused] = useState(false);
   const [grown, setGrown] = useState(false);
 
@@ -137,6 +153,9 @@ export function MarkdownEditor({
   // one line before snapping to its real height.
   useLayoutEffect(() => {
     if (variant !== 'composer') return;
+    // In preview the field is display:none — every measurement reads 0. Keep
+    // the height (and `grown`) from before the switch.
+    if (mode === 'preview') return;
     const ta = textareaRef.current;
     if (!ta) return;
 
@@ -158,6 +177,11 @@ export function MarkdownEditor({
       : value.includes('\n');
     setGrown(multiline || value.includes('\n'));
   }, [value, mode, variant, maxRows, minRows, textareaRef]);
+
+  const isUploading = enableFileUpload && fileUpload.isUploading;
+  useEffect(() => {
+    onUploadingChange?.(isUploading);
+  }, [isUploading, onUploadingChange]);
 
   const defaultToggleCheckbox = useCallback(
     (lineIndex: number) => {
@@ -211,6 +235,9 @@ export function MarkdownEditor({
     </div>
   );
 
+  // The caller may own the upload hook (and the drop target) itself.
+  const dragActive = enableFileUpload ? fileUpload.isDragOver : dragOver;
+
   const textarea = (
     <textarea
       {...textareaProps}
@@ -222,7 +249,7 @@ export function MarkdownEditor({
         variant === 'panel'
           ? 'h-full w-full rounded-md border p-3 font-mono'
           : 'min-h-[36px] w-full flex-1 overflow-y-auto rounded-lg border px-3 py-2 leading-snug',
-        fileUpload.isDragOver && enableFileUpload
+        dragActive
           ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
           : 'border-[var(--theme-border)]',
         textareaProps?.className,
@@ -281,12 +308,20 @@ export function MarkdownEditor({
         className={cn('group relative flex min-h-0 flex-1 gap-4 overflow-hidden', className)}
         onKeyDown={handleKeyDown}
       >
-        {mode !== 'preview' && (
-          <div className={cn('relative min-w-0', mode === 'split' ? 'w-1/2' : 'w-full')} {...dragProps}>
-            {textarea}
-            {attachButton}
-          </div>
-        )}
+        {/*
+          The textarea is hidden, never unmounted: unmounting drops the caret,
+          the selection, and any `onBlur`-based save the caller relies on.
+        */}
+        <div
+          className={cn(
+            'relative min-w-0',
+            mode === 'preview' ? 'hidden' : mode === 'split' ? 'w-1/2' : 'w-full',
+          )}
+          {...dragProps}
+        >
+          {textarea}
+          {attachButton}
+        </div>
         {mode !== 'write' && previewPane}
         {/* Overlaid on the content, dimmed until the editor is hovered or focused. */}
         <div
@@ -310,7 +345,12 @@ export function MarkdownEditor({
       {mode === 'split' && previewPane}
       <div className="relative flex items-end gap-2" {...dragProps}>
         {overlay}
-        {mode === 'preview' ? previewPane : textarea}
+        {mode === 'preview' && previewPane}
+        {/* Hidden, not unmounted — see the panel branch. */}
+        <div className={cn('relative flex min-w-0 flex-1', mode === 'preview' && 'hidden')}>
+          {textarea}
+          {attachButton}
+        </div>
         {trailing}
       </div>
       {(showToggle || actions) && (

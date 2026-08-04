@@ -244,7 +244,8 @@ function CreateDeliverableSheet({
         </div>
         <div className="mb-3 flex h-56">
           <MarkdownEditor
-            surfaceKind="deliverable_content"
+            surfaceKind="deliverable_content_mobile"
+            defaultMode="write"
             profile="doc"
             value={content}
             onChange={setContent}

@@ -32,16 +32,24 @@ export function writeMarkdownMode(surfaceKind: string, mode: MarkdownMode) {
   }
 }
 
+const SPLIT_QUERY = `(min-width: ${SPLIT_MIN_WIDTH}px)`;
+
 /**
- * True when the viewport is wide enough for a side-by-side split.
+ * One-shot read of the same condition `useSplitAllowed` subscribes to, for
+ * callers outside React (the scratchpad store's global hotkey).
  * `matchMedia` is guarded because jsdom (tests) doesn't always provide it.
  */
+export function isSplitAllowed(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+  return window.matchMedia(SPLIT_QUERY).matches;
+}
+
+/**
+ * True when the viewport is wide enough for a side-by-side split.
+ */
 export function useSplitAllowed(): boolean {
-  const query = `(min-width: ${SPLIT_MIN_WIDTH}px)`;
-  const [allowed, setAllowed] = useState(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-    return window.matchMedia(query).matches;
-  });
+  const query = SPLIT_QUERY;
+  const [allowed, setAllowed] = useState(isSplitAllowed);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -62,12 +70,33 @@ export function useSplitAllowed(): boolean {
  * On a narrow viewport `split` degrades to `preview` without overwriting the
  * stored preference — going back to a wide screen restores the split.
  */
-export function useMarkdownMode(surfaceKind: string, defaultMode: MarkdownMode = 'write') {
-  const [stored, setStored] = useState<MarkdownMode>(() => readMarkdownMode(surfaceKind) ?? defaultMode);
+export interface MarkdownModeOptions {
+  /**
+   * Whether `preview` is a durable preference.
+   *
+   * False for composers: previewing a message is a transient "check my
+   * formatting" gesture, not a setting. Persisting it would reopen every
+   * later thread with a rendered pane and no field to type in. `write` and
+   * `split` still persist — both keep the input reachable.
+   */
+  persistPreview?: boolean;
+}
+
+export function useMarkdownMode(
+  surfaceKind: string,
+  defaultMode: MarkdownMode = 'write',
+  { persistPreview = true }: MarkdownModeOptions = {},
+) {
+  const readInitial = () => {
+    const saved = readMarkdownMode(surfaceKind);
+    if (!saved) return defaultMode;
+    return !persistPreview && saved === 'preview' ? defaultMode : saved;
+  };
+  const [stored, setStored] = useState<MarkdownMode>(readInitial);
 
   // A single mounted editor can host different surfaces over its lifetime.
   useEffect(() => {
-    setStored(readMarkdownMode(surfaceKind) ?? defaultMode);
+    setStored(readInitial());
     // `defaultMode` is a literal at every call site; re-reading on surface change only.
   }, [surfaceKind]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -77,9 +106,10 @@ export function useMarkdownMode(surfaceKind: string, defaultMode: MarkdownMode =
   const setMode = useCallback(
     (next: MarkdownMode) => {
       setStored(next);
-      writeMarkdownMode(surfaceKind, next);
+      // A non-persisted preview leaves the previous durable choice in place.
+      if (persistPreview || next !== 'preview') writeMarkdownMode(surfaceKind, next);
     },
-    [surfaceKind],
+    [surfaceKind, persistPreview],
   );
 
   const cycleMode = useCallback(() => {

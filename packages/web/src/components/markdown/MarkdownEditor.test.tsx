@@ -26,6 +26,14 @@ function mockViewport(wide: boolean) {
   );
 }
 
+/** The mode currently shown as active by the toggle. */
+function activeMode(): string | null {
+  const pressed = screen
+    .getByRole('group', { name: 'Markdown view mode' })
+    .querySelector('[aria-pressed="true"]');
+  return pressed?.getAttribute('aria-label') ?? null;
+}
+
 /** Uncontrolled editor: the component owns the mode, the test owns the value. */
 function Harness(props: { surfaceKind: string; initial?: string } & Record<string, unknown>) {
   const { surfaceKind, initial = '', ...rest } = props;
@@ -58,15 +66,26 @@ describe('MarkdownEditor — mode cycling and persistence', () => {
   });
 
   it('restores the persisted mode on remount instead of the default', () => {
-    const { container, unmount } = render(<Harness surfaceKind="unit_panel" initial="hello" />);
+    const { unmount } = render(<Harness surfaceKind="unit_panel" initial="hello" />);
     fireEvent.click(screen.getByLabelText('Preview'));
     unmount();
 
-    const second = render(<Harness surfaceKind="unit_panel" initial="hello" />);
+    render(<Harness surfaceKind="unit_panel" initial="hello" />);
 
-    // Preview mode replaces the textarea — its absence is the observable proof.
-    expect(container.querySelector('textarea')).toBeNull();
-    expect(second.container.querySelector('textarea')).toBeNull();
+    expect(activeMode()).toBe('Preview');
+  });
+
+  /**
+   * Unmounting the field on every preview would drop the caret and, worse, skip
+   * the `onBlur` some callers save on (SkillEditor). Preview hides it instead.
+   */
+  it('keeps the textarea mounted in preview mode', () => {
+    const { container } = render(<Harness surfaceKind="unit_panel" initial="hello" />);
+    const before = container.querySelector('textarea');
+
+    fireEvent.click(screen.getByLabelText('Preview'));
+
+    expect(container.querySelector('textarea')).toBe(before);
   });
 
   it('cycles write → preview → split on ⌘⇧P', () => {
@@ -118,6 +137,48 @@ describe('MarkdownEditor — composer auto-resize', () => {
 });
 
 /**
+ * Previewing a message is a transient "check my formatting" gesture, not a
+ * setting. Persisting it would reopen every later thread — every ticket, every
+ * conversation — showing a rendered pane and no field to type in.
+ */
+describe('MarkdownEditor — composer preview is not a durable preference', () => {
+  it('does not persist preview, and reopens in the previous durable mode', () => {
+    render(
+      <Harness surfaceKind="unit_no_persist" variant="composer" initial={'a\nb'} defaultMode="write" />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Preview'));
+    expect(activeMode()).toBe('Preview');
+    expect(readMarkdownMode('unit_no_persist')).toBeNull();
+
+    cleanup();
+    render(<Harness surfaceKind="unit_no_persist" variant="composer" initial={'a\nb'} defaultMode="write" />);
+
+    expect(activeMode()).toBe('Write');
+  });
+
+  it('ignores a preview left in storage by an older build', () => {
+    localStorage.setItem('md_mode_unit_stale', 'preview');
+
+    render(
+      <Harness surfaceKind="unit_stale" variant="composer" initial={'a\nb'} defaultMode="write" />,
+    );
+
+    expect(activeMode()).toBe('Write');
+  });
+
+  it('still persists split, which keeps the input reachable', () => {
+    render(
+      <Harness surfaceKind="unit_split_ok" variant="composer" initial={'a\nb'} defaultMode="write" />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Split'));
+
+    expect(readMarkdownMode('unit_split_ok')).toBe('split');
+  });
+});
+
+/**
  * Below 640px a side-by-side split is unreadable. It degrades to preview
  * *without* overwriting the stored preference, so going back to a wide screen
  * restores the split the user actually asked for.
@@ -127,9 +188,9 @@ describe('MarkdownEditor — narrow viewport', () => {
     localStorage.setItem('md_mode_unit_narrow', 'split');
     mockViewport(false);
 
-    const { container } = render(<Harness surfaceKind="unit_narrow" initial="hello" />);
+    render(<Harness surfaceKind="unit_narrow" initial="hello" />);
 
-    expect(container.querySelector('textarea')).toBeNull();
+    expect(activeMode()).toBe('Preview');
     expect(screen.queryByLabelText('Split')).toBeNull();
     expect(readMarkdownMode('unit_narrow')).toBe('split');
   });
