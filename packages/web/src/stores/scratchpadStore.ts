@@ -6,6 +6,16 @@ import {
   saveRepoScratchpad,
   fetchScratchpadList,
 } from '../services/api';
+import {
+  isSplitAllowed,
+  nextMarkdownMode,
+  readMarkdownMode,
+  writeMarkdownMode,
+  type MarkdownMode,
+} from '../components/markdown/useMarkdownMode';
+
+/** Every scratchpad surface shares one persisted view mode. */
+const SCRATCHPAD_SURFACE = 'scratchpad';
 
 interface ScratchpadEntry {
   content: string;
@@ -17,7 +27,11 @@ interface ScratchpadEntry {
 
 interface ScratchpadState {
   entries: Record<string, ScratchpadEntry>; // key: '__global__' | 'org/name'
-  previewExpanded: boolean;
+  /**
+   * Write / preview / split, shared by every scratchpad surface and cycled by
+   * the global Alt+Shift+V hotkey. Persisted like every other markdown surface.
+   */
+  markdownMode: MarkdownMode;
 
   // For Feature 3 main panel view
   selectedScratchpadKey: string | null;
@@ -30,7 +44,8 @@ interface ScratchpadState {
   save: (key: string) => Promise<void>;
   flushSave: (key: string) => void;
   toggleCheckbox: (key: string, lineIndex: number) => void;
-  togglePreview: () => void;
+  setMarkdownMode: (mode: MarkdownMode) => void;
+  cycleMarkdownMode: () => void;
   setSelectedScratchpadKey: (key: string | null) => void;
   loadScratchpadList: (repos?: string[]) => Promise<void>;
 }
@@ -50,7 +65,7 @@ function parseRepoKey(key: string): { org: string; name: string } | null {
 
 export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
   entries: {},
-  previewExpanded: false,
+  markdownMode: readMarkdownMode(SCRATCHPAD_SURFACE) ?? 'split',
   selectedScratchpadKey: null,
   scratchpadList: [],
   scratchpadListLoaded: false,
@@ -177,7 +192,16 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
     );
   },
 
-  togglePreview: () => set((state) => ({ previewExpanded: !state.previewExpanded })),
+  setMarkdownMode: (mode: MarkdownMode) => {
+    writeMarkdownMode(SCRATCHPAD_SURFACE, mode);
+    set({ markdownMode: mode });
+  },
+
+  // `isSplitAllowed` keeps the hotkey in step with the toggle: without it the
+  // cycle can land on `split`, which a narrow viewport renders as `preview` —
+  // one press would appear to do nothing.
+  cycleMarkdownMode: () =>
+    get().setMarkdownMode(nextMarkdownMode(get().markdownMode, isSplitAllowed())),
 
   setSelectedScratchpadKey: (key) => set({ selectedScratchpadKey: key }),
 

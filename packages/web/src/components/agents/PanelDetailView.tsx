@@ -6,6 +6,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { ModelBadge } from './ModelBadge';
 import { ModelSelect } from './ModelSelect';
 import { cn } from '../../lib/cn';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 import { tint, tintClasses } from '../../lib/tints';
 
 function PanelEmptyState() {
@@ -208,13 +209,15 @@ export function PanelDetailView() {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-[var(--theme-text-secondary)]">Description</label>
-            <textarea
-              className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-              rows={2}
-              placeholder="Multi-expert architectural review panel..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            <div className="flex h-24">
+              <MarkdownEditor
+                surfaceKind="panel_description"
+                defaultMode="write"
+                value={description}
+                onChange={setDescription}
+                placeholder="Multi-expert architectural review panel..."
+              />
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -347,13 +350,15 @@ export function PanelDetailView() {
             <label className="text-xs font-medium text-[var(--theme-text-secondary)]">
               Synthesis Prompt <span className="font-normal text-[var(--theme-text-muted)]">(optional)</span>
             </label>
-            <textarea
-              className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 font-mono text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-              rows={4}
-              placeholder="Custom instructions for the orchestrator that generates the synthesis. Leave empty for the default synthesis behavior."
-              value={orchestratorPrompt}
-              onChange={(e) => setOrchestratorPrompt(e.target.value)}
-            />
+            <div className="flex h-40">
+              <MarkdownEditor
+                surfaceKind="panel_orchestrator_prompt"
+                defaultMode="write"
+                value={orchestratorPrompt}
+                onChange={setOrchestratorPrompt}
+                placeholder="Custom instructions for the orchestrator that generates the synthesis. Leave empty for the default synthesis behavior."
+              />
+            </div>
           </div>
 
           <div className="flex justify-end">

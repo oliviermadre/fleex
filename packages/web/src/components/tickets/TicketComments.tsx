@@ -40,6 +40,7 @@ import { useColorMode } from '../../hooks/useActiveTheme';
 import { preprocessMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
 import { userRemarkPlugins } from '../markdown/profiles';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 
 /** Per-mode color for the conversation execution-mode pill. */
 const MODE_PILL_CLASS: Record<ConversationMode, string> = {
@@ -1229,13 +1230,6 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     await doPost(conflicts);
   }, [conflictModal, doPost]);
 
-  const autoResize = useCallback(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = `${ta.scrollHeight}px`;
-  }, []);
-
   const closeMentionAc = useCallback(() => {
     setAcOpen(false);
     setAcQuery('');
@@ -1257,16 +1251,12 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     requestAnimationFrame(() => {
       ta.focus();
       ta.setSelectionRange(newCursor, newCursor);
-      ta.style.height = 'auto';
-      ta.style.height = `${ta.scrollHeight}px`;
     });
   }, [body, setBody, acTriggerPos, closeMentionAc]);
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleMentionScan = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     const cursor = e.target.selectionStart;
-    setBody(val);
-    autoResize();
 
     // Detect mention trigger: scan backwards from cursor for '@'
     const textBeforeCursor = val.slice(0, cursor);
@@ -1287,10 +1277,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       }
     }
     closeMentionAc();
-    // `setBody` is now identity-stable (see useDraft), but it is listed here so
-    // this handler stays correct under exhaustive-deps and can never re-capture
-    // a stale setter — the mechanism behind the Cockpit draft-collision bug.
-  }, [setBody, autoResize, closeMentionAc]);
+  }, [closeMentionAc]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -1598,92 +1585,100 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         )}
       </div>
 
-      {/* Composer: line 1 = input + attach + send, line 2 = execution bar */}
-      <div className="flex flex-shrink-0 flex-col gap-2 border-t border-[var(--theme-border)] pt-3">
-        {/* Line 1 — input + actions */}
-        <div ref={inputWrapperRef} className="relative flex items-end gap-2" {...commentFileUpload.dragProps}>
-          {/* Mention autocomplete popup */}
-          {acOpen && filteredOptions.length > 0 && (
-            <MentionAutocomplete
-              options={filteredOptions}
-              selectedIndex={acIndex}
-              onSelect={acceptMention}
-              position={{ bottom: (textareaRef.current?.offsetHeight ?? 36) + 8, left: 0 }}
-            />
-          )}
-          <textarea
-            ref={textareaRef}
-            className={`max-h-40 min-h-[36px] flex-1 resize-none overflow-y-auto rounded-lg border bg-[var(--theme-bg-surface)] px-3 py-2 text-sm leading-snug text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
-              commentFileUpload.isDragOver
-                ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
-                : 'border-[var(--theme-border)]'
-            }`}
-            rows={1}
-            placeholder="Write a comment... (@ to mention)"
-            value={body}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onPaste={commentFileUpload.pasteHandler}
-            onBlur={() => { setTimeout(closeMentionAc, 150); }}
-            disabled={submitting}
-          />
-          <button
-            type="button"
-            className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg text-[var(--theme-text-muted)] transition-opacity hover:text-[var(--theme-accent)] hover:opacity-90"
-            onClick={commentFileUpload.openFilePicker}
-            title="Attach file"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-            </svg>
-          </button>
-          <button
-            className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-30"
-            onClick={handleSubmit}
-            disabled={submitting || !body.trim()}
-            title="Send (Enter)"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-            </svg>
-          </button>
-        </div>
+      {/* Composer — one markdown surface: input, its preview, and the execution bar */}
+      <div
+        ref={inputWrapperRef}
+        className="flex-shrink-0 border-t border-[var(--theme-border)] pt-3"
+        {...commentFileUpload.dragProps}
+      >
+        <MarkdownEditor
+          variant="composer"
+          surfaceKind="comment"
+          value={body}
+          onChange={setBody}
+          disabled={submitting}
+          // The drop target is the wrapper above, so the editor can't detect
+          // the drag itself — it just mirrors the highlight.
+          dragOver={commentFileUpload.isDragOver}
+          placeholder="Write a comment... (@ to mention)"
+          textareaRef={textareaRef}
+          maxRows={10}
+          textareaProps={{
+            onChange: handleMentionScan,
+            onKeyDown: handleKeyDown,
+            onPaste: commentFileUpload.pasteHandler,
+            onBlur: () => { setTimeout(closeMentionAc, 150); },
+          }}
+          overlay={
+            acOpen && filteredOptions.length > 0 ? (
+              <MentionAutocomplete
+                options={filteredOptions}
+                selectedIndex={acIndex}
+                onSelect={acceptMention}
+                position={{ bottom: (textareaRef.current?.offsetHeight ?? 36) + 8, left: 0 }}
+              />
+            ) : null
+          }
+          trailing={
+            <>
+              <button
+                type="button"
+                className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg text-[var(--theme-text-muted)] transition-opacity hover:text-[var(--theme-accent)] hover:opacity-90"
+                onClick={commentFileUpload.openFilePicker}
+                title="Attach file"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                </svg>
+              </button>
+              <button
+                className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-30"
+                onClick={handleSubmit}
+                disabled={submitting || !body.trim()}
+                title="Send (Enter)"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+              </button>
+            </>
+          }
+          actions={
+            <>
+              {/* Conversation execution bar (mode / model / effort / fast) */}
+              {/* Mode: single pill, cycles Talk→Plan→Edit on click (or Shift+Tab) */}
+              <span className="flex items-center gap-1 text-[var(--theme-text-secondary)]">
+                Mode :
+                <InfoHint text="Le mode définit les droits de l'agent au prochain acknowledge : Talk = réponse sans outils, Plan = lecture seule, Edit = écriture (Write/Edit/Bash). Il appartient à la conversation et s'applique à la prochaine exécution, sans envoyer de message." />
+              </span>
+              <button
+                type="button"
+                onClick={cycleMode}
+                title="Conversation mode — click or Shift+Tab to cycle (Ctrl+1/2/3 to set). Applies to the next agent acknowledge, sends no message."
+                className={`flex items-center gap-1.5 rounded-md border px-2 py-1 font-medium transition-colors ${MODE_PILL_CLASS[executionMode]}`}
+              >
+                <span className="capitalize">{executionMode}</span>
+                <span className="text-[10px] opacity-60">⇧⇥</span>
+              </button>
 
-        {/* Line 2 — conversation execution bar (mode / model / effort / fast) */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {/* Mode: single pill, cycles Talk→Plan→Edit on click (or Shift+Tab) */}
-          <span className="flex items-center gap-1 text-[var(--theme-text-secondary)]">
-            Mode :
-            <InfoHint text="Le mode définit les droits de l'agent au prochain acknowledge : Talk = réponse sans outils, Plan = lecture seule, Edit = écriture (Write/Edit/Bash). Il appartient à la conversation et s'applique à la prochaine exécution, sans envoyer de message." />
-          </span>
-          <button
-            type="button"
-            onClick={cycleMode}
-            title="Conversation mode — click or Shift+Tab to cycle (Ctrl+1/2/3 to set). Applies to the next agent acknowledge, sends no message."
-            className={`flex items-center gap-1.5 rounded-md border px-2 py-1 font-medium transition-colors ${MODE_PILL_CLASS[executionMode]}`}
-          >
-            <span className="capitalize">{executionMode}</span>
-            <span className="text-[10px] opacity-60">⇧⇥</span>
-          </button>
+              {/* Model override dropdown — default "Auto (persona)" */}
+              <span className="ml-1 flex items-center gap-1 text-[var(--theme-text-secondary)]">
+                Model :
+                <InfoHint text="Le modèle utilisé pour la prochaine exécution de l'agent mentionné. Auto = chaque agent garde le modèle de sa config. Choisir un modèle ici est un override de conversation : il s'applique à la prochaine mention sans modifier la config de l'agent." />
+              </span>
+              <ModelSelect
+                variant="inline"
+                icon="🤖"
+                value={modelOverride ?? ''}
+                onChange={(v) => patchExecConfig({ modelOverride: v === '' ? null : v })}
+                leadingOption={{ value: '', label: 'Auto (persona)' }}
+                title="Model for the next agent run. Auto = inherit the agent's own model. An override applies to the next mention without changing the agent config."
+                ariaLabel="Model override"
+              />
 
-          {/* Model override dropdown — default "Auto (persona)" */}
-          <span className="ml-1 flex items-center gap-1 text-[var(--theme-text-secondary)]">
-            Model :
-            <InfoHint text="Le modèle utilisé pour la prochaine exécution de l'agent mentionné. Auto = chaque agent garde le modèle de sa config. Choisir un modèle ici est un override de conversation : il s'applique à la prochaine mention sans modifier la config de l'agent." />
-          </span>
-          <ModelSelect
-            variant="inline"
-            icon="🤖"
-            value={modelOverride ?? ''}
-            onChange={(v) => patchExecConfig({ modelOverride: v === '' ? null : v })}
-            leadingOption={{ value: '', label: 'Auto (persona)' }}
-            title="Model for the next agent run. Auto = inherit the agent's own model. An override applies to the next mention without changing the agent config."
-            ariaLabel="Model override"
-          />
-
-          {/* Effort dropdown — shown only when the resolved model supports it */}
-          {showEffort && (
-            <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
+              {/* Effort dropdown — shown only when the resolved model supports it */}
+              {showEffort && (
+                <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
               <span className="opacity-60">◐</span>
               <select
                 value={effectiveEffort}
@@ -1700,12 +1695,12 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   <option key={lvl} value={lvl}>Effort: {lvl}</option>
                 ))}
               </select>
-            </label>
-          )}
+                </label>
+              )}
 
-          {/* Fast toggle — shown only when the resolved model supports it */}
-          {showFast && (
-            <button
+              {/* Fast toggle — shown only when the resolved model supports it */}
+              {showFast && (
+                <button
               type="button"
               onClick={() => patchExecConfig({ fastMode: !fastMode })}
               title="Fast (low-latency) mode for the next agent run."
@@ -1714,12 +1709,14 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   ? tint('yellow')
                   : 'border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
               }`}
-            >
-              <span>⚡</span>
-              <span>Fast</span>
-            </button>
-          )}
-        </div>
+                >
+                  <span>⚡</span>
+                  <span>Fast</span>
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       {/* Floating execution panel */}

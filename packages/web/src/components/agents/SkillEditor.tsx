@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Skill } from '@fleex/shared';
 import { useSkillStore } from '../../stores/skillStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 
 const TABS = [
   { key: 'config' as const, label: 'Config' },
@@ -139,7 +140,7 @@ function SkillMarkdownTab({ skill }: SkillEditorProps) {
     setContent(skill.markdownContent);
   }, [skill.markdownContent]);
 
-  const handleBlur = useCallback(() => {
+  const save = useCallback(() => {
     if (content !== skill.markdownContent) {
       updateSkill(skill.id, { markdownContent: content }).catch((err) =>
         console.error('Failed to save skill markdown:', err),
@@ -147,17 +148,24 @@ function SkillMarkdownTab({ skill }: SkillEditorProps) {
     }
   }, [content, skill.id, skill.markdownContent, updateSkill]);
 
+  // Blur is not a reliable last chance: switching to preview or leaving the tab
+  // can take the textarea away without one. Keep a flush on unmount.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => () => saveRef.current(), []);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden p-4">
       <p className="mb-2 text-xs text-[var(--theme-text-muted)]">
         Markdown instructions sent to the agent when this skill is executed against a ticket.
       </p>
-      <textarea
+      <MarkdownEditor
+        surfaceKind="skill_instructions"
+        defaultMode="write"
         value={content}
-        onChange={(e) => setContent(e.target.value)}
-        onBlur={handleBlur}
-        className="flex-1 resize-none rounded border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-3 font-mono text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
-        placeholder="# Skill Instructions&#10;&#10;Describe the workflow the agent should perform..."
+        onChange={setContent}
+        placeholder={'# Skill Instructions\n\nDescribe the workflow the agent should perform...'}
+        textareaProps={{ onBlur: save }}
       />
     </div>
   );

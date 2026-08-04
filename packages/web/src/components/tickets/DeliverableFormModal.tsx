@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 import { Modal } from '../ui/Modal';
-import { useFileUpload } from '../../hooks/useFileUpload';
 import * as api from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { tint } from '../../lib/tints';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 
 interface DeliverableFormModalProps {
   open: boolean;
@@ -20,15 +20,11 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
   const [status, setStatus] = useState<'draft' | 'final'>('final');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
+  // Saving mid-upload persists the `![Uploading …](fleex-upload-…)` placeholder.
+  const [uploading, setUploading] = useState(false);
   const [titleError, setTitleError] = useState('');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const { isUploading, isDragOver, pasteHandler, dragProps, openFilePicker } = useFileUpload({
-    textareaRef,
-    value: content,
-    onChange: setContent,
-  });
 
   const resetForm = useCallback(() => {
     setTitle('');
@@ -136,36 +132,19 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
 
         {/* Content */}
         <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-[var(--theme-text-secondary)]">Content</label>
-            <button
-              type="button"
-              onClick={openFilePicker}
-              className="text-[10px] text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-secondary)]"
-            >
-              {isUploading ? 'Uploading...' : 'Attach file'}
-            </button>
-          </div>
-          <div
-            {...dragProps}
-            className={`relative rounded-md border transition-colors ${
-              isDragOver ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/5' : 'border-[var(--theme-border)]'
-            }`}
-          >
-            <textarea
-              ref={textareaRef}
+          <label className="text-xs font-medium text-[var(--theme-text-secondary)]">Content</label>
+          <div className="flex h-80">
+            <MarkdownEditor
+              surfaceKind="deliverable_content"
+              defaultMode="split"
+              profile="doc"
               value={content}
-              onChange={(e) => setContent(e.target.value)}
-              onPaste={pasteHandler}
+              onChange={setContent}
+              textareaRef={textareaRef}
+              enableFileUpload
+              onUploadingChange={setUploading}
               placeholder="Markdown content, URL, or HTML..."
-              rows={12}
-              className="w-full resize-y rounded-md bg-[var(--theme-bg-input)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] outline-none"
             />
-            {isDragOver && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-[var(--theme-accent)]/10">
-                <span className="text-sm font-medium text-[var(--theme-accent)]">Drop file here</span>
-              </div>
-            )}
           </div>
           <span className="text-[10px] text-[var(--theme-text-faint)]">
             Supports Markdown, file upload (drag & drop or paste), and raw HTML
@@ -182,7 +161,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving || isUploading}
+            disabled={saving || uploading}
             className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save deliverable'}

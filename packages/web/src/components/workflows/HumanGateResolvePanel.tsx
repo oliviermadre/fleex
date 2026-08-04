@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { useDraft } from '../../hooks/useDraft';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 
 interface Props {
   runId: string;
@@ -34,12 +35,13 @@ export function HumanGateResolvePanel({ runId, stepRunId, outcomes, onResolve }:
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium text-[var(--theme-text-primary)]">Resolve gate</h3>
-      <textarea
-        placeholder="Notes (optional, injected as context for the next step)"
+      <MarkdownEditor
+        variant="composer"
+        surfaceKind="workflow_gate_notes"
         value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        rows={3}
-        className="w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)]"
+        onChange={setNotes}
+        minRows={3}
+        placeholder="Notes (optional, injected as context for the next step)"
       />
       {submitError && <div className="text-xs text-[var(--theme-danger)]">{submitError}</div>}
       <div className="flex flex-wrap gap-2">

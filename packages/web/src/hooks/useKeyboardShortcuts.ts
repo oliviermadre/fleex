@@ -38,7 +38,7 @@ export function useKeyboardShortcuts() {
   const bringToFront = useUIStore((s) => s.bringToFront);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
   const scratchpadOpen = useUIStore((s) => s.scratchpadOpen);
-  const togglePreview = useScratchpadStore((s) => s.togglePreview);
+  const cycleMarkdownMode = useScratchpadStore((s) => s.cycleMarkdownMode);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
@@ -139,10 +139,11 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Alt+Shift+V: toggle scratchpad preview (when panel is open)
+      // Alt+Shift+V: cycle the scratchpad view mode (when panel is open).
+      // Kept as an alias of the editor's own ⌘⇧P for existing muscle memory.
       if (e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyV') {
         e.preventDefault();
-        if (scratchpadOpen) togglePreview();
+        if (scratchpadOpen) cycleMarkdownMode();
         return;
       }
 
@@ -336,5 +337,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups, focusedFloatingPanelId, floatingSessionIds, bringToFront]);
+  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, cycleMarkdownMode, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups, focusedFloatingPanelId, floatingSessionIds, bringToFront]);
 }

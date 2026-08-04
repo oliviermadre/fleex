@@ -12,6 +12,7 @@ import { MobileTicketRepos } from './MobileTicketRepos';
 import { MobileWorkflow } from './MobileWorkflow';
 import { MobileDeliverables } from './MobileDeliverables';
 import { MobileTicketMeta } from './MobileTicketMeta';
+import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 
 type Tab = 'description' | 'conversation' | 'deliverables' | 'runs' | 'workflow';
 
@@ -184,12 +185,18 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
         <div className="flex min-h-0 flex-1 flex-col">
           {editingDesc ? (
             <>
-              <textarea
-                autoFocus
+              {/* Own surface kind, defaulting to `write`: this is a dedicated
+                  edit screen, so it must never inherit the desktop `split`
+                  preference — narrow viewports degrade that to `preview`, and
+                  the screen would open with a Save button and no field. */}
+              <MarkdownEditor
+                surfaceKind="ticket_description_mobile"
+                defaultMode="write"
+                className="px-4 py-3"
                 value={descDraft}
-                onChange={(e) => setDescDraft(e.target.value)}
+                onChange={setDescDraft}
                 placeholder="Description (markdown)…"
-                className="min-h-0 flex-1 resize-none bg-[var(--theme-bg-base)] px-4 py-3 font-mono text-[13px] leading-relaxed text-[var(--theme-text-primary)] outline-none"
+                textareaProps={{ autoFocus: true }}
               />
               <div
                 className="flex shrink-0 justify-end gap-2 border-t border-[var(--theme-border)] px-3 py-2"

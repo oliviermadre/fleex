@@ -5,10 +5,9 @@ import type { DomainEventLog } from '@fleex/shared';
 import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useFileUpload } from '../../hooks/useFileUpload';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { fetchEvents } from '../../services/api';
-import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { MarkdownEditor } from '../markdown/MarkdownEditor';
 import { EpicProgressBar } from './EpicProgressBar';
 import { NanoRoadmap } from './NanoRoadmap';
 import { PriorityIndicator } from './PriorityIndicator';
@@ -384,7 +383,6 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
   const updateGroup = useTicketGroupStore((s) => s.updateGroup);
   const [text, setText] = useState(description);
   const textRef = useRef(description);
-  const [mode, setMode] = useState<'write' | 'preview' | 'split'>('split');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -410,13 +408,6 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
 
   useEffect(() => () => { clearTimeout(debounceRef.current); }, []);
 
-  const fileUpload = useFileUpload({
-    textareaRef,
-    value: text,
-    onChange: handleChange,
-    onFlushDebounce: flushDebounce,
-  });
-
   const handleToggleCheckbox = useCallback((lineIndex: number) => {
     const lines = textRef.current.split('\n');
     const line = lines[lineIndex];
@@ -426,80 +417,22 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
     } else if (/\[[xX]\]/.test(line)) {
       lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
     }
-    const next = lines.join('\n');
-    handleChange(next);
+    handleChange(lines.join('\n'));
   }, [handleChange]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Mode toggle */}
-      <div className="flex items-center gap-0.5 border-b border-[var(--theme-border)] px-4 py-1">
-        {(['write', 'preview', 'split'] as const).map((m) => (
-          <button
-            key={m}
-            className={cn(
-              'px-2 py-1 text-[11px] transition-colors',
-              mode === m
-                ? 'text-[var(--theme-text-primary)]'
-                : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-muted)]',
-            )}
-            onClick={() => setMode(m)}
-          >
-            {m === 'write' ? 'Write' : m === 'preview' ? 'Preview' : 'Split'}
-          </button>
-        ))}
-      </div>
-
-      {/* Editor / Preview */}
-      <div className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4">
-        {mode !== 'preview' && (
-          <div
-            className={cn('relative', mode === 'split' ? 'w-1/2' : 'w-full')}
-            {...fileUpload.dragProps}
-          >
-            <textarea
-              ref={textareaRef}
-              className={cn(
-                'h-full w-full resize-none rounded-md border bg-[var(--theme-bg-surface)] p-3 text-sm font-mono text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none',
-                fileUpload.isDragOver
-                  ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
-                  : 'border-[var(--theme-border)]',
-              )}
-              value={text}
-              onChange={(e) => handleChange(e.target.value)}
-              onPaste={fileUpload.pasteHandler}
-              placeholder="Add a description (markdown supported)..."
-            />
-            <button
-              type="button"
-              onClick={fileUpload.openFilePicker}
-              className="absolute bottom-2 right-2 rounded p-1 text-[var(--theme-text-muted)] opacity-50 transition-opacity hover:text-[var(--theme-accent)] hover:opacity-100"
-              title="Attach file"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-              </svg>
-            </button>
-            {fileUpload.isUploading && (
-              <div className="absolute bottom-2 left-3 text-xs text-[var(--theme-text-muted)]">
-                Uploading...
-              </div>
-            )}
-          </div>
-        )}
-        {mode !== 'write' && (
-          <div className={cn(
-            'overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3',
-            mode === 'split' ? 'w-1/2' : 'w-full',
-          )}>
-            {text.trim() ? (
-              <MarkdownRenderer content={text} onToggleCheckbox={handleToggleCheckbox} />
-            ) : (
-              <p className="text-sm italic text-[var(--theme-text-muted)]">Nothing to preview</p>
-            )}
-          </div>
-        )}
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+      <MarkdownEditor
+        surfaceKind="epic_description"
+        defaultMode="split"
+        value={text}
+        onChange={handleChange}
+        onToggleCheckbox={handleToggleCheckbox}
+        onFlushDebounce={flushDebounce}
+        textareaRef={textareaRef}
+        enableFileUpload
+        placeholder="Add a description (markdown supported)..."
+      />
     </div>
   );
 }
