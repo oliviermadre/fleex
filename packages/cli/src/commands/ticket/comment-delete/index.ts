@@ -17,7 +17,7 @@ const def: CommandDef = {
     cmd.argument('<ticket>', 'Ticket display ID or UUID');
     cmd.argument('<comment>', 'Comment UUID or 8-char id prefix (see `fleex ticket comments`)');
     cmd.option('-f, --force', 'Skip confirmation');
-    cmd.option('--board <id>', 'Disambiguate the ticket by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (ticketArg: string, commentArg: string, opts: DeleteOptions) => {
     const uuid = await resolveTicketId(ticketArg, opts.board);

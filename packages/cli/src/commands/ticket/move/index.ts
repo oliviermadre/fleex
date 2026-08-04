@@ -13,7 +13,7 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.argument('<status>', 'Target status (backlog|todo|doing|reviewing|done|cancelled)');
-    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (idArg: string, statusArg: string, opts: MoveOptions) => {
     assertValidStatus(statusArg);

@@ -55,7 +55,7 @@ export function makeStatusCommand(opts: {
     setup(cmd) {
       cmd.argument('<ticket>', 'Ticket display ID or UUID');
       cmd.argument('<mention>', 'Mention UUID or 8-char id prefix (see `fleex ticket mentions`)');
-      cmd.option('--board <id>', 'Disambiguate the ticket by board');
+      cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
     },
     action: async (ticketArg: string, mentionArg: string, cmdOpts: { board?: string }) => {
       const mention = await getMention(ticketArg, mentionArg, cmdOpts.board);

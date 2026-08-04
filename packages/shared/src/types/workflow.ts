@@ -1,6 +1,6 @@
 import type { DeliverableType, DeliverableStatus } from './ticket.js';
 
-export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate';
+export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native';
 
 export type EdgeOperator = 'eq' | 'neq' | 'in' | 'gt' | 'lt' | 'contains';
 
@@ -17,6 +17,19 @@ export interface JsonSchema {
   required?: string[];
 }
 
+/**
+ * One deterministic operation inside a `native` step. `operationId` keys into
+ * the shared operation registry (see `native-operations/descriptors.ts`);
+ * `params` holds either literal values or `{{ … }}` references resolved at
+ * runtime against the run's upstream step outputs.
+ */
+export interface NativeAction {
+  /** Local to the step — keeps ordering stable and lets errors name the action. */
+  id: string;
+  operationId: string;
+  params: Record<string, unknown>;
+}
+
 export interface WorkflowStep {
   id: string;
   name: string;
@@ -26,6 +39,11 @@ export interface WorkflowStep {
   prompt?: string;
   outputSchema?: JsonSchema;
   humanGateOutcomes?: string[];
+  /**
+   * Required (non-empty) iff `executorType === 'native'`. Optional on the type
+   * so pre-existing templates keep deserialising — mirrors `humanGateOutcomes`.
+   */
+  nativeActions?: NativeAction[];
   position: { x: number; y: number };
 }
 

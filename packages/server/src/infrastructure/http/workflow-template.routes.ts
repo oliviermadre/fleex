@@ -31,7 +31,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 const SLUG_PATTERN = /^[a-z0-9_-]+$/;
-const EXECUTOR_TYPES = ['agent', 'skill', 'panel', 'human_gate'] as const;
+const EXECUTOR_TYPES = ['agent', 'skill', 'panel', 'human_gate', 'native'] as const;
 const STEP_MODES = ['talk', 'plan', 'edit'] as const;
 const EDGE_OPERATORS = ['eq', 'neq', 'in', 'gt', 'lt', 'contains'] as const;
 const JSON_SCHEMA_PROP_TYPES = ['string', 'number', 'boolean', 'array', 'object'] as const;
@@ -68,6 +68,29 @@ function validateOutputSchema(schema: unknown, path: string): ValidationResult {
   return { ok: true };
 }
 
+/**
+ * Shape-only check. Whether the operation exists, whether its params satisfy the
+ * descriptor, and whether references point at real ancestors is decided by
+ * `WorkflowTemplateEntity.validate` — this guard only keeps malformed JSON from
+ * reaching it.
+ */
+function validateNativeActions(actions: unknown, path: string): ValidationResult {
+  if (!isArray(actions)) return { ok: false, error: `${path} must be an array` };
+  for (let i = 0; i < actions.length; i++) {
+    const a = actions[i];
+    const ap = `${path}[${i}]`;
+    if (!isObject(a)) return { ok: false, error: `${ap} must be an object` };
+    if (!isString(a['id']) || a['id'].length === 0) {
+      return { ok: false, error: `${ap}.id must be a non-empty string` };
+    }
+    if (!isString(a['operationId']) || a['operationId'].length === 0) {
+      return { ok: false, error: `${ap}.operationId must be a non-empty string` };
+    }
+    if (!isObject(a['params'])) return { ok: false, error: `${ap}.params must be an object` };
+  }
+  return { ok: true };
+}
+
 function validateStep(step: unknown, idx: number): ValidationResult {
   const p = `steps[${idx}]`;
   if (!isObject(step)) return { ok: false, error: `${p} must be an object` };
@@ -88,6 +111,10 @@ function validateStep(step: unknown, idx: number): ValidationResult {
     if (!isArray(step['humanGateOutcomes']) || !step['humanGateOutcomes'].every(isString)) {
       return { ok: false, error: `${p}.humanGateOutcomes must be an array of strings` };
     }
+  }
+  if (step['nativeActions'] !== undefined) {
+    const r = validateNativeActions(step['nativeActions'], `${p}.nativeActions`);
+    if (!r.ok) return r;
   }
   if (!isObject(step['position'])) return { ok: false, error: `${p}.position must be an object` };
   if (!isNumber((step['position'] as Record<string, unknown>)['x'])) return { ok: false, error: `${p}.position.x must be a number` };
@@ -130,7 +157,7 @@ interface TemplateBody {
   enabled: boolean;
 }
 
-function parseTemplateBody(body: unknown): { ok: true; data: TemplateBody } | { ok: false; error: string } {
+export function parseTemplateBody(body: unknown): { ok: true; data: TemplateBody } | { ok: false; error: string } {
   if (!isObject(body)) return { ok: false, error: 'body must be an object' };
 
   if (!isString(body['name']) || body['name'].length === 0) {

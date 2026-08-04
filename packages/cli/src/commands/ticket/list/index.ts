@@ -1,7 +1,8 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { c, info, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
-import { resolveEpicId, resolveBoardRef } from '../_shared.ts';
+import { resolveEpicId } from '../../epic/_shared.ts';
+import { resolveBoardId } from '../../board/_shared.ts';
 
 interface ListOptions {
   board?: string;
@@ -30,16 +31,17 @@ const def: CommandDef = {
   aliases: ['ls'],
   description: 'List tickets (optionally filtered by --board, --status, --tag, --epic)',
   setup(cmd) {
-    cmd.option('--board <id>', 'Filter by board: name, UUID, or unique id prefix');
+    cmd.option('--board <board>', 'Filter by board (name, UUID, or 8-char id prefix)');
     cmd.option('--status <status>', 'Filter by status (backlog|todo|doing|reviewing|done|cancelled)');
     cmd.option('--tag <tag>', 'Filter by tag');
     cmd.option('--epic <id>', 'Filter by epic UUID or 8-char prefix');
   },
   action: async (opts: ListOptions) => {
     const base = apiBase();
+    // Resolve once: the API only understands full board UUIDs, and this id is
+    // reused by the epics/memberships queries below.
+    const boardId = opts.board ? await resolveBoardId(opts.board) : undefined;
     const params: string[] = [];
-    // Same board contract as everywhere else: name, UUID or unique id prefix.
-    const boardId = opts.board ? await resolveBoardRef(opts.board) : undefined;
     if (boardId) params.push(`boardId=${encodeURIComponent(boardId)}`);
     if (boardId && opts.status) params.push(`status=${encodeURIComponent(opts.status)}`);
     if (opts.tag) params.push(`tag=${encodeURIComponent(opts.tag)}`);

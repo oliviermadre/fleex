@@ -24,7 +24,7 @@ const def: CommandDef = {
     cmd.option('--repo <org/name>', 'Repository to link (repeatable)', accumulate, [] as string[]);
     cmd.option('--pr <url|org/name#n>', 'GitHub PR to link — full PR URL or org/name#N (repeatable)', accumulate, [] as string[]);
     cmd.option('--issue <url|org/name#n>', 'GitHub issue to link — full issue URL or org/name#N (repeatable)', accumulate, [] as string[]);
-    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (idArg: string, opts: LinkOptions) => {
     const repos = opts.repo ?? [];

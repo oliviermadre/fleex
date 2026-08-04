@@ -1,6 +1,6 @@
 import { die, err, c } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
-import { resolveBoard } from '../board/_shared.ts';
+import { fetchBoards, resolveBoardId } from '../board/_shared.ts';
 
 export const VALID_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled'] as const;
 export const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
@@ -173,7 +173,6 @@ export function normalizeDueDate(input: string): string {
   return new Date(ms).toISOString();
 }
 
-interface Board { id: string; name: string; emoji?: string }
 interface Ticket {
   id: string;
   displayId: number;
@@ -186,10 +185,11 @@ interface Ticket {
  * UUID) to a UUID via the API. If multiple boards have a ticket with the same
  * displayId, prints a disambiguation message and exits.
  */
-export async function resolveTicketId(input: string, boardId?: string): Promise<string> {
+export async function resolveTicketId(input: string, board?: string): Promise<string> {
   const cleaned = input.startsWith('#') ? input.slice(1) : input;
 
-  // Already a UUID?
+  // Already a UUID? Short-circuit BEFORE resolving the board, so passing a
+  // ticket UUID never costs a `GET /api/boards`.
   if (cleaned.includes('-') && cleaned.length >= 36) {
     return cleaned;
   }
@@ -199,9 +199,12 @@ export async function resolveTicketId(input: string, boardId?: string): Promise<
   }
   const did = parseInt(cleaned, 10);
 
+  // Single choke point for the ~20 commands that disambiguate with --board:
+  // whatever form the user typed (name, prefix, UUID) becomes a real UUID here.
+  const boardId = board && board.trim() ? await resolveBoardId(board) : undefined;
+
   const base = apiBase();
-  const resolvedBoard = boardId ? await resolveBoardRef(boardId) : undefined;
-  const url = resolvedBoard ? `${base}/api/tickets?boardId=${encodeURIComponent(resolvedBoard)}` : `${base}/api/tickets`;
+  const url = boardId ? `${base}/api/tickets?boardId=${encodeURIComponent(boardId)}` : `${base}/api/tickets`;
   const tickets = await apiGet<Ticket[]>(url);
   const matches = tickets.filter((t) => t.displayId === did);
 
@@ -209,7 +212,7 @@ export async function resolveTicketId(input: string, boardId?: string): Promise<
   if (matches.length === 1) return matches[0]!.id;
 
   // Multiple matches — fetch boards to print a helpful disambiguation
-  const boards = await apiGet<Board[]>(`${base}/api/boards`);
+  const boards = await fetchBoards();
   err(`There are ${matches.length} tickets with the id ${cleaned}, consider using the --board flag`);
   process.stderr.write(`${c.blue('[fleex]')} Tickets found:\n`);
   for (const t of matches) {
@@ -239,43 +242,8 @@ export async function resolveAnyTicketUuid(input: string): Promise<string> {
   return ticket.id;
 }
 
-/**
- * Resolve any user-supplied board reference to a UUID: name, UUID, or unique
- * id prefix. One contract for every `--board` in the CLI.
- */
-export async function resolveBoardRef(input: string): Promise<string> {
-  return (await resolveBoard(input)).id;
-}
-
-/**
- * Resolve a board reference to its UUID.
- *
- * When `specified` is given it goes through the same resolver as the `board`
- * and `epic` commands (UUID, unique id prefix, or exact name) — `ticket` used
- * to pass the string straight to the API, so a prefix copied from `board list`
- * failed here while working everywhere else. When omitted:
- *   - If exactly one board exists, auto-select it.
- *   - Otherwise print the list and exit.
- */
-export async function resolveBoardId(specified?: string): Promise<string> {
-  if (specified) return resolveBoardRef(specified);
-  const base = apiBase();
-  const boards = await apiGet<Board[]>(`${base}/api/boards`);
-  if (boards.length === 0) die('No boards found. Create one in the web UI first.');
-  if (boards.length === 1) return boards[0]!.id;
-  err('Multiple boards found. Specify one with --board ID:');
-  for (const b of boards) {
-    process.stderr.write(`  ${b.id}  ${b.emoji ?? ''} ${b.name}\n`);
-  }
-  process.exit(1);
-}
-
-/** Resolve an epic id from an 8-char prefix or full UUID. */
-export async function resolveEpicId(input: string): Promise<string> {
-  if (input.length >= 36) return input;
-  const base = apiBase();
-  const epics = await apiGet<{ id: string }[]>(`${base}/api/epics`);
-  const match = epics.find((e) => e.id.startsWith(input));
-  if (!match) die(`Epic not found: ${input}`);
-  return match.id;
-}
+// Board and epic resolution live with their own commands:
+//   - board/_shared.ts  → resolveBoardId / resolveBoardIdOrDefault
+//   - epic/_shared.ts   → resolveEpicId
+// Both used to be duplicated here; the copies silently accepted an unresolved
+// board reference and picked the first epic matching a prefix.

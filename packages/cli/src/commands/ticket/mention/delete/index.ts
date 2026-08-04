@@ -15,7 +15,7 @@ const def: CommandDef = {
     cmd.argument('<ticket>', 'Ticket display ID or UUID');
     cmd.argument('<mention>', 'Mention UUID or 8-char id prefix (see `fleex ticket mentions`)');
     cmd.option('-f, --force', 'Skip confirmation');
-    cmd.option('--board <id>', 'Disambiguate the ticket by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (ticketArg: string, mentionArg: string, opts: DeleteOptions) => {
     const mention = await getMention(ticketArg, mentionArg, opts.board);

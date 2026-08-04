@@ -1,18 +1,23 @@
 import { useEffect, useState } from 'react';
-import type { WorkflowStep, JsonSchema } from '@fleex/shared';
+import type { WorkflowStep, WorkflowEdge, JsonSchema } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { TagInput } from '../ui/TagInput';
+import { NativeActionsEditor } from './NativeActionsEditor';
 
 interface Props {
   step: WorkflowStep;
   isEntry: boolean;
   onChange: (next: WorkflowStep) => void;
   onSetEntry: () => void;
+  /** The rest of the graph — a native step's references are resolved against it. */
+  steps: WorkflowStep[];
+  edges: WorkflowEdge[];
+  entryStepId: string;
 }
 
-export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) {
+export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, edges, entryStepId }: Props) {
   const personas = useAgentPersonaStore((s) => s.personas);
   const skills = useSkillStore((s) => s.skills);
   const panels = usePanelStore((s) => s.panels);
@@ -27,6 +32,10 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
     setOutputSchemaError(null);
   }, [step.id]);
 
+  // `human_gate` and `native` are self-contained: neither points at a persona /
+  // skill / panel, and neither runs an agent, so neither has a ref or a mode.
+  const hasExecutorRef = step.executorType !== 'human_gate' && step.executorType !== 'native';
+
   const refOptions = (() => {
     switch (step.executorType) {
       case 'agent':
@@ -36,6 +45,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
       case 'panel':
         return panels.map((p) => ({ value: p.name, label: p.displayName || p.name }));
       case 'human_gate':
+      case 'native':
         return [];
     }
   })();
@@ -84,7 +94,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
       </div>
 
       {/* Executor ref (select) */}
-      {step.executorType !== 'human_gate' && (
+      {hasExecutorRef && (
         <label className="block text-xs space-y-1">
           <span style={{ color: 'var(--theme-text-muted)' }}>Executor ref</span>
           <select
@@ -104,7 +114,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
       )}
 
       {/* Mode override */}
-      {step.executorType !== 'human_gate' && (
+      {hasExecutorRef && (
         <label className="block text-xs space-y-1">
           <span style={{ color: 'var(--theme-text-muted)' }}>Mode override (optional)</span>
           <select
@@ -139,6 +149,17 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
             placeholder="Custom instructions injected into the agent's workflow context…"
           />
         </label>
+      )}
+
+      {/* Native actions */}
+      {step.executorType === 'native' && (
+        <NativeActionsEditor
+          step={step}
+          steps={steps}
+          edges={edges}
+          entryStepId={entryStepId}
+          onChange={onChange}
+        />
       )}
 
       {/* Human gate outcomes */}

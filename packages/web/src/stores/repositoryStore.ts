@@ -18,6 +18,13 @@ function repoKey(org: string, name: string): string {
   return `${org}/${name}`;
 }
 
+/**
+ * In-flight `GET /repositories` request, shared by concurrent callers.
+ * That endpoint shells out to git once per repo, so opening/closing/reopening
+ * the New Task modal must not stampede it.
+ */
+let inFlightFetch: Promise<void> | null = null;
+
 export const useRepositoryStore = create<RepositoryState>((set) => ({
   repositories: [],
   branchesByRepo: {},
@@ -35,9 +42,16 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
       worktreesByRepo: { ...state.worktreesByRepo, [key]: worktrees },
     })),
 
-  fetchRepositories: async () => {
-    const repos = await api.fetchRepositories();
-    set({ repositories: repos });
+  fetchRepositories: () => {
+    if (inFlightFetch) return inFlightFetch;
+    inFlightFetch = api
+      .fetchRepositories()
+      .then((repos) => { set({ repositories: repos }); })
+      // Keep the last known list rather than blanking the pickers: callers
+      // don't catch, and request() already raised a toast.
+      .catch(() => {})
+      .finally(() => { inFlightFetch = null; });
+    return inFlightFetch;
   },
 
   fetchBranches: async (org, name) => {

@@ -4,6 +4,8 @@ import type { WorkflowStep, WorkflowExecutorType } from '@fleex/shared';
 import { COLOR_ERROR_RED } from '../../lib/constants';
 import { tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
+import { ListChecksIcon } from './executor-palette';
+import { nativeStepSummary } from './nativeStepSummary';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
@@ -31,8 +33,9 @@ function XIcon({ className }: IconProps) {
 
 // Executor types map onto the canonical primitive glyphs (lib/primitives.tsx),
 // so a step node on the canvas shows the SAME icon as the sidebar and the
-// palette. `human_gate` is not a primitive, so it keeps its dedicated glyph.
-const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate'>, PrimitiveKind> = {
+// palette. `human_gate` and `native` are not primitives (nothing in the sidebar
+// corresponds to them), so they keep their dedicated glyphs.
+const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native'>, PrimitiveKind> = {
   agent: 'persona',
   panel: 'panel',
   skill: 'skill',
@@ -40,6 +43,7 @@ const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate'>,
 
 function StepIcon({ type, className }: { type: WorkflowExecutorType; className?: string }) {
   if (type === 'human_gate') return <UserCheckIcon className={className} />;
+  if (type === 'native') return <ListChecksIcon className={className} />;
   // tinted={false}: the icon inherits the node's executor-type colour (border +
   // icon share one hue) instead of re-applying the tint, keeping each node
   // chromatically coherent.
@@ -51,6 +55,7 @@ const executorColor = {
   panel: `${tintClasses('blue').text} ${tintClasses('blue').borderColor}`,
   skill: `${tintClasses('green').text} ${tintClasses('green').borderColor}`,
   human_gate: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor} border-dashed`,
+  native: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -70,6 +75,7 @@ const BORDER_HEX = {
   panel: '#3b82f6',       // blue-500
   skill: '#22c55e',       // green-500
   human_gate: '#f59e0b',  // amber-500
+  native: '#14b8a6',      // teal-500
 } as const;
 
 export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
@@ -89,7 +95,12 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   }
 
   const { step, isSelected, isEntry, onSelect, onDelete } = data;
-  const showUnconfigured = !step.executorRef && step.executorType !== 'human_gate';
+  // A native step has no `executorRef` — what makes it configured is having at
+  // least one action, so it gets its own emptiness test and its own subtitle.
+  const nativeSummary = nativeStepSummary(step);
+  const showUnconfigured = step.executorType === 'native'
+    ? (step.nativeActions ?? []).length === 0
+    : !step.executorRef && step.executorType !== 'human_gate';
   const borderColor = BORDER_HEX[step.executorType];
   const handleStyle = {
     width: 12,
@@ -162,7 +173,9 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
           )}
         </div>
         <div style={{ fontSize: 10, color: 'var(--theme-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {showUnconfigured ? <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Unconfigured</span> : (step.executorRef || '—')}
+          {showUnconfigured
+            ? <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Unconfigured</span>
+            : (nativeSummary ?? step.executorRef ?? '—') || '—'}
         </div>
       </div>
 

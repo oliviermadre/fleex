@@ -4,6 +4,7 @@ import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, STORAGE_KEY_SETTINGS
 import { resolveTemplate, type WorkspaceContext } from '../lib/templateUtils';
 import type { Theme } from '../lib/themes';
 import * as api from '../services/api';
+import { useRepositoryStore } from './repositoryStore';
 
 export interface PinnedIcon {
   id: string;
@@ -124,6 +125,36 @@ function loadFromStorage(): AppSettings {
 
 function saveToStorage(settings: AppSettings) {
   localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings, null, 2));
+}
+
+function stringList(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+/**
+ * Commits a repository-list change from the `PUT /config` response.
+ *
+ * The server response wins over the optimistic local list: only it expands glob
+ * patterns into `resolvedRepositories`. Both client-side caches of the repo list
+ * are refreshed here — `settings.resolvedRepositories` (ticket repo picker,
+ * filters, scratchpads) and the repositoryStore (New Task picker) — so neither
+ * goes stale after an add/remove.
+ */
+function applyRepositoryConfig(
+  set: (partial: { settings: AppSettings }) => void,
+  current: AppSettings,
+  config: Record<string, unknown>,
+  fallbackRepositories: string[],
+) {
+  const updated: AppSettings = {
+    ...current,
+    repositories: stringList(config['repositories']) ?? fallbackRepositories,
+    resolvedRepositories: stringList(config['resolvedRepositories']) ?? current.resolvedRepositories,
+  };
+  set({ settings: updated });
+  saveToStorage(updated);
+  void useRepositoryStore.getState().fetchRepositories().catch(() => { /* toasted by request() */ });
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -328,19 +359,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   addRepositories: async (repos) => {
     const current = get().settings;
     const merged = [...new Set([...current.repositories.map((r) => r.toLowerCase()), ...repos.map((r) => r.toLowerCase())])].sort();
-    await api.updateConfig({ repositories: merged });
-    const updated = { ...current, repositories: merged };
-    set({ settings: updated });
-    saveToStorage(updated);
+    const config = await api.updateConfig({ repositories: merged });
+    applyRepositoryConfig(set, current, config, merged);
   },
 
   removeRepository: async (repo) => {
     const target = repo.toLowerCase();
     const current = get().settings;
     const filtered = current.repositories.filter((r) => r.toLowerCase() !== target);
-    await api.updateConfig({ repositories: filtered });
-    const updated = { ...current, repositories: filtered };
-    set({ settings: updated });
-    saveToStorage(updated);
+    const config = await api.updateConfig({ repositories: filtered });
+    applyRepositoryConfig(set, current, config, filtered);
   },
 }));

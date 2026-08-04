@@ -24,7 +24,7 @@ const def: CommandDef = {
     cmd.option('--color <color>', 'Epic color (hex or name)');
     cmd.option('--description <text>', 'Epic description');
     cmd.option('--timeframe <tf>', 'Timeframe: now | next | later');
-    cmd.option('--board <board>', 'Associate with a board (name, UUID, or id prefix)');
+    cmd.option('--board <board>', 'Associate with a board (name, UUID, or 8-char id prefix)');
   },
   action: async (opts: CreateOptions) => {
     const name = opts.name?.trim();

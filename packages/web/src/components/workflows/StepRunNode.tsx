@@ -3,6 +3,8 @@ import type { WorkflowStep, StepRunStatus, WorkflowExecutorType } from '@fleex/s
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
+import { ListChecksIcon } from './executor-palette';
+import { nativeStepSummary } from './nativeStepSummary';
 
 export interface StepRunNodeData {
   step: WorkflowStep;
@@ -94,7 +96,7 @@ function SkipForwardIcon({ className }: IconProps) {
 // Executor types map onto the canonical primitive glyphs (lib/primitives.tsx),
 // so a step node on the canvas shows the SAME icon as the sidebar and the
 // palette. `human_gate` is not a primitive, so it keeps its dedicated glyph.
-const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate'>, PrimitiveKind> = {
+const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native'>, PrimitiveKind> = {
   agent: 'persona',
   panel: 'panel',
   skill: 'skill',
@@ -102,6 +104,7 @@ const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate'>,
 
 function StepIcon({ type, className }: { type: WorkflowExecutorType; className?: string }) {
   if (type === 'human_gate') return <UserCheckIcon className={className} />;
+  if (type === 'native') return <ListChecksIcon className={className} />;
   // tinted={false}: the icon inherits the node's executor-type colour (border +
   // icon share one hue) instead of re-applying the tint, keeping each node
   // chromatically coherent.
@@ -113,6 +116,7 @@ const executorColor = {
   panel: `${tintClasses('blue').text} ${tintClasses('blue').borderColor}`,
   skill: `${tintClasses('green').text} ${tintClasses('green').borderColor}`,
   human_gate: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor} border-dashed`,
+  native: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
 };
 
 function StatusIcon({ status }: { status: StepRunStatus | 'pending' }) {
@@ -153,7 +157,9 @@ export function StepRunNode({ data }: { data: StepRunNodeData }) {
           <span className="text-xs font-medium truncate flex-1 text-[var(--theme-text-primary)]">{data.step.name}</span>
           <StatusIcon status={data.status} />
         </div>
-        <div className="text-[10px] truncate text-[var(--theme-text-muted)]">{data.step.executorRef || '—'}</div>
+        <div className="text-[10px] truncate text-[var(--theme-text-muted)]">
+          {nativeStepSummary(data.step) ?? (data.step.executorRef || '—')}
+        </div>
         {data.summary && (
           <div className="mt-1 text-[10px] line-clamp-2 text-[var(--theme-text-muted)]">{data.summary}</div>
         )}

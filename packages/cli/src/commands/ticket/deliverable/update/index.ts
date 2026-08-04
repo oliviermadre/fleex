@@ -24,7 +24,7 @@ const def: CommandDef = {
     cmd.option('--status <status>', 'draft | final');
     cmd.option('--content <content>', 'New inline content (Markdown or HTML)');
     cmd.option('--file <path>', 'Read new content from file');
-    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (ticketIdArg: string, delivId: string, opts: UpdateOptions) => {
     const body: Record<string, unknown> = {};

@@ -13,7 +13,8 @@ const def: CommandDef = {
   isParent: true,
   extraHelp: `\n${SECTION('Ticket ID:')}
   Use a display ID (e.g. ${GREEN('42')} or ${GREEN('#42')}) or a full UUID.
-  If multiple boards share the same display ID, disambiguate with ${chalk.cyan('--board <id>')}.
+  If multiple boards share the same display ID, disambiguate with ${chalk.cyan('--board <board>')}
+  — a board name, a full UUID, or the 8-char id prefix shown by ${chalk.cyan('fleex board list')}.
 
 ${SECTION('Statuses:')}  backlog, todo, doing, reviewing, done, cancelled
 ${SECTION('Priorities:')} none, low, medium, high

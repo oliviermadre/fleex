@@ -27,7 +27,7 @@ const def: CommandDef = {
     cmd.option('--content <content>', 'Inline content (Markdown or HTML)');
     cmd.option('--file <path>', 'Read content from file (Markdown or HTML)');
     cmd.option('--agent-name <name>', 'Override the agent name attached to this deliverable (default: cli)');
-    cmd.option('--board <id>', 'Disambiguate by board: name, UUID, or unique id prefix');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (ticketIdArg: string, opts: AddOptions) => {
     if (!opts.title) die('Missing --title');
