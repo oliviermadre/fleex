@@ -37,6 +37,12 @@ const edge = (
   ...(clauses ? { conditionGroup: { match, clauses } } : {}),
 });
 
+/** Fields the ambiguity fixtures read, declared so schema warnings don't mask them. */
+const routingFields = {
+  status: { type: 'string' as const },
+  priority: { type: 'string' as const },
+};
+
 const validate = (steps: WorkflowStep[], edges: WorkflowEdge[], entryStepId = steps[0]?.id) =>
   validateEdgeConditions(steps, edges, entryStepId);
 
@@ -175,7 +181,9 @@ describe('edge condition validation', () => {
         step('out'),
       ];
       const edges = [
-        edge('e1', 'entry', 'left'),
+        // One conditional + one default: two defaults from `entry` would be a
+        // save-time error of its own, which is not what this test is about.
+        edge('e1', 'entry', 'left', [{ field: 'result', operator: 'eq', value: 'ok' }]),
         edge('e2', 'entry', 'right'),
         edge('e3', 'left', 'join'),
         edge('e4', 'right', 'join'),
@@ -230,6 +238,66 @@ describe('edge condition validation', () => {
       const result = validate(steps, edges);
       expect(result.errors).toEqual([]);
       expect(result.warnings).toEqual([expect.stringMatching(/declares no output field "result"/)]);
+    });
+  });
+
+  // ── Ambiguity prevention ───────────────────────────────────────────────────
+
+  describe('competing edges', () => {
+    it('refuses to save two default edges leaving the same step', () => {
+      // Nothing at runtime can tell two defaults apart, so every single run would
+      // stop on an unanswerable routing question. It's a config mistake: catch it
+      // where the author can still fix it cheaply.
+      const steps = [step('a'), step('b'), step('c')];
+      const edges = [edge('e1', 'a', 'b'), edge('e2', 'a', 'c')];
+      const result = validate(steps, edges);
+      expect(result.byEdge['e1']?.errors).toEqual([expect.stringMatching(/2 default edges/)]);
+      expect(result.byEdge['e2']?.errors).toEqual([expect.stringMatching(/2 default edges/)]);
+      expect(save(steps, edges, 'a')).toThrow(/default edges/);
+    });
+
+    it('allows one default per source step, on several sources', () => {
+      const steps = [step('a'), step('b'), step('c')];
+      const edges = [edge('e1', 'a', 'b'), edge('e2', 'b', 'c')];
+      expect(validate(steps, edges).errors).toEqual([]);
+    });
+
+    it('warns when one edge\'s conditions are a subset of another\'s', () => {
+      // `status = Doing` matches every time `status = Doing AND priority = High`
+      // does, so the run *will* pause and ask. A warning, not an error: the author
+      // may want exactly that, and the engine now handles it gracefully.
+      const steps = [step('a', routingFields), step('b', routingFields), step('c')];
+      const edges = [
+        edge('e1', 'a', 'b', [{ field: 'status', operator: 'eq', value: 'Doing' }]),
+        edge('e2', 'a', 'c', [
+          { field: 'status', operator: 'eq', value: 'Doing' },
+          { field: 'priority', operator: 'eq', value: 'High' },
+        ]),
+      ];
+      const result = validate(steps, edges);
+      expect(result.errors).toEqual([]);
+      expect(result.byEdge['e1']?.warnings).toEqual([expect.stringMatching(/can match at the same time/)]);
+      expect(result.byEdge['e2']?.warnings).toEqual([expect.stringMatching(/can match at the same time/)]);
+    });
+
+    it('stays quiet on edges that read different fields', () => {
+      // No inclusion, no guaranteed overlap — guessing further would need a SAT
+      // solver and would drown the author in false positives.
+      const steps = [step('a', routingFields), step('b', routingFields), step('c')];
+      const edges = [
+        edge('e1', 'a', 'b', [{ field: 'status', operator: 'eq', value: 'Doing' }]),
+        edge('e2', 'a', 'c', [{ field: 'priority', operator: 'eq', value: 'High' }]),
+      ];
+      expect(validate(steps, edges).warnings).toEqual([]);
+    });
+
+    it('does not compare edges leaving different steps', () => {
+      const steps = [step('a', routingFields), step('b', routingFields), step('c')];
+      const edges = [
+        edge('e1', 'a', 'b', [{ field: 'status', operator: 'eq', value: 'Doing' }]),
+        edge('e2', 'b', 'c', [{ field: 'status', operator: 'eq', value: 'Doing' }]),
+      ];
+      expect(validate(steps, edges).warnings).toEqual([]);
     });
   });
 

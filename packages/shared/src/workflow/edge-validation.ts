@@ -60,7 +60,20 @@ export function validateEdgeConditions(
   const dominators = entryStepId ? computeDominators(steps, edges, entryStepId) : null;
 
   for (const edge of edges) {
-    const bucket = (byEdge[edge.id] = { errors: [] as string[], warnings: [] as string[] });
+    byEdge[edge.id] = { errors: [], warnings: [] };
+  }
+
+  // Two defaults leaving the same step is unarbitrable by construction: nothing
+  // in the run can ever tell them apart. Blocking at save time is the only place
+  // where the author can still fix it cheaply — at runtime it would mean parking
+  // every single run on a routing question with no right answer.
+  detectDuplicateDefaults(byId, edges, byEdge);
+  // Overlapping conditions are only *likely* to be ambiguous, so they warn: the
+  // engine now pauses and asks rather than guessing, which is a fine outcome.
+  detectOverlappingConditions(byId, edges, byEdge);
+
+  for (const edge of edges) {
+    const bucket = byEdge[edge.id]!;
     const { errors, warnings } = bucket;
     const sourceName = byId.get(edge.source)?.name || edge.source;
     const targetName = byId.get(edge.target)?.name || edge.target;
@@ -86,6 +99,96 @@ export function validateEdgeConditions(
     warnings: Object.values(byEdge).flatMap((i) => i.warnings),
     byEdge,
   };
+}
+
+type IssueBuckets = Record<string, { errors: string[]; warnings: string[] }>;
+
+function stepLabel(byId: Map<string, WorkflowStep>, id: string): string {
+  return byId.get(id)?.name || id;
+}
+
+function edgeLabel(byId: Map<string, WorkflowStep>, edge: WorkflowEdge): string {
+  return `"${stepLabel(byId, edge.source)}" → "${stepLabel(byId, edge.target)}"`;
+}
+
+/** ≥ 2 default edges leaving the same step: a blocking configuration error. */
+function detectDuplicateDefaults(
+  byId: Map<string, WorkflowStep>,
+  edges: WorkflowEdge[],
+  byEdge: IssueBuckets,
+): void {
+  const bySource = new Map<string, WorkflowEdge[]>();
+  for (const edge of edges) {
+    if (!edge.isDefault) continue;
+    const list = bySource.get(edge.source) ?? [];
+    list.push(edge);
+    bySource.set(edge.source, list);
+  }
+
+  for (const [source, group] of bySource) {
+    if (group.length < 2) continue;
+    const targets = group.map((e) => `"${stepLabel(byId, e.target)}"`).join(', ');
+    for (const edge of group) {
+      byEdge[edge.id]?.errors.push(
+        `"${stepLabel(byId, source)}" has ${group.length} default edges (${targets}): ` +
+          'only one branch can be the fallback — make the others conditional or delete them',
+      );
+    }
+  }
+}
+
+/**
+ * Two `all`-matching edges from the same step where one's clauses are a subset
+ * of the other's: the broader one matches every time the narrower one does, so
+ * the run *will* stop and ask. A warning, not an error — the author may want
+ * exactly that, and only strict clause inclusion is detected (no SAT solver, no
+ * false positives).
+ */
+function detectOverlappingConditions(
+  byId: Map<string, WorkflowStep>,
+  edges: WorkflowEdge[],
+  byEdge: IssueBuckets,
+): void {
+  const bySource = new Map<string, { edge: WorkflowEdge; clauses: Set<string> }[]>();
+  for (const edge of edges) {
+    if (edge.isDefault) continue;
+    const group = normalizeEdgeCondition(edge);
+    if (!group || group.match === 'any') continue; // `any` overlaps are not decidable this cheaply
+    const clauses = new Set(group.clauses.map((c) => clauseKey(c, edge.source)));
+    const list = bySource.get(edge.source) ?? [];
+    list.push({ edge, clauses });
+    bySource.set(edge.source, list);
+  }
+
+  for (const group of bySource.values()) {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i]!;
+        const b = group[j]!;
+        if (!isSubset(a.clauses, b.clauses) && !isSubset(b.clauses, a.clauses)) continue;
+        const message =
+          `edge ${edgeLabel(byId, a.edge)} and edge ${edgeLabel(byId, b.edge)} can match at the ` +
+          'same time — the run will pause and ask which branch to follow';
+        byEdge[a.edge.id]?.warnings.push(message);
+        byEdge[b.edge.id]?.warnings.push(message);
+      }
+    }
+  }
+}
+
+function clauseKey(clause: EdgeConditionClause, source: string): string {
+  return [
+    clause.stepId ?? source,
+    clause.field,
+    clause.operator,
+    JSON.stringify(clause.value ?? null),
+    clause.caseInsensitive ? '1' : '0',
+  ].join('|');
+}
+
+function isSubset(a: Set<string>, b: Set<string>): boolean {
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
 }
 
 interface ClauseValidationCtx {
