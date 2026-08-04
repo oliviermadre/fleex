@@ -5,6 +5,7 @@ import type {
   WorkflowEdgeConditionGroup,
   RunSubject,
 } from '@fleex/shared';
+import type { RunHistoryEntry } from '../../utils/run-history.js';
 
 export interface StepExecutionInput {
   /** Null for a routine run — `routineId` + `subject` carry the context instead. */
@@ -29,6 +30,12 @@ export interface StepExecutionInput {
       targetName: string;
     }[];
     previousOutputs: Record<string, Record<string, unknown>>;
+    /**
+     * The run's narrative so far (see `utils/run-history.ts`). Agentic executors
+     * inject it in the prompt; `previousOutputs` stays the machine-readable
+     * channel for edge conditions and `{{ steps.* }}` references.
+     */
+    runHistory?: RunHistoryEntry[];
     /**
      * Names of every step in the run snapshot, so an edge condition reading an
      * earlier step renders as "Compute status.status" rather than a raw id.

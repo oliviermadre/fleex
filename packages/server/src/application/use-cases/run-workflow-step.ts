@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { StepRunEntity } from '../../domain/entities/step-run.entity.js';
 import { EdgeEvaluator } from '../services/edge-evaluator.js';
 import { pauseForRouting } from '../services/ambiguous-routing.js';
+import { buildRunHistory } from '../utils/run-history.js';
 import { WorkflowRunNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
@@ -71,6 +72,25 @@ export class RunWorkflowStepUseCase {
         }
       }
 
+      // The prompt-facing counterpart of `previousOutputs`. It keeps the earlier
+      // attempts of THIS step (that is where a human's answer to a
+      // `waiting_for_info` question is recorded) and carries comments,
+      // deliverables and gate decisions — none of which cross a step boundary
+      // otherwise. A ticket run recovers them from the ticket timeline; a
+      // routine run has no timeline, so this is its only memory.
+      const stepNames = Object.fromEntries(
+        run.templateSnapshot.steps.map((s: WorkflowStep) => [s.id, s.name]),
+      );
+      const runHistory = buildRunHistory({
+        stepNames,
+        stepRuns: allStepRuns.map((sr) => ({
+          stepId: sr.stepId, attempt: sr.attempt, status: sr.status,
+          output: sr.output, createdAt: sr.createdAt,
+        })),
+        currentStepId: step.id,
+        currentAttempt: attempt,
+      });
+
       const outgoingEdges = run.outgoingEdges(step.id).map((e) => {
         const target = run.findStep(e.target);
         return {
@@ -84,10 +104,8 @@ export class RunWorkflowStepUseCase {
         workflowRunId: run.id, stepRunId: stepRun.id, step,
         workflowContext: {
           workflowName: run.templateSnapshot.name, stepName: step.name,
-          outgoingEdges, previousOutputs,
-          stepNames: Object.fromEntries(
-            run.templateSnapshot.steps.map((s: WorkflowStep) => [s.id, s.name]),
-          ),
+          outgoingEdges, previousOutputs, runHistory,
+          stepNames,
           predecessorStepIds: run.templateSnapshot.edges
             .filter((e) => e.target === step.id)
             .map((e) => e.source),

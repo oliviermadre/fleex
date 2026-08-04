@@ -201,6 +201,14 @@ export interface StepOutput {
   mentionStatus?: 'resolved' | 'waiting_for_info';
   schemaFields: Record<string, unknown>;
   outcome?: string;
+  /**
+   * Free-text answer a human gave to a `waiting_for_info` question, recorded on
+   * the step run that asked it. On a ticket run the answer is *also* posted as a
+   * ticket comment, but a routine run has no ticket timeline — without this
+   * field the answer would exist nowhere and the retried step would re-run with
+   * the exact same prompt.
+   */
+  humanResponse?: string;
   result: StepRunResult;
   /**
    * Set when several outgoing edges matched at once and a human had to arbitrate.

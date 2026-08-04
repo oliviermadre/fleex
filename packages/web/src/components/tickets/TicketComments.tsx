@@ -1520,7 +1520,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                     // This card only ever renders inside a ticket, so ticketId is
                     // set — the guard is for the shared nullable run type.
                     if (run.ticketId) await api.postTicketComment(run.ticketId, response);
-                    await retryStep(run.id, stepRun.id);
+                    await retryStep(run.id, stepRun.id, response);
                   }}
                 />
               </div>

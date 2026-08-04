@@ -120,4 +120,40 @@ describe('RetryStepUseCase', () => {
 
     expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'a');
   });
+
+  // WHY: on a routine run there is no ticket to post the answer to, so the retry
+  // IS the answer's only carrier. If it isn't persisted on the attempt that
+  // asked, the new attempt re-runs on an identical prompt and asks again.
+  it('records the human answer on the paused attempt before restarting', async () => {
+    const run = makeRun();
+    const step = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'a' });
+    step.markNeedsReview({ output: { schemaFields: {}, result: 'needs_review', comment: 'Which repo?' } });
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const orchestrator = { runStep: vi.fn() };
+    const canceller = { cancelExecution: vi.fn() };
+    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
+
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', humanResponse: '  fleex only  ' });
+
+    expect(step.output?.humanResponse).toBe('fleex only');
+    expect(stepRunStore.save).toHaveBeenCalledWith(step);
+    expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'a');
+  });
+
+  it('leaves the output untouched when no answer was given (plain retry)', async () => {
+    const run = makeRun();
+    const step = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'a' });
+    step.fail({ message: 'boom' });
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const orchestrator = { runStep: vi.fn() };
+    const canceller = { cancelExecution: vi.fn() };
+    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
+
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', humanResponse: '   ' });
+
+    expect(step.output?.humanResponse).toBeUndefined();
+    expect(stepRunStore.save).not.toHaveBeenCalled();
+  });
 });

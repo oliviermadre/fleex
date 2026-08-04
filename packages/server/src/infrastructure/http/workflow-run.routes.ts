@@ -229,13 +229,20 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
     );
 
     // POST /api/workflows/runs/:id/steps/:stepRunId/retry — retry a step
-    app.post<{ Params: { id: string; stepRunId: string } }>(
+    app.post<{ Params: { id: string; stepRunId: string }; Body: unknown }>(
       '/api/workflows/runs/:id/steps/:stepRunId/retry',
       async (request, reply) => {
+        // Optional: the answer the user typed when the step paused on a
+        // `waiting_for_info` question. Recorded on the paused attempt so the
+        // retry sees it — the only channel that exists on a routine run.
+        const body = request.body;
+        const humanResponse =
+          isObject(body) && isString(body['humanResponse']) ? body['humanResponse'] : undefined;
         try {
           await deps.retryStep.execute({
             workflowRunId: request.params.id,
             stepRunId: request.params.stepRunId,
+            ...(humanResponse ? { humanResponse } : {}),
           });
           return reply.code(204).send();
         } catch (err) {

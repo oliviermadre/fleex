@@ -135,6 +135,21 @@ export class StepRunEntity {
     this.completedAt = new Date();
   }
 
+  /**
+   * Records the human's free-text answer to the question this step asked when it
+   * paused on `needs_review`. Status is left untouched: the caller (RetryStep)
+   * decides what happens next, and the answer must survive on THIS attempt —
+   * the retry spawns attempt+1, which reads it back from the run history.
+   *
+   * Without this, a routine run loses the answer entirely: there is no ticket
+   * timeline to post it to, so the retried step would re-run on an identical
+   * prompt and ask the same question again.
+   */
+  recordHumanResponse(response: string): void {
+    const prev = this.output ?? { schemaFields: {}, result: 'needs_review' as const };
+    this.output = { ...prev, humanResponse: response };
+  }
+
   toDTO(): StepRun {
     return {
       id: this.id,

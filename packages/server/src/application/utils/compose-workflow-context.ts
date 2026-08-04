@@ -1,5 +1,6 @@
 import type { JsonSchema, WorkflowEdgeCondition, WorkflowEdgeConditionGroup } from '@fleex/shared';
 import { formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
+import { formatRunHistory, type RunHistoryEntry } from './run-history.js';
 
 export interface WorkflowContextInput {
   workflowName: string;
@@ -14,6 +15,13 @@ export interface WorkflowContextInput {
     targetName: string;
   }[];
   previousOutputs: Record<string, Record<string, unknown>>;
+  /**
+   * The run's narrative so far. When present it *replaces* the raw
+   * `previousOutputs` dump: it says the same thing by step name, and adds the
+   * comments, deliverables, gate decisions and human answers that the
+   * schemaFields-only dump silently drops.
+   */
+  runHistory?: RunHistoryEntry[];
   /** Step id → name, so a condition on an earlier step names it readably. */
   stepNames?: Record<string, string>;
 }
@@ -65,8 +73,15 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
   // so it's especially easy for the agent to misuse `comment` as a meta status
   // report ("I asked X about Y") instead of the actual question. The standard
   // mentionStatus instruction covers this, but doubling down here is cheap.
-  parts.push(`**If you need human input to continue this workflow**: set \`mentionStatus: "waiting_for_info"\` and put your actual question(s) in \`comment\`. The workflow will pause and a side panel will prompt the user to respond. Their answer is posted as a ticket comment and this step retries automatically with that new context. Write the question directly ("Should we use option A or B?"), as if chatting — do NOT narrate ("I posed a question to @someone", "Awaiting reply"); only what you write in \`comment\` reaches the reader.`);
+  parts.push(`**If you need human input to continue this workflow**: set \`mentionStatus: "waiting_for_info"\` and put your actual question(s) in \`comment\`. The workflow will pause and a side panel will prompt the user to respond. Their answer is recorded in this run's history and this step retries automatically with that new context. Write the question directly ("Should we use option A or B?"), as if chatting — do NOT narrate ("I posed a question to @someone", "Awaiting reply"); only what you write in \`comment\` reaches the reader.`);
   parts.push('');
+
+  const history = input.runHistory ? formatRunHistory(input.runHistory) : '';
+  if (history) {
+    parts.push(history);
+    parts.push('');
+    return parts.join('\n');
+  }
 
   const prevKeys = Object.keys(input.previousOutputs);
   if (prevKeys.length > 0) {

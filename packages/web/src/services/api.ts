@@ -1010,10 +1010,19 @@ export async function resolveWorkflowRoute(
   );
 }
 
-export async function retryWorkflowStep(runId: string, stepRunId: string): Promise<void> {
+export async function retryWorkflowStep(
+  runId: string,
+  stepRunId: string,
+  /**
+   * Answer to the question the step asked before pausing. Recorded server-side
+   * on the paused attempt so the retried step actually reads it — on a routine
+   * run there is no ticket comment to carry it.
+   */
+  humanResponse?: string,
+): Promise<void> {
   await request<void>(
     `/workflows/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepRunId)}/retry`,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify(humanResponse ? { humanResponse } : {}) },
   );
 }
 

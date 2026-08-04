@@ -33,6 +33,7 @@ export class SkillStepExecutor implements StepExecutor {
       outputSchema: input.step.outputSchema,
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,
+      runHistory: input.workflowContext.runHistory,
     });
 
     const result = await this.executeAgent.executeForSkill(skill.id, ticketId, {
