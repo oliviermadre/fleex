@@ -41,11 +41,27 @@ export class SqliteWorkflowTemplateStoreAdapter implements WorkflowTemplateStore
   }
 
   async save(t: WorkflowTemplateEntity): Promise<void> {
+    // Use INSERT … ON CONFLICT DO UPDATE (upsert-in-place) instead of INSERT OR REPLACE.
+    // INSERT OR REPLACE performs DELETE + INSERT, which triggers ON DELETE CASCADE on
+    // routines.template_id — every routine bound to this template is destroyed the
+    // moment someone edits the workflow in the builder, with no warning and no undo.
+    // ON CONFLICT DO UPDATE performs an in-place UPDATE: no row is deleted, no cascade fires.
     this.conn.db.prepare(`
-      INSERT OR REPLACE INTO workflow_templates
+      INSERT INTO workflow_templates
         (id, name, slug, emoji, description, steps, edges, entry_step_id, enabled, created_at, updated_at)
       VALUES
         (@id, @name, @slug, @emoji, @description, @steps, @edges, @entry_step_id, @enabled, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        slug = excluded.slug,
+        emoji = excluded.emoji,
+        description = excluded.description,
+        steps = excluded.steps,
+        edges = excluded.edges,
+        entry_step_id = excluded.entry_step_id,
+        enabled = excluded.enabled,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at
     `).run({
       id: t.id,
       name: t.name,
