@@ -12,7 +12,7 @@ OAuth SSO (GitHub / Google) and WebSocket reverse tunnel for NAT traversal.
 2. [Prerequisites](#2-prerequisites)
 3. [PostgreSQL setup](#3-postgresql-setup)
 4. [Environment variables reference](#4-environment-variables-reference)
-5. [The removed JSON storage driver](#5-the-removed-json-storage-driver)
+5. [Storage drivers](#5-storage-drivers)
 6. [Host gateway setup](#6-host-gateway-setup)
 7. [Central server setup](#7-central-server-setup)
 8. [OAuth SSO — GitHub](#8-oauth-sso--github)
@@ -151,22 +151,22 @@ A default local user is seeded automatically:
 
 ---
 
-## 5. The removed JSON storage driver
+## 5. Storage drivers
 
-The `json` storage driver has been removed. `sqlite` is now the default (and the
-only backend offered at install time); `pgsql` and `supabase` remain available
-through manual configuration.
+`FLEEX_STORAGE_DRIVER` accepts three values:
 
-Old `~/.fleex/projects/*.json` files are no longer read. They are left on disk —
-nothing deletes them — and can be removed manually once you no longer need them.
-There is no automatic JSON → SQLite migrator.
+| Driver | When |
+|---|---|
+| `sqlite` | Default. The only backend offered at install time — single machine, zero setup. |
+| `pgsql` | Self-hosted PostgreSQL — see §3. Configured manually. |
+| `supabase` | Hosted PostgreSQL — see §3. Configured manually. |
 
-`fleex self-update` rewrites any lingering `"FLEEX_STORAGE_DRIVER": "json"` in
-`~/.fleex/workspaces.json` to `"sqlite"`. Setting `FLEEX_STORAGE_DRIVER=json`
-by hand now fails fast with an explicit error.
+Any other value fails fast at boot. Switching driver is a manual operation:
+there is no cross-driver data migrator, so a new driver starts on an empty
+database.
 
-> Keep `~/.fleex/gateway.json` — it is the gateway identity, not application
-> data, and is unrelated to the storage driver.
+> `~/.fleex/gateway.json` is the gateway identity, not application data — it is
+> unrelated to the storage driver and must be kept.
 
 ---
 

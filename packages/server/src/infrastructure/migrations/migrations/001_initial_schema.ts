@@ -549,7 +549,6 @@ const migration: Migration = {
       'sessions',
     ];
 
-
     for (const table of tables) {
       await ctx.exec(`DROP TABLE IF EXISTS ${table}`);
     }

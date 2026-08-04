@@ -47,13 +47,6 @@ export interface StorageStores {
 export function resolveStorageDriver(): StorageDriver {
   const raw = process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'sqlite';
   const valid: StorageDriver[] = ['sqlite', 'pgsql', 'supabase'];
-  if (raw === 'json') {
-    throw new Error(
-      'FLEEX_STORAGE_DRIVER="json" is no longer supported — the JSON storage driver was removed. ' +
-        'Use "sqlite" (recommended), "pgsql" or "supabase". ' +
-        'Your existing ~/.fleex/projects/*.json files are left untouched but will not be read.',
-    );
-  }
   if (!valid.includes(raw as StorageDriver)) {
     throw new Error(
       `Invalid FLEEX_STORAGE_DRIVER="${raw}". Must be one of: ${valid.join(', ')}`,
