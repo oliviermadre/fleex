@@ -14,16 +14,22 @@ const makeInput = (overrides: Partial<{ outcomes: string[] }> = {}) => ({
 describe('HumanGateStepExecutor', () => {
   it('posts a comment and returns needs_review', async () => {
     const postComment = { execute: vi.fn().mockResolvedValue({ comment: { id: 'c-1' }, createdMentions: [] }) };
-    const exec = new HumanGateStepExecutor(postComment as never);
+    const eventBus = { emit: vi.fn() };
+    const exec = new HumanGateStepExecutor(postComment as never, eventBus as never);
     const r = await exec.execute(makeInput());
     expect(r.output.result).toBe('needs_review');
     expect((r.output.schemaFields as Record<string, unknown>).outcomes).toEqual(['approve', 'reject']);
     expect(postComment.execute).toHaveBeenCalledOnce();
+    // The gate announcement is the call to action: without `comment.posted` the
+    // WebSocket never pushes it, so an open thread stays empty until remount.
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'comment.posted', commentId: 'c-1' }),
+    );
   });
 
   it('throws if humanGateOutcomes is empty', async () => {
     const postComment = { execute: vi.fn() };
-    const exec = new HumanGateStepExecutor(postComment as never);
+    const exec = new HumanGateStepExecutor(postComment as never, { emit: vi.fn() } as never);
     await expect(exec.execute(makeInput({ outcomes: [] }))).rejects.toThrow(/at least one outcome/);
   });
 });

@@ -416,7 +416,7 @@ export async function createContainer() {
     const agentStepExecutor = new AgentStepExecutor(executeAgent);
     const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore);
     const panelStepExecutor = new PanelStepExecutor(runPanel);
-    const humanGateStepExecutor = new HumanGateStepExecutor(postComment);
+    const humanGateStepExecutor = new HumanGateStepExecutor(postComment, eventBus);
     const nativeStepExecutor = new NativeStepExecutor(new ApplyNativeActionsUseCase({
       ticketStore: ticketStore_,
       registry: new NativeOperationRegistry(),

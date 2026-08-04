@@ -8,6 +8,7 @@ import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { PostCommentUseCase } from './post-comment.js';
+import { postWorkflowComment } from '../services/workflow-comment.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 
@@ -92,13 +93,11 @@ export class ResolveAmbiguousRouteUseCase {
     ].join('\n');
 
     try {
-      await this.postComment.execute({
+      await postWorkflowComment(this.postComment, this.eventBus, {
         ticketId: run.ticketId,
         authorName: `workflow:${run.templateSnapshot.name} → ${stepName}`,
-        authorType: 'agent',
         body,
         visibility: 'public',
-        parentId: null,
       });
     } catch (err) {
       this.logger.error('Failed to post ambiguous route resolution comment', {

@@ -6,6 +6,7 @@ import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { PostCommentUseCase } from '../use-cases/post-comment.js';
+import { postWorkflowComment } from './workflow-comment.js';
 
 /**
  * Pausing a run because several edges matched, from the two places edges are
@@ -85,13 +86,11 @@ async function postAmbiguityComment(
   ].join('\n');
 
   try {
-    await deps.postComment.execute({
+    await postWorkflowComment(deps.postComment, deps.eventBus, {
       ticketId: run.ticketId,
       authorName: `workflow:${run.templateSnapshot.name} → ${step.name}`,
-      authorType: 'agent',
       body,
       visibility: 'public',
-      parentId: null,
     });
   } catch (err) {
     deps.logger?.error('Failed to post ambiguous routing comment', {

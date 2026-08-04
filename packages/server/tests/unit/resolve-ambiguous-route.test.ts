@@ -39,7 +39,7 @@ const makeParkedStepRun = () => {
   return stepRun;
 };
 
-const makePostComment = () => ({ execute: vi.fn().mockResolvedValue({ comment: {}, createdMentions: [] }) });
+const makePostComment = () => ({ execute: vi.fn().mockResolvedValue({ comment: { id: 'c-1' }, createdMentions: [] }) });
 const makeLogger = () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() });
 
 const makeUseCase = (over: {
@@ -124,9 +124,16 @@ describe('ResolveAmbiguousRouteUseCase', () => {
   it('leaves a decision trail attributed to the workflow step', async () => {
     const run = makeRun(); run.block();
     const stepRun = makeParkedStepRun();
-    const { uc, postComment } = makeUseCase({ run, stepRun });
+    const { uc, postComment, eventBus } = makeUseCase({ run, stepRun });
 
     await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', edgeId: 'e2', notes: 'spec first' });
+
+    // The panel promises the reason is "posted in the thread". Persisting it is
+    // not enough — only `comment.posted` pushes it over the WebSocket, so
+    // without this the reviewer clicks and sees nothing until they remount.
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'comment.posted', commentId: 'c-1', ticketId: 't-1', createdMentions: [],
+    }));
 
     expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
       ticketId: 't-1',

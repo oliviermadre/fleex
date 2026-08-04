@@ -6,6 +6,7 @@ import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { PostCommentUseCase } from './post-comment.js';
+import { postWorkflowComment } from '../services/workflow-comment.js';
 
 export type { OrchestratorPort };
 
@@ -50,9 +51,8 @@ export class CreateWorkflowRunUseCase {
     // Post a "starting" marker comment in the ticket timeline so it's obvious
     // to readers that the next bursts of activity belong to this workflow run.
     // Emoji + bold name keep it scannable; the trigger source helps debugging.
-    await this.postComment.execute({
+    await postWorkflowComment(this.postComment, this.eventBus, {
       ticketId: run.ticketId,
-      authorType: 'agent',
       authorName: `workflow:${template.name}`,
       body: `🚦 Starting workflow ${template.emoji ? `${template.emoji} ` : ''}**${template.name}** _(triggered ${params.triggeredFrom === 'mention' ? 'via @mention' : `from ${params.triggeredFrom}`})_`,
     });

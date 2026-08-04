@@ -8,6 +8,7 @@ import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { PostCommentUseCase } from './post-comment.js';
+import { postWorkflowComment } from '../services/workflow-comment.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
 export class ResolveHumanGateUseCase {
@@ -124,16 +125,14 @@ export class ResolveHumanGateUseCase {
     ].join('\n');
 
     try {
-      await this.postComment.execute({
+      await postWorkflowComment(this.postComment, this.eventBus, {
         ticketId,
         // Attributed like every other workflow step comment, so it renders consistently
         // in the thread (e.g. "workflow:Spec Dev PR → Check Spec"). Agent authorship also
         // means any @mention a reviewer types inside their notes stays inert (no chaining).
         authorName: `workflow:${workflowName} → ${stepName}`,
-        authorType: 'agent',
         body,
         visibility: 'public',
-        parentId: null,
       });
     } catch (err) {
       this.logger.error('Failed to post human gate resolution comment', {
