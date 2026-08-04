@@ -31,7 +31,7 @@ const KIND_TO_MENTION_TYPE: Record<PrimitiveKind, MentionTargetType> = {
   workflow: 'workflow',
 };
 
-type GlyphProps = { size: number; className?: string };
+type GlyphProps = { size: number; className?: string; strokeWidth?: number };
 
 const glyphBaseProps = {
   viewBox: '0 0 24 24',
@@ -82,6 +82,58 @@ function WorkflowGlyph({ size, className }: GlyphProps) {
       <circle cx="12" cy="18" r="2.2" />
       <path d="M7.6 7.4 10.6 16M16.4 7.4 13.4 16" />
     </svg>
+  );
+}
+
+/**
+ * Routine — the loop arrows already used by the nav entry and the ROUTINE badge
+ * in the execution log.
+ *
+ * A routine is NOT one of the four launchable primitives (it *runs* a workflow,
+ * it is not a building block you can @mention), so it stays out of
+ * `PRIMITIVE_META`. It still belongs in this file: it is surfaced next to the
+ * primitives everywhere, and it had drifted into three hand-copied inline SVGs
+ * before this. Purple is its hue, same as the log badge.
+ */
+function RoutineGlyph({ size, className, strokeWidth }: GlyphProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      className={className}
+      aria-hidden="true"
+      {...glyphBaseProps}
+      strokeWidth={strokeWidth ?? glyphBaseProps.strokeWidth}
+    >
+      <path d="M17 2l4 4-4 4" />
+      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+      <path d="M7 22l-4-4 4-4" />
+      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+    </svg>
+  );
+}
+
+/**
+ * The one icon to render for a routine. Pass `tinted={false}` to inherit the
+ * surrounding colour (nav item, already-tinted chip).
+ */
+export function RoutineIcon({
+  size = 16,
+  className,
+  tinted = true,
+  strokeWidth,
+}: {
+  size?: number;
+  className?: string;
+  tinted?: boolean;
+  strokeWidth?: number;
+}) {
+  return (
+    <RoutineGlyph
+      size={size}
+      strokeWidth={strokeWidth}
+      className={cn(tinted && tintText('purple'), className)}
+    />
   );
 }
 

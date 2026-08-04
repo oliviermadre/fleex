@@ -100,7 +100,6 @@ describe('execution log — routine-anchored runs', () => {
 
     // The chip the row renders in place of the ticket chip.
     expect(entry!.routineName).toBe('Daily recap');
-    expect(entry!.routineEmoji).toBe('🔁');
 
     // No ticket ⇒ nothing to count. A non-zero count here would put a "2
     // comments" badge on a button that opens no ticket.

@@ -9,7 +9,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
 import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
-import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
+import { PrimitiveIcon, RoutineIcon, type PrimitiveKind } from '../../lib/primitives';
 
 // ── Type badge ──
 
@@ -23,18 +23,6 @@ const EXEC_TYPE_TO_KIND: Record<ExecutionLogEntry['type'], PrimitiveKind> = {
   workflow: 'workflow',
 };
 
-/** Nav-sidebar routine glyph, reused so the log and the nav agree visually. */
-function RoutineIcon({ size = 14, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M17 2l4 4-4 4" />
-      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
-      <path d="M7 22l-4-4 4-4" />
-      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
-    </svg>
-  );
-}
-
 /**
  * A routine-anchored run reads as its own kind in the log: it has no ticket,
  * no comments, no deliverables — showing it as a plain WORKFLOW row invites
@@ -47,7 +35,7 @@ function TypeBadge({ type, isRoutine }: { type: ExecutionLogEntry['type']; isRou
       {/* `shrink-0` is required: without it the flex row squeezes the SVG for the
           widest label ("WORKFLOW"), which is why that glyph rendered tiny. */}
       {isRoutine ? (
-        <RoutineIcon size={14} className={cn('shrink-0', tintText('purple'))} />
+        <RoutineIcon size={14} className="shrink-0" />
       ) : (
         <PrimitiveIcon kind={EXEC_TYPE_TO_KIND[type]} size={14} className="shrink-0" />
       )}
@@ -475,11 +463,12 @@ export const ExecutionRow = memo(function ExecutionRow({
         {/* Col 2: Title block (ticket icon + title / mode + agent + ticket type) */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            {/* Routine chip where a ticket-bound run shows its ticket chip. */}
+            {/* Routine chip where a ticket-bound run shows its ticket chip.
+                Always the canonical glyph — a per-routine emoji would make the
+                log read like a chat, and "routine" would stop being a type you
+                can recognise at a glance. */}
             {isRoutineRun ? (
-              entry.routineEmoji
-                ? <span className="flex-shrink-0 text-sm leading-none">{entry.routineEmoji}</span>
-                : <RoutineIcon size={14} className={cn('flex-shrink-0', tintText('purple'))} />
+              <RoutineIcon size={14} className="flex-shrink-0" />
             ) : (
               <TicketIcon priority={entry.ticketPriority} />
             )}
@@ -645,7 +634,7 @@ export const ExecutionRow = memo(function ExecutionRow({
               className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 text-[11px] font-medium text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
               title="Open routine"
             >
-              <RoutineIcon size={12} className="shrink-0" />
+              <RoutineIcon size={12} tinted={false} className="shrink-0" />
               <span>Routine</span>
             </button>
           )}

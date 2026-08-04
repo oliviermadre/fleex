@@ -195,7 +195,6 @@ export interface ExecutionLogEntry extends AgentExecution {
    * Set iff the execution belongs to a routine run (`ticketId` is then null).
    */
   readonly routineName?: string | null;
-  readonly routineEmoji?: string | null;
   readonly routineSlug?: string | null;
 }
 

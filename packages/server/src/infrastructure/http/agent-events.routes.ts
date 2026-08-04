@@ -245,7 +245,6 @@ export function agentEventsRoutes(container: Container) {
           commentCount: exec.ticketId ? commentCountMap.get(exec.ticketId) ?? 0 : 0,
           deliverableCount: exec.ticketId ? deliverableCountMap.get(exec.ticketId) ?? 0 : 0,
           routineName: routine?.name ?? null,
-          routineEmoji: routine?.emoji ?? null,
           routineSlug: routine?.slug ?? null,
         };
       }
@@ -516,7 +515,6 @@ export function agentEventsRoutes(container: Container) {
           deliverableCount: run.ticketId ? deliverableCountMap.get(run.ticketId) ?? 0 : 0,
           // Routine chip — rendered where a ticket-bound row shows its ticket chip.
           routineName: routine?.name ?? null,
-          routineEmoji: routine?.emoji ?? null,
           routineSlug: routine?.slug ?? null,
 
           workflowRunId: run.id,

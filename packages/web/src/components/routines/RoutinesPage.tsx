@@ -8,6 +8,7 @@ import { Button } from '../ui/Button';
 import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
 import { cn } from '../../lib/cn';
 import { tint, tintText } from '../../lib/tints';
+import { RoutineIcon } from '../../lib/primitives';
 
 /**
  * The Routines screen — the single home for every workflow execution that has
@@ -52,7 +53,7 @@ export function RoutinesPage() {
           {error && <p className={cn('px-4 py-3 text-xs', tintText('red'))}>{error}</p>}
           {!loading && !error && routines.length === 0 && (
             <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-              <span className="text-2xl">🔁</span>
+              <RoutineIcon size={24} />
               <p className="text-xs text-[var(--theme-text-muted)]">
                 No routine yet. A routine runs a workflow on a repo, a brief, or nothing at all — no ticket needed.
               </p>
@@ -92,11 +93,7 @@ export function RoutinesPage() {
 function SelectRoutineEmptyState() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 text-[var(--theme-text-muted)]">
-      <svg width="48" height="48" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" className="text-[var(--theme-text-faint)]">
-        <path d="M2.5 8a5.5 5.5 0 019.4-3.9M13.5 8a5.5 5.5 0 01-9.4 3.9" />
-        <polyline points="11.5,1.5 12,4.2 9.3,4.6" />
-        <polyline points="4.5,14.5 4,11.8 6.7,11.4" />
-      </svg>
+      <RoutineIcon size={48} strokeWidth={1} tinted={false} className="text-[var(--theme-text-faint)]" />
       <p className="text-sm">Select a routine from the list</p>
     </div>
   );
@@ -116,7 +113,7 @@ function RoutineListItem({ routine, active, onClick }: {
           : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
       )}
     >
-      <span className="flex-shrink-0 text-base leading-none">{routine.emoji || '🔁'}</span>
+      <RoutineIcon size={16} className="flex-shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{routine.name}</span>
         <span className="truncate text-[11px] text-[var(--theme-text-muted)]">

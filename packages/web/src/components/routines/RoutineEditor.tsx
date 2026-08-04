@@ -18,7 +18,6 @@ export function RoutineEditor({ routine, templates, onClose }: {
 }) {
   const { create, update, select } = useRoutineStore();
   const [name, setName] = useState(routine?.name ?? '');
-  const [emoji, setEmoji] = useState(routine?.emoji ?? '🔁');
   const [description, setDescription] = useState(routine?.description ?? '');
   const [templateId, setTemplateId] = useState(routine?.templateId ?? templates[0]?.id ?? '');
   const [repos, setRepos] = useState<string[]>(routine?.subject.repos ?? []);
@@ -36,9 +35,9 @@ export function RoutineEditor({ routine, templates, onClose }: {
     };
     try {
       if (routine) {
-        await update(routine.id, { name, emoji, description: description || null, templateId, subject, trigger });
+        await update(routine.id, { name, description: description || null, templateId, subject, trigger });
       } else {
-        const created = await create({ name, emoji, description: description || null, templateId, subject, trigger });
+        const created = await create({ name, description: description || null, templateId, subject, trigger });
         await select(created.id);
       }
       onClose();
@@ -55,10 +54,7 @@ export function RoutineEditor({ routine, templates, onClose }: {
 
   const templateOptions = templates.length === 0
     ? [{ value: '', label: 'No workflow template available' }]
-    : templates.map((t) => ({
-      value: t.id,
-      label: `${t.emoji ? `${t.emoji} ` : ''}${t.name}`,
-    }));
+    : templates.map((t) => ({ value: t.id, label: t.name }));
 
   return (
     <Modal open onClose={onClose} maxWidth="max-w-xl">
@@ -72,26 +68,14 @@ export function RoutineEditor({ routine, templates, onClose }: {
       </div>
 
       <div className="mt-4 flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
-        <div className="flex gap-2">
-          <div className="w-20 shrink-0">
-            <Input
-              label="Emoji"
-              className="w-full"
-              value={emoji}
-              onChange={(e) => setEmoji(e.target.value)}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Input
-              label="Name"
-              className="w-full"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Weekly dependency sweep"
-              autoFocus
-            />
-          </div>
-        </div>
+        <Input
+          label="Name"
+          className="w-full"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Weekly dependency sweep"
+          autoFocus
+        />
 
         <Input
           label="Description"

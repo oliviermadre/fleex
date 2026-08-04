@@ -6,6 +6,7 @@ import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
 import { cn } from '../../lib/cn';
+import { RoutineIcon } from '../../lib/primitives';
 import { RepositoriesIcon } from './icons';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
 
@@ -153,14 +154,7 @@ export function NavSidebar() {
             whose active run is blocked on a gate or waiting for an answer:
             those runs have no ticket, so nothing else in the nav surfaces them. */}
         <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 2l4 4-4 4" />
-              <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
-              <path d="M7 22l-4-4 4-4" />
-              <path d="M21 13v1a4 4 0 0 1-4 4H3" />
-            </svg>
-          }
+          icon={<RoutineIcon size={20} strokeWidth={1.5} tinted={false} />}
           label="Routines"
           shortLabel="Routines"
           active={activePanel === 'routines'}

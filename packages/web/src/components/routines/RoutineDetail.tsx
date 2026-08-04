@@ -9,6 +9,7 @@ import { Button } from '../ui/Button';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { cn } from '../../lib/cn';
 import { tint, tintSolid, tintText, type TintHue } from '../../lib/tints';
+import { PrimitiveIcon, RoutineIcon } from '../../lib/primitives';
 
 const CARD_SHELL = 'rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-5';
 
@@ -119,15 +120,18 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
     <div className="flex flex-col gap-5 p-6">
       <section className={CARD_SHELL}>
         <div className="flex items-start gap-3">
-          <span className="text-2xl leading-none">{routine.emoji || '🔁'}</span>
+          <RoutineIcon size={20} className="mt-0.5 flex-shrink-0" />
           <div className="min-w-0 flex-1">
             <h1 className="text-base font-semibold text-[var(--theme-text-primary)]">{routine.name}</h1>
             {routine.description && (
               <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{routine.description}</p>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--theme-text-muted)]">
-              <span className={cn('inline-flex items-center rounded px-1.5 py-0.5', tint('purple'))}>
-                {template ? `${template.emoji ?? ''} ${template.name}` : routine.templateId}
+              {/* The workflow this routine runs, carrying the canonical
+                  workflow glyph rather than the template's free-text emoji. */}
+              <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5', tint('purple'))}>
+                <PrimitiveIcon kind="workflow" size={12} tinted={false} className="shrink-0" />
+                {template ? template.name : routine.templateId}
               </span>
               <span className={cn('inline-flex items-center rounded px-1.5 py-0.5', tint('blue'))}>
                 {describeTrigger(routine.trigger)}
