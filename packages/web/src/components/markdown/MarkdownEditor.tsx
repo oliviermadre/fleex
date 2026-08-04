@@ -303,33 +303,42 @@ export function MarkdownEditor({
   if (variant === 'panel') {
     return (
       <div
-        className={cn('group relative flex min-h-0 flex-1 gap-4 overflow-hidden', className)}
+        className={cn('group flex min-h-0 flex-1 overflow-hidden', className)}
         onKeyDown={handleKeyDown}
       >
         {/*
-          The textarea is hidden, never unmounted: unmounting drops the caret,
-          the selection, and any `onBlur`-based save the caller relies on.
+          The positioning context is this inner row, not the outer box, so that
+          any padding a caller passes through `className` insets the overlaid
+          toggle too. An absolutely positioned child anchors to its container's
+          *padding box*, so on the outer box `right-2` would measure from the
+          outside edge and the toggle would sit outside the field.
         */}
-        <div
-          className={cn(
-            'relative min-w-0',
-            mode === 'preview' ? 'hidden' : mode === 'split' ? 'w-1/2' : 'w-full',
-          )}
-          {...dragProps}
-        >
-          {textarea}
-          {attachButton}
-        </div>
-        {mode !== 'write' && previewPane}
-        {/*
-          Overlaid on the content: at rest it is dim *and* collapsed to the
-          active mode alone, so it stops competing with the text underneath.
-          Focus deliberately doesn't open it — focus means "I'm typing", which
-          is exactly when the toggle is least useful and most in the way.
-          Hover, and only hover, expands it.
-        */}
-        <div className="absolute right-2 top-2 z-10 opacity-35 transition-opacity group-hover:opacity-100">
-          {toggle}
+        <div className="relative flex min-h-0 min-w-0 flex-1 gap-4">
+          {/*
+            The textarea is hidden, never unmounted: unmounting drops the caret,
+            the selection, and any `onBlur`-based save the caller relies on.
+          */}
+          <div
+            className={cn(
+              'relative min-w-0',
+              mode === 'preview' ? 'hidden' : mode === 'split' ? 'w-1/2' : 'w-full',
+            )}
+            {...dragProps}
+          >
+            {textarea}
+            {attachButton}
+          </div>
+          {mode !== 'write' && previewPane}
+          {/*
+            Overlaid on the content: at rest it is dim *and* collapsed to the
+            active mode alone, so it stops competing with the text underneath.
+            Focus deliberately doesn't open it — focus means "I'm typing", which
+            is exactly when the toggle is least useful and most in the way.
+            Hover, and only hover, expands it.
+          */}
+          <div className="absolute right-2 top-2 z-10 opacity-35 transition-opacity group-hover:opacity-100">
+            {toggle}
+          </div>
         </div>
       </div>
     );

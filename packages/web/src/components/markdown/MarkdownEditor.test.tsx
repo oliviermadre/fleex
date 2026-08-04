@@ -235,3 +235,28 @@ describe('MarkdownEditor — overlaid toggle collapse', () => {
     expect(collapsed('Split')).toBe(false);
   });
 });
+
+/**
+ * The scratchpads pass their padding through `className`. That padding lands on
+ * the editor's outer box — and an absolutely positioned child anchors to its
+ * container's *padding box*, so if that same box were the positioning context,
+ * `right-2` would measure from the outside edge and the toggle would float
+ * outside the field. Keep the two boxes distinct.
+ */
+describe('MarkdownEditor — overlaid toggle anchoring', () => {
+  it('does not position the toggle against the box carrying the caller padding', () => {
+    const { container } = render(
+      <Harness surfaceKind="unit_anchor" initial="hello" className="p-4" />,
+    );
+
+    const padded = container.querySelector('.p-4');
+    expect(padded).not.toBeNull();
+    expect(padded!.className).not.toContain('relative');
+
+    const overlay = screen.getByRole('group', { name: 'Markdown view mode' }).parentElement!;
+    expect(overlay.className).toContain('absolute');
+    // The nearest positioned ancestor sits *inside* the padded box.
+    expect(padded!.contains(overlay.parentElement)).toBe(true);
+    expect(overlay.parentElement!.className).toContain('relative');
+  });
+});
