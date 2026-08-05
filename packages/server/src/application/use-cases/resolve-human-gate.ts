@@ -83,7 +83,8 @@ export class ResolveHumanGateUseCase {
 
     this.eventBus.emit({
       type: 'workflow.step_completed', workflowRunId: run.id, stepRunId: stepRun.id,
-      stepId: step.id, ticketId: run.ticketId, nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
+      stepId: step.id, ticketId: run.ticketId, routineId: run.routineId,
+      nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
     });
 
     if (nextEdge) {
@@ -94,13 +95,15 @@ export class ResolveHumanGateUseCase {
       run.complete();
       await this.runStore.save(run);
       this.eventBus.emit({
-        type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId, occurredAt: new Date(),
+        type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId,
+        routineId: run.routineId, occurredAt: new Date(),
       });
     }
   }
 
   private async postResolutionComment(
-    ticketId: string,
+    /** Null for a routine run: the decision trail lives in the step_run itself. */
+    ticketId: string | null,
     workflowName: string,
     stepName: string,
     outcome: string,

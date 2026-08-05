@@ -37,7 +37,7 @@ function makeUseCase() {
   const personaStore = { getByName: async () => persona } as never;
   const getTicketContext = {
     execute: async () => ({
-      ticket: { title: 'A ticket', status: 'todo' },
+      ticket: { title: 'A ticket', status: 'todo', links: [] },
       comments: [],
       deliverables: [],
     }),

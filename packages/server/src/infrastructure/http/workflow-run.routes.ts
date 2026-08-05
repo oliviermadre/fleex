@@ -15,6 +15,11 @@ import type { ResolveHumanGateUseCase } from '../../application/use-cases/resolv
 import type { ResolveAmbiguousRouteUseCase } from '../../application/use-cases/resolve-ambiguous-route.js';
 import type { RetryStepUseCase } from '../../application/use-cases/retry-step.js';
 import type { CancelWorkflowRunUseCase } from '../../application/use-cases/cancel-workflow-run.js';
+import type { SubmitDeliverableUseCase } from '../../application/use-cases/submit-deliverable.js';
+import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
+import type { EventBus } from '../../application/event-bus.js';
+import { InvalidDeliverableTypeError } from '../../domain/errors.js';
+import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 
 // ── Manual validation helpers ──────────────────────────────────────────────
 
@@ -109,7 +114,51 @@ interface WorkflowRunRouteDeps {
   resolveAmbiguousRoute: ResolveAmbiguousRouteUseCase;
   retryStep: RetryStepUseCase;
   cancelWorkflowRun: CancelWorkflowRunUseCase;
+  submitDeliverable: SubmitDeliverableUseCase;
+  deliverableStore: DeliverableStorePort;
+  eventBus: EventBus;
   authorNameResolver: () => string;
+}
+
+interface StepDeliverableBody {
+  title: string;
+  type: string;
+  content: string;
+  status?: string;
+  agentName?: string;
+}
+
+function parseStepDeliverableBody(
+  body: unknown,
+): { ok: true; data: StepDeliverableBody } | { ok: false; error: string } {
+  if (!isObject(body)) return { ok: false, error: 'body must be an object' };
+  if (!isString(body['title']) || body['title'].length === 0) {
+    return { ok: false, error: 'title must be a non-empty string' };
+  }
+  if (!isString(body['type']) || body['type'].length === 0) {
+    return { ok: false, error: 'type must be a non-empty string' };
+  }
+  // An empty deliverable is almost always a `--file` that read nothing; failing
+  // here is far cheaper to diagnose than an empty artifact in the run graph.
+  if (!isString(body['content']) || body['content'].length === 0) {
+    return { ok: false, error: 'content must be a non-empty string' };
+  }
+  if (body['status'] !== undefined && body['status'] !== 'draft' && body['status'] !== 'final') {
+    return { ok: false, error: 'status must be "draft" or "final"' };
+  }
+  if (body['agentName'] !== undefined && !isString(body['agentName'])) {
+    return { ok: false, error: 'agentName must be a string' };
+  }
+  return {
+    ok: true,
+    data: {
+      title: body['title'],
+      type: body['type'],
+      content: body['content'],
+      ...(isString(body['status']) ? { status: body['status'] } : {}),
+      ...(isString(body['agentName']) ? { agentName: body['agentName'] } : {}),
+    },
+  };
 }
 
 export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
@@ -228,14 +277,95 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
       },
     );
 
-    // POST /api/workflows/runs/:id/steps/:stepRunId/retry — retry a step
+    // GET /api/workflows/runs/:id/steps/:stepRunId/deliverables
+    app.get<{ Params: { id: string; stepRunId: string } }>(
+      '/api/workflows/runs/:id/steps/:stepRunId/deliverables',
+      async (request, reply) => {
+        const stepRun = await deps.stepRunStore.getById(request.params.stepRunId);
+        if (!stepRun || stepRun.workflowRunId !== request.params.id) {
+          return reply.code(404).send({ error: 'STEP_RUN_NOT_FOUND' });
+        }
+        const deliverables = await deps.deliverableStore.getByStepRun(stepRun.id);
+        return deliverables.map((d) => d.toDTO());
+      },
+    );
+
+    // POST /api/workflows/runs/:id/steps/:stepRunId/deliverables — attach an
+    // artifact to the step that produced it.
+    //
+    // This is the escape hatch from the structured-output channel: returning a
+    // long deliverable through `structuredOutput` forces the agent to
+    // re-serialize the whole content as output tokens, which is slow and can
+    // exceed the output limit outright (a full meeting transcript does). Here
+    // the content arrives as a plain request body — typically read from a file
+    // by the CLI — so it never passes through the model.
     app.post<{ Params: { id: string; stepRunId: string } }>(
+      '/api/workflows/runs/:id/steps/:stepRunId/deliverables',
+      async (request, reply) => {
+        const parsed = parseStepDeliverableBody(request.body);
+        if (!parsed.ok) return reply.code(400).send({ error: 'INVALID_BODY', message: parsed.error });
+
+        const run = await deps.runStore.getById(request.params.id);
+        if (!run) return reply.code(404).send({ error: 'WORKFLOW_RUN_NOT_FOUND' });
+        const stepRun = await deps.stepRunStore.getById(request.params.stepRunId);
+        // Cross-run ids are rejected rather than tolerated: a step run that
+        // belongs elsewhere would attach the artifact to the wrong graph.
+        if (!stepRun || stepRun.workflowRunId !== run.id) {
+          return reply.code(404).send({ error: 'STEP_RUN_NOT_FOUND' });
+        }
+
+        const agentName = parsed.data.agentName ?? 'cli';
+        try {
+          const deliverable = await deps.submitDeliverable.execute({
+            // Mirrors `persistStepArtifacts`: a ticket run anchors on the ticket,
+            // a routine run on the run — and both now also on the step run.
+            ticketId: run.ticketId,
+            workflowRunId: run.ticketId ? null : run.id,
+            stepRunId: stepRun.id,
+            agentName,
+            type: parsed.data.type as DeliverableType,
+            title: parsed.data.title,
+            content: parsed.data.content,
+            status: parsed.data.status as DeliverableStatus | undefined,
+          });
+
+          deps.eventBus.emit({
+            type: 'deliverable.created',
+            deliverableId: deliverable.id,
+            ticketId: run.ticketId,
+            workflowRunId: run.ticketId ? null : run.id,
+            stepRunId: stepRun.id,
+            agentName,
+            status: deliverable.status,
+            title: deliverable.title,
+            occurredAt: new Date(),
+          });
+
+          return reply.code(201).send(deliverable.toDTO());
+        } catch (err) {
+          if (err instanceof InvalidDeliverableTypeError) {
+            return reply.code(400).send({ error: err.code, message: err.message });
+          }
+          throw err;
+        }
+      },
+    );
+
+    // POST /api/workflows/runs/:id/steps/:stepRunId/retry — retry a step
+    app.post<{ Params: { id: string; stepRunId: string }; Body: unknown }>(
       '/api/workflows/runs/:id/steps/:stepRunId/retry',
       async (request, reply) => {
+        // Optional: the answer the user typed when the step paused on a
+        // `waiting_for_info` question. Recorded on the paused attempt so the
+        // retry sees it — the only channel that exists on a routine run.
+        const body = request.body;
+        const humanResponse =
+          isObject(body) && isString(body['humanResponse']) ? body['humanResponse'] : undefined;
         try {
           await deps.retryStep.execute({
             workflowRunId: request.params.id,
             stepRunId: request.params.stepRunId,
+            ...(humanResponse ? { humanResponse } : {}),
           });
           return reply.code(204).send();
         } catch (err) {

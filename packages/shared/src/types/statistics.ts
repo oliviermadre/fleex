@@ -146,6 +146,25 @@ export interface WorkflowLeaderboardEntry {
   readonly avgDurationMs: number | null;
 }
 
+/**
+ * Routine runs in range, grouped by routine. Distinct from the workflow board:
+ * a routine may target a primitive (agent / skill / panel) and then has no
+ * template at all, so its runs are invisible on every other leaderboard.
+ */
+export interface RoutineLeaderboardEntry {
+  readonly routineId: string;
+  readonly routineName: string;
+  /** `workflow` / `agent` / `skill` / `panel` — what the routine launches. */
+  readonly targetKind: string;
+  readonly targetRef: string;
+  readonly executionCount: number;
+  readonly completedCount: number;
+  readonly failedCount: number;
+  readonly avgDurationMs: number | null;
+  /** ISO instant of the most recent run in range, for a "last run" column. */
+  readonly lastRunAt: string | null;
+}
+
 export interface StatisticsResponse {
   readonly from: string;
   readonly to: string;
@@ -156,6 +175,7 @@ export interface StatisticsResponse {
   readonly skillLeaderboard: SkillLeaderboardEntry[];
   readonly panelLeaderboard: PanelLeaderboardEntry[];
   readonly workflowLeaderboard: WorkflowLeaderboardEntry[];
+  readonly routineLeaderboard: RoutineLeaderboardEntry[];
   // ── Extended analytics (derived from existing data; no schema changes) ──
   readonly usageByType: UsageByTypeBucket[];
   readonly activityHeatmap: ActivityHeatmapCell[];

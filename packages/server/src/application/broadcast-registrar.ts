@@ -140,12 +140,19 @@ export class BroadcastRegistrar {
     });
 
     // ── Workflow broadcasts ──
+    //
+    // Every payload carries BOTH anchors. `ticketId` is what the ticket views
+    // filter on; `routineId` is what /routines filters on. A routine run has a
+    // null ticketId, so without the second field these pushes are invisible to
+    // the Routines screen and the user is left refreshing the page by hand to
+    // see a step finish or a gate open.
     bus.on('workflow.run_created', (e) => {
       if (e.type === 'workflow.run_created') {
         this.ticketBroadcast('workflow:run_created', {
           workflowRunId: e.workflowRunId,
           templateId: e.templateId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
         });
       }
     });
@@ -156,6 +163,7 @@ export class BroadcastRegistrar {
           stepRunId: e.stepRunId,
           stepId: e.stepId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
         });
       }
     });
@@ -166,6 +174,7 @@ export class BroadcastRegistrar {
           stepRunId: e.stepRunId,
           stepId: e.stepId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
           nextEdgeId: e.nextEdgeId,
         });
       }
@@ -177,6 +186,7 @@ export class BroadcastRegistrar {
           stepRunId: e.stepRunId,
           stepId: e.stepId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
         });
       }
     });
@@ -187,6 +197,7 @@ export class BroadcastRegistrar {
           stepRunId: e.stepRunId,
           stepId: e.stepId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
         });
       }
     });
@@ -197,6 +208,7 @@ export class BroadcastRegistrar {
           stepRunId: e.stepRunId,
           stepId: e.stepId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
           candidateEdgeIds: e.candidateEdgeIds,
         });
       }
@@ -206,6 +218,7 @@ export class BroadcastRegistrar {
         this.ticketBroadcast('workflow:run_completed', {
           workflowRunId: e.workflowRunId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
         });
       }
     });
@@ -216,6 +229,7 @@ export class BroadcastRegistrar {
           stepRunId: e.stepRunId,
           stepId: e.stepId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
           error: e.error,
         });
       }
@@ -225,6 +239,41 @@ export class BroadcastRegistrar {
         this.ticketBroadcast('workflow:run_cancelled', {
           workflowRunId: e.workflowRunId,
           ticketId: e.ticketId,
+          routineId: e.routineId ?? null,
+        });
+      }
+    });
+
+    // ── Routine broadcasts ──
+    // Routine runs have no ticketId, so they are invisible to every
+    // `workflow:*` push above. These three are what light up /routines live
+    // when the scheduler fires while nobody is looking at the screen.
+    bus.on('routine.run_started', (e) => {
+      if (e.type === 'routine.run_started') {
+        this.ticketBroadcast('routine:run_started', {
+          routineId: e.routineId,
+          routineSlug: e.routineSlug,
+          workflowRunId: e.workflowRunId,
+          triggerKind: e.triggerKind,
+        });
+      }
+    });
+    bus.on('routine.run_completed', (e) => {
+      if (e.type === 'routine.run_completed') {
+        this.ticketBroadcast('routine:run_completed', {
+          routineId: e.routineId,
+          workflowRunId: e.workflowRunId,
+          status: e.status,
+        });
+      }
+    });
+    bus.on('routine.run_skipped', (e) => {
+      if (e.type === 'routine.run_skipped') {
+        this.ticketBroadcast('routine:run_skipped', {
+          routineId: e.routineId,
+          routineSlug: e.routineSlug,
+          activeRunId: e.activeRunId,
+          reason: e.reason,
         });
       }
     });

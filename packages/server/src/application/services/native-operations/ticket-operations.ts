@@ -109,7 +109,7 @@ export const TICKET_OPERATIONS: readonly NativeOperationImpl[] = [
           authorName: ctx.actor.workflowName,
           body: str(params['body']),
         });
-        return { commentId: comment.id };
+        return { commentId: comment?.id ?? null };
       },
     }),
   },

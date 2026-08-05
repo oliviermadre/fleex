@@ -17,6 +17,7 @@ import type { TicketGroupStorePort } from '../../application/ports/ticket-group-
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
+import type { RoutineStorePort } from '../../application/ports/routine-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
@@ -42,6 +43,7 @@ export interface StorageStores {
   workflowTemplateStore: WorkflowTemplateStorePort | null;
   workflowRunStore: WorkflowRunStorePort | null;
   stepRunStore: StepRunStorePort | null;
+  routineStore: RoutineStorePort | null;
 }
 
 export function resolveStorageDriver(): StorageDriver {
@@ -114,6 +116,7 @@ async function createSqliteStores(deps: {
   const { SqliteWorkflowTemplateStoreAdapter } = await import('./sqlite/sqlite-workflow-template-store.adapter.js');
   const { SqliteWorkflowRunStoreAdapter } = await import('./sqlite/sqlite-workflow-run-store.adapter.js');
   const { SqliteStepRunStoreAdapter } = await import('./sqlite/sqlite-step-run-store.adapter.js');
+  const { SqliteRoutineStoreAdapter } = await import('./sqlite/sqlite-routine-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const connection = new SqliteConnection(dbPath);
@@ -150,6 +153,7 @@ async function createSqliteStores(deps: {
     workflowTemplateStore: new SqliteWorkflowTemplateStoreAdapter(connection),
     workflowRunStore: new SqliteWorkflowRunStoreAdapter(connection),
     stepRunStore: new SqliteStepRunStoreAdapter(connection),
+    routineStore: new SqliteRoutineStoreAdapter(connection),
   };
 }
 
@@ -218,6 +222,7 @@ async function createPgsqlStores(deps: {
     workflowTemplateStore: null,
     workflowRunStore: null,
     stepRunStore: null,
+    routineStore: null,
   };
 }
 
@@ -254,6 +259,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseWorkflowTemplateStore } = await import('./supabase/supabase-workflow-template-store.adapter.js');
   const { SupabaseWorkflowRunStore } = await import('./supabase/supabase-workflow-run-store.adapter.js');
   const { SupabaseStepRunStore } = await import('./supabase/supabase-step-run-store.adapter.js');
+  const { SupabaseRoutineStore } = await import('./supabase/supabase-routine-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const connection = new SupabaseConnection(url, key, dbUrl, deps.logger);
@@ -290,5 +296,6 @@ async function createSupabaseStores(deps: {
     workflowTemplateStore: new SupabaseWorkflowTemplateStore(connection),
     workflowRunStore: new SupabaseWorkflowRunStore(connection),
     stepRunStore: new SupabaseStepRunStore(connection),
+    routineStore: new SupabaseRoutineStore(connection),
   };
 }

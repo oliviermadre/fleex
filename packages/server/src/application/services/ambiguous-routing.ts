@@ -61,6 +61,7 @@ export async function pauseForRouting(
     stepRunId: stepRun.id,
     stepId: step.id,
     ticketId: run.ticketId,
+    routineId: run.routineId,
     candidateEdgeIds: candidates.map((e) => e.id),
     occurredAt: new Date(),
   });

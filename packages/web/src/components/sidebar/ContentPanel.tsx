@@ -20,6 +20,10 @@ import { ScratchpadsContent } from '../scratchpad/ScratchpadsContent';
 import { TicketsContentPanel } from '../tickets/TicketsContentPanel';
 import { AgentListPanel } from '../agents/AgentListPanel';
 import { AssistantSidebar } from '../assistant/AssistantSidebar';
+import { RoutinesContentPanel } from '../routines/RoutinesContentPanel';
+import { describeTrigger } from '../routines/RoutineDetail';
+import { useRoutineStore } from '../../stores/routineStore';
+import { RoutineIcon } from '../../lib/primitives';
 import { RepositoriesIcon } from './icons';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
@@ -38,6 +42,7 @@ export function ContentPanel() {
     if (activePanel === 'claude-config') return <CollapsedClaudeConfigPanel />;
     if (activePanel === 'agents') return <CollapsedAgentsPanel />;
     if (activePanel === 'scratchpads') return <CollapsedScratchpadsPanel />;
+    if (activePanel === 'routines') return <CollapsedRoutinesPanel />;
     if (activePanel === 'analytics') return <CollapsedAnalyticsPanel />;
     if (activePanel === 'settings') return <CollapsedSettingsPanel />;
     // cluster or unknown — just show expand button
@@ -54,6 +59,7 @@ export function ContentPanel() {
       {activePanel === 'dashboard' && null}
       {activePanel === 'cluster' && null}
       {activePanel === 'scratchpads' && <ScratchpadsContent />}
+      {activePanel === 'routines' && <RoutinesContentPanel />}
       {activePanel === 'analytics' && <AnalyticsNav />}
       {activePanel === 'settings' && <SettingsNav />}
       {activePanel === 'assistant' && <AssistantSidebar />}
@@ -811,6 +817,54 @@ function CollapsedScratchpadsPanel() {
             })}
           </>
         )}
+      </div>
+      <CollapsedTooltip ctl={tooltipCtl} />
+    </CollapsedShell>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// ── Collapsed Routines panel ──
+// ═══════════════════════════════════════════════
+
+function CollapsedRoutinesPanel() {
+  const routines = useRoutineStore((s) => s.routines);
+  const selectedId = useRoutineStore((s) => s.selectedId);
+  const select = useRoutineStore((s) => s.select);
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
+
+  return (
+    <CollapsedShell>
+      <div className="flex-1 overflow-y-auto w-full">
+        {routines.length === 0 ? (
+          <div className="flex items-center justify-center py-6">
+            <RoutineIcon size={16} tinted={false} className="text-[var(--theme-text-faint)]" />
+          </div>
+        ) : routines.map((routine) => {
+          const isSelected = selectedId === routine.id;
+          return (
+            <CollapsedRow
+              key={routine.id}
+              isSelected={isSelected}
+              onClick={() => void select(routine.id)}
+              onMouseEnter={(e) => showTooltip(e, routine.name, describeTrigger(routine.trigger))}
+              onMouseLeave={hideTooltip}
+              icon={
+                <span className="relative">
+                  <RoutineIcon
+                    size={16}
+                    tinted={false}
+                    className={isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]'}
+                  />
+                  {routine.awaitingAttention && (
+                    <span className={cn('absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full', tintSolid('yellow'))} />
+                  )}
+                </span>
+              }
+            />
+          );
+        })}
       </div>
       <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>

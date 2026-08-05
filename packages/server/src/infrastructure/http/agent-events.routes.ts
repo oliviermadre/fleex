@@ -1,12 +1,14 @@
 import type { FastifyInstance } from 'fastify';
-import { computeInitials, type PanelMemberSummary, type ExecutionLogEntry, type AgentExecution, type WorkflowStepSummary } from '@fleex/shared';
+import { computeInitials, type PanelMemberSummary, type ExecutionLogEntry, type AgentExecution, type WorkflowStepSummary, type ExecutionScope } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { StepRunEntity } from '../../domain/entities/step-run.entity.js';
+import type { RoutineEntity } from '../../domain/entities/routine.entity.js';
 import type { Container } from '../container.js';
 
 const VALID_STATUSES = new Set<AgentExecution['status']>(['running', 'completed', 'failed', 'interrupted']);
 const VALID_TYPES = new Set<ExecutionLogEntry['type']>(['agent', 'panel', 'skill', 'workflow']);
+const VALID_SCOPES = new Set<ExecutionScope>(['tickets', 'routines']);
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 100;
 const MAX_Q_LENGTH = 200;
@@ -32,6 +34,7 @@ export function agentEventsRoutes(container: Container) {
       Querystring: {
         status?: string;
         type?: string;
+        scope?: string;
         q?: string;
         limit?: string;
         offset?: string;
@@ -40,6 +43,7 @@ export function agentEventsRoutes(container: Container) {
       // ── Query param validation (defensive) ──────────────────────────────
       const statusFilter = parseCsvWhitelist<AgentExecution['status']>(request.query.status, VALID_STATUSES);
       const typeFilter = parseCsvWhitelist<ExecutionLogEntry['type']>(request.query.type, VALID_TYPES);
+      const scopeFilter = parseCsvWhitelist<ExecutionScope>(request.query.scope, VALID_SCOPES);
       const q = request.query.q ? request.query.q.slice(0, MAX_Q_LENGTH).toLowerCase() : undefined;
       const limit = clampInt(request.query.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
       const offset = clampInt(request.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
@@ -66,14 +70,14 @@ export function agentEventsRoutes(container: Container) {
         if (exec.mentionId) mentionIds.add(exec.mentionId);
       }
       for (const run of allWorkflowRuns) {
-        ticketIds.add(run.ticketId);
+        if (run.ticketId) ticketIds.add(run.ticketId);
       }
 
       // Bulk fetch tickets, personas, mentions, comments, deliverables, panels, skills.
       // Each lookup falls back to an empty result on failure so a transient store
       // error in one collection doesn't 500 the whole Execution Log view.
       const ticketIdArr = [...ticketIds];
-      const [allTickets, allPersonas, allMentions, allComments, allDeliverables, allPanels, allSkills, allStepRuns] = await Promise.all([
+      const [allTickets, allPersonas, allMentions, allComments, allDeliverables, allPanels, allSkills, allStepRuns, allRoutines] = await Promise.all([
         container.ticketStore.getAllTickets().catch((err: unknown) => {
           request.log.error({ err }, 'executions: ticketStore.getAllTickets failed');
           return [];
@@ -115,6 +119,12 @@ export function agentEventsRoutes(container: Container) {
           request.log.error({ err }, 'executions: stepRunStore.getAll failed');
           return [] as StepRunEntity[];
         }) ?? Promise.resolve([] as StepRunEntity[]),
+        // Routines are optional in the same way — an instance that never ran the
+        // routines migration simply has no routine-anchored run to label.
+        container.routineStore?.getAll().catch((err: unknown) => {
+          request.log.error({ err }, 'executions: routineStore.getAll failed');
+          return [] as RoutineEntity[];
+        }) ?? Promise.resolve([] as RoutineEntity[]),
       ]);
 
       // Build comment/deliverable count maps
@@ -124,6 +134,8 @@ export function agentEventsRoutes(container: Container) {
       }
       const deliverableCountMap = new Map<string, number>();
       for (const d of allDeliverables) {
+        // Routine deliverables hang off a run, not a ticket — nothing to count.
+        if (!d.ticketId) continue;
         deliverableCountMap.set(d.ticketId, (deliverableCountMap.get(d.ticketId) ?? 0) + 1);
       }
 
@@ -133,6 +145,7 @@ export function agentEventsRoutes(container: Container) {
       const panelByName = new Map(allPanels.map((p) => [p.name, p]));
       const panelById = new Map(allPanels.map((p) => [p.id, p]));
       const skillById = new Map(allSkills.map((s) => [s.id, s]));
+      const routineById = new Map(allRoutines.map((r) => [r.id, r]));
 
       // ── Identify executions owned by a workflow step ─────────────────────
       // Each agent/skill/panel step records the underlying agent_execution.id
@@ -191,7 +204,8 @@ export function agentEventsRoutes(container: Container) {
       }
 
       function enrichStandalone(exec: AgentExecution): ExecutionLogEntry {
-        const ticket = ticketMap.get(exec.ticketId);
+        const ticket = exec.ticketId ? ticketMap.get(exec.ticketId) : undefined;
+        const routine = exec.routineId ? routineById.get(exec.routineId) : undefined;
         const persona = personaMap.get(exec.personaId);
         const mention = exec.mentionId ? mentionMap.get(exec.mentionId) : null;
         const rawType = mention?.targetType;
@@ -228,8 +242,10 @@ export function agentEventsRoutes(container: Container) {
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,
           ticketType: ticket?.type ?? null,
-          commentCount: commentCountMap.get(exec.ticketId) ?? 0,
-          deliverableCount: deliverableCountMap.get(exec.ticketId) ?? 0,
+          commentCount: exec.ticketId ? commentCountMap.get(exec.ticketId) ?? 0 : 0,
+          deliverableCount: exec.ticketId ? deliverableCountMap.get(exec.ticketId) ?? 0 : 0,
+          routineName: routine?.name ?? null,
+          routineSlug: routine?.slug ?? null,
         };
       }
 
@@ -309,7 +325,7 @@ export function agentEventsRoutes(container: Container) {
         const orchestratorPersona = personaMap.get(orchestratorExec.personaId);
 
         // Ticket context — pull from any exec, they share it
-        const ticket = ticketMap.get(orchestratorExec.ticketId);
+        const ticket = orchestratorExec.ticketId ? ticketMap.get(orchestratorExec.ticketId) : undefined;
 
         // effectiveMode / model: prefer orchestrator's
         const effectiveMode = orchestratorExec.effectiveMode ?? sorted[0]!.effectiveMode ?? null;
@@ -345,8 +361,8 @@ export function agentEventsRoutes(container: Container) {
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,
           ticketType: ticket?.type ?? null,
-          commentCount: commentCountMap.get(orchestratorExec.ticketId) ?? 0,
-          deliverableCount: deliverableCountMap.get(orchestratorExec.ticketId) ?? 0,
+          commentCount: orchestratorExec.ticketId ? commentCountMap.get(orchestratorExec.ticketId) ?? 0 : 0,
+          deliverableCount: orchestratorExec.ticketId ? deliverableCountMap.get(orchestratorExec.ticketId) ?? 0 : 0,
 
           panelDisplayName: panel?.displayName ?? mention?.targetAgent ?? 'Panel',
           panelMembers: members,
@@ -366,7 +382,8 @@ export function agentEventsRoutes(container: Container) {
       }
 
       function enrichWorkflowRun(run: WorkflowRunEntity): ExecutionLogEntry {
-        const ticket = ticketMap.get(run.ticketId);
+        const ticket = run.ticketId ? ticketMap.get(run.ticketId) : undefined;
+        const routine = run.routineId ? routineById.get(run.routineId) : undefined;
         const allSteps = run.templateSnapshot.steps;
         const stepRuns = stepRunsByRun.get(run.id) ?? [];
 
@@ -469,6 +486,9 @@ export function agentEventsRoutes(container: Container) {
           // fields empty so the row UI knows not to render persona/model columns.
           personaId: '',
           ticketId: run.ticketId,
+          // Anchor. Exactly one of ticketId / routineId is set (entity invariant);
+          // the UI keys the routine chip and the CTA set off this.
+          routineId: run.routineId ?? null,
           mentionId: `workflow:${run.id}`,
           eventCount: stepRuns.length,
           status: mappedStatus,
@@ -491,8 +511,11 @@ export function agentEventsRoutes(container: Container) {
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,
           ticketType: ticket?.type ?? null,
-          commentCount: commentCountMap.get(run.ticketId) ?? 0,
-          deliverableCount: deliverableCountMap.get(run.ticketId) ?? 0,
+          commentCount: run.ticketId ? commentCountMap.get(run.ticketId) ?? 0 : 0,
+          deliverableCount: run.ticketId ? deliverableCountMap.get(run.ticketId) ?? 0 : 0,
+          // Routine chip — rendered where a ticket-bound row shows its ticket chip.
+          routineName: routine?.name ?? null,
+          routineSlug: routine?.slug ?? null,
 
           workflowRunId: run.id,
           workflowSubStatus: subStatus,
@@ -521,8 +544,24 @@ export function agentEventsRoutes(container: Container) {
         entries = entries.filter(
           (e) =>
             (e.ticketTitle && e.ticketTitle.toLowerCase().includes(q)) ||
+            (e.routineName && e.routineName.toLowerCase().includes(q)) ||
             e.executorName.toLowerCase().includes(q),
         );
+      }
+
+      // Scope counts BEFORE the scope filter, same rationale as typeCounts.
+      const scopeCounts = { all: entries.length, tickets: 0, routines: 0 };
+      for (const e of entries) {
+        if (e.routineId) scopeCounts.routines += 1;
+        else scopeCounts.tickets += 1;
+      }
+
+      // Filter by scope. Scope is the coarser cut (what a run is anchored to),
+      // so it is applied BEFORE the type counts — the type tab badges then
+      // describe the scope the user is actually looking at.
+      if (scopeFilter) {
+        const scopes = new Set(scopeFilter);
+        entries = entries.filter((e) => scopes.has(e.routineId ? 'routines' : 'tickets'));
       }
 
       // Compute per-type counts BEFORE applying the type filter, so tab badges
@@ -556,7 +595,7 @@ export function agentEventsRoutes(container: Container) {
       // Pagination — limit/offset are pre-validated and clamped (limit ≤ 500).
       entries = entries.slice(offset, offset + limit);
 
-      return { entries, total, liveCount, historyCount, typeCounts };
+      return { entries, total, liveCount, historyCount, typeCounts, scopeCounts };
     });
 
     // GET /api/personas/:id/executions — list executions for a persona

@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, MarkerType, Position, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
-import type { WorkflowRun, StepRun, WorkflowStep } from '@fleex/shared';
+import type { WorkflowRun, StepRun, WorkflowStep, TicketDeliverable } from '@fleex/shared';
 import { StepRunNode, type StepRunNodeData } from './StepRunNode';
 import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
@@ -11,7 +11,14 @@ import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
 import { CancelledStepRestartPanel } from './CancelledStepRestartPanel';
+import { StepSessionOverlay } from './StepSessionOverlay';
+import { StepOutputView } from './StepOutputView';
+import { splitStepDeliverables } from './stepDeliverableSplit';
+import { stepSessionState } from './stepSession';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { tint } from '../../lib/tints';
 import { countCompletedSteps } from './workflowProgress';
 import { postTicketComment } from '../../services/api';
 import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
@@ -22,10 +29,28 @@ const edgeTypes = { workflow: WorkflowDagEdge };
 interface Props {
   run: WorkflowRun;
   stepRuns: StepRun[];
+  /**
+   * The deliverables this run produced, attributed back to their producing
+   * step (icon on the node + list in the step sidebar). Optional: surfaces
+   * that don't have them at hand (e.g. the ticket workflow tab) just get no
+   * markers.
+   */
+  deliverables?: TicketDeliverable[];
 }
 
-export function WorkflowRunView({ run, stepRuns }: Props) {
+/** Sidebar width bounds. Below 320px the output columns collapse; above 80% of
+ *  the view the DAG is no longer usable. */
+const SIDEBAR_MIN_WIDTH = 320;
+const DEFAULT_SIDEBAR_WIDTH = 420;
+
+export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // The SDK session currently opened in the floating popup, if any.
+  const [openSession, setOpenSession] = useState<
+    { executionId: string; stepName: string } | null
+  >(null);
   const colorMode = useColorMode();
   const themeColors = useActiveTheme().colors;
   const cancel = useWorkflowRunStore((s) => s.cancel);
@@ -47,16 +72,77 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
     return m;
   }, [stepRuns]);
 
+  // Deliverable → producing step. `stepRunId` is the real edge and is used
+  // whenever it is set: it survives a step rename and points at the *attempt*,
+  // not just the step. Rows written before the anchor existed (and any produced
+  // outside a step run) still only carry the `agentName` contract from
+  // persistStepArtifacts — `workflow:{name} → {step name}` — so that parse stays
+  // as the fallback rather than dropping historical deliverables off the graph.
+  const deliverablesByStepId = useMemo(() => {
+    const stepIdByStepRun = new Map(stepRuns.map((sr) => [sr.id, sr.stepId]));
+
+    // Title → step, read off what the step runs *declared* they produced. This
+    // sits ahead of the name fallback because it survives what the name cannot:
+    // two steps of the same workflow routinely carry the same name (the editor
+    // hands out "New Step"), and the author string only carries that name.
+    // Ambiguous titles resolve to nothing rather than to a coin flip.
+    const stepIdByTitle = new Map<string, string | null>();
+    for (const sr of stepRuns) {
+      const title = sr.output?.deliverable?.title;
+      if (!title) continue;
+      const seen = stepIdByTitle.get(title);
+      if (seen === undefined) stepIdByTitle.set(title, sr.stepId);
+      else if (seen !== sr.stepId) stepIdByTitle.set(title, null);
+    }
+
+    // Same guard on the name map: a duplicated step name identifies nothing.
+    const idByName = new Map<string, string | null>();
+    for (const s of run.templateSnapshot.steps) {
+      idByName.set(s.name, idByName.has(s.name) ? null : s.id);
+    }
+
+    const m = new Map<string, TicketDeliverable[]>();
+    for (const d of deliverables) {
+      let stepId = d.stepRunId ? stepIdByStepRun.get(d.stepRunId) : undefined;
+      if (!stepId) stepId = stepIdByTitle.get(d.title) ?? undefined;
+      if (!stepId) {
+        const sep = d.agentName.lastIndexOf(' → ');
+        if (sep < 0) continue;
+        stepId = idByName.get(d.agentName.slice(sep + 3)) ?? undefined;
+      }
+      if (!stepId) continue;
+      m.set(stepId, [...(m.get(stepId) ?? []), d]);
+    }
+    return m;
+  }, [run.templateSnapshot.steps, stepRuns, deliverables]);
+
   const nodes = useMemo(
     () =>
       run.templateSnapshot.steps.map((step) => {
         const sr = latestPerStep.get(step.id);
+        const session = stepSessionState(step, sr);
+        // The marker counts what the step actually produced, which is not the
+        // same as what can be traced back to it. A run that predates the
+        // stepRunId anchor has no attributable row, yet its output carries the
+        // deliverable the sidebar renders — so the output alone is enough to
+        // earn the marker, and the split keeps it from being counted twice.
+        const attributed = deliverablesByStepId.get(step.id) ?? [];
+        const split = splitStepDeliverables(attributed, sr?.output?.deliverable?.title, sr?.id);
+        const deliverableCount =
+          split.previousDeliverables.length +
+          (split.latestDeliverable || sr?.output?.deliverable ? 1 : 0);
         const data: StepRunNodeData = {
           step,
           status: sr?.status ?? 'pending',
           summary: (sr?.output?.comment ?? undefined) as string | undefined,
           isCurrent: run.currentStepId === step.id,
           onSelect: setSelectedStepId,
+          onOpenSession:
+            session.kind === 'available'
+              ? () =>
+                  setOpenSession({ executionId: session.executionId, stepName: step.name })
+              : undefined,
+          deliverableCount,
         };
         return {
           id: step.id,
@@ -71,7 +157,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
           data: data as unknown as Record<string, unknown>,
         };
       }),
-    [run.templateSnapshot.steps, latestPerStep, run.currentStepId],
+    [run.templateSnapshot.steps, latestPerStep, run.currentStepId, deliverablesByStepId],
   );
 
   const edges: Edge[] = useMemo(
@@ -97,9 +183,50 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
     ? stepIndex.get(selectedStepId)
     : undefined;
   const selectedStepRun = selectedStepId ? latestPerStep.get(selectedStepId) : undefined;
+  const selectedSession = selectedStep
+    ? stepSessionState(selectedStep, selectedStepRun)
+    : ({ kind: 'none' } as const);
+
+  // The latest attempt's deliverable is shown inside its output; the earlier
+  // attempts' stay in the box above. See stepDeliverableSplit.
+  const { latestDeliverable, previousDeliverables } = useMemo(
+    () =>
+      splitStepDeliverables(
+        (selectedStep ? deliverablesByStepId.get(selectedStep.id) : undefined) ?? [],
+        selectedStepRun?.output?.deliverable?.title,
+        selectedStepRun?.id,
+      ),
+    [selectedStep, selectedStepRun, deliverablesByStepId],
+  );
 
   const completed = countCompletedSteps(stepRuns);
   const total = run.templateSnapshot.steps.length;
+
+  // Drag from the sidebar's left edge. Width is measured against the body
+  // container, not the viewport, so it behaves the same in the full-page run
+  // view and in the (narrower) ticket workflow tab.
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const body = bodyRef.current;
+    if (!body) return;
+
+    const onMove = (ev: MouseEvent) => {
+      const rect = body.getBoundingClientRect();
+      const raw = rect.right - ev.clientX;
+      setSidebarWidth(Math.max(SIDEBAR_MIN_WIDTH, Math.min(raw, rect.width * 0.8)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -135,7 +262,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
+      <div ref={bodyRef} className="flex flex-1 overflow-hidden">
         {/* DAG canvas */}
         <div className="flex-1">
           <ReactFlow
@@ -168,9 +295,19 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
 
         {/* Step detail sidebar */}
         {selectedStep && (
+          <>
           <div
-            className="w-[420px] p-4 overflow-y-auto space-y-3"
-            style={{ borderLeft: '1px solid var(--theme-border)' }}
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={startResize}
+            className="group/h relative w-[3px] flex-shrink-0 cursor-col-resize bg-[var(--theme-border)] transition-colors hover:bg-[var(--theme-accent)] active:bg-[var(--theme-accent)]"
+          >
+            {/* Wider invisible hit-area for easier grabbing */}
+            <span className="absolute inset-y-0 -left-1 -right-1" />
+          </div>
+          <div
+            className="flex-shrink-0 p-4 overflow-y-auto space-y-3"
+            style={{ width: sidebarWidth }}
           >
             <h3 className="text-sm font-medium text-[var(--theme-text-primary)]">
               {selectedStep.name}
@@ -188,15 +325,33 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                 </div>
               )}
             </div>
+            {/* The step's Claude SDK session. Available as soon as the agent
+                starts, so a step still running opens on a live stream. */}
+            {selectedSession.kind === 'available' && (
+              <button
+                onClick={() =>
+                  setOpenSession({
+                    executionId: selectedSession.executionId,
+                    stepName: selectedStep.name,
+                  })
+                }
+                className="w-full text-xs px-3 py-1.5 rounded border border-[var(--theme-border-input)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] transition-colors"
+              >
+                {selectedSession.live ? 'Watch SDK session (live)' : 'View SDK session'}
+              </button>
+            )}
+            {previousDeliverables.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                  {latestDeliverable ? 'Previous deliverables' : 'Deliverables'}
+                </div>
+                {previousDeliverables.map((d) => (
+                  <StepDeliverableRow key={d.id} deliverable={d} />
+                ))}
+              </div>
+            )}
             {selectedStepRun?.output && (
-              <details className="text-xs">
-                <summary className="cursor-pointer text-[var(--theme-text-secondary)]">
-                  Output
-                </summary>
-                <pre className="mt-2 p-2 rounded bg-[var(--theme-bg-overlay)] overflow-x-auto text-[10px] text-[var(--theme-text-primary)]">
-                  {JSON.stringify(selectedStepRun.output, null, 2)}
-                </pre>
-              </details>
+              <StepOutputView output={selectedStepRun.output} latestDeliverable={latestDeliverable} />
             )}
             {selectedStepRun?.status === 'needs_review' &&
               selectedStep.executorType === 'human_gate' && (
@@ -220,11 +375,13 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   stepRunId={selectedStepRun.id}
                   question={selectedStepRun.output?.comment}
                   onSubmit={async (response) => {
-                    // Post the user's response as a regular ticket comment so the
-                    // agent picks it up from the ticket context on the next run,
-                    // then retry the step.
-                    await postTicketComment(run.ticketId, response);
-                    await retry(run.id, selectedStepRun.id);
+                    // The response travels with the retry: the server records it
+                    // on the paused attempt and the new attempt reads it back
+                    // from the run history. This is the ONLY channel on a routine
+                    // run — it has no ticket timeline. On a ticket run we also
+                    // post it as a comment so it stays visible in the thread.
+                    if (run.ticketId) await postTicketComment(run.ticketId, response);
+                    await retry(run.id, selectedStepRun.id, response);
                   }}
                 />
               )}
@@ -264,8 +421,73 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
               />
             )}
           </div>
+          </>
         )}
       </div>
+
+      {openSession && (
+        <StepSessionOverlay
+          executionId={openSession.executionId}
+          stepName={openSession.stepName}
+          // Derived from the live step-runs rather than captured at open time,
+          // so the "live" badge clears on its own when the step finishes while
+          // the popup is still open.
+          live={stepRuns.some(
+            (sr) => sr.executionId === openSession.executionId && sr.status === 'running',
+          )}
+          onClose={() => setOpenSession(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function stepDeliverableAge(dateStr: string): string {
+  const minutes = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+/**
+ * One deliverable produced by the selected step — the same main info as the
+ * ticket Deliverables tab (configured type badge, title, draft state, age),
+ * opening in the shared reading overlay.
+ */
+function StepDeliverableRow({ deliverable: d }: { deliverable: TicketDeliverable }) {
+  const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
+  const labelForType = useDeliverableTypesStore((s) => s.labelFor);
+  const colorForType = useDeliverableTypesStore((s) => s.colorFor);
+  const c = colorForType(d.type);
+  const contentIsUrl = /^https?:\/\/\S+$/.test(d.content.trim());
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        contentIsUrl ? window.open(d.content.trim(), '_blank', 'noopener') : openDeliverableOverlay(d)
+      }
+      title={d.title}
+      className="flex w-full items-center gap-2 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
+    >
+      <span
+        className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${c ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
+        style={c ? { backgroundColor: c.bg, color: c.text } : undefined}
+      >
+        {labelForType(d.type)}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--theme-text-primary)]">
+        {d.title}
+      </span>
+      {d.status === 'draft' && (
+        <span className={`shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${tint('yellow')}`}>
+          draft
+        </span>
+      )}
+      <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">
+        {stepDeliverableAge(d.createdAt)}
+      </span>
+    </button>
   );
 }

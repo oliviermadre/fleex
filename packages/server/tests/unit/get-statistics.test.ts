@@ -258,3 +258,81 @@ describe('GetStatisticsUseCase — flow metrics', () => {
     });
   });
 });
+
+// ── Routine leaderboard ─────────────────────────────────────────────────────
+
+describe('GetStatisticsUseCase — routine leaderboard', () => {
+  const params = { from: '2026-06-01', to: '2026-06-04', granularity: 'day' as const };
+
+  function useCaseWith(runs: unknown[], routines: unknown[]) {
+    const empty = () => ({ getAll: vi.fn().mockResolvedValue([]) });
+    return new GetStatisticsUseCase(
+      { getAllTickets: vi.fn().mockResolvedValue([]), getAllBoards: vi.fn().mockResolvedValue([]) } as unknown as TicketStorePort,
+      empty() as unknown as CommentStorePort,
+      empty() as unknown as MentionStorePort,
+      empty() as unknown as DeliverableStorePort,
+      { getAllExecutions: vi.fn().mockResolvedValue([]) } as unknown as AgentEventStorePort,
+      empty() as unknown as PersonaStorePort,
+      empty() as unknown as SessionStorePort,
+      undefined,
+      undefined,
+      { getAll: vi.fn().mockResolvedValue(runs) } as never,
+      { getAll: vi.fn().mockResolvedValue(routines) } as never,
+    );
+  }
+
+  const routineRun = (id: string, routineId: string, over: Record<string, unknown> = {}) => ({
+    id,
+    routineId,
+    templateId: null,
+    templateSnapshot: { name: 'synthetic' },
+    status: 'completed',
+    startedAt: new Date('2026-06-01T09:00:00Z'),
+    completedAt: new Date('2026-06-01T09:30:00Z'),
+    ...over,
+  });
+
+  it('counts primitive-target routine runs the workflow board can never show', async () => {
+    // A routine targeting an agent produces runs with a null templateId: they
+    // are excluded from the workflow leaderboard by construction, so without
+    // this board their activity appears nowhere in Statistics.
+    const result = await useCaseWith(
+      [
+        routineRun('r-run-1', 'rt-1'),
+        routineRun('r-run-2', 'rt-1', { status: 'failed', completedAt: null }),
+      ],
+      [{ id: 'rt-1', name: 'Daily recap', target: { kind: 'agent', ref: 'builder' } }],
+    ).execute(params);
+
+    expect(result.workflowLeaderboard).toHaveLength(0);
+    expect(result.routineLeaderboard).toHaveLength(1);
+    expect(result.routineLeaderboard[0]).toMatchObject({
+      routineId: 'rt-1',
+      routineName: 'Daily recap',
+      targetKind: 'agent',
+      targetRef: 'builder',
+      executionCount: 2,
+      completedCount: 1,
+      failedCount: 1,
+      avgDurationMs: 1_800_000,
+    });
+  });
+
+  it('leaves ticket-anchored runs off the board', async () => {
+    const result = await useCaseWith(
+      [routineRun('w1', undefined as unknown as string, { ticketId: 't-1', templateId: 'tpl-1' })],
+      [],
+    ).execute(params);
+
+    expect(result.routineLeaderboard).toHaveLength(0);
+  });
+
+  it('keeps a row for a routine deleted since its runs', async () => {
+    // Dropping it would silently rewrite the period's totals — the runs
+    // happened, whatever the catalogue looks like today.
+    const result = await useCaseWith([routineRun('r-run-1', 'gone')], []).execute(params);
+
+    expect(result.routineLeaderboard).toHaveLength(1);
+    expect(result.routineLeaderboard[0]!.routineId).toBe('gone');
+  });
+});

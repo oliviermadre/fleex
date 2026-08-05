@@ -220,6 +220,7 @@ export type {
   AgentEventWsMessage,
   ExecutionLogEntry,
   ExecutionLogResponse,
+  ExecutionScope,
   PanelMemberSummary,
   WorkflowStepSummary,
   ExecutionKind,
@@ -255,6 +256,7 @@ export type {
   SkillLeaderboardEntry,
   PanelLeaderboardEntry,
   WorkflowLeaderboardEntry,
+  RoutineLeaderboardEntry,
   StatisticsSummary,
   StatisticsResponse,
   UsageByTypeBucket,
@@ -304,6 +306,25 @@ export type {
 } from './types/workflow.js';
 
 export type {
+  RunSubject,
+  RoutineTargetKind,
+  RoutineTarget,
+  RoutineTriggerKind,
+  RoutineTrigger,
+  RoutineOverlapPolicy,
+  Routine,
+  CreateRoutineInput,
+  UpdateRoutineInput,
+} from './types/routine.js';
+export {
+  ROUTINE_TARGET_KINDS,
+  normalizeRoutineTarget,
+  emptyRunSubject,
+  normalizeRunSubject,
+  parseRepoRef,
+} from './types/routine.js';
+
+export type {
   NativeParamType,
   NativeOperationParam,
   NativeOperationDescriptor,
@@ -312,6 +333,8 @@ export {
   NATIVE_OPERATIONS,
   NATIVE_OPERATION_IDS,
   NATIVE_OP_CREATE_TICKET,
+  NATIVE_OP_TRIGGER_WORKFLOW,
+  NATIVE_FOR_EACH_MAX_ITEMS,
   NATIVE_STEP_KIND_TICKET_ACTIONS,
   getNativeOperation,
 } from './native-operations/descriptors.js';
@@ -339,10 +362,13 @@ export { computeAncestors, computeDominators } from './workflow/graph.js';
 export type { EdgeValidationResult, EdgeFieldSuggestion } from './workflow/edge-validation.js';
 export { validateEdgeConditions, edgeConditionSuggestions } from './workflow/edge-validation.js';
 
-export type { ParsedReference, ReferenceKind, TicketReferenceField } from './native-operations/references.js';
+export type {
+  ParsedReference, ReferenceKind, TicketReferenceField, CreatedReferenceField,
+} from './native-operations/references.js';
 export {
   REFERENCE_PATTERN,
   TICKET_REFERENCE_FIELDS,
+  CREATED_REFERENCE_FIELDS,
   ReferenceSyntaxError,
   parseReferencePath,
   findReferences,

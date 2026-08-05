@@ -1,8 +1,12 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
+import { useRoutineStore } from '../../stores/routineStore';
+import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
 import { cn } from '../../lib/cn';
+import { RoutineIcon } from '../../lib/primitives';
 import { RepositoriesIcon } from './icons';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
 
@@ -34,6 +38,14 @@ export function NavSidebar() {
   const sessions = useSessionStore((s) => s.sessions);
   const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
+  const routinesAwaiting = useRoutineStore((s) => s.routines.filter((r) => r.awaitingAttention).length);
+  const loadRoutines = useRoutineStore((s) => s.load);
+  // The badge must be right before the user ever opens /routines, so the nav —
+  // always mounted — is what primes the list…
+  useEffect(() => { void loadRoutines(); }, [loadRoutines]);
+  // …and what keeps it live. A gate opening on a scheduled run must light the
+  // badge up wherever the user happens to be, not on their next page reload.
+  useRoutineLiveUpdates();
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
@@ -136,6 +148,19 @@ export function NavSidebar() {
           collapsed={navCollapsed}
           badge={liveExecutionCount > 0 ? (liveExecutionCount > 9 ? '9+' : String(liveExecutionCount)) : undefined}
           onClick={() => navigate('/execution-log')}
+        />
+
+        {/* Routines — workflow runs with no ticket. The badge counts routines
+            whose active run is blocked on a gate or waiting for an answer:
+            those runs have no ticket, so nothing else in the nav surfaces them. */}
+        <NavItem
+          icon={<RoutineIcon size={20} strokeWidth={1.5} tinted={false} />}
+          label="Routines"
+          shortLabel="Routines"
+          active={activePanel === 'routines'}
+          collapsed={navCollapsed}
+          badge={routinesAwaiting > 0 ? String(routinesAwaiting) : undefined}
+          onClick={() => navigate('/routines')}
         />
 
         {/* === Content === */}

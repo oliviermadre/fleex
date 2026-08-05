@@ -5,7 +5,9 @@ import type { SqliteConnection } from './connection.js';
 
 interface DeliverableRow {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
+  workflow_run_id: string | null;
+  step_run_id: string | null;
   agent_name: string;
   type: DeliverableType;
   title: string;
@@ -67,16 +69,18 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO deliverables
-        (id, ticket_id, agent_name, type, title, content, version, status,
+        (id, ticket_id, workflow_run_id, step_run_id, agent_name, type, title, content, version, status,
          mention_id, created_at, updated_at)
       VALUES
-        (@id, @ticket_id, @agent_name, @type, @title, @content, @version, @status,
+        (@id, @ticket_id, @workflow_run_id, @step_run_id, @agent_name, @type, @title, @content, @version, @status,
          @mention_id, @created_at, @updated_at)
     `);
 
     stmt.run({
       id: deliverable.id,
       ticket_id: deliverable.ticketId,
+      workflow_run_id: deliverable.workflowRunId,
+      step_run_id: deliverable.stepRunId,
       agent_name: deliverable.agentName,
       type: deliverable.type,
       title: deliverable.title,
@@ -106,6 +110,22 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
       row.mention_id,
       new Date(row.created_at),
       new Date(row.updated_at),
+      row.workflow_run_id ?? null,
+      row.step_run_id ?? null,
     );
+  }
+
+  async getByWorkflowRun(workflowRunId: string): Promise<TicketDeliverableEntity[]> {
+    const rows = this.conn.db
+      .prepare('SELECT * FROM deliverables WHERE workflow_run_id = ? ORDER BY created_at ASC')
+      .all(workflowRunId) as DeliverableRow[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
+  async getByStepRun(stepRunId: string): Promise<TicketDeliverableEntity[]> {
+    const rows = this.conn.db
+      .prepare('SELECT * FROM deliverables WHERE step_run_id = ? ORDER BY created_at ASC')
+      .all(stepRunId) as DeliverableRow[];
+    return rows.map((r) => this.toEntity(r));
   }
 }

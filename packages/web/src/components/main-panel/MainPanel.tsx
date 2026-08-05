@@ -26,6 +26,7 @@ import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
 import { ListFocusView } from '../list-focus/ListFocusView';
 import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
+import { RoutinesPage } from '../routines/RoutinesPage';
 import { DocumentsPage } from '../documents/DocumentsPage';
 import { AssistantConversation } from '../assistant/AssistantConversation';
 
@@ -105,6 +106,10 @@ export function MainPanel() {
 
   if (activePanel === 'execution-log') {
     return <ExecutionLogPage />;
+  }
+
+  if (activePanel === 'routines') {
+    return <RoutinesPage />;
   }
 
   if (activePanel === 'analytics') {

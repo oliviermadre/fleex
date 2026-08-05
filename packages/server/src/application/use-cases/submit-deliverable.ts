@@ -18,7 +18,18 @@ export class SubmitDeliverableUseCase {
   ) {}
 
   async execute(params: {
-    ticketId: string;
+    /**
+     * Null for a deliverable produced by a routine run: there is no ticket to
+     * attach it to, so `workflowRunId` is the anchor instead.
+     */
+    ticketId?: string | null;
+    workflowRunId?: string | null;
+    /**
+     * The step run that produced it. Set alongside `workflowRunId` (and
+     * alongside `ticketId` for a ticket-anchored workflow) so the run graph can
+     * place the artifact on the node that emitted it.
+     */
+    stepRunId?: string | null;
     agentName: string;
     type: DeliverableType;
     title: string;
@@ -42,7 +53,9 @@ export class SubmitDeliverableUseCase {
 
     const deliverable = TicketDeliverableEntity.create({
       id: randomUUID(),
-      ticketId: params.ticketId,
+      ticketId: params.ticketId ?? null,
+      workflowRunId: params.workflowRunId ?? null,
+      stepRunId: params.stepRunId ?? null,
       agentName: params.agentName,
       type: params.type,
       title: params.title,
@@ -53,15 +66,19 @@ export class SubmitDeliverableUseCase {
 
     await this.deliverableStore.save(deliverable);
 
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId: params.ticketId,
-      action: 'deliverable_submitted',
-      changes: { deliverableId: { from: null, to: deliverable.id } },
-      actorType: 'agent',
-      actorName: params.agentName,
-      source: 'api',
-    }));
+    // The activity feed is a ticket-scoped timeline; a run-anchored deliverable
+    // has nothing to append to.
+    if (params.ticketId) {
+      await this.ticketStore.saveActivity(TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: params.ticketId,
+        action: 'deliverable_submitted',
+        changes: { deliverableId: { from: null, to: deliverable.id } },
+        actorType: 'agent',
+        actorName: params.agentName,
+        source: 'api',
+      }));
+    }
 
     this.logger.info('Deliverable submitted', {
       ticketId: params.ticketId,

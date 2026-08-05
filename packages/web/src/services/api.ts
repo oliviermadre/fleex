@@ -37,6 +37,11 @@ import type {
   OverlaySyncApplyResponse,
   OverlaySyncRemoveRequest,
   OverlaySyncRemoveResponse,
+  Routine,
+  CreateRoutineInput,
+  UpdateRoutineInput,
+  RoutineTrigger,
+  TicketDeliverable,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -760,6 +765,7 @@ export async function cancelExecution(executionId: string): Promise<{ cancelled:
 export async function fetchAllExecutions(params?: {
   status?: string;
   type?: string;
+  scope?: string;
   q?: string;
   limit?: number;
   offset?: number;
@@ -767,6 +773,7 @@ export async function fetchAllExecutions(params?: {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
   if (params?.type) qs.set('type', params.type);
+  if (params?.scope) qs.set('scope', params.scope);
   if (params?.q) qs.set('q', params.q);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
@@ -1003,10 +1010,19 @@ export async function resolveWorkflowRoute(
   );
 }
 
-export async function retryWorkflowStep(runId: string, stepRunId: string): Promise<void> {
+export async function retryWorkflowStep(
+  runId: string,
+  stepRunId: string,
+  /**
+   * Answer to the question the step asked before pausing. Recorded server-side
+   * on the paused attempt so the retried step actually reads it — on a routine
+   * run there is no ticket comment to carry it.
+   */
+  humanResponse?: string,
+): Promise<void> {
   await request<void>(
     `/workflows/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepRunId)}/retry`,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify(humanResponse ? { humanResponse } : {}) },
   );
 }
 
@@ -1046,4 +1062,69 @@ export async function overlaySyncRemove(
     method: 'POST',
     body: JSON.stringify(req),
   });
+}
+
+// ── Routines ──────────────────────────────────────────────────────────────
+// A routine's run history ships its step runs and deliverables inline: the
+// detail screen mounts the existing WorkflowRunView per run, and a routine run
+// has no ticket to fetch deliverables from.
+
+export interface RoutineRunDetail {
+  run: WorkflowRun;
+  stepRuns: StepRun[];
+  deliverables: TicketDeliverable[];
+}
+
+/**
+ * List item = the routine plus its active run's status, so the list and the nav
+ * badge can show "waiting for you" without a second round-trip per routine.
+ */
+export interface RoutineListItem extends Routine {
+  activeRunId: string | null;
+  activeRunStatus: string | null;
+  awaitingAttention: boolean;
+}
+
+export async function fetchRoutines(): Promise<RoutineListItem[]> {
+  return request<RoutineListItem[]>('/routines');
+}
+
+export async function fetchRoutine(idOrSlug: string): Promise<Routine> {
+  return request<Routine>(`/routines/${encodeURIComponent(idOrSlug)}`);
+}
+
+export async function createRoutine(input: CreateRoutineInput): Promise<Routine> {
+  return request<Routine>('/routines', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function updateRoutine(id: string, changes: UpdateRoutineInput): Promise<Routine> {
+  return request<Routine>(`/routines/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify(changes),
+  });
+}
+
+export async function deleteRoutine(id: string): Promise<void> {
+  await request<void>(`/routines/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function launchRoutine(id: string): Promise<WorkflowRun> {
+  return request<WorkflowRun>(`/routines/${encodeURIComponent(id)}/run`, { method: 'POST' });
+}
+
+export async function fetchRoutineRuns(id: string): Promise<RoutineRunDetail[]> {
+  return request<RoutineRunDetail[]>(`/routines/${encodeURIComponent(id)}/runs`);
+}
+
+/**
+ * "When would this actually fire?" for the trigger editor.
+ *
+ * Computed server-side on purpose: the scheduler's own cron/timezone code
+ * answers, so the preview can never drift from what will really happen — which
+ * a second, client-side cron implementation eventually would.
+ */
+export async function previewRoutineTrigger(trigger: RoutineTrigger, count = 5): Promise<string[]> {
+  const res = await request<{ nextRuns: string[] }>('/routines/trigger-preview', {
+    method: 'POST', body: JSON.stringify({ trigger, count }),
+  });
+  return res.nextRuns;
 }

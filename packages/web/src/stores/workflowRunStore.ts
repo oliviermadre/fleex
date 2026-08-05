@@ -19,7 +19,8 @@ interface State {
   cancel(runId: string): Promise<void>;
   resolveGate(runId: string, stepRunId: string, outcome: string, notes?: string): Promise<void>;
   resolveRoute(runId: string, stepRunId: string, edgeId: string, notes?: string): Promise<void>;
-  retry(runId: string, stepRunId: string): Promise<void>;
+  /** `humanResponse`: answer to the question a `needs_review` step asked. */
+  retry(runId: string, stepRunId: string, humanResponse?: string): Promise<void>;
 
   activeByTicket(ticketId: string): WorkflowRun | undefined;
   historyByTicket(ticketId: string): WorkflowRun[];
@@ -104,8 +105,8 @@ export const useWorkflowRunStore = create<State>((set, get) => ({
     await api.resolveWorkflowRoute(runId, stepRunId, { edgeId, notes });
   },
 
-  retry: async (runId, stepRunId) => {
-    await api.retryWorkflowStep(runId, stepRunId);
+  retry: async (runId, stepRunId, humanResponse) => {
+    await api.retryWorkflowStep(runId, stepRunId, humanResponse);
   },
 
   activeByTicket: (ticketId) => {

@@ -4,7 +4,7 @@ import type {
 } from '@fleex/shared';
 import {
   NATIVE_OPERATIONS, getNativeOperation, nativeReferenceSuggestions, validateNativeSteps,
-  allowsEmbeddedReference,
+  allowsEmbeddedReference, computeAncestors, NATIVE_FOR_EACH_MAX_ITEMS,
 } from '@fleex/shared';
 import { TagInput } from '../ui/TagInput';
 
@@ -91,8 +91,28 @@ export function NativeActionsEditor({ step, steps, edges, entryStepId, onChange 
     setAddingId('');
   };
 
+  // Only array outputs can be iterated, so only those are offered — the picker
+  // must never build a `forEach` the validator immediately rejects.
+  const arrayReferences = useMemo(() => {
+    const ancestors = computeAncestors(steps, edges).get(step.id) ?? new Set<string>();
+    return steps
+      .filter((s) => ancestors.has(s.id))
+      .flatMap((s) => Object.entries(s.outputSchema?.properties ?? {})
+        .filter(([, property]) => property.type === 'array')
+        .map(([field]) => ({
+          token: `{{ steps.${s.id}.${field} }}`,
+          label: `${s.name || s.id} → ${field}`,
+        })));
+  }, [step.id, steps, edges]);
+
   return (
     <div className="space-y-2">
+      <ForEachField
+        value={step.forEach ?? ''}
+        options={arrayReferences}
+        onChange={(next) => onChange({ ...step, forEach: next === '' ? undefined : next })}
+      />
+
       <span className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>
         Actions ({actions.length})
       </span>
@@ -170,6 +190,53 @@ export function NativeActionsEditor({ step, steps, edges, entryStepId, onChange 
       {issues?.warnings.map((msg) => (
         <div key={msg} className="text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>⚠ {msg}</div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The step-level `forEach`: the actions below run once per element of the
+ * chosen array, with `{{ item.* }}` bound.
+ *
+ * Deliberately editable as free text *and* pickable: the picker only knows the
+ * arrays declared in an upstream output schema, and an author who typed a
+ * schema-less step still needs a way in.
+ */
+function ForEachField({
+  value, options, onChange,
+}: { value: string; options: { token: string; label: string }[]; onChange: (v: string) => void }) {
+  return (
+    <div className="text-[11px] space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <span style={{ color: 'var(--theme-text-muted)' }}>For each</span>
+        {options.length > 0 && (
+          <select
+            value=""
+            onChange={(e) => { if (e.target.value) onChange(e.target.value); }}
+            className="h-5 text-[10px] rounded border shrink-0"
+            style={inputStyle}
+            title="Iterate an upstream array"
+          >
+            <option value="">{'{{ … }}'}</option>
+            {options.map((o) => (
+              <option key={o.token} value={o.token}>{o.label}</option>
+            ))}
+          </select>
+        )}
+      </div>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full h-8 px-2 text-[11px] rounded border"
+        style={inputStyle}
+        placeholder="Leave empty to run once"
+      />
+      {value !== '' && (
+        <p className="text-[10px] leading-tight" style={{ color: 'var(--theme-text-muted)' }}>
+          The actions below run once per element, with {'{{ item }}'} bound.
+          Over {NATIVE_FOR_EACH_MAX_ITEMS} elements the step fails instead of truncating.
+        </p>
+      )}
     </div>
   );
 }
@@ -331,7 +398,9 @@ function ReferencePicker({
   suggestions, onInsert,
 }: { suggestions: ReferenceSuggestion[]; onInsert: (token: string) => void }) {
   if (suggestions.length === 0) return null;
-  const groups = ['Steps', 'Ticket', 'Workflow'] as const;
+  // `Item` and `Created` come first: on a fan-out or a create step they are what
+  // the author is reaching for, and the Steps group is long enough to bury them.
+  const groups = ['Item', 'Created', 'Steps', 'Ticket', 'Workflow'] as const;
   return (
     <select
       value=""

@@ -28,6 +28,8 @@ import type { PersonaStorePort } from '../../application/ports/persona-store.por
 import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
 import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
+import type { RoutineStorePort } from '../../application/ports/routine-store.port.js';
+import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StorageDriver } from '../../infrastructure/adapters/storage-factory.js';
 import type { OkfInput } from './build-bundle.js';
 
@@ -43,6 +45,14 @@ interface KnowledgeStores {
   skillStore: SkillStorePort;
   /** `null` on drivers that ship no workflow-template store (pgsql, json). */
   workflowStore: WorkflowTemplateStorePort | null;
+  /**
+   * `null` on drivers with no routine support (pgsql) — same boundary as
+   * `workflowStore`, cf. `storage-factory`. When null the bundle simply has no
+   * routines section rather than failing the export.
+   */
+  routineStore: RoutineStorePort | null;
+  /** `null` alongside `routineStore` — runs are how a deliverable finds its routine. */
+  runStore: WorkflowRunStorePort | null;
   close: () => Promise<void>;
 }
 
@@ -67,6 +77,8 @@ export async function loadOkfInput(
       panels,
       skills,
       workflows,
+      routines,
+      runs,
     ] = await Promise.all([
       stores.ticketStore.getAllBoards(),
       stores.groupStore.getAllTicketGroups(),
@@ -78,6 +90,8 @@ export async function loadOkfInput(
       stores.panelStore.getAll(),
       stores.skillStore.getAll(),
       stores.workflowStore ? stores.workflowStore.getAll() : Promise.resolve([]),
+      stores.routineStore ? stores.routineStore.getAll() : Promise.resolve([]),
+      stores.runStore ? stores.runStore.getAll() : Promise.resolve([]),
     ]);
 
     const epicDtos = epics.map((e) => e.toDTO());
@@ -106,6 +120,11 @@ export async function loadOkfInput(
       panels: panels.map((p) => p.toDTO()),
       skills: skills.map((s) => s.toDTO()),
       workflows: workflows.map((w) => w.toDTO()),
+      routines: routines.map((r) => r.toDTO()),
+      // Only routine-anchored runs: a ticket run's deliverables are already
+      // exported under their ticket, so carrying those runs would duplicate
+      // them in the bundle.
+      routineRuns: runs.map((r) => r.toDTO()).filter((r) => !!r.routineId),
     };
 
     return { input, close: stores.close };
@@ -160,6 +179,8 @@ async function createSupabaseStores(logger: LoggerPort): Promise<KnowledgeStores
   const { SupabasePanelStore } = await import('../../infrastructure/adapters/supabase/supabase-panel-store.adapter.js');
   const { SupabaseSkillStore } = await import('../../infrastructure/adapters/supabase/supabase-skill-store.adapter.js');
   const { SupabaseWorkflowTemplateStore } = await import('../../infrastructure/adapters/supabase/supabase-workflow-template-store.adapter.js');
+  const { SupabaseRoutineStore } = await import('../../infrastructure/adapters/supabase/supabase-routine-store.adapter.js');
+  const { SupabaseWorkflowRunStore } = await import('../../infrastructure/adapters/supabase/supabase-workflow-run-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const conn = new SupabaseConnection(url, key, dbUrl, logger);
@@ -175,6 +196,8 @@ async function createSupabaseStores(logger: LoggerPort): Promise<KnowledgeStores
     panelStore: new SupabasePanelStore(conn),
     skillStore: new SupabaseSkillStore(conn),
     workflowStore: new SupabaseWorkflowTemplateStore(conn),
+    routineStore: new SupabaseRoutineStore(conn),
+    runStore: new SupabaseWorkflowRunStore(conn),
     close: () => conn.close(),
   };
 }
@@ -190,6 +213,8 @@ async function createSqliteStores(): Promise<KnowledgeStores> {
   const { SqlitePanelStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-panel-store.adapter.js');
   const { SqliteSkillStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-skill-store.adapter.js');
   const { SqliteWorkflowTemplateStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-workflow-template-store.adapter.js');
+  const { SqliteRoutineStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-routine-store.adapter.js');
+  const { SqliteWorkflowRunStoreAdapter } = await import('../../infrastructure/adapters/sqlite/sqlite-workflow-run-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const conn = new SqliteConnection(dbPath);
@@ -205,6 +230,8 @@ async function createSqliteStores(): Promise<KnowledgeStores> {
     panelStore: new SqlitePanelStoreAdapter(conn),
     skillStore: new SqliteSkillStoreAdapter(conn),
     workflowStore: new SqliteWorkflowTemplateStoreAdapter(conn),
+    routineStore: new SqliteRoutineStoreAdapter(conn),
+    runStore: new SqliteWorkflowRunStoreAdapter(conn),
     close: async () => {
       conn.close();
     },
@@ -239,6 +266,8 @@ async function createPgsqlStores(): Promise<KnowledgeStores> {
     panelStore: new PgPanelStore(conn),
     skillStore: new PgSkillStore(conn),
     workflowStore: null, // pgsql ships no workflow-template store (see storage-factory)
+    routineStore: null, // …and therefore no routines either
+    runStore: null,
     close: () => conn.close(),
   };
 }

@@ -1,5 +1,18 @@
-import { DELIVERABLE_TYPES, DELIVERABLE_STATUSES, DEFAULT_DELIVERABLE_TYPES } from '@fleex/shared';
+import { DELIVERABLE_TYPES, DELIVERABLE_STATUSES, DEFAULT_DELIVERABLE_TYPES, normalizeDeliverableTypes } from '@fleex/shared';
 import type { JsonSchema } from '@fleex/shared';
+import type { ConfigPort } from '../ports/config.port.js';
+
+/**
+ * The deliverable type ids an agent may pick, for this workspace (system types
+ * excluded). Workflow steps went without this for a while and were handed the
+ * legacy preset instead, so a workspace type like `fireflies` was invisible to
+ * a step agent — it could only ever answer with a built-in type.
+ */
+export function selectableDeliverableTypeIds(config: ConfigPort): string[] {
+  return normalizeDeliverableTypes(config.get().deliverableTypes)
+    .filter((t) => !t.system)
+    .map((t) => t.id);
+}
 
 /**
  * Build the structured-output JSON schema with the workspace's configured

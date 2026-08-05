@@ -169,6 +169,8 @@ export class GetSessionGroupsUseCase {
       try {
         const allExecs = await this.agentEventStore.getAllExecutions();
         for (const exec of allExecs) {
+          // Routine executions are not attached to any ticket, hence to no session.
+          if (exec.ticketId === null) continue;
           // getAllExecutions returns newest first; keep only the first (latest) per ticket
           if (!ticketLatestExec.has(exec.ticketId)) {
             ticketLatestExec.set(exec.ticketId, exec);

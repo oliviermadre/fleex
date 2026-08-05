@@ -42,6 +42,7 @@ export class CancelWorkflowRunUseCase {
       type: 'workflow.run_cancelled',
       workflowRunId: run.id,
       ticketId: run.ticketId,
+      routineId: run.routineId,
       occurredAt: new Date(),
     });
   }

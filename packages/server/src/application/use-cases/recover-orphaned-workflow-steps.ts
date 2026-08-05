@@ -52,6 +52,7 @@ export class RecoverOrphanedWorkflowStepsUseCase {
           stepRunId: sr.id,
           stepId: sr.stepId,
           ticketId: run.ticketId,
+          routineId: run.routineId,
           error: 'Interrupted by server restart',
           occurredAt: new Date(),
         });

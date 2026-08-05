@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { StepRunEntity } from '../../domain/entities/step-run.entity.js';
 import { EdgeEvaluator } from '../services/edge-evaluator.js';
 import { pauseForRouting } from '../services/ambiguous-routing.js';
+import { buildRunHistory } from '../utils/run-history.js';
 import { WorkflowRunNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
@@ -56,7 +57,7 @@ export class RunWorkflowStepUseCase {
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
         type: 'workflow.step_started', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, occurredAt: new Date(),
+        ticketId: run.ticketId, routineId: run.routineId, occurredAt: new Date(),
       });
 
       // 3. Build workflow context (previousOutputs from prior step_runs)
@@ -71,6 +72,25 @@ export class RunWorkflowStepUseCase {
         }
       }
 
+      // The prompt-facing counterpart of `previousOutputs`. It keeps the earlier
+      // attempts of THIS step (that is where a human's answer to a
+      // `waiting_for_info` question is recorded) and carries comments,
+      // deliverables and gate decisions — none of which cross a step boundary
+      // otherwise. A ticket run recovers them from the ticket timeline; a
+      // routine run has no timeline, so this is its only memory.
+      const stepNames = Object.fromEntries(
+        run.templateSnapshot.steps.map((s: WorkflowStep) => [s.id, s.name]),
+      );
+      const runHistory = buildRunHistory({
+        stepNames,
+        stepRuns: allStepRuns.map((sr) => ({
+          stepId: sr.stepId, attempt: sr.attempt, status: sr.status,
+          output: sr.output, createdAt: sr.createdAt,
+        })),
+        currentStepId: step.id,
+        currentAttempt: attempt,
+      });
+
       const outgoingEdges = run.outgoingEdges(step.id).map((e) => {
         const target = run.findStep(e.target);
         return {
@@ -80,13 +100,12 @@ export class RunWorkflowStepUseCase {
       });
 
       const input: StepExecutionInput = {
-        ticketId: run.ticketId, workflowRunId: run.id, stepRunId: stepRun.id, step,
+        ticketId: run.ticketId, routineId: run.routineId, subject: run.subjectSnapshot,
+        workflowRunId: run.id, stepRunId: stepRun.id, step,
         workflowContext: {
           workflowName: run.templateSnapshot.name, stepName: step.name,
-          outgoingEdges, previousOutputs,
-          stepNames: Object.fromEntries(
-            run.templateSnapshot.steps.map((s: WorkflowStep) => [s.id, s.name]),
-          ),
+          outgoingEdges, previousOutputs, runHistory,
+          stepNames,
           predecessorStepIds: run.templateSnapshot.edges
             .filter((e) => e.target === step.id)
             .map((e) => e.source),
@@ -108,14 +127,14 @@ export class RunWorkflowStepUseCase {
 
       // 5. Handle result
       if (result.output.result === 'needs_review') {
-        await this.persistStepArtifacts(run, step, result.output, executionId);
+        await this.persistStepArtifacts(run, step, stepRun.id, result.output, executionId);
         stepRun.markNeedsReview({ output: result.output, executionId });
         run.block();
         await this.deps.stepRunStore.save(stepRun);
         await this.deps.runStore.save(run);
         this.deps.eventBus.emit({
           type: 'workflow.needs_review', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-          ticketId: run.ticketId, occurredAt: new Date(),
+          ticketId: run.ticketId, routineId: run.routineId, occurredAt: new Date(),
         });
         return;
       }
@@ -127,7 +146,7 @@ export class RunWorkflowStepUseCase {
       // Artifacts are persisted before any branching: whatever the routing turns
       // out to be, the step *did* produce that deliverable/comment and the human
       // arbitrating an ambiguity needs to read it.
-      await this.persistStepArtifacts(run, step, result.output, executionId);
+      await this.persistStepArtifacts(run, step, stepRun.id, result.output, executionId);
 
       // 6b. Several edges matched — the engine can't arbitrate a config problem.
       // Park the run and let a human pick, instead of silently taking the oldest.
@@ -143,7 +162,7 @@ export class RunWorkflowStepUseCase {
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
         type: 'workflow.step_completed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
+        ticketId: run.ticketId, routineId: run.routineId, nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
       });
 
       // 7. Advance or complete
@@ -155,7 +174,8 @@ export class RunWorkflowStepUseCase {
         run.complete();
         await this.deps.runStore.save(run);
         this.deps.eventBus.emit({
-          type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId, occurredAt: new Date(),
+          type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId,
+          routineId: run.routineId, occurredAt: new Date(),
         });
       }
     } catch (err) {
@@ -174,7 +194,7 @@ export class RunWorkflowStepUseCase {
         // manual page refresh (the DB is `cancelled`, but nothing was pushed).
         this.deps.eventBus.emit({
           type: 'workflow.step_cancelled', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-          ticketId: run.ticketId, occurredAt: new Date(),
+          ticketId: run.ticketId, routineId: run.routineId, occurredAt: new Date(),
         });
         return;
       }
@@ -184,7 +204,8 @@ export class RunWorkflowStepUseCase {
       await this.deps.runStore.save(run);
       this.deps.eventBus.emit({
         type: 'workflow.run_failed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
+        ticketId: run.ticketId, routineId: run.routineId,
+        error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
       });
     }
   }
@@ -200,6 +221,7 @@ export class RunWorkflowStepUseCase {
   private async persistStepArtifacts(
     run: WorkflowRunEntity,
     step: WorkflowStep,
+    stepRunId: string,
     output: StepOutput,
     executionId: string | undefined,
   ): Promise<void> {
@@ -210,6 +232,12 @@ export class RunWorkflowStepUseCase {
     if (output.deliverable) {
       const deliverable = await this.deps.submitDeliverable.execute({
         ticketId: run.ticketId,
+        // Routine runs have no ticket: the deliverable hangs off the run, which
+        // the routine detail screen reads back.
+        workflowRunId: run.ticketId ? null : run.id,
+        // Always set, ticket run or not: the run graph places the artifact on
+        // the node that produced it rather than guessing from the title.
+        stepRunId,
         agentName: author,
         type: output.deliverable.type,
         title: output.deliverable.title,
@@ -224,15 +252,22 @@ export class RunWorkflowStepUseCase {
         type: 'deliverable.created',
         deliverableId: deliverable.id,
         ticketId: run.ticketId,
+        workflowRunId: run.ticketId ? null : run.id,
+        stepRunId,
         agentName: author,
         status: (output.deliverable.status ?? 'final') as 'draft' | 'final',
         title: deliverable.title,
         occurredAt: now,
       });
     }
-    if (output.comment && output.comment.trim().length > 0) {
+    // A step comment is a ticket-timeline artifact. A routine run has no
+    // timeline — its step_runs ARE its timeline (cf. the Routines PRD, which
+    // deliberately introduces no run-comments table), so the comment stays in
+    // the step output and is rendered from there.
+    if (run.ticketId && output.comment && output.comment.trim().length > 0) {
+      const ticketId = run.ticketId;
       const { comment } = await this.deps.postComment.execute({
-        ticketId: run.ticketId,
+        ticketId,
         authorType: 'agent',
         authorName: author,
         body: output.comment,
@@ -244,7 +279,7 @@ export class RunWorkflowStepUseCase {
       this.deps.eventBus.emit({
         type: 'comment.posted',
         commentId: comment.id,
-        ticketId: run.ticketId,
+        ticketId,
         authorType: 'agent',
         authorName: author,
         createdMentions: [],

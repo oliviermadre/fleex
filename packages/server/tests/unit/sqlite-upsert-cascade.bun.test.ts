@@ -15,6 +15,9 @@ import { SqliteConnection } from '../../src/infrastructure/adapters/sqlite/conne
 import { SqliteTicketStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-ticket-store.adapter.js';
 import { SqliteWorkflowRunStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-workflow-run-store.adapter.js';
 import { SqliteStepRunStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-step-run-store.adapter.js';
+import { SqliteWorkflowTemplateStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-workflow-template-store.adapter.js';
+import { SqliteRoutineStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-routine-store.adapter.js';
+import { RoutineEntity } from '../../src/domain/entities/routine.entity.js';
 import { runPendingMigrations } from '../../src/infrastructure/migrations/run-migrations.js';
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
@@ -51,6 +54,8 @@ let conn: SqliteConnection;
 let ticketStore: SqliteTicketStoreAdapter;
 let runStore: SqliteWorkflowRunStoreAdapter;
 let stepRunStore: SqliteStepRunStoreAdapter;
+let templateStore: SqliteWorkflowTemplateStoreAdapter;
+let routineStore: SqliteRoutineStoreAdapter;
 
 beforeEach(async () => {
   conn = new SqliteConnection(':memory:');
@@ -60,6 +65,8 @@ beforeEach(async () => {
   ticketStore = new SqliteTicketStoreAdapter(conn);
   runStore = new SqliteWorkflowRunStoreAdapter(conn);
   stepRunStore = new SqliteStepRunStoreAdapter(conn);
+  templateStore = new SqliteWorkflowTemplateStoreAdapter(conn);
+  routineStore = new SqliteRoutineStoreAdapter(conn);
 
   // Seed the workflow_template referenced by FK (no CASCADE, but still required)
   conn.db.exec(`
@@ -165,6 +172,71 @@ describe('WorkflowRunStore.save — no cascade on update (AC3)', () => {
 
     const fetched = await runStore.getById('run-1');
     expect(fetched?.status).toBe('needs_review');
+  });
+});
+
+// ── WorkflowTemplateStore.save() must NOT cascade-delete routines ─────────────
+//
+// Same bug, new victim: `routines.template_id REFERENCES workflow_templates(id)
+// ON DELETE CASCADE`. With INSERT OR REPLACE, editing a workflow in the builder
+// silently destroyed every routine bound to it — the routine vanished from the
+// sidebar and never came back, not even after a hard reload. There is no undo
+// and no trace, so this is pinned down here rather than left to QA.
+
+describe('WorkflowTemplateStore.save — no cascade on update', () => {
+  function makeRoutine(id = 'routine-1'): RoutineEntity {
+    return RoutineEntity.create({ id, name: 'Daily recap', target: { kind: 'workflow' as const, ref: 'tmpl-1' } });
+  }
+
+  async function loadTemplate() {
+    const t = await templateStore.getById('tmpl-1');
+    expect(t, 'seeded template must exist').not.toBeNull();
+    return t!;
+  }
+
+  it('keeps routines alive when their template is re-saved', async () => {
+    await routineStore.save(makeRoutine());
+
+    const template = await loadTemplate();
+    template.name = 'Renamed workflow';
+    template.updatedAt = new Date();
+    await templateStore.save(template);
+
+    const still = await routineStore.getById('routine-1');
+    expect(still, 'routine must survive a workflow save').not.toBeNull();
+    expect(still?.target).toEqual({ kind: 'workflow', ref: 'tmpl-1' });
+  });
+
+  it('keeps routines alive across repeated saves (the builder saves on every edit)', async () => {
+    await routineStore.save(makeRoutine());
+
+    for (let i = 0; i < 3; i++) {
+      const template = await loadTemplate();
+      template.updatedAt = new Date();
+      await templateStore.save(template);
+    }
+
+    expect(await routineStore.getAll()).toHaveLength(1);
+  });
+
+  it('still persists the edited template (no regression on save semantics)', async () => {
+    const template = await loadTemplate();
+    template.name = 'Renamed workflow';
+    template.enabled = false;
+    await templateStore.save(template);
+
+    const fetched = await templateStore.getById('tmpl-1');
+    expect(fetched?.name).toBe('Renamed workflow');
+    expect(fetched?.enabled).toBe(false);
+  });
+
+  it('still cascade-deletes routines when the template is actually removed', async () => {
+    // The cascade is intentional on a real delete: a routine without its
+    // workflow has nothing to run.
+    await routineStore.save(makeRoutine());
+    await templateStore.remove('tmpl-1');
+
+    expect(await routineStore.getById('routine-1')).toBeNull();
   });
 });
 

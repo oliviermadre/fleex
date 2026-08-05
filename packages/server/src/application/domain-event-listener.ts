@@ -319,6 +319,9 @@ export class DomainEventListener {
   // ── Deliverable created → auto-review if final ──
 
   private async handleDeliverableWorkflow(event: DeliverableCreatedEvent): Promise<void> {
+    // The auto-review workflow is entirely ticket-scoped; a routine deliverable
+    // has no ticket to review and no mention to resolve.
+    if (!event.ticketId) return;
     await this.deps.autoReviewWorkflow.handleDeliverableCreated({
       ticketId: event.ticketId,
       agentName: event.agentName,
@@ -329,6 +332,7 @@ export class DomainEventListener {
   // ── Deliverable updated → auto-review if status changed to final ──
 
   private async handleDeliverableUpdatedWorkflow(event: DeliverableUpdatedEvent): Promise<void> {
+    if (!event.ticketId) return;
     if (event.oldStatus !== 'final' && event.newStatus === 'final') {
       await this.deps.autoReviewWorkflow.handleDeliverableCreated({
         ticketId: event.ticketId,
@@ -368,6 +372,7 @@ export class DomainEventListener {
   }
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {
+    if (!event.ticketId) return;
     await this.deps.wakeWaitingAgents.execute(event.ticketId, event.agentName ? [event.agentName] : []);
   }
 

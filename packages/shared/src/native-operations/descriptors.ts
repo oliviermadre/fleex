@@ -43,8 +43,15 @@ export interface NativeOperationParam {
 export interface NativeOperationDescriptor {
   id: string;
   label: string;
-  category: 'ticket';
+  category: 'ticket' | 'workflow';
   description: string;
+  /**
+   * Whether the operation needs the run's subject ticket to exist. Defaults to
+   * true — every ticket mutation reads or writes a ticket. A routine run has no
+   * ticket, so an operation that does not opt out is rejected there with a
+   * named error instead of null-dereferencing deep inside its planner.
+   */
+  requiresSubjectTicket?: boolean;
   params: readonly NativeOperationParam[];
   /**
    * Ticket fields this operation writes. Two actions in the same step declaring
@@ -62,16 +69,22 @@ export const NATIVE_OPERATIONS: readonly NativeOperationDescriptor[] = [
     id: 'ticket.create',
     label: 'Create ticket',
     category: 'ticket',
+    // It *makes* the subject rather than reading one, so it is the one ticket
+    // operation a routine run can execute.
+    requiresSubjectTicket: false,
     description:
       'Create a new ticket. Must be the first action of the step; the actions that follow then apply to the ticket just created.',
     params: [
       {
+        // Not `required`: a routine run has no ticket, so the default below
+        // resolves to nothing and the board falls back to the routine subject's.
+        // Marking it required would make that legal case unsaveable.
         name: 'boardId',
         label: 'Board',
         type: 'string',
-        required: true,
+        required: false,
         defaultValue: '{{ ticket.boardId }}',
-        description: "Defaults to the board of the run's ticket.",
+        description: "Defaults to the board of the run's ticket, then to the routine subject's board.",
       },
       { name: 'title', label: 'Title', type: 'string', required: true },
       { name: 'description', label: 'Description', type: 'text', required: false },
@@ -188,6 +201,36 @@ export const NATIVE_OPERATIONS: readonly NativeOperationDescriptor[] = [
     description: 'Post a comment on the ticket. Supports {{ … }} references.',
     params: [{ name: 'body', label: 'Body', type: 'text', required: true }],
   },
+  {
+    id: 'workflow.trigger',
+    label: 'Trigger workflow',
+    category: 'workflow',
+    // The whole point: a routine run with no ticket can still spawn work.
+    requiresSubjectTicket: false,
+    description:
+      'Start another workflow run. Runs after this step\'s write, so combined with "Create ticket" it launches a workflow on the ticket just created.',
+    params: [
+      {
+        // Slug, not id: a template id is a uuid nobody can read in a diff, and
+        // the slug is what the CLI and the mention syntax already use. The
+        // server resolves it through `WorkflowTemplateStorePort.getBySlug`,
+        // which every adapter already implements.
+        name: 'templateSlug',
+        label: 'Workflow',
+        type: 'string',
+        required: true,
+        description: 'Slug of the workflow template to start.',
+      },
+      {
+        name: 'ticketId',
+        label: 'Ticket',
+        type: 'string',
+        required: false,
+        description:
+          "Defaults to the step's subject — the ticket just created when the step starts with Create ticket.",
+      },
+    ],
+  },
 ];
 
 const BY_ID = new Map(NATIVE_OPERATIONS.map((op) => [op.id, op]));
@@ -200,3 +243,16 @@ export const NATIVE_OPERATION_IDS: readonly string[] = NATIVE_OPERATIONS.map((op
 
 /** `ticket.create` is special-cased by the executor: it rebinds the step's subject. */
 export const NATIVE_OP_CREATE_TICKET = 'ticket.create';
+
+/** Spawns a child workflow run. Special-cased only in that it needs no ticket. */
+export const NATIVE_OP_TRIGGER_WORKFLOW = 'workflow.trigger';
+
+/**
+ * Hard cap on a `forEach` fan-out.
+ *
+ * An upstream agent step decides the length of the array, so without a ceiling
+ * a hallucinated 900-element list would create 900 tickets before anyone
+ * noticed. Exceeding it fails the step rather than truncating: silently doing
+ * "the first 50" is the one outcome no author could have meant.
+ */
+export const NATIVE_FOR_EACH_MAX_ITEMS = 50;

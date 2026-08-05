@@ -12,12 +12,27 @@ export class RetryStepUseCase {
     private readonly canceller: CancelExecutionPort,
   ) {}
 
-  async execute(params: { workflowRunId: string; stepRunId: string }): Promise<void> {
+  async execute(params: {
+    workflowRunId: string;
+    stepRunId: string;
+    /**
+     * The human's answer when the step paused asking a question. Recorded on the
+     * attempt that asked, so the retry (attempt+1) reads it back from the run
+     * history. Mandatory plumbing for routine runs, which have no ticket
+     * timeline to carry the answer.
+     */
+    humanResponse?: string;
+  }): Promise<void> {
     const run = await this.runStore.getById(params.workflowRunId);
     if (!run) throw new WorkflowRunNotFoundError(params.workflowRunId);
 
     const stepRun = await this.stepRunStore.getById(params.stepRunId);
     if (!stepRun) throw new StepRunNotFoundError(params.stepRunId);
+
+    if (params.humanResponse && params.humanResponse.trim().length > 0) {
+      stepRun.recordHumanResponse(params.humanResponse.trim());
+      await this.stepRunStore.save(stepRun);
+    }
 
     // If the target step_run is still flagged `running`, abort its agent
     // execution before restarting. The process may genuinely still be alive (a

@@ -3,10 +3,19 @@ import type {
   StepOutput,
   WorkflowEdgeCondition,
   WorkflowEdgeConditionGroup,
+  RunSubject,
 } from '@fleex/shared';
+import type { RunHistoryEntry } from '../../utils/run-history.js';
 
 export interface StepExecutionInput {
-  ticketId: string;
+  /** Null for a routine run — `routineId` + `subject` carry the context instead. */
+  ticketId: string | null;
+  routineId?: string | null;
+  /**
+   * The run's frozen subject (repos / brief / documents / board). Replaces the
+   * ticket as the agent's "what am I working on" when there is no ticket.
+   */
+  subject?: RunSubject | null;
   workflowRunId: string;
   stepRunId: string;
   step: WorkflowStep;
@@ -21,6 +30,12 @@ export interface StepExecutionInput {
       targetName: string;
     }[];
     previousOutputs: Record<string, Record<string, unknown>>;
+    /**
+     * The run's narrative so far (see `utils/run-history.ts`). Agentic executors
+     * inject it in the prompt; `previousOutputs` stays the machine-readable
+     * channel for edge conditions and `{{ steps.* }}` references.
+     */
+    runHistory?: RunHistoryEntry[];
     /**
      * Names of every step in the run snapshot, so an edge condition reading an
      * earlier step renders as "Compute status.status" rather than a raw id.

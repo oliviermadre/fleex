@@ -167,6 +167,25 @@ export class WorkflowRunAlreadyActiveError extends DomainError {
   }
 }
 
+/**
+ * A `workflow.trigger` chain got too deep.
+ *
+ * A workflow that triggers a workflow is a feature; a workflow that — directly
+ * or through two others — triggers itself is an incident: every run spawns
+ * another, forever, each one creating tickets. A depth cap is the cheap,
+ * always-correct guard (no cycle detection to get subtly wrong), and a chain
+ * that long is a modelling mistake in its own right.
+ */
+export class WorkflowRunDepthExceededError extends DomainError {
+  constructor(templateId: string, maxDepth: number) {
+    super(
+      `Refusing to start workflow ${templateId}: it would be nested more than ${maxDepth} `
+      + 'runs deep. A workflow triggering itself, directly or through others, is the usual cause.',
+      'WORKFLOW_RUN_DEPTH_EXCEEDED',
+    );
+  }
+}
+
 export class WorkflowTemplateNotFoundError extends DomainError {
   constructor(slugOrId: string) {
     super(`Workflow template not found: ${slugOrId}`, 'WORKFLOW_TEMPLATE_NOT_FOUND');
@@ -214,6 +233,57 @@ export class InvalidRouteEdgeError extends DomainError {
 export class StepNotAwaitingRoutingError extends DomainError {
   constructor(stepRunId: string, status: string) {
     super(`Step run ${stepRunId} is not awaiting routing (status: ${status})`, 'STEP_NOT_AWAITING_ROUTING');
+  }
+}
+
+// ── Routines ───────────────────────────────────────────────────────────────
+
+export class RoutineNotFoundError extends DomainError {
+  constructor(slugOrId: string) {
+    super(`Routine not found: ${slugOrId}`, 'ROUTINE_NOT_FOUND');
+  }
+}
+
+/**
+ * The primitive a routine targets (persona / skill / panel) does not exist.
+ * Workflow targets keep their own {@link WorkflowTemplateNotFoundError} —
+ * distinct codes because the fix differs (pick a template vs fix a name).
+ */
+export class RoutineTargetNotFoundError extends DomainError {
+  constructor(kind: string, ref: string) {
+    super(`Routine target not found: ${kind} "${ref}"`, 'ROUTINE_TARGET_NOT_FOUND');
+  }
+}
+
+/**
+ * A routine already has a run in flight. Mirrors
+ * {@link WorkflowRunAlreadyActiveError} for tickets: two concurrent runs of the
+ * same routine would race on the same workspace and the same subject.
+ */
+export class RoutineRunAlreadyActiveError extends DomainError {
+  constructor(routineId: string) {
+    super(`A workflow run is already active on routine ${routineId}`, 'ROUTINE_RUN_ALREADY_ACTIVE');
+  }
+}
+
+/** A routine's slug collides with an existing one. */
+export class RoutineSlugConflictError extends DomainError {
+  constructor(slug: string) {
+    super(`A routine with slug "${slug}" already exists`, 'ROUTINE_SLUG_CONFLICT');
+  }
+}
+
+/**
+ * A `once` / `cron` trigger the scheduler could not turn into a fire time: an
+ * unparseable cron expression, an unknown IANA timezone, a non-ISO `runAt`.
+ *
+ * Rejected at write time rather than at tick time: a malformed trigger stored
+ * now becomes a routine the scheduler silently never fires, and the author
+ * would keep believing it is armed.
+ */
+export class InvalidRoutineTriggerError extends DomainError {
+  constructor(reason: string) {
+    super(`Invalid routine trigger: ${reason}`, 'INVALID_ROUTINE_TRIGGER');
   }
 }
 

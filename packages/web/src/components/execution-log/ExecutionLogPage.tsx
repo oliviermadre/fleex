@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useExecutionLogStore, type ExecutionTypeFilter } from '../../stores/executionLogStore';
+import { useExecutionLogStore, type ExecutionTypeFilter, type ExecutionScopeFilter } from '../../stores/executionLogStore';
 import { appWs } from '../../services/websocket';
 import { ExecutionRow } from './ExecutionRow';
 import { cn } from '../../lib/cn';
@@ -16,6 +16,12 @@ const TYPE_FILTERS: { key: ExecutionTypeFilter; label: string; kind: PrimitiveKi
   { key: 'workflow', label: 'WORKFLOW', kind: 'workflow' },
 ];
 
+const SCOPE_FILTERS: { key: ExecutionScopeFilter; label: string }[] = [
+  { key: 'all', label: 'ANY' },
+  { key: 'tickets', label: 'TICKETS' },
+  { key: 'routines', label: 'ROUTINES' },
+];
+
 export function ExecutionLogPage() {
   const liveEntries = useExecutionLogStore((s) => s.liveEntries);
   const historyEntries = useExecutionLogStore((s) => s.historyEntries);
@@ -23,6 +29,9 @@ export function ExecutionLogPage() {
   const historyCount = useExecutionLogStore((s) => s.historyCount);
   const typeCounts = useExecutionLogStore((s) => s.typeCounts);
   const typeFilter = useExecutionLogStore((s) => s.typeFilter);
+  const scopeCounts = useExecutionLogStore((s) => s.scopeCounts);
+  const scopeFilter = useExecutionLogStore((s) => s.scopeFilter);
+  const setScopeFilter = useExecutionLogStore((s) => s.setScopeFilter);
   const searchQuery = useExecutionLogStore((s) => s.searchQuery);
   const setTypeFilter = useExecutionLogStore((s) => s.setTypeFilter);
   const setSearchQuery = useExecutionLogStore((s) => s.setSearchQuery);
@@ -142,6 +151,38 @@ export function ExecutionLogPage() {
                   )}
                 >
                   {kind && <PrimitiveIcon kind={kind} size={14} />}
+                  <span>{label}</span>
+                  <span className={cn(
+                    'ml-0.5 rounded-full px-1.5 text-[10px] font-semibold',
+                    active
+                      ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
+                      : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-faint)]',
+                  )}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Scope filter tabs — what a run is anchored to. Orthogonal to the
+              type tabs: a workflow run is a workflow whether it hangs off a
+              ticket or a routine, but only one of the two has a ticket. */}
+          <div className="flex items-center gap-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-0.5">
+            {SCOPE_FILTERS.map(({ key, label }) => {
+              const count = scopeCounts[key] ?? 0;
+              const active = scopeFilter === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setScopeFilter(key)}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                    active
+                      ? 'bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)] shadow-sm'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
+                  )}
+                >
                   <span>{label}</span>
                   <span className={cn(
                     'ml-0.5 rounded-full px-1.5 text-[10px] font-semibold',

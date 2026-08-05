@@ -78,6 +78,15 @@ function buildContext(adapter: AdapterType, connection: unknown): MigrationConte
         await conn.query(sql);
       }
     },
+    async query(sql: string): Promise<Record<string, unknown>[]> {
+      if (adapter === 'sqlite') {
+        const conn = connection as { db: { prepare(sql: string): { all(): unknown[] } } };
+        return conn.db.prepare(sql).all() as Record<string, unknown>[];
+      }
+      const conn = connection as { query(text: string): Promise<{ rows: Record<string, unknown>[] }> };
+      const result = await conn.query(sql);
+      return result.rows ?? [];
+    },
     dialect(variants) {
       return variants[adapter] ?? null;
     },

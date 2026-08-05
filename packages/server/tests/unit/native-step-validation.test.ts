@@ -336,3 +336,154 @@ describe('nativeReferenceSuggestions', () => {
     }
   });
 });
+
+/**
+ * Fan-out (`forEach`) and the two references it makes possible.
+ *
+ * These are the checks that keep a fan-out honest at save time: a `{{ item }}`
+ * with nothing to bind, or a `{{ created.* }}` with nothing created, would
+ * otherwise only fail once the step had already started mutating tickets — once
+ * per element, N times over.
+ */
+describe('forEach and its references', () => {
+  const arrayStep = (id: string, itemProperties?: Record<string, { type: 'string' }>): WorkflowStep => ({
+    id,
+    name: id.toUpperCase(),
+    executorType: 'agent',
+    executorRef: 'p1',
+    position: { x: 0, y: 0 },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        findings: {
+          type: 'array',
+          ...(itemProperties ? { items: { type: 'object', properties: itemProperties } } : {}),
+        },
+        summary: { type: 'string' },
+      },
+    },
+  });
+
+  const fanOut = (actions: NativeAction[], forEach?: string): WorkflowStep => ({
+    ...nativeStep('n', actions),
+    ...(forEach ? { forEach } : {}),
+  });
+
+  const validate = (steps: WorkflowStep[]) =>
+    validateNativeSteps(steps, [edge('e1', 'scan', 'n')], 'scan');
+
+  it('refuses {{ item.* }} on a step with no forEach', () => {
+    // Nothing would bind it at runtime, and by then the step's other actions
+    // have already run — the author has to hear about it while editing.
+    const { errors } = validate([
+      arrayStep('scan'),
+      fanOut([act('ticket.set_title', { title: '{{ item.title }}' })]),
+    ]);
+    expect(errors.join('\n')).toMatch(/this step has no forEach/);
+  });
+
+  it('accepts the same reference once the step iterates', () => {
+    const { errors } = validate([
+      arrayStep('scan', { title: { type: 'string' } }),
+      fanOut([act('ticket.set_title', { title: '{{ item.title }}' })], '{{ steps.scan.findings }}'),
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  it('refuses to iterate something that is not an array', () => {
+    const { errors } = validate([
+      arrayStep('scan'),
+      fanOut([act('ticket.set_title', { title: 'x' })], '{{ steps.scan.summary }}'),
+    ]);
+    expect(errors.join('\n')).toMatch(/only an array can be iterated/);
+  });
+
+  it('refuses a forEach pointing at a step that does not run first', () => {
+    const { errors } = validate([
+      arrayStep('scan'),
+      fanOut([act('ticket.set_title', { title: 'x' })], '{{ steps.elsewhere.findings }}'),
+    ]);
+    expect(errors.join('\n')).toMatch(/unknown step "elsewhere"/);
+  });
+
+  it('refuses a forEach that is not a single reference', () => {
+    // "items: {{ … }}" would be interpolated into a string, and a string is not
+    // iterable in any way the author meant.
+    const { errors } = validate([
+      arrayStep('scan'),
+      fanOut([act('ticket.set_title', { title: 'x' })], 'items: {{ steps.scan.findings }}'),
+    ]);
+    expect(errors.join('\n')).toMatch(/must be a single reference/);
+  });
+
+  it('refuses {{ created.* }} when the step creates no ticket', () => {
+    const { errors } = validate([
+      arrayStep('scan'),
+      fanOut([act('ticket.post_comment', { body: '{{ created.id }}' })]),
+    ]);
+    expect(errors.join('\n')).toMatch(/creates no ticket/);
+  });
+
+  it('refuses {{ created.* }} inside the create action itself', () => {
+    // A ticket cannot be named after the id it does not have yet.
+    const { errors } = validate([
+      arrayStep('scan'),
+      fanOut([act('ticket.create', { boardId: 'b-1', title: '{{ created.id }}' })]),
+    ]);
+    expect(errors.join('\n')).toMatch(/cannot reference the ticket it is about to create/);
+  });
+
+  it('accepts {{ created.* }} in an action that follows the create', () => {
+    const { errors } = validate([
+      arrayStep('scan'),
+      fanOut([
+        act('ticket.create', { boardId: 'b-1', title: 'Spun off' }),
+        act('ticket.post_comment', { body: 'Created #{{ created.displayId }}' }),
+      ]),
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  it('refuses an unknown created field rather than resolving it to nothing', () => {
+    const { errors } = validate([
+      arrayStep('scan'),
+      fanOut([
+        act('ticket.create', { boardId: 'b-1', title: 'Spun off' }),
+        act('ticket.post_comment', { body: '{{ created.title }}' }),
+      ]),
+    ]);
+    expect(errors.join('\n')).toMatch(/unknown created field "title"/);
+  });
+
+  it('offers item.* only on an iterating step, and only the fields the element declares', () => {
+    const steps = [
+      arrayStep('scan', { title: { type: 'string' }, file: { type: 'string' } }),
+      fanOut([act('ticket.set_title', { title: 'x' })], '{{ steps.scan.findings }}'),
+    ];
+    const edges = [edge('e1', 'scan', 'n')];
+    const tokens = nativeReferenceSuggestions(steps[1]!, steps, edges, 'scan').map((s) => s.token);
+
+    expect(tokens).toContain('{{ item }}');
+    expect(tokens).toContain('{{ item.title }}');
+    expect(tokens).toContain('{{ item.file }}');
+    expect(tokens).not.toContain('{{ item.nonexistent }}');
+
+    const plain = [steps[0]!, nativeStep('n', [act('ticket.set_title', { title: 'x' })])];
+    expect(nativeReferenceSuggestions(plain[1]!, plain, edges, 'scan').some((s) => s.group === 'Item'))
+      .toBe(false);
+  });
+
+  it('offers created.* only on a step that creates a ticket', () => {
+    const steps = [
+      arrayStep('scan'),
+      fanOut([act('ticket.create', { boardId: 'b-1', title: 'x' })]),
+    ];
+    const edges = [edge('e1', 'scan', 'n')];
+    expect(nativeReferenceSuggestions(steps[1]!, steps, edges, 'scan').map((s) => s.token))
+      .toContain('{{ created.id }}');
+
+    const plain = [steps[0]!, nativeStep('n', [act('ticket.set_title', { title: 'x' })])];
+    expect(nativeReferenceSuggestions(plain[1]!, plain, edges, 'scan').some((s) => s.group === 'Created'))
+      .toBe(false);
+  });
+});

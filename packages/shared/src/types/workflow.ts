@@ -1,4 +1,5 @@
 import type { DeliverableType, DeliverableStatus } from './ticket.js';
+import type { RunSubject } from './routine.js';
 
 export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route';
 
@@ -17,6 +18,12 @@ export interface JsonSchemaProperty {
   enum?: string[];
   description?: string;
   items?: JsonSchemaProperty;
+  /**
+   * Fields of an object — including the object an `array` iterates over. Without
+   * it `{ type: 'array', items: { type: 'object' } }` is a list of opaque blobs,
+   * and a `forEach` step has nothing to offer the author for `{{ item.* }}`.
+   */
+  properties?: Record<string, JsonSchemaProperty>;
 }
 
 export interface JsonSchema {
@@ -52,6 +59,13 @@ export interface WorkflowStep {
    * so pre-existing templates keep deserialising — mirrors `humanGateOutcomes`.
    */
   nativeActions?: NativeAction[];
+  /**
+   * Native steps only. A `{{ … }}` reference to an array in an upstream step's
+   * output; the step's actions run once per element, with `{{ item.* }}` bound.
+   * Optional on the type — like `nativeActions` — so pre-existing templates
+   * keep deserialising.
+   */
+  forEach?: string;
   position: { x: number; y: number };
 }
 
@@ -130,8 +144,33 @@ export interface WorkflowTemplateSnapshot {
 
 export interface WorkflowRun {
   id: string;
-  ticketId: string;
-  templateId: string;
+  /**
+   * Null iff the run belongs to a routine. Exactly one of `ticketId` /
+   * `routineId` is set — enforced in the DB — so a run is always reachable
+   * either from its ticket or from its routine, and never orphaned.
+   */
+  ticketId: string | null;
+  /** Set iff the run has no ticket. See `Routine`. Absent on pre-routines rows. */
+  routineId?: string | null;
+  /**
+   * The run whose `workflow.trigger` action spawned this one. Null for a run a
+   * human (or a routine) started. Only there to bound recursion: a workflow
+   * that triggers itself would otherwise fan out forever.
+   */
+  parentRunId?: string | null;
+  /**
+   * The routine's subject, frozen when the run started — same rationale as
+   * `templateSnapshot`: editing a routine must not rewrite its history.
+   */
+  subjectSnapshot?: RunSubject | null;
+  /** Workspace directory the run's agent steps ran in, when one was created. */
+  workspacePath?: string | null;
+  /**
+   * Null for a synthetic run: a routine targeting a primitive (agent / skill /
+   * panel) has no template — the one-step snapshot below is fabricated at
+   * launch and is the only definition the run ever had.
+   */
+  templateId: string | null;
   templateSnapshot: WorkflowTemplateSnapshot;
   status: WorkflowRunStatus;
   currentStepId: string | null;
@@ -167,6 +206,14 @@ export interface StepOutput {
   mentionStatus?: 'resolved' | 'waiting_for_info';
   schemaFields: Record<string, unknown>;
   outcome?: string;
+  /**
+   * Free-text answer a human gave to a `waiting_for_info` question, recorded on
+   * the step run that asked it. On a ticket run the answer is *also* posted as a
+   * ticket comment, but a routine run has no ticket timeline — without this
+   * field the answer would exist nowhere and the retried step would re-run with
+   * the exact same prompt.
+   */
+  humanResponse?: string;
   result: StepRunResult;
   /**
    * Set when several outgoing edges matched at once and a human had to arbitrate.
@@ -198,7 +245,10 @@ export interface StepRun {
 }
 
 export interface CreateWorkflowRunInput {
-  ticketId: string;
+  /** Omit when starting a routine run. */
+  ticketId?: string;
+  /** Omit when starting a ticket run. Exactly one of the two must be present. */
+  routineId?: string;
   templateId: string;
   triggeredBy: string;
   triggeredFrom: string;

@@ -1,7 +1,10 @@
 export interface AgentExecution {
   readonly id: string;
   readonly personaId: string;
-  readonly ticketId: string;
+  /** Null for workflow-step executions that belong to a routine, not a ticket. */
+  readonly ticketId: string | null;
+  /** Set instead of `ticketId` when the execution came from a routine run. */
+  readonly routineId?: string | null;
   readonly mentionId: string;
   readonly eventCount: number;
   readonly status: 'running' | 'completed' | 'failed' | 'interrupted';
@@ -79,8 +82,9 @@ export interface ExecutionStartContext {
   readonly systemPromptSections: string[];
   readonly systemPromptLength: number;
   readonly userPromptLength: number;
-  readonly ticketTitle: string;
-  readonly ticketStatus: string;
+  /** Undefined for a routine-anchored run — there is no ticket to describe. */
+  readonly ticketTitle?: string;
+  readonly ticketStatus?: string;
   readonly commentsCount: number;
   readonly deliverablesCount: number;
 }
@@ -95,7 +99,8 @@ export interface ExecutionStartData {
   readonly executionId: string;
   readonly personaId: string;
   readonly personaName: string;
-  readonly ticketId: string;
+  /** Null for a routine-anchored run (no ticket). */
+  readonly ticketId: string | null;
   readonly mentionId?: string;
   readonly model: string;
   readonly effectiveMode?: string;
@@ -114,6 +119,15 @@ export interface ExecutionStartData {
    * emitted before this field existed.
    */
   readonly maxTurns?: number;
+  /**
+   * The workflow run and step run this execution belongs to. Only set for
+   * `kind: 'workflow_step'`. Without them the log shows an agent working on
+   * *something* with no way to tell which node of which run it is — and no way
+   * to replay that step's CLI commands (`fleex workflow step deliverable add
+   * <runId> <stepRunId> …`) by hand to reproduce what it did.
+   */
+  readonly workflowRunId?: string | null;
+  readonly stepRunId?: string | null;
   readonly context: ExecutionStartContext;
 }
 
@@ -185,6 +199,12 @@ export interface ExecutionLogEntry extends AgentExecution {
   readonly workflowCompletedSteps?: number;
   /** Total number of steps in the run's snapshot. */
   readonly workflowTotalSteps?: number;
+  /**
+   * Routine chip, shown where a ticket-bound execution shows its ticket chip.
+   * Set iff the execution belongs to a routine run (`ticketId` is then null).
+   */
+  readonly routineName?: string | null;
+  readonly routineSlug?: string | null;
 }
 
 /**
@@ -201,6 +221,14 @@ export function computeInitials(displayName: string): string {
   return trimmed.slice(0, 2).toUpperCase();
 }
 
+/**
+ * What a run is anchored to. Orthogonal to `ExecutionLogEntry['type']` (which
+ * says *what executed*): a workflow run can be anchored to a ticket or to a
+ * routine, and the two need very different affordances — a routine run has no
+ * ticket, so no comments/deliverables/ticket CTAs.
+ */
+export type ExecutionScope = 'tickets' | 'routines';
+
 export interface ExecutionLogResponse {
   readonly entries: ExecutionLogEntry[];
   readonly total: number;
@@ -212,6 +240,11 @@ export interface ExecutionLogResponse {
     readonly panel: number;
     readonly skill: number;
     readonly workflow: number;
+  };
+  readonly scopeCounts: {
+    readonly all: number;
+    readonly tickets: number;
+    readonly routines: number;
   };
 }
 

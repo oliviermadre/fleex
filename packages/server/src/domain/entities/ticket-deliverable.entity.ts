@@ -3,7 +3,8 @@ import type { TicketDeliverable, DeliverableType, DeliverableStatus } from '@fle
 export class TicketDeliverableEntity {
   constructor(
     public readonly id: string,
-    public readonly ticketId: string,
+    /** Null when the deliverable was produced by a routine run (no ticket). */
+    public readonly ticketId: string | null,
     public readonly agentName: string,
     public type: DeliverableType,
     public title: string,
@@ -13,11 +14,24 @@ export class TicketDeliverableEntity {
     public readonly mentionId: string | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
+    /**
+     * Set instead of `ticketId` for routine runs: the artifact hangs off the
+     * run, which is reachable from the routine detail screen.
+     */
+    public readonly workflowRunId: string | null = null,
+    /**
+     * The step run that produced it. Narrower than `workflowRunId` and the only
+     * anchor precise enough for the run graph to place the artifact on the node
+     * that emitted it. Null outside a workflow, and on pre-anchor rows.
+     */
+    public readonly stepRunId: string | null = null,
   ) {}
 
   static create(params: {
     id: string;
-    ticketId: string;
+    ticketId?: string | null;
+    workflowRunId?: string | null;
+    stepRunId?: string | null;
     agentName: string;
     type: DeliverableType;
     title: string;
@@ -28,7 +42,7 @@ export class TicketDeliverableEntity {
     const now = new Date();
     return new TicketDeliverableEntity(
       params.id,
-      params.ticketId,
+      params.ticketId ?? null,
       params.agentName,
       params.type,
       params.title,
@@ -38,6 +52,8 @@ export class TicketDeliverableEntity {
       params.mentionId ?? null,
       now,
       now,
+      params.workflowRunId ?? null,
+      params.stepRunId ?? null,
     );
   }
 
@@ -74,6 +90,8 @@ export class TicketDeliverableEntity {
     return {
       id: this.id,
       ticketId: this.ticketId,
+      workflowRunId: this.workflowRunId,
+      stepRunId: this.stepRunId,
       agentName: this.agentName,
       type: this.type,
       title: this.title,

@@ -22,7 +22,7 @@ import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -167,6 +167,13 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // Execution Log
   if (pathname === '/execution-log') {
     return { ...base, panel: 'execution-log' };
+  }
+
+  // Routines. Only the panel is routed: which routine is open lives in the
+  // routine store, since a deep link would have to resolve a slug to an id
+  // before the list has loaded.
+  if (pathname === '/routines') {
+    return { ...base, panel: 'routines' };
   }
 
   // Claude Config
@@ -359,6 +366,8 @@ export function storeToUrl(
       return { pathname: '/list-focus', search: '' };
     case 'execution-log':
       return { pathname: '/execution-log', search: '' };
+    case 'routines':
+      return { pathname: '/routines', search: '' };
     case 'cluster':
       return { pathname: '/cluster', search: '' };
     case 'scratchpads': {

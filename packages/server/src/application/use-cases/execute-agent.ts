@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel } from '@fleex/shared';
-import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject } from '@fleex/shared';
+import { inferModelCapabilities, resolveEffortLevel, parseRepoRef } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
@@ -44,7 +44,7 @@ interface ActiveExecution {
   mentionId: string;
   executionId: string;
   personaId: string;
-  ticketId?: string;
+  ticketId?: string | null;
   status: 'running' | 'completed' | 'failed';
   abortController: AbortController;
 }
@@ -1400,7 +1400,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // workflow-aware label (e.g. "workflow:Smoke Test → PR FAQ") so readers
     // of the ticket comments tab can tell at a glance which workflow run
     // produced each comment instead of seeing just the bare persona name.
-    workflowContext?: { workflowName: string; stepName: string };
+    // `runId`/`stepRunId` additionally tag the execution with the workflow node
+    // it belongs to, so the Execution Log header names the step being debugged.
+    workflowContext?: { workflowName: string; stepName: string; runId?: string | null; stepRunId?: string | null };
   }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
     if (!this.skillStore) {
       throw new Error('SkillStore not available');
@@ -1540,6 +1542,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       worktreePath,
       kind: 'skill',
       maxTurns: skillMaxTurns,
+      workflowRunId: opts?.workflowContext?.runId,
+      stepRunId: opts?.workflowContext?.stepRunId,
       label: skill.displayName,
       skillId,
       skillName: skill.commandName,
@@ -1884,7 +1888,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    */
   async executeForWorkflowStep(params: {
     personaName: string;
-    ticketId: string;
+    /** Null when the run is anchored to a routine — `routineId` + `subject` replace it. */
+    ticketId: string | null;
+    routineId?: string | null;
+    /** Frozen routine subject (repos / brief / documents). Drives workspace + prompt. */
+    subject?: RunSubject | null;
+    workflowRunId?: string | null;
+    /** The attempt this execution *is*. Emitted in the header for debugging. */
+    stepRunId?: string | null;
     outputFormat: typeof OUTPUT_FORMAT_SCHEMA;
     workflowContextPrompt: string;
     mode: MentionExecutionMode;
@@ -1926,7 +1937,13 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // Workspace if needed (same as executeForMention)
       let worktreePath: string | null = null;
       if (effectiveMode !== 'talk') {
-        worktreePath = await this.ensureWorkspace(params.ticketId);
+        worktreePath = params.ticketId
+          ? await this.ensureWorkspace(params.ticketId)
+          : await this.ensureRoutineWorkspace({
+            routineId: params.routineId ?? null,
+            workflowRunId: params.workflowRunId ?? executionId,
+            subject: params.subject ?? null,
+          });
       }
 
       // Start tracking
@@ -1941,9 +1958,22 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       await params.onExecutionStarted?.(executionId);
 
       // Compose prompts
-      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
-      const context = await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name });
-      const userPromptBlocks = await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt);
+      // A routine run has no ticket to read context from: the frozen subject
+      // (brief + repos) is the whole "what am I working on".
+      const context = params.ticketId
+        ? await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name })
+        : null;
+      // Known repo count so an empty workspace is stated rather than left for
+      // the agent to discover: a routine with no repo gets a workspace holding
+      // only `.fleex.json`, and without this note the agent explores it, finds
+      // nothing, and stalls instead of working from its brief.
+      const repoCount = context
+        ? context.ticket.links.filter((l) => l.type === 'repository').length
+        : (params.subject?.repos?.length ?? 0);
+      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount);
+      const userPromptBlocks = context
+        ? await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt)
+        : await this.composeRoutineUserPrompt(params.subject ?? null, params.workflowContextPrompt);
       const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
 
       let sequence = 0;
@@ -1977,13 +2007,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         kind: 'workflow_step',
         label: 'workflow step',
         maxTurns: wfMaxTurns,
+        workflowRunId: params.workflowRunId,
+        stepRunId: params.stepRunId,
         systemPromptSections: wfContextSections,
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPromptText.length,
-        ticketTitle: context.ticket.title,
-        ticketStatus: context.ticket.status,
-        commentsCount: context.comments.length,
-        deliverablesCount: context.deliverables.length,
+        ticketTitle: context?.ticket.title,
+        ticketStatus: context?.ticket.status,
+        commentsCount: context?.comments.length ?? 0,
+        deliverablesCount: context?.deliverables.length ?? 0,
       }));
 
       // SDK query
@@ -2120,6 +2152,29 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       for (const d of context.deliverables) {
         pushText(`### [${d.status}] ${d.title} (${d.type})\n${d.content ?? ''}\n`);
       }
+    }
+    pushText('\n---\n\n' + workflowContextPrompt);
+    return blocks;
+  }
+
+  /**
+   * Workflow-step prompt for a routine run. There is no ticket, so the frozen
+   * subject stands in for it: the brief is the objective, the repos tell the
+   * agent what is checked out in its workspace.
+   */
+  private async composeRoutineUserPrompt(
+    subject: RunSubject | null,
+    workflowContextPrompt: string,
+  ): Promise<PromptContentBlock[]> {
+    const blocks: PromptContentBlock[] = [];
+    const pushText = (text: string) => blocks.push({ type: 'text', text });
+
+    pushText('# Routine run\n\nThis run is not attached to a ticket. Your objective is the brief below.');
+    if (subject?.brief) {
+      blocks.push(...await this.resolveText(`\n## Brief\n\n${subject.brief}`));
+    }
+    if (subject?.repos?.length) {
+      pushText(`\n## Repositories\n\n${subject.repos.map((r) => `- ${r}`).join('\n')}\n`);
     }
     pushText('\n---\n\n' + workflowContextPrompt);
     return blocks;
@@ -2289,6 +2344,87 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     return workspaceRoot;
   }
 
+  /**
+   * Workspace for a routine run. Mirrors `ensureWorkspace` but sources repos
+   * from the run's frozen subject instead of ticket links, and keys the
+   * workspace on the run rather than the routine: a recurring routine must not
+   * inherit the leftover state of its previous execution.
+   *
+   * Deviation from the PRD, which named the workspace `routine-{slug}-{run8}`:
+   * the slug would require a routine-store lookup here, so the routine id is
+   * used instead. Both directions stay traceable.
+   */
+  private async ensureRoutineWorkspace(params: {
+    routineId: string | null;
+    workflowRunId: string;
+    subject: RunSubject | null;
+  }): Promise<string | null> {
+    const runShort = params.workflowRunId.slice(0, 8);
+    const routineShort = (params.routineId ?? 'adhoc').slice(0, 8);
+    const workspaceId = `routine-${routineShort}-${runShort}`;
+    const branchName = `agent/${workspaceId}`;
+
+    let workspaceRoot: string;
+    try {
+      workspaceRoot = this.resolver!.workspacePath(workspaceId);
+      mkdirSync(workspaceRoot, { recursive: true });
+      const manifestPath = join(workspaceRoot, '.fleex.json');
+      if (!existsSync(manifestPath)) {
+        writeFileSync(manifestPath, JSON.stringify({
+          routineId: params.routineId, workflowRunId: params.workflowRunId,
+        }, null, 2));
+      }
+    } catch (err) {
+      this.logger.error('Failed to create workspace for routine run', {
+        routineId: params.routineId, workflowRunId: params.workflowRunId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
+
+    const repos = (params.subject?.repos ?? [])
+      .map((ref) => parseRepoRef(ref))
+      .filter((r): r is { org: string; name: string } => r !== null);
+    if (repos.length === 0) {
+      this.logger.info('Routine workspace ready with no repository', { workspaceId, workspaceRoot });
+      return workspaceRoot;
+    }
+
+    for (const repo of repos) {
+      const wtPath = this.resolver!.workspaceRepoPath(workspaceId, repo.name);
+      if (existsSync(wtPath)) continue;
+
+      const barePath = this.resolver!.barePath(repo.org, repo.name);
+      if (!existsSync(barePath)) {
+        try {
+          await this.bareCloneManager!.ensureBareClone(
+            repo.org, repo.name, `git@github.com:${repo.org}/${repo.name}.git`,
+          );
+        } catch (err) {
+          this.logger.warn('Failed to clone repository for routine run', {
+            workspaceId, repo: `${repo.org}/${repo.name}`,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          continue;
+        }
+      }
+
+      try {
+        await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+          branch: branchName, createNewBranch: true,
+        });
+        this.logger.info('Routine worktree ready', { workspaceId, repo: `${repo.org}/${repo.name}`, wtPath, branch: branchName });
+      } catch (err) {
+        this.logger.warn('Failed to create routine worktree', {
+          workspaceId, repo: `${repo.org}/${repo.name}`, wtPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return workspaceRoot;
+  }
+
   private composeSystemPrompt(persona: AgentPersonaEntity, humanName: string | null, worktreePath: string | null = null, repoCount?: number): string {
     const parts: string[] = [];
 
@@ -2320,8 +2456,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     if (worktreePath) {
       const workdirNote = repoCount === 0
-        ? `\n\nNote: this ticket has **no repository attached**. The workspace is empty — there is no codebase to read, edit, or run git against. Rely on MCP tools, web search, and file operations within this workspace as appropriate.`
-        : '';
+        ? `\n\nNote: there is **no repository attached**. The workspace is empty — there is no codebase to read, edit, or run git against. Do not go looking for one: rely on MCP tools, web search, and file operations within this workspace as appropriate.`
+        : `\n\nEach attached repository is checked out as a **subdirectory** of that working directory, on a dedicated branch.`;
       parts.push(
         `## Working Directory\n\n`
         + `Your working directory is:\n\`${worktreePath}\`\n\n`

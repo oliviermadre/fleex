@@ -299,6 +299,17 @@ export const CommentMarkdown = memo(function CommentMarkdown({
           />
         );
       }
+      if (href?.startsWith('#fleex-routine:')) {
+        // Routine reference — purely referential, like @ticket. Mentioning a
+        // routine never triggers anything (a routine has no ticket to run on);
+        // the chip only highlights the handle. Purple = the routine glyph hue.
+        const name = href.slice('#fleex-routine:'.length);
+        return (
+          <span className={`inline-flex items-center rounded-sm px-1 py-px ${tint('purple')}`}>
+            @{name}
+          </span>
+        );
+      }
       if (href?.startsWith('#fleex-human:')) {
         const name = href.slice('#fleex-human:'.length);
         const mentionText = `@${name}`;
@@ -1517,8 +1528,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                     // workflowRuns store, so the card here and the panel there stay
                     // in sync and this card disappears once the step leaves
                     // needs_review.
-                    await api.postTicketComment(run.ticketId, response);
-                    await retryStep(run.id, stepRun.id);
+                    // This card only ever renders inside a ticket, so ticketId is
+                    // set — the guard is for the shared nullable run type.
+                    if (run.ticketId) await api.postTicketComment(run.ticketId, response);
+                    await retryStep(run.id, stepRun.id, response);
                   }}
                 />
               </div>

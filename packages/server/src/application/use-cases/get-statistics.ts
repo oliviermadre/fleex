@@ -16,6 +16,7 @@ import type {
   CycleTimeStatus,
   ThroughputWipBucket,
   WorkflowLeaderboardEntry,
+  RoutineLeaderboardEntry,
 } from '@fleex/shared';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
@@ -27,6 +28,7 @@ import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
+import type { RoutineStorePort } from '../ports/routine-store.port.js';
 
 interface CacheEntry {
   data: StatisticsResponse;
@@ -70,6 +72,7 @@ export class GetStatisticsUseCase {
     private readonly skillStore?: SkillStorePort,
     private readonly domainEventLogStore?: DomainEventLogStorePort,
     private readonly workflowRunStore?: WorkflowRunStorePort | null,
+    private readonly routineStore?: RoutineStorePort | null,
   ) {}
 
   async execute(params: {
@@ -397,11 +400,12 @@ export class GetStatisticsUseCase {
     // happened before `from`. Workflow stats come from the run store (richer:
     // template name, status, duration) rather than the event log.
     let moveEvents: LogEntry[] = [];
-    const [allRuns, fetchedMoves] = await Promise.all([
+    const [allRuns, fetchedMoves, routines] = await Promise.all([
       this.workflowRunStore ? this.workflowRunStore.getAll() : Promise.resolve([]),
       this.domainEventLogStore
         ? this.domainEventLogStore.list({ limit: 50_000, eventType: 'ticket.moved', until: to })
         : Promise.resolve([] as LogEntry[]),
+      this.routineStore ? this.routineStore.getAll() : Promise.resolve([]),
     ]);
     moveEvents = fetchedMoves;
     const filteredRuns = allRuns.filter((r) => {
@@ -480,6 +484,8 @@ export class GetStatisticsUseCase {
     }
     const workflowRunsByTicket = new Map<string, number>();
     for (const r of allRuns) {
+      // Routine runs have no ticket: they never contribute to a per-ticket count.
+      if (r.ticketId === null) continue;
       workflowRunsByTicket.set(r.ticketId, (workflowRunsByTicket.get(r.ticketId) ?? 0) + 1);
     }
 
@@ -564,8 +570,11 @@ export class GetStatisticsUseCase {
     });
 
     // Workflow leaderboard — runs started in range, grouped by template.
+    // Synthetic runs (routine → single primitive) have no template: they'd all
+    // collapse into one meaningless "null" row, so they stay off the board.
     const runsByTemplate = new Map<string, typeof filteredRuns>();
     for (const r of filteredRuns) {
+      if (r.templateId === null) continue;
       const list = runsByTemplate.get(r.templateId) ?? [];
       list.push(r);
       runsByTemplate.set(r.templateId, list);
@@ -585,6 +594,45 @@ export class GetStatisticsUseCase {
           completedCount: runs.filter((r) => r.status === 'completed').length,
           failedCount: runs.filter((r) => r.status === 'failed').length,
           avgDurationMs: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null,
+        };
+      })
+      .sort((a, b) => b.executionCount - a.executionCount);
+
+    // Routine leaderboard — routine-anchored runs in range, grouped by routine.
+    // Routines are the one launcher no other board can show: a routine that
+    // targets a primitive produces runs with no templateId, so it is absent
+    // from the workflow board, and its steps are attributed to the primitive,
+    // not to the routine. A routine deleted since its runs still gets a row —
+    // dropping it would silently change historical totals.
+    const runsByRoutine = new Map<string, typeof filteredRuns>();
+    for (const r of filteredRuns) {
+      if (!r.routineId) continue;
+      const list = runsByRoutine.get(r.routineId) ?? [];
+      list.push(r);
+      runsByRoutine.set(r.routineId, list);
+    }
+    const routineById = new Map(routines.map((r) => [r.id, r]));
+    const routineLeaderboard: RoutineLeaderboardEntry[] = [...runsByRoutine.entries()]
+      .map(([routineId, runs]) => {
+        const routine = routineById.get(routineId);
+        const durations = runs
+          .filter((r) => r.status === 'completed' && r.completedAt)
+          .map((r) => r.completedAt!.getTime() - r.startedAt.getTime())
+          .filter((d) => d > 0);
+        const lastRunAt = runs.reduce<Date | null>(
+          (acc, r) => (acc === null || r.startedAt > acc ? r.startedAt : acc),
+          null,
+        );
+        return {
+          routineId,
+          routineName: routine?.name ?? runs[0]?.templateSnapshot.name ?? routineId,
+          targetKind: routine?.target.kind ?? 'workflow',
+          targetRef: routine?.target.ref ?? '',
+          executionCount: runs.length,
+          completedCount: runs.filter((r) => r.status === 'completed').length,
+          failedCount: runs.filter((r) => r.status === 'failed').length,
+          avgDurationMs: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null,
+          lastRunAt: lastRunAt ? lastRunAt.toISOString() : null,
         };
       })
       .sort((a, b) => b.executionCount - a.executionCount);
@@ -614,6 +662,7 @@ export class GetStatisticsUseCase {
       skillLeaderboard,
       panelLeaderboard,
       workflowLeaderboard,
+      routineLeaderboard,
       usageByType,
       activityHeatmap,
       ticketIterations,

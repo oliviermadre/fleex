@@ -5,6 +5,7 @@ import { SessionNamingService } from '../domain/services/session-naming.js';
 import { SessionGroupingService } from '../domain/services/session-grouping.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
 import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
+import { RoutineSchedulerService } from '../domain/services/routine-scheduler.js';
 import { RepositoryResolver } from '../domain/services/repository-resolver.js';
 import { GithubDiscovery } from '../domain/services/github-discovery.js';
 import { RepoPathResolver } from '../domain/services/repo-path-resolver.js';
@@ -69,11 +70,16 @@ import { NativeStepExecutor } from '../application/services/step-executors/nativ
 import { RouteStepExecutor } from '../application/services/step-executors/route-step-executor.js';
 import { NativeOperationRegistry } from '../application/services/native-operations/registry.js';
 import { ApplyNativeActionsUseCase } from '../application/use-cases/apply-native-actions.js';
+import type { TriggerWorkflowRunPort } from '../application/services/native-operations/types.js';
+import { WorkflowTemplateNotFoundError } from '../domain/errors.js';
 import { ApplyTicketMutationUseCase } from '../application/use-cases/apply-ticket-mutation.js';
 import { CreateTicketUseCase } from '../application/use-cases/create-ticket.js';
 import { WorkflowOrchestrator } from '../application/services/workflow-orchestrator.js';
 import { RunWorkflowStepUseCase } from '../application/use-cases/run-workflow-step.js';
 import { CreateWorkflowRunUseCase } from '../application/use-cases/create-workflow-run.js';
+import { CreateRoutineUseCase } from '../application/use-cases/create-routine.js';
+import { UpdateRoutineUseCase, DeleteRoutineUseCase } from '../application/use-cases/update-routine.js';
+import { RunRoutineUseCase } from '../application/use-cases/run-routine.js';
 import { ResolveHumanGateUseCase } from '../application/use-cases/resolve-human-gate.js';
 import { ResolveAmbiguousRouteUseCase } from '../application/use-cases/resolve-ambiguous-route.js';
 import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
@@ -138,6 +144,7 @@ export async function createContainer() {
     workflowTemplateStore,
     workflowRunStore,
     stepRunStore,
+    routineStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
@@ -277,6 +284,12 @@ export async function createContainer() {
   const eventBus = new EventBus();
   const remoteEventBus = new EventBus();
 
+  // Routine scheduler. Constructed here (it needs the bus) but its stores and
+  // launch use case are setter-injected further down, once the workflow engine
+  // they depend on exists.
+  const routineScheduler = new RoutineSchedulerService(eventBus, logger);
+  routineScheduler.registerBusHandlers(eventBus);
+
   // Per-workspace deliverable-type backoffice (CRUD + usage + reassignment).
   const manageDeliverableTypes = new ManageDeliverableTypesUseCase(config, deliverableStore, logger, eventBus);
 
@@ -410,13 +423,24 @@ export async function createContainer() {
   let retryStep: RetryStepUseCase | null = null;
   let cancelWorkflowRun: CancelWorkflowRunUseCase | null = null;
   let workflowOrchestrator: WorkflowOrchestrator | null = null;
+  // Routines ride on the same stores as workflows: no routine without a
+  // workflow engine to run it.
+  let createRoutine: CreateRoutineUseCase | null = null;
+  let updateRoutine: UpdateRoutineUseCase | null = null;
+  let deleteRoutine: DeleteRoutineUseCase | null = null;
+  let runRoutine: RunRoutineUseCase | null = null;
 
   if (workflowTemplateStore && workflowRunStore && stepRunStore) {
     // Step executors
-    const agentStepExecutor = new AgentStepExecutor(executeAgent);
-    const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore);
-    const panelStepExecutor = new PanelStepExecutor(runPanel);
+    const agentStepExecutor = new AgentStepExecutor(executeAgent, config);
+    const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore, personaStore_, config);
+    const panelStepExecutor = new PanelStepExecutor(runPanel, config);
     const humanGateStepExecutor = new HumanGateStepExecutor(postComment, eventBus);
+    // `workflow.trigger` needs CreateWorkflowRun, which needs the orchestrator,
+    // which needs this very executor. The holder is filled in once both ends
+    // exist (a few lines below); calling it before then is impossible — the
+    // effect only runs inside a step of a run that CreateWorkflowRun started.
+    const workflowTrigger: { run: TriggerWorkflowRunPort | null } = { run: null };
     const nativeStepExecutor = new NativeStepExecutor(new ApplyNativeActionsUseCase({
       ticketStore: ticketStore_,
       registry: new NativeOperationRegistry(),
@@ -424,6 +448,10 @@ export async function createContainer() {
       applyTicketMutation,
       postComment,
       eventBus,
+      triggerWorkflowRun: (p) => {
+        if (!workflowTrigger.run) throw new Error('workflow.trigger: engine not wired yet');
+        return workflowTrigger.run(p);
+      },
     }));
 
     // RunWorkflowStep — orchestrator dep resolved below (circular dep pattern)
@@ -452,10 +480,32 @@ export async function createContainer() {
     (runWorkflowStep as unknown as { deps: { orchestrator: WorkflowOrchestrator } }).deps.orchestrator = workflowOrchestrator;
 
     createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment);
+
+    // Close the lazy loop opened above. Slug → template resolution lives here
+    // rather than in the operation so the operation stays a pure planner.
+    const templateStore = workflowTemplateStore;
+    const createRun = createWorkflowRun;
+    workflowTrigger.run = async ({ templateSlug, ticketId, triggeredBy, parentRunId }) => {
+      const template = await templateStore.getBySlug(templateSlug);
+      if (!template) throw new WorkflowTemplateNotFoundError(templateSlug);
+      const run = await createRun.execute({
+        ticketId, templateId: template.id, triggeredBy, triggeredFrom: 'workflow', parentRunId,
+      });
+      return { id: run.id };
+    };
     resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
     resolveAmbiguousRoute = new ResolveAmbiguousRouteUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
     retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, executeAgent);
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
+
+    if (routineStore) {
+      const targetStores = { templateStore: workflowTemplateStore, personaStore: personaStore_, skillStore, panelStore };
+      createRoutine = new CreateRoutineUseCase(routineStore, targetStores, logger);
+      updateRoutine = new UpdateRoutineUseCase(routineStore, targetStores);
+      deleteRoutine = new DeleteRoutineUseCase(routineStore);
+      runRoutine = new RunRoutineUseCase(routineStore, createWorkflowRun, eventBus);
+      routineScheduler.setDeps({ routineStore, runStore: workflowRunStore, runRoutine });
+    }
 
     logger.info('Workflow orchestration wired', { driver });
   } else {
@@ -508,6 +558,7 @@ export async function createContainer() {
     repositoryResolver,
     githubDiscovery,
     repositoryRefreshScheduler,
+    routineScheduler,
     resolver,
     bareCloneManager,
     overlayManager,
@@ -566,6 +617,11 @@ export async function createContainer() {
     workflowTemplateStore,
     workflowRunStore,
     stepRunStore,
+    routineStore,
+    createRoutine,
+    updateRoutine,
+    deleteRoutine,
+    runRoutine,
     workflowOrchestrator,
     createWorkflowRun,
     resolveHumanGate,

@@ -148,4 +148,155 @@ describe('NativeStepExecutor', () => {
       .rejects.toThrow(/at least one action/);
     expect(applyNativeActions.execute).not.toHaveBeenCalled();
   });
+
+  it('runs native actions on a routine run instead of refusing outright', async () => {
+    // A routine run has no ticket, but it can still create one and trigger a
+    // workflow on it. Refusing here would make the whole fan-out feature
+    // unreachable from a routine — which is the main place it is wanted.
+    const applyNativeActions = { execute: vi.fn().mockResolvedValue({ ...okResult, ticketId: null }) };
+    const exec = new NativeStepExecutor(applyNativeActions as never);
+
+    const result = await exec.execute({
+      ...makeInput(), ticketId: null, subject: { repos: [], boardId: 'b-routine' },
+    } as never);
+
+    expect(result.output.result).toBe('ok');
+    // The routine's board travels with the call: it is the only board a
+    // `ticket.create` can fall back to when there is no subject ticket.
+    expect(applyNativeActions.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ ticketId: null, subjectBoardId: 'b-routine' }),
+    );
+  });
+
+  describe('forEach fan-out', () => {
+    const fanOut = (
+      forEach: string,
+      previousOutputs: Record<string, Record<string, unknown>>,
+    ) => {
+      const input = makeInput({ previousOutputs }) as Record<string, unknown>;
+      return { ...input, step: { ...(input.step as object), forEach } };
+    };
+
+    it('runs the action list once per element, binding the element to {{ item }}', async () => {
+      // The point of Lot 2: one upstream step emits N findings, one native step
+      // acts on each — without N copies of the same node in the graph.
+      const applyNativeActions = {
+        execute: vi.fn(async () => ({ ticketId: 't-new', actionsApplied: 1, changed: [], createdTicketId: 't-new' })),
+      };
+      const exec = new NativeStepExecutor(applyNativeActions as never);
+
+      const result = await exec.execute(fanOut(
+        '{{ steps.scan.findings }}',
+        { scan: { findings: [{ title: 'a' }, { title: 'b' }, { title: 'c' }] } },
+      ) as never);
+
+      expect(applyNativeActions.execute).toHaveBeenCalledTimes(3);
+      expect(applyNativeActions.execute.mock.calls.map(([c]) => (c as {
+        references: { item: unknown };
+      }).references.item)).toEqual([{ title: 'a' }, { title: 'b' }, { title: 'c' }]);
+
+      const fields = result.output.schemaFields as Record<string, unknown>;
+      expect(result.output.result).toBe('ok');
+      expect(fields.iterations).toBe(3);
+      expect(fields.createdTicketIds).toEqual(['t-new', 't-new', 't-new']);
+      expect(fields.failures).toEqual([]);
+    });
+
+    it('keeps each iteration a separate call, so the one-write contract still holds', async () => {
+      // Folding the loop into `applyNativeActions` would break its "resolve
+      // everything, then one read and one write" guarantee: a failure in the
+      // middle would leave some elements half-applied with no way to say which.
+      const applyNativeActions = {
+        execute: vi.fn(async () => ({ ticketId: 't-1', actionsApplied: 1, changed: [] })),
+      };
+      const exec = new NativeStepExecutor(applyNativeActions as never);
+
+      await exec.execute(fanOut('{{ steps.scan.items }}', { scan: { items: ['x', 'y'] } }) as never);
+
+      for (const [call] of applyNativeActions.execute.mock.calls) {
+        expect((call as { actions: unknown[] }).actions).toHaveLength(1);
+      }
+    });
+
+    it('fails the step when forEach does not resolve to an array', async () => {
+      // Iterating a string character by character, or an object not at all, is
+      // never what the author meant — and it would show up as N absurd tickets.
+      const applyNativeActions = { execute: vi.fn() };
+      const exec = new NativeStepExecutor(applyNativeActions as never);
+
+      const result = await exec.execute(
+        fanOut('{{ steps.scan.summary }}', { scan: { summary: 'nothing found' } }) as never,
+      );
+
+      expect(result.output.result).toBe('ko');
+      expect((result.output.schemaFields as Record<string, unknown>).error)
+        .toMatch(/only an array can be iterated/);
+      expect(applyNativeActions.execute).not.toHaveBeenCalled();
+    });
+
+    it('fails the step when forEach points at a step that never ran', async () => {
+      const applyNativeActions = { execute: vi.fn() };
+      const exec = new NativeStepExecutor(applyNativeActions as never);
+
+      const result = await exec.execute(fanOut('{{ steps.ghost.items }}', {}) as never);
+
+      expect(result.output.result).toBe('ko');
+      expect((result.output.schemaFields as Record<string, unknown>).error).toMatch(/ghost/);
+    });
+
+    it('refuses a runaway fan-out instead of silently doing the first 50', async () => {
+      // The array length is decided by an upstream agent. Truncating would be
+      // the worst outcome: 50 tickets created, 900 asked for, and nothing in the
+      // run to say the other 850 were dropped.
+      const applyNativeActions = { execute: vi.fn() };
+      const exec = new NativeStepExecutor(applyNativeActions as never);
+
+      const result = await exec.execute(fanOut(
+        '{{ steps.scan.items }}',
+        { scan: { items: Array.from({ length: 51 }, (_, i) => i) } },
+      ) as never);
+
+      expect(result.output.result).toBe('ko');
+      expect((result.output.schemaFields as Record<string, unknown>).error).toMatch(/over the limit of 50/);
+      expect(applyNativeActions.execute).not.toHaveBeenCalled();
+    });
+
+    it('reports a partial fan-out as needs_review, not as a failed step', async () => {
+      // Some elements landed and some did not. `ko` would invite a retry that
+      // re-creates the successful ones; the decision belongs to a human.
+      const applyNativeActions = {
+        execute: vi.fn()
+          .mockResolvedValueOnce({ ticketId: 't-a', actionsApplied: 1, changed: [], createdTicketId: 't-a' })
+          .mockRejectedValueOnce(new Error('board b-9 does not exist'))
+          .mockResolvedValueOnce({ ticketId: 't-c', actionsApplied: 1, changed: [], createdTicketId: 't-c' }),
+      };
+      const exec = new NativeStepExecutor(applyNativeActions as never);
+
+      const result = await exec.execute(
+        fanOut('{{ steps.scan.items }}', { scan: { items: ['a', 'b', 'c'] } }) as never,
+      );
+      const fields = result.output.schemaFields as Record<string, unknown>;
+
+      expect(result.output.result).toBe('needs_review');
+      // The good elements are not sacrificed to the bad one.
+      expect(fields.createdTicketIds).toEqual(['t-a', 't-c']);
+      expect(fields.failures).toEqual([{ index: 1, error: 'board b-9 does not exist' }]);
+      expect(fields.iterations).toBe(3);
+    });
+
+    it('aggregates the runs each iteration triggered', async () => {
+      const applyNativeActions = {
+        execute: vi.fn()
+          .mockResolvedValueOnce({ ticketId: 't-a', actionsApplied: 1, changed: [], triggeredRunIds: ['r-a'] })
+          .mockResolvedValueOnce({ ticketId: 't-b', actionsApplied: 1, changed: [], triggeredRunIds: ['r-b'] }),
+      };
+      const exec = new NativeStepExecutor(applyNativeActions as never);
+
+      const result = await exec.execute(
+        fanOut('{{ steps.scan.items }}', { scan: { items: ['a', 'b'] } }) as never,
+      );
+
+      expect((result.output.schemaFields as Record<string, unknown>).triggeredRunIds).toEqual(['r-a', 'r-b']);
+    });
+  });
 });

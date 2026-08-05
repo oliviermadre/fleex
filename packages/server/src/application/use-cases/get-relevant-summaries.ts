@@ -46,6 +46,7 @@ export class GetRelevantSummariesUseCase {
     const currentTags = new Set(currentTicket.tags);
 
     for (const summary of candidates) {
+      if (!summary.ticketId) continue;
       const ticket = await this.ticketStore.getTicketById(summary.ticketId);
       if (!ticket) continue;
 

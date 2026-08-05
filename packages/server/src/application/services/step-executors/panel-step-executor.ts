@@ -1,5 +1,6 @@
 import type { RunPanelUseCase } from '../../use-cases/run-panel.js';
-import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
+import type { ConfigPort } from '../../ports/config.port.js';
+import { buildStandardOutputSchema, mergeOutputSchemas, selectableDeliverableTypeIds } from '../../utils/merge-output-schemas.js';
 import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
 import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
 import type { StepOutput } from '@fleex/shared';
@@ -7,27 +8,41 @@ import type { StepOutput } from '@fleex/shared';
 const STANDARD_KEYS = new Set(['deliverable', 'comment', 'mentionStatus']);
 
 export class PanelStepExecutor implements StepExecutor {
-  constructor(private readonly runPanel: RunPanelUseCase) {}
+  constructor(
+    private readonly runPanel: RunPanelUseCase,
+    private readonly config: ConfigPort,
+  ) {}
 
   async execute(input: StepExecutionInput): Promise<StepExecutorResult> {
-    const outputFormat = mergeOutputSchemas(STANDARD_OUTPUT_SCHEMA, input.step.outputSchema);
+    const typeIds = selectableDeliverableTypeIds(this.config);
+    const outputFormat = mergeOutputSchemas(buildStandardOutputSchema(typeIds), input.step.outputSchema);
     const ctxPrompt = composeWorkflowContextPrompt({
       workflowName: input.workflowContext.workflowName,
       stepName: input.workflowContext.stepName,
+      workflowRunId: input.workflowRunId,
+      stepRunId: input.stepRunId,
+      deliverableTypeIds: typeIds,
       outputSchema: input.step.outputSchema,
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,
+      runHistory: input.workflowContext.runHistory,
     });
 
+    // Ticket run: the panel debates the ticket thread, as always. Routine run:
+    // no ticket exists — the run's frozen subject (brief + repos) becomes the
+    // discussion context instead, and run-panel skips the timeline side effects.
     const result = await this.runPanel.execute({
       panelName: input.step.executorRef,
       ticketId: input.ticketId,
+      subject: input.subject ?? null,
       extraContextPrompt: ctxPrompt,
       outputFormatOverride: outputFormat,
       returnStructured: true,
       workflowContext: {
         workflowName: input.workflowContext.workflowName,
         stepName: input.workflowContext.stepName,
+        runId: input.workflowRunId,
+        stepRunId: input.stepRunId,
       },
     });
 

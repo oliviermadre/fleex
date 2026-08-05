@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind } from '@fleex/shared';
 
 // ── Base ──
 
@@ -230,7 +230,11 @@ export interface ExecutionCancelledEvent extends DomainEvent {
 export interface DeliverableCreatedEvent extends DomainEvent {
   type: 'deliverable.created';
   deliverableId: string;
-  ticketId: string;
+  /** Null when the deliverable belongs to a routine run instead of a ticket. */
+  ticketId: string | null;
+  workflowRunId?: string | null;
+  /** The step run that produced it, so the run graph refreshes the right node. */
+  stepRunId?: string | null;
   agentName: string;
   status: 'draft' | 'final';
   /** Deliverable title — carried in the payload so consumers (e.g. audit-trail
@@ -241,7 +245,9 @@ export interface DeliverableCreatedEvent extends DomainEvent {
 export interface DeliverableUpdatedEvent extends DomainEvent {
   type: 'deliverable.updated';
   deliverableId: string;
-  ticketId: string;
+  /** Null when the deliverable belongs to a routine run instead of a ticket. */
+  ticketId: string | null;
+  workflowRunId?: string | null;
   agentName: string;
   oldStatus: string;
   newStatus: string;
@@ -255,7 +261,9 @@ export interface DeliverableUpdatedEvent extends DomainEvent {
 export interface DeliverableDeletedEvent extends DomainEvent {
   type: 'deliverable.deleted';
   deliverableId: string;
-  ticketId: string;
+  /** Null when the deliverable belongs to a routine run instead of a ticket. */
+  ticketId: string | null;
+  workflowRunId?: string | null;
 }
 
 // ── Persona events ──
@@ -340,8 +348,11 @@ export interface PanelExecutedEvent extends DomainEvent {
 export interface WorkflowRunCreatedEvent extends DomainEvent {
   type: 'workflow.run_created';
   workflowRunId: string;
-  ticketId: string;
-  templateId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
+  /** Null for a synthetic run (routine targeting a primitive — no template). */
+  templateId: string | null;
 }
 
 export interface WorkflowStepStartedEvent extends DomainEvent {
@@ -349,7 +360,9 @@ export interface WorkflowStepStartedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 export interface WorkflowStepCompletedEvent extends DomainEvent {
@@ -357,7 +370,9 @@ export interface WorkflowStepCompletedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
   nextEdgeId: string | null;
 }
 
@@ -366,7 +381,9 @@ export interface WorkflowNeedsReviewEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 /** Several outgoing edges matched: the run is parked until a human picks one. */
@@ -375,7 +392,9 @@ export interface WorkflowAwaitingRoutingEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
   candidateEdgeIds: string[];
 }
 
@@ -384,13 +403,17 @@ export interface WorkflowStepCancelledEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 export interface WorkflowRunCompletedEvent extends DomainEvent {
   type: 'workflow.run_completed';
   workflowRunId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
 }
 
 export interface WorkflowRunFailedEvent extends DomainEvent {
@@ -398,14 +421,49 @@ export interface WorkflowRunFailedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
   error: string;
 }
 
 export interface WorkflowRunCancelledEvent extends DomainEvent {
   type: 'workflow.run_cancelled';
   workflowRunId: string;
-  ticketId: string;
+  /** Null when the run is anchored to a routine instead of a ticket. */
+  ticketId: string | null;
+  routineId?: string | null;
+}
+
+// ── Routine events ──
+//
+// A routine run has no ticket, so none of the `workflow.*` events above reach
+// the /routines screen (they are keyed on ticketId). These three are what make
+// a scheduled launch visible live instead of on the next manual refresh.
+
+export interface RoutineRunStartedEvent extends DomainEvent {
+  type: 'routine.run_started';
+  routineId: string;
+  routineSlug: string;
+  workflowRunId: string;
+  /** `once` / `cron` for a scheduled launch, `manual` for the Launch button. */
+  triggerKind: RoutineTriggerKind;
+}
+
+export interface RoutineRunCompletedEvent extends DomainEvent {
+  type: 'routine.run_completed';
+  routineId: string;
+  workflowRunId: string;
+  status: 'completed' | 'failed' | 'cancelled';
+}
+
+/** A tick fired while a run was still active and `overlapPolicy` said `skip`. */
+export interface RoutineRunSkippedEvent extends DomainEvent {
+  type: 'routine.run_skipped';
+  routineId: string;
+  routineSlug: string;
+  activeRunId: string;
+  reason: 'overlap';
 }
 
 // ── Worktree events ──
@@ -577,7 +635,10 @@ export type AnyDomainEvent =
   | WorkflowAwaitingRoutingEvent
   | WorkflowRunCompletedEvent
   | WorkflowRunFailedEvent
-  | WorkflowRunCancelledEvent;
+  | WorkflowRunCancelledEvent
+  | RoutineRunStartedEvent
+  | RoutineRunCompletedEvent
+  | RoutineRunSkippedEvent;
 
 // ── Event type string union ──
 

@@ -261,6 +261,8 @@ function EventBlock({ event }: { event: AgentEvent }) {
       const ctx = data?.['context'] as Record<string, unknown> | undefined;
       const label = data?.['label'] as string | undefined;
       const startMaxTurns = data?.['maxTurns'] as number | undefined;
+      const startRunId = data?.['workflowRunId'] as string | null | undefined;
+      const startStepRunId = data?.['stepRunId'] as string | null | undefined;
       const modeBadge = effectiveMode === 'talk' ? '🗣 talk' : effectiveMode === 'plan' ? '📋 plan' : effectiveMode === 'edit' ? '📝 edit' : null;
       return (
         <div className="py-1 space-y-1">
@@ -287,6 +289,21 @@ function EventBlock({ event }: { event: AgentEvent }) {
                 <span className="font-mono">{execId}</span>
               </div>
             )}
+            {/* The workflow node this execution *is*. Both ids together are
+                exactly what the step's own CLI commands take, so a run can be
+                reproduced by hand from the log instead of dug out of the DB. */}
+            {startRunId && (
+              <div>
+                <span className="text-[var(--theme-text-secondary)]">run:</span>{' '}
+                <span className="font-mono">{startRunId}</span>
+              </div>
+            )}
+            {startStepRunId && (
+              <div>
+                <span className="text-[var(--theme-text-secondary)]">step run:</span>{' '}
+                <span className="font-mono">{startStepRunId}</span>
+              </div>
+            )}
             {resumeSessionId && (
               <div>
                 <span className="text-[var(--theme-text-secondary)]">resume:</span>{' '}
@@ -301,12 +318,16 @@ function EventBlock({ event }: { event: AgentEvent }) {
             )}
             {ctx && (
               <>
-                <div>
-                  <span className="text-[var(--theme-text-secondary)]">ticket:</span>{' '}
-                  {ctx['ticketTitle'] as string} ({ctx['ticketStatus'] as string})
-                  {' · '}{ctx['commentsCount'] as number} comments
-                  {' · '}{ctx['deliverablesCount'] as number} deliverables
-                </div>
+                {/* A routine-anchored run has no ticket; without this guard the
+                    header read "ticket: undefined (undefined)". */}
+                {ctx['ticketTitle'] != null && (
+                  <div>
+                    <span className="text-[var(--theme-text-secondary)]">ticket:</span>{' '}
+                    {ctx['ticketTitle'] as string} ({ctx['ticketStatus'] as string})
+                    {' · '}{ctx['commentsCount'] as number} comments
+                    {' · '}{ctx['deliverablesCount'] as number} deliverables
+                  </div>
+                )}
                 <div>
                   <span className="text-[var(--theme-text-secondary)]">context:</span>{' '}
                   {(ctx['systemPromptSections'] as string[])?.join(', ')}

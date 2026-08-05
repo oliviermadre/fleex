@@ -6,6 +6,12 @@ import { appWs } from '../services/websocket';
 import { PAGE_SIZE_EXECUTIONS } from '../lib/constants';
 
 export type ExecutionTypeFilter = 'all' | 'agent' | 'panel' | 'skill' | 'workflow';
+/**
+ * What a run is anchored to. Orthogonal to the type filter: a workflow run can
+ * be anchored to a ticket or to a routine, and a routine run has no ticket at
+ * all (no comments, no deliverables, nowhere to navigate).
+ */
+export type ExecutionScopeFilter = 'all' | 'tickets' | 'routines';
 
 interface ExecutionLogState {
   // Data
@@ -15,9 +21,11 @@ interface ExecutionLogState {
   historyCount: number;
   total: number;
   typeCounts: { all: number; agent: number; panel: number; skill: number; workflow: number };
+  scopeCounts: { all: number; tickets: number; routines: number };
 
   // Filters
   typeFilter: ExecutionTypeFilter;
+  scopeFilter: ExecutionScopeFilter;
   searchQuery: string;
 
   // Loading
@@ -29,6 +37,7 @@ interface ExecutionLogState {
   load: (opts?: { silent?: boolean }) => Promise<void>;
   loadMore: () => Promise<void>;
   setTypeFilter: (filter: ExecutionTypeFilter) => void;
+  setScopeFilter: (filter: ExecutionScopeFilter) => void;
   setSearchQuery: (query: string) => void;
   handleWsEvent: (msg: { type: string; data: unknown }) => void;
   subscribeAll: () => void;
@@ -42,18 +51,21 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
   historyCount: 0,
   total: 0,
   typeCounts: { all: 0, agent: 0, panel: 0, skill: 0, workflow: 0 },
+  scopeCounts: { all: 0, tickets: 0, routines: 0 },
   typeFilter: 'all',
+  scopeFilter: 'all',
   searchQuery: '',
   loaded: false,
   loading: false,
   loadingMore: false,
 
   load: async (opts) => {
-    const { typeFilter, searchQuery } = get();
+    const { typeFilter, scopeFilter, searchQuery } = get();
     if (!opts?.silent) set({ loading: true });
     try {
       const res = await api.fetchAllExecutions({
         type: typeFilter === 'all' ? undefined : typeFilter,
+        scope: scopeFilter === 'all' ? undefined : scopeFilter,
         q: searchQuery || undefined,
         limit: PAGE_SIZE_EXECUTIONS,
       });
@@ -68,6 +80,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
         historyCount: res.historyCount,
         total: res.total,
         typeCounts: res.typeCounts,
+        scopeCounts: res.scopeCounts,
         loaded: true,
         loading: false,
       });
@@ -78,7 +91,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
   },
 
   loadMore: async () => {
-    const { typeFilter, searchQuery, liveEntries, historyEntries, historyCount, loadingMore } = get();
+    const { typeFilter, scopeFilter, searchQuery, liveEntries, historyEntries, historyCount, loadingMore } = get();
     if (loadingMore) return;
     if (historyEntries.length >= historyCount) return;
     set({ loadingMore: true });
@@ -86,6 +99,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
       const offset = liveEntries.length + historyEntries.length;
       const res = await api.fetchAllExecutions({
         type: typeFilter === 'all' ? undefined : typeFilter,
+        scope: scopeFilter === 'all' ? undefined : scopeFilter,
         q: searchQuery || undefined,
         limit: PAGE_SIZE_EXECUTIONS,
         offset,
@@ -99,6 +113,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
         historyEntries: [...historyEntries, ...deduped],
         historyCount: res.historyCount,
         typeCounts: res.typeCounts,
+        scopeCounts: res.scopeCounts,
         loadingMore: false,
       });
     } catch (err) {
@@ -109,6 +124,11 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
 
   setTypeFilter: (filter) => {
     set({ typeFilter: filter });
+    get().load();
+  },
+
+  setScopeFilter: (filter) => {
+    set({ scopeFilter: filter });
     get().load();
   },
 

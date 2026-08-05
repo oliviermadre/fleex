@@ -4,7 +4,7 @@ export interface BuildExecutionStartArgs {
   executionId: string;
   personaId: string;
   personaName: string;
-  ticketId: string;
+  ticketId: string | null;
   mentionId?: string;
   model: string;
   effectiveMode: MentionExecutionMode;
@@ -16,11 +16,14 @@ export interface BuildExecutionStartArgs {
   skillName?: string;
   /** Effective (already clamped) turn budget for this run; omit when N/A. */
   maxTurns?: number;
+  /** Owning workflow run / step run. Workflow steps only; omit elsewhere. */
+  workflowRunId?: string | null;
+  stepRunId?: string | null;
   systemPromptSections: string[];
   systemPromptLength: number;
   userPromptLength: number;
-  ticketTitle: string;
-  ticketStatus: string;
+  ticketTitle?: string;
+  ticketStatus?: string;
   commentsCount: number;
   deliverablesCount: number;
 }
@@ -52,6 +55,8 @@ export function buildExecutionStartData(args: BuildExecutionStartArgs): Executio
     skillId: args.skillId,
     skillName: args.skillName,
     maxTurns: args.maxTurns,
+    workflowRunId: args.workflowRunId ?? null,
+    stepRunId: args.stepRunId ?? null,
     context: {
       systemPromptSections: args.systemPromptSections,
       systemPromptLength: args.systemPromptLength,

@@ -12,6 +12,11 @@ import type { EventBus } from '../event-bus.js';
  * forgets to emit writes a comment nobody sees until the ticket is remounted.
  * Every workflow-authored comment goes through here so that can't happen again.
  *
+ * A null `ticketId` means the run is anchored to a routine, which has no
+ * timeline to comment on — the run's own `step_runs` are its timeline (cf. the
+ * Routines PRD). Callers would otherwise each need the same guard, so it lives
+ * here and returns null.
+ *
  * `createdMentions` is always empty on purpose: workflows orchestrate via edges,
  * not mentions, so a workflow comment must never auto-trigger an agent or the
  * auto-review workflow — even when a reviewer typed an @mention in their notes.
@@ -20,14 +25,16 @@ export async function postWorkflowComment(
   postComment: PostCommentUseCase,
   eventBus: EventBus,
   params: {
-    ticketId: string;
+    ticketId: string | null;
     authorName: string;
     body: string;
     visibility?: CommentVisibility;
   },
-): Promise<TicketCommentEntity> {
+): Promise<TicketCommentEntity | null> {
+  if (params.ticketId === null) return null;
+  const ticketId = params.ticketId;
   const { comment } = await postComment.execute({
-    ticketId: params.ticketId,
+    ticketId,
     authorType: 'agent',
     authorName: params.authorName,
     body: params.body,
@@ -38,7 +45,7 @@ export async function postWorkflowComment(
   eventBus.emit({
     type: 'comment.posted',
     commentId: comment.id,
-    ticketId: params.ticketId,
+    ticketId,
     authorType: 'agent',
     authorName: params.authorName,
     createdMentions: [],
