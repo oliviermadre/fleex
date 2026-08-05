@@ -187,6 +187,40 @@ describe('deriveTicketAgentActivity', () => {
     const [withoutMap] = deriveTicketAgentActivity(['T1'], EMPTY);
     expect(withoutMap?.cumulativeCostUsd).toBe(0);
   });
+
+  // ── runningExecutionId — what the clickable Running badge opens ──
+
+  it('attaches the running execution id to a running entry', () => {
+    const [t] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+      runningExecutionIdByTicket: new Map([['T1', 'exec-1']]),
+    });
+    expect(t?.runningExecutionId).toBe('exec-1');
+  });
+
+  it('omits the execution id on non-running entries and on workflow-only runs', () => {
+    // WHY: the badge is only clickable when there is a stream to open. A waiting
+    // or idle ticket, and a ticket running solely through a workflow (whose step
+    // executions aren't ticket-anchored), must carry nothing.
+    const map = new Map([['T1', 'exec-1']]);
+    const [waiting] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+      waitingMentionTicketIds: ['T1'],
+      runningExecutionIdByTicket: map,
+    });
+    expect(waiting?.activity).toBe('waiting');
+    expect(waiting?.runningExecutionId).toBeUndefined();
+
+    const [workflowOnly] = deriveTicketAgentActivity(['T2'], {
+      ...EMPTY,
+      runningWorkflowTicketIds: ['T2'],
+      runningExecutionIdByTicket: map,
+    });
+    expect(workflowOnly?.activity).toBe('running');
+    expect(workflowOnly?.runningExecutionId).toBeUndefined();
+  });
 });
 
 describe('deriveActivitySince', () => {

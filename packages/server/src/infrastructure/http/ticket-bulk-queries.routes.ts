@@ -176,6 +176,17 @@ export async function computeAgentActivity(
     })),
   });
 
+  // The execution a `running` badge opens: freshest still-running one, so a
+  // ticket that fired several agents lands on the latest thing that started.
+  const runningExecutionIdByTicket = new Map<string, string>();
+  const runningStartedAtByTicket = new Map<string, string>();
+  for (const e of runningExecutions) {
+    const prev = runningStartedAtByTicket.get(e.ticketId);
+    if (prev && e.startedAt <= prev) continue;
+    runningStartedAtByTicket.set(e.ticketId, e.startedAt);
+    runningExecutionIdByTicket.set(e.ticketId, e.id);
+  }
+
   // Last SDK activity per ticket → the cockpit's "idle since {{age}}" (#400).
   // CLI sessions are excluded (NaS spec'd "dernière exécution du sdk"); a
   // NULL source reads as sdk. Freshest signal wins: completedAt, else the
@@ -207,6 +218,7 @@ export async function computeAgentActivity(
     runningSinceByTicket,
     waitingSinceByTicket,
     costByTicket,
+    runningExecutionIdByTicket,
   });
 }
 

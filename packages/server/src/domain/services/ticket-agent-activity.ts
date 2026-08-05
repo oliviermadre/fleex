@@ -32,6 +32,11 @@ export interface AgentActivitySources {
    * cost badge can omit it — the entry then reports `cumulativeCostUsd: 0`.
    */
   readonly costByTicket?: ReadonlyMap<string, number>;
+  /**
+   * The running SDK execution to open from a `running` badge, per ticket.
+   * Optional: only attached to the `running` entries it belongs to.
+   */
+  readonly runningExecutionIdByTicket?: ReadonlyMap<string, string>;
 }
 
 /** Human-readable tooltip copy per non-idle state. */
@@ -76,7 +81,8 @@ export function deriveTicketAgentActivity(
     }
     if (running.has(ticketId)) {
       const since = sources.runningSinceByTicket?.get(ticketId);
-      return { ticketId, activity: 'running', detail: DETAIL.running, lastActivityAt, since, cumulativeCostUsd };
+      const runningExecutionId = sources.runningExecutionIdByTicket?.get(ticketId);
+      return { ticketId, activity: 'running', detail: DETAIL.running, lastActivityAt, since, cumulativeCostUsd, runningExecutionId };
     }
     return { ticketId, activity: 'idle', lastActivityAt, since: lastActivityAt, cumulativeCostUsd };
   });

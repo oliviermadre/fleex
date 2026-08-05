@@ -12,6 +12,8 @@ interface Props {
   lastActivityAt?: string | null;
   /** When the current waiting/running state began; null/undefined = unknown. */
   since?: string | null;
+  /** Opens the live execution behind a running badge; omitted = inert pill. */
+  onOpenExecution?: () => void;
 }
 
 /**
@@ -26,7 +28,7 @@ interface Props {
  * formatAge rolls units over (59s → 1m, never 61s), and a badge never wraps
  * onto two lines (pass 6: "interdit !").
  */
-export function ActivityBadge({ activity, detail, lastActivityAt, since }: Props) {
+export function ActivityBadge({ activity, detail, lastActivityAt, since, onOpenExecution }: Props) {
   const now = useNow();
   if (activity !== 'idle') {
     return (
@@ -34,6 +36,8 @@ export function ActivityBadge({ activity, detail, lastActivityAt, since }: Props
         activity={activity}
         detail={detail}
         duration={since ? formatAge(since, now) : undefined}
+        onClick={onOpenExecution}
+        clickTitle={detail ? `${detail} — click to open the live execution` : undefined}
       />
     );
   }

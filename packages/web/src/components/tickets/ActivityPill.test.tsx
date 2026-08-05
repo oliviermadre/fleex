@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, cleanup, fireEvent } from '@testing-library/react';
 import { ActivityPill } from './ActivityPill';
 
 afterEach(cleanup);
@@ -30,5 +30,34 @@ describe('ActivityPill', () => {
     const withoutDetail = render(<ActivityPill activity="running" />);
     const el = withoutDetail.container.querySelector('[role="status"]');
     expect(el?.getAttribute('title')).toBeTruthy();
+  });
+
+  it('stays an inert pill — not a button — when there is nothing to open', () => {
+    // WHY: the hover/press affordance must only appear where a click leads
+    // somewhere. No running execution ⇒ no button, no cursor-pointer.
+    const { container } = render(<ActivityPill activity="running" />);
+    expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('becomes a button that opens the execution, without triggering its host', () => {
+    // WHY: every host of the pill (kanban card, cockpit row) is itself clickable;
+    // opening the stream must not also open the ticket behind it.
+    const onClick = vi.fn();
+    const onHostClick = vi.fn();
+    const { container } = render(
+      <div onClick={onHostClick}>
+        <ActivityPill activity="running" duration="5m" onClick={onClick} />
+      </div>,
+    );
+    const button = container.querySelector('button');
+    expect(button).not.toBeNull();
+    expect(button?.textContent).toContain('Running for 5m');
+    // Still announced as a live state, and the press affordance is on the pill.
+    expect(button?.querySelector('[role="status"]')).not.toBeNull();
+    expect(button?.className).toContain('active:translate-y-px');
+
+    fireEvent.click(button!);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onHostClick).not.toHaveBeenCalled();
   });
 });

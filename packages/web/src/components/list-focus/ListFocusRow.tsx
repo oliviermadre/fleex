@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Board, AgentActivityState, Ticket, TicketLink, TicketUnreadCounts } from '@fleex/shared';
 import { ActivityBadge } from './ActivityBadge';
+import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
 import { TypePickerPopover } from '../tickets/TypePickerPopover';
 import { DueDateBadge } from '../tickets/DueDateBadge';
@@ -93,6 +94,8 @@ interface Props {
   lastActivityAt?: string | null;
   /** Start of the current waiting/running state ("Waiting for 2h", pass 5). */
   since?: string | null;
+  /** Live execution behind a running badge — makes the badge clickable. */
+  runningExecutionId?: string | null;
   unread: TicketUnreadCounts;
   prStates: Record<string, string>;
   selected: boolean;
@@ -108,6 +111,7 @@ export function ListFocusRow({
   detail,
   lastActivityAt,
   since,
+  runningExecutionId,
   unread,
   prStates,
   selected,
@@ -117,6 +121,8 @@ export function ListFocusRow({
 }: Props) {
   const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
+  // The running badge opens the live SDK stream in the usual floating panel.
+  const [openExecutionId, setOpenExecutionId] = useState<string | null>(null);
   // Same session resolution as KanbanCard so the quick-action button shows the
   // exact same state on both surfaces.
   const ticketSessions = useMemo(
@@ -125,6 +131,7 @@ export function ListFocusRow({
   );
 
   return (
+    <>
     <div
       role="button"
       tabIndex={0}
@@ -223,6 +230,9 @@ export function ListFocusRow({
           detail={detail}
           lastActivityAt={lastActivityAt}
           since={since}
+          onOpenExecution={
+            runningExecutionId ? () => setOpenExecutionId(runningExecutionId) : undefined
+          }
         />
       </div>
 
@@ -289,5 +299,14 @@ export function ListFocusRow({
         />
       </div>
     </div>
+
+    {openExecutionId && (
+      <FloatingExecutionPanel
+        executionId={openExecutionId}
+        title={ticket.title}
+        onClose={() => setOpenExecutionId(null)}
+      />
+    )}
+    </>
   );
 }

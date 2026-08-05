@@ -5,6 +5,7 @@ import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
 import { ActivityPill } from './ActivityPill';
+import { FloatingExecutionPanel } from './ExecutionModal';
 import { CostBadge } from './CostBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
@@ -79,6 +80,9 @@ export function KanbanCard({
   // the cards whose activity actually changed.
   const activity = useTicketActivityStore((s) => s.activityByTicket[ticket.id] ?? 'idle');
   const activityDetail = useTicketActivityStore((s) => s.detailByTicket[ticket.id]);
+  // Live execution behind a Running pill — clicking the pill opens its stream.
+  const runningExecutionId = useTicketActivityStore((s) => s.runningExecutionIdByTicket[ticket.id]);
+  const [openExecutionId, setOpenExecutionId] = useState<string | null>(null);
   // Cumulative agentic cost for the header badge (#404). 0 ⇒ no badge.
   const cumulativeCost = useTicketActivityStore((s) => s.costByTicket[ticket.id] ?? 0);
   const groups = useTicketGroupStore((s) => s.groups);
@@ -135,6 +139,7 @@ export function KanbanCard({
   };
 
   return (
+    <>
     <div
       draggable
       onDragStart={(e) => {
@@ -323,7 +328,13 @@ export function KanbanCard({
         <div className="px-3 pb-1.5 space-y-1.5 text-xs text-[var(--theme-text-muted)]">
           <div className="flex items-center gap-1.5">
             {/* Agentic activity (running / waiting) — persists across the board */}
-            <ActivityPill activity={activity} detail={activityDetail} />
+            <ActivityPill
+              activity={activity}
+              detail={activityDetail}
+              onClick={
+                runningExecutionId ? () => setOpenExecutionId(runningExecutionId) : undefined
+              }
+            />
             {/* Assignee */}
             {ticket.assignee && (
               ticket.assignee === 'user' ? (
@@ -423,5 +434,14 @@ export function KanbanCard({
         </span>
       </div>
     </div>
+
+    {openExecutionId && (
+      <FloatingExecutionPanel
+        executionId={openExecutionId}
+        title={ticket.title}
+        onClose={() => setOpenExecutionId(null)}
+      />
+    )}
+    </>
   );
 }

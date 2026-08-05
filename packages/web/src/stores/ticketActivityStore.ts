@@ -35,6 +35,12 @@ interface TicketActivityState {
    */
   sinceByTicket: Record<string, string>;
   /**
+   * The running SDK execution behind a `running` badge, per ticket — what the
+   * badge opens when clicked. Absent ⇒ nothing to open (idle, or a workflow-only
+   * run), and the badge stays a plain non-clickable pill.
+   */
+  runningExecutionIdByTicket: Record<string, string>;
+  /**
    * Cumulative agentic cost per ticket (#404), in USD. Kept for EVERY tracked
    * ticket (idle/done included — a finished ticket's total cost is precisely
    * what the card badge surfaces). Absence ⇒ 0 (no badge).
@@ -58,6 +64,7 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
   detailByTicket: {},
   lastActivityAtByTicket: {},
   sinceByTicket: {},
+  runningExecutionIdByTicket: {},
   costByTicket: {},
   trackedIds: [],
 
@@ -69,6 +76,7 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
         detailByTicket: {},
         lastActivityAtByTicket: {},
         sinceByTicket: {},
+        runningExecutionIdByTicket: {},
         costByTicket: {},
       });
       return;
@@ -86,6 +94,7 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
     const detailByTicket: Record<string, string> = {};
     const lastActivityAtByTicket: Record<string, string> = {};
     const sinceByTicket: Record<string, string> = {};
+    const runningExecutionIdByTicket: Record<string, string> = {};
     const costByTicket: Record<string, number> = {};
     for (const it of items) {
       // Cost is kept for EVERY entry — idle/done included — since the badge must
@@ -101,8 +110,11 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
       // since only matters for the CURRENT non-idle state ("Running for 5m");
       // a ticket that dropped back to idle loses its stale since here.
       if (it.since) sinceByTicket[it.ticketId] = it.since;
+      // Same lifecycle as `since`: only the CURRENT run is openable, so a ticket
+      // that stopped running loses its stale execution id here.
+      if (it.runningExecutionId) runningExecutionIdByTicket[it.ticketId] = it.runningExecutionId;
     }
-    set({ activityByTicket, detailByTicket, lastActivityAtByTicket, sinceByTicket, costByTicket });
+    set({ activityByTicket, detailByTicket, lastActivityAtByTicket, sinceByTicket, runningExecutionIdByTicket, costByTicket });
   },
 
   getActivity: (ticketId) => get().activityByTicket[ticketId] ?? 'idle',

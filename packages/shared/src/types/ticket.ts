@@ -562,6 +562,13 @@ export interface TicketAgentActivity {
    * Drives the Kanban card's coloured cost badge.
    */
   readonly cumulativeCostUsd: number;
+  /**
+   * The SDK execution behind a `running` badge — the freshest still-running
+   * `AgentExecution` of the ticket. Lets the badge open that execution's event
+   * stream in one click. Absent when the ticket isn't running, or when it runs
+   * only through a workflow (whose step executions aren't ticket-anchored).
+   */
+  readonly runningExecutionId?: string;
 }
 
 // ── Summaries ──
