@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Routine, RoutineTarget, RoutineTrigger, WorkflowRunStatus, WorkflowTemplate } from '@fleex/shared';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -9,6 +9,7 @@ import type { RoutineRunDetail } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintSolid, tintText, type TintHue } from '../../lib/tints';
 import { PrimitiveIcon, RoutineIcon, type PrimitiveKind } from '../../lib/primitives';
+import { clampPanelWidth, DEFAULT_PANEL_RATIO } from './runPanelWidth';
 
 /** How each routine target kind maps onto the app's primitive iconography. */
 const TARGET_PRIMITIVE_KIND: Record<RoutineTarget['kind'], PrimitiveKind> = {
@@ -264,8 +265,9 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
         ))}
       </div>
 
-      {/* The Current Run tab owns the full remaining height (the DAG needs a
-          sized parent); every other tab is a padded scroll area. */}
+      {/* Current Run and History own the full remaining height (both host a DAG,
+          which needs a sized parent, and History anchors its slide-over to that
+          box); Overview and Config are padded scroll areas. */}
       {activeTab === 'current' ? (
         <CurrentRunTab
           current={current}
@@ -273,12 +275,13 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
           loading={runsLoading && runs.length === 0}
           onRefresh={() => void refreshRuns()}
         />
+      ) : activeTab === 'history' ? (
+        <HistoryTab history={history} />
       ) : (
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'overview' && (
             <OverviewTab routine={routine} targetInfo={targetInfo} runs={runs} onNavigate={setActiveTab} />
           )}
-          {activeTab === 'history' && <HistoryTab history={history} />}
           {activeTab === 'config' && <ConfigTab routine={routine} targetInfo={targetInfo} />}
         </div>
       )}
@@ -562,22 +565,167 @@ function CurrentRunTab({ current, isActive, loading, onRefresh }: {
   );
 }
 
-/** The archive — every past run, expandable to its full DAG. */
+/**
+ * The archive — every past run as a row, opened in a slide-over.
+ *
+ * The DAG used to unfold inside the row itself, in a card too short to read it.
+ * Clicking now opens a panel over the listing (the Datadog log pattern): the
+ * list stays put behind it, so moving from one run to the next costs one click,
+ * and the run gets the full height of the pane instead of a fixed 360px.
+ */
 function HistoryTab({ history }: { history: RoutineRunDetail[] }) {
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState<number | null>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
+
+  // Derived, not mirrored: a refresh that drops the open run closes the panel
+  // rather than pinning it to a stale copy.
+  const selected = history.find((d) => d.run.id === selectedRunId) ?? null;
+
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const area = areaRef.current;
+    if (!area) return;
+    const onMove = (ev: MouseEvent) => {
+      const rect = area.getBoundingClientRect();
+      setPanelWidth(clampPanelWidth(rect.right - ev.clientX, rect.width));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
+
   if (history.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-16 text-[var(--theme-text-muted)]">
+      <div className="flex flex-1 flex-col items-center gap-3 p-6 py-16 text-[var(--theme-text-muted)]">
         <RoutineIcon size={32} strokeWidth={1} tinted={false} className="text-[var(--theme-text-faint)]" />
         <p className="text-sm">No past run yet.</p>
       </div>
     );
   }
+
   return (
-    <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
-      {history.map((detail) => (
-        <HistoryRun key={detail.run.id} detail={detail} />
-      ))}
+    <div ref={areaRef} className="relative min-h-0 flex-1 overflow-hidden">
+      <div className="h-full overflow-y-auto p-6">
+        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
+          {history.map((detail) => (
+            <HistoryRun
+              key={detail.run.id}
+              detail={detail}
+              selected={detail.run.id === selectedRunId}
+              onSelect={() => setSelectedRunId(detail.run.id)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {selected && (
+        <RunSlideOver
+          detail={selected}
+          width={panelWidth}
+          onStartResize={startResize}
+          onClose={() => setSelectedRunId(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * The run panel: an overlay anchored to the right of the listing, resizable by
+ * its left edge. Deliberately not a portal — it must cover the History pane and
+ * nothing else, which the pane's own coordinates give for free.
+ */
+function RunSlideOver({
+  detail,
+  width,
+  onStartResize,
+  onClose,
+}: {
+  detail: RoutineRunDetail;
+  /** null until the handle is dragged: the panel opens at its default ratio. */
+  width: number | null;
+  onStartResize: (e: React.MouseEvent) => void;
+  onClose: () => void;
+}) {
+  const { run, stepRuns, deliverables } = detail;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Yield to any modal stacked above (deliverable reader, SDK session),
+      // same guard as StepSessionOverlay — ESC must close one thing at a time.
+      if (e.key !== 'Escape' || document.querySelector('[data-overlay-top]')) return;
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+
+  return (
+    <>
+      {/* The listing stays visible behind — that is the point of the pattern. */}
+      <div
+        className="absolute inset-0 z-10"
+        style={{ background: 'var(--theme-glass-overlay)' }}
+        onMouseDown={onClose}
+      />
+      <div
+        className="absolute inset-y-0 right-0 z-20 flex border-l border-[var(--theme-border)] shadow-2xl"
+        style={{ width: width ?? `${DEFAULT_PANEL_RATIO * 100}%`, background: 'var(--theme-bg-surface)' }}
+      >
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize run panel"
+          onMouseDown={onStartResize}
+          className="relative w-[3px] shrink-0 cursor-col-resize bg-[var(--theme-border)] transition-colors hover:bg-[var(--theme-accent)]"
+        >
+          <span className="absolute inset-y-0 -left-1 -right-1" />
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex flex-shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-4 py-2.5">
+            <span className={cn('h-2 w-2 shrink-0 rounded-full', tintSolid(runStatusHue(run.status)))} />
+            <span className={cn('text-xs font-medium', tintText(runStatusHue(run.status)))}>
+              {run.status.replace('_', ' ')}
+            </span>
+            <span className="text-xs text-[var(--theme-text-muted)]">{formatAbsolute(run.startedAt)}</span>
+            {run.completedAt && (
+              <span className="text-xs text-[var(--theme-text-muted)]">
+                · {formatDuration(new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime())}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close run panel"
+              className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+              style={{ fontSize: 16, lineHeight: 1 }}
+            >
+              &times;
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1">
+            <WorkflowRunView run={run} stepRuns={stepRuns} deliverables={deliverables} />
+          </div>
+
+          {deliverables.length > 0 && (
+            <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] px-4 py-2">
+              <RunDeliverables deliverables={deliverables} />
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -713,16 +861,29 @@ function RunDeliverables({ deliverables }: { deliverables: RoutineRunDetail['del
   );
 }
 
-/** One past run: a compact row, expandable to its full DAG when needed. */
-function HistoryRun({ detail }: { detail: RoutineRunDetail }) {
-  const { run, stepRuns, deliverables } = detail;
-  const [open, setOpen] = useState(false);
+/** One past run: a compact row that opens the slide-over. */
+function HistoryRun({
+  detail,
+  selected,
+  onSelect,
+}: {
+  detail: RoutineRunDetail;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { run, deliverables } = detail;
   return (
     <div className="border-b border-[var(--theme-border)] last:border-b-0">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
+        onClick={onSelect}
+        aria-current={selected}
+        className={cn(
+          'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[var(--theme-bg-hover)]',
+          // The panel hides most of the list; the highlight is what tells you
+          // which row it belongs to on the sliver still visible.
+          selected && 'bg-[var(--theme-bg-hover)]',
+        )}
       >
         <span className={cn('h-2 w-2 shrink-0 rounded-full', tintSolid(runStatusHue(run.status)))} />
         <span className={cn('text-xs font-medium', tintText(runStatusHue(run.status)))}>
@@ -739,20 +900,8 @@ function HistoryRun({ detail }: { detail: RoutineRunDetail }) {
             · {deliverables.length} deliverable{deliverables.length > 1 ? 's' : ''}
           </span>
         )}
-        <span className="ml-auto text-xs text-[var(--theme-text-muted)]">{open ? '▾' : '▸'}</span>
+        <span className="ml-auto text-xs text-[var(--theme-text-muted)]">›</span>
       </button>
-      {open && (
-        <div className="border-t border-[var(--theme-border)]">
-          <div className="h-[360px]">
-            <WorkflowRunView run={run} stepRuns={stepRuns} deliverables={deliverables} />
-          </div>
-          {deliverables.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] px-4 py-2">
-              <RunDeliverables deliverables={deliverables} />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
