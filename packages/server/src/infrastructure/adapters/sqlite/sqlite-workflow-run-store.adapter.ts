@@ -12,7 +12,7 @@ interface Row {
   parent_run_id: string | null;
   subject_snapshot: string | null;
   workspace_path: string | null;
-  template_id: string;
+  template_id: string | null;
   template_snapshot: string;
   status: string;
   current_step_id: string | null;

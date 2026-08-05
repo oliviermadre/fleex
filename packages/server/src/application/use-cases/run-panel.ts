@@ -20,7 +20,7 @@ import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { EventBus } from '../event-bus.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { ExecutionRegistryPort } from '../ports/execution-registry.port.js';
-import type { AgentEventType, MentionExecutionMode } from '@fleex/shared';
+import type { AgentEventType, MentionExecutionMode, RunSubject } from '@fleex/shared';
 import { normalizeDeliverableTypes } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { streamSdkQuery } from '../utils/stream-sdk-query.js';
@@ -120,9 +120,19 @@ export class RunPanelUseCase {
    */
   async execute(params: {
     panelName: string;
-    ticketId: string;
+    /**
+     * Null for a routine-run panel: there is no ticket to debate. Only legal
+     * together with `returnStructured` — the classic mention path is
+     * ticket-anchored by construction.
+     */
+    ticketId: string | null;
     mentionId?: string; // the mention that triggered this panel (if from @panel:name)
     topic?: string; // override topic (if not provided, derived from ticket)
+    /**
+     * Routine-run panels: the run's frozen subject. Its brief becomes the
+     * discussion topic/context in place of the ticket thread.
+     */
+    subject?: RunSubject | null;
     /** Workflow orchestrator: extra instructions injected into the synthesis prompt */
     extraContextPrompt?: string;
     /** Workflow orchestrator: override the orchestrator's output schema */
@@ -143,20 +153,35 @@ export class RunPanelUseCase {
     if (!panel) throw new PanelNotFoundError(params.panelName);
     if (!panel.enabled) throw new PanelNotFoundError(`Panel ${params.panelName} is disabled`);
 
-    // 2. Load ticket context
-    const context = await this.getTicketContext.execute({
-      ticketId: params.ticketId,
-      agentName: `panel:${panel.name}`,
-    });
-
-    const topic = params.topic || context.ticket.title;
-    const ticketContextBlocks = await this.buildTicketContextBlocks(context);
-    const ticketMeta: PanelTicketMeta = {
-      title: context.ticket.title,
-      status: context.ticket.status,
-      commentsCount: context.comments.length,
-      deliverablesCount: context.deliverables.length,
-    };
+    // 2. Load discussion context — the ticket thread, or, for a routine run,
+    // the run's frozen subject (there is no ticket to read).
+    if (!params.ticketId && !params.returnStructured) {
+      throw new Error(`panel "${panel.name}": a ticketless run is only supported through the workflow orchestrator`);
+    }
+    let topic: string;
+    let ticketContextBlocks: PromptContentBlock[];
+    let ticketMeta: PanelTicketMeta;
+    if (params.ticketId) {
+      const context = await this.getTicketContext.execute({
+        ticketId: params.ticketId,
+        agentName: `panel:${panel.name}`,
+      });
+      topic = params.topic || context.ticket.title;
+      ticketContextBlocks = await this.buildTicketContextBlocks(context);
+      ticketMeta = {
+        title: context.ticket.title,
+        status: context.ticket.status,
+        commentsCount: context.comments.length,
+        deliverablesCount: context.deliverables.length,
+      };
+    } else {
+      topic = params.topic
+        || params.subject?.brief?.split('\n')[0]?.trim()
+        || params.workflowContext?.workflowName
+        || panel.displayName;
+      ticketContextBlocks = this.buildSubjectContextBlocks(params.subject ?? null);
+      ticketMeta = { title: topic, status: 'routine', commentsCount: 0, deliverablesCount: 0 };
+    }
 
     this.logger.info('Panel execution started', {
       panelName: panel.name,
@@ -176,7 +201,7 @@ export class RunPanelUseCase {
           this.eventBus.emit({
             type: 'mention.acknowledged',
             mentionId: mention.id,
-            ticketId: params.ticketId,
+            ticketId: params.ticketId!,
             targetAgent: mention.targetAgent,
             occurredAt: new Date(),
           });
@@ -184,33 +209,39 @@ export class RunPanelUseCase {
       }
     }
 
-    // 4. Post announcement comment
+    // 4. Post announcement comment (a routine run has no timeline to post to)
     const panelAuthor = params.workflowContext
       ? `workflow:${params.workflowContext.workflowName} → ${params.workflowContext.stepName}`
       : `panel:${panel.name}`;
-    const { comment: announceComment } = await this.postComment.execute({
-      ticketId: params.ticketId,
-      body: `🏛️ **${panel.displayName}** — Panel discussion started on: **${topic}**\n\n_${panel.members.length} members participating..._`,
-      authorName: panelAuthor,
-      authorType: 'agent',
-      humanMentionNames: [],
-    });
-
-    if (this.eventBus) {
-      this.eventBus.emit({
-        type: 'comment.posted',
-        commentId: announceComment.id,
+    let announceCommentId: string | null = null;
+    if (params.ticketId) {
+      const { comment: announceComment } = await this.postComment.execute({
         ticketId: params.ticketId,
-        authorType: 'agent',
+        body: `🏛️ **${panel.displayName}** — Panel discussion started on: **${topic}**\n\n_${panel.members.length} members participating..._`,
         authorName: panelAuthor,
-        createdMentions: [],
-        occurredAt: new Date(),
+        authorType: 'agent',
+        humanMentionNames: [],
       });
+      announceCommentId = announceComment.id;
+
+      if (this.eventBus) {
+        this.eventBus.emit({
+          type: 'comment.posted',
+          commentId: announceComment.id,
+          ticketId: params.ticketId,
+          authorType: 'agent',
+          authorName: panelAuthor,
+          createdMentions: [],
+          occurredAt: new Date(),
+        });
+      }
     }
 
-    // 5. Ensure worktree exists (skip for message mode)
+    // 5. Ensure worktree exists (skip for message mode). A routine panel runs
+    // without one: members deliberate over the subject, they don't edit code —
+    // repos in the subject stay the agent/skill steps' business.
     let worktreePath: string | null = null;
-    if (panel.executionMode !== 'message') {
+    if (params.ticketId && panel.executionMode !== 'message') {
       worktreePath = await this.ensureWorktree(params.ticketId);
 
       if (worktreePath) {
@@ -261,6 +292,10 @@ export class RunPanelUseCase {
       return { structuredOutput: synthStructured, executionId: synthExecutionId };
     }
 
+    // Ticketless + !returnStructured was rejected up front, so from here on the
+    // ticket exists — everything below is ticket-timeline side effects.
+    const ticketId = params.ticketId!;
+
     const result: PanelResult = {
       panelName: panel.name,
       panelDisplayName: panel.displayName,
@@ -272,11 +307,11 @@ export class RunPanelUseCase {
 
     // 8. Post synthesis as comment
     const { comment: synthComment } = await this.postComment.execute({
-      ticketId: params.ticketId,
+      ticketId,
       body: synthesis,
       authorName: panelAuthor,
       authorType: 'agent',
-      parentId: announceComment.id,
+      parentId: announceCommentId ?? undefined,
       humanMentionNames: [],
     });
 
@@ -284,7 +319,7 @@ export class RunPanelUseCase {
       this.eventBus.emit({
         type: 'comment.posted',
         commentId: synthComment.id,
-        ticketId: params.ticketId,
+        ticketId,
         authorType: 'agent',
         authorName: panelAuthor,
         createdMentions: [],
@@ -295,7 +330,7 @@ export class RunPanelUseCase {
     // 9. Submit full transcript as deliverable
     const transcript = this.buildTranscript(panel, topic, memberResponses, synthesis, durationMs);
     const deliverable = await this.submitDeliverable.execute({
-      ticketId: params.ticketId,
+      ticketId,
       agentName: panelAuthor,
       type: 'report',
       title: `${panel.displayName} — ${topic}`,
@@ -308,7 +343,7 @@ export class RunPanelUseCase {
       this.eventBus.emit({
         type: 'deliverable.created',
         deliverableId: deliverable.id,
-        ticketId: params.ticketId,
+        ticketId,
         agentName: panelAuthor,
         status: 'final',
         title: deliverable.title,
@@ -330,7 +365,7 @@ export class RunPanelUseCase {
           this.eventBus.emit({
             type: 'mention.resolved',
             mentionId: mention.id,
-            ticketId: params.ticketId,
+            ticketId,
             targetAgent: mention.targetAgent,
             resolvedBy: panelAuthor,
             occurredAt: new Date(),
@@ -342,7 +377,7 @@ export class RunPanelUseCase {
     // 11. Log activity
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
-      ticketId: params.ticketId,
+      ticketId,
       action: 'panel_executed',
       changes: {
         panelName: { from: null, to: panel.name },
@@ -365,7 +400,7 @@ export class RunPanelUseCase {
         panelId: panel.id,
         panelName: panel.name,
         panelDisplayName: panel.displayName,
-        ticketId: params.ticketId,
+        ticketId,
         status: panelStatus,
         durationMs,
         memberCount: memberResponses.length,
@@ -410,7 +445,7 @@ export class RunPanelUseCase {
     topic: string,
     ticketContextBlocks: PromptContentBlock[],
     worktreePath: string | null,
-    ticketId: string,
+    ticketId: string | null,
     mentionId: string,
     ticketMeta: PanelTicketMeta,
   ): Promise<MemberResponse[]> {
@@ -529,7 +564,7 @@ export class RunPanelUseCase {
     emoji: string,
     worktreePath: string | null,
     effectiveMode: MentionExecutionMode,
-    ticketId: string,
+    ticketId: string | null,
     mentionId: string,
     ticketMeta: PanelTicketMeta,
   ): Promise<MemberResponse> {
@@ -551,7 +586,7 @@ export class RunPanelUseCase {
     // even though the panel itself keeps running (the orchestrator simply won't
     // get this member's report). Registered before the SDK loop starts.
     const abortController = new AbortController();
-    this.executionRegistry?.registerExecution({ executionId, personaId: persona.id, ticketId, abortController });
+    this.executionRegistry?.registerExecution({ executionId, personaId: persona.id, ticketId: ticketId ?? undefined, abortController });
 
     let sequence = 0;
     const emitEvent = async (eventType: AgentEventType, data: unknown) => {
@@ -575,7 +610,7 @@ export class RunPanelUseCase {
 
     // Build content blocks for multimodal support
     const promptBlocks: PromptContentBlock[] = [
-      { type: 'text', text: `# Panel Discussion Topic\n\n**Subject:** ${topic}\n\n## Ticket Context\n` },
+      { type: 'text', text: `# Panel Discussion Topic\n\n**Subject:** ${topic}\n\n${ticketId ? '## Ticket Context' : '## Context'}\n` },
       ...ticketContextBlocks,
       { type: 'text', text: `${codeAccessInstructions}\n\n---\n\nAs ${persona.displayName || persona.name}, share your expert perspective on this topic.\nBe concise (3-5 paragraphs max) but incisive.\nRaise the key points from your area of expertise.\nIf you disagree with the approach, explain why and propose alternatives.` },
     ];
@@ -693,7 +728,7 @@ export class RunPanelUseCase {
     topic: string,
     memberResponses: MemberResponse[],
     worktreePath: string | null,
-    ticketId: string,
+    ticketId: string | null,
     mentionId: string,
     ticketMeta: PanelTicketMeta,
     extraContextPrompt?: string,
@@ -759,7 +794,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
 
     // Register the orchestrator session so it too can be terminated from the UI.
     const abortController = new AbortController();
-    this.executionRegistry?.registerExecution({ executionId, personaId: orchestratorPersonaId, ticketId, abortController });
+    this.executionRegistry?.registerExecution({ executionId, personaId: orchestratorPersonaId, ticketId: ticketId ?? undefined, abortController });
 
     // Single sequence counter spanning start → stream → end so the
     // orchestrator's atomic log streams the same rich content as a persona.
@@ -930,6 +965,26 @@ Be concise and decision-oriented. Write in the same language as the panel member
       }
     }
 
+    return blocks;
+  }
+
+  /**
+   * Routine-run counterpart of `buildTicketContextBlocks`: the run's frozen
+   * subject is the whole discussion context. The brief is injected verbatim —
+   * it composes with each member persona's own prompts, same contract as the
+   * agent steps' routine prompt.
+   */
+  private buildSubjectContextBlocks(subject: RunSubject | null): PromptContentBlock[] {
+    const blocks: PromptContentBlock[] = [];
+    if (subject?.brief) {
+      blocks.push({ type: 'text', text: `## Brief\n\n${subject.brief}` });
+    }
+    if (subject?.repos && subject.repos.length > 0) {
+      blocks.push({ type: 'text', text: `\n## Repositories concerned\n\n${subject.repos.map((r) => `- ${r}`).join('\n')}` });
+    }
+    if (blocks.length === 0) {
+      blocks.push({ type: 'text', text: '_No specific context was provided — debate the topic from your own expertise._' });
+    }
     return blocks;
   }
 

@@ -1,4 +1,4 @@
-import type { Routine, RoutineTrigger } from '@fleex/shared';
+import type { Routine, RoutineTarget, RoutineTrigger } from '@fleex/shared';
 import { die } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
 
@@ -37,6 +37,11 @@ export function describeTrigger(trigger: RoutineTrigger): string {
   if (trigger.kind === 'manual') return 'manual';
   if (trigger.kind === 'once') return `once · ${trigger.runAt} (${trigger.timezone})`;
   return `cron · ${trigger.cron} (${trigger.timezone})`;
+}
+
+/** "workflow · <template id>" / "agent · builder" — the target in one cell. */
+export function describeTarget(target: RoutineTarget): string {
+  return `${target.kind} · ${target.ref}`;
 }
 
 export function shortTrigger(trigger: RoutineTrigger): string {

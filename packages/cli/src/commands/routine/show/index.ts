@@ -1,7 +1,7 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { c, info, present } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
-import { resolveRoutine, describeTrigger } from '../_shared.ts';
+import { resolveRoutine, describeTrigger, describeTarget } from '../_shared.ts';
 
 interface RunDetail {
   run: { id: string; status: string; startedAt?: string; completedAt?: string | null };
@@ -28,7 +28,7 @@ const def: CommandDef = {
       process.stdout.write(`  ${c.dim('slug')}      ${routine.slug}\n`);
       process.stdout.write(`  ${c.dim('id')}        ${routine.id}\n`);
       process.stdout.write(`  ${c.dim('enabled')}   ${routine.enabled ? 'yes' : 'no (paused)'}\n`);
-      process.stdout.write(`  ${c.dim('workflow')}  ${routine.templateId}\n`);
+      process.stdout.write(`  ${c.dim('runs')}      ${describeTarget(routine.target)}\n`);
       if (routine.description) process.stdout.write(`  ${c.dim('about')}     ${routine.description}\n`);
 
       process.stdout.write(`\n  ${c.bold('Trigger')}\n`);

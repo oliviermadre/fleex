@@ -349,7 +349,8 @@ export interface WorkflowRunCreatedEvent extends DomainEvent {
   /** Null when the run is anchored to a routine instead of a ticket. */
   ticketId: string | null;
   routineId?: string | null;
-  templateId: string;
+  /** Null for a synthetic run (routine targeting a primitive — no template). */
+  templateId: string | null;
 }
 
 export interface WorkflowStepStartedEvent extends DomainEvent {

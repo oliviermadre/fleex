@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import type {
-  CreateRoutineInput, UpdateRoutineInput, RoutineTrigger, RoutineOverlapPolicy,
+  CreateRoutineInput, UpdateRoutineInput, RoutineTrigger, RoutineOverlapPolicy, RoutineTarget,
 } from '@fleex/shared';
-import { normalizeRunSubject } from '@fleex/shared';
+import { normalizeRunSubject, normalizeRoutineTarget } from '@fleex/shared';
 import {
   RoutineNotFoundError,
   RoutineSlugConflictError,
   RoutineRunAlreadyActiveError,
   InvalidRoutineTriggerError,
+  RoutineTargetNotFoundError,
   WorkflowTemplateNotFoundError,
 } from '../../domain/errors.js';
 import { nextRunTimes } from '../../domain/services/routine-schedule.js';
@@ -51,10 +52,24 @@ function parseOverlapPolicy(raw: unknown): RoutineOverlapPolicy | undefined {
   return raw === 'skip' || raw === 'queue' ? raw : undefined;
 }
 
+/**
+ * `target` is the canonical shape; a bare `templateId` is still accepted so
+ * pre-target clients (and scripts) keep working — it reads as a workflow target.
+ */
+function parseTarget(body: Record<string, unknown>): RoutineTarget | null {
+  const target = normalizeRoutineTarget(body['target']);
+  if (target) return target;
+  if (typeof body['templateId'] === 'string' && body['templateId'].length > 0) {
+    return { kind: 'workflow', ref: body['templateId'] };
+  }
+  return null;
+}
+
 /** Maps domain errors to HTTP without repeating the same try/catch six times. */
 function sendDomainError(reply: { code: (n: number) => { send: (b: unknown) => unknown } }, err: unknown): unknown {
   if (err instanceof RoutineNotFoundError) return reply.code(404).send({ error: err.code, message: err.message });
   if (err instanceof WorkflowTemplateNotFoundError) return reply.code(404).send({ error: err.code, message: err.message });
+  if (err instanceof RoutineTargetNotFoundError) return reply.code(404).send({ error: err.code, message: err.message });
   if (err instanceof RoutineSlugConflictError) return reply.code(409).send({ error: err.code, message: err.message });
   if (err instanceof RoutineRunAlreadyActiveError) return reply.code(409).send({ error: err.code, message: err.message });
   if (err instanceof InvalidRoutineTriggerError) return reply.code(422).send({ error: err.code, message: err.message });
@@ -127,15 +142,16 @@ export function routineRoutes(deps: RoutineRouteDeps) {
       if (typeof body['name'] !== 'string' || body['name'].trim().length === 0) {
         return reply.code(400).send({ error: 'INVALID_BODY', message: 'name must be a non-empty string' });
       }
-      if (typeof body['templateId'] !== 'string' || body['templateId'].length === 0) {
-        return reply.code(400).send({ error: 'INVALID_BODY', message: 'templateId must be a non-empty string' });
+      const target = parseTarget(body);
+      if (!target) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: 'target must be { kind: workflow|agent|skill|panel, ref } (or legacy templateId)' });
       }
       const trigger = parseTrigger(body['trigger']);
       if (!trigger.ok) return reply.code(400).send({ error: 'INVALID_BODY', message: trigger.error });
 
       const input: CreateRoutineInput = {
         name: body['name'],
-        templateId: body['templateId'],
+        target,
         subject: normalizeRunSubject(body['subject']),
         ...(typeof body['emoji'] === 'string' ? { emoji: body['emoji'] } : {}),
         ...(typeof body['description'] === 'string' ? { description: body['description'] } : {}),
@@ -158,12 +174,21 @@ export function routineRoutes(deps: RoutineRouteDeps) {
       const trigger = parseTrigger(body['trigger']);
       if (!trigger.ok) return reply.code(400).send({ error: 'INVALID_BODY', message: trigger.error });
 
+      let target: RoutineTarget | undefined;
+      if (body['target'] !== undefined || typeof body['templateId'] === 'string') {
+        const parsed = parseTarget(body);
+        if (!parsed) {
+          return reply.code(400).send({ error: 'INVALID_BODY', message: 'target must be { kind: workflow|agent|skill|panel, ref }' });
+        }
+        target = parsed;
+      }
+
       const changes: UpdateRoutineInput = {
         ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
         ...(typeof body['emoji'] === 'string' ? { emoji: body['emoji'] } : {}),
         ...(body['description'] === null || typeof body['description'] === 'string'
           ? { description: body['description'] as string | null } : {}),
-        ...(typeof body['templateId'] === 'string' ? { templateId: body['templateId'] } : {}),
+        ...(target ? { target } : {}),
         ...(body['subject'] !== undefined ? { subject: normalizeRunSubject(body['subject']) } : {}),
         ...(trigger.value ? { trigger: trigger.value } : {}),
         ...(parseOverlapPolicy(body['overlapPolicy']) ? { overlapPolicy: parseOverlapPolicy(body['overlapPolicy'])! } : {}),

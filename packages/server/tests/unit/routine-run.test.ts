@@ -21,7 +21,7 @@ const template = WorkflowTemplateEntity.create({
 
 function makeRoutine() {
   return RoutineEntity.create({
-    id: 'r-1', name: 'Daily recap', templateId: 'tmpl-1',
+    id: 'r-1', name: 'Daily recap', target: { kind: 'workflow' as const, ref: 'tmpl-1' },
     subject: { repos: ['acme/api'], brief: 'Summarise yesterday' },
   });
 }
@@ -125,7 +125,12 @@ describe('CreateRoutineUseCase', () => {
   function useCase() {
     return new CreateRoutineUseCase(
       { getBySlug: vi.fn().mockResolvedValue(null), save: vi.fn() } as never,
-      { getById: vi.fn().mockResolvedValue(template) } as never,
+      {
+        templateStore: { getById: vi.fn().mockResolvedValue(template) },
+        personaStore: { getByName: vi.fn().mockResolvedValue(null) },
+        skillStore: { getByCommandName: vi.fn().mockResolvedValue(null) },
+        panelStore: { getByName: vi.fn().mockResolvedValue(null) },
+      } as never,
       { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as never,
     );
   }
@@ -134,7 +139,7 @@ describe('CreateRoutineUseCase', () => {
     // Without a `next_run_at` the scheduler's due query never sees the routine:
     // it would sit in the list looking scheduled and never fire.
     const routine = await useCase().execute({
-      name: 'Daily recap', templateId: 'tmpl-1',
+      name: 'Daily recap', target: { kind: 'workflow', ref: 'tmpl-1' },
       trigger: { kind: 'cron', cron: '0 9 * * *', timezone: 'Europe/Paris' },
     });
 
@@ -145,13 +150,13 @@ describe('CreateRoutineUseCase', () => {
   it('rejects a malformed cron rather than persisting a routine that never fires', async () => {
     // Better a loud 422 at write time than a routine the author believes is armed.
     await expect(useCase().execute({
-      name: 'Daily recap', templateId: 'tmpl-1',
+      name: 'Daily recap', target: { kind: 'workflow', ref: 'tmpl-1' },
       trigger: { kind: 'cron', cron: 'every monday', timezone: 'Europe/Paris' },
     })).rejects.toBeInstanceOf(InvalidRoutineTriggerError);
   });
 
   it('leaves a manual routine unarmed', async () => {
-    const routine = await useCase().execute({ name: 'Ad-hoc sweep', templateId: 'tmpl-1' });
+    const routine = await useCase().execute({ name: 'Ad-hoc sweep', target: { kind: 'workflow', ref: 'tmpl-1' } });
     expect(routine.nextRunAt).toBeNull();
   });
 });

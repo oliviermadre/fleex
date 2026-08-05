@@ -433,7 +433,7 @@ export async function createContainer() {
   if (workflowTemplateStore && workflowRunStore && stepRunStore) {
     // Step executors
     const agentStepExecutor = new AgentStepExecutor(executeAgent);
-    const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore);
+    const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore, personaStore_);
     const panelStepExecutor = new PanelStepExecutor(runPanel);
     const humanGateStepExecutor = new HumanGateStepExecutor(postComment, eventBus);
     // `workflow.trigger` needs CreateWorkflowRun, which needs the orchestrator,
@@ -499,8 +499,9 @@ export async function createContainer() {
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
 
     if (routineStore) {
-      createRoutine = new CreateRoutineUseCase(routineStore, workflowTemplateStore, logger);
-      updateRoutine = new UpdateRoutineUseCase(routineStore, workflowTemplateStore);
+      const targetStores = { templateStore: workflowTemplateStore, personaStore: personaStore_, skillStore, panelStore };
+      createRoutine = new CreateRoutineUseCase(routineStore, targetStores, logger);
+      updateRoutine = new UpdateRoutineUseCase(routineStore, targetStores);
       deleteRoutine = new DeleteRoutineUseCase(routineStore);
       runRoutine = new RunRoutineUseCase(routineStore, createWorkflowRun);
       routineScheduler.setDeps({ routineStore, runStore: workflowRunStore, runRoutine });

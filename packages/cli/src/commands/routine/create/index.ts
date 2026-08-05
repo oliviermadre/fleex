@@ -1,4 +1,4 @@
-import type { Routine, RoutineTrigger } from '@fleex/shared';
+import type { Routine, RoutineTarget, RoutineTrigger } from '@fleex/shared';
 import type { CommandDef } from '../../../core/types.ts';
 import { c, die, ok, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
@@ -6,7 +6,10 @@ import { fetchWorkflows, workflowHandleName } from '../../../core/agentic.ts';
 import { describeTrigger } from '../_shared.ts';
 
 interface CreateOptions {
-  workflow: string;
+  workflow?: string;
+  agent?: string;
+  skill?: string;
+  panel?: string;
   description?: string;
   repo?: string[];
   brief?: string;
@@ -26,6 +29,23 @@ async function resolveTemplateId(ref: string): Promise<string> {
     ?? workflows.find((w) => (w.name ?? '').toLowerCase() === needle);
   if (!found) die(`No workflow matches "${ref}". Run \`fleex workflow list\` to see them.`);
   return found.id;
+}
+
+/**
+ * Build the routine target from the four exclusive flags. Workflow refs resolve
+ * to the template id; agent/skill/panel refs are passed by name — the server
+ * validates their existence at write time (404 with the offending ref).
+ */
+export async function resolveTargetFromFlags(
+  opts: { workflow?: string; agent?: string; skill?: string; panel?: string },
+): Promise<RoutineTarget | undefined> {
+  const given = [opts.workflow, opts.agent, opts.skill, opts.panel].filter((v) => v !== undefined);
+  if (given.length > 1) die('--workflow, --agent, --skill and --panel are mutually exclusive.');
+  if (opts.workflow !== undefined) return { kind: 'workflow', ref: await resolveTemplateId(opts.workflow) };
+  if (opts.agent !== undefined) return { kind: 'agent', ref: opts.agent.trim() };
+  if (opts.skill !== undefined) return { kind: 'skill', ref: opts.skill.trim() };
+  if (opts.panel !== undefined) return { kind: 'panel', ref: opts.panel.trim() };
+  return undefined;
 }
 
 /** Build the trigger from the schedule flags. `--cron` and `--at` are exclusive. */
@@ -48,10 +68,13 @@ export function parseOverlap(value: string | undefined): 'skip' | 'queue' | unde
 const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
-  description: 'Create a routine: a named workflow recipe with a subject and a trigger, no ticket',
+  description: 'Create a routine: a named recipe that runs a workflow, agent, skill or panel on a subject and a trigger, no ticket',
   setup(cmd) {
     cmd.argument('<name>', 'Routine name (the slug is derived from it server-side)');
-    cmd.requiredOption('--workflow <ref>', 'Workflow template to run (slug, name or UUID)');
+    cmd.option('--workflow <ref>', 'Workflow template to run (slug, name or UUID) — exclusive with --agent/--skill/--panel');
+    cmd.option('--agent <name>', 'Agent persona to run (persona name) — exclusive with the other target flags');
+    cmd.option('--skill <command>', 'Skill to run (command name) — exclusive with the other target flags');
+    cmd.option('--panel <name>', 'Panel to run (panel name) — exclusive with the other target flags');
     cmd.option('--description <text>', 'What this routine is for');
     cmd.option('--repo <org/name...>', 'Repositories the run gets a worktree on (space-separated)');
     cmd.option('--brief <text>', 'Free-form markdown injected into the agent prompt');
@@ -62,7 +85,8 @@ const def: CommandDef = {
     cmd.option('--disabled', 'Create the routine paused');
   },
   action: async (name: string, opts: CreateOptions) => {
-    const templateId = await resolveTemplateId(opts.workflow);
+    const target = await resolveTargetFromFlags(opts);
+    if (!target) die('Pass exactly one target: --workflow, --agent, --skill or --panel.');
     const trigger = buildTrigger(opts);
     const subject = {
       repos: (opts.repo ?? []).map((r) => r.trim()).filter(Boolean),
@@ -72,7 +96,7 @@ const def: CommandDef = {
     const routine = await apiPost<Routine>(`${apiBase()}/api/routines`, {
       name,
       ...(opts.description !== undefined ? { description: opts.description } : {}),
-      templateId,
+      target,
       subject,
       ...(trigger ? { trigger } : {}),
       ...(parseOverlap(opts.overlap) ? { overlapPolicy: parseOverlap(opts.overlap) } : {}),

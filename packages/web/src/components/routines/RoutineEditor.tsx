@@ -1,6 +1,9 @@
-import { useState } from 'react';
-import type { Routine, RoutineOverlapPolicy, RoutineTrigger, WorkflowTemplate } from '@fleex/shared';
+import { useEffect, useMemo, useState } from 'react';
+import type { Routine, RoutineOverlapPolicy, RoutineTarget, RoutineTargetKind, RoutineTrigger, WorkflowTemplate } from '@fleex/shared';
 import { useRoutineStore } from '../../stores/routineStore';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSkillStore } from '../../stores/skillStore';
+import { usePanelStore } from '../../stores/panelStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -10,22 +13,60 @@ import { RoutineRepoPicker } from './RoutineRepoPicker';
 import { cn } from '../../lib/cn';
 import { tintText } from '../../lib/tints';
 
-/** Create / edit a routine: its subject, its workflow, and how it starts. */
+const TARGET_KIND_OPTIONS: { value: RoutineTargetKind; label: string }[] = [
+  { value: 'workflow', label: 'Workflow' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'skill', label: 'Skill' },
+  { value: 'panel', label: 'Panel' },
+];
+
+/** Create / edit a routine: its subject, its target primitive, and how it starts. */
 export function RoutineEditor({ routine, templates, onClose }: {
   routine?: Routine;
   templates: WorkflowTemplate[];
   onClose: () => void;
 }) {
   const { create, update, select } = useRoutineStore();
+  const { personas, loaded: personasLoaded, loadPersonas } = useAgentPersonaStore();
+  const { skills, loaded: skillsLoaded, loadSkills } = useSkillStore();
+  const { panels, loaded: panelsLoaded, loadPanels } = usePanelStore();
   const [name, setName] = useState(routine?.name ?? '');
   const [description, setDescription] = useState(routine?.description ?? '');
-  const [templateId, setTemplateId] = useState(routine?.templateId ?? templates[0]?.id ?? '');
+  const [targetKind, setTargetKind] = useState<RoutineTargetKind>(routine?.target.kind ?? 'workflow');
+  const [targetRef, setTargetRef] = useState(routine?.target.ref ?? templates[0]?.id ?? '');
   const [repos, setRepos] = useState<string[]>(routine?.subject.repos ?? []);
   const [brief, setBrief] = useState(routine?.subject.brief ?? '');
   const [trigger, setTrigger] = useState<RoutineTrigger>(routine?.trigger ?? { kind: 'manual' });
   const [overlapPolicy, setOverlapPolicy] = useState<RoutineOverlapPolicy>(routine?.overlapPolicy ?? 'skip');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The non-workflow catalogs load lazily: most routines target a workflow and
+  // never need them, but the picker must be full the instant a kind is chosen.
+  useEffect(() => {
+    if (!personasLoaded) void loadPersonas();
+    if (!skillsLoaded) void loadSkills();
+    if (!panelsLoaded) void loadPanels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // One option list per kind. Refs follow the executorRef convention: workflow
+  // by template id, agent by persona name, skill by command name, panel by name.
+  const refOptions = useMemo(() => {
+    const byKind: Record<RoutineTargetKind, { value: string; label: string }[]> = {
+      workflow: templates.map((t) => ({ value: t.id, label: t.name })),
+      agent: personas.map((p) => ({ value: p.name, label: p.displayName || p.name })),
+      skill: skills.filter((s) => s.enabled).map((s) => ({ value: s.commandName, label: s.displayName || s.commandName })),
+      panel: panels.filter((p) => p.enabled).map((p) => ({ value: p.name, label: p.displayName || p.name })),
+    };
+    return byKind;
+  }, [templates, personas, skills, panels]);
+
+  const onKindChange = (kind: RoutineTargetKind) => {
+    setTargetKind(kind);
+    // A ref never survives a kind switch — it points into another catalog.
+    setTargetRef(refOptions[kind][0]?.value ?? '');
+  };
 
   const onSubmit = async () => {
     setSaving(true);
@@ -34,11 +75,12 @@ export function RoutineEditor({ routine, templates, onClose }: {
       repos: repos.map((r) => r.trim()).filter(Boolean),
       brief: brief.trim() || undefined,
     };
+    const target: RoutineTarget = { kind: targetKind, ref: targetRef };
     try {
       if (routine) {
-        await update(routine.id, { name, description: description || null, templateId, subject, trigger, overlapPolicy });
+        await update(routine.id, { name, description: description || null, target, subject, trigger, overlapPolicy });
       } else {
-        const created = await create({ name, description: description || null, templateId, subject, trigger, overlapPolicy });
+        const created = await create({ name, description: description || null, target, subject, trigger, overlapPolicy });
         await select(created.id);
       }
       onClose();
@@ -51,11 +93,11 @@ export function RoutineEditor({ routine, templates, onClose }: {
     }
   };
 
-  const canSubmit = name.trim().length > 0 && templateId.length > 0 && !saving;
+  const canSubmit = name.trim().length > 0 && targetRef.length > 0 && !saving;
 
-  const templateOptions = templates.length === 0
-    ? [{ value: '', label: 'No workflow template available' }]
-    : templates.map((t) => ({ value: t.id, label: t.name }));
+  const currentRefOptions = refOptions[targetKind].length === 0
+    ? [{ value: '', label: `No ${targetKind} available` }]
+    : refOptions[targetKind];
 
   return (
     <Modal open onClose={onClose} maxWidth="max-w-xl">
@@ -64,7 +106,7 @@ export function RoutineEditor({ routine, templates, onClose }: {
           {routine ? 'Edit routine' : 'New routine'}
         </h2>
         <p className="mt-1 text-xs text-[var(--theme-text-secondary)]">
-          A routine runs a workflow on a repo, a brief, or nothing at all — no ticket needed.
+          A routine runs a workflow, agent, skill or panel on a repo, a brief, or nothing at all — no ticket needed.
         </p>
       </div>
 
@@ -85,12 +127,22 @@ export function RoutineEditor({ routine, templates, onClose }: {
           placeholder="What this routine is for"
         />
 
-        <Select
-          label="Workflow"
-          options={templateOptions}
-          value={templateId}
-          onChange={(e) => setTemplateId(e.target.value)}
-        />
+        {/* The target primitive: any of the four agentic kinds. The rest of the
+            routine is kind-agnostic — the brief composes with whatever runs. */}
+        <div className="grid grid-cols-2 gap-3">
+          <Select
+            label="Runs a"
+            options={TARGET_KIND_OPTIONS}
+            value={targetKind}
+            onChange={(e) => onKindChange(e.target.value as RoutineTargetKind)}
+          />
+          <Select
+            label={TARGET_KIND_OPTIONS.find((o) => o.value === targetKind)?.label ?? 'Target'}
+            options={currentRefOptions}
+            value={targetRef}
+            onChange={(e) => setTargetRef(e.target.value)}
+          />
+        </div>
 
         <RoutineRepoPicker value={repos} onChange={setRepos} />
 

@@ -2,13 +2,15 @@ import type { Routine } from '@fleex/shared';
 import type { CommandDef } from '../../../core/types.ts';
 import { c, die, ok, present } from '../../../core/colors.ts';
 import { apiBase, apiPatch } from '../../../core/api.ts';
-import { fetchWorkflows, workflowHandleName } from '../../../core/agentic.ts';
 import { describeTrigger, resolveRoutine } from '../_shared.ts';
-import { buildTrigger, parseOverlap } from '../create/index.ts';
+import { buildTrigger, parseOverlap, resolveTargetFromFlags } from '../create/index.ts';
 
 interface EditOptions {
   name?: string;
   workflow?: string;
+  agent?: string;
+  skill?: string;
+  panel?: string;
   description?: string;
   repo?: string[];
   brief?: string;
@@ -27,7 +29,10 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<slug>', 'Routine slug, name, or UUID');
     cmd.option('--name <text>', 'Rename the routine');
-    cmd.option('--workflow <ref>', 'Switch the workflow template (slug, name or UUID)');
+    cmd.option('--workflow <ref>', 'Retarget on a workflow template (slug, name or UUID) — exclusive with --agent/--skill/--panel');
+    cmd.option('--agent <name>', 'Retarget on an agent persona (persona name) — exclusive with the other target flags');
+    cmd.option('--skill <command>', 'Retarget on a skill (command name) — exclusive with the other target flags');
+    cmd.option('--panel <name>', 'Retarget on a panel (panel name) — exclusive with the other target flags');
     cmd.option('--description <text>', 'Replace the description');
     cmd.option('--repo <org/name...>', 'Replace the repository list (space-separated)');
     cmd.option('--brief <text>', 'Replace the brief (empty string clears it)');
@@ -45,16 +50,7 @@ const def: CommandDef = {
     }
     const trigger = opts.manual ? ({ kind: 'manual' } as const) : buildTrigger(opts);
 
-    let templateId: string | undefined;
-    if (opts.workflow !== undefined) {
-      const workflows = await fetchWorkflows();
-      const needle = opts.workflow.trim().toLowerCase();
-      const found = workflows.find((w) => w.id === opts.workflow)
-        ?? workflows.find((w) => workflowHandleName(w).toLowerCase() === needle)
-        ?? workflows.find((w) => (w.name ?? '').toLowerCase() === needle);
-      if (!found) die(`No workflow matches "${opts.workflow}". Run \`fleex workflow list\` to see them.`);
-      templateId = found.id;
-    }
+    const target = await resolveTargetFromFlags(opts);
 
     // The PATCH endpoint replaces the subject wholesale (normalizeRunSubject),
     // so a partial change must be merged over the current subject here — else
@@ -71,7 +67,7 @@ const def: CommandDef = {
     const changes = {
       ...(opts.name !== undefined ? { name: opts.name } : {}),
       ...(opts.description !== undefined ? { description: opts.description || null } : {}),
-      ...(templateId !== undefined ? { templateId } : {}),
+      ...(target !== undefined ? { target } : {}),
       ...(subject !== undefined ? { subject } : {}),
       ...(trigger ? { trigger } : {}),
       ...(parseOverlap(opts.overlap) ? { overlapPolicy: parseOverlap(opts.overlap) } : {}),

@@ -3,6 +3,7 @@ import { normalizeRunSubject } from '@fleex/shared';
 import type { RoutineStorePort } from '../../../application/ports/routine-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 import type { RoutineOverlapPolicy, RoutineTrigger } from '@fleex/shared';
+import { rowToTarget, targetToColumns } from '../routine-target-mapping.js';
 
 interface Row {
   id: string;
@@ -11,7 +12,9 @@ interface Row {
   emoji: string;
   description: string | null;
   enabled: boolean;
-  template_id: string;
+  template_id: string | null;
+  target_kind: string | null;
+  target_ref: string | null;
   subject: unknown;
   trigger_kind: string;
   cron: string | null;
@@ -39,7 +42,7 @@ function toEntity(r: Row): RoutineEntity {
     r.emoji,
     r.description,
     r.enabled,
-    r.template_id,
+    rowToTarget(r),
     normalizeRunSubject(r.subject),
     rowToTrigger(r),
     r.overlap_policy as RoutineOverlapPolicy,
@@ -105,7 +108,7 @@ export class SupabaseRoutineStore implements RoutineStorePort {
       emoji: routine.emoji,
       description: routine.description,
       enabled: routine.enabled,
-      template_id: routine.templateId,
+      ...targetToColumns(routine.target),
       subject: routine.subject,
       trigger_kind: t.kind,
       cron: t.kind === 'cron' ? t.cron : null,

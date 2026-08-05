@@ -17,7 +17,7 @@ function makeRoutine(trigger: RoutineTrigger, overrides: Partial<{
   const r = RoutineEntity.create({
     id: overrides.id ?? 'r-1',
     name: 'Dependency sweep',
-    templateId: 'tmpl-1',
+    target: { kind: 'workflow' as const, ref: 'tmpl-1' },
     trigger,
     ...(overrides.overlapPolicy ? { overlapPolicy: overrides.overlapPolicy } : {}),
   });

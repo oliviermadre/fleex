@@ -165,7 +165,12 @@ export interface WorkflowRun {
   subjectSnapshot?: RunSubject | null;
   /** Workspace directory the run's agent steps ran in, when one was created. */
   workspacePath?: string | null;
-  templateId: string;
+  /**
+   * Null for a synthetic run: a routine targeting a primitive (agent / skill /
+   * panel) has no template — the one-step snapshot below is fabricated at
+   * launch and is the only definition the run ever had.
+   */
+  templateId: string | null;
   templateSnapshot: WorkflowTemplateSnapshot;
   status: WorkflowRunStatus;
   currentStepId: string | null;

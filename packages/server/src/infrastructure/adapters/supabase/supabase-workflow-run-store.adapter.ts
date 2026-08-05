@@ -10,7 +10,7 @@ interface WorkflowRunRow {
   parent_run_id: string | null;
   subject_snapshot: RunSubject | null;
   workspace_path: string | null;
-  template_id: string;
+  template_id: string | null;
   template_snapshot: WorkflowTemplateSnapshot;
   status: string;
   current_step_id: string | null;

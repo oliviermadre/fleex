@@ -24,6 +24,37 @@ export interface RunSubject {
   boardId?: string;
 }
 
+/**
+ * What a routine launches. `workflow` runs a template (the original behaviour);
+ * `agent` / `skill` / `panel` run a single agentic primitive, wrapped at launch
+ * time in a synthetic one-step run so the whole run machinery (history, DAG,
+ * deliverables, needs_review) applies unchanged.
+ */
+export type RoutineTargetKind = 'workflow' | 'agent' | 'skill' | 'panel';
+
+export interface RoutineTarget {
+  kind: RoutineTargetKind;
+  /**
+   * `workflow` → template id; `agent` → persona name; `skill` → command name;
+   * `panel` → panel name. Names, not ids, for primitives: that is how workflow
+   * steps already reference them (`executorRef`).
+   */
+  ref: string;
+}
+
+export const ROUTINE_TARGET_KINDS: RoutineTargetKind[] = ['workflow', 'agent', 'skill', 'panel'];
+
+/** Parses an untrusted target. Returns null when the shape is not a target. */
+export function normalizeRoutineTarget(raw: unknown): RoutineTarget | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  const kind = o['kind'];
+  const ref = o['ref'];
+  if (typeof ref !== 'string' || ref.length === 0) return null;
+  if (kind !== 'workflow' && kind !== 'agent' && kind !== 'skill' && kind !== 'panel') return null;
+  return { kind, ref };
+}
+
 export type RoutineTriggerKind = 'manual' | 'once' | 'cron';
 
 export type RoutineTrigger =
@@ -41,7 +72,7 @@ export interface Routine {
   emoji: string;
   description: string | null;
   enabled: boolean;
-  templateId: string;
+  target: RoutineTarget;
   subject: RunSubject;
   trigger: RoutineTrigger;
   overlapPolicy: RoutineOverlapPolicy;
@@ -56,7 +87,7 @@ export interface CreateRoutineInput {
   name: string;
   emoji?: string;
   description?: string | null;
-  templateId: string;
+  target: RoutineTarget;
   subject?: Partial<RunSubject>;
   trigger?: RoutineTrigger;
   overlapPolicy?: RoutineOverlapPolicy;
@@ -67,7 +98,7 @@ export interface UpdateRoutineInput {
   name?: string;
   emoji?: string;
   description?: string | null;
-  templateId?: string;
+  target?: RoutineTarget;
   subject?: Partial<RunSubject>;
   trigger?: RoutineTrigger;
   overlapPolicy?: RoutineOverlapPolicy;

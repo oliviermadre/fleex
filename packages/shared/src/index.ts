@@ -306,6 +306,8 @@ export type {
 
 export type {
   RunSubject,
+  RoutineTargetKind,
+  RoutineTarget,
   RoutineTriggerKind,
   RoutineTrigger,
   RoutineOverlapPolicy,
@@ -314,6 +316,8 @@ export type {
   UpdateRoutineInput,
 } from './types/routine.js';
 export {
+  ROUTINE_TARGET_KINDS,
+  normalizeRoutineTarget,
   emptyRunSubject,
   normalizeRunSubject,
   parseRepoRef,

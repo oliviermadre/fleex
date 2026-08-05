@@ -8,7 +8,11 @@ export class WorkflowRunEntity {
   constructor(
     public readonly id: string,
     public readonly ticketId: string | null,
-    public readonly templateId: string,
+    /**
+     * Null for a synthetic run: a routine targeting a primitive (agent / skill /
+     * panel) fabricates its one-step snapshot at launch and has no template row.
+     */
+    public readonly templateId: string | null,
     public readonly templateSnapshot: WorkflowTemplateSnapshot,
     public status: WorkflowRunStatus,
     public currentStepId: string | null,
@@ -48,7 +52,7 @@ export class WorkflowRunEntity {
     ticketId?: string | null;
     routineId?: string | null;
     subjectSnapshot?: RunSubject | null;
-    templateId: string;
+    templateId: string | null;
     templateSnapshot: WorkflowTemplateSnapshot;
     triggeredBy: string;
     triggeredFrom: string;

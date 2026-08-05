@@ -4,7 +4,7 @@ import {
   WorkflowRunAlreadyActiveError, WorkflowTemplateNotFoundError, RoutineRunAlreadyActiveError,
   WorkflowRunDepthExceededError,
 } from '../../domain/errors.js';
-import type { RunSubject } from '@fleex/shared';
+import type { RunSubject, WorkflowTemplateSnapshot } from '@fleex/shared';
 import type { WorkflowTemplateStorePort } from '../ports/workflow-template-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
@@ -41,13 +41,28 @@ export class CreateWorkflowRunUseCase {
      * routine mid-run can't change what the run is working on.
      */
     subjectSnapshot?: RunSubject | null;
-    templateId: string;
+    /** Null iff `templateSnapshot` is provided directly (synthetic run). */
+    templateId: string | null;
+    /**
+     * Direct snapshot for a synthetic run — a routine targeting a single
+     * primitive (agent / skill / panel) fabricates a one-step "template" at
+     * launch instead of referencing a stored one. Mutually exclusive with
+     * `templateId`; everything downstream (orchestrator, DAG, history) treats
+     * both kinds of run identically.
+     */
+    templateSnapshot?: WorkflowTemplateSnapshot;
     triggeredBy: string;
     triggeredFrom: string;
     /** Set when a `workflow.trigger` action spawned this run. Bounds recursion. */
     parentRunId?: string | null;
   }): Promise<WorkflowRunEntity> {
-    await this.assertDepthWithinLimit(params.parentRunId ?? null, params.templateId);
+    if ((params.templateId === null) === (params.templateSnapshot === undefined)) {
+      throw new Error('exactly one of templateId / templateSnapshot must be provided');
+    }
+    await this.assertDepthWithinLimit(
+      params.parentRunId ?? null,
+      params.templateId ?? params.templateSnapshot!.name,
+    );
 
     // One active run per anchor. Two concurrent runs would race on the same
     // ticket timeline, or on the same routine workspace.
@@ -59,22 +74,28 @@ export class CreateWorkflowRunUseCase {
       if (existing) throw new RoutineRunAlreadyActiveError(params.routineId);
     }
 
-    const template = await this.templateStore.getById(params.templateId);
-    if (!template) throw new WorkflowTemplateNotFoundError(params.templateId);
+    let snapshot: WorkflowTemplateSnapshot;
+    if (params.templateId !== null) {
+      const template = await this.templateStore.getById(params.templateId);
+      if (!template) throw new WorkflowTemplateNotFoundError(params.templateId);
+      snapshot = {
+        name: template.name,
+        emoji: template.emoji,
+        steps: template.steps,
+        edges: template.edges,
+        entryStepId: template.entryStepId,
+      };
+    } else {
+      snapshot = params.templateSnapshot!;
+    }
 
     const run = WorkflowRunEntity.create({
       id: randomUUID(),
       ticketId: params.ticketId ?? null,
       routineId: params.routineId ?? null,
       subjectSnapshot: params.subjectSnapshot ?? null,
-      templateId: template.id,
-      templateSnapshot: {
-        name: template.name,
-        emoji: template.emoji,
-        steps: template.steps,
-        edges: template.edges,
-        entryStepId: template.entryStepId,
-      },
+      templateId: params.templateId,
+      templateSnapshot: snapshot,
       triggeredBy: params.triggeredBy,
       triggeredFrom: params.triggeredFrom,
       parentRunId: params.parentRunId ?? null,
@@ -87,8 +108,8 @@ export class CreateWorkflowRunUseCase {
     // Emoji + bold name keep it scannable; the trigger source helps debugging.
     await postWorkflowComment(this.postComment, this.eventBus, {
       ticketId: run.ticketId,
-      authorName: `workflow:${template.name}`,
-      body: `🚦 Starting workflow ${template.emoji ? `${template.emoji} ` : ''}**${template.name}** _(triggered ${params.triggeredFrom === 'mention' ? 'via @mention' : `from ${params.triggeredFrom}`})_`,
+      authorName: `workflow:${snapshot.name}`,
+      body: `🚦 Starting workflow ${snapshot.emoji ? `${snapshot.emoji} ` : ''}**${snapshot.name}** _(triggered ${params.triggeredFrom === 'mention' ? 'via @mention' : `from ${params.triggeredFrom}`})_`,
     });
 
     this.eventBus.emit({

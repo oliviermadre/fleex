@@ -566,8 +566,11 @@ export class GetStatisticsUseCase {
     });
 
     // Workflow leaderboard — runs started in range, grouped by template.
+    // Synthetic runs (routine → single primitive) have no template: they'd all
+    // collapse into one meaningless "null" row, so they stay off the board.
     const runsByTemplate = new Map<string, typeof filteredRuns>();
     for (const r of filteredRuns) {
+      if (r.templateId === null) continue;
       const list = runsByTemplate.get(r.templateId) ?? [];
       list.push(r);
       runsByTemplate.set(r.templateId, list);

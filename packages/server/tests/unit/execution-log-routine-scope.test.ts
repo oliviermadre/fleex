@@ -28,7 +28,7 @@ const routine = RoutineEntity.create({
   id: 'r-1',
   name: 'Daily recap',
   emoji: '🔁',
-  templateId: 'tmpl-1',
+  target: { kind: 'workflow' as const, ref: 'tmpl-1' },
   subject: { brief: 'Summarise yesterday' },
 });
 

@@ -1,25 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import type { CreateRoutineInput } from '@fleex/shared';
 import { RoutineEntity } from '../../domain/entities/routine.entity.js';
-import {
-  RoutineSlugConflictError,
-  WorkflowTemplateNotFoundError,
-} from '../../domain/errors.js';
+import { RoutineSlugConflictError } from '../../domain/errors.js';
 import { assertTriggerValid, computeNextRunAt } from '../../domain/services/routine-schedule.js';
+import { assertRoutineTargetExists, type RoutineTargetStores } from '../services/routine-target-validator.js';
 import type { RoutineStorePort } from '../ports/routine-store.port.js';
-import type { WorkflowTemplateStorePort } from '../ports/workflow-template-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
 export class CreateRoutineUseCase {
   constructor(
     private readonly routineStore: RoutineStorePort,
-    private readonly templateStore: WorkflowTemplateStorePort,
+    private readonly targetStores: RoutineTargetStores,
     private readonly logger: LoggerPort,
   ) {}
 
   async execute(input: CreateRoutineInput): Promise<RoutineEntity> {
-    const template = await this.templateStore.getById(input.templateId);
-    if (!template) throw new WorkflowTemplateNotFoundError(input.templateId);
+    await assertRoutineTargetExists(input.target, this.targetStores);
 
     const trigger = input.trigger ?? { kind: 'manual' as const };
     assertTriggerValid(trigger);

@@ -1,5 +1,5 @@
 import type {
-  Routine, RunSubject, RoutineTrigger, RoutineOverlapPolicy,
+  Routine, RunSubject, RoutineTrigger, RoutineOverlapPolicy, RoutineTarget,
 } from '@fleex/shared';
 import { normalizeRunSubject, slugify } from '@fleex/shared';
 
@@ -11,7 +11,7 @@ export class RoutineEntity {
     public emoji: string,
     public description: string | null,
     public enabled: boolean,
-    public templateId: string,
+    public target: RoutineTarget,
     public subject: RunSubject,
     public trigger: RoutineTrigger,
     public overlapPolicy: RoutineOverlapPolicy,
@@ -28,7 +28,7 @@ export class RoutineEntity {
     slug?: string;
     emoji?: string;
     description?: string | null;
-    templateId: string;
+    target: RoutineTarget;
     subject?: Partial<RunSubject>;
     trigger?: RoutineTrigger;
     overlapPolicy?: RoutineOverlapPolicy;
@@ -36,7 +36,7 @@ export class RoutineEntity {
   }): RoutineEntity {
     const name = params.name.trim();
     if (name.length === 0) throw new Error('Routine name is required');
-    if (!params.templateId) throw new Error('Routine templateId is required');
+    if (!params.target?.ref) throw new Error('Routine target is required');
 
     const now = new Date();
     return new RoutineEntity(
@@ -46,7 +46,7 @@ export class RoutineEntity {
       params.emoji ?? '⏰',
       params.description ?? null,
       params.enabled ?? true,
-      params.templateId,
+      params.target,
       normalizeRunSubject(params.subject),
       params.trigger ?? { kind: 'manual' },
       params.overlapPolicy ?? 'skip',
@@ -62,7 +62,7 @@ export class RoutineEntity {
     name?: string;
     emoji?: string;
     description?: string | null;
-    templateId?: string;
+    target?: RoutineTarget;
     subject?: Partial<RunSubject>;
     trigger?: RoutineTrigger;
     overlapPolicy?: RoutineOverlapPolicy;
@@ -75,7 +75,10 @@ export class RoutineEntity {
     }
     if (changes.emoji !== undefined) this.emoji = changes.emoji;
     if (changes.description !== undefined) this.description = changes.description;
-    if (changes.templateId !== undefined) this.templateId = changes.templateId;
+    if (changes.target !== undefined) {
+      if (!changes.target.ref) throw new Error('Routine target is required');
+      this.target = changes.target;
+    }
     // The subject is replaced wholesale, never merged: a partial merge would
     // make "remove the last repo" impossible to express.
     if (changes.subject !== undefined) this.subject = normalizeRunSubject(changes.subject);
@@ -122,7 +125,7 @@ export class RoutineEntity {
       emoji: this.emoji,
       description: this.description,
       enabled: this.enabled,
-      templateId: this.templateId,
+      target: this.target,
       subject: this.subject,
       trigger: this.trigger,
       overlapPolicy: this.overlapPolicy,

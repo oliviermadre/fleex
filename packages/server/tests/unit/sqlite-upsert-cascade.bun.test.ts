@@ -185,7 +185,7 @@ describe('WorkflowRunStore.save — no cascade on update (AC3)', () => {
 
 describe('WorkflowTemplateStore.save — no cascade on update', () => {
   function makeRoutine(id = 'routine-1'): RoutineEntity {
-    return RoutineEntity.create({ id, name: 'Daily recap', templateId: 'tmpl-1' });
+    return RoutineEntity.create({ id, name: 'Daily recap', target: { kind: 'workflow' as const, ref: 'tmpl-1' } });
   }
 
   async function loadTemplate() {
@@ -204,7 +204,7 @@ describe('WorkflowTemplateStore.save — no cascade on update', () => {
 
     const still = await routineStore.getById('routine-1');
     expect(still, 'routine must survive a workflow save').not.toBeNull();
-    expect(still?.templateId).toBe('tmpl-1');
+    expect(still?.target).toEqual({ kind: 'workflow', ref: 'tmpl-1' });
   });
 
   it('keeps routines alive across repeated saves (the builder saves on every edit)', async () => {

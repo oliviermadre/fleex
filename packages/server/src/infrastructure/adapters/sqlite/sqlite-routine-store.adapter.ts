@@ -3,6 +3,7 @@ import { normalizeRunSubject } from '@fleex/shared';
 import type { RoutineStorePort } from '../../../application/ports/routine-store.port.js';
 import type { SqliteConnection } from './connection.js';
 import type { RoutineOverlapPolicy, RoutineTrigger } from '@fleex/shared';
+import { rowToTarget, targetToColumns } from '../routine-target-mapping.js';
 
 interface Row {
   id: string;
@@ -11,7 +12,9 @@ interface Row {
   emoji: string;
   description: string | null;
   enabled: number;
-  template_id: string;
+  template_id: string | null;
+  target_kind: string | null;
+  target_ref: string | null;
   subject: string;
   trigger_kind: string;
   cron: string | null;
@@ -72,11 +75,11 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
     const t = routine.trigger;
     this.conn.db.prepare(`
       INSERT INTO routines
-        (id, slug, name, emoji, description, enabled, template_id, subject,
+        (id, slug, name, emoji, description, enabled, template_id, target_kind, target_ref, subject,
          trigger_kind, cron, run_at, timezone, overlap_policy,
          last_run_at, last_run_id, next_run_at, created_at, updated_at)
       VALUES
-        (@id, @slug, @name, @emoji, @description, @enabled, @template_id, @subject,
+        (@id, @slug, @name, @emoji, @description, @enabled, @template_id, @target_kind, @target_ref, @subject,
          @trigger_kind, @cron, @run_at, @timezone, @overlap_policy,
          @last_run_at, @last_run_id, @next_run_at, @created_at, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
@@ -86,6 +89,8 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
         description = excluded.description,
         enabled = excluded.enabled,
         template_id = excluded.template_id,
+        target_kind = excluded.target_kind,
+        target_ref = excluded.target_ref,
         subject = excluded.subject,
         trigger_kind = excluded.trigger_kind,
         cron = excluded.cron,
@@ -103,7 +108,7 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
       emoji: routine.emoji,
       description: routine.description,
       enabled: routine.enabled ? 1 : 0,
-      template_id: routine.templateId,
+      ...targetToColumns(routine.target),
       subject: JSON.stringify(routine.subject),
       trigger_kind: t.kind,
       cron: t.kind === 'cron' ? t.cron : null,
@@ -131,7 +136,7 @@ function toEntity(r: Row): RoutineEntity {
     r.emoji,
     r.description,
     r.enabled === 1,
-    r.template_id,
+    rowToTarget(r),
     normalizeRunSubject(JSON.parse(r.subject)),
     rowToTrigger(r),
     r.overlap_policy as RoutineOverlapPolicy,

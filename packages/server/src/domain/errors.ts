@@ -245,6 +245,17 @@ export class RoutineNotFoundError extends DomainError {
 }
 
 /**
+ * The primitive a routine targets (persona / skill / panel) does not exist.
+ * Workflow targets keep their own {@link WorkflowTemplateNotFoundError} —
+ * distinct codes because the fix differs (pick a template vs fix a name).
+ */
+export class RoutineTargetNotFoundError extends DomainError {
+  constructor(kind: string, ref: string) {
+    super(`Routine target not found: ${kind} "${ref}"`, 'ROUTINE_TARGET_NOT_FOUND');
+  }
+}
+
+/**
  * A routine already has a run in flight. Mirrors
  * {@link WorkflowRunAlreadyActiveError} for tickets: two concurrent runs of the
  * same routine would race on the same workspace and the same subject.

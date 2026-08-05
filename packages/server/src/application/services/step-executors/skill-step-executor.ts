@@ -1,5 +1,6 @@
 import type { ExecuteAgentUseCase } from '../../use-cases/execute-agent.js';
 import type { SkillStorePort } from '../../ports/skill-store.port.js';
+import type { PersonaStorePort } from '../../ports/persona-store.port.js';
 import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
 import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
 import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
@@ -11,18 +12,10 @@ export class SkillStepExecutor implements StepExecutor {
   constructor(
     private readonly executeAgent: ExecuteAgentUseCase,
     private readonly skillStore: SkillStorePort,
+    private readonly personaStore: PersonaStorePort,
   ) {}
 
   async execute(input: StepExecutionInput): Promise<StepExecutorResult> {
-    // `executeForSkill` builds its prompt from the ticket thread. Lot 1 keeps
-    // skill steps ticket-only rather than half-porting that pipeline: a
-    // routine run rejects the step loudly instead of running it blind.
-    if (!input.ticketId) {
-      throw new Error(
-        `Step "${input.workflowContext.stepName}": skill steps are not supported in a routine run (no ticket context).`,
-      );
-    }
-    const ticketId = input.ticketId;
     const skill = await this.skillStore.getByCommandName(input.step.executorRef);
     if (!skill) throw new Error(`skill "${input.step.executorRef}" not found`);
 
@@ -36,6 +29,32 @@ export class SkillStepExecutor implements StepExecutor {
       runHistory: input.workflowContext.runHistory,
     });
 
+    // Routine run: `executeForSkill` is built around a ticket thread (announce
+    // comment, session resume, ticket context), none of which exists here.
+    // Instead the skill runs as its persona through the routine-capable
+    // workflow-step pipeline, with the skill's markdown put in front of the
+    // step context — the routine's brief (in the subject) composes with the
+    // skill's own instructions, which is the whole contract of a skill.
+    if (!input.ticketId) {
+      const persona = await this.personaStore.getById(skill.personaId);
+      if (!persona) throw new Error(`skill "${skill.commandName}": persona ${skill.personaId} not found`);
+
+      const skillPreamble = `# Skill: ${skill.displayName}\n\n${skill.markdownContent}`;
+      const { structuredOutput, executionId } = await this.executeAgent.executeForWorkflowStep({
+        personaName: persona.name,
+        ticketId: null,
+        routineId: input.routineId,
+        subject: input.subject,
+        workflowRunId: input.workflowRunId,
+        outputFormat,
+        workflowContextPrompt: `${skillPreamble}\n\n---\n\n${workflowContextPrompt}`,
+        mode: 'edit',
+        onExecutionStarted: input.onExecutionStarted,
+      });
+      return { output: this.toStepOutput(structuredOutput), executionId };
+    }
+
+    const ticketId = input.ticketId;
     const result = await this.executeAgent.executeForSkill(skill.id, ticketId, {
       outputFormatOverride: outputFormat,
       workflowContextPrompt,

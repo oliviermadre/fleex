@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Routine, RoutineTrigger, WorkflowRunStatus, WorkflowTemplate } from '@fleex/shared';
+import type { Routine, RoutineTarget, RoutineTrigger, WorkflowRunStatus, WorkflowTemplate } from '@fleex/shared';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
@@ -8,7 +8,41 @@ import { RoutineEditor } from './RoutineEditor';
 import type { RoutineRunDetail } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintSolid, tintText, type TintHue } from '../../lib/tints';
-import { PrimitiveIcon, RoutineIcon } from '../../lib/primitives';
+import { PrimitiveIcon, RoutineIcon, type PrimitiveKind } from '../../lib/primitives';
+
+/** How each routine target kind maps onto the app's primitive iconography. */
+const TARGET_PRIMITIVE_KIND: Record<RoutineTarget['kind'], PrimitiveKind> = {
+  workflow: 'workflow',
+  agent: 'persona',
+  skill: 'skill',
+  panel: 'panel',
+};
+
+const TARGET_KIND_LABEL: Record<RoutineTarget['kind'], string> = {
+  workflow: 'Workflow',
+  agent: 'Agent',
+  skill: 'Skill',
+  panel: 'Panel',
+};
+
+interface TargetInfo {
+  kind: RoutineTarget['kind'];
+  icon: PrimitiveKind;
+  kindLabel: string;
+  label: string;
+}
+
+/**
+ * Display identity of a routine's target. Workflow refs are template ids and
+ * resolve to the template's name; primitive refs (persona name, skill command
+ * name, panel name) are already human-readable handles.
+ */
+export function describeTarget(target: RoutineTarget, templates: WorkflowTemplate[]): TargetInfo {
+  const label = target.kind === 'workflow'
+    ? templates.find((t) => t.id === target.ref)?.name ?? target.ref
+    : target.ref;
+  return { kind: target.kind, icon: TARGET_PRIMITIVE_KIND[target.kind], kindLabel: TARGET_KIND_LABEL[target.kind], label };
+}
 
 /** Relative age of a timestamp — "2h ago", "3d ago". */
 export function formatRelativeTime(dateStr: string): string {
@@ -103,7 +137,7 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
     setActiveTab('overview');
   }, [routine.id]);
 
-  const template = templates.find((t) => t.id === routine.templateId);
+  const targetInfo = describeTarget(routine.target, templates);
 
   // The run that deserves the "Current Run" tab: still moving, else the latest.
   const current = runs.find(({ run }) => isActiveStatus(run.status)) ?? runs[0] ?? null;
@@ -146,10 +180,10 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
           </span>
         </div>
 
-        {/* The workflow this routine runs, with the canonical workflow glyph. */}
+        {/* The primitive this routine runs, with its canonical glyph. */}
         <span className={cn('inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs', tint('purple'))}>
-          <PrimitiveIcon kind="workflow" size={12} tinted={false} className="shrink-0" />
-          {template ? template.name : routine.templateId}
+          <PrimitiveIcon kind={targetInfo.icon} size={12} tinted={false} className="shrink-0" />
+          {targetInfo.label}
         </span>
         {!routine.enabled && (
           <span className={cn('inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-xs', tint('gray'))}>paused</span>
@@ -242,10 +276,10 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
       ) : (
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'overview' && (
-            <OverviewTab routine={routine} template={template} runs={runs} onNavigate={setActiveTab} />
+            <OverviewTab routine={routine} targetInfo={targetInfo} runs={runs} onNavigate={setActiveTab} />
           )}
           {activeTab === 'history' && <HistoryTab history={history} />}
-          {activeTab === 'config' && <ConfigTab routine={routine} template={template} />}
+          {activeTab === 'config' && <ConfigTab routine={routine} targetInfo={targetInfo} />}
         </div>
       )}
     </div>
@@ -267,9 +301,9 @@ function CardHeader({ hue, label }: { hue: TintHue; label: string }) {
  * The routine's home — same anatomy as the Repository Overview: a row of stat
  * cards, then redirect tables toward the tabs that hold the full story.
  */
-function OverviewTab({ routine, template, runs, onNavigate }: {
+function OverviewTab({ routine, targetInfo, runs, onNavigate }: {
   routine: Routine;
-  template: WorkflowTemplate | undefined;
+  targetInfo: TargetInfo;
   runs: RoutineRunDetail[];
   onNavigate: (tab: Tab) => void;
 }) {
@@ -400,10 +434,10 @@ function OverviewTab({ routine, template, runs, onNavigate }: {
             </button>
           </div>
           <div className="flex flex-col gap-2.5 px-5 py-4 text-xs">
-            <ConfigRow label="Workflow">
+            <ConfigRow label={targetInfo.kindLabel}>
               <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5', tint('purple'))}>
-                <PrimitiveIcon kind="workflow" size={12} tinted={false} className="shrink-0" />
-                {template ? template.name : routine.templateId}
+                <PrimitiveIcon kind={targetInfo.icon} size={12} tinted={false} className="shrink-0" />
+                {targetInfo.label}
               </span>
             </ConfigRow>
             <ConfigRow label="Trigger">
@@ -455,6 +489,7 @@ function OverviewTab({ routine, template, runs, onNavigate }: {
             >
               <span className="shrink-0 rounded border border-[var(--theme-border)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">{d.type}</span>
               <span className="truncate text-[13.5px] font-semibold text-[var(--theme-text-primary)]">{d.title}</span>
+              <span className="ml-auto shrink-0 text-xs text-[var(--theme-text-muted)]">{formatRelativeTime(d.createdAt)}</span>
             </div>
           ))}
         </div>
@@ -547,7 +582,7 @@ function HistoryTab({ history }: { history: RoutineRunDetail[] }) {
 }
 
 /** The full recipe, read-only — editing opens the shared RoutineEditor modal. */
-function ConfigTab({ routine, template }: { routine: Routine; template: WorkflowTemplate | undefined }) {
+function ConfigTab({ routine, targetInfo }: { routine: Routine; targetInfo: TargetInfo }) {
   const templates = useWorkflowTemplateStore((s) => s.templates);
   const update = useRoutineStore((s) => s.update);
   const [editing, setEditing] = useState(false);
@@ -585,10 +620,10 @@ function ConfigTab({ routine, template }: { routine: Routine; template: Workflow
           <ConfigRow label="Description">
             <span className="text-[var(--theme-text-secondary)]">{routine.description || <span className="text-[var(--theme-text-muted)]">none</span>}</span>
           </ConfigRow>
-          <ConfigRow label="Workflow">
+          <ConfigRow label={targetInfo.kindLabel}>
             <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5', tint('purple'))}>
-              <PrimitiveIcon kind="workflow" size={12} tinted={false} className="shrink-0" />
-              {template ? template.name : routine.templateId}
+              <PrimitiveIcon kind={targetInfo.icon} size={12} tinted={false} className="shrink-0" />
+              {targetInfo.label}
             </span>
           </ConfigRow>
           <ConfigRow label="Trigger">
