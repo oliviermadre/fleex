@@ -14,6 +14,8 @@ export class PanelStepExecutor implements StepExecutor {
     const ctxPrompt = composeWorkflowContextPrompt({
       workflowName: input.workflowContext.workflowName,
       stepName: input.workflowContext.stepName,
+      workflowRunId: input.workflowRunId,
+      stepRunId: input.stepRunId,
       outputSchema: input.step.outputSchema,
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,

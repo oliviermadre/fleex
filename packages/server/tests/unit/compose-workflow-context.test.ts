@@ -113,3 +113,30 @@ describe('composeWorkflowContextPrompt', () => {
     expect(out).toContain('terminal');
   });
 });
+
+describe('composeWorkflowContextPrompt — step identity', () => {
+  // WHY: a step that produced a 70k-char artifact used to fail outright on the
+  // output token limit, because `structuredOutput` was the only way to emit a
+  // deliverable. Knowing its own ids lets the agent write the content to disk
+  // and attach it with `--file`, so it never passes through the model.
+  it('gives the step its own ids and the CLI escape hatch for bulky artifacts', () => {
+    const out = composeWorkflowContextPrompt({
+      workflowName: 'Veille', stepName: 'Résumé',
+      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+      workflowRunId: 'run-abc', stepRunId: 'sr-def',
+    });
+    expect(out).toContain('run-abc');
+    expect(out).toContain('fleex workflow step deliverable add run-abc sr-def');
+    expect(out).toContain('--file');
+  });
+
+  it('says nothing about identity when the caller has no ids to give', () => {
+    // Callers outside a workflow run (tests, one-off compositions) must not get
+    // a CLI command with holes in it.
+    const out = composeWorkflowContextPrompt({
+      workflowName: 'Veille', stepName: 'Résumé',
+      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+    });
+    expect(out).not.toContain('fleex workflow step deliverable add');
+  });
+});

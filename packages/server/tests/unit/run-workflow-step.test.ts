@@ -148,6 +148,46 @@ describe('RunWorkflowStepUseCase', () => {
     }));
   });
 
+  // WHY: the run graph renders a deliverable on the node that produced it. That
+  // is only possible if the deliverable carries the id of the *step run* that
+  // made it — with the run id alone the UI has to guess by title and recency,
+  // and a retried step then shows a discarded attempt's artifact as its output.
+  it('anchors the deliverable to the step run that produced it', async () => {
+    const run = makeRun();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { save: vi.fn(), getLatestForStep: vi.fn().mockResolvedValue(null), getByWorkflowRun: vi.fn().mockResolvedValue([]) };
+    const agentExecutor = { execute: vi.fn().mockResolvedValue({
+      output: {
+        schemaFields: {}, result: 'ok',
+        deliverable: { type: 'report', title: 'T', markdown: '# T', status: 'final' },
+      },
+      executionId: 'exec-1',
+    }) };
+    const eventBus = { emit: vi.fn() };
+
+    const artifacts = makeArtifactStubs();
+    const uc = new RunWorkflowStepUseCase({
+      runStore: runStore as never, stepRunStore: stepRunStore as never,
+      orchestrator: { runStep: vi.fn() } as never, eventBus: eventBus as never,
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
+    });
+
+    await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
+
+    const savedStepRun = stepRunStore.save.mock.calls[0]?.[0] as { id: string };
+    expect(savedStepRun.id).toBeTruthy();
+    expect(artifacts.submitDeliverable.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ stepRunId: savedStepRun.id }),
+    );
+    // The same id travels on the event, so the graph refreshes the right node.
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'deliverable.created', stepRunId: savedStepRun.id }),
+    );
+  });
+
   // WHY: the read-side (Comments tab deliverable chips + inline Human Gate card)
   // derives artifacts from an explicit execution→comment/deliverable FK instead of
   // pattern-matching on agentName. The orchestrator MUST stamp that FK with the

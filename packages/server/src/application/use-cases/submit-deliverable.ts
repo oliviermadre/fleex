@@ -24,6 +24,12 @@ export class SubmitDeliverableUseCase {
      */
     ticketId?: string | null;
     workflowRunId?: string | null;
+    /**
+     * The step run that produced it. Set alongside `workflowRunId` (and
+     * alongside `ticketId` for a ticket-anchored workflow) so the run graph can
+     * place the artifact on the node that emitted it.
+     */
+    stepRunId?: string | null;
     agentName: string;
     type: DeliverableType;
     title: string;
@@ -49,6 +55,7 @@ export class SubmitDeliverableUseCase {
       id: randomUUID(),
       ticketId: params.ticketId ?? null,
       workflowRunId: params.workflowRunId ?? null,
+      stepRunId: params.stepRunId ?? null,
       agentName: params.agentName,
       type: params.type,
       title: params.title,

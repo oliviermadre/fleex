@@ -27,6 +27,7 @@ import migration025 from './migrations/024_add_execution_output_refs.js';
 import migration026 from './migrations/025_add_routines.js';
 import migration027 from './migrations/026_add_workflow_run_parent.js';
 import migration028 from './migrations/027_routine_primitive_targets.js';
+import migration029 from './migrations/028_deliverable_step_anchor.js';
 
 /**
  * Ordered array of all migrations.
@@ -61,4 +62,5 @@ export const allMigrations: Migration[] = [
   migration026,
   migration027,
   migration028,
+  migration029,
 ];

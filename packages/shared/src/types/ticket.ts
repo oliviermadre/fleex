@@ -437,6 +437,13 @@ export interface TicketDeliverable {
   readonly ticketId: string | null;
   /** Set instead of `ticketId` for routine runs — the run is the anchor. */
   readonly workflowRunId?: string | null;
+  /**
+   * The step run that produced this deliverable. Narrower than `workflowRunId`:
+   * it is what lets the run graph render the artifact on the node that emitted
+   * it instead of guessing by title. Null on rows written before the step
+   * anchor existed, and on deliverables created outside a workflow.
+   */
+  readonly stepRunId?: string | null;
   readonly agentName: string;
   readonly type: DeliverableType;
   readonly title: string;

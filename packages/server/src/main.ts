@@ -146,6 +146,9 @@ async function main() {
       resolveAmbiguousRoute: container.resolveAmbiguousRoute,
       retryStep: container.retryStep,
       cancelWorkflowRun: container.cancelWorkflowRun,
+      submitDeliverable: container.submitDeliverable,
+      deliverableStore: container.deliverableStore,
+      eventBus: container.eventBus,
       authorNameResolver: () => 'workflow-trigger',
     }));
   } else {

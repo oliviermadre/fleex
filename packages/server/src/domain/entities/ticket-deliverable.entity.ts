@@ -19,12 +19,19 @@ export class TicketDeliverableEntity {
      * run, which is reachable from the routine detail screen.
      */
     public readonly workflowRunId: string | null = null,
+    /**
+     * The step run that produced it. Narrower than `workflowRunId` and the only
+     * anchor precise enough for the run graph to place the artifact on the node
+     * that emitted it. Null outside a workflow, and on pre-anchor rows.
+     */
+    public readonly stepRunId: string | null = null,
   ) {}
 
   static create(params: {
     id: string;
     ticketId?: string | null;
     workflowRunId?: string | null;
+    stepRunId?: string | null;
     agentName: string;
     type: DeliverableType;
     title: string;
@@ -46,6 +53,7 @@ export class TicketDeliverableEntity {
       now,
       now,
       params.workflowRunId ?? null,
+      params.stepRunId ?? null,
     );
   }
 
@@ -83,6 +91,7 @@ export class TicketDeliverableEntity {
       id: this.id,
       ticketId: this.ticketId,
       workflowRunId: this.workflowRunId,
+      stepRunId: this.stepRunId,
       agentName: this.agentName,
       type: this.type,
       title: this.title,

@@ -7,10 +7,11 @@ const DIM = chalk.dim;
 
 const def: CommandDef = {
   name: 'step',
-  description: 'Control individual step runs in a workflow run (retry)',
+  description: 'Control individual step runs in a workflow run (retry, deliverable)',
   isParent: true,
   extraHelp: `\n${SECTION('Examples:')}
   ${DIM('$')} fleex workflow step retry <runId> <stepRunId>   ${DIM('# re-run a failed step')}
+  ${DIM('$')} fleex workflow step deliverable add <runId> <stepRunId> --title "…" --file ./out.md
 `,
   action: (...args: unknown[]) => {
     const cmd = args[args.length - 1] as Command;

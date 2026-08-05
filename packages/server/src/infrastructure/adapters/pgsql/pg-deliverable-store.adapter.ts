@@ -41,6 +41,14 @@ export class PgDeliverableStore implements DeliverableStorePort {
     return rows.map(rowToDeliverable);
   }
 
+  async getByStepRun(stepRunId: string): Promise<TicketDeliverableEntity[]> {
+    const { rows } = await this.db.query(
+      'SELECT * FROM deliverables WHERE step_run_id = $1 ORDER BY created_at ASC',
+      [stepRunId],
+    );
+    return rows.map(rowToDeliverable);
+  }
+
   async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
     const { rows } = await this.db.query(
       'SELECT * FROM deliverables WHERE ticket_id = $1 AND type = $2 LIMIT 1',
@@ -61,8 +69,8 @@ export class PgDeliverableStore implements DeliverableStorePort {
     await this.db.query(
       `INSERT INTO deliverables (
         id, ticket_id, agent_name, type, title, content,
-        version, status, mention_id, created_at, updated_at, workflow_run_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        version, status, mention_id, created_at, updated_at, workflow_run_id, step_run_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (id) DO UPDATE SET
         ticket_id = $2,
         agent_name = $3,
@@ -74,7 +82,8 @@ export class PgDeliverableStore implements DeliverableStorePort {
         mention_id = $9,
         created_at = $10,
         updated_at = $11,
-        workflow_run_id = $12`,
+        workflow_run_id = $12,
+        step_run_id = $13`,
       [
         deliverable.id,
         deliverable.ticketId,
@@ -88,6 +97,7 @@ export class PgDeliverableStore implements DeliverableStorePort {
         deliverable.createdAt.toISOString(),
         deliverable.updatedAt.toISOString(),
         deliverable.workflowRunId,
+        deliverable.stepRunId,
       ],
     );
   }
@@ -111,5 +121,6 @@ function rowToDeliverable(row: Record<string, unknown>): TicketDeliverableEntity
     new Date(row.created_at as string),
     new Date(row.updated_at as string),
     (row.workflow_run_id as string) ?? null,
+    (row.step_run_id as string) ?? null,
   );
 }

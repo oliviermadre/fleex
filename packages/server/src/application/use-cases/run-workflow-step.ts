@@ -127,7 +127,7 @@ export class RunWorkflowStepUseCase {
 
       // 5. Handle result
       if (result.output.result === 'needs_review') {
-        await this.persistStepArtifacts(run, step, result.output, executionId);
+        await this.persistStepArtifacts(run, step, stepRun.id, result.output, executionId);
         stepRun.markNeedsReview({ output: result.output, executionId });
         run.block();
         await this.deps.stepRunStore.save(stepRun);
@@ -146,7 +146,7 @@ export class RunWorkflowStepUseCase {
       // Artifacts are persisted before any branching: whatever the routing turns
       // out to be, the step *did* produce that deliverable/comment and the human
       // arbitrating an ambiguity needs to read it.
-      await this.persistStepArtifacts(run, step, result.output, executionId);
+      await this.persistStepArtifacts(run, step, stepRun.id, result.output, executionId);
 
       // 6b. Several edges matched — the engine can't arbitrate a config problem.
       // Park the run and let a human pick, instead of silently taking the oldest.
@@ -221,6 +221,7 @@ export class RunWorkflowStepUseCase {
   private async persistStepArtifacts(
     run: WorkflowRunEntity,
     step: WorkflowStep,
+    stepRunId: string,
     output: StepOutput,
     executionId: string | undefined,
   ): Promise<void> {
@@ -234,6 +235,9 @@ export class RunWorkflowStepUseCase {
         // Routine runs have no ticket: the deliverable hangs off the run, which
         // the routine detail screen reads back.
         workflowRunId: run.ticketId ? null : run.id,
+        // Always set, ticket run or not: the run graph places the artifact on
+        // the node that produced it rather than guessing from the title.
+        stepRunId,
         agentName: author,
         type: output.deliverable.type,
         title: output.deliverable.title,
@@ -249,6 +253,7 @@ export class RunWorkflowStepUseCase {
         deliverableId: deliverable.id,
         ticketId: run.ticketId,
         workflowRunId: run.ticketId ? null : run.id,
+        stepRunId,
         agentName: author,
         status: (output.deliverable.status ?? 'final') as 'draft' | 'final',
         title: deliverable.title,

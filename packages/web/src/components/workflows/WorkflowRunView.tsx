@@ -72,25 +72,31 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
     return m;
   }, [stepRuns]);
 
-  // Deliverable → producing step. The only linkage is the `agentName` contract
-  // written by persistStepArtifacts — `workflow:{name} → {step name}` — which
-  // is already what the ticket Deliverables tab renders verbatim. Parsed here
-  // rather than persisted as a FK: the string IS the contract.
+  // Deliverable → producing step. `stepRunId` is the real edge and is used
+  // whenever it is set: it survives a step rename and points at the *attempt*,
+  // not just the step. Rows written before the anchor existed (and any produced
+  // outside a step run) still only carry the `agentName` contract from
+  // persistStepArtifacts — `workflow:{name} → {step name}` — so that parse stays
+  // as the fallback rather than dropping historical deliverables off the graph.
   const deliverablesByStepId = useMemo(() => {
+    const stepIdByStepRun = new Map(stepRuns.map((sr) => [sr.id, sr.stepId]));
     const idByName = new Map<string, string>();
     for (const s of run.templateSnapshot.steps) {
       if (!idByName.has(s.name)) idByName.set(s.name, s.id);
     }
     const m = new Map<string, TicketDeliverable[]>();
     for (const d of deliverables) {
-      const sep = d.agentName.lastIndexOf(' → ');
-      if (sep < 0) continue;
-      const stepId = idByName.get(d.agentName.slice(sep + 3));
+      let stepId = d.stepRunId ? stepIdByStepRun.get(d.stepRunId) : undefined;
+      if (!stepId) {
+        const sep = d.agentName.lastIndexOf(' → ');
+        if (sep < 0) continue;
+        stepId = idByName.get(d.agentName.slice(sep + 3));
+      }
       if (!stepId) continue;
       m.set(stepId, [...(m.get(stepId) ?? []), d]);
     }
     return m;
-  }, [run.templateSnapshot.steps, deliverables]);
+  }, [run.templateSnapshot.steps, stepRuns, deliverables]);
 
   const nodes = useMemo(
     () =>
@@ -160,6 +166,7 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
       splitStepDeliverables(
         (selectedStep ? deliverablesByStepId.get(selectedStep.id) : undefined) ?? [],
         selectedStepRun?.output?.deliverable?.title,
+        selectedStepRun?.id,
       ),
     [selectedStep, selectedStepRun, deliverablesByStepId],
   );

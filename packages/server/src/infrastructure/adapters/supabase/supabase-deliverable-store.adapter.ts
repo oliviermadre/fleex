@@ -8,6 +8,7 @@ interface DeliverableRow {
   id: string;
   ticket_id: string | null;
   workflow_run_id: string | null;
+  step_run_id: string | null;
   agent_name: string;
   type: DeliverableType;
   title: string;
@@ -33,6 +34,7 @@ function rowToEntity(r: DeliverableRow): TicketDeliverableEntity {
     new Date(r.created_at),
     new Date(r.updated_at),
     r.workflow_run_id ?? null,
+    r.step_run_id ?? null,
   );
 }
 
@@ -105,6 +107,16 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     return (data as DeliverableRow[]).map(rowToEntity);
   }
 
+  async getByStepRun(stepRunId: string): Promise<TicketDeliverableEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('deliverables')
+      .select('*')
+      .eq('step_run_id', stepRunId)
+      .order('created_at');
+    if (error) throw new Error(`SupabaseDeliverableStore.getByStepRun failed: ${error.message}`);
+    return (data as DeliverableRow[]).map(rowToEntity);
+  }
+
   async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
     const { data, error } = await this.conn.client
       .from('deliverables')
@@ -131,6 +143,7 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
       id: deliverable.id,
       ticket_id: deliverable.ticketId,
       workflow_run_id: deliverable.workflowRunId,
+      step_run_id: deliverable.stepRunId,
       agent_name: deliverable.agentName,
       type: deliverable.type,
       title: deliverable.title,

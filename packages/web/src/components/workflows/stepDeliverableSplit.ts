@@ -13,15 +13,36 @@ export interface StepDeliverableSplit {
  * there is no way to tell what the run just produced from what a discarded
  * attempt produced two retries ago.
  *
- * The only handle available is the title carried by the latest attempt's
- * output: deliverables are not linked to a step *run*, only to a step. Ties are
+ * `stepRunId` answers that exactly: it names the attempt. It is used whenever
+ * the deliverable carries one.
+ *
+ * The title fallback is for rows written before that anchor existed, where the
+ * only handle is the title carried by the latest attempt's output. Ties are
  * broken by recency because retried attempts routinely reuse the exact same
  * title, and the most recent one is by definition the latest attempt's.
  */
 export function splitStepDeliverables(
   all: TicketDeliverable[],
   latestTitle: string | null | undefined,
+  latestStepRunId?: string | null,
 ): StepDeliverableSplit {
+  if (latestStepRunId) {
+    // A step run can hold several deliverables (the step's own output plus any
+    // the agent attached from the CLI); the newest is the one to surface.
+    const anchored = all
+      .filter((d) => d.stepRunId === latestStepRunId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (anchored) {
+      return {
+        latestDeliverable: anchored,
+        previousDeliverables: all.filter((d) => d.id !== anchored.id),
+      };
+    }
+    // No anchored row: either the latest attempt produced nothing, or this
+    // step predates the anchor. Fall through to the title heuristic, which
+    // returns the whole list as history when it matches nothing.
+  }
+
   if (!latestTitle) return { latestDeliverable: undefined, previousDeliverables: all };
 
   const newestMatch = all

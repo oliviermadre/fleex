@@ -22,6 +22,8 @@ import type {
   WorkflowStep,
   WorkflowEdge,
   TicketLink,
+  Routine,
+  WorkflowRun,
 } from '@fleex/shared';
 import { frontmatter, type FmPair } from './frontmatter.js';
 import { dayOf, firstLine, flatten, maxIso, summarizeOneLine, toZ } from './format.js';
@@ -40,6 +42,18 @@ export interface OkfInput {
   panels: Panel[];
   skills: Skill[];
   workflows: WorkflowTemplate[];
+  /**
+   * Routines — durable, ticket-less recipes. Without them (and without the
+   * deliverables their runs produce, below) everything an agent does outside a
+   * ticket is invisible to the exported knowledge base.
+   * Optional so pre-routines callers and fixtures keep working.
+   */
+  routines?: Routine[];
+  /**
+   * Routine-anchored runs only. They are not exported as documents; they are
+   * the join that maps a run-anchored deliverable back to its routine.
+   */
+  routineRuns?: WorkflowRun[];
 }
 
 export interface OkfFile {
@@ -101,6 +115,7 @@ export function buildBundle(input: OkfInput): OkfFile[] {
   const panels = [...input.panels].sort(cmpName((p) => p.name, (p) => p.id));
   const skills = [...input.skills].sort(cmpName((s) => s.commandName, (s) => s.id));
   const workflows = [...input.workflows].sort(cmpName((w) => w.slug, (w) => w.id));
+  const routines = [...(input.routines ?? [])].sort(cmpName((r) => r.slug, (r) => r.id));
 
   // 2. Deterministic slugs.
   const boardSlug = assignSlugs(boards, (b) => b.id, (b) => b.name);
@@ -109,6 +124,7 @@ export function buildBundle(input: OkfInput): OkfFile[] {
   const panelSlug = assignSlugs(panels, (p) => p.id, (p) => p.name);
   const skillSlug = assignSlugs(skills, (s) => s.id, (s) => s.commandName);
   const workflowSlug = assignSlugs(workflows, (w) => w.id, (w) => w.slug);
+  const routineSlug = assignSlugs(routines, (r) => r.id, (r) => r.slug);
 
   const ticketDir = new Map<string, string>(); // ticketId → `<NNNN>-<slug>`
   for (const t of tickets) {
@@ -135,6 +151,33 @@ export function buildBundle(input: OkfInput): OkfFile[] {
   for (const list of deliverablesByTicket.values()) {
     list.forEach((d, i) => {
       deliverableMeta.set(d.id, { ordinal: pad2(i + 1), slug: slugifyOr(d.title) });
+    });
+  }
+
+  // Run-anchored deliverables: produced by a routine run, so they have no
+  // ticket to hang off and the ticket grouping above drops them. Map each back
+  // to its routine through the run it came from; a deliverable whose run is
+  // gone (run pruned, routine deleted) has no home in the bundle and is skipped
+  // rather than filed under an invented one.
+  const routineIdByRun = new Map(
+    (input.routineRuns ?? [])
+      .filter((r): r is WorkflowRun & { routineId: string } => !!r.routineId)
+      .map((r) => [r.id, r.routineId] as const),
+  );
+  const knownRoutineIds = new Set(routines.map((r) => r.id));
+  const deliverablesByRoutine = groupBy(
+    input.deliverables.filter((d) => {
+      if (d.ticketId !== null || !d.workflowRunId) return false;
+      const routineId = routineIdByRun.get(d.workflowRunId);
+      return !!routineId && knownRoutineIds.has(routineId);
+    }),
+    (d) => routineIdByRun.get(d.workflowRunId!)!,
+  );
+  for (const list of deliverablesByRoutine.values()) list.sort(cmpCreated());
+  const routineDeliverableMeta = new Map<string, { ordinal: string; slug: string }>();
+  for (const list of deliverablesByRoutine.values()) {
+    list.forEach((d, i) => {
+      routineDeliverableMeta.set(d.id, { ordinal: pad2(i + 1), slug: slugifyOr(d.title) });
     });
   }
 
@@ -516,31 +559,109 @@ export function buildBundle(input: OkfInput): OkfFile[] {
     );
   }
 
+  // ── Routines (one folder each, like tickets) ──
+  //
+  // A routine is the ticket-less counterpart of a ticket: a durable subject
+  // that keeps producing artifacts. It gets a folder rather than a flat file
+  // because, like a ticket, it owns deliverables.
+  for (const routine of routines) {
+    const slug = routineSlug.get(routine.id)!;
+    const routineDeliverables = deliverablesByRoutine.get(routine.id) ?? [];
+    const runCount = (input.routineRuns ?? []).filter((r) => r.routineId === routine.id).length;
+
+    const deliverablesBody = routineDeliverables
+      .map((d) => {
+        const meta = routineDeliverableMeta.get(d.id)!;
+        return `- [${d.title}](./deliverables/${meta.ordinal}-${meta.slug}.md) — ${d.type}, ${d.status}, v${d.version}`;
+      })
+      .join('\n');
+
+    files.push(
+      conceptFile(
+        `routines/${slug}/routine.md`,
+        [
+          ['type', 'Fleex Routine'],
+          ['title', withEmoji(routine.emoji, routine.name)],
+          ['description', summarizeOneLine(routine.description)],
+          ['tags', dedupe(['routine', routine.target.kind, routine.trigger.kind])],
+          ['timestamp', toZ(maxIso(routine.updatedAt, routine.createdAt))],
+          ['fleex_id', routine.id],
+          ['fleex_kind', 'routine'],
+          ['fleex_slug', routine.slug],
+          ['fleex_enabled', routine.enabled],
+          ['fleex_target_kind', routine.target.kind],
+          ['fleex_target_ref', routine.target.ref],
+          ['fleex_trigger', renderTrigger(routine.trigger)],
+          ['fleex_runs', runCount],
+        ],
+        sections(
+          heading('Description', routine.description ?? ''),
+          heading('Brief', routine.subject.brief ?? ''),
+          heading(
+            'Repositories',
+            routine.subject.repos.map((r) => `- ${r}`).join('\n'),
+          ),
+          heading('Deliverables', deliverablesBody),
+        ),
+      ),
+    );
+
+    for (const d of routineDeliverables) {
+      const meta = routineDeliverableMeta.get(d.id)!;
+      files.push(
+        conceptFile(
+          `routines/${slug}/deliverables/${meta.ordinal}-${meta.slug}.md`,
+          [
+            ['type', 'Fleex Deliverable'],
+            ['title', d.title],
+            ['description', `${d.type} by ${d.agentName} (v${d.version}, ${d.status})`],
+            ['tags', dedupe(['deliverable', d.type, d.status])],
+            ['timestamp', toZ(maxIso(d.updatedAt, d.createdAt))],
+            ['fleex_id', d.id],
+            ['fleex_kind', 'deliverable'],
+            ['fleex_deliverable_type', d.type],
+            ['fleex_version', d.version],
+            ['fleex_status', d.status],
+            ['fleex_routine', slug],
+            ['fleex_agent', d.agentName],
+          ],
+          sections(`> Produit par la routine [${routine.name}](../routine.md).`, d.content),
+        ),
+      );
+    }
+  }
+
   // ── index.md files ──
-  files.push(...buildIndexes({ boards, epics, tickets, personas, panels, skills, workflows }, {
+  files.push(...buildIndexes({ boards, epics, tickets, personas, panels, skills, workflows, routines }, {
     boardSlug,
     epicSlug,
     personaSlug,
     panelSlug,
     skillSlug,
     workflowSlug,
+    routineSlug,
     ticketDir,
     publicCommentsByTicket,
     deliverablesByTicket,
     deliverableMeta,
+    deliverablesByRoutine,
+    routineDeliverableMeta,
   }));
 
   // ── log.md ──
-  files.push(buildLog({ boards, epics, tickets, personas, panels, skills, workflows }, {
+  files.push(buildLog({ boards, epics, tickets, personas, panels, skills, workflows, routines }, {
     boardSlug,
     epicSlug,
     personaSlug,
     panelSlug,
     skillSlug,
     workflowSlug,
+    routineSlug,
     ticketDir,
     deliverablesByTicket,
     deliverableMeta,
+    deliverablesByRoutine,
+    routineDeliverableMeta,
   }));
 
   // Deterministic file ordering (does not affect bytes, but keeps the plan stable).
@@ -557,10 +678,13 @@ interface SlugMaps {
   panelSlug: Map<string, string>;
   skillSlug: Map<string, string>;
   workflowSlug: Map<string, string>;
+  routineSlug: Map<string, string>;
   ticketDir: Map<string, string>;
   publicCommentsByTicket?: Map<string, TicketComment[]>;
   deliverablesByTicket: Map<string, TicketDeliverable[]>;
   deliverableMeta: Map<string, { ordinal: string; slug: string }>;
+  deliverablesByRoutine: Map<string, TicketDeliverable[]>;
+  routineDeliverableMeta: Map<string, { ordinal: string; slug: string }>;
 }
 
 interface SortedCollections {
@@ -571,6 +695,7 @@ interface SortedCollections {
   panels: Panel[];
   skills: Skill[];
   workflows: WorkflowTemplate[];
+  routines: Routine[];
 }
 
 function buildIndexes(c: SortedCollections, m: SlugMaps): OkfFile[] {
@@ -591,6 +716,18 @@ function buildIndexes(c: SortedCollections, m: SlugMaps): OkfFile[] {
       'Tickets',
       c.tickets
         .map((t) => bullet(t.title, `tickets/${m.ticketDir.get(t.id)}/ticket.md`, summarizeOneLine(t.description)))
+        .join('\n'),
+    ),
+    heading(
+      'Routines',
+      c.routines
+        .map((r) =>
+          bullet(
+            withEmoji(r.emoji, r.name),
+            `routines/${m.routineSlug.get(r.id)}/routine.md`,
+            summarizeOneLine(r.description),
+          ),
+        )
         .join('\n'),
     ),
     heading(
@@ -653,6 +790,41 @@ function buildIndexes(c: SortedCollections, m: SlugMaps): OkfFile[] {
     }
   }
 
+  // routines indexes — emitted only when there are routines, so a workspace
+  // that uses none keeps a byte-identical bundle to before.
+  if (c.routines.length > 0) {
+    files.push(plainFile('routines/index.md', listIndex('Routines', c.routines.map((r) => ({
+      title: withEmoji(r.emoji, r.name),
+      url: `${m.routineSlug.get(r.id)}/routine.md`,
+      desc: summarizeOneLine(r.description),
+    })))));
+
+    for (const r of c.routines) {
+      const slug = m.routineSlug.get(r.id)!;
+      const deliverables = m.deliverablesByRoutine.get(r.id) ?? [];
+      const entries: IndexEntry[] = [{ title: r.name, url: 'routine.md', desc: 'Routine concept' }];
+      if (deliverables.length > 0) {
+        entries.push({ title: 'Deliverables', url: 'deliverables/', desc: `${deliverables.length} deliverables` });
+      }
+      files.push(plainFile(`routines/${slug}/index.md`, listIndex(withEmoji(r.emoji, r.name), entries)));
+
+      if (deliverables.length > 0) {
+        files.push(
+          plainFile(
+            `routines/${slug}/deliverables/index.md`,
+            listIndex(
+              'Deliverables',
+              deliverables.map((d) => {
+                const meta = m.routineDeliverableMeta.get(d.id)!;
+                return { title: d.title, url: `${meta.ordinal}-${meta.slug}.md`, desc: `${d.type}, ${d.status}` };
+              }),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   // agents indexes
   files.push(plainFile('agents/index.md', listIndex('Agents', [
     { title: 'Personas', url: 'personas/', desc: 'agent personas' },
@@ -704,6 +876,14 @@ function buildLog(c: SortedCollections, m: SlugMaps): OkfFile {
   for (const p of c.panels) add(p.createdAt, p.id, p.displayName || p.name, `/agents/panels/${m.panelSlug.get(p.id)}.md`);
   for (const s of c.skills) add(s.createdAt, s.id, s.displayName || s.name, `/agents/skills/${m.skillSlug.get(s.id)}.md`);
   for (const w of c.workflows) add(w.createdAt, w.id, withEmoji(w.emoji, w.name), `/agents/workflows/${m.workflowSlug.get(w.id)}.md`);
+  for (const r of c.routines) {
+    const slug = m.routineSlug.get(r.id)!;
+    add(r.createdAt, r.id, withEmoji(r.emoji, r.name), `/routines/${slug}/routine.md`);
+    for (const d of m.deliverablesByRoutine.get(r.id) ?? []) {
+      const meta = m.routineDeliverableMeta.get(d.id)!;
+      add(d.createdAt, d.id, d.title, `/routines/${slug}/deliverables/${meta.ordinal}-${meta.slug}.md`);
+    }
+  }
 
   // Group by day, newest day first; within a day order by (createdAt, id).
   const byDay = new Map<string, LogItem[]>();
@@ -744,6 +924,18 @@ function bullet(title: string, url: string | null, desc?: string): string {
 function withEmoji(emoji: string | null | undefined, name: string): string {
   const e = (emoji ?? '').trim();
   return e ? `${e} ${name}`.trim() : name.trim();
+}
+
+/** One-line, clock-free rendering of a routine trigger for the frontmatter. */
+function renderTrigger(t: Routine['trigger']): string {
+  switch (t.kind) {
+    case 'cron':
+      return `cron ${t.cron} (${t.timezone})`;
+    case 'once':
+      return `once ${t.runAt} (${t.timezone})`;
+    default:
+      return 'manual';
+  }
 }
 
 function pad2(n: number): string {

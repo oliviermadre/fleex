@@ -23,6 +23,8 @@ export class SkillStepExecutor implements StepExecutor {
     const workflowContextPrompt = composeWorkflowContextPrompt({
       workflowName: input.workflowContext.workflowName,
       stepName: input.workflowContext.stepName,
+      workflowRunId: input.workflowRunId,
+      stepRunId: input.stepRunId,
       outputSchema: input.step.outputSchema,
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,

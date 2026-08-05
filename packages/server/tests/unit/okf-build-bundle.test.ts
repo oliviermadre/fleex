@@ -11,6 +11,8 @@ import type {
   Panel,
   Skill,
   WorkflowTemplate,
+  Routine,
+  WorkflowRun,
 } from '@fleex/shared';
 
 // ── Fixture factories (only the fields buildBundle reads need to be realistic) ──
@@ -116,6 +118,29 @@ const persona = (over: Partial<AgentPersona> = {}): AgentPersona => ({
   ...over,
 });
 
+const routine = (over: Partial<Routine> = {}): Routine => ({
+  id: 'routine-1',
+  slug: 'veille-produit',
+  name: 'Veille produit',
+  emoji: '🔭',
+  description: 'Résume la veille hebdo.',
+  enabled: true,
+  target: { kind: 'agent', ref: 'builder' },
+  subject: { repos: ['fleex/fleex'], brief: 'Regarde les changelogs.' },
+  trigger: { kind: 'cron', cron: '0 9 * * 1', timezone: 'Europe/Paris' },
+  overlapPolicy: 'skip',
+  lastRunAt: null,
+  lastRunId: null,
+  nextRunAt: null,
+  createdAt: '2026-05-06T08:00:00.000Z',
+  updatedAt: '2026-05-06T09:00:00.000Z',
+  ...over,
+});
+
+/** Only `id` and `routineId` are read: a run is just the deliverable→routine join. */
+const routineRun = (id: string, routineId: string | null): WorkflowRun =>
+  ({ id, routineId }) as WorkflowRun;
+
 const emptyInput = (): OkfInput => ({
   boards: [],
   epics: [],
@@ -216,7 +241,19 @@ describe('buildBundle — conformance & determinism', () => {
     epics: [epic()],
     tickets: [ticket()],
     comments: [comment(), comment({ id: 'c-2', authorName: 'builder', authorType: 'agent', parentId: 'comment-1', body: 'On it.' })],
-    deliverables: [deliverable()],
+    routines: [routine()],
+    routineRuns: [routineRun('run-1', 'routine-1')],
+    deliverables: [
+      deliverable(),
+      deliverable({
+        id: 'deliv-r1',
+        ticketId: null,
+        workflowRunId: 'run-1',
+        title: 'Veille S19',
+        createdAt: '2026-05-06T10:00:00.000Z',
+        updatedAt: '2026-05-06T10:00:00.000Z',
+      }),
+    ],
     mentions: [
       {
         id: 'm-1',
@@ -336,5 +373,59 @@ describe('buildBundle — conformance & determinism', () => {
     expect(t).toContain('/epics/okf-export.md');
     expect(t).toContain('./discussion.md');
     expect(t).toContain('./deliverables/01-auth-spec.md');
+  });
+});
+
+describe('buildBundle — routines', () => {
+  it('exports routines as first-class concepts', () => {
+    // Before routines were loaded at all, a workspace could run its whole
+    // knowledge production through them and export nothing of it.
+    const files = fileMap({ ...emptyInput(), routines: [routine()] });
+    const path = 'routines/veille-produit/routine.md';
+    expect(files.has(path)).toBe(true);
+    const content = files.get(path)!;
+    expect(content).toMatch(/^---\ntype: Fleex Routine\n/);
+    expect(content).toContain('fleex_target_kind: agent');
+    expect(content).toContain('fleex_trigger: "cron 0 9 * * 1 (Europe/Paris)"');
+    expect(files.get('index.md')!).toContain('routines/veille-produit/routine.md');
+  });
+
+  it('exports a run-anchored deliverable under the routine that produced it', () => {
+    // The knowledge hole: these have no ticket, so the ticket grouping dropped
+    // them silently and the bundle lost every artifact a routine ever made.
+    const files = fileMap({
+      ...emptyInput(),
+      routines: [routine()],
+      routineRuns: [routineRun('run-1', 'routine-1')],
+      deliverables: [
+        deliverable({ id: 'd-r', ticketId: null, workflowRunId: 'run-1', title: 'Veille S19' }),
+      ],
+    });
+    const path = 'routines/veille-produit/deliverables/01-veille-s19.md';
+    expect(files.has(path)).toBe(true);
+    expect(files.get(path)!).toContain('](../routine.md)');
+    expect(files.get('routines/veille-produit/routine.md')!).toContain(
+      './deliverables/01-veille-s19.md',
+    );
+  });
+
+  it('skips a deliverable whose run or routine is gone rather than inventing a parent', () => {
+    const files = fileMap({
+      ...emptyInput(),
+      routines: [routine()],
+      routineRuns: [routineRun('run-1', 'routine-gone')],
+      deliverables: [
+        deliverable({ id: 'd-r', ticketId: null, workflowRunId: 'run-1', title: 'Orpheline' }),
+      ],
+    });
+    expect([...files.keys()].some((p) => p.includes('orpheline'))).toBe(false);
+  });
+
+  it('emits no routines section at all when the workspace has none', () => {
+    // Determinism guard: adding routines must leave an unrelated workspace's
+    // bundle byte-identical to what it produced before.
+    const files = fileMap({ ...emptyInput(), boards: [board()], tickets: [ticket()] });
+    expect([...files.keys()].some((p) => p.startsWith('routines/'))).toBe(false);
+    expect(files.get('index.md')!).not.toContain('Routines');
   });
 });

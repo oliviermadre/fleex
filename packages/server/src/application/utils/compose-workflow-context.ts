@@ -5,6 +5,16 @@ import { formatRunHistory, type RunHistoryEntry } from './run-history.js';
 export interface WorkflowContextInput {
   workflowName: string;
   stepName: string;
+  /**
+   * Identity of the current execution. Every agentic run — workflow, persona,
+   * skill or panel — is normalized to a workflow run with step runs before it
+   * reaches an executor, so these two ids always exist and always mean the same
+   * thing. Exposing them lets a step address itself from a tool (e.g. attach a
+   * large deliverable through the CLI instead of paying for it in output
+   * tokens). Optional so existing callers/tests keep compiling.
+   */
+  workflowRunId?: string;
+  stepRunId?: string;
   stepPrompt?: string;
   outputSchema: JsonSchema | undefined;
   outgoingEdges: {
@@ -33,6 +43,25 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
   parts.push('');
   parts.push(`You are executing step **${input.stepName}** of workflow **${input.workflowName}**.`);
   parts.push('');
+
+  // Self-identification. The main use is escaping the structured-output channel
+  // for bulky artifacts: emitting a large deliverable through `structuredOutput`
+  // means re-serializing the whole content as JSON output tokens, which is slow
+  // and can blow the output limit outright. `--file` reads from disk instead, so
+  // the content never passes through the model.
+  if (input.workflowRunId && input.stepRunId) {
+    parts.push(`**This step's identity** — run \`${input.workflowRunId}\`, step run \`${input.stepRunId}\`.`);
+    parts.push('');
+    parts.push(`Use them to attach an artifact to *this* step from the CLI instead of returning it in \`deliverable\`:`);
+    parts.push('');
+    parts.push('```bash');
+    parts.push(`fleex workflow step deliverable add ${input.workflowRunId} ${input.stepRunId} \\`);
+    parts.push(`  --title "…" --type report --status final --file ./path/to/content.md`);
+    parts.push('```');
+    parts.push('');
+    parts.push(`Prefer this whenever the content is long (a transcript, a full log, a generated file): write it to disk, then pass \`--file\`. Reserve the \`deliverable\` output field for short content. A deliverable added this way is attached to this step and shows on this node in the run graph — do not also return it in \`deliverable\`, or it will be recorded twice.`);
+    parts.push('');
+  }
 
   if (input.stepPrompt && input.stepPrompt.trim()) {
     parts.push(input.stepPrompt.trim());

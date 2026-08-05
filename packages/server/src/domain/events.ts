@@ -233,6 +233,8 @@ export interface DeliverableCreatedEvent extends DomainEvent {
   /** Null when the deliverable belongs to a routine run instead of a ticket. */
   ticketId: string | null;
   workflowRunId?: string | null;
+  /** The step run that produced it, so the run graph refreshes the right node. */
+  stepRunId?: string | null;
   agentName: string;
   status: 'draft' | 'final';
   /** Deliverable title — carried in the payload so consumers (e.g. audit-trail
