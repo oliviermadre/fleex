@@ -1,7 +1,58 @@
 import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliverable.entity.js';
-import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
+import type {
+  DeliverableStorePort,
+  DeliverableFacetCounts,
+  DeliverableQueryFilters,
+  DeliverableQueryOptions,
+  DeliverableQueryResult,
+} from '../../../application/ports/deliverable-store.port.js';
 import type { PgConnection } from './connection.js';
+import {
+  DELIVERABLE_SEARCH_VIEW,
+  likePattern,
+  originFromRow,
+  type DeliverableOriginColumns,
+} from '../deliverable-search.js';
+
+/** Facet dimension excluded from its own filter, so a facet list stays browsable. */
+type FacetDimension = 'type' | 'emitter' | 'status' | 'origin_kind';
+
+/**
+ * Build the shared WHERE clause. `except` drops one dimension's own filter so a
+ * facet list keeps showing its siblings once the user selects a value in it.
+ */
+function buildWhere(
+  filters: DeliverableQueryFilters,
+  except?: FacetDimension,
+): { sql: string; params: unknown[] } {
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  const add = (column: FacetDimension, values: string[] | undefined) => {
+    if (!values?.length || except === column) return;
+    params.push(values);
+    clauses.push(`${column} = ANY($${params.length}::text[])`);
+  };
+  add('type', filters.types);
+  add('emitter', filters.agentNames);
+  add('status', filters.statuses);
+  add('origin_kind', filters.originKinds);
+  if (filters.ticketId) {
+    params.push(filters.ticketId);
+    clauses.push(`ticket_id = $${params.length}`);
+  }
+  if (filters.search?.trim()) {
+    // Deliverable title, ticket title, or routine name — the three names a
+    // reader might remember a document by.
+    params.push(likePattern(filters.search));
+    const p = `$${params.length}`;
+    clauses.push(
+      `(LOWER(title) LIKE ${p} OR LOWER(COALESCE(ticket_title, '')) LIKE ${p}
+        OR LOWER(COALESCE(origin_routine_name, '')) LIKE ${p})`,
+    );
+  }
+  return { sql: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '', params };
+}
 
 export class PgDeliverableStore implements DeliverableStorePort {
   constructor(private readonly db: PgConnection) {}
@@ -31,6 +82,60 @@ export class PgDeliverableStore implements DeliverableStorePort {
   async getAll(): Promise<TicketDeliverableEntity[]> {
     const { rows } = await this.db.query('SELECT * FROM deliverables ORDER BY created_at ASC');
     return rows.map(rowToDeliverable);
+  }
+
+  async query(options: DeliverableQueryOptions): Promise<DeliverableQueryResult> {
+    const { sql: where, params } = buildWhere(options);
+    const countRes = await this.db.query(
+      `SELECT COUNT(*)::int AS count FROM ${DELIVERABLE_SEARCH_VIEW} ${where}`,
+      params,
+    );
+    const { rows } = await this.db.query(
+      `SELECT * FROM ${DELIVERABLE_SEARCH_VIEW} ${where} ORDER BY updated_at DESC, id DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, options.limit, options.offset],
+    );
+
+    const origins: DeliverableQueryResult['origins'] = {};
+    for (const row of rows) {
+      const origin = originFromRow(row as unknown as DeliverableOriginColumns);
+      if (origin) origins[row.id as string] = origin;
+    }
+    return {
+      items: rows.map(rowToDeliverable),
+      total: (countRes.rows[0]?.count as number) ?? 0,
+      origins,
+    };
+  }
+
+  async getFacets(filters: DeliverableQueryFilters = {}): Promise<DeliverableFacetCounts> {
+    const facet = async (column: FacetDimension) => {
+      const { sql: where, params } = buildWhere(filters, column);
+      const { rows } = await this.db.query(
+        `SELECT ${column} AS value, COUNT(*)::int AS count FROM ${DELIVERABLE_SEARCH_VIEW} ${where}
+         GROUP BY ${column} ORDER BY count DESC`,
+        params,
+      );
+      return rows.map((r) => ({ value: String(r.value), count: r.count as number }));
+    };
+    const { sql: where, params } = buildWhere(filters);
+    const countRes = await this.db.query(
+      `SELECT COUNT(*)::int AS count FROM ${DELIVERABLE_SEARCH_VIEW} ${where}`,
+      params,
+    );
+    const [types, agentNames, statuses, originKinds] = await Promise.all([
+      facet('type'),
+      facet('emitter'),
+      facet('status'),
+      facet('origin_kind'),
+    ]);
+    return {
+      types,
+      agentNames,
+      statuses,
+      originKinds,
+      total: (countRes.rows[0]?.count as number) ?? 0,
+    };
   }
 
   async getByWorkflowRun(workflowRunId: string): Promise<TicketDeliverableEntity[]> {

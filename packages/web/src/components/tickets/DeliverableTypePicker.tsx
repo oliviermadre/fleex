@@ -37,7 +37,7 @@ export function DeliverableTypePicker({
       const updated = await api.changeDeliverableType(deliverable.id, typeId);
       onChanged?.(updated);
       const docs = useDocumentsStore.getState();
-      if (docs.deliverables.length > 0) docs.fetchAll();
+      if (docs.deliverables.length > 0) docs.fetchAll(); // refresh rows + sidebar counts
       useDeliverableTypesStore.getState().load(); // refresh usage counts
       useToastStore.getState().addToast('success', `Type changed to ${labelFor(typeId)}`);
     } catch {

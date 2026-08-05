@@ -137,6 +137,49 @@ export function RoutineIcon({
   );
 }
 
+/**
+ * Ticket — a tag/label outline. Not a primitive (nothing launches a ticket),
+ * but surfaces that name a deliverable's *origin* need to tell "written on a
+ * ticket" from "produced by a routine" at a glance, and a lettered badge reads
+ * as noise next to the routine glyph.
+ */
+function TicketGlyph({ size, className, strokeWidth }: GlyphProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      className={className}
+      aria-hidden="true"
+      {...glyphBaseProps}
+      strokeWidth={strokeWidth ?? glyphBaseProps.strokeWidth}
+    >
+      <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 3 12V4a1 1 0 0 1 1-1h8a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.6Z" />
+      <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** The one icon to render for a ticket, tinted with the mention badge's hue. */
+export function TicketIcon({
+  size = 16,
+  className,
+  tinted = true,
+  strokeWidth,
+}: {
+  size?: number;
+  className?: string;
+  tinted?: boolean;
+  strokeWidth?: number;
+}) {
+  return (
+    <TicketGlyph
+      size={size}
+      strokeWidth={strokeWidth}
+      className={cn(tinted && tintText(MENTION_TYPE_META.ticket.hue), className)}
+    />
+  );
+}
+
 export interface PrimitiveMeta {
   kind: PrimitiveKind;
   /** Singular label, capitalised for headings ("Persona"). */

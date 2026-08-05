@@ -1,10 +1,12 @@
-import type { TicketDeliverable } from '@fleex/shared';
+import type { DeliverableListItem } from '@fleex/shared';
 import { useNavigate } from 'react-router-dom';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { cn } from '../../lib/cn';
-import { tint, tintClasses } from '../../lib/tints';
+import { tint } from '../../lib/tints';
+import { PrimitiveIcon, RoutineIcon, TicketIcon } from '../../lib/primitives';
+import { parseEmitter } from '../../lib/emitter';
 
 // Theme-accent fallback used when a type has no configured colour.
 const ACCENT_BADGE = 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]';
@@ -23,25 +25,18 @@ function formatRelativeTime(dateStr: string): string {
   return `${weeks}w ago`;
 }
 
-function getInitials(name: string): string {
-  return name
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .slice(0, 2)
-    .join('');
-}
-
-export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable }) {
+export function DocumentRow({ deliverable }: { deliverable: DeliverableListItem }) {
   const navigate = useNavigate();
-  const tickets = useTicketStore((s) => s.tickets);
   const selectBoard = useTicketStore((s) => s.selectBoard);
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
   const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
   const typeColorCfg = useDeliverableTypesStore((s) => s.colorFor)(deliverable.type);
 
-  const ticket = tickets.find((t) => t.id === deliverable.ticketId);
+  // The origin (ticket title or routine name) is resolved server-side: with a
+  // paginated list the client has no ticket list to look it up in.
+  const origin = deliverable.origin;
+  const emitter = parseEmitter(deliverable.agentName);
   const statusColor =
     deliverable.status === 'final'
       ? tint('green')
@@ -51,10 +46,10 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
 
   const handleOpenTicket = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (ticket) {
+    if (origin?.kind === 'ticket') {
       selectBoard(null);
-      selectTicket(ticket.id);
-      navigate(`/tickets/board/all/ticket/${ticket.id}`);
+      selectTicket(origin.id);
+      navigate(`/tickets/board/all/ticket/${origin.id}`);
     }
   };
 
@@ -80,19 +75,31 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
         )}
       </div>
 
-      {/* Agent */}
-      <div className="flex flex-[1.5] items-center gap-1.5">
-        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${tintClasses('purple').bg} ${tintClasses('purple').text}`}>
-          {getInitials(deliverable.agentName)}
-        </span>
-        <span className="truncate text-xs text-[var(--theme-text-secondary)]">
-          {deliverable.agentName}
+      {/* Emitter — the agentic primitive that produced it, named without its
+          `workflow:` / `panel:` prefix: the icon carries the kind. */}
+      <div className="flex min-w-0 flex-[1.5] items-center gap-1.5">
+        <PrimitiveIcon kind={emitter.kind} size={14} className="shrink-0" />
+        <span className="truncate text-xs text-[var(--theme-text-secondary)]" title={deliverable.agentName}>
+          {emitter.name}
         </span>
       </div>
 
-      {/* Ticket name */}
-      <div className="flex-[2] truncate text-xs text-[var(--theme-text-secondary)]">
-        {ticket ? ticket.title : <span className="text-[var(--theme-text-faint)]">&mdash;</span>}
+      {/* Origin — the ticket it was written on, or the routine that produced it */}
+      <div className="flex flex-[2] min-w-0 items-center gap-1.5 text-xs text-[var(--theme-text-secondary)]">
+        {origin ? (
+          <>
+            {origin.kind === 'routine' ? (
+              <RoutineIcon size={14} className="shrink-0" />
+            ) : (
+              <TicketIcon size={14} className="shrink-0" />
+            )}
+            <span className="truncate" title={origin.label}>
+              {origin.label}
+            </span>
+          </>
+        ) : (
+          <span className="text-[var(--theme-text-faint)]">&mdash;</span>
+        )}
       </div>
 
       {/* Type badge */}
@@ -129,7 +136,7 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
             <polyline points="14 2 14 8 20 8" />
           </svg>
         </button>
-        {ticket && (
+        {origin?.kind === 'ticket' && (
           <button
             className="rounded p-1 text-[var(--theme-text-faint)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]"
             onClick={handleOpenTicket}

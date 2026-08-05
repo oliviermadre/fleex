@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react';
-import type { TicketDeliverable } from '@fleex/shared';
-import { useDocumentsStore } from '../../stores/documentsStore';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { DeliverableListItem } from '@fleex/shared';
+import { DOCUMENTS_PAGE_SIZE, useDocumentsStore } from '../../stores/documentsStore';
 import { DocumentsFilterSidebar } from './DocumentsFilterSidebar';
 import { DocumentRow } from './DocumentRow';
 import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
@@ -22,10 +22,10 @@ function startOfWeek(date: Date): Date {
 
 interface DocGroup {
   label: string;
-  docs: TicketDeliverable[];
+  docs: DeliverableListItem[];
 }
 
-function groupByRecency(docs: TicketDeliverable[]): DocGroup[] {
+function groupByRecency(docs: DeliverableListItem[]): DocGroup[] {
   const now = new Date();
   const todayStart = startOfDay(now);
   const weekStart = startOfWeek(now);
@@ -41,8 +41,8 @@ function groupByRecency(docs: TicketDeliverable[]): DocGroup[] {
 
 const COLUMN_HEADERS = [
   { label: 'Title', flex: 'flex-[3]' },
-  { label: 'Agent', flex: 'flex-[1.5]' },
-  { label: 'Ticket', flex: 'flex-[2]' },
+  { label: 'Agentique', flex: 'flex-[1.5]' },
+  { label: 'Origine', flex: 'flex-[2]' },
   { label: 'Type', flex: 'flex-[0.8]' },
   { label: 'Status', flex: 'flex-[0.6]' },
   { label: 'Updated', flex: 'w-16 shrink-0 text-right' },
@@ -50,28 +50,56 @@ const COLUMN_HEADERS = [
 ];
 
 export function DocumentsPage() {
+  // The store holds the loaded pages only; `total` is the DB-side count.
   const deliverables = useDocumentsStore((s) => s.deliverables);
+  const total = useDocumentsStore((s) => s.total);
   const loading = useDocumentsStore((s) => s.loading);
+  const loadingMore = useDocumentsStore((s) => s.loadingMore);
   const fetchAll = useDocumentsStore((s) => s.fetchAll);
+  const loadMore = useDocumentsStore((s) => s.loadMore);
 
-  const filterTypes = useDocumentsStore((s) => s.filterTypes);
-  const filterAgentNames = useDocumentsStore((s) => s.filterAgentNames);
-  const filterStatuses = useDocumentsStore((s) => s.filterStatuses);
+  // Distinguishes "nothing here" from "nothing matched" in the empty state.
+  const hasQuery = useDocumentsStore(
+    (s) =>
+      s.search.trim().length > 0 ||
+      s.filterTypes.size > 0 ||
+      s.filterAgentNames.size > 0 ||
+      s.filterStatuses.size > 0,
+  );
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
-  const filtered = useMemo(() => {
-    let result = deliverables;
-    if (filterTypes.size > 0) result = result.filter((d) => filterTypes.has(d.type));
-    if (filterAgentNames.size > 0) result = result.filter((d) => filterAgentNames.has(d.agentName));
-    if (filterStatuses.size > 0) result = result.filter((d) => filterStatuses.has(d.status));
-    // Sort by updatedAt desc
-    return [...result].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [deliverables, filterTypes, filterAgentNames, filterStatuses]);
+  // Filtering and ordering are server-side; only keep the sort as a tiebreaker
+  // for pages appended by "load more".
+  const sorted = useMemo(
+    () => [...deliverables].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [deliverables],
+  );
 
-  const groups = useMemo(() => groupByRecency(filtered), [filtered]);
+  const groups = useMemo(() => groupByRecency(sorted), [sorted]);
+
+  const hasMore = deliverables.length < total;
+
+  // Infinite scroll: the sentinel below the last row pulls the next page in.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const setSentinel = useCallback((node: HTMLDivElement | null) => {
+    sentinelRef.current = node;
+  }, []);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMore();
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, sorted.length]);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
@@ -80,7 +108,7 @@ export function DocumentsPage() {
         <div className="flex items-baseline gap-2">
           <h1 className="text-base font-semibold text-[var(--theme-text-primary)]">Documents</h1>
           <span className="text-xs text-[var(--theme-text-faint)]">
-            ({filtered.length} of {deliverables.length})
+            ({deliverables.length} of {total})
           </span>
         </div>
       </div>
@@ -110,27 +138,44 @@ export function DocumentsPage() {
               <div className="flex h-full items-center justify-center">
                 <span className="text-xs text-[var(--theme-text-faint)]">Loading documents...</span>
               </div>
-            ) : filtered.length === 0 ? (
+            ) : sorted.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <span className="text-xs text-[var(--theme-text-faint)]">
-                  {deliverables.length === 0 ? 'No documents yet' : 'No documents match your filters'}
+                  {hasQuery ? 'No documents match your search or filters' : 'No documents yet'}
                 </span>
               </div>
             ) : (
-              groups.map((group) => (
-                <div key={group.label}>
-                  {/* Group header */}
-                  <div className="sticky top-0 z-10 border-b border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-4 py-1.5">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-faint)]">
-                      {group.label}
-                    </span>
+              <>
+                {groups.map((group) => (
+                  <div key={group.label}>
+                    {/* Group header */}
+                    <div className="sticky top-0 z-10 border-b border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-4 py-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-faint)]">
+                        {group.label}
+                      </span>
+                    </div>
+                    {/* Rows */}
+                    {group.docs.map((doc) => (
+                      <DocumentRow key={doc.id} deliverable={doc} />
+                    ))}
                   </div>
-                  {/* Rows */}
-                  {group.docs.map((doc) => (
-                    <DocumentRow key={doc.id} deliverable={doc} />
-                  ))}
-                </div>
-              ))
+                ))}
+
+                {/* Load more — auto-triggered on scroll, clickable as a fallback */}
+                {hasMore && (
+                  <div ref={setSentinel} className="flex justify-center px-4 py-4">
+                    <button
+                      className="rounded-md px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] disabled:opacity-60"
+                      onClick={() => void loadMore()}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore
+                        ? 'Loading…'
+                        : `Load ${Math.min(DOCUMENTS_PAGE_SIZE, total - deliverables.length)} more`}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

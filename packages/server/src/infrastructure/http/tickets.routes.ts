@@ -13,6 +13,42 @@ import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
+import type { DeliverableQueryFilters } from '../../application/ports/deliverable-store.port.js';
+
+/** Default and maximum page size for the global deliverables list. */
+const DELIVERABLES_PAGE_SIZE = 100;
+const DELIVERABLES_MAX_PAGE_SIZE = 500;
+
+function clampLimit(raw: string | undefined): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DELIVERABLES_PAGE_SIZE;
+  return Math.min(Math.floor(parsed), DELIVERABLES_MAX_PAGE_SIZE);
+}
+
+/** Repeated query params (`?type=a&type=b`) arrive as arrays — accept both. */
+function asList(raw: string | string[] | undefined): string[] | undefined {
+  if (raw === undefined) return undefined;
+  const values = (Array.isArray(raw) ? raw : [raw]).flatMap((v) => v.split(',')).filter(Boolean);
+  return values.length > 0 ? values : undefined;
+}
+
+function deliverableFiltersFromQuery(query: {
+  type?: string | string[];
+  agent_name?: string | string[];
+  status?: string | string[];
+  ticket_id?: string;
+  origin?: string | string[];
+  q?: string;
+}): DeliverableQueryFilters {
+  return {
+    types: asList(query.type),
+    agentNames: asList(query.agent_name),
+    statuses: asList(query.status),
+    originKinds: asList(query.origin),
+    ticketId: query.ticket_id,
+    search: query.q?.trim() || undefined,
+  };
+}
 
 export function ticketRoutes(container: Container) {
   const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
@@ -976,26 +1012,55 @@ export function ticketRoutes(container: Container) {
 
     // ── Deliverables (web) ──
 
-    // List all deliverables globally (for Documents page)
+    // List deliverables globally, one page at a time (for the Documents page).
+    // Filtering, ordering (newest-updated first) and counting all happen in the
+    // database — loading the whole table here truncated silently on Supabase and
+    // hid the most recent documents.
     app.get<{
-      Querystring: { type?: string; agent_name?: string; ticket_id?: string; status?: string };
+      Querystring: {
+        type?: string | string[];
+        agent_name?: string | string[];
+        ticket_id?: string;
+        status?: string | string[];
+        origin?: string | string[];
+        q?: string;
+        limit?: string;
+        offset?: string;
+      };
     }>('/api/deliverables', async (request) => {
-      let deliverables = await container.deliverableStore.getAll();
+      const filters = deliverableFiltersFromQuery(request.query);
+      const limit = clampLimit(request.query.limit);
+      const offset = Math.max(0, Number(request.query.offset ?? 0) || 0);
 
-      if (request.query.type) {
-        deliverables = deliverables.filter((d) => d.type === request.query.type);
-      }
-      if (request.query.agent_name) {
-        deliverables = deliverables.filter((d) => d.agentName === request.query.agent_name);
-      }
-      if (request.query.ticket_id) {
-        deliverables = deliverables.filter((d) => d.ticketId === request.query.ticket_id);
-      }
-      if (request.query.status) {
-        deliverables = deliverables.filter((d) => d.status === request.query.status);
-      }
+      const { items, total, origins } = await container.deliverableStore.query({
+        ...filters,
+        limit,
+        offset,
+      });
+      return {
+        items: items.map((d) => ({ ...d.toDTO(), origin: origins[d.id] ?? null })),
+        total,
+        limit,
+        offset,
+      };
+    });
 
-      return deliverables.map((d) => d.toDTO());
+    // Sidebar facets — distinct values with their counts, aggregated over every
+    // row so a type that only exists in today's documents still shows up.
+    app.get<{
+      Querystring: {
+        type?: string | string[];
+        agent_name?: string | string[];
+        ticket_id?: string;
+        status?: string | string[];
+        origin?: string | string[];
+        q?: string;
+      };
+    }>('/api/deliverables/facets', async (request) => {
+      const facets = await container.deliverableStore.getFacets(
+        deliverableFiltersFromQuery(request.query),
+      );
+      return facets;
     });
 
     app.get<{ Params: { id: string } }>('/api/tickets/:id/deliverables', async (request) => {
