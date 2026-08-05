@@ -455,6 +455,57 @@ export interface TicketDeliverable {
   readonly updatedAt: string;
 }
 
+/**
+ * Where a deliverable comes from: the ticket it was written on, or the routine
+ * whose run produced it. Resolved server-side — the client holds one page and
+ * cannot look the ticket up in a list it never loaded.
+ */
+export interface DeliverableOrigin {
+  readonly kind: 'ticket' | 'routine';
+  readonly id: string;
+  readonly label: string;
+  /** Set for routine origins — the run that emitted the deliverable. */
+  readonly workflowRunId?: string | null;
+}
+
+/** A deliverable as listed in the Documents view, with its origin resolved. */
+export interface DeliverableListItem extends TicketDeliverable {
+  readonly origin: DeliverableOrigin | null;
+}
+
+/**
+ * One page of the global deliverables list (Documents view). `total` is the
+ * count matching the filters *in the database*, not the length of `items` —
+ * the view shows the real total while loading 100 rows at a time.
+ */
+export interface DeliverablePage {
+  readonly items: DeliverableListItem[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+/** One sidebar entry: a distinct value and how many rows carry it. */
+export interface DeliverableFacet {
+  readonly value: string;
+  readonly count: number;
+}
+
+/**
+ * Sidebar facets computed by the database over the whole table, so a type that
+ * only appears in today's documents still shows up (and with its true count)
+ * even though the list only holds the most recent page.
+ */
+export interface DeliverableFacets {
+  readonly types: DeliverableFacet[];
+  /** One entry per agentic emitter (`workflow:X`, `panel:Y`, a persona name). */
+  readonly agentNames: DeliverableFacet[];
+  readonly statuses: DeliverableFacet[];
+  /** `ticket` | `routine` | `none` — what the document hangs off. */
+  readonly originKinds: DeliverableFacet[];
+  readonly total: number;
+}
+
 // ── Read Cursors ──
 
 export interface TicketReadCursors {
