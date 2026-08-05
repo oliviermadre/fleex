@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
-import type { StepOutput } from '@fleex/shared';
+import type { StepOutput, TicketDeliverable } from '@fleex/shared';
 import { StepOutputView } from './StepOutputView';
 
 afterEach(() => {
@@ -60,6 +60,31 @@ describe('StepOutputView', () => {
     expect(getByText('low')).toBeTruthy();
     // Nested values have no better rendering than JSON — but they are shown.
     expect(getByText(/"locks": "ok"/)).toBeTruthy();
+  });
+
+  it('shows a deliverable the agent attached from the CLI, not only the one in its output', () => {
+    // Attaching from the CLI is the recommended path for bulky content (it
+    // never passes through the model), and such a run returns
+    // `deliverable: null`. The run graph already draws the artifact on the
+    // node; the sidebar showed nothing, which read as "the step produced
+    // nothing" — the exact opposite of what happened.
+    const attached = {
+      id: 'd-1',
+      title: 'Fireflies — weekly digest',
+      content: '# Transcript\n\n…',
+      type: 'fireflies',
+      status: 'final',
+      stepRunId: 'sr-1',
+    } as TicketDeliverable;
+
+    const { getByText } = render(
+      <StepOutputView
+        output={{ deliverable: null, comment: null, schemaFields: {}, result: 'ok' }}
+        latestDeliverable={attached}
+      />,
+    );
+
+    expect(getByText('Fireflies — weekly digest')).toBeTruthy();
   });
 
   it('renders a bare output (no comment, no deliverable) without crashing', () => {

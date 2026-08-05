@@ -12,7 +12,7 @@ describe('SkillStepExecutor', () => {
         rawText: '', executionId: 'exec-1',
       }),
     };
-    const exec = new SkillStepExecutor(executeAgent as never, skillStore as never);
+    const exec = new SkillStepExecutor(executeAgent as never, skillStore as never, {} as never, { get: () => ({}) } as never);
     const r = await exec.execute({
       ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
       step: { id: 's1', name: 'Doc Update', executorType: 'skill', executorRef: 'doc-writer', position: { x: 0, y: 0 } },
@@ -25,7 +25,7 @@ describe('SkillStepExecutor', () => {
 
   it('throws when skill is not found', async () => {
     const skillStore = { getByCommandName: vi.fn().mockResolvedValue(null) };
-    const exec = new SkillStepExecutor({} as never, skillStore as never);
+    const exec = new SkillStepExecutor({} as never, skillStore as never, {} as never, { get: () => ({}) } as never);
     await expect(exec.execute({
       ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
       step: { id: 's1', name: 'X', executorType: 'skill', executorRef: 'missing', position: { x: 0, y: 0 } },

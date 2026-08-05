@@ -119,6 +119,15 @@ export interface ExecutionStartData {
    * emitted before this field existed.
    */
   readonly maxTurns?: number;
+  /**
+   * The workflow run and step run this execution belongs to. Only set for
+   * `kind: 'workflow_step'`. Without them the log shows an agent working on
+   * *something* with no way to tell which node of which run it is — and no way
+   * to replay that step's CLI commands (`fleex workflow step deliverable add
+   * <runId> <stepRunId> …`) by hand to reproduce what it did.
+   */
+  readonly workflowRunId?: string | null;
+  readonly stepRunId?: string | null;
   readonly context: ExecutionStartContext;
 }
 

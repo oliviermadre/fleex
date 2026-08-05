@@ -9,7 +9,7 @@ describe('PanelStepExecutor', () => {
         executionId: 'exec-1',
       }),
     };
-    const exec = new PanelStepExecutor(runPanel as never);
+    const exec = new PanelStepExecutor(runPanel as never, { get: () => ({}) } as never);
     const r = await exec.execute({
       ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
       step: { id: 's1', name: 'Spec Panel', executorType: 'panel', executorRef: 'les-big-tech', position: { x: 0, y: 0 } },
@@ -17,6 +17,9 @@ describe('PanelStepExecutor', () => {
     });
     expect(runPanel.execute).toHaveBeenCalledWith(expect.objectContaining({
       panelName: 'les-big-tech', ticketId: 't-1', returnStructured: true,
+      // The panel's own executions must carry the node they stand for, so the
+      // Execution Log can be read back to a step of a run.
+      workflowContext: expect.objectContaining({ runId: 'r-1', stepRunId: 'sr-1' }),
     }));
     expect(r.output.deliverable?.title).toBe('Spec');
     expect(r.output.result).toBe('ok');

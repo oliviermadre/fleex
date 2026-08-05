@@ -1400,7 +1400,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // workflow-aware label (e.g. "workflow:Smoke Test → PR FAQ") so readers
     // of the ticket comments tab can tell at a glance which workflow run
     // produced each comment instead of seeing just the bare persona name.
-    workflowContext?: { workflowName: string; stepName: string };
+    // `runId`/`stepRunId` additionally tag the execution with the workflow node
+    // it belongs to, so the Execution Log header names the step being debugged.
+    workflowContext?: { workflowName: string; stepName: string; runId?: string | null; stepRunId?: string | null };
   }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
     if (!this.skillStore) {
       throw new Error('SkillStore not available');
@@ -1540,6 +1542,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       worktreePath,
       kind: 'skill',
       maxTurns: skillMaxTurns,
+      workflowRunId: opts?.workflowContext?.runId,
+      stepRunId: opts?.workflowContext?.stepRunId,
       label: skill.displayName,
       skillId,
       skillName: skill.commandName,
@@ -1890,6 +1894,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     /** Frozen routine subject (repos / brief / documents). Drives workspace + prompt. */
     subject?: RunSubject | null;
     workflowRunId?: string | null;
+    /** The attempt this execution *is*. Emitted in the header for debugging. */
+    stepRunId?: string | null;
     outputFormat: typeof OUTPUT_FORMAT_SCHEMA;
     workflowContextPrompt: string;
     mode: MentionExecutionMode;
@@ -2001,6 +2007,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         kind: 'workflow_step',
         label: 'workflow step',
         maxTurns: wfMaxTurns,
+        workflowRunId: params.workflowRunId,
+        stepRunId: params.stepRunId,
         systemPromptSections: wfContextSections,
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPromptText.length,

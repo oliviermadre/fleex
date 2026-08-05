@@ -106,12 +106,31 @@ function PrettyOutput({ output, latestDeliverable }: Props) {
 
       {/* The deliverable THIS attempt produced. Deliberately shown inside the
           output rather than in the deliverables box above: that box lists the
-          previous attempts, and telling old from new is the whole point. */}
-      {output.deliverable && (
+          previous attempts, and telling old from new is the whole point.
+
+          The output is not the only way a step produces one: an agent can
+          attach a deliverable to its own step run from the CLI, which is the
+          recommended path for bulky content. Those runs return
+          `deliverable: null`, so keying this section on the output alone hid a
+          deliverable the graph was already showing on the node. When only the
+          persisted row exists, it *is* the deliverable — render it from there. */}
+      {output.deliverable ? (
         <Section label="Deliverable">
           <OutputDeliverable deliverable={output.deliverable} persisted={latestDeliverable} />
         </Section>
-      )}
+      ) : latestDeliverable ? (
+        <Section label="Deliverable">
+          <OutputDeliverable
+            deliverable={{
+              title: latestDeliverable.title,
+              markdown: latestDeliverable.content,
+              type: latestDeliverable.type,
+              status: latestDeliverable.status,
+            }}
+            persisted={latestDeliverable}
+          />
+        </Section>
+      ) : null}
 
       {output.comment && (
         <Section label="Comment">

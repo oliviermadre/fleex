@@ -432,9 +432,9 @@ export async function createContainer() {
 
   if (workflowTemplateStore && workflowRunStore && stepRunStore) {
     // Step executors
-    const agentStepExecutor = new AgentStepExecutor(executeAgent);
-    const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore, personaStore_);
-    const panelStepExecutor = new PanelStepExecutor(runPanel);
+    const agentStepExecutor = new AgentStepExecutor(executeAgent, config);
+    const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore, personaStore_, config);
+    const panelStepExecutor = new PanelStepExecutor(runPanel, config);
     const humanGateStepExecutor = new HumanGateStepExecutor(postComment, eventBus);
     // `workflow.trigger` needs CreateWorkflowRun, which needs the orchestrator,
     // which needs this very executor. The holder is filled in once both ends

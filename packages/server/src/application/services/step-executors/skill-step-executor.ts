@@ -1,7 +1,8 @@
 import type { ExecuteAgentUseCase } from '../../use-cases/execute-agent.js';
 import type { SkillStorePort } from '../../ports/skill-store.port.js';
 import type { PersonaStorePort } from '../../ports/persona-store.port.js';
-import { mergeOutputSchemas, STANDARD_OUTPUT_SCHEMA } from '../../utils/merge-output-schemas.js';
+import type { ConfigPort } from '../../ports/config.port.js';
+import { buildStandardOutputSchema, mergeOutputSchemas, selectableDeliverableTypeIds } from '../../utils/merge-output-schemas.js';
 import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
 import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
 import type { StepOutput } from '@fleex/shared';
@@ -13,18 +14,21 @@ export class SkillStepExecutor implements StepExecutor {
     private readonly executeAgent: ExecuteAgentUseCase,
     private readonly skillStore: SkillStorePort,
     private readonly personaStore: PersonaStorePort,
+    private readonly config: ConfigPort,
   ) {}
 
   async execute(input: StepExecutionInput): Promise<StepExecutorResult> {
     const skill = await this.skillStore.getByCommandName(input.step.executorRef);
     if (!skill) throw new Error(`skill "${input.step.executorRef}" not found`);
 
-    const outputFormat = mergeOutputSchemas(STANDARD_OUTPUT_SCHEMA, input.step.outputSchema);
+    const typeIds = selectableDeliverableTypeIds(this.config);
+    const outputFormat = mergeOutputSchemas(buildStandardOutputSchema(typeIds), input.step.outputSchema);
     const workflowContextPrompt = composeWorkflowContextPrompt({
       workflowName: input.workflowContext.workflowName,
       stepName: input.workflowContext.stepName,
       workflowRunId: input.workflowRunId,
       stepRunId: input.stepRunId,
+      deliverableTypeIds: typeIds,
       outputSchema: input.step.outputSchema,
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,
@@ -48,6 +52,7 @@ export class SkillStepExecutor implements StepExecutor {
         routineId: input.routineId,
         subject: input.subject,
         workflowRunId: input.workflowRunId,
+        stepRunId: input.stepRunId,
         outputFormat,
         workflowContextPrompt: `${skillPreamble}\n\n---\n\n${workflowContextPrompt}`,
         mode: 'edit',
@@ -64,6 +69,8 @@ export class SkillStepExecutor implements StepExecutor {
       workflowContext: {
         workflowName: input.workflowContext.workflowName,
         stepName: input.workflowContext.stepName,
+        runId: input.workflowRunId,
+        stepRunId: input.stepRunId,
       },
     });
 

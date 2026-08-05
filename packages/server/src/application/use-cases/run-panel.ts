@@ -142,9 +142,11 @@ export class RunPanelUseCase {
     /**
      * Workflow orchestrator: identifies the workflow run that triggered this
      * panel, so the announce comment is authored with a workflow-aware label
-     * instead of the bare `panel:<name>`.
+     * instead of the bare `panel:<name>`. `runId`/`stepRunId` additionally tag
+     * every execution the panel spawns with the node it belongs to, so the
+     * Execution Log can be read back to a specific step of a specific run.
      */
-    workflowContext?: { workflowName: string; stepName: string };
+    workflowContext?: { workflowName: string; stepName: string; runId?: string | null; stepRunId?: string | null };
   }): Promise<PanelResult | { structuredOutput: Record<string, unknown> | null; executionId: string }> {
     const startTime = Date.now();
 
@@ -278,6 +280,7 @@ export class RunPanelUseCase {
       ticketMeta,
       params.extraContextPrompt,
       params.outputFormatOverride,
+      params.workflowContext,
     );
 
     const durationMs = Date.now() - startTime;
@@ -733,6 +736,8 @@ export class RunPanelUseCase {
     ticketMeta: PanelTicketMeta,
     extraContextPrompt?: string,
     outputFormatOverride?: typeof STANDARD_OUTPUT_SCHEMA,
+    /** Workflow node this synthesis stands for, when the panel is a step. */
+    stepAnchor?: { runId?: string | null; stepRunId?: string | null },
   ): Promise<{ text: string; structuredOutput: Record<string, unknown> | null; executionId: string }> {
     const validResponses = memberResponses.filter((r) => !r.error && r.response);
 
@@ -820,6 +825,8 @@ Be concise and decision-oriented. Write in the same language as the panel member
       worktreePath,
       kind: 'panel_orchestrator',
       label: 'orchestrateur',
+      workflowRunId: stepAnchor?.runId,
+      stepRunId: stepAnchor?.stepRunId,
       systemPromptSections: orchestratorContextSections,
       systemPromptLength: orchestratorSystemPrompt?.length ?? 0,
       userPromptLength: synthesisPrompt.length,

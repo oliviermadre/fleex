@@ -139,4 +139,21 @@ describe('composeWorkflowContextPrompt — step identity', () => {
     });
     expect(out).not.toContain('fleex workflow step deliverable add');
   });
+
+  // The CLI path skips the structured-output schema, so nothing constrains
+  // `--type` at the point of use. Naming the workspace's own types here is what
+  // stops an agent from copying the example type out of the snippet — which is
+  // how a Fireflies transcript ended up filed as a generic `report`.
+  it('names the workspace deliverable types next to the CLI command', () => {
+    const out = composeWorkflowContextPrompt({
+      workflowName: 'Veille', stepName: 'Résumé',
+      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+      workflowRunId: 'run-abc', stepRunId: 'sr-def',
+      deliverableTypeIds: ['fireflies', 'report'],
+    });
+    expect(out).toContain('`fireflies`');
+    expect(out).toContain('`report`');
+    // No type is presented as the safe default: the example is a placeholder.
+    expect(out).toContain('--type <TYPE>');
+  });
 });

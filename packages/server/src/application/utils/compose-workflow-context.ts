@@ -15,6 +15,14 @@ export interface WorkflowContextInput {
    */
   workflowRunId?: string;
   stepRunId?: string;
+  /**
+   * Deliverable type ids this workspace lets an agent pick. The CLI escape
+   * hatch bypasses the structured-output schema, so without the list here the
+   * agent has nothing to choose from at the point of use and falls back to
+   * whatever the example shows — which is how a run that should have produced a
+   * `fireflies` deliverable produced a `report` one.
+   */
+  deliverableTypeIds?: string[];
   stepPrompt?: string;
   outputSchema: JsonSchema | undefined;
   outgoingEdges: {
@@ -54,11 +62,19 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
     parts.push('');
     parts.push(`Use them to attach an artifact to *this* step from the CLI instead of returning it in \`deliverable\`:`);
     parts.push('');
+    const types = input.deliverableTypeIds ?? [];
     parts.push('```bash');
     parts.push(`fleex workflow step deliverable add ${input.workflowRunId} ${input.stepRunId} \\`);
-    parts.push(`  --title "…" --type report --status final --file ./path/to/content.md`);
+    parts.push(`  --title "…" --type <TYPE> --status final --file ./path/to/content.md`);
     parts.push('```');
     parts.push('');
+    if (types.length > 0) {
+      // Same choice as `deliverable.type` in the structured output — stated
+      // again here because this command is the one place where nothing
+      // validates the type up front and a wrong guess is silently accepted.
+      parts.push(`\`--type\` takes exactly one of: ${types.map((t) => `\`${t}\``).join(', ')}. Pick the one that genuinely describes what you produced — see the type descriptions in the Output Format section above. Do not default to a generic type when a specific one fits.`);
+      parts.push('');
+    }
     parts.push(`Prefer this whenever the content is long (a transcript, a full log, a generated file): write it to disk, then pass \`--file\`. Reserve the \`deliverable\` output field for short content. A deliverable added this way is attached to this step and shows on this node in the run graph — do not also return it in \`deliverable\`, or it will be recorded twice.`);
     parts.push('');
   }

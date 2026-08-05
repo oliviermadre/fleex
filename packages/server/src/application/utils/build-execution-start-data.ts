@@ -16,6 +16,9 @@ export interface BuildExecutionStartArgs {
   skillName?: string;
   /** Effective (already clamped) turn budget for this run; omit when N/A. */
   maxTurns?: number;
+  /** Owning workflow run / step run. Workflow steps only; omit elsewhere. */
+  workflowRunId?: string | null;
+  stepRunId?: string | null;
   systemPromptSections: string[];
   systemPromptLength: number;
   userPromptLength: number;
@@ -52,6 +55,8 @@ export function buildExecutionStartData(args: BuildExecutionStartArgs): Executio
     skillId: args.skillId,
     skillName: args.skillName,
     maxTurns: args.maxTurns,
+    workflowRunId: args.workflowRunId ?? null,
+    stepRunId: args.stepRunId ?? null,
     context: {
       systemPromptSections: args.systemPromptSections,
       systemPromptLength: args.systemPromptLength,
