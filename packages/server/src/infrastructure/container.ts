@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import { existsSync, realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { SessionNamingService } from '../domain/services/session-naming.js';
@@ -6,6 +7,7 @@ import { SessionGroupingService } from '../domain/services/session-grouping.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
 import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
 import { RoutineSchedulerService } from '../domain/services/routine-scheduler.js';
+import { resolveSchedulerRole } from '../domain/services/scheduler-role.js';
 import { RepositoryResolver } from '../domain/services/repository-resolver.js';
 import { GithubDiscovery } from '../domain/services/github-discovery.js';
 import { RepoPathResolver } from '../domain/services/repo-path-resolver.js';
@@ -284,10 +286,33 @@ export async function createContainer() {
   const eventBus = new EventBus();
   const remoteEventBus = new EventBus();
 
+  // Human-readable identity of this process, shared by the audit trail and the
+  // routine claims. Distinct from `serverId` below on purpose: `serverId` must
+  // be unique per process for the hub's own-event filter, whereas this one is
+  // meant to be recognisable ("mbp-olivier:3001") in a row a human reads.
+  const instanceId = process.env['FLEEX_INSTANCE_ID'] ?? `${hostname()}:${process.env['PORT'] ?? '3000'}`;
+
+  // Whether this instance is allowed to fire scheduled routines at all — see
+  // scheduler-role.ts. Resolved here so the HTTP layer can explain the answer
+  // rather than leaving a disarmed instance looking broken.
+  const schedulerRole = resolveSchedulerRole({
+    env: process.env,
+    repoDir: process.env['FLEEX_REPO_DIR'] ?? process.cwd(),
+    homedir: homedir(),
+    dirExists: (p) => existsSync(p),
+    realPath: (p) => {
+      try {
+        return realpathSync.native(p);
+      } catch {
+        return p;
+      }
+    },
+  });
+
   // Routine scheduler. Constructed here (it needs the bus) but its stores and
   // launch use case are setter-injected further down, once the workflow engine
   // they depend on exists.
-  const routineScheduler = new RoutineSchedulerService(eventBus, logger);
+  const routineScheduler = new RoutineSchedulerService(eventBus, logger, instanceId);
   routineScheduler.registerBusHandlers(eventBus);
 
   // Per-workspace deliverable-type backoffice (CRUD + usage + reassignment).
@@ -379,7 +404,6 @@ export async function createContainer() {
   const AUDIT_EXCLUDED_EVENTS = new Set<string>([
     'session.hookStatusChanged',
   ]);
-  const instanceId = process.env['FLEEX_INSTANCE_ID'] ?? `${hostname()}:${process.env['PORT'] ?? '3000'}`;
   eventBus.on('*', (event) => {
     if (AUDIT_EXCLUDED_EVENTS.has(event.type)) return;
     const entry = DomainEventLogEntity.create({
@@ -559,6 +583,8 @@ export async function createContainer() {
     githubDiscovery,
     repositoryRefreshScheduler,
     routineScheduler,
+    schedulerRole,
+    instanceId,
     resolver,
     bareCloneManager,
     overlayManager,

@@ -115,6 +115,12 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
     PORT: String(ports.server),
     HOST_GATEWAY_URL: `http://localhost:${ports.gateway}`,
     FLEEX_STORAGE_DRIVER: process.env.FLEEX_STORAGE_DRIVER ?? 'sqlite',
+    // Which checkout this instance runs from. The server compares it to the
+    // canonical install to decide whether it is the one that fires scheduled
+    // routines (main install vs. a QA worktree sharing the same database).
+    // It could fall back to its own cwd, but only the CLI knows the repo the
+    // instance was *resolved* to, independently of where bun happens to start.
+    FLEEX_REPO_DIR: ctx.repoDir,
   }, ['run', 'dev:server']);
   savePid('server', serverProc.pid!, ctx);
 

@@ -31,6 +31,7 @@ import migration029 from './migrations/028_deliverable_step_anchor.js';
 import migration030 from './migrations/029_deliverable_search_view.js';
 import migration031 from './migrations/030_deliverable_emitter.js';
 import migration032 from './migrations/031_deliverable_origin_kind.js';
+import migration033 from './migrations/032_routine_scheduler_claims.js';
 
 /**
  * Ordered array of all migrations.
@@ -69,4 +70,5 @@ export const allMigrations: Migration[] = [
   migration030,
   migration031,
   migration032,
+  migration033,
 ];

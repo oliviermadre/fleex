@@ -1,6 +1,6 @@
 import { RoutineEntity } from '../../../domain/entities/routine.entity.js';
 import { normalizeRunSubject } from '@fleex/shared';
-import type { RoutineStorePort } from '../../../application/ports/routine-store.port.js';
+import type { RoutineClaim, RoutineStorePort } from '../../../application/ports/routine-store.port.js';
 import type { SqliteConnection } from './connection.js';
 import type { RoutineOverlapPolicy, RoutineTrigger } from '@fleex/shared';
 import { rowToTarget, targetToColumns } from '../routine-target-mapping.js';
@@ -24,6 +24,8 @@ interface Row {
   last_run_at: string | null;
   last_run_id: string | null;
   next_run_at: string | null;
+  last_claimed_by: string | null;
+  last_claimed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -71,6 +73,51 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
     return rows.map(toEntity);
   }
 
+  /**
+   * The `next_run_at = @observed` predicate is the whole mechanism: the UPDATE
+   * matches only while the row still carries the value this process read, so
+   * the second writer touches nothing and learns it lost. WAL lets both
+   * instances write concurrently, but SQLite still serialises the writes — the
+   * losing UPDATE is evaluated against the winner's result, never against a
+   * stale snapshot.
+   *
+   * `RETURNING` rather than the driver's affected-row count: it is the same
+   * signal, expressed in SQL instead of in whatever shape the bound sqlite
+   * build happens to return from `run()`.
+   */
+  async claimDue(claim: RoutineClaim): Promise<boolean> {
+    const row = this.conn.db.prepare(`
+      UPDATE routines
+         SET next_run_at = @next_run_at,
+             enabled = CASE WHEN @disable = 1 THEN 0 ELSE enabled END,
+             last_claimed_by = @claimed_by,
+             last_claimed_at = @claimed_at,
+             updated_at = @claimed_at
+       WHERE id = @id AND next_run_at = @observed
+      RETURNING id
+    `).get({
+      id: claim.id,
+      observed: claim.observedNextRunAt.toISOString(),
+      next_run_at: claim.nextRunAt?.toISOString() ?? null,
+      disable: claim.disable ? 1 : 0,
+      claimed_by: claim.claimedBy,
+      claimed_at: claim.claimedAt.toISOString(),
+    });
+    return row !== undefined && row !== null;
+  }
+
+  async rearm(id: string, nextRunAt: Date | null): Promise<void> {
+    this.conn.db.prepare(
+      'UPDATE routines SET next_run_at = ?, updated_at = ? WHERE id = ?',
+    ).run(nextRunAt?.toISOString() ?? null, new Date().toISOString(), id);
+  }
+
+  /**
+   * Deliberately does NOT write `last_claimed_by` / `last_claimed_at`: those
+   * columns belong to {@link claimDue} alone. Including them here would let any
+   * ordinary edit (rename, enable toggle) overwrite a claim another instance
+   * had just recorded.
+   */
   async save(routine: RoutineEntity): Promise<void> {
     const t = routine.trigger;
     this.conn.db.prepare(`
@@ -145,6 +192,8 @@ function toEntity(r: Row): RoutineEntity {
     r.next_run_at ? new Date(r.next_run_at) : null,
     new Date(r.created_at),
     new Date(r.updated_at),
+    r.last_claimed_by ?? null,
+    r.last_claimed_at ? new Date(r.last_claimed_at) : null,
   );
   return e;
 }

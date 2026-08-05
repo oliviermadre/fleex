@@ -79,6 +79,18 @@ export interface Routine {
   lastRunAt: string | null;
   lastRunId: string | null;
   nextRunAt: string | null;
+  /**
+   * Which Fleex instance last won the race to fire a scheduled occurrence
+   * (`hostname:port`, or `FLEEX_INSTANCE_ID`), and when. Null until a scheduler
+   * has claimed one — a manual-only routine never gets a claimant.
+   *
+   * Only meaningful when several instances share one storage (two machines on
+   * the same Supabase, or a main install plus a worktree on the same SQLite
+   * file): it is the difference between "the run happened on the other laptop"
+   * and "the run never happened".
+   */
+  lastClaimedBy: string | null;
+  lastClaimedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

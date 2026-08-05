@@ -20,6 +20,13 @@ export class RoutineEntity {
     public nextRunAt: Date | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
+    /**
+     * Which instance last won the race to fire a scheduled occurrence, and
+     * when. Written only by {@link RoutineStorePort.claimDue}; defaulted here
+     * so every existing positional construction keeps compiling.
+     */
+    public lastClaimedBy: string | null = null,
+    public lastClaimedAt: Date | null = null,
   ) {}
 
   static create(params: {
@@ -94,18 +101,6 @@ export class RoutineEntity {
     this.updatedAt = new Date();
   }
 
-  /**
-   * A `once` routine has spent its single occurrence: disarm *and* disable it.
-   * Clearing `next_run_at` alone would be enough for this process, but the row
-   * outlives it — leaving `enabled = true` would let a future boot recompute
-   * arm the same one-shot again.
-   */
-  consumeOneShot(): void {
-    this.nextRunAt = null;
-    this.enabled = false;
-    this.updatedAt = new Date();
-  }
-
   recordRun(runId: string, at: Date = new Date()): void {
     this.lastRunId = runId;
     this.lastRunAt = at;
@@ -132,6 +127,8 @@ export class RoutineEntity {
       lastRunAt: this.lastRunAt?.toISOString() ?? null,
       lastRunId: this.lastRunId,
       nextRunAt: this.nextRunAt?.toISOString() ?? null,
+      lastClaimedBy: this.lastClaimedBy,
+      lastClaimedAt: this.lastClaimedAt?.toISOString() ?? null,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

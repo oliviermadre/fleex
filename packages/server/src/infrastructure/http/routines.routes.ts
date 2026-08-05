@@ -12,6 +12,7 @@ import {
   WorkflowTemplateNotFoundError,
 } from '../../domain/errors.js';
 import { nextRunTimes } from '../../domain/services/routine-schedule.js';
+import type { SchedulerRole } from '../../domain/services/scheduler-role.js';
 import type { RoutineStorePort } from '../../application/ports/routine-store.port.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
@@ -86,6 +87,10 @@ interface RoutineRouteDeps {
   deleteRoutine: DeleteRoutineUseCase;
   runRoutine: RunRoutineUseCase;
   authorNameResolver: () => string;
+  /** Whether this instance fires schedules, and why. See scheduler-role.ts. */
+  schedulerRole: SchedulerRole;
+  /** This instance's identity — the value it stamps on the claims it wins. */
+  instanceId: string;
 }
 
 export function routineRoutes(deps: RoutineRouteDeps) {
@@ -106,6 +111,18 @@ export function routineRoutes(deps: RoutineRouteDeps) {
         };
       }));
     });
+
+    // GET /api/routines/scheduler — "is this instance the one that fires my
+    // crons?". Without it, a disarmed instance is indistinguishable from a
+    // broken one: the routines list looks identical either way, and the answer
+    // lives in a boot log the user is not reading. Declared before the
+    // `:idOrSlug` route so the literal segment is not swallowed by it.
+    app.get('/api/routines/scheduler', async () => ({
+      armed: deps.schedulerRole.armed,
+      reason: deps.schedulerRole.reason,
+      detail: deps.schedulerRole.detail,
+      instanceId: deps.instanceId,
+    }));
 
     // GET /api/routines/:idOrSlug — detail. Accepts the slug so the URL and the
     // CLI can both address a routine by its permalink.

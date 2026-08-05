@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { RoutineTrigger } from '@fleex/shared';
+import type { RoutineClaim } from '../../src/application/ports/routine-store.port.js';
 import { RoutineEntity } from '../../src/domain/entities/routine.entity.js';
 import { RoutineSchedulerService } from '../../src/domain/services/routine-scheduler.js';
 import {
@@ -26,32 +27,88 @@ function makeRoutine(trigger: RoutineTrigger, overrides: Partial<{
   return r;
 }
 
-/** In-memory routine store; `getDue` / `getEnabled` mirror the SQL predicates. */
+/**
+ * Reads must hand out copies, exactly as a database does. Sharing the stored
+ * object would let one scheduler's claim mutate the very row another scheduler
+ * is still holding as its CAS witness — the fake would then be incapable of
+ * reproducing the race it exists to test.
+ */
+function snapshot(r: RoutineEntity): RoutineEntity {
+  return new RoutineEntity(
+    r.id, r.slug, r.name, r.emoji, r.description, r.enabled, r.target, r.subject,
+    r.trigger, r.overlapPolicy, r.lastRunAt, r.lastRunId, r.nextRunAt,
+    r.createdAt, r.updatedAt, r.lastClaimedBy, r.lastClaimedAt,
+  );
+}
+
+/**
+ * In-memory routine store; `getDue` / `getEnabled` mirror the SQL predicates
+ * and `claimDue` mirrors the conditional UPDATE, down to refusing a witness
+ * that has moved.
+ *
+ * `readBarrier` is the lever the multi-instance tests pull: it holds every
+ * reader inside `getDue` until released, so several schedulers provably observe
+ * the same due row before any of them writes.
+ */
 function makeStore(routines: RoutineEntity[]) {
   const byId = new Map(routines.map((r) => [r.id, r]));
   return {
     saves: [] as RoutineEntity[],
-    getAll: async () => [...byId.values()],
-    getById: async (id: string) => byId.get(id) ?? null,
+    claimsWon: [] as string[],
+    readBarrier: null as Promise<void> | null,
+    getAll: async () => [...byId.values()].map(snapshot),
+    getById: async (id: string) => {
+      const r = byId.get(id);
+      return r ? snapshot(r) : null;
+    },
     getBySlug: async () => null,
-    getEnabled: async () => [...byId.values()].filter((r) => r.enabled),
-    getDue: async (now: Date) => [...byId.values()].filter(
-      (r) => r.enabled && r.nextRunAt !== null && r.nextRunAt.getTime() <= now.getTime(),
-    ),
+    getEnabled: async () => [...byId.values()].filter((r) => r.enabled).map(snapshot),
+    getDue: async function (this: { readBarrier: Promise<void> | null }, now: Date) {
+      if (this.readBarrier) await this.readBarrier;
+      return [...byId.values()]
+        .filter((r) => r.enabled && r.nextRunAt !== null && r.nextRunAt.getTime() <= now.getTime())
+        .map(snapshot);
+    },
+    claimDue: async function (
+      this: { claimsWon: string[] },
+      claim: RoutineClaim,
+    ): Promise<boolean> {
+      const row = byId.get(claim.id);
+      if (!row) return false;
+      if (row.nextRunAt?.getTime() !== claim.observedNextRunAt.getTime()) return false;
+      row.nextRunAt = claim.nextRunAt;
+      if (claim.disable) row.enabled = false;
+      row.lastClaimedBy = claim.claimedBy;
+      row.lastClaimedAt = claim.claimedAt;
+      this.claimsWon.push(claim.claimedBy);
+      return true;
+    },
+    rearm: async (id: string, nextRunAt: Date | null) => {
+      const row = byId.get(id);
+      if (row) row.nextRunAt = nextRunAt;
+    },
     save: async function (this: { saves: RoutineEntity[] }, r: RoutineEntity) {
-      byId.set(r.id, r);
+      byId.set(r.id, snapshot(r));
       this.saves.push(r);
     },
     delete: async () => {},
   };
 }
 
-function makeScheduler(routines: RoutineEntity[], activeRun: { id: string } | null = null) {
-  const store = makeStore(routines);
+type Store = ReturnType<typeof makeStore>;
+
+function makeScheduler(
+  routines: RoutineEntity[],
+  activeRun: { id: string } | null = null,
+  opts: { store?: Store; instanceId?: string } = {},
+) {
+  const store = opts.store ?? makeStore(routines);
   const runStore = { getActiveByRoutine: vi.fn().mockResolvedValue(activeRun) };
   const runRoutine = { execute: vi.fn().mockResolvedValue({ id: 'run-new' }) };
   const eventBus = { emit: vi.fn(), on: vi.fn() };
-  const scheduler = new RoutineSchedulerService(eventBus as never, logger as never);
+  const scheduler = new RoutineSchedulerService(
+    eventBus as never, logger as never, opts.instanceId ?? 'test-instance',
+  );
   scheduler.setDeps({ routineStore: store as never, runStore: runStore as never, runRoutine: runRoutine as never });
   return { scheduler, store, runStore, runRoutine, eventBus };
 }
@@ -155,6 +212,139 @@ describe('RoutineSchedulerService — overlapPolicy', () => {
     runStore.getActiveByRoutine.mockResolvedValue(null);
     await scheduler.tick(new Date('2026-08-04T12:01:00Z'));
     expect(runRoutine.execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('RoutineSchedulerService — several instances share one storage', () => {
+  /**
+   * The scenario this whole claim mechanism exists for: two machines on the
+   * same Supabase, or `~/.fleex/repo` plus a QA worktree on the same
+   * `fleex.db`. Both tick, both see the same due row, and without a claim both
+   * would launch — two agent runs on the same routine, in the same basePath.
+   */
+  function raceTwoInstances(routine: RoutineEntity, now: Date) {
+    const store = makeStore([routine]);
+    const a = makeScheduler([], null, { store, instanceId: 'laptop:3000' });
+    const b = makeScheduler([], null, { store, instanceId: 'desktop:3000' });
+
+    let release!: () => void;
+    store.readBarrier = new Promise<void>((r) => { release = r; });
+
+    // Both ticks are started before either can write, and both are held inside
+    // getDue until released — so each provably reads the same `next_run_at`.
+    const settled = Promise.all([a.scheduler.tick(now), b.scheduler.tick(now)]);
+    release();
+    return { store, a, b, settled };
+  }
+
+  it('launches a due routine exactly once when two instances tick together', async () => {
+    const now = new Date('2026-08-04T12:00:00Z');
+    const routine = makeRoutine(
+      { kind: 'cron', cron: '*/5 * * * *', timezone: PARIS },
+      { nextRunAt: now },
+    );
+    const { store, a, b, settled } = raceTwoInstances(routine, now);
+    await settled;
+
+    const launches = a.runRoutine.execute.mock.calls.length + b.runRoutine.execute.mock.calls.length;
+    expect(launches).toBe(1);
+    expect(store.claimsWon).toHaveLength(1);
+    // And the row records which machine took it — the difference between "it
+    // ran on the other laptop" and "it never ran".
+    expect((await store.getById('r-1'))!.lastClaimedBy).toBe(store.claimsWon[0]);
+  });
+
+  it('advances the schedule once, not once per instance', async () => {
+    // Two instances each advancing the cron would silently eat a slot: a
+    // */5 routine would fire every ten minutes on a two-machine setup.
+    const now = new Date('2026-08-04T12:00:00Z');
+    const routine = makeRoutine(
+      { kind: 'cron', cron: '*/5 * * * *', timezone: PARIS },
+      { nextRunAt: now },
+    );
+    const { store, settled } = raceTwoInstances(routine, now);
+    await settled;
+
+    expect((await store.getById('r-1'))!.nextRunAt!.toISOString()).toBe('2026-08-04T12:05:00.000Z');
+  });
+
+  it('fires a one-shot exactly once across instances, and disables it', async () => {
+    const now = new Date('2026-08-04T12:00:00Z');
+    const routine = makeRoutine(
+      { kind: 'once', runAt: now.toISOString(), timezone: PARIS },
+      { nextRunAt: now },
+    );
+    const { store, a, b, settled } = raceTwoInstances(routine, now);
+    await settled;
+
+    expect(a.runRoutine.execute.mock.calls.length + b.runRoutine.execute.mock.calls.length).toBe(1);
+    const after = (await store.getById('r-1'))!;
+    expect(after.enabled).toBe(false);
+    expect(after.nextRunAt).toBeNull();
+  });
+
+  it('announces the overlap skip once, not once per instance', async () => {
+    // `routine.run_skipped` is a user-visible event. Emitting it from every
+    // instance would make a single skipped occurrence look like several.
+    const now = new Date('2026-08-04T12:00:00Z');
+    const routine = makeRoutine(
+      { kind: 'cron', cron: '*/5 * * * *', timezone: PARIS },
+      { overlapPolicy: 'skip', nextRunAt: now },
+    );
+    const store = makeStore([routine]);
+    const a = makeScheduler([], { id: 'run-active' }, { store, instanceId: 'laptop:3000' });
+    const b = makeScheduler([], { id: 'run-active' }, { store, instanceId: 'desktop:3000' });
+
+    let release!: () => void;
+    store.readBarrier = new Promise<void>((r) => { release = r; });
+    const settled = Promise.all([a.scheduler.tick(now), b.scheduler.tick(now)]);
+    release();
+    await settled;
+
+    const skips = [...a.eventBus.emit.mock.calls, ...b.eventBus.emit.mock.calls]
+      .filter(([e]) => (e as { type: string }).type === 'routine.run_skipped');
+    expect(skips).toHaveLength(1);
+  });
+
+  it('does nothing at all when it loses the claim', async () => {
+    // The loser must not launch, must not announce, and must not write: a
+    // consolation write is exactly how `last_run_id` used to get clobbered.
+    const now = new Date('2026-08-04T12:00:00Z');
+    const routine = makeRoutine(
+      { kind: 'cron', cron: '*/5 * * * *', timezone: PARIS },
+      { nextRunAt: now },
+    );
+    const { scheduler, store, runRoutine, eventBus } = makeScheduler([routine]);
+    store.claimDue = async () => false;
+
+    await scheduler.tick(now);
+
+    expect(runRoutine.execute).not.toHaveBeenCalled();
+    expect(eventBus.emit).not.toHaveBeenCalled();
+    expect(store.saves).toHaveLength(0);
+  });
+
+  it('refuses a claim whose witness has moved on', async () => {
+    // The store contract itself, stated plainly: a CAS against a stale
+    // `next_run_at` must fail rather than overwrite.
+    const now = new Date('2026-08-04T12:00:00Z');
+    const store = makeStore([makeRoutine(
+      { kind: 'cron', cron: '*/5 * * * *', timezone: PARIS },
+      { nextRunAt: now },
+    )]);
+
+    const first = await store.claimDue({
+      id: 'r-1', observedNextRunAt: now, nextRunAt: new Date('2026-08-04T12:05:00Z'),
+      claimedBy: 'laptop:3000', claimedAt: now,
+    });
+    const second = await store.claimDue({
+      id: 'r-1', observedNextRunAt: now, nextRunAt: new Date('2026-08-04T12:05:00Z'),
+      claimedBy: 'desktop:3000', claimedAt: now,
+    });
+
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    expect((await store.getById('r-1'))!.lastClaimedBy).toBe('laptop:3000');
   });
 });
 
