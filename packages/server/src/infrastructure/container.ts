@@ -503,7 +503,7 @@ export async function createContainer() {
       createRoutine = new CreateRoutineUseCase(routineStore, targetStores, logger);
       updateRoutine = new UpdateRoutineUseCase(routineStore, targetStores);
       deleteRoutine = new DeleteRoutineUseCase(routineStore);
-      runRoutine = new RunRoutineUseCase(routineStore, createWorkflowRun);
+      runRoutine = new RunRoutineUseCase(routineStore, createWorkflowRun, eventBus);
       routineScheduler.setDeps({ routineStore, runStore: workflowRunStore, runRoutine });
     }
 

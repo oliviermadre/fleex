@@ -66,6 +66,7 @@ describe('RunRoutineUseCase', () => {
       getActiveByRoutine: vi.fn().mockResolvedValue(activeRun),
       save: vi.fn(),
     };
+    const eventBus = { emit: vi.fn() };
     const createRun = new CreateWorkflowRunUseCase(
       { getById: vi.fn().mockResolvedValue(template) } as never,
       runStore as never,
@@ -73,7 +74,10 @@ describe('RunRoutineUseCase', () => {
       { emit: vi.fn() } as never,
       { execute: vi.fn() } as never,
     );
-    return { routine, routineStore, runStore, uc: new RunRoutineUseCase(routineStore as never, createRun) };
+    return {
+      routine, routineStore, runStore, eventBus,
+      uc: new RunRoutineUseCase(routineStore as never, createRun, eventBus as never),
+    };
   }
 
   it('freezes the routine subject into the run', async () => {
@@ -93,6 +97,50 @@ describe('RunRoutineUseCase', () => {
 
     expect(routine.lastRunId).toBe(run.id);
     expect(routineStore.save).toHaveBeenCalledOnce();
+  });
+
+  it('announces every launch, not just the scheduled ones', async () => {
+    // The emission used to live in the scheduler, so a routine launched by hand
+    // logged `routine.run_completed` with no matching `run_started`: half of
+    // its history was missing from the audit trail.
+    const { uc, eventBus } = deps();
+    const run = await uc.execute({ routineId: 'r-1', triggeredBy: '@john', triggeredFrom: 'api' });
+
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'routine.run_started', routineId: 'r-1', workflowRunId: run.id, triggerKind: 'manual',
+    }));
+  });
+
+  it('reports the routine trigger when the scheduler is the caller', async () => {
+    // `triggerKind` is what tells a cron firing apart from someone pressing
+    // Launch on that same cron routine — both produce identical runs otherwise.
+    const cronRoutine = RoutineEntity.create({
+      id: 'r-1', name: 'Daily recap', target: { kind: 'workflow' as const, ref: 'tmpl-1' },
+      subject: { repos: [], brief: 'Summarise yesterday' },
+      trigger: { kind: 'cron', cron: '0 9 * * *', timezone: 'Europe/Paris' },
+    });
+    const routineStore = { getById: vi.fn().mockResolvedValue(cronRoutine), save: vi.fn() };
+    const eventBus = { emit: vi.fn() };
+    const createRun = new CreateWorkflowRunUseCase(
+      { getById: vi.fn().mockResolvedValue(template) } as never,
+      { getActiveByRoutine: vi.fn().mockResolvedValue(null), save: vi.fn() } as never,
+      { runStep: vi.fn() } as never,
+      { emit: vi.fn() } as never,
+      { execute: vi.fn() } as never,
+    );
+    const uc = new RunRoutineUseCase(routineStore as never, createRun, eventBus as never);
+
+    await uc.execute({ routineId: 'r-1', triggeredBy: 'routine-scheduler', triggeredFrom: 'schedule' });
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'routine.run_started', triggerKind: 'cron',
+    }));
+
+    // Same routine, launched by hand: the origin wins over the schedule.
+    eventBus.emit.mockClear();
+    await uc.execute({ routineId: 'r-1', triggeredBy: '@john', triggeredFrom: 'api' });
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'routine.run_started', triggerKind: 'manual',
+    }));
   });
 
   it('refuses to launch while a run is already active on that routine', async () => {

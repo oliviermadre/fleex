@@ -14,6 +14,8 @@ const EVENT_DOMAIN_COLORS: Record<string, string> = {
   session: tint('teal'),
   worktree: tint('green'),
   execution: tint('red'),
+  workflow: tint('indigo'),
+  routine: tint('pink'),
 };
 
 function getEventDomain(eventType: string): string {

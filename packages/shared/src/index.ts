@@ -256,6 +256,7 @@ export type {
   SkillLeaderboardEntry,
   PanelLeaderboardEntry,
   WorkflowLeaderboardEntry,
+  RoutineLeaderboardEntry,
   StatisticsSummary,
   StatisticsResponse,
   UsageByTypeBucket,

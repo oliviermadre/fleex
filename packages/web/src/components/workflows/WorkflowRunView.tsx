@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, MarkerType, Position, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
@@ -12,6 +12,8 @@ import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
 import { CancelledStepRestartPanel } from './CancelledStepRestartPanel';
 import { StepSessionOverlay } from './StepSessionOverlay';
+import { StepOutputView } from './StepOutputView';
+import { splitStepDeliverables } from './stepDeliverableSplit';
 import { stepSessionState } from './stepSession';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -36,8 +38,15 @@ interface Props {
   deliverables?: TicketDeliverable[];
 }
 
+/** Sidebar width bounds. Below 320px the output columns collapse; above 80% of
+ *  the view the DAG is no longer usable. */
+const SIDEBAR_MIN_WIDTH = 320;
+const DEFAULT_SIDEBAR_WIDTH = 420;
+
 export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const bodyRef = useRef<HTMLDivElement>(null);
   // The SDK session currently opened in the floating popup, if any.
   const [openSession, setOpenSession] = useState<
     { executionId: string; stepName: string } | null
@@ -144,8 +153,45 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
     ? stepSessionState(selectedStep, selectedStepRun)
     : ({ kind: 'none' } as const);
 
+  // The latest attempt's deliverable is shown inside its output; the earlier
+  // attempts' stay in the box above. See stepDeliverableSplit.
+  const { latestDeliverable, previousDeliverables } = useMemo(
+    () =>
+      splitStepDeliverables(
+        (selectedStep ? deliverablesByStepId.get(selectedStep.id) : undefined) ?? [],
+        selectedStepRun?.output?.deliverable?.title,
+      ),
+    [selectedStep, selectedStepRun, deliverablesByStepId],
+  );
+
   const completed = countCompletedSteps(stepRuns);
   const total = run.templateSnapshot.steps.length;
+
+  // Drag from the sidebar's left edge. Width is measured against the body
+  // container, not the viewport, so it behaves the same in the full-page run
+  // view and in the (narrower) ticket workflow tab.
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const body = bodyRef.current;
+    if (!body) return;
+
+    const onMove = (ev: MouseEvent) => {
+      const rect = body.getBoundingClientRect();
+      const raw = rect.right - ev.clientX;
+      setSidebarWidth(Math.max(SIDEBAR_MIN_WIDTH, Math.min(raw, rect.width * 0.8)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -181,7 +227,7 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
+      <div ref={bodyRef} className="flex flex-1 overflow-hidden">
         {/* DAG canvas */}
         <div className="flex-1">
           <ReactFlow
@@ -214,9 +260,19 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
 
         {/* Step detail sidebar */}
         {selectedStep && (
+          <>
           <div
-            className="w-[420px] p-4 overflow-y-auto space-y-3"
-            style={{ borderLeft: '1px solid var(--theme-border)' }}
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={startResize}
+            className="group/h relative w-[3px] flex-shrink-0 cursor-col-resize bg-[var(--theme-border)] transition-colors hover:bg-[var(--theme-accent)] active:bg-[var(--theme-accent)]"
+          >
+            {/* Wider invisible hit-area for easier grabbing */}
+            <span className="absolute inset-y-0 -left-1 -right-1" />
+          </div>
+          <div
+            className="flex-shrink-0 p-4 overflow-y-auto space-y-3"
+            style={{ width: sidebarWidth }}
           >
             <h3 className="text-sm font-medium text-[var(--theme-text-primary)]">
               {selectedStep.name}
@@ -249,25 +305,18 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
                 {selectedSession.live ? 'Watch SDK session (live)' : 'View SDK session'}
               </button>
             )}
-            {(deliverablesByStepId.get(selectedStep.id)?.length ?? 0) > 0 && (
+            {previousDeliverables.length > 0 && (
               <div className="space-y-1.5">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
-                  Deliverables
+                  {latestDeliverable ? 'Previous deliverables' : 'Deliverables'}
                 </div>
-                {deliverablesByStepId.get(selectedStep.id)!.map((d) => (
+                {previousDeliverables.map((d) => (
                   <StepDeliverableRow key={d.id} deliverable={d} />
                 ))}
               </div>
             )}
             {selectedStepRun?.output && (
-              <details className="text-xs">
-                <summary className="cursor-pointer text-[var(--theme-text-secondary)]">
-                  Output
-                </summary>
-                <pre className="mt-2 p-2 rounded bg-[var(--theme-bg-overlay)] overflow-x-auto text-[10px] text-[var(--theme-text-primary)]">
-                  {JSON.stringify(selectedStepRun.output, null, 2)}
-                </pre>
-              </details>
+              <StepOutputView output={selectedStepRun.output} latestDeliverable={latestDeliverable} />
             )}
             {selectedStepRun?.status === 'needs_review' &&
               selectedStep.executorType === 'human_gate' && (
@@ -337,6 +386,7 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
               />
             )}
           </div>
+          </>
         )}
       </div>
 

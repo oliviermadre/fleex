@@ -7,6 +7,7 @@ import type {
   SkillLeaderboardEntry,
   PanelLeaderboardEntry,
   WorkflowLeaderboardEntry,
+  RoutineLeaderboardEntry,
 } from '@fleex/shared';
 import { useStatisticsStore, type Preset, type Granularity } from '../../stores/statisticsStore';
 import { cn } from '../../lib/cn';
@@ -616,6 +617,7 @@ function DashboardContent({
       {/* Leaderboards */}
       <AgentLeaderboard entries={data.agentLeaderboard} />
       <WorkflowLeaderboard entries={data.workflowLeaderboard} />
+      <RoutineLeaderboard entries={data.routineLeaderboard} />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SkillLeaderboard entries={data.skillLeaderboard} />
@@ -695,6 +697,44 @@ function WorkflowLeaderboard({ entries }: { entries: WorkflowLeaderboardEntry[] 
           render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(8)} label={String(e.executionCount)} />,
         },
         { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
+        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
+        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+      ]}
+    />
+  );
+}
+
+/**
+ * Same shape as the workflow board, plus what the workflow board cannot say:
+ * *what* the routine launches. A routine targeting an agent / skill / panel
+ * produces runs with no template, so this is the only place its activity shows.
+ */
+function RoutineLeaderboard({ entries }: { entries: RoutineLeaderboardEntry[] }) {
+  const max = Math.max(1, ...entries.map((e) => e.executionCount));
+  return (
+    <LeaderboardTable
+      title="Routine Leaderboard"
+      rows={entries}
+      empty="No routine runs yet"
+      keyOf={(e) => e.routineId}
+      columns={[
+        { header: 'Routine', render: (e, i) => <RankCell index={i} name={e.routineName} /> },
+        {
+          header: 'Target',
+          render: (e) => (
+            <span className="text-xs text-[var(--theme-text-secondary)]">
+              <span className="text-[var(--theme-text-faint)]">{e.targetKind}</span>
+              {e.targetRef ? ` · ${e.targetRef}` : ''}
+            </span>
+          ),
+        },
+        {
+          header: 'Runs',
+          align: 'right',
+          render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(2)} label={String(e.executionCount)} />,
+        },
+        { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
+        { header: 'Last Run', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.lastRunAt ? new Date(e.lastRunAt).toLocaleDateString() : '—'}</span> },
         { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
         { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
       ]}

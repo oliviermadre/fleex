@@ -3,6 +3,7 @@ import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entit
 import type { RoutineEntity } from '../../domain/entities/routine.entity.js';
 import { RoutineNotFoundError } from '../../domain/errors.js';
 import type { RoutineStorePort } from '../ports/routine-store.port.js';
+import type { EventBus } from '../event-bus.js';
 import type { CreateWorkflowRunUseCase } from './create-workflow-run.js';
 
 /**
@@ -19,11 +20,18 @@ import type { CreateWorkflowRunUseCase } from './create-workflow-run.js';
  * pipeline: the routine fabricates a one-step template snapshot at launch and
  * everything downstream — orchestrator, step executors, run history,
  * deliverable attribution, needs_review — applies unchanged.
+ *
+ * `routine.run_started` is emitted here rather than in the scheduler: this is
+ * the single door every launch goes through (scheduler, Launch button, API,
+ * CLI). Emitting it from the scheduler only — as it used to be — meant the
+ * audit trail recorded `routine.run_completed` for manual launches but never
+ * the matching `run_started`, leaving half of every routine's history missing.
  */
 export class RunRoutineUseCase {
   constructor(
     private readonly routineStore: RoutineStorePort,
     private readonly createWorkflowRun: CreateWorkflowRunUseCase,
+    private readonly eventBus?: EventBus,
   ) {}
 
   async execute(params: {
@@ -46,6 +54,17 @@ export class RunRoutineUseCase {
 
     routine.recordRun(run.id);
     await this.routineStore.save(routine);
+
+    // A scheduled launch reports the schedule that fired it; anything else is a
+    // human pressing Launch, whatever the routine's own trigger says.
+    this.eventBus?.emit({
+      type: 'routine.run_started',
+      routineId: routine.id,
+      routineSlug: routine.slug,
+      workflowRunId: run.id,
+      triggerKind: params.triggeredFrom === 'schedule' ? routine.trigger.kind : 'manual',
+      occurredAt: new Date(),
+    });
 
     return run;
   }

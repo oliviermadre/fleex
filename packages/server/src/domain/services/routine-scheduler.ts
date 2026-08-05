@@ -227,15 +227,9 @@ export class RoutineSchedulerService {
     }
     await store.save(fresh);
 
+    // `routine.run_started` is emitted by RunRoutineUseCase, not here: it is the
+    // door every launch goes through, so manual launches get the event too.
     if (!workflowRunId) return;
-    this.eventBus.emit({
-      type: 'routine.run_started',
-      routineId: routine.id,
-      routineSlug: routine.slug,
-      workflowRunId,
-      triggerKind,
-      occurredAt: new Date(),
-    });
     this.logger.info('Routine launched on schedule', {
       routineId: routine.id, slug: routine.slug, workflowRunId, triggerKind,
     });

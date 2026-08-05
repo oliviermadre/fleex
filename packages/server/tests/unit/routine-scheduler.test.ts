@@ -182,18 +182,21 @@ describe('RoutineSchedulerService — a one-shot fires exactly once', () => {
     expect(runRoutine.execute).toHaveBeenCalledTimes(1);
   });
 
-  it('announces the launch so /routines updates without a manual refresh', async () => {
+  it('marks the launch as scheduled so the announcement can tell it from a click', async () => {
+    // `routine.run_started` is emitted by RunRoutineUseCase, not here — that is
+    // the single door every launch goes through. All the scheduler owes the
+    // event is the origin: `triggeredFrom: 'schedule'`.
     const now = new Date('2026-08-04T12:00:00Z');
     const routine = makeRoutine(
       { kind: 'once', runAt: now.toISOString(), timezone: PARIS },
       { nextRunAt: now },
     );
-    const { scheduler, eventBus } = makeScheduler([routine]);
+    const { scheduler, runRoutine } = makeScheduler([routine]);
 
     await scheduler.tick(now);
 
-    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'routine.run_started', routineId: 'r-1', workflowRunId: 'run-new', triggerKind: 'once',
+    expect(runRoutine.execute).toHaveBeenCalledWith(expect.objectContaining({
+      routineId: 'r-1', triggeredFrom: 'schedule',
     }));
   });
 
@@ -204,13 +207,12 @@ describe('RoutineSchedulerService — a one-shot fires exactly once', () => {
       { kind: 'cron', cron: '*/5 * * * *', timezone: PARIS },
       { nextRunAt: now },
     );
-    const { scheduler, runRoutine, store, eventBus } = makeScheduler([routine]);
+    const { scheduler, runRoutine, store } = makeScheduler([routine]);
     runRoutine.execute.mockRejectedValue(new Error('template gone'));
 
     await scheduler.tick(now);
 
     expect((await store.getById('r-1'))!.nextRunAt!.getTime()).toBeGreaterThan(now.getTime());
-    expect(eventBus.emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'routine.run_started' }));
   });
 });
 
