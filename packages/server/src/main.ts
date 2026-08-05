@@ -260,9 +260,9 @@ async function main() {
 
   // Wire merge detection for ticket auto-complete
   container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {
-    const movedIds = await container.detectMerge.execute(mergedPRs, repoKey);
-    for (const id of movedIds) {
-      container.eventBus.emit({ type: 'ticket.moved', ticketId: id, fromStatus: '', toStatus: 'done', occurredAt: new Date() });
+    const moved = await container.detectMerge.execute(mergedPRs, repoKey);
+    for (const { id, fromStatus } of moved) {
+      container.eventBus.emit({ type: 'ticket.moved', ticketId: id, fromStatus, toStatus: 'done', occurredAt: new Date() });
     }
   });
 

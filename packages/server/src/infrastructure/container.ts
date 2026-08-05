@@ -228,7 +228,7 @@ export async function createContainer() {
   const createSession = new CreateSessionUseCase(tmux, sessionStore_, namingService, git, config, logger);
   const renameSession = new RenameSessionUseCase(tmux, sessionStore_, namingService, logger);
   const createWorktreeUC = new CreateWorktreeUseCase(git, logger, bareCloneManager, overlayManager, resolver);
-  const detectMerge = new DetectMergeUseCase(ticketStore_, logger);
+  const detectMerge = new DetectMergeUseCase(ticketStore_, logger, (prs) => githubGraphql.fetchPRStates(prs));
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
     ticketStore_, createSession, createWorktreeUC, git, config, logger, resolver,
   );

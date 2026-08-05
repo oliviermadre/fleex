@@ -9,6 +9,7 @@ import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { parsePRRefs } from '../../domain/services/pr-ref.js';
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
@@ -846,11 +847,7 @@ export function ticketRoutes(container: Container) {
         const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
         if (prLinks.length === 0) return {};
 
-        const prs = prLinks.map((link) => {
-          const match = link.ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
-          if (!match) return null;
-          return { org: match[1]!, name: match[2]!, number: parseInt(match[3]!, 10) };
-        }).filter((p): p is NonNullable<typeof p> => p !== null);
+        const prs = parsePRRefs(prLinks.map((link) => link.ref));
 
         const stateMap = await container.githubGraphql.fetchPRStates(prs);
         // Return as plain object: { "org/name#123": "OPEN", ... }
@@ -865,11 +862,7 @@ export function ticketRoutes(container: Container) {
         const { refs } = request.body;
         if (!refs || refs.length === 0) return {};
 
-        const prs = refs.map((ref) => {
-          const match = ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
-          if (!match) return null;
-          return { org: match[1]!, name: match[2]!, number: parseInt(match[3]!, 10) };
-        }).filter((p): p is NonNullable<typeof p> => p !== null);
+        const prs = parsePRRefs(refs);
 
         const stateMap = await container.githubGraphql.fetchPRStates(prs);
         return Object.fromEntries(stateMap);
