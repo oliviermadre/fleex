@@ -53,6 +53,19 @@ describe('StepOutputView', () => {
     expect(getByText('new')).toBeTruthy();
   });
 
+  it('opens an unpersisted deliverable in a popup, not inside the sidebar column', () => {
+    // Clicking a deliverable must do one thing everywhere. It used to unfold in
+    // place when no persisted row was matched, which rendered a full report in a
+    // 400px column while its neighbour opened the reading overlay.
+    const { getByText } = render(<StepOutputView output={baseOutput} />);
+
+    fireEvent.click(getByText('Migration review'));
+
+    const popup = document.body.querySelector('.deliverable-overlay-panel');
+    expect(popup).toBeTruthy();
+    expect(popup?.textContent).toContain('Findings');
+  });
+
   it('shows custom schema fields rather than hiding them behind the raw toggle', () => {
     const { getByText } = render(<StepOutputView output={baseOutput} />);
 

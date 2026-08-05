@@ -113,13 +113,16 @@ function isActiveStatus(status: string): boolean {
 
 type Tab = 'overview' | 'current' | 'history' | 'config';
 
+/** Open/close travel of the run panel — fast enough to feel instant, long enough to read as a slide. */
+const PANEL_SLIDE_MS = 180;
+
 /**
  * Routine detail — the same tab anatomy as the Repository dashboard and the
  * Agentic Catalog:
  *
  * - a slim identity header (name, workflow chip, status, Play);
  * - a tab bar: Overview (the routine's home — stats, config summary and
- *   redirect tables), Current Run (the active — else latest — run's DAG at
+ *   redirect tables), Latest Run (the active — else latest — run's DAG at
  *   full height), History (the archive), Config (the full recipe, editable);
  * - edit/delete still live on the sidebar rows; Play is the only header action.
  *
@@ -140,9 +143,12 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
 
   const targetInfo = describeTarget(routine.target, templates);
 
-  // The run that deserves the "Current Run" tab: still moving, else the latest.
+  // The run that deserves the "Latest Run" tab: still moving, else the latest.
   const current = runs.find(({ run }) => isActiveStatus(run.status)) ?? runs[0] ?? null;
-  const history = runs.filter(({ run }) => run.id !== current?.run.id);
+  // History is the whole archive, including the run shown in "Latest Run" —
+  // pinned first, so the tab is a complete ledger rather than "everything but
+  // the one you were just looking at".
+  const history = current ? [current, ...runs.filter(({ run }) => run.id !== current.run.id)] : runs;
   const isActive = current !== null && isActiveStatus(current.run.status);
 
   const onLaunch = async () => {
@@ -162,7 +168,7 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'current', label: 'Current Run' },
+    { key: 'current', label: 'Latest Run' },
     { key: 'history', label: 'History', count: history.length },
     { key: 'config', label: 'Config' },
   ];
@@ -265,7 +271,7 @@ export function RoutineDetail({ routine }: { routine: Routine }) {
         ))}
       </div>
 
-      {/* Current Run and History own the full remaining height (both host a DAG,
+      {/* Latest Run and History own the full remaining height (both host a DAG,
           which needs a sized parent, and History anchors its slide-over to that
           box); Overview and Config are padded scroll areas. */}
       {activeTab === 'current' ? (
@@ -383,7 +389,7 @@ function OverviewTab({ routine, targetInfo, runs, onNavigate }: {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Recent runs → Current Run / History */}
+        {/* Recent runs → Latest Run / History */}
         <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
           <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-5 py-3">
             <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Recent runs</span>
@@ -582,6 +588,20 @@ function HistoryTab({ history }: { history: RoutineRunDetail[] }) {
   // rather than pinning it to a stale copy.
   const selected = history.find((d) => d.run.id === selectedRunId) ?? null;
 
+  // The panel outlives its selection by the length of the slide-out, otherwise
+  // unmounting on click would cut the closing animation on its first frame.
+  const [lingering, setLingering] = useState<RoutineRunDetail | null>(null);
+  useEffect(() => {
+    if (selected) {
+      setLingering(selected);
+      return;
+    }
+    if (!lingering) return;
+    const timer = setTimeout(() => setLingering(null), PANEL_SLIDE_MS);
+    return () => clearTimeout(timer);
+  }, [selected, lingering]);
+  const panelDetail = selected ?? lingering;
+
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const area = areaRef.current;
@@ -606,7 +626,7 @@ function HistoryTab({ history }: { history: RoutineRunDetail[] }) {
     return (
       <div className="flex flex-1 flex-col items-center gap-3 p-6 py-16 text-[var(--theme-text-muted)]">
         <RoutineIcon size={32} strokeWidth={1} tinted={false} className="text-[var(--theme-text-faint)]" />
-        <p className="text-sm">No past run yet.</p>
+        <p className="text-sm">No run yet.</p>
       </div>
     );
   }
@@ -626,9 +646,10 @@ function HistoryTab({ history }: { history: RoutineRunDetail[] }) {
         </div>
       </div>
 
-      {selected && (
+      {panelDetail && (
         <RunSlideOver
-          detail={selected}
+          detail={panelDetail}
+          open={selected !== null}
           width={panelWidth}
           onStartResize={startResize}
           onClose={() => setSelectedRunId(null)}
@@ -645,17 +666,32 @@ function HistoryTab({ history }: { history: RoutineRunDetail[] }) {
  */
 function RunSlideOver({
   detail,
+  open,
   width,
   onStartResize,
   onClose,
 }: {
   detail: RoutineRunDetail;
+  /** false while sliding back out — the panel is still mounted, on its way off. */
+  open: boolean;
   /** null until the handle is dragged: the panel opens at its default ratio. */
   width: number | null;
   onStartResize: (e: React.MouseEvent) => void;
   onClose: () => void;
 }) {
   const { run, stepRuns, deliverables } = detail;
+
+  // Mount off-screen, then slide in on the next frame — the browser needs one
+  // painted frame at the starting transform for the transition to run at all.
+  const [slidIn, setSlidIn] = useState(false);
+  useEffect(() => {
+    if (!open) {
+      setSlidIn(false);
+      return;
+    }
+    const frame = requestAnimationFrame(() => setSlidIn(true));
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -674,12 +710,23 @@ function RunSlideOver({
       {/* The listing stays visible behind — that is the point of the pattern. */}
       <div
         className="absolute inset-0 z-10"
-        style={{ background: 'var(--theme-glass-overlay)' }}
+        style={{
+          background: 'var(--theme-glass-overlay)',
+          opacity: slidIn ? 1 : 0,
+          transition: `opacity ${PANEL_SLIDE_MS}ms ease-out`,
+        }}
         onMouseDown={onClose}
       />
       <div
         className="absolute inset-y-0 right-0 z-20 flex border-l border-[var(--theme-border)] shadow-2xl"
-        style={{ width: width ?? `${DEFAULT_PANEL_RATIO * 100}%`, background: 'var(--theme-bg-surface)' }}
+        style={{
+          width: width ?? `${DEFAULT_PANEL_RATIO * 100}%`,
+          background: 'var(--theme-bg-surface)',
+          transform: slidIn ? 'translateX(0)' : 'translateX(100%)',
+          // Width is deliberately left out: the resize handle must track the
+          // cursor with no lag, only the open/close travel is animated.
+          transition: `transform ${PANEL_SLIDE_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+        }}
       >
         <div
           role="separator"

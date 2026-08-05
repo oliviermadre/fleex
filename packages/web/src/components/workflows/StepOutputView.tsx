@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import type { StepOutput, StepRunResult, TicketDeliverable } from '@fleex/shared';
@@ -213,8 +214,10 @@ function FieldRow({ label, value }: { label: string; value: unknown }) {
 /**
  * The deliverable carried by the output. When the persisted row was matched we
  * open the shared reading overlay — same affordance as everywhere else; when it
- * was not (deliverable rejected, or run not yet persisted) the markdown is
- * expandable in place so the content is never lost.
+ * was not (deliverable rejected, or run not yet persisted) the markdown the
+ * agent returned opens in a read-only popup of its own. It used to unfold
+ * inside the sidebar, which made the same row behave two different ways and
+ * showed a full report in a 400px column.
  */
 function OutputDeliverable({
   deliverable,
@@ -226,14 +229,14 @@ function OutputDeliverable({
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
   const labelForType = useDeliverableTypesStore((s) => s.labelFor);
   const colorForType = useDeliverableTypesStore((s) => s.colorFor);
-  const [expanded, setExpanded] = useState(false);
+  const [popupOpen, setPopupOpen] = useState(false);
   const c = colorForType(deliverable.type);
 
   return (
     <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
       <button
         type="button"
-        onClick={() => (persisted ? openDeliverableOverlay(persisted) : setExpanded((v) => !v))}
+        onClick={() => (persisted ? openDeliverableOverlay(persisted) : setPopupOpen(true))}
         title={deliverable.title}
         className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
       >
@@ -258,13 +261,68 @@ function OutputDeliverable({
           new
         </span>
       </button>
-      {expanded && !persisted && (
-        <div className="needs-review-markdown max-h-72 overflow-y-auto border-t border-[var(--theme-border)] px-2 py-2 text-xs text-[var(--theme-text-primary)]">
+      {popupOpen && !persisted && (
+        <UnpersistedDeliverablePopup deliverable={deliverable} onClose={() => setPopupOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The reading popup for a deliverable that has no persisted row behind it —
+ * same frame as `DeliverableReadingOverlay`, minus everything that needs an id
+ * (type picker, copy to ticket, detach): there is no record to act on yet.
+ */
+function UnpersistedDeliverablePopup({
+  deliverable,
+  onClose,
+}: {
+  deliverable: NonNullable<StepOutput['deliverable']>;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="deliverable-overlay-backdrop"
+      // Marks this as the topmost overlay so the step sidebar and the run
+      // slide-over leave ESC alone while it is open.
+      data-overlay-top
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="deliverable-overlay-panel" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-4 py-3">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--theme-text-primary)]">
+            {deliverable.title}
+          </span>
+          <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">not persisted</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close deliverable"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            style={{ fontSize: 16, lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+        <div className="needs-review-markdown flex-1 overflow-y-auto px-6 py-4 text-sm text-[var(--theme-text-primary)]">
           <Markdown remarkPlugins={userRemarkPlugins} rehypePlugins={rehypePlugins}>
             {deliverable.markdown}
           </Markdown>
         </div>
-      )}
-    </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

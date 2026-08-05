@@ -80,17 +80,35 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
   // as the fallback rather than dropping historical deliverables off the graph.
   const deliverablesByStepId = useMemo(() => {
     const stepIdByStepRun = new Map(stepRuns.map((sr) => [sr.id, sr.stepId]));
-    const idByName = new Map<string, string>();
-    for (const s of run.templateSnapshot.steps) {
-      if (!idByName.has(s.name)) idByName.set(s.name, s.id);
+
+    // Title → step, read off what the step runs *declared* they produced. This
+    // sits ahead of the name fallback because it survives what the name cannot:
+    // two steps of the same workflow routinely carry the same name (the editor
+    // hands out "New Step"), and the author string only carries that name.
+    // Ambiguous titles resolve to nothing rather than to a coin flip.
+    const stepIdByTitle = new Map<string, string | null>();
+    for (const sr of stepRuns) {
+      const title = sr.output?.deliverable?.title;
+      if (!title) continue;
+      const seen = stepIdByTitle.get(title);
+      if (seen === undefined) stepIdByTitle.set(title, sr.stepId);
+      else if (seen !== sr.stepId) stepIdByTitle.set(title, null);
     }
+
+    // Same guard on the name map: a duplicated step name identifies nothing.
+    const idByName = new Map<string, string | null>();
+    for (const s of run.templateSnapshot.steps) {
+      idByName.set(s.name, idByName.has(s.name) ? null : s.id);
+    }
+
     const m = new Map<string, TicketDeliverable[]>();
     for (const d of deliverables) {
       let stepId = d.stepRunId ? stepIdByStepRun.get(d.stepRunId) : undefined;
+      if (!stepId) stepId = stepIdByTitle.get(d.title) ?? undefined;
       if (!stepId) {
         const sep = d.agentName.lastIndexOf(' → ');
         if (sep < 0) continue;
-        stepId = idByName.get(d.agentName.slice(sep + 3));
+        stepId = idByName.get(d.agentName.slice(sep + 3)) ?? undefined;
       }
       if (!stepId) continue;
       m.set(stepId, [...(m.get(stepId) ?? []), d]);
@@ -103,6 +121,16 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
       run.templateSnapshot.steps.map((step) => {
         const sr = latestPerStep.get(step.id);
         const session = stepSessionState(step, sr);
+        // The marker counts what the step actually produced, which is not the
+        // same as what can be traced back to it. A run that predates the
+        // stepRunId anchor has no attributable row, yet its output carries the
+        // deliverable the sidebar renders — so the output alone is enough to
+        // earn the marker, and the split keeps it from being counted twice.
+        const attributed = deliverablesByStepId.get(step.id) ?? [];
+        const split = splitStepDeliverables(attributed, sr?.output?.deliverable?.title, sr?.id);
+        const deliverableCount =
+          split.previousDeliverables.length +
+          (split.latestDeliverable || sr?.output?.deliverable ? 1 : 0);
         const data: StepRunNodeData = {
           step,
           status: sr?.status ?? 'pending',
@@ -114,7 +142,7 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
               ? () =>
                   setOpenSession({ executionId: session.executionId, stepName: step.name })
               : undefined,
-          deliverableCount: deliverablesByStepId.get(step.id)?.length ?? 0,
+          deliverableCount,
         };
         return {
           id: step.id,
