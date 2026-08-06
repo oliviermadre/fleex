@@ -1,6 +1,6 @@
 import { RoutineEntity } from '../../../domain/entities/routine.entity.js';
 import { normalizeRunSubject } from '@fleex/shared';
-import type { RoutineStorePort } from '../../../application/ports/routine-store.port.js';
+import type { RoutineClaim, RoutineStorePort } from '../../../application/ports/routine-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 import type { RoutineOverlapPolicy, RoutineTrigger } from '@fleex/shared';
 import { rowToTarget, targetToColumns } from '../routine-target-mapping.js';
@@ -24,6 +24,8 @@ interface Row {
   last_run_at: string | null;
   last_run_id: string | null;
   next_run_at: string | null;
+  last_claimed_by: string | null;
+  last_claimed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -51,6 +53,8 @@ function toEntity(r: Row): RoutineEntity {
     r.next_run_at ? new Date(r.next_run_at) : null,
     new Date(r.created_at),
     new Date(r.updated_at),
+    r.last_claimed_by ?? null,
+    r.last_claimed_at ? new Date(r.last_claimed_at) : null,
   );
 }
 
@@ -99,6 +103,51 @@ export class SupabaseRoutineStore implements RoutineStorePort {
     return (data as Row[]).map(toEntity);
   }
 
+  /**
+   * The CAS is the pair of `.eq()` filters: the UPDATE matches only while the
+   * row still holds the `next_run_at` this process read, so of the N instances
+   * that saw the same due routine exactly one gets a row back.
+   *
+   * `.select()` is what makes the outcome observable — supabase-js reports no
+   * error for an UPDATE that matched nothing, so without it a lost race would
+   * look identical to a won one.
+   *
+   * The instant is sent as a `Z`-suffixed ISO string: Postgres compares
+   * timestamptz by instant, and the value round-trips exactly because it is the
+   * one we wrote in the first place.
+   */
+  async claimDue(claim: RoutineClaim): Promise<boolean> {
+    const patch: Record<string, unknown> = {
+      next_run_at: claim.nextRunAt?.toISOString() ?? null,
+      last_claimed_by: claim.claimedBy,
+      last_claimed_at: claim.claimedAt.toISOString(),
+      updated_at: claim.claimedAt.toISOString(),
+    };
+    if (claim.disable) patch['enabled'] = false;
+
+    const { data, error } = await this.conn.client
+      .from('routines')
+      .update(patch)
+      .eq('id', claim.id)
+      .eq('next_run_at', claim.observedNextRunAt.toISOString())
+      .select('id');
+    if (error) throw new Error(`SupabaseRoutineStore.claimDue failed: ${error.message}`);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async rearm(id: string, nextRunAt: Date | null): Promise<void> {
+    const { error } = await this.conn.client
+      .from('routines')
+      .update({ next_run_at: nextRunAt?.toISOString() ?? null, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(`SupabaseRoutineStore.rearm failed: ${error.message}`);
+  }
+
+  /**
+   * Deliberately does NOT write `last_claimed_by` / `last_claimed_at`: those
+   * columns belong to {@link claimDue} alone, so an ordinary edit can never
+   * overwrite a claim another instance just recorded.
+   */
   async save(routine: RoutineEntity): Promise<void> {
     const t = routine.trigger;
     const { error } = await this.conn.client.from('routines').upsert({

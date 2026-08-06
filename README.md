@@ -154,6 +154,27 @@ fleex desktop --workspace perso   # perso@main → SQLite stack + Electron windo
 
 `fleex status` shows the **Workspace** and **Driver** of every running instance.
 
+### Scheduled routines across several instances
+
+Instances of the same workspace share one database — two machines on the same Supabase,
+or `~/.fleex/repo` plus a worktree on the same `fleex.db` — so they all see the same
+routine come due. Two rules keep that from firing it twice:
+
+- **A due occurrence is claimed before it runs.** The instance that atomically moves
+  `next_run_at` forward is the only one allowed to launch; the others find the slot
+  already taken and move on. Whichever machine is awake takes the routine, so nothing
+  is lost when one of them is closed. The routine records which instance won
+  (`lastClaimedBy`) — that is how you tell "it ran on the other laptop" from "it never
+  ran".
+- **Only the canonical install schedules.** A stack started from a worktree does not
+  arm its scheduler: a QA instance running an unmerged branch must not execute a
+  production routine. Routines still run — on the instance in `~/.fleex/repo`, against
+  the same shared database.
+
+`GET /api/routines/scheduler` reports whether the instance you are talking to schedules,
+and why. Override the placement rule with `FLEEX_ROUTINE_SCHEDULER=on|off` — `on` to
+schedule from a worktree on purpose, `off` to silence one machine of a two-machine setup.
+
 ### Updating
 
 `fleex self-update` is workspace-aware:

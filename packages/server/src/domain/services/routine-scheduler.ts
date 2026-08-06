@@ -12,6 +12,15 @@ export const ROUTINE_TICK_INTERVAL_MS = 60_000;
 export const SCHEDULER_TRIGGERED_BY = 'routine-scheduler';
 
 /**
+ * What this instance intends to do with one due occurrence, decided before any
+ * write so the decision and the claim can be a single compare-and-swap.
+ */
+type Occurrence =
+  | { kind: 'launch'; nextRunAt: Date | null; disable: boolean }
+  | { kind: 'skip'; activeRunId: string; nextRunAt: Date | null; disable: boolean }
+  | { kind: 'hold' };
+
+/**
  * Fires scheduled routines.
  *
  * Same shape as {@link RepositoryRefreshScheduler}: a single interval, a
@@ -20,17 +29,31 @@ export const SCHEDULER_TRIGGERED_BY = 'routine-scheduler';
  * and a `.catch` inside the interval callback — an unhandled rejection there
  * would kill the ticker and silently stop every routine in the instance.
  *
- * Two rules carry the design:
+ * Three rules carry the design:
  *
  *  1. **No missed-tick replay.** After an outage, a due routine fires *once*
  *     and its next slot is recomputed from `now`, not walked forward from the
  *     slot it missed. Replaying would turn a two-hour downtime into 24
  *     simultaneous agent runs — a self-inflicted thundering herd on every
  *     restart.
- *  2. **Launching goes through {@link RunRoutineUseCase}.** The concurrency
+ *  2. **Claim before launching.** Several instances routinely share one
+ *     storage — two machines on the same Supabase, or `~/.fleex/repo` plus a
+ *     QA worktree on the same `fleex.db` — and they all see the same due row.
+ *     Advancing `next_run_at` is therefore done *first*, as a CAS against the
+ *     value this tick observed ({@link RoutineStorePort.claimDue}), and only
+ *     the instance whose UPDATE matched a row is allowed to act. Reading the
+ *     schedule, launching, and then advancing — the obvious order — leaves a
+ *     window in which every instance believes the occurrence is still free.
+ *  3. **Launching goes through {@link RunRoutineUseCase}.** The concurrency
  *     guard (`RoutineRunAlreadyActiveError`) and the `subjectSnapshot` freezing
  *     live there, and a scheduled launch must be indistinguishable from the
  *     manual Launch button apart from `triggeredBy`.
+ *
+ * Rule 2 also settles who owns which columns: the scheduler only ever writes
+ * `next_run_at` (plus `enabled` for a spent one-shot) through narrow updates,
+ * never through `save()`. A full-row upsert from a scheduler holding a row it
+ * read seconds ago would erase the `last_run_id` a sibling instance had just
+ * recorded.
  */
 export class RoutineSchedulerService {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -44,6 +67,8 @@ export class RoutineSchedulerService {
   constructor(
     private readonly eventBus: EventBus,
     private readonly logger: LoggerPort,
+    /** Identifies this process on the claims it wins. See `Routine.lastClaimedBy`. */
+    private readonly instanceId: string = 'unknown',
   ) {}
 
   setDeps(deps: {
@@ -95,7 +120,7 @@ export class RoutineSchedulerService {
         this.logger.error('Routine scheduler tick failed', { error: String(err) });
       });
     }, intervalMs);
-    this.logger.info('Routine scheduler started', { intervalMs });
+    this.logger.info('Routine scheduler started', { intervalMs, instanceId: this.instanceId });
   }
 
   stop(): void {
@@ -112,6 +137,13 @@ export class RoutineSchedulerService {
    * through 24 slots is re-armed on the next future slot, not on the oldest
    * missed one. A `once` keeps its (possibly past) instant — a one-shot is a
    * single intent, not a herd, so it still fires exactly once.
+   *
+   * When two instances share a storage, a late booter recomputing from *its*
+   * own `now` can push a slot the earlier instance was still waiting on. That
+   * is the accepted cost of recomputing from the clock rather than replaying,
+   * and it stays bounded to one slot: edits already re-arm at edit time
+   * (`UpdateRoutineUseCase`), so this pass only matters for a schedule changed
+   * while every instance was down.
    */
   async recomputeAll(now: Date = new Date()): Promise<void> {
     const store = this.routineStore;
@@ -132,8 +164,7 @@ export class RoutineSchedulerService {
         next = null;
       }
       if (sameInstant(routine.nextRunAt, next)) continue;
-      routine.schedule(next);
-      await store.save(routine);
+      await store.rearm(routine.id, next);
     }
   }
 
@@ -150,12 +181,39 @@ export class RoutineSchedulerService {
       if (!store || !runStore || !runRoutine) return;
 
       for (const routine of await store.getDue(now)) {
+        // The witness for the CAS. `getDue` cannot return a null one, but the
+        // claim is meaningless without it, so it is checked rather than forced.
+        const observed = routine.nextRunAt;
+        if (!observed) continue;
+
         const active = await runStore.getActiveByRoutine(routine.id);
-        if (active) {
-          await this.handleOverlap(routine, active.id, now);
+        const occurrence = this.planOccurrence(routine, active?.id ?? null, now);
+
+        // `hold` is the queue policy waiting for the routine to free up. It
+        // writes nothing and announces nothing, so there is no side effect to
+        // serialise and nothing to claim — whichever instance ticks once the
+        // run ends will go through the claim then.
+        if (occurrence.kind === 'hold') continue;
+
+        const won = await store.claimDue({
+          id: routine.id,
+          observedNextRunAt: observed,
+          nextRunAt: occurrence.nextRunAt,
+          ...(occurrence.disable ? { disable: true } : {}),
+          claimedBy: this.instanceId,
+          claimedAt: now,
+        });
+        if (!won) {
+          // Another instance took this occurrence between our read and our
+          // write. Not an error — it is the mechanism working.
+          this.logger.debug('Routine occurrence claimed by another instance', {
+            routineId: routine.id, slug: routine.slug, dueAt: observed.toISOString(),
+          });
           continue;
         }
-        await this.launch(routine, now);
+
+        if (occurrence.kind === 'skip') this.announceSkip(routine, occurrence.activeRunId);
+        else await this.launch(routine);
       }
     } finally {
       this.ticking = false;
@@ -163,27 +221,39 @@ export class RoutineSchedulerService {
   }
 
   /**
-   * A slot came due while the previous run is still in flight.
+   * Decides what to do with a due occurrence, and where its schedule lands —
+   * without writing anything, so the caller can turn the whole decision into
+   * one atomic claim.
    *
    * `skip` drops the occurrence and moves on to the next slot — the honest
-   * reading of "this routine may not overlap itself". `queue` leaves
-   * `next_run_at` in the past so the very next tick retries: a queue of depth
-   * one, which is all the schema can express, and enough for "run it as soon as
-   * the routine is free". A queued occurrence deliberately does not survive a
-   * restart — the boot recompute re-arms forward, same anti-herd rule as above.
+   * reading of "this routine may not overlap itself". `queue` holds it: the
+   * schedule is left in the past so the next tick that finds the routine free
+   * runs it. That is a queue of depth one, which is all the schema can express,
+   * and enough for "run it as soon as the routine is free". A queued occurrence
+   * deliberately does not survive a restart — the boot recompute re-arms
+   * forward, same anti-herd rule as above.
+   *
+   * A one-shot is both disarmed and disabled, whichever branch it takes.
+   * Clearing `next_run_at` alone would be enough for this process, but the row
+   * outlives it — leaving `enabled = true` would let a future boot recompute
+   * arm the same one-shot again. And skipping a one-shot drops it for good:
+   * retrying every minute until the active run ends would silently turn a
+   * single intent into a poller.
    */
-  private async handleOverlap(routine: RoutineEntity, activeRunId: string, now: Date): Promise<void> {
-    if (routine.overlapPolicy !== 'skip') return;
+  private planOccurrence(routine: RoutineEntity, activeRunId: string | null, now: Date): Occurrence {
+    if (activeRunId && routine.overlapPolicy !== 'skip') return { kind: 'hold' };
 
-    if (routine.trigger.kind === 'once') {
-      // Skipping a one-shot means dropping it for good: retrying every minute
-      // until the active run ends would silently turn it into a poller.
-      routine.consumeOneShot();
-    } else {
-      routine.schedule(nextCronRunAfter(routine.trigger, now));
-    }
-    await this.routineStore!.save(routine);
+    const oneShot = routine.trigger.kind === 'once';
+    const landing = {
+      nextRunAt: oneShot ? null : nextCronRunAfter(routine.trigger, now),
+      disable: oneShot,
+    };
+    return activeRunId
+      ? { kind: 'skip', activeRunId, ...landing }
+      : { kind: 'launch', ...landing };
+  }
 
+  private announceSkip(routine: RoutineEntity, activeRunId: string): void {
     this.eventBus.emit({
       type: 'routine.run_skipped',
       routineId: routine.id,
@@ -197,42 +267,31 @@ export class RoutineSchedulerService {
     });
   }
 
-  private async launch(routine: RoutineEntity, now: Date): Promise<void> {
-    const store = this.routineStore!;
-    const triggerKind = routine.trigger.kind;
-
-    let workflowRunId: string | null = null;
+  /**
+   * Runs the occurrence this instance has already claimed.
+   *
+   * Nothing here touches the schedule: the claim advanced it, which is also why
+   * a failed launch cannot turn into a 60-second retry loop — the routine whose
+   * template was deleted has already moved on to its next slot.
+   */
+  private async launch(routine: RoutineEntity): Promise<void> {
     try {
       const run = await this.runRoutine!.execute({
         routineId: routine.id,
         triggeredBy: SCHEDULER_TRIGGERED_BY,
         triggeredFrom: 'schedule',
       });
-      workflowRunId = run.id;
+      // `routine.run_started` is emitted by RunRoutineUseCase, not here: it is
+      // the door every launch goes through, so manual launches get it too.
+      this.logger.info('Routine launched on schedule', {
+        routineId: routine.id, slug: routine.slug,
+        workflowRunId: run.id, triggerKind: routine.trigger.kind,
+      });
     } catch (err) {
-      // A failed launch must still advance the schedule, otherwise a routine
-      // whose template was deleted retries every 60 s forever.
       this.logger.error('Scheduled routine launch failed', {
         routineId: routine.id, slug: routine.slug, error: String(err),
       });
     }
-
-    // Reload: RunRoutineUseCase saved its own instance (lastRunId / lastRunAt).
-    // Saving the stale one we are holding would erase that.
-    const fresh = (await store.getById(routine.id)) ?? routine;
-    if (triggerKind === 'once') {
-      fresh.consumeOneShot();
-    } else {
-      fresh.schedule(nextCronRunAfter(fresh.trigger, now));
-    }
-    await store.save(fresh);
-
-    // `routine.run_started` is emitted by RunRoutineUseCase, not here: it is the
-    // door every launch goes through, so manual launches get the event too.
-    if (!workflowRunId) return;
-    this.logger.info('Routine launched on schedule', {
-      routineId: routine.id, slug: routine.slug, workflowRunId, triggerKind,
-    });
   }
 }
 

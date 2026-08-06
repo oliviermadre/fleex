@@ -175,6 +175,8 @@ async function main() {
       deleteRoutine: container.deleteRoutine,
       runRoutine: container.runRoutine,
       authorNameResolver: () => 'routine-trigger',
+      schedulerRole: container.schedulerRole,
+      instanceId: container.instanceId,
     }));
   } else {
     container.logger.warn('routineStore or use cases not available — /api/routines routes skipped');
@@ -246,10 +248,20 @@ async function main() {
     }
   }
 
-  // Start the routine scheduler. Only meaningful when the storage driver gave
-  // us routines at all (sqlite/supabase) — otherwise it would tick over nothing.
+  // Start the routine scheduler. Two conditions, for two different reasons:
+  // the storage driver must have given us routines at all (sqlite/supabase),
+  // and this instance must be the one that schedules them — a QA worktree
+  // sharing the main install's database must not fire production routines with
+  // unmerged code. See scheduler-role.ts.
   if (container.routineStore && container.runRoutine) {
-    container.routineScheduler.start(ROUTINE_TICK_INTERVAL_MS);
+    if (container.schedulerRole.armed) {
+      container.routineScheduler.start(ROUTINE_TICK_INTERVAL_MS);
+    } else {
+      container.logger.info(
+        'Routine scheduler disarmed on this instance — routines still run, on the instance that schedules them',
+        { reason: container.schedulerRole.reason, detail: container.schedulerRole.detail },
+      );
+    }
   }
 
   // Wire repo-exists check so refresh summaries include isClonedLocally
