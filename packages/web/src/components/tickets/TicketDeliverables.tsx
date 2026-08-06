@@ -4,7 +4,7 @@ import { tint, tintText, tintClasses } from '../../lib/tints';
 import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
-import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { DeliverableFormModal } from './DeliverableFormModal';
 import { TicketPickerModal } from './TicketPickerModal';
@@ -40,8 +40,6 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const seenSet = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
   const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
   const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
-  const labelForType = useDeliverableTypesStore((s) => s.labelFor);
-  const colorForType = useDeliverableTypesStore((s) => s.colorFor);
 
   const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
     // Mark as seen when opening
@@ -166,24 +164,14 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
 
                 {/* Type badge — click to change type. Kept outside the row-open
                     button (no nested buttons); full label, configured colour. */}
-                {(() => {
-                  const c = colorForType(d.type);
-                  return (
-                    <div className="flex-shrink-0 py-2.5 pl-2">
-                      <DeliverableTypePicker
-                        deliverable={d}
-                        onChanged={(u) => setDeliverables((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
-                      >
-                        <span
-                          className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${c ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
-                          style={c ? { backgroundColor: c.bg, color: c.text } : undefined}
-                        >
-                          {labelForType(d.type)}
-                        </span>
-                      </DeliverableTypePicker>
-                    </div>
-                  );
-                })()}
+                <div className="flex-shrink-0 py-2.5 pl-2">
+                  <DeliverableTypePicker
+                    deliverable={d}
+                    onChanged={(u) => setDeliverables((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
+                  >
+                    <DeliverableTypeBadge type={d.type} />
+                  </DeliverableTypePicker>
+                </div>
 
                 <button
                   className="flex flex-1 items-center gap-3 px-2 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-surface-hover)]"

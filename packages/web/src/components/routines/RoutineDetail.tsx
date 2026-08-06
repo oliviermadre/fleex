@@ -4,6 +4,7 @@ import { useRoutineStore } from '../../stores/routineStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { WorkflowRunView } from '../workflows/WorkflowRunView';
+import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { RoutineEditor } from './RoutineEditor';
 import type { RoutineRunDetail } from '../../services/api';
 import { cn } from '../../lib/cn';
@@ -496,7 +497,7 @@ function OverviewTab({ routine, targetInfo, runs, onNavigate }: {
               className="flex cursor-pointer items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0 hover:bg-[var(--theme-bg-hover)]"
               onClick={() => openDeliverable(d)}
             >
-              <span className="shrink-0 rounded border border-[var(--theme-border)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">{d.type}</span>
+              <DeliverableTypeBadge type={d.type} />
               <span className="truncate text-[13.5px] font-semibold text-[var(--theme-text-primary)]">{d.title}</span>
               <span className="ml-auto shrink-0 text-xs text-[var(--theme-text-muted)]">{formatRelativeTime(d.createdAt)}</span>
             </div>
@@ -898,9 +899,9 @@ function RunDeliverables({ deliverables }: { deliverables: RoutineRunDetail['del
           type="button"
           onClick={() => openDeliverable(d)}
           title={d.title}
-          className="flex min-w-0 items-center gap-1 rounded border border-[var(--theme-border)] px-1.5 py-0.5 text-[11px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+          className="flex min-w-0 items-center gap-1.5 rounded border border-[var(--theme-border)] py-0.5 pl-0.5 pr-1.5 text-[11px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
         >
-          <span className="shrink-0 text-[var(--theme-text-muted)]">{d.type}</span>
+          <DeliverableTypeBadge type={d.type} />
           <span className="truncate">{d.title}</span>
         </button>
       ))}

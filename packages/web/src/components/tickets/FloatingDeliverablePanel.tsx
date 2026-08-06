@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { TicketDeliverable } from '@fleex/shared';
 import { stripHtmlCodeFence } from '@fleex/shared';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { TITLE_BAR_HEIGHT, PILL_BORDER_RADIUS } from '../../lib/constants';
@@ -47,8 +48,6 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   isFocused?: boolean;
 }) {
   const renderer = useDeliverableTypesStore((s) => s.rendererFor)(deliverable.type);
-  const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
-  const typeColor = useDeliverableTypesStore((s) => s.colorFor)(deliverable.type);
   const updateFloatingDeliverable = useUIStore((s) => s.updateFloatingDeliverable);
   const isHtml = renderer === 'html';
 
@@ -133,23 +132,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           onMouseDown={handleTitleMouseDown}
         >
           <DeliverableTypePicker deliverable={deliverable} onChanged={updateFloatingDeliverable}>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: '0.05em',
-                padding: '1px 6px',
-                borderRadius: 3,
-                backgroundColor: typeColor?.bg ?? 'var(--theme-accent-muted)',
-                color: typeColor?.text ?? 'var(--theme-accent)',
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-                textTransform: 'uppercase',
-                display: 'inline-block',
-              }}
-            >
-              {typeLabel}
-            </span>
+            <DeliverableTypeBadge type={deliverable.type} />
           </DeliverableTypePicker>
 
           <span

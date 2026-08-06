@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Routine, CreateRoutineInput, UpdateRoutineInput } from '@fleex/shared';
+import type { Routine, CreateRoutineInput, UpdateRoutineInput, TicketDeliverable } from '@fleex/shared';
 import * as api from '../services/api';
 import type { RoutineRunDetail, RoutineListItem } from '../services/api';
 
@@ -22,6 +22,7 @@ interface RoutineStore {
   load: () => Promise<void>;
   select: (id: string | null) => Promise<void>;
   refreshRuns: () => Promise<void>;
+  applyDeliverableUpdate: (updated: TicketDeliverable) => void;
   create: (input: CreateRoutineInput) => Promise<Routine>;
   update: (id: string, changes: UpdateRoutineInput) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -76,6 +77,24 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err), runsLoading: false });
     }
+  },
+
+  /**
+   * Patch one deliverable in place across the loaded runs. Deliverables are
+   * edited from overlays that live outside the routine tree (reading overlay,
+   * floating panel); without this the routine's lists keep rendering the type
+   * captured at `fetchRoutineRuns` time until the next full refresh.
+   */
+  applyDeliverableUpdate: (updated) => {
+    const runs = get().runs;
+    if (!runs.some((r) => r.deliverables.some((d) => d.id === updated.id))) return;
+    set({
+      runs: runs.map((r) => (
+        r.deliverables.some((d) => d.id === updated.id)
+          ? { ...r, deliverables: r.deliverables.map((d) => (d.id === updated.id ? updated : d)) }
+          : r
+      )),
+    });
   },
 
   create: async (input) => {

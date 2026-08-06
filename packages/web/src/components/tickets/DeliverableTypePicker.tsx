@@ -2,9 +2,11 @@ import { type ReactNode } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useDocumentsStore } from '../../stores/documentsStore';
+import { useRoutineStore } from '../../stores/routineStore';
 import { useToastStore } from '../../stores/toastStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+import { themedTypeColor } from '../../lib/tints';
 import * as api from '../../services/api';
 
 /**
@@ -38,6 +40,7 @@ export function DeliverableTypePicker({
       onChanged?.(updated);
       const docs = useDocumentsStore.getState();
       if (docs.deliverables.length > 0) docs.fetchAll(); // refresh rows + sidebar counts
+      useRoutineStore.getState().applyDeliverableUpdate(updated); // routine run lists
       useDeliverableTypesStore.getState().load(); // refresh usage counts
       useToastStore.getState().addToast('success', `Type changed to ${labelFor(typeId)}`);
     } catch {
@@ -66,7 +69,11 @@ export function DeliverableTypePicker({
             {...getFloatingProps()}
             className="z-[1000] min-w-[240px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
           >
-            {selectable.map((t) => (
+            {selectable.map((t) => {
+              // Themed, not raw: preset colours are remapped to `var(--tint-*)`
+              // so the option stays readable in the light theme too.
+              const color = themedTypeColor(t.color ?? null);
+              return (
               <button
                 key={t.id}
                 type="button"
@@ -79,7 +86,7 @@ export function DeliverableTypePicker({
               >
                 <span
                   className="text-xs font-medium"
-                  style={{ color: t.color?.text ?? 'var(--theme-accent)' }}
+                  style={{ color: color?.text ?? 'var(--theme-accent)' }}
                 >
                   {t.label}
                 </span>
@@ -87,7 +94,8 @@ export function DeliverableTypePicker({
                   <span className="text-[10px] text-[var(--theme-text-faint)]">{t.description}</span>
                 )}
               </button>
-            ))}
+              );
+            })}
           </div>
         </FloatingPortal>
       )}

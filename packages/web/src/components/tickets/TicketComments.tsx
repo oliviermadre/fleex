@@ -13,6 +13,7 @@ import { usePanelStore } from '../../stores/panelStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
+import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
 import { selectWaitingInputCards } from '../workflows/waitingInputCards';
@@ -150,17 +151,6 @@ function isUrl(text: string): boolean {
   return /^https?:\/\/\S+$/.test(text.trim());
 }
 
-function deliverableTypeLabel(type: string): string {
-  switch (type) {
-    case 'prd': return 'PRD';
-    case 'spec': return 'SPEC';
-    case 'url': return 'URL';
-    case 'pr': return 'PR';
-    case 'plan': return 'PLAN';
-    default: return type.toUpperCase().slice(0, 4);
-  }
-}
-
 /**
  * Gmail-style attachment chip materialising a deliverable linked to a comment
  * (via its mention's resolvedDeliverableId). Clicking opens the same overlay as
@@ -177,9 +167,7 @@ function DeliverableChip({ deliverable, onOpen }: {
       title={deliverable.title}
       className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
     >
-      <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1 py-0.5 text-[10px] font-bold tracking-wider text-[var(--theme-accent)]">
-        {deliverableTypeLabel(deliverable.type)}
-      </span>
+      <DeliverableTypeBadge type={deliverable.type} />
       <span className="truncate font-medium text-[var(--theme-text-primary)]">{deliverable.title}</span>
       {isUrl(deliverable.content) ? (
         <svg className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
