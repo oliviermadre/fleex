@@ -11,6 +11,21 @@ export class CachedAgentEventStore implements AgentEventStorePort {
   private executions = new Map<string, AgentExecution>();
   private warmedUp = false;
 
+  /**
+   * Fired right after an execution's cached status flips (running → terminal, or
+   * into existence). This cache IS the source the cockpit's agent-activity
+   * endpoint reads, so a listener notified here is guaranteed to observe the new
+   * status — unlike a listener hooked on the `execution_start`/`execution_end`
+   * *stream* events, which the use-cases emit before `completeExecution` and
+   * before minutes of post-processing (comments, deliverables). That gap is what
+   * left the cockpit badge stuck on "Running for 11m" after a finished skill run.
+   */
+  onExecutionLifecycle?: (e: {
+    executionId: string;
+    ticketId: string | null;
+    status: AgentExecution['status'];
+  }) => void;
+
   constructor(private readonly inner: AgentEventStorePort) {}
 
   async warmUp(): Promise<void> {
@@ -83,6 +98,11 @@ export class CachedAgentEventStore implements AgentEventStorePort {
       cacheReadTokens: null,
       cacheCreationTokens: null,
     });
+    this.onExecutionLifecycle?.({
+      executionId: params.executionId,
+      ticketId: params.ticketId,
+      status: 'running',
+    });
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
@@ -111,6 +131,11 @@ export class CachedAgentEventStore implements AgentEventStorePort {
         ...(metrics?.deliverableId != null && { deliverableId: metrics.deliverableId }),
       });
     }
+    this.onExecutionLifecycle?.({
+      executionId,
+      ticketId: cached?.ticketId ?? null,
+      status,
+    });
   }
 
   async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
@@ -178,6 +203,9 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     for (const [id, exec] of this.executions) {
       if (exec.status === 'running') {
         this.executions.set(id, { ...exec, status: 'interrupted', completedAt: now });
+        // A restart orphans in-flight runs. Without this the cockpit keeps a
+        // "Running for …" badge alive for an execution nothing will ever finish.
+        this.onExecutionLifecycle?.({ executionId: id, ticketId: exec.ticketId, status: 'interrupted' });
       }
     }
     return mentionIds;

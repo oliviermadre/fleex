@@ -24,11 +24,20 @@ const RECONCILE_TYPES = new Set<string>([
   'workflow:run_completed',
   'workflow:run_failed',
   'workflow:run_cancelled',
+  // SDK execution lifecycle, mirrored onto this channel by the server. This is
+  // the only signal a skill / panel / direct launch produces — without it the
+  // cockpit activity column stays idle until the view remounts.
+  'execution:started',
+  'execution:ended',
 ]);
 
 /** Events whose meaning is unambiguous enough to flip the pill on instantly. */
 const OPTIMISTIC_WAITING = new Set<string>(['mention:waiting_for_info', 'workflow:needs_review']);
-const OPTIMISTIC_RUNNING = new Set<string>(['workflow:run_created', 'workflow:step_started']);
+const OPTIMISTIC_RUNNING = new Set<string>([
+  'workflow:run_created',
+  'workflow:step_started',
+  'execution:started',
+]);
 
 /**
  * Drives the Kanban activity pill in real time (#381). Mounted once (alongside

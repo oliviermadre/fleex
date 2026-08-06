@@ -184,6 +184,23 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     container.ticketBroadcast = ticketBroadcast;
     container.domainEventListener.setTicketBroadcast(ticketBroadcast);
 
+    // Mirror the SDK execution lifecycle onto the board-wide `tickets` channel so
+    // the cockpit ACTIVITY column reconciles for EVERY launch origin. Mention-driven
+    // runs already reconcile via `mention:*` and workflow steps via `workflow:*`,
+    // but a skill / panel / direct launch emits neither — its badge stayed frozen
+    // (idle at launch, running after completion) until the view was refreshed.
+    //
+    // Hooked on the execution cache rather than the event stream on purpose: the
+    // cache is what the agent-activity endpoint reads, so the reconcile this
+    // triggers can never race ahead of the status it is meant to observe.
+    container.agentEventStore.onExecutionLifecycle = ({ executionId, ticketId, status }) => {
+      if (!ticketId) return; // routine runs have no ticket — nothing to reconcile
+      ticketBroadcast(status === 'running' ? 'execution:started' : 'execution:ended', {
+        executionId,
+        ticketId,
+      });
+    };
+
     // Wire up persona broadcast
     const personaBroadcast = (type: string, data: unknown) => channelBroadcast('personas', type, data);
     container.personaBroadcast = personaBroadcast;

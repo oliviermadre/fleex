@@ -35,6 +35,24 @@ export function summarizeStderr(raw: string, keep = 4096): string {
   return `${s.slice(0, keep)}\n\n…[${elidedKB} KB elided]…\n\n${s.slice(-keep)}`;
 }
 
+/** How long to wait for the SDK generator's own cleanup before moving on. */
+export const TEARDOWN_TIMEOUT_MS = 5_000;
+
+/** Resolve when `p` settles, or after `ms` — whichever comes first. */
+async function withDeadline(p: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      p,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export interface StreamSdkQueryResult {
   /** Session id captured from the SDK `init` message, if any. */
   sessionId?: string;
@@ -127,12 +145,36 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
       })()
     : prompt;
 
+  // Driven with an explicit iterator rather than `for await` so the loop owns its
+  // own exit conditions. A plain `for await` can only leave when the SDK closes
+  // the stream, and it only re-checks `abortSignal` when a *new* message arrives
+  // — so a subprocess that emits its final `result` and then never tears its
+  // stream down leaves the run hanging with the answer already in hand, holding
+  // its SDK limiter slot, deaf to the execution timeout. Observed live: a skill
+  // run stuck "Running for 19m" after its structured output had been delivered.
+  const stream = query({
+    prompt: promptArg,
+    options: queryOptions as Parameters<typeof query>[0]['options'],
+  });
+  const iterator = stream[Symbol.asyncIterator]();
+
+  // Resolves the moment the caller aborts, so a stalled `next()` can be raced
+  // against it instead of blocking until the SDK deigns to yield again.
+  let onAbort: (() => void) | undefined;
+  const abortedSentinel = Symbol('aborted');
+  const abortedPromise = new Promise<typeof abortedSentinel>((resolve) => {
+    if (!abortSignal) return; // never settles — harmless, the race just ignores it
+    if (abortSignal.aborted) return resolve(abortedSentinel);
+    onAbort = () => resolve(abortedSentinel);
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+  });
+
   try {
-    for await (const message of query({
-      prompt: promptArg,
-      options: queryOptions as Parameters<typeof query>[0]['options'],
-    })) {
+    for (;;) {
       if (abortSignal?.aborted) break;
+      const step = await Promise.race([iterator.next(), abortedPromise]);
+      if (step === abortedSentinel || step.done) break;
+      const message = step.value;
       messageCount++;
       const msg = message as Record<string, unknown>;
 
@@ -171,9 +213,12 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
         }
 
         await emitEvent('message_stop', { result: resultText, subtype: resultSubtype });
-      } else {
-        await emitEvent('content_block_delta', msg);
+        // `result` is terminal by contract — nothing meaningful follows it. Leave
+        // on our own terms instead of waiting for a stream teardown that may
+        // never come.
+        break;
       }
+      await emitEvent('content_block_delta', msg);
     }
   } catch (err) {
     // Attach the captured CLI stderr so the reason survives everywhere the
@@ -187,6 +232,19 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
       throw augmented;
     }
     throw err;
+  } finally {
+    if (abortSignal && onAbort) abortSignal.removeEventListener('abort', onAbort);
+    // Leaving the loop early means the generator is still open, so hand it back
+    // its cancellation — that is what kills the CLI subprocess. Bounded, because
+    // a teardown that hangs is the very failure this function stopped waiting on:
+    // the run must finish either way, at worst leaking the child to the OS.
+    await withDeadline(
+      Promise.resolve(iterator.return?.()).then(
+        () => undefined,
+        () => undefined,
+      ),
+      TEARDOWN_TIMEOUT_MS,
+    );
   }
 
   return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount, stderr: stderrBuf };
