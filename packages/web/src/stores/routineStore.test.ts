@@ -27,7 +27,7 @@ describe('routineStore.applyDeliverableUpdate', () => {
 
     useRoutineStore.getState().applyDeliverableUpdate(deliverable('d1', 'briefing'));
 
-    expect(useRoutineStore.getState().runs[0].deliverables[0].type).toBe('briefing');
+    expect(useRoutineStore.getState().runs[0]!.deliverables[0]!.type).toBe('briefing');
   });
 
   it('leaves runs untouched (same reference) when the deliverable is unknown', () => {
