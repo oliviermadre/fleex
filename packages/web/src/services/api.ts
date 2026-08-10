@@ -1111,6 +1111,11 @@ export async function launchRoutine(id: string): Promise<WorkflowRun> {
   return request<WorkflowRun>(`/routines/${encodeURIComponent(id)}/run`, { method: 'POST' });
 }
 
+/** Mints a fresh webhook secret — the old URL dies immediately. */
+export async function rotateRoutineWebhook(id: string): Promise<Routine> {
+  return request<Routine>(`/routines/${encodeURIComponent(id)}/webhook/rotate`, { method: 'POST' });
+}
+
 export async function fetchRoutineRuns(id: string): Promise<RoutineRunDetail[]> {
   return request<RoutineRunDetail[]>(`/routines/${encodeURIComponent(id)}/runs`);
 }

@@ -119,6 +119,18 @@ export class RoutineEntity {
     this.updatedAt = new Date();
   }
 
+  /**
+   * Replaces the capability secret — the recovery path when a URL leaked.
+   * Every sender configured with the old URL stops working, which is exactly
+   * the point; that is why this is its own explicit action and never a side
+   * effect of toggling the feature.
+   */
+  rotateWebhookSecret(mintSecret: () => string): void {
+    if (!this.webhookSecret) throw new Error('Routine has no webhook secret to rotate');
+    this.webhookSecret = mintSecret();
+    this.updatedAt = new Date();
+  }
+
   /** Arms (or disarms, with null) the next scheduled fire time. */
   schedule(nextRunAt: Date | null): void {
     this.nextRunAt = nextRunAt;

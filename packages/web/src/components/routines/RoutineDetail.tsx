@@ -73,11 +73,13 @@ export function triggerTimezone(trigger: RoutineTrigger): string | undefined {
 }
 
 /**
- * The routine's webhook capability URL, copyable. The secret IS the URL, so
- * this is deliberately the one place the UI prints it in full — with the
- * password warning attached.
+ * The routine's webhook capability URL, copyable and rotatable. The secret IS
+ * the URL, so this is deliberately the one place the UI prints it in full —
+ * with the password warning attached, and the regenerate escape hatch for
+ * when it leaked.
  */
-function WebhookUrl({ secret }: { secret: string }) {
+function WebhookUrl({ routineId, secret }: { routineId: string; secret: string }) {
+  const rotateWebhook = useRoutineStore((s) => s.rotateWebhook);
   const url = `${window.location.origin}/api/hooks/${secret}`;
   return (
     <span className="flex min-w-0 items-center gap-1.5">
@@ -94,6 +96,18 @@ function WebhookUrl({ secret }: { secret: string }) {
         title="Copy webhook URL (treat it as a password)"
       >
         Copy
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (window.confirm('Regenerate the webhook URL? Every sender configured with the current URL stops working immediately.')) {
+            void rotateWebhook(routineId);
+          }
+        }}
+        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+        title="Mint a fresh URL — use this if the current one leaked"
+      >
+        Regenerate
       </button>
     </span>
   );
@@ -485,7 +499,7 @@ function OverviewTab({ routine, targetInfo, runs, onNavigate }: {
             </ConfigRow>
             {routine.webhookEnabled && routine.webhookSecret && (
               <ConfigRow label="Webhook URL">
-                <WebhookUrl secret={routine.webhookSecret} />
+                <WebhookUrl routineId={routine.id} secret={routine.webhookSecret} />
               </ConfigRow>
             )}
             <ConfigRow label="Repositories">
@@ -868,7 +882,7 @@ function ConfigTab({ routine, targetInfo }: { routine: Routine; targetInfo: Targ
           </ConfigRow>
           {routine.webhookEnabled && routine.webhookSecret && (
             <ConfigRow label="Webhook URL">
-              <WebhookUrl secret={routine.webhookSecret} />
+              <WebhookUrl routineId={routine.id} secret={routine.webhookSecret} />
             </ConfigRow>
           )}
           {routine.nextRunAt && routine.enabled && (

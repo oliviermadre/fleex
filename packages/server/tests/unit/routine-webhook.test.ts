@@ -48,6 +48,18 @@ describe('RoutineEntity webhook capability', () => {
     expect(mints).toBe(1);
   });
 
+  it('rotate replaces the secret — the leaked-URL recovery path', () => {
+    const routine = makeRoutine();
+    expect(routine.webhookSecret).toBe('sekret-token');
+    routine.rotateWebhookSecret(() => 'fresh-token');
+    expect(routine.webhookSecret).toBe('fresh-token');
+  });
+
+  it('rotate refuses when no secret exists yet', () => {
+    const routine = makeRoutine({ webhook: false });
+    expect(() => routine.rotateWebhookSecret(() => 'x')).toThrow(/no webhook secret/);
+  });
+
   it('mints URL-safe 256-bit tokens', () => {
     const secret = mintWebhookSecret();
     expect(secret).toMatch(/^[A-Za-z0-9_-]+$/);

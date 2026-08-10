@@ -14,8 +14,11 @@ export default defineConfig({
   server: {
     port: webPort,
     // .ts.net: Tailscale MagicDNS hostnames, so the dev server can be reached
-    // from a phone via `tailscale serve` (see docs/mobile.md)
-    allowedHosts: ['.nip.io', '.ts.net'],
+    // from a phone via `tailscale serve` (see docs/mobile.md).
+    // ngrok domains: webhook testing — the /api proxy below forwards an
+    // inbound `POST /api/hooks/<secret>` to the Fleex server. (Tunnelling the
+    // server port directly also works and skips Vite entirely.)
+    allowedHosts: ['.nip.io', '.ts.net', '.ngrok-free.app', '.ngrok.app', '.ngrok.io'],
     historyApiFallback: true,
     proxy: {
       '/api': {
