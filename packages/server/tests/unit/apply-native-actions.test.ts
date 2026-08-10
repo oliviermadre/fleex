@@ -159,6 +159,28 @@ describe('ApplyNativeActionsUseCase', () => {
     expect((ticketStore.saveTicket.mock.calls[0]?.[0] as TicketEntity).priority).toBe('high');
   });
 
+  it('digs into an upstream object field with a deep reference', async () => {
+    // The webhook case: the trigger step publishes `issue` as one object, and a
+    // deterministic template reads {{ steps.t.issue.title }} with no agent hop.
+    const { run, ticketStore } = harness();
+
+    await run(
+      [action('ticket.set_title', { title: '{{ steps.t.issue.title }}' })],
+      { steps: { t: { issue: { title: 'Deep title', number: 7 } } } },
+    );
+
+    expect((ticketStore.saveTicket.mock.calls[0]?.[0] as TicketEntity).title).toBe('Deep title');
+  });
+
+  it('fails loudly on a deep path the output does not contain', async () => {
+    const { run } = harness();
+
+    await expect(run(
+      [action('ticket.set_title', { title: '{{ steps.t.issue.titel }}' })],
+      { steps: { t: { issue: { title: 'Deep title' } } } },
+    )).rejects.toThrow(/has no "titel"/);
+  });
+
   it('accepts the {{ output.* }} shorthand when the step has a single predecessor', async () => {
     const { run, ticketStore } = harness();
 

@@ -97,6 +97,56 @@ describe('trigger step references', () => {
     expect(tokens).toContain('{{ steps.t.previousRunAt }}');
     expect(tokens).toContain('{{ steps.t.firedVia }}');
   });
+
+  describe('deep references into a declared payload object', () => {
+    // The GitHub-issues shape: the payload carries ONE object, not an array, so
+    // a fully deterministic template (no extract agent) needs
+    // {{ steps.t.issue.title }} to reach into it.
+    const issueSchema: WorkflowStep['outputSchema'] = {
+      type: 'object',
+      properties: {
+        action: { type: 'string' },
+        issue: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            number: { type: 'number' },
+            user: { type: 'object' },
+          },
+        },
+      },
+    };
+    const upsert = (params: Record<string, unknown>): NativeAction =>
+      ({ id: 'a1', operationId: 'ticket.upsert', params: { externalRef: 'x', boardId: 'b', title: 't', ...params } });
+
+    it('accepts a declared deep path', () => {
+      const steps = [triggerStep('t', issueSchema), nativeStep('n', [upsert({ title: '{{ steps.t.issue.title }}' })])];
+      const { errors } = validateNativeSteps(steps, [edge('e1', 't', 'n')], 't');
+      expect(errors).toEqual([]);
+    });
+
+    it('rejects a segment the schema contradicts, listing what is declared', () => {
+      const steps = [triggerStep('t', issueSchema), nativeStep('n', [upsert({ title: '{{ steps.t.issue.titel }}' })])];
+      const { errors } = validateNativeSteps(steps, [edge('e1', 't', 'n')], 't');
+      expect(errors.join('\n')).toMatch(/declares no "titel" under "issue".*title/);
+    });
+
+    it('tolerates depth past what the schema describes — runtime enforces it', () => {
+      // `issue.user` is a bare object: the author stopped describing there, so
+      // `.login` cannot be contradicted statically.
+      const steps = [triggerStep('t', issueSchema), nativeStep('n', [upsert({ title: '{{ steps.t.issue.user.login }}' })])];
+      const { errors } = validateNativeSteps(steps, [edge('e1', 't', 'n')], 't');
+      expect(errors).toEqual([]);
+    });
+
+    it('offers nested declared fields in the picker', () => {
+      const steps = [triggerStep('t', issueSchema), nativeStep('n', [])];
+      const tokens = nativeReferenceSuggestions(steps[1]!, steps, [edge('e1', 't', 'n')], 't').map((s) => s.token);
+      expect(tokens).toContain('{{ steps.t.issue }}');
+      expect(tokens).toContain('{{ steps.t.issue.title }}');
+      expect(tokens).toContain('{{ steps.t.issue.number }}');
+    });
+  });
 });
 
 describe('TriggerStepExecutor', () => {

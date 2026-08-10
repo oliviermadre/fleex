@@ -178,12 +178,27 @@ function validateForEach(
     return null;
   }
 
-  const property = effectiveOutputSchema(source)?.properties?.[ref.field ?? ''];
+  let property = effectiveOutputSchema(source)?.properties?.[ref.field ?? ''];
   if (!property) {
     errors.push(
       `${where}: forEach ${ref.raw} — "${source.name || source.id}" declares no output field "${ref.field}"`,
     );
     return null;
+  }
+  if (ref.path) {
+    const walked = walkDeclaredPath(property, ref.path.split('.'), ref.field ?? '');
+    if (walked.unknownSegment) {
+      errors.push(
+        `${where}: forEach ${ref.raw} — "${source.name || source.id}" declares no "${walked.unknownSegment}" ` +
+          `under "${walked.at}"` +
+          (walked.available.length > 0 ? ` (declared: ${walked.available.join(', ')})` : ''),
+      );
+      return null;
+    }
+    // Undescribed past the declared levels: legal, but there is no element
+    // schema to offer — same posture as the {{ output.* }} shorthand.
+    if (!walked.property) return null;
+    property = walked.property;
   }
   if (property.type !== 'array') {
     errors.push(
@@ -341,7 +356,7 @@ function validateReference(ctx: ParamValidationCtx, ref: ParsedReference, isFull
     return;
   }
 
-  const property = sourceSchema.properties?.[ref.field ?? ''];
+  let property = sourceSchema.properties?.[ref.field ?? ''];
   if (!property) {
     const available = Object.keys(sourceSchema.properties ?? {});
     errors.push(
@@ -351,7 +366,23 @@ function validateReference(ctx: ParamValidationCtx, ref: ParsedReference, isFull
     return;
   }
 
-  if (isFullValue) {
+  // A deep reference is checked as far as the schema describes it; past the
+  // last declared level (an object with no `properties`) the payload is
+  // arbitrary JSON, so the rest can only be enforced at runtime.
+  if (ref.path) {
+    const walked = walkDeclaredPath(property, ref.path.split('.'), ref.field ?? '');
+    if (walked.unknownSegment) {
+      errors.push(
+        `${label}: ${ref.raw} — "${source.name || sourceStepId}" declares no "${walked.unknownSegment}" ` +
+          `under "${walked.at}"` +
+          (walked.available.length > 0 ? ` (declared: ${walked.available.join(', ')})` : ''),
+      );
+      return;
+    }
+    property = walked.property;
+  }
+
+  if (isFullValue && property) {
     checkTypeCompatibility(param, property, ref, label, errors, warnings);
   }
 
@@ -361,6 +392,36 @@ function validateReference(ctx: ParamValidationCtx, ref: ParsedReference, isFull
         `the step will fail at runtime if it was skipped`,
     );
   }
+}
+
+/**
+ * Follows a deep reference path through the *declared* schema.
+ *
+ * Stops in one of three ways: the whole path is declared (returns the final
+ * property, type-checkable), the schema stops describing the shape midway
+ * (returns `undefined` — legal, enforced at runtime only), or a segment
+ * contradicts what IS declared (reported — that one is always a typo).
+ */
+function walkDeclaredPath(
+  root: JsonSchemaProperty,
+  segments: string[],
+  rootName: string,
+): { property?: JsonSchemaProperty; unknownSegment?: string; at: string; available: string[] } {
+  let cursor: JsonSchemaProperty = root;
+  let at = rootName;
+  for (const segment of segments) {
+    if (cursor.type !== 'object' || !cursor.properties) {
+      // Undescribed from here on — nothing to contradict.
+      return { at, available: [] };
+    }
+    const next = cursor.properties[segment];
+    if (!next) {
+      return { unknownSegment: segment, at, available: Object.keys(cursor.properties) };
+    }
+    cursor = next;
+    at = `${at}.${segment}`;
+  }
+  return { property: cursor, at, available: [] };
 }
 
 function checkTypeCompatibility(
@@ -449,13 +510,13 @@ export function nativeReferenceSuggestions(
 
   for (const source of steps) {
     if (!ancestors.has(source.id)) continue;
-    const fields = Object.keys(effectiveOutputSchema(source)?.properties ?? {});
+    const paths = schemaFieldPaths(effectiveOutputSchema(source)?.properties ?? {});
     const conditional = dominators ? !dominators.has(source.id) : false;
     const name = source.name || source.id;
-    for (const field of fields) {
+    for (const path of paths) {
       out.push({
-        token: `{{ steps.${source.id}.${field} }}`,
-        label: `${name} → ${field}`,
+        token: `{{ steps.${source.id}.${path} }}`,
+        label: `${name} → ${path}`,
         group: 'Steps',
         conditional,
       });
@@ -463,8 +524,8 @@ export function nativeReferenceSuggestions(
       // unambiguous — when the step has exactly one incoming edge.
       if (source.id === solePredecessorId) {
         out.push({
-          token: `{{ output.${field} }}`,
-          label: `previous step → ${field}`,
+          token: `{{ output.${path} }}`,
+          label: `previous step → ${path}`,
           group: 'Steps',
           conditional,
         });
@@ -493,6 +554,31 @@ export function nativeReferenceSuggestions(
     }
   }
 
+  return out;
+}
+
+/**
+ * Every referenceable path a schema declares: the top-level fields, plus the
+ * nested properties of declared objects (`issue`, `issue.title`, …), so the
+ * picker can offer `{{ steps.<id>.issue.title }}` when the author described the
+ * payload that far. Capped at three levels — a webhook payload's interesting
+ * fields live near the top, and past that the picker turns into noise.
+ */
+function schemaFieldPaths(
+  properties: Record<string, JsonSchemaProperty>,
+  maxDepth = 3,
+): string[] {
+  const out: string[] = [];
+  const visit = (prefix: string, props: Record<string, JsonSchemaProperty>, depth: number) => {
+    for (const [name, prop] of Object.entries(props)) {
+      const path = prefix ? `${prefix}.${name}` : name;
+      out.push(path);
+      if (depth < maxDepth && prop.type === 'object' && prop.properties) {
+        visit(path, prop.properties, depth + 1);
+      }
+    }
+  };
+  visit('', properties, 1);
   return out;
 }
 
