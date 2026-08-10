@@ -71,6 +71,17 @@ export function SplitIcon({ className }: IconProps) {
   );
 }
 
+// Trigger — an arrow entering a circle (the run's entry point).
+export function TriggerInIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="15" cy="12" r="6" />
+      <line x1="1" y1="12" x2="9" y2="12" />
+      <polyline points="6 9 9 12 6 15" />
+    </svg>
+  );
+}
+
 // ── Palette data ──────────────────────────────────────────────────────────────
 
 type IconComponent = React.ComponentType<IconProps>;
@@ -125,6 +136,13 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     description: 'Convergence point — no action, no agent, only branching',
     Icon: SplitIcon,
     colorClass: `${tintClasses('orange').text} ${tintClasses('orange').borderColor}`,
+  },
+  {
+    type: 'trigger',
+    label: 'Trigger',
+    description: 'Entry step — exposes the webhook payload and how the run started',
+    Icon: TriggerInIcon,
+    colorClass: `${tintClasses('pink').text} ${tintClasses('pink').borderColor}`,
   },
 ];
 

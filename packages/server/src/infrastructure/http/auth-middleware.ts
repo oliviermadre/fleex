@@ -36,12 +36,15 @@ export function createAuthMiddleware(container: Container) {
   );
 
   return async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
-    // Skip auth for auth routes, health, and internal gateway routes
+    // Skip auth for auth routes, health, internal gateway routes, and inbound
+    // webhook deliveries — those authenticate themselves by capability token
+    // (the URL path IS the secret; see webhooks.routes.ts).
     const url = request.url;
     if (
       url.startsWith('/auth/') ||
       url.startsWith('/health') ||
-      url.startsWith('/internal/')
+      url.startsWith('/internal/') ||
+      url.startsWith('/api/hooks/')
     ) {
       return;
     }

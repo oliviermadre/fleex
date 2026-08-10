@@ -48,6 +48,7 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { routineRoutes } from './infrastructure/http/routines.routes.js';
+import { webhookRoutes } from './infrastructure/http/webhooks.routes.js';
 import { ROUTINE_TICK_INTERVAL_MS } from './domain/services/routine-scheduler.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
@@ -177,6 +178,13 @@ async function main() {
       authorNameResolver: () => 'routine-trigger',
       schedulerRole: container.schedulerRole,
       instanceId: container.instanceId,
+    }));
+    // Inbound webhook deliveries. Registered under the same gate: a webhook is
+    // just another way to fire a routine. Auth is the capability token in the
+    // path (auth-middleware skips /api/hooks/).
+    await app.register(webhookRoutes({
+      routineStore: container.routineStore,
+      runRoutine: container.runRoutine,
     }));
   } else {
     container.logger.warn('routineStore or use cases not available — /api/routines routes skipped');

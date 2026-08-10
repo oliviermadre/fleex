@@ -2,12 +2,14 @@
  * `{{ … }}` references inside native action parameters.
  *
  * Six forms are understood:
- *   {{ steps.<stepId>.<field> }}  canonical — a schemaField of an upstream step
- *   {{ output.<field> }}          shorthand for the single direct predecessor
- *   {{ ticket.<field> }}          a field of the run's subject ticket
- *   {{ workflow }}                the workflow name
+ *   {{ steps.<stepId>.<field>[.<path>] }}  canonical — a schemaField of an
+ *     upstream step; the optional path digs into an object field, arbitrary
+ *     depth ({{ steps.t.issue.title }} — a webhook payload is arbitrary JSON)
+ *   {{ output.<field>[.<path>] }}  shorthand for the single direct predecessor
+ *   {{ ticket.<field> }}           a field of the run's subject ticket
+ *   {{ workflow }}                 the workflow name
  *   {{ item }} / {{ item.<path> }} the current element of a `forEach` fan-out
- *   {{ created.<field> }}         the ticket this very step's `ticket.create` made
+ *   {{ created.<field> }}          the ticket this very step's `ticket.create` made
  *
  * Parsing lives in `shared` because both the editor (static validation) and the
  * server (runtime resolution) need exactly the same grammar.
@@ -29,6 +31,12 @@ export interface ParsedReference {
    * Absent for a bare `{{ item }}`, which is the element itself.
    */
   field?: string;
+  /**
+   * Segments beyond `field`, dot-joined, for `step` / `output` references that
+   * dig into an object field (`{{ steps.t.issue.title }}` → field `issue`,
+   * path `title`). Walked at resolution time, exactly like `{{ item.<path> }}`.
+   */
+  path?: string;
 }
 
 /** Ticket fields exposed to `{{ ticket.* }}`. Read-only, deliberately narrow. */
@@ -76,17 +84,23 @@ export function parseReferencePath(inner: string, raw: string): ParsedReference 
   const parts = path.split('.');
 
   if (parts[0] === 'steps') {
-    if (parts.length !== 3 || !parts[1] || !parts[2]) {
-      throw new ReferenceSyntaxError(`"${raw}" must be {{ steps.<stepId>.<field> }}`);
+    if (parts.length < 3 || parts.some((p) => p === '')) {
+      throw new ReferenceSyntaxError(`"${raw}" must be {{ steps.<stepId>.<field> }} (optionally .<path> into an object field)`);
     }
-    return { raw, kind: 'step', stepId: parts[1], field: parts[2] };
+    return {
+      raw, kind: 'step', stepId: parts[1], field: parts[2],
+      ...(parts.length > 3 ? { path: parts.slice(3).join('.') } : {}),
+    };
   }
 
   if (parts[0] === 'output') {
-    if (parts.length !== 2 || !parts[1]) {
-      throw new ReferenceSyntaxError(`"${raw}" must be {{ output.<field> }}`);
+    if (parts.length < 2 || parts.some((p) => p === '')) {
+      throw new ReferenceSyntaxError(`"${raw}" must be {{ output.<field> }} (optionally .<path> into an object field)`);
     }
-    return { raw, kind: 'output', field: parts[1] };
+    return {
+      raw, kind: 'output', field: parts[1],
+      ...(parts.length > 2 ? { path: parts.slice(2).join('.') } : {}),
+    };
   }
 
   if (parts[0] === 'ticket') {

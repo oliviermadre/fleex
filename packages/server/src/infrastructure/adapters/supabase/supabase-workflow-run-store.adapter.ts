@@ -16,6 +16,7 @@ interface WorkflowRunRow {
   current_step_id: string | null;
   triggered_by: string;
   triggered_from: string;
+  trigger_payload: unknown;
   started_at: string;
   completed_at: string | null;
   created_at: string;
@@ -42,6 +43,7 @@ function rowToEntity(r: WorkflowRunRow): WorkflowRunEntity {
     r.subject_snapshot ?? null,
     r.workspace_path ?? null,
     r.parent_run_id ?? null,
+    r.trigger_payload ?? null,
   );
 }
 
@@ -102,6 +104,19 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
     return data ? rowToEntity(data as WorkflowRunRow) : null;
   }
 
+  async findPreviousRunStartedAt(routineId: string, before: Date): Promise<string | null> {
+    const { data, error } = await this.conn.client
+      .from('workflow_runs')
+      .select('started_at')
+      .eq('routine_id', routineId)
+      .lt('created_at', before.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`SupabaseWorkflowRunStore.findPreviousRunStartedAt failed: ${error.message}`);
+    return (data as { started_at: string } | null)?.started_at ?? null;
+  }
+
   async getByStatus(status: WorkflowRunStatus): Promise<WorkflowRunEntity[]> {
     const { data, error } = await this.conn.client
       .from('workflow_runs')
@@ -134,6 +149,7 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
       current_step_id: run.currentStepId,
       triggered_by: run.triggeredBy,
       triggered_from: run.triggeredFrom,
+      trigger_payload: run.triggerPayload,
       started_at: run.startedAt.toISOString(),
       completed_at: run.completedAt?.toISOString() ?? null,
       created_at: run.createdAt.toISOString(),

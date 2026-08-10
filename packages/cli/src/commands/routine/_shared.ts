@@ -33,10 +33,13 @@ export async function resolveRoutine(ref: string): Promise<RoutineListItem> {
 }
 
 /** "cron · 0 9 * * * (Europe/Paris)" — the schedule in one readable cell. */
-export function describeTrigger(trigger: RoutineTrigger): string {
-  if (trigger.kind === 'manual') return 'manual';
-  if (trigger.kind === 'once') return `once · ${trigger.runAt} (${trigger.timezone})`;
-  return `cron · ${trigger.cron} (${trigger.timezone})`;
+export function describeTrigger(trigger: RoutineTrigger, webhookEnabled = false): string {
+  // Webhook is additive to the base trigger, not a kind of its own — so it
+  // reads as a suffix: "cron · */5 * * * * (UTC) + webhook".
+  const suffix = webhookEnabled ? ' + webhook' : '';
+  if (trigger.kind === 'manual') return `manual${suffix}`;
+  if (trigger.kind === 'once') return `once · ${trigger.runAt} (${trigger.timezone})${suffix}`;
+  return `cron · ${trigger.cron} (${trigger.timezone})${suffix}`;
 }
 
 /** "workflow · <template id>" / "agent · builder" — the target in one cell. */
@@ -44,8 +47,9 @@ export function describeTarget(target: RoutineTarget): string {
   return `${target.kind} · ${target.ref}`;
 }
 
-export function shortTrigger(trigger: RoutineTrigger): string {
-  if (trigger.kind === 'manual') return 'manual';
-  if (trigger.kind === 'once') return 'once';
-  return trigger.cron;
+export function shortTrigger(trigger: RoutineTrigger, webhookEnabled = false): string {
+  const suffix = webhookEnabled ? '+hook' : '';
+  if (trigger.kind === 'manual') return `manual${suffix}`;
+  if (trigger.kind === 'once') return `once${suffix}`;
+  return `${trigger.cron}${suffix}`;
 }

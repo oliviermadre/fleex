@@ -96,6 +96,65 @@ export const NATIVE_OPERATIONS: readonly NativeOperationDescriptor[] = [
     ],
   },
   {
+    id: 'ticket.upsert',
+    label: 'Upsert ticket',
+    category: 'ticket',
+    // Like `ticket.create` it makes (or finds) the subject rather than reading
+    // one, so it is legal in a routine run.
+    requiresSubjectTicket: false,
+    description:
+      'Create a ticket keyed on an external reference, or find the one already imported — '
+      + 're-running with the same External ref never creates a duplicate. Must be the first '
+      + 'action of the step. When the ticket already exists and "If it already exists" is '
+      + '"skip", the step\'s remaining actions are not applied for it.',
+    params: [
+      {
+        name: 'externalRef',
+        label: 'External ref',
+        type: 'string',
+        required: true,
+        description:
+          'Stable id in the source system, namespaced by convention — e.g. "linear:ABC-42" '
+          + 'or "github-project:PVTI_xxx". This is the dedup key.',
+      },
+      {
+        name: 'url',
+        label: 'URL',
+        type: 'string',
+        required: false,
+        description: 'Link back to the item in the source system.',
+      },
+      {
+        name: 'onExisting',
+        label: 'If it already exists',
+        type: 'enum',
+        enum: ['skip', 'update'],
+        required: false,
+        defaultValue: 'skip',
+        allowReference: false,
+        description:
+          'skip: leave the existing ticket untouched and stop the remaining actions for it. '
+          + 'update: apply the fields below (tags are added, not replaced) and continue.',
+      },
+      {
+        // Same shape and same rationale as `ticket.create` — see its comment.
+        name: 'boardId',
+        label: 'Board',
+        type: 'string',
+        required: false,
+        defaultValue: '{{ ticket.boardId }}',
+        description: "Defaults to the board of the run's ticket, then to the routine subject's board.",
+      },
+      { name: 'title', label: 'Title', type: 'string', required: true },
+      { name: 'description', label: 'Description', type: 'text', required: false },
+      { name: 'status', label: 'Status', type: 'enum', enum: TICKET_STATUSES, required: false },
+      { name: 'priority', label: 'Priority', type: 'enum', enum: TICKET_PRIORITIES, required: false },
+      { name: 'type', label: 'Type', type: 'enum', enum: TICKET_TYPES, required: false, nullable: true },
+      { name: 'tags', label: 'Tags', type: 'string[]', required: false },
+      { name: 'dueDate', label: 'Due date', type: 'date', required: false, nullable: true },
+    ],
+  },
+  {
     id: 'ticket.set_status',
     label: 'Set status',
     category: 'ticket',
@@ -243,6 +302,20 @@ export const NATIVE_OPERATION_IDS: readonly string[] = NATIVE_OPERATIONS.map((op
 
 /** `ticket.create` is special-cased by the executor: it rebinds the step's subject. */
 export const NATIVE_OP_CREATE_TICKET = 'ticket.create';
+
+/** Idempotent sibling of `ticket.create`, keyed on an external reference. */
+export const NATIVE_OP_UPSERT_TICKET = 'ticket.upsert';
+
+/**
+ * The operations that make (or find) the step's subject instead of reading one.
+ * Every "must be the first action / at most one per step / rebinds the subject /
+ * enables `{{ created.* }}`" rule keys on this list, so a future member inherits
+ * the whole contract by being added here.
+ */
+export const NATIVE_CREATE_FAMILY: readonly string[] = [
+  NATIVE_OP_CREATE_TICKET,
+  NATIVE_OP_UPSERT_TICKET,
+];
 
 /** Spawns a child workflow run. Special-cased only in that it needs no ticket. */
 export const NATIVE_OP_TRIGGER_WORKFLOW = 'workflow.trigger';

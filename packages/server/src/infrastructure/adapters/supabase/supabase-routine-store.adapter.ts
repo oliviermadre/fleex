@@ -26,6 +26,8 @@ interface Row {
   next_run_at: string | null;
   last_claimed_by: string | null;
   last_claimed_at: string | null;
+  webhook_enabled: boolean | null;
+  webhook_secret: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -55,6 +57,8 @@ function toEntity(r: Row): RoutineEntity {
     new Date(r.updated_at),
     r.last_claimed_by ?? null,
     r.last_claimed_at ? new Date(r.last_claimed_at) : null,
+    r.webhook_enabled === true,
+    r.webhook_secret ?? null,
   );
 }
 
@@ -81,6 +85,13 @@ export class SupabaseRoutineStore implements RoutineStorePort {
     const { data, error } = await this.conn.client
       .from('routines').select('*').eq('slug', slug).maybeSingle();
     if (error) throw new Error(`SupabaseRoutineStore.getBySlug failed: ${error.message}`);
+    return data ? toEntity(data as Row) : null;
+  }
+
+  async getByWebhookSecret(secret: string): Promise<RoutineEntity | null> {
+    const { data, error } = await this.conn.client
+      .from('routines').select('*').eq('webhook_secret', secret).maybeSingle();
+    if (error) throw new Error(`SupabaseRoutineStore.getByWebhookSecret failed: ${error.message}`);
     return data ? toEntity(data as Row) : null;
   }
 
@@ -164,6 +175,8 @@ export class SupabaseRoutineStore implements RoutineStorePort {
       run_at: t.kind === 'once' ? t.runAt : null,
       timezone: t.kind === 'manual' ? 'Europe/Paris' : t.timezone,
       overlap_policy: routine.overlapPolicy,
+      webhook_enabled: routine.webhookEnabled,
+      webhook_secret: routine.webhookSecret,
       last_run_at: routine.lastRunAt?.toISOString() ?? null,
       last_run_id: routine.lastRunId,
       next_run_at: routine.nextRunAt?.toISOString() ?? null,

@@ -75,6 +75,15 @@ export interface Routine {
   target: RoutineTarget;
   subject: RunSubject;
   trigger: RoutineTrigger;
+  /**
+   * Webhook firing is *additive*, not a trigger kind: a routine keeps its base
+   * trigger (cron 9AM as a safety net) and may also be fired from outside via
+   * `POST /api/hooks/<webhookSecret>`, payload included. The secret is
+   * server-generated, is the whole auth model (capability URL), and survives
+   * the toggle turning off so re-enabling never invalidates configured senders.
+   */
+  webhookEnabled: boolean;
+  webhookSecret: string | null;
   overlapPolicy: RoutineOverlapPolicy;
   lastRunAt: string | null;
   lastRunId: string | null;
@@ -102,6 +111,8 @@ export interface CreateRoutineInput {
   target: RoutineTarget;
   subject?: Partial<RunSubject>;
   trigger?: RoutineTrigger;
+  /** The secret is never client-supplied — the server generates it on enable. */
+  webhookEnabled?: boolean;
   overlapPolicy?: RoutineOverlapPolicy;
   enabled?: boolean;
 }
@@ -113,6 +124,7 @@ export interface UpdateRoutineInput {
   target?: RoutineTarget;
   subject?: Partial<RunSubject>;
   trigger?: RoutineTrigger;
+  webhookEnabled?: boolean;
   overlapPolicy?: RoutineOverlapPolicy;
   enabled?: boolean;
 }

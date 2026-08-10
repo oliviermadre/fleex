@@ -32,7 +32,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 const SLUG_PATTERN = /^[a-z0-9_-]+$/;
-const EXECUTOR_TYPES = ['agent', 'skill', 'panel', 'human_gate', 'native', 'route'] as const;
+const EXECUTOR_TYPES = ['agent', 'skill', 'panel', 'human_gate', 'native', 'route', 'trigger'] as const;
 const STEP_MODES = ['talk', 'plan', 'edit'] as const;
 const MATCH_MODES = ['all', 'any'] as const;
 const JSON_SCHEMA_PROP_TYPES = ['string', 'number', 'boolean', 'array', 'object'] as const;

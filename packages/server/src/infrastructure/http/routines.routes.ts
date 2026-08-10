@@ -20,6 +20,7 @@ import type { DeliverableStorePort } from '../../application/ports/deliverable-s
 import type { CreateRoutineUseCase } from '../../application/use-cases/create-routine.js';
 import type { UpdateRoutineUseCase, DeleteRoutineUseCase } from '../../application/use-cases/update-routine.js';
 import type { RunRoutineUseCase } from '../../application/use-cases/run-routine.js';
+import { mintWebhookSecret } from '../../application/services/webhook-secret.js';
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -175,6 +176,7 @@ export function routineRoutes(deps: RoutineRouteDeps) {
         ...(trigger.value ? { trigger: trigger.value } : {}),
         ...(parseOverlapPolicy(body['overlapPolicy']) ? { overlapPolicy: parseOverlapPolicy(body['overlapPolicy'])! } : {}),
         ...(typeof body['enabled'] === 'boolean' ? { enabled: body['enabled'] } : {}),
+        ...(typeof body['webhookEnabled'] === 'boolean' ? { webhookEnabled: body['webhookEnabled'] } : {}),
       };
 
       try {
@@ -210,6 +212,7 @@ export function routineRoutes(deps: RoutineRouteDeps) {
         ...(trigger.value ? { trigger: trigger.value } : {}),
         ...(parseOverlapPolicy(body['overlapPolicy']) ? { overlapPolicy: parseOverlapPolicy(body['overlapPolicy'])! } : {}),
         ...(typeof body['enabled'] === 'boolean' ? { enabled: body['enabled'] } : {}),
+        ...(typeof body['webhookEnabled'] === 'boolean' ? { webhookEnabled: body['webhookEnabled'] } : {}),
       };
 
       try {
@@ -227,6 +230,21 @@ export function routineRoutes(deps: RoutineRouteDeps) {
       } catch (err) {
         return sendDomainError(reply, err);
       }
+    });
+
+    // POST /api/routines/:id/webhook/rotate — mint a fresh capability secret.
+    // The recovery path for a leaked URL: the old one dies immediately, every
+    // configured sender must be re-pointed. Deliberately NOT part of PATCH:
+    // an edit must never invalidate senders as a side effect.
+    app.post<{ Params: { id: string } }>('/api/routines/:id/webhook/rotate', async (request, reply) => {
+      const routine = await deps.routineStore.getById(request.params.id);
+      if (!routine) return reply.code(404).send({ error: 'ROUTINE_NOT_FOUND' });
+      if (!routine.webhookSecret) {
+        return reply.code(409).send({ error: 'WEBHOOK_NOT_CONFIGURED', message: 'enable the webhook first' });
+      }
+      routine.rotateWebhookSecret(mintWebhookSecret);
+      await deps.routineStore.save(routine);
+      return routine.toDTO();
     });
 
     // POST /api/routines/:id/run — the "Lancer" button. 409 when a run is

@@ -19,6 +19,20 @@ export interface StepExecutionInput {
   workflowRunId: string;
   stepRunId: string;
   step: WorkflowStep;
+  /**
+   * How this run started — only assembled for `trigger` steps (it costs a store
+   * query), which turn it into their output. Other executors never see it.
+   */
+  runInfo?: {
+    /** The run's `triggeredFrom`: schedule / webhook / routine / api / workflow / mention:*. */
+    triggeredFrom: string;
+    /** ISO start of this run. */
+    startedAt: string;
+    /** ISO start of the routine's previous run; null on the first run or in a ticket run. */
+    previousRunAt: string | null;
+    /** Payload delivered by a webhook fire; undefined when the run has none. */
+    triggerPayload?: unknown;
+  };
   workflowContext: {
     workflowName: string;
     stepName: string;

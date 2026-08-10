@@ -338,6 +338,8 @@ export {
   NATIVE_OPERATIONS,
   NATIVE_OPERATION_IDS,
   NATIVE_OP_CREATE_TICKET,
+  NATIVE_OP_UPSERT_TICKET,
+  NATIVE_CREATE_FAMILY,
   NATIVE_OP_TRIGGER_WORKFLOW,
   NATIVE_FOR_EACH_MAX_ITEMS,
   NATIVE_STEP_KIND_TICKET_ACTIONS,
@@ -364,6 +366,7 @@ export {
   describeEdge,
 } from './workflow/edge-conditions.js';
 export { computeAncestors, computeDominators } from './workflow/graph.js';
+export { effectiveOutputSchema, TRIGGER_STEP_META_PROPERTIES } from './workflow/trigger-step.js';
 export type { EdgeValidationResult, EdgeFieldSuggestion } from './workflow/edge-validation.js';
 export { validateEdgeConditions, edgeConditionSuggestions } from './workflow/edge-validation.js';
 

@@ -27,6 +27,8 @@ interface RoutineStore {
   update: (id: string, changes: UpdateRoutineInput) => Promise<void>;
   remove: (id: string) => Promise<void>;
   launch: (id: string) => Promise<void>;
+  /** Mints a fresh webhook secret; the old URL stops working immediately. */
+  rotateWebhook: (id: string) => Promise<void>;
 }
 
 /**
@@ -122,5 +124,12 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
     await api.launchRoutine(id);
     await get().load();
     if (get().selectedId === id) await get().refreshRuns();
+  },
+
+  rotateWebhook: async (id) => {
+    await api.rotateRoutineWebhook(id);
+    // The list rows carry the secret the detail screen renders — reload so the
+    // new URL shows immediately.
+    await get().load();
   },
 }));

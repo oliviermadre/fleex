@@ -109,6 +109,7 @@ export class NativeStepExecutor implements StepExecutor {
     }
 
     const createdTicketIds: string[] = [];
+    const foundTicketIds: string[] = [];
     const triggeredRunIds: string[] = [];
     const failures: { index: number; error: string }[] = [];
 
@@ -119,6 +120,9 @@ export class NativeStepExecutor implements StepExecutor {
           references: { ...references, item },
         });
         if (result.createdTicketId) createdTicketIds.push(result.createdTicketId);
+        // `wasCreated === false` is the upsert's "already imported" outcome —
+        // reported separately so a re-poll reads as convergence, not silence.
+        if (result.wasCreated === false && result.ticketId) foundTicketIds.push(result.ticketId);
         triggeredRunIds.push(...(result.triggeredRunIds ?? []));
       } catch (err) {
         // One bad element must not cost the good ones: the loop carries on and
@@ -135,6 +139,7 @@ export class NativeStepExecutor implements StepExecutor {
         schemaFields: {
           iterations: items.length,
           createdTicketIds,
+          foundTicketIds,
           triggeredRunIds,
           failures,
         },
@@ -168,7 +173,7 @@ function fanOutFailure(message: string): StepExecutorResult {
   return {
     output: {
       schemaFields: {
-        iterations: 0, createdTicketIds: [], triggeredRunIds: [], failures: [],
+        iterations: 0, createdTicketIds: [], foundTicketIds: [], triggeredRunIds: [], failures: [],
         error: message,
       },
       result: 'ko',
@@ -191,5 +196,6 @@ function fields(result: ApplyNativeActionsResult): Record<string, unknown> {
       ? { createdTicketDisplayId: result.createdTicketDisplayId }
       : {}),
     ...(result.triggeredRunIds?.length ? { triggeredRunIds: result.triggeredRunIds } : {}),
+    ...(result.wasCreated !== undefined ? { wasCreated: result.wasCreated } : {}),
   };
 }

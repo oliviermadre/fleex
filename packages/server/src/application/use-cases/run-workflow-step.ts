@@ -99,9 +99,25 @@ export class RunWorkflowStepUseCase {
         };
       });
 
+      // Only a trigger step consumes it, and it costs a store query — so it is
+      // assembled here, per dispatch, rather than for every step of every run.
+      const runInfo: StepExecutionInput['runInfo'] = step.executorType === 'trigger'
+        ? {
+            triggeredFrom: run.triggeredFrom,
+            startedAt: run.startedAt.toISOString(),
+            previousRunAt: run.routineId
+              ? await this.deps.runStore.findPreviousRunStartedAt(run.routineId, run.createdAt)
+              : null,
+            ...(run.triggerPayload !== null && run.triggerPayload !== undefined
+              ? { triggerPayload: run.triggerPayload }
+              : {}),
+          }
+        : undefined;
+
       const input: StepExecutionInput = {
         ticketId: run.ticketId, routineId: run.routineId, subject: run.subjectSnapshot,
         workflowRunId: run.id, stepRunId: stepRun.id, step,
+        ...(runInfo ? { runInfo } : {}),
         workflowContext: {
           workflowName: run.templateSnapshot.name, stepName: step.name,
           outgoingEdges, previousOutputs, runHistory,

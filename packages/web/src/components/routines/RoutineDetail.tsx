@@ -72,6 +72,47 @@ export function triggerTimezone(trigger: RoutineTrigger): string | undefined {
   return trigger.kind === 'manual' ? undefined : trigger.timezone;
 }
 
+/**
+ * The routine's webhook capability URL, copyable and rotatable. The secret IS
+ * the URL, so this is deliberately the one place the UI prints it in full —
+ * with the password warning attached, and the regenerate escape hatch for
+ * when it leaked.
+ */
+function WebhookUrl({ routineId, secret }: { routineId: string; secret: string }) {
+  const rotateWebhook = useRoutineStore((s) => s.rotateWebhook);
+  const url = `${window.location.origin}/api/hooks/${secret}`;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <code
+        className="min-w-0 truncate rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--theme-text-secondary)]"
+        title={`${url} — treat this URL as a password`}
+      >
+        {url}
+      </code>
+      <button
+        type="button"
+        onClick={() => void navigator.clipboard.writeText(url)}
+        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+        title="Copy webhook URL (treat it as a password)"
+      >
+        Copy
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (window.confirm('Regenerate the webhook URL? Every sender configured with the current URL stops working immediately.')) {
+            void rotateWebhook(routineId);
+          }
+        }}
+        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+        title="Mint a fresh URL — use this if the current one leaked"
+      >
+        Regenerate
+      </button>
+    </span>
+  );
+}
+
 /** An absolute timestamp, in the routine's own zone when it has one. */
 export function formatAbsolute(dateStr: string, timezone?: string): string {
   try {
@@ -452,7 +493,15 @@ function OverviewTab({ routine, targetInfo, runs, onNavigate }: {
             </ConfigRow>
             <ConfigRow label="Trigger">
               <span className={cn('inline-flex items-center rounded px-1.5 py-0.5', tint('blue'))}>{describeTrigger(routine.trigger)}</span>
+              {routine.webhookEnabled && (
+                <span className={cn('ml-1.5 inline-flex items-center rounded px-1.5 py-0.5', tint('pink'))}>+ webhook</span>
+              )}
             </ConfigRow>
+            {routine.webhookEnabled && routine.webhookSecret && (
+              <ConfigRow label="Webhook URL">
+                <WebhookUrl routineId={routine.id} secret={routine.webhookSecret} />
+              </ConfigRow>
+            )}
             <ConfigRow label="Repositories">
               {routine.subject.repos.length > 0 ? (
                 <span className="flex flex-wrap items-center gap-1.5">
@@ -827,7 +876,15 @@ function ConfigTab({ routine, targetInfo }: { routine: Routine; targetInfo: Targ
             {triggerTimezone(routine.trigger) && (
               <span className="ml-2 text-[var(--theme-text-muted)]">{triggerTimezone(routine.trigger)}</span>
             )}
+            {routine.webhookEnabled && (
+              <span className={cn('ml-1.5 inline-flex items-center rounded px-1.5 py-0.5', tint('pink'))}>+ webhook</span>
+            )}
           </ConfigRow>
+          {routine.webhookEnabled && routine.webhookSecret && (
+            <ConfigRow label="Webhook URL">
+              <WebhookUrl routineId={routine.id} secret={routine.webhookSecret} />
+            </ConfigRow>
+          )}
           {routine.nextRunAt && routine.enabled && (
             <ConfigRow label="Next run">
               <span className="text-[var(--theme-text-secondary)]">{formatAbsolute(routine.nextRunAt, triggerTimezone(routine.trigger))}</span>

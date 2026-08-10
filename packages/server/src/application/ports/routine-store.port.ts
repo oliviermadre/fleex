@@ -27,6 +27,12 @@ export interface RoutineStorePort {
   /** Resolves a routine by its slug. Lets the CLI and URLs use `/routines/daily-recap`. */
   getBySlug(slug: string): Promise<RoutineEntity | null>;
   /**
+   * Resolves a routine by its webhook capability secret — the whole auth model
+   * of `POST /api/hooks/:token`. Exact-match lookup on a unique index, never an
+   * iteration, so timing reveals nothing about near-miss tokens.
+   */
+  getByWebhookSecret(secret: string): Promise<RoutineEntity | null>;
+  /**
    * Enabled routines whose `next_run_at` has come. Backed by the
    * `(enabled, next_run_at)` index so the 60 s tick stays a single index scan
    * instead of deserialising every routine row.

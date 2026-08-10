@@ -23,6 +23,7 @@ const DEFAULT_STEP_NAME: Partial<Record<WorkflowExecutorType, string>> = {
   human_gate: 'Human Gate',
   native: 'Ticket Actions',
   route: 'Router',
+  trigger: 'Trigger',
 };
 
 interface Props {

@@ -182,16 +182,20 @@ function lookup(ref: ParsedReference, ctx: RuntimeReferenceContext): unknown {
  * path must fail the step, not blank a field on 30 tickets in a row.
  */
 function readItemPath(item: unknown, ref: ParsedReference): unknown {
-  let cursor: unknown = item;
-  for (const segment of (ref.field ?? '').split('.')) {
+  return walkPath(item, (ref.field ?? '').split('.'), ref, 'item');
+}
+
+function walkPath(root: unknown, segments: string[], ref: ParsedReference, what: string): unknown {
+  let cursor: unknown = root;
+  for (const segment of segments) {
     if (cursor === null || typeof cursor !== 'object') {
       throw new ReferenceResolutionError(
-        `${ref.raw} — item is ${cursor === null ? 'null' : typeof cursor}, it has no "${segment}"`,
+        `${ref.raw} — ${what} is ${cursor === null ? 'null' : typeof cursor}, it has no "${segment}"`,
       );
     }
     cursor = (cursor as Record<string, unknown>)[segment];
     if (cursor === undefined) {
-      throw new ReferenceResolutionError(`${ref.raw} — item has no "${segment}"`);
+      throw new ReferenceResolutionError(`${ref.raw} — ${what} has no "${segment}"`);
     }
   }
   return cursor;
@@ -216,5 +220,8 @@ function readStepField(
         (available.length > 0 ? ` (got: ${available.join(', ')})` : ' (empty output)'),
     );
   }
+  // A deep reference digs into the object field, same walk as {{ item.a.b }}
+  // — the trigger step's webhook payload is the motivating case.
+  if (ref.path) return walkPath(value, ref.path.split('.'), ref, `"${ref.field}"`);
   return value;
 }

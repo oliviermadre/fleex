@@ -5,6 +5,7 @@ import type {
   WorkflowStep,
 } from '../types/workflow.js';
 import { computeAncestors, computeDominators } from './graph.js';
+import { effectiveOutputSchema } from './trigger-step.js';
 import {
   MAX_REGEX_LENGTH,
   compileRegex,
@@ -265,9 +266,9 @@ function validateClause(ctx: ClauseValidationCtx): void {
   const readsSourceStep = !clause.stepId || clause.stepId === edge.source;
   if (readsSourceStep && isStandardField(clause.field)) return;
 
-  const property = step.outputSchema?.properties?.[clause.field];
+  const property = effectiveOutputSchema(step)?.properties?.[clause.field];
   if (!property) {
-    const available = Object.keys(step.outputSchema?.properties ?? {});
+    const available = Object.keys(effectiveOutputSchema(step)?.properties ?? {});
     warnings.push(
       `${label}: "${step.name || sourceStepId}" declares no output field "${clause.field}"` +
         (available.length > 0 ? ` (declared: ${available.join(', ')})` : ''),
@@ -331,7 +332,7 @@ export function edgeConditionSuggestions(
 
   // The source step: its declared fields, then the standard ones. `stepId` is
   // left undefined so the clause keeps working if the edge is re-parented.
-  for (const [field, prop] of Object.entries(source.outputSchema?.properties ?? {})) {
+  for (const [field, prop] of Object.entries(effectiveOutputSchema(source)?.properties ?? {})) {
     out.push({
       stepName: sourceName,
       field,
@@ -356,7 +357,7 @@ export function edgeConditionSuggestions(
   for (const step of orderByDistance(steps, edges, edge.source, ancestors)) {
     const name = step.name || step.id;
     const conditional = dominators ? !dominators.has(step.id) : false;
-    for (const [field, prop] of Object.entries(step.outputSchema?.properties ?? {})) {
+    for (const [field, prop] of Object.entries(effectiveOutputSchema(step)?.properties ?? {})) {
       out.push({
         stepId: step.id,
         stepName: name,

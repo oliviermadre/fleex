@@ -4,6 +4,7 @@ import { RoutineEntity } from '../../domain/entities/routine.entity.js';
 import { RoutineSlugConflictError } from '../../domain/errors.js';
 import { assertTriggerValid, computeNextRunAt } from '../../domain/services/routine-schedule.js';
 import { assertRoutineTargetExists, type RoutineTargetStores } from '../services/routine-target-validator.js';
+import { mintWebhookSecret } from '../services/webhook-secret.js';
 import type { RoutineStorePort } from '../ports/routine-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
@@ -21,6 +22,9 @@ export class CreateRoutineUseCase {
     assertTriggerValid(trigger);
 
     const routine = RoutineEntity.create({ id: randomUUID(), ...input });
+    // The secret is minted server-side on enable, never accepted from the
+    // client — see `Routine.webhookSecret`.
+    if (input.webhookEnabled) routine.enableWebhook(mintWebhookSecret);
     // Armed at creation, not at the first tick: the scheduler's due query reads
     // `next_run_at`, so a routine without one would never be picked up.
     routine.schedule(computeNextRunAt(trigger, new Date()));

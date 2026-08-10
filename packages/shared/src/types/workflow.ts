@@ -1,7 +1,14 @@
 import type { DeliverableType, DeliverableStatus } from './ticket.js';
 import type { RunSubject } from './routine.js';
 
-export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route';
+/**
+ * `trigger` is the deterministic entry step that materialises "what started this
+ * run": it exposes the webhook payload (top-level keys) plus the reserved meta
+ * fields `previousRunAt` / `firedVia` / `firedAt` as an ordinary step output, so
+ * everything downstream reads it through `{{ steps.<id>.<field> }}`, `forEach`
+ * and edge conditions — no dedicated reference grammar.
+ */
+export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route' | 'trigger';
 
 export type EdgeOperator =
   | 'eq' | 'neq'
@@ -165,6 +172,12 @@ export interface WorkflowRun {
   subjectSnapshot?: RunSubject | null;
   /** Workspace directory the run's agent steps ran in, when one was created. */
   workspacePath?: string | null;
+  /**
+   * JSON body delivered by the webhook that fired this run, persisted so step
+   * retries re-read the exact payload. Null for every other trigger source.
+   * Consumed by the `trigger` step, which republishes it as its output.
+   */
+  triggerPayload?: unknown;
   /**
    * Null for a synthetic run: a routine targeting a primitive (agent / skill /
    * panel) has no template — the one-step snapshot below is fabricated at

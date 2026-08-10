@@ -107,7 +107,7 @@ const def: CommandDef = {
       ok(`Created ${routine.name}`);
       process.stdout.write(`  ${c.dim('handle')}    @routine:${routine.slug}\n`);
       process.stdout.write(`  ${c.dim('id')}        ${routine.id}\n`);
-      process.stdout.write(`  ${c.dim('schedule')}  ${describeTrigger(routine.trigger)}\n`);
+      process.stdout.write(`  ${c.dim('schedule')}  ${describeTrigger(routine.trigger, routine.webhookEnabled)}\n`);
       process.stdout.write(`  ${c.dim('next run')}  ${routine.nextRunAt ?? '- (manual trigger)'}\n`);
     });
   },

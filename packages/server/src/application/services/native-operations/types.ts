@@ -12,7 +12,17 @@ import type { EventBus } from '../../event-bus.js';
  */
 export type OpPlan =
   /** Creates the step's subject. Only valid as the first action. */
-  | { kind: 'create'; input: Omit<CreateTicketInput, 'actor'> }
+  | {
+      kind: 'create';
+      input: Omit<CreateTicketInput, 'actor'>;
+      /**
+       * Present on `ticket.upsert`: look up an existing ticket by its
+       * `external` link before creating. On a match, `skip` binds the subject
+       * and stops the step's remaining actions; `update` patches the fields
+       * from `input` (tags added, not replaced) and carries on.
+       */
+      upsert?: { ref: string; onExisting: 'skip' | 'update' };
+    }
   /** Status change — always via `moveTo()`, never folded into a field patch. */
   | { kind: 'move'; status: TicketStatus }
   /** Merged with the other field patches into one `update()`. */

@@ -34,6 +34,7 @@ function harness(ticket: TicketEntity | null = makeTicket()) {
     saveActivity: vi.fn(),
     getBoardById: vi.fn().mockResolvedValue({ id: 'b-2' }),
     getTicketsByStatus: vi.fn().mockResolvedValue([]),
+    getTicketsLinkedTo: vi.fn().mockResolvedValue([]),
     createTicket: vi.fn(),
   };
   const eventBus = { emit: vi.fn() };
@@ -156,6 +157,28 @@ describe('ApplyNativeActionsUseCase', () => {
     );
 
     expect((ticketStore.saveTicket.mock.calls[0]?.[0] as TicketEntity).priority).toBe('high');
+  });
+
+  it('digs into an upstream object field with a deep reference', async () => {
+    // The webhook case: the trigger step publishes `issue` as one object, and a
+    // deterministic template reads {{ steps.t.issue.title }} with no agent hop.
+    const { run, ticketStore } = harness();
+
+    await run(
+      [action('ticket.set_title', { title: '{{ steps.t.issue.title }}' })],
+      { steps: { t: { issue: { title: 'Deep title', number: 7 } } } },
+    );
+
+    expect((ticketStore.saveTicket.mock.calls[0]?.[0] as TicketEntity).title).toBe('Deep title');
+  });
+
+  it('fails loudly on a deep path the output does not contain', async () => {
+    const { run } = harness();
+
+    await expect(run(
+      [action('ticket.set_title', { title: '{{ steps.t.issue.titel }}' })],
+      { steps: { t: { issue: { title: 'Deep title' } } } },
+    )).rejects.toThrow(/has no "titel"/);
   });
 
   it('accepts the {{ output.* }} shorthand when the step has a single predecessor', async () => {
@@ -332,7 +355,139 @@ describe('ApplyNativeActionsUseCase', () => {
         action('ticket.create', { boardId: 'b-2', title: 'First' }),
         action('ticket.set_priority', { priority: 'high' }),
         action('ticket.create', { boardId: 'b-2', title: 'Second' }),
-      ])).rejects.toThrow(/only one "Create ticket"/);
+      ])).rejects.toThrow(/only one subject-creating action/);
+
+      expect(createTicket.execute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ticket.upsert', () => {
+    const created = () => TicketEntity.create({
+      id: 't-new', boardId: 'b-2', displayId: 7, title: 'Imported',
+      description: '', status: 'backlog', priority: 'medium', type: null,
+      position: 0, tags: [],
+    });
+    const imported = (overrides: { tags?: string[]; createdAt?: Date } = {}) => {
+      const t = TicketEntity.create({
+        id: 't-imported', boardId: 'b-2', displayId: 9, title: 'Already there',
+        description: 'old', status: 'todo', priority: 'low', type: null,
+        position: 0, tags: overrides.tags ?? ['keep'],
+      });
+      if (overrides.createdAt) (t as { createdAt: Date }).createdAt = overrides.createdAt;
+      return t;
+    };
+
+    it('creates the ticket with the external link when nothing matches the ref', async () => {
+      const { run, ticketStore, createTicket } = harness();
+      createTicket.execute.mockResolvedValue(created());
+
+      const result = await run([
+        action('ticket.upsert', { externalRef: 'linear:ABC-42', boardId: 'b-2', title: 'Imported', url: 'https://linear.app/ABC-42' }),
+      ]);
+
+      expect(ticketStore.getTicketsLinkedTo).toHaveBeenCalledWith('external', 'linear:ABC-42');
+      expect(createTicket.execute).toHaveBeenCalledWith(expect.objectContaining({
+        boardId: 'b-2',
+        title: 'Imported',
+        links: [{ type: 'external', ref: 'linear:ABC-42', label: 'linear:ABC-42', url: 'https://linear.app/ABC-42' }],
+      }));
+      expect(result.wasCreated).toBe(true);
+      expect(result.createdTicketId).toBe('t-new');
+    });
+
+    it('skip: binds the match and stops the remaining actions — the step is idempotent, not just the create', async () => {
+      // The dark-factory guarantee: an already imported item must not re-trigger
+      // the delivery workflow on every poll.
+      const { run, ticketStore, createTicket, triggerWorkflowRun } = harness();
+      ticketStore.getTicketsLinkedTo.mockResolvedValue([imported()]);
+
+      const result = await run([
+        action('ticket.upsert', { externalRef: 'linear:ABC-42', boardId: 'b-2', title: 'Imported' }),
+        action('ticket.set_priority', { priority: 'high' }),
+        action('workflow.trigger', { templateSlug: 'delivery' }),
+      ]);
+
+      expect(createTicket.execute).not.toHaveBeenCalled();
+      expect(triggerWorkflowRun).not.toHaveBeenCalled();
+      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ ticketId: 't-imported', wasCreated: false, actionsApplied: 1 });
+      expect(result.createdTicketId).toBeUndefined();
+    });
+
+    it('update: patches the match in one write, adding tags instead of replacing them', async () => {
+      const { run, ticketStore, createTicket } = harness();
+      ticketStore.getTicketsLinkedTo.mockResolvedValue([imported({ tags: ['keep'] })]);
+
+      const result = await run([
+        action('ticket.upsert', {
+          externalRef: 'linear:ABC-42', onExisting: 'update',
+          title: 'Refreshed', description: 'new body', tags: ['source:linear', 'keep'],
+        }),
+      ]);
+
+      expect(createTicket.execute).not.toHaveBeenCalled();
+      expect(ticketStore.saveTicket).toHaveBeenCalledTimes(1);
+      const saved = ticketStore.saveTicket.mock.calls[0]?.[0] as TicketEntity;
+      expect(saved.id).toBe('t-imported');
+      expect(saved.title).toBe('Refreshed');
+      expect(saved.description).toBe('new body');
+      expect(saved.tags).toEqual(['keep', 'source:linear']);
+      expect(result.wasCreated).toBe(false);
+    });
+
+    it('a match needs no board — a routine run without one must still converge', async () => {
+      // The board cascade only runs when a ticket is actually created; on a
+      // match the missing board is irrelevant and must not fail the iteration.
+      const { run, ticketStore } = harness(null);
+      ticketStore.getTicketsLinkedTo.mockResolvedValue([imported()]);
+
+      const result = await run(
+        [action('ticket.upsert', { externalRef: 'linear:ABC-42', title: 'Imported' })],
+        {},
+        { ticketId: null, subjectBoardId: null },
+      );
+
+      expect(result).toMatchObject({ ticketId: 't-imported', wasCreated: false });
+    });
+
+    it('exposes {{ created.* }} for the found ticket on the update path', async () => {
+      const { run, postComment, ticketStore } = harness();
+      ticketStore.getTicketsLinkedTo.mockResolvedValue([imported()]);
+
+      await run([
+        action('ticket.upsert', { externalRef: 'linear:ABC-42', onExisting: 'update', title: 'Refreshed' }),
+        action('ticket.post_comment', { body: 'Upserted as #{{ created.displayId }}' }),
+      ]);
+
+      expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
+        body: 'Upserted as #9',
+      }));
+    });
+
+    it('converges on the oldest match when a race left several', async () => {
+      const { run, ticketStore } = harness();
+      const older = imported({ createdAt: new Date('2026-01-01') });
+      const newer = TicketEntity.create({
+        id: 't-dupe', boardId: 'b-2', displayId: 11, title: 'Race dupe',
+        description: '', status: 'backlog', priority: 'none', type: null,
+        position: 0, tags: [],
+      });
+      ticketStore.getTicketsLinkedTo.mockResolvedValue([newer, older]);
+
+      const result = await run([
+        action('ticket.upsert', { externalRef: 'linear:ABC-42', title: 'Imported' }),
+      ]);
+
+      expect(result.ticketId).toBe('t-imported');
+    });
+
+    it('rejects an upsert combined with a create in the same step', async () => {
+      const { run, createTicket } = harness();
+
+      await expect(run([
+        action('ticket.upsert', { externalRef: 'linear:ABC-42', title: 'Imported' }),
+        action('ticket.create', { boardId: 'b-2', title: 'Second' }),
+      ])).rejects.toThrow(/only one subject-creating action/);
 
       expect(createTicket.execute).not.toHaveBeenCalled();
     });

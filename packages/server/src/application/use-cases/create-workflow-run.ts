@@ -55,6 +55,8 @@ export class CreateWorkflowRunUseCase {
     triggeredFrom: string;
     /** Set when a `workflow.trigger` action spawned this run. Bounds recursion. */
     parentRunId?: string | null;
+    /** JSON body of the webhook delivery that fired this run, when there is one. */
+    triggerPayload?: unknown;
   }): Promise<WorkflowRunEntity> {
     if ((params.templateId === null) === (params.templateSnapshot === undefined)) {
       throw new Error('exactly one of templateId / templateSnapshot must be provided');
@@ -99,6 +101,7 @@ export class CreateWorkflowRunUseCase {
       triggeredBy: params.triggeredBy,
       triggeredFrom: params.triggeredFrom,
       parentRunId: params.parentRunId ?? null,
+      triggerPayload: params.triggerPayload ?? null,
     });
 
     await this.runStore.save(run);

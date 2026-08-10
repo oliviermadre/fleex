@@ -107,7 +107,7 @@ describe('native step validation', () => {
 
     it('refuses two creations in one step', () => {
       expect(save([nativeStep('n', [create, { ...create, id: 'a2' }])], []))
-        .toThrow(/only one "Create ticket"/);
+        .toThrow(/only one subject-creating action/);
     });
   });
 
