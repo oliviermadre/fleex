@@ -37,7 +37,13 @@ export function isEffortLevel(v: unknown): v is EffortLevel {
 export function effortRank(v: unknown): number {
   return isEffortLevel(v) ? EFFORT_LEVELS.indexOf(v) : -1;
 }
-export type TicketLinkType = 'github_issue' | 'github_pr' | 'worktree' | 'session' | 'repository' | 'slack_message';
+/**
+ * `external` carries a stable reference into any third-party system, namespaced
+ * by the author (`linear:ABC-42`, `sentry:PROJ-123`, `github-project:PVTI_x`).
+ * It is the dedup key of the native `ticket.upsert` operation — the namespace is
+ * a convention, never parsed by the server, so a new source needs no new type.
+ */
+export type TicketLinkType = 'github_issue' | 'github_pr' | 'worktree' | 'session' | 'repository' | 'slack_message' | 'external';
 
 export interface TicketLink {
   readonly id: string;

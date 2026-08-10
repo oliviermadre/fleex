@@ -1,7 +1,7 @@
 import {
   getNativeOperation,
   validateResolvedParams,
-  NATIVE_OP_CREATE_TICKET,
+  NATIVE_CREATE_FAMILY,
   type NativeAction,
 } from '@fleex/shared';
 import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
@@ -16,7 +16,7 @@ import {
   hasPendingCreatedReference,
   type RuntimeReferenceContext,
 } from '../services/native-operations/resolve-references.js';
-import type { CreateTicketUseCase } from './create-ticket.js';
+import type { CreateTicketUseCase, CreateTicketInput } from './create-ticket.js';
 import {
   type ApplyTicketMutationUseCase,
   type TicketFieldPatch,
@@ -60,6 +60,11 @@ export interface ApplyNativeActionsResult {
   createdTicketDisplayId?: number;
   /** Runs spawned by `workflow.trigger`, in action order. */
   triggeredRunIds?: string[];
+  /**
+   * Set only when the step starts with a subject-creating action: `true` when a
+   * ticket was created, `false` when `ticket.upsert` found an existing one.
+   */
+  wasCreated?: boolean;
 }
 
 /**
@@ -145,7 +150,7 @@ export class ApplyNativeActionsUseCase {
       // The create itself may not reference what it is about to create, so it
       // gets no tolerance and fails loudly instead of writing a literal
       // "{{ created.id }}" into a ticket title.
-      const isCreate = action.operationId === NATIVE_OP_CREATE_TICKET;
+      const isCreate = NATIVE_CREATE_FAMILY.includes(action.operationId);
       const params = resolveParams(action.params ?? {}, refCtx, {
         tolerateCreated: !isCreate,
         droppableWithoutTicket: optionalParamNames(descriptor),
@@ -166,14 +171,14 @@ export class ApplyNativeActionsUseCase {
     // commits a ticket, and only then does planning reject the second — leaving
     // exactly the partial write this whole ordering exists to prevent.
     const createIndexes = resolved
-      .map((r, i) => (r.action.operationId === NATIVE_OP_CREATE_TICKET ? i : -1))
+      .map((r, i) => (NATIVE_CREATE_FAMILY.includes(r.action.operationId) ? i : -1))
       .filter((i) => i >= 0);
     if (createIndexes.length > 1) {
-      throw new Error(`${where}: only one "Create ticket" action is allowed`);
+      throw new Error(`${where}: only one subject-creating action ("Create ticket" or "Upsert ticket") is allowed`);
     }
     const createIndex = createIndexes[0] ?? -1;
     if (createIndex > 0) {
-      throw new Error(`${where}: "Create ticket" must be the first action`);
+      throw new Error(`${where}: "Create ticket" / "Upsert ticket" must be the first action`);
     }
     // Pass 1 let `{{ created.* }}` through as raw text on the promise that pass 2
     // would fill it in. With no create there is no pass 2, and the placeholder
@@ -188,15 +193,18 @@ export class ApplyNativeActionsUseCase {
       }
     }
 
-    // ── 3. Optional create — rebinds the subject for the remaining actions ───
+    // ── 3. Optional create/upsert — rebinds the subject for the remaining actions ───
     let subject: TicketEntity | null = subjectTicket;
     let createdTicketId: string | undefined;
     let createdTicketDisplayId: number | undefined;
+    let wasCreated: boolean | undefined;
     let changed: string[] = [];
     const triggeredRunIds: string[] = [];
     // Counted as things actually commit, never assumed from `actions.length`,
     // so the number stays truthful on the failure path too.
     let actionsApplied = 0;
+    // Field changes an `onExisting: 'update'` upsert folds into the single write.
+    let upsertPatch: { move?: { status: TicketStatus }; fields: TicketFieldPatch } | null = null;
 
     const progress = (): ApplyNativeActionsResult => ({
       ticketId: subject?.id ?? null,
@@ -205,26 +213,55 @@ export class ApplyNativeActionsUseCase {
       ...(createdTicketId ? { createdTicketId } : {}),
       ...(createdTicketDisplayId !== undefined ? { createdTicketDisplayId } : {}),
       ...(triggeredRunIds.length > 0 ? { triggeredRunIds } : {}),
+      ...(wasCreated !== undefined ? { wasCreated } : {}),
     });
 
     try {
       if (createIndex === 0) {
         const first = resolved[0];
         if (!first) throw new Error(`${where}: missing create action`);
-        first.params = {
-          ...first.params,
-          boardId: resolveCreateBoardId(first.params['boardId'], input.subjectBoardId, where),
-        };
-        const plan = first.impl.plan({ params: first.params, ticket: null });
-        if (plan.kind !== 'create') throw new Error(`${where}: ticket.create must plan a create`);
-        subject = await this.deps.createTicket.execute({ ...plan.input, actor });
-        createdTicketId = subject.id;
-        createdTicketDisplayId = subject.displayId;
-        actionsApplied += 1;
+        // Planned before the board cascade runs: an upsert that matches an
+        // existing ticket must not fail on a missing board it will never use.
+        const preview = first.impl.plan({ params: first.params, ticket: null });
+        if (preview.kind !== 'create') {
+          throw new Error(`${where}: "${first.descriptor.label}" must plan a create`);
+        }
 
-        // Pass 2 — the create has committed, so `{{ created.* }}` is knowable.
-        // Only the actions that actually deferred something are redone, and they
-        // are re-validated in full: pass 1 skipped their shape check.
+        const existing = preview.upsert
+          ? await this.findUpsertMatch(preview.upsert.ref)
+          : null;
+
+        if (existing && preview.upsert) {
+          subject = existing;
+          wasCreated = false;
+          actionsApplied += 1;
+          if (preview.upsert.onExisting === 'skip') {
+            // Idempotence of the whole step, not just the create: an already
+            // imported item must not re-trigger delivery workflows or re-post
+            // handoff comments, so the remaining actions are not applied to it.
+            return progress();
+          }
+          upsertPatch = upsertUpdatePatch(preview.input, existing);
+        } else {
+          first.params = {
+            ...first.params,
+            boardId: resolveCreateBoardId(first.params['boardId'], input.subjectBoardId, where),
+          };
+          const plan = first.impl.plan({ params: first.params, ticket: null });
+          if (plan.kind !== 'create') {
+            throw new Error(`${where}: "${first.descriptor.label}" must plan a create`);
+          }
+          subject = await this.deps.createTicket.execute({ ...plan.input, actor });
+          createdTicketId = subject.id;
+          createdTicketDisplayId = subject.displayId;
+          wasCreated = true;
+          actionsApplied += 1;
+        }
+
+        // Pass 2 — the subject is committed (created or matched), so
+        // `{{ created.* }}` is knowable. Only the actions that actually deferred
+        // something are redone, and they are re-validated in full: pass 1
+        // skipped their shape check.
         refCtx.created = { id: subject.id, displayId: subject.displayId };
         for (const r of resolved) {
           if (r.pendingCreated.length === 0) continue;
@@ -248,8 +285,8 @@ export class ApplyNativeActionsUseCase {
         return r.impl.plan({ params: r.params, ticket: subject });
       });
 
-      let move: { status: TicketStatus } | undefined;
-      let fields: TicketFieldPatch = {};
+      let move: { status: TicketStatus } | undefined = upsertPatch?.move;
+      let fields: TicketFieldPatch = upsertPatch?.fields ?? {};
       const effects: Extract<OpPlan, { kind: 'effect' }>[] = [];
 
       for (const plan of plans) {
@@ -301,9 +338,49 @@ export class ApplyNativeActionsUseCase {
 
     return progress();
   }
+
+  /**
+   * The ticket a `ticket.upsert` external ref already points at, if any.
+   *
+   * Archived tickets match too — archiving an imported ticket must retire the
+   * item, not invite the next poll to re-create it. More than one match means
+   * two runs raced the same ref before either link landed; the oldest wins so
+   * repeated imports keep converging on a single ticket.
+   */
+  private async findUpsertMatch(ref: string): Promise<TicketEntity | null> {
+    const linked = await this.deps.ticketStore.getTicketsLinkedTo('external', ref);
+    if (linked.length <= 1) return linked[0] ?? null;
+    return [...linked].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null;
+  }
 }
 
 type TicketStatus = Parameters<TicketEntity['moveTo']>[0];
+
+/**
+ * What an `onExisting: 'update'` upsert writes to the matched ticket.
+ *
+ * Provided fields replace, except tags which are added — a human's tags on the
+ * matched ticket must survive a re-import. Absent fields stay untouched.
+ */
+function upsertUpdatePatch(
+  input: Omit<CreateTicketInput, 'actor'>,
+  existing: TicketEntity,
+): { move?: { status: TicketStatus }; fields: TicketFieldPatch } {
+  const fields: TicketFieldPatch = {};
+  if (input.title) fields.title = input.title;
+  if (input.description !== undefined) fields.description = input.description;
+  if (input.priority !== undefined) fields.priority = input.priority;
+  if (input.type !== undefined) fields.type = input.type;
+  if (input.tags !== undefined) {
+    const added = input.tags.filter((t) => !existing.tags.includes(t));
+    if (added.length > 0) fields.tags = [...existing.tags, ...added];
+  }
+  if (input.dueDate !== undefined) fields.dueDate = input.dueDate ? new Date(input.dueDate) : null;
+  return {
+    ...(input.status !== undefined ? { move: { status: input.status } } : {}),
+    fields,
+  };
+}
 
 /**
  * Params that may vanish when there is no subject ticket to read.

@@ -202,6 +202,27 @@ describe('NativeStepExecutor', () => {
       expect(fields.failures).toEqual([]);
     });
 
+    it('separates created from found tickets, so a re-poll reads as convergence', async () => {
+      // A fan-out of `ticket.upsert` over an already-imported list must report
+      // "found, nothing new" — not pretend nothing happened, and not claim
+      // creations that never took place.
+      const applyNativeActions = {
+        execute: vi.fn()
+          .mockResolvedValueOnce({ ticketId: 't-new', actionsApplied: 1, changed: [], createdTicketId: 't-new', wasCreated: true })
+          .mockResolvedValueOnce({ ticketId: 't-old', actionsApplied: 1, changed: [], wasCreated: false }),
+      };
+      const exec = new NativeStepExecutor(applyNativeActions as never);
+
+      const result = await exec.execute(
+        fanOut('{{ steps.scan.items }}', { scan: { items: ['a', 'b'] } }) as never,
+      );
+      const fields = result.output.schemaFields as Record<string, unknown>;
+
+      expect(result.output.result).toBe('ok');
+      expect(fields.createdTicketIds).toEqual(['t-new']);
+      expect(fields.foundTicketIds).toEqual(['t-old']);
+    });
+
     it('keeps each iteration a separate call, so the one-write contract still holds', async () => {
       // Folding the loop into `applyNativeActions` would break its "resolve
       // everything, then one read and one write" guarantee: a failure in the

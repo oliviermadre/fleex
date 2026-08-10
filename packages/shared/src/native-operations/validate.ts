@@ -1,7 +1,7 @@
 import type { WorkflowStep, WorkflowEdge, NativeAction, JsonSchemaProperty } from '../types/workflow.js';
 import {
   getNativeOperation,
-  NATIVE_OP_CREATE_TICKET,
+  NATIVE_CREATE_FAMILY,
   NATIVE_STEP_KIND_TICKET_ACTIONS,
   type NativeOperationParam,
 } from './descriptors.js';
@@ -77,7 +77,7 @@ export function validateNativeSteps(
     const forEachItems = step.forEach
       ? validateForEach(step, byId, ancestors, where, errors)
       : null;
-    const hasCreate = actions.some((a) => a.operationId === NATIVE_OP_CREATE_TICKET);
+    const hasCreate = actions.some((a) => NATIVE_CREATE_FAMILY.includes(a.operationId));
 
     for (const action of actions) {
       const op = getNativeOperation(action.operationId);
@@ -114,7 +114,7 @@ export function validateNativeSteps(
           warnings,
           forEachItems,
           hasCreate,
-          isCreateAction: action.operationId === NATIVE_OP_CREATE_TICKET,
+          isCreateAction: NATIVE_CREATE_FAMILY.includes(action.operationId),
         });
       }
     }
@@ -196,14 +196,14 @@ function validateForEach(
 
 function validateCreatePlacement(actions: NativeAction[], where: string, errors: string[]): void {
   const createIndexes = actions
-    .map((a, i) => (a.operationId === NATIVE_OP_CREATE_TICKET ? i : -1))
+    .map((a, i) => (NATIVE_CREATE_FAMILY.includes(a.operationId) ? i : -1))
     .filter((i) => i >= 0);
   if (createIndexes.length > 1) {
-    errors.push(`${where}: only one "Create ticket" action is allowed per step`);
+    errors.push(`${where}: only one subject-creating action ("Create ticket" or "Upsert ticket") is allowed per step`);
   }
   if (createIndexes.length === 1 && createIndexes[0] !== 0) {
     errors.push(
-      `${where}: "Create ticket" must be the first action — the actions after it apply to the new ticket`,
+      `${where}: "Create ticket" / "Upsert ticket" must be the first action — the actions after it apply to that ticket`,
     );
   }
 }
@@ -485,7 +485,7 @@ export function nativeReferenceSuggestions(
     }
   }
 
-  if ((step.nativeActions ?? []).some((a) => a.operationId === NATIVE_OP_CREATE_TICKET)) {
+  if ((step.nativeActions ?? []).some((a) => NATIVE_CREATE_FAMILY.includes(a.operationId))) {
     for (const field of CREATED_REFERENCE_FIELDS) {
       out.push({ token: `{{ created.${field} }}`, label: `created.${field}`, group: 'Created' });
     }

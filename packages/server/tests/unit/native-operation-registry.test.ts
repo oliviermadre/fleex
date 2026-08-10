@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NATIVE_OPERATIONS, NATIVE_OPERATION_IDS, getNativeOperation } from '@fleex/shared';
+import { NATIVE_OPERATIONS, NATIVE_OPERATION_IDS, NATIVE_CREATE_FAMILY, getNativeOperation } from '@fleex/shared';
 import { NativeOperationRegistry } from '../../src/application/services/native-operations/registry.js';
 import { TICKET_OPERATIONS } from '../../src/application/services/native-operations/ticket-operations.js';
 
@@ -61,11 +61,16 @@ describe('native operation registry', () => {
     }
   });
 
-  it('keeps ticket.create the only operation that is not a plain mutation', () => {
-    // `apply-native-actions` special-cases exactly one id. If a second creating
-    // operation appeared, that special case would silently not apply to it.
-    const creators = NATIVE_OPERATIONS.filter((op) => op.id.endsWith('.create'));
-    expect(creators.map((op) => op.id)).toEqual(['ticket.create']);
+  it('keeps the subject-creating family explicit', () => {
+    // `apply-native-actions` special-cases exactly the members of
+    // NATIVE_CREATE_FAMILY (first action, at most one, subject rebinding,
+    // `{{ created.* }}`). A creating operation outside the list would silently
+    // miss the whole contract.
+    const creators = NATIVE_OPERATIONS
+      .filter((op) => op.id.endsWith('.create') || op.id.endsWith('.upsert'))
+      .map((op) => op.id)
+      .sort();
+    expect(creators).toEqual([...NATIVE_CREATE_FAMILY].sort());
   });
 
   it('exposes a descriptor for every id it advertises', () => {

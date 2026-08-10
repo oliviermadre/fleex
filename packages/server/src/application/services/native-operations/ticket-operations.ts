@@ -35,6 +35,33 @@ export const TICKET_OPERATIONS: readonly NativeOperationImpl[] = [
     }),
   },
   {
+    id: 'ticket.upsert',
+    plan: ({ params }) => {
+      const ref = str(params['externalRef']);
+      const url = strOrNull(params['url']);
+      return {
+        kind: 'create',
+        upsert: {
+          ref,
+          onExisting: params['onExisting'] === 'update' ? 'update' : 'skip',
+        },
+        input: {
+          boardId: str(params['boardId']),
+          title: str(params['title']),
+          description: params['description'] === undefined ? undefined : str(params['description']),
+          status: params['status'] === undefined ? undefined : (params['status'] as TicketStatus),
+          priority: params['priority'] === undefined ? undefined : (params['priority'] as TicketPriority),
+          type: params['type'] === undefined ? undefined : (params['type'] as TicketType | null),
+          tags: params['tags'] === undefined ? undefined : strList(params['tags']),
+          dueDate: params['dueDate'] === undefined ? undefined : strOrNull(params['dueDate']),
+          // The dedup key travels with the create so the very first import is
+          // already linked — findable by the next run without a second write.
+          links: [{ type: 'external', ref, label: ref, url }],
+        },
+      };
+    },
+  },
+  {
     // The whole point of AC7: status never travels through `update()`, because
     // only `moveTo()` produces the `moved` activity and the `ticket.moved` event.
     id: 'ticket.set_status',
