@@ -29,7 +29,7 @@ describe('parseTemplateBody — native steps', () => {
   });
 
   it('accepts every executor type the engine can dispatch', () => {
-    for (const executorType of ['agent', 'skill', 'panel', 'human_gate', 'native']) {
+    for (const executorType of ['agent', 'skill', 'panel', 'human_gate', 'native', 'route', 'trigger']) {
       const r = parseTemplateBody(body([{ ...nativeStep, executorType }]));
       expect(r.ok, `executorType "${executorType}" must be accepted`).toBe(true);
     }
