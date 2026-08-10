@@ -37,6 +37,7 @@ export function RoutineEditor({ routine, templates, onClose }: {
   const [repos, setRepos] = useState<string[]>(routine?.subject.repos ?? []);
   const [brief, setBrief] = useState(routine?.subject.brief ?? '');
   const [trigger, setTrigger] = useState<RoutineTrigger>(routine?.trigger ?? { kind: 'manual' });
+  const [webhookEnabled, setWebhookEnabled] = useState(routine?.webhookEnabled ?? false);
   const [overlapPolicy, setOverlapPolicy] = useState<RoutineOverlapPolicy>(routine?.overlapPolicy ?? 'skip');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,9 +79,9 @@ export function RoutineEditor({ routine, templates, onClose }: {
     const target: RoutineTarget = { kind: targetKind, ref: targetRef };
     try {
       if (routine) {
-        await update(routine.id, { name, description: description || null, target, subject, trigger, overlapPolicy });
+        await update(routine.id, { name, description: description || null, target, subject, trigger, overlapPolicy, webhookEnabled });
       } else {
-        const created = await create({ name, description: description || null, target, subject, trigger, overlapPolicy });
+        const created = await create({ name, description: description || null, target, subject, trigger, overlapPolicy, webhookEnabled });
         await select(created.id);
       }
       onClose();
@@ -165,6 +166,44 @@ export function RoutineEditor({ routine, templates, onClose }: {
         </div>
 
         <TriggerEditor value={trigger} onChange={setTrigger} />
+
+        {/* Webhook is additive to the base trigger, not a kind of its own — a
+            routine can be cron 9AM as a safety net AND fire on push. */}
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 text-xs text-[var(--theme-text-secondary)]">
+            <input
+              type="checkbox"
+              checked={webhookEnabled}
+              onChange={(e) => setWebhookEnabled(e.target.checked)}
+            />
+            Also fire on webhook — external systems POST to a URL, payload included
+          </label>
+          {webhookEnabled && (
+            routine?.webhookSecret ? (
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[11px] text-[var(--theme-text-primary)]">
+                  {`${window.location.origin}/api/hooks/${routine.webhookSecret}`}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/api/hooks/${routine.webhookSecret}`)}
+                >
+                  Copy
+                </Button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-[var(--theme-text-muted)]">
+                The URL appears after saving.
+              </p>
+            )
+          )}
+          {webhookEnabled && routine?.webhookSecret && (
+            <p className="text-[11px] text-[var(--theme-text-muted)]">
+              The URL contains the secret — treat it like a password.
+            </p>
+          )}
+        </div>
 
         {/* Overlap only exists for scheduled triggers: it decides what a tick
             firing mid-run does. A manual routine has no ticks to arbitrate. */}

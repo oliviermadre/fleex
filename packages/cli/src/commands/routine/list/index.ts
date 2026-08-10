@@ -25,7 +25,7 @@ const def: CommandDef = {
       const rows = routines.map((r) => [
         r.slug,
         trunc(`${r.emoji ? r.emoji + ' ' : ''}${r.name}`, 28),
-        trunc(shortTrigger(r.trigger), 18),
+        trunc(shortTrigger(r.trigger, r.webhookEnabled), 18),
         r.nextRunAt ?? '-',
         r.enabled ? 'yes' : 'paused',
         // The active run is what makes "waiting" actionable from a terminal:

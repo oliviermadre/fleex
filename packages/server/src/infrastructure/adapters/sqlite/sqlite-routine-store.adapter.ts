@@ -26,6 +26,8 @@ interface Row {
   next_run_at: string | null;
   last_claimed_by: string | null;
   last_claimed_at: string | null;
+  webhook_enabled: number | null;
+  webhook_secret: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -56,6 +58,11 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
 
   async getBySlug(slug: string): Promise<RoutineEntity | null> {
     const r = this.conn.db.prepare('SELECT * FROM routines WHERE slug = ?').get(slug) as Row | undefined;
+    return r ? toEntity(r) : null;
+  }
+
+  async getByWebhookSecret(secret: string): Promise<RoutineEntity | null> {
+    const r = this.conn.db.prepare('SELECT * FROM routines WHERE webhook_secret = ?').get(secret) as Row | undefined;
     return r ? toEntity(r) : null;
   }
 
@@ -123,11 +130,11 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
     this.conn.db.prepare(`
       INSERT INTO routines
         (id, slug, name, emoji, description, enabled, template_id, target_kind, target_ref, subject,
-         trigger_kind, cron, run_at, timezone, overlap_policy,
+         trigger_kind, cron, run_at, timezone, overlap_policy, webhook_enabled, webhook_secret,
          last_run_at, last_run_id, next_run_at, created_at, updated_at)
       VALUES
         (@id, @slug, @name, @emoji, @description, @enabled, @template_id, @target_kind, @target_ref, @subject,
-         @trigger_kind, @cron, @run_at, @timezone, @overlap_policy,
+         @trigger_kind, @cron, @run_at, @timezone, @overlap_policy, @webhook_enabled, @webhook_secret,
          @last_run_at, @last_run_id, @next_run_at, @created_at, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
         slug = excluded.slug,
@@ -144,6 +151,8 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
         run_at = excluded.run_at,
         timezone = excluded.timezone,
         overlap_policy = excluded.overlap_policy,
+        webhook_enabled = excluded.webhook_enabled,
+        webhook_secret = excluded.webhook_secret,
         last_run_at = excluded.last_run_at,
         last_run_id = excluded.last_run_id,
         next_run_at = excluded.next_run_at,
@@ -162,6 +171,8 @@ export class SqliteRoutineStoreAdapter implements RoutineStorePort {
       run_at: t.kind === 'once' ? t.runAt : null,
       timezone: t.kind === 'manual' ? 'Europe/Paris' : t.timezone,
       overlap_policy: routine.overlapPolicy,
+      webhook_enabled: routine.webhookEnabled ? 1 : 0,
+      webhook_secret: routine.webhookSecret,
       last_run_at: routine.lastRunAt?.toISOString() ?? null,
       last_run_id: routine.lastRunId,
       next_run_at: routine.nextRunAt?.toISOString() ?? null,
@@ -194,6 +205,8 @@ function toEntity(r: Row): RoutineEntity {
     new Date(r.updated_at),
     r.last_claimed_by ?? null,
     r.last_claimed_at ? new Date(r.last_claimed_at) : null,
+    r.webhook_enabled === 1,
+    r.webhook_secret ?? null,
   );
   return e;
 }

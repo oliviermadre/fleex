@@ -27,6 +27,13 @@ export class RoutineEntity {
      */
     public lastClaimedBy: string | null = null,
     public lastClaimedAt: Date | null = null,
+    /**
+     * Additive push channel — see the `Routine` DTO. `webhookSecret` outlives
+     * `webhookEnabled` on purpose: disabling must not invalidate the URL a
+     * sender already configured.
+     */
+    public webhookEnabled: boolean = false,
+    public webhookSecret: string | null = null,
   ) {}
 
   static create(params: {
@@ -95,6 +102,23 @@ export class RoutineEntity {
     this.updatedAt = new Date();
   }
 
+  /**
+   * Turns the push channel on, minting the capability secret on first enable.
+   * The secret is the URL — never author-typed, never regenerated implicitly
+   * (rotation, when it exists, will be its own explicit action).
+   */
+  enableWebhook(mintSecret: () => string): void {
+    this.webhookEnabled = true;
+    if (!this.webhookSecret) this.webhookSecret = mintSecret();
+    this.updatedAt = new Date();
+  }
+
+  /** Turns the push channel off. The secret stays, dormant — see the DTO doc. */
+  disableWebhook(): void {
+    this.webhookEnabled = false;
+    this.updatedAt = new Date();
+  }
+
   /** Arms (or disarms, with null) the next scheduled fire time. */
   schedule(nextRunAt: Date | null): void {
     this.nextRunAt = nextRunAt;
@@ -123,6 +147,8 @@ export class RoutineEntity {
       target: this.target,
       subject: this.subject,
       trigger: this.trigger,
+      webhookEnabled: this.webhookEnabled,
+      webhookSecret: this.webhookSecret,
       overlapPolicy: this.overlapPolicy,
       lastRunAt: this.lastRunAt?.toISOString() ?? null,
       lastRunId: this.lastRunId,

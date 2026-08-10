@@ -446,8 +446,11 @@ export interface RoutineRunStartedEvent extends DomainEvent {
   routineId: string;
   routineSlug: string;
   workflowRunId: string;
-  /** `once` / `cron` for a scheduled launch, `manual` for the Launch button. */
-  triggerKind: RoutineTriggerKind;
+  /**
+   * `once` / `cron` for a scheduled launch, `webhook` for an inbound delivery
+   * on the routine's capability URL, `manual` for the Launch button.
+   */
+  triggerKind: RoutineTriggerKind | 'webhook';
 }
 
 export interface RoutineRunCompletedEvent extends DomainEvent {

@@ -32,7 +32,12 @@ const def: CommandDef = {
       if (routine.description) process.stdout.write(`  ${c.dim('about')}     ${routine.description}\n`);
 
       process.stdout.write(`\n  ${c.bold('Trigger')}\n`);
-      process.stdout.write(`  ${c.dim('schedule')}  ${describeTrigger(routine.trigger)}\n`);
+      process.stdout.write(`  ${c.dim('schedule')}  ${describeTrigger(routine.trigger, routine.webhookEnabled)}\n`);
+      if (routine.webhookEnabled && routine.webhookSecret) {
+        // The URL is a capability: printing it is deliberate (this is where an
+        // operator copies it from), but it deserves the password warning.
+        process.stdout.write(`  ${c.dim('webhook')}   ${apiBase()}/api/hooks/${routine.webhookSecret}  ${c.dim('(treat as a password)')}\n`);
+      }
       process.stdout.write(`  ${c.dim('overlap')}   ${routine.overlapPolicy}\n`);
       process.stdout.write(`  ${c.dim('next run')}  ${routine.nextRunAt ?? '-'}\n`);
       process.stdout.write(`  ${c.dim('last run')}  ${routine.lastRunAt ?? '-'}\n`);

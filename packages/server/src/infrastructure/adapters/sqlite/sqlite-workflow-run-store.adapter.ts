@@ -18,6 +18,7 @@ interface Row {
   current_step_id: string | null;
   triggered_by: string;
   triggered_from: string;
+  trigger_payload: string | null;
   started_at: string;
   completed_at: string | null;
   created_at: string;
@@ -78,11 +79,11 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       INSERT INTO workflow_runs
         (id, ticket_id, routine_id, parent_run_id, subject_snapshot, workspace_path,
          template_id, template_snapshot, status, current_step_id,
-         triggered_by, triggered_from, started_at, completed_at, created_at, updated_at)
+         triggered_by, triggered_from, trigger_payload, started_at, completed_at, created_at, updated_at)
       VALUES
         (@id, @ticket_id, @routine_id, @parent_run_id, @subject_snapshot, @workspace_path,
          @template_id, @template_snapshot, @status, @current_step_id,
-         @triggered_by, @triggered_from, @started_at, @completed_at, @created_at, @updated_at)
+         @triggered_by, @triggered_from, @trigger_payload, @started_at, @completed_at, @created_at, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
         ticket_id = excluded.ticket_id,
         routine_id = excluded.routine_id,
@@ -95,6 +96,7 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
         current_step_id = excluded.current_step_id,
         triggered_by = excluded.triggered_by,
         triggered_from = excluded.triggered_from,
+        trigger_payload = excluded.trigger_payload,
         started_at = excluded.started_at,
         completed_at = excluded.completed_at,
         created_at = excluded.created_at,
@@ -112,6 +114,7 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       current_step_id: run.currentStepId,
       triggered_by: run.triggeredBy,
       triggered_from: run.triggeredFrom,
+      trigger_payload: run.triggerPayload === null ? null : JSON.stringify(run.triggerPayload),
       started_at: run.startedAt.toISOString(),
       completed_at: run.completedAt?.toISOString() ?? null,
       created_at: run.createdAt.toISOString(),
@@ -137,6 +140,7 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       r.subject_snapshot ? JSON.parse(r.subject_snapshot) as RunSubject : null,
       r.workspace_path ?? null,
       r.parent_run_id ?? null,
+      r.trigger_payload === null || r.trigger_payload === undefined ? null : JSON.parse(r.trigger_payload),
     );
   }
 }

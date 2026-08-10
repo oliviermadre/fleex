@@ -173,6 +173,12 @@ export interface WorkflowRun {
   /** Workspace directory the run's agent steps ran in, when one was created. */
   workspacePath?: string | null;
   /**
+   * JSON body delivered by the webhook that fired this run, persisted so step
+   * retries re-read the exact payload. Null for every other trigger source.
+   * Consumed by the `trigger` step, which republishes it as its output.
+   */
+  triggerPayload?: unknown;
+  /**
    * Null for a synthetic run: a routine targeting a primitive (agent / skill /
    * panel) has no template — the one-step snapshot below is fabricated at
    * launch and is the only definition the run ever had.

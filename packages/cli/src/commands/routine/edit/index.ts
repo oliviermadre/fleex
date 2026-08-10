@@ -83,7 +83,7 @@ const def: CommandDef = {
     present(updated, () => {
       ok(`Updated ${updated.name}`);
       process.stdout.write(`  ${c.dim('handle')}    @routine:${updated.slug}\n`);
-      process.stdout.write(`  ${c.dim('schedule')}  ${describeTrigger(updated.trigger)}\n`);
+      process.stdout.write(`  ${c.dim('schedule')}  ${describeTrigger(updated.trigger, updated.webhookEnabled)}\n`);
       process.stdout.write(`  ${c.dim('overlap')}   ${updated.overlapPolicy}\n`);
       process.stdout.write(`  ${c.dim('next run')}  ${updated.nextRunAt ?? '- (manual trigger)'}\n`);
     });

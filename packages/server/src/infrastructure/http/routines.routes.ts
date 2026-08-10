@@ -175,6 +175,7 @@ export function routineRoutes(deps: RoutineRouteDeps) {
         ...(trigger.value ? { trigger: trigger.value } : {}),
         ...(parseOverlapPolicy(body['overlapPolicy']) ? { overlapPolicy: parseOverlapPolicy(body['overlapPolicy'])! } : {}),
         ...(typeof body['enabled'] === 'boolean' ? { enabled: body['enabled'] } : {}),
+        ...(typeof body['webhookEnabled'] === 'boolean' ? { webhookEnabled: body['webhookEnabled'] } : {}),
       };
 
       try {
@@ -210,6 +211,7 @@ export function routineRoutes(deps: RoutineRouteDeps) {
         ...(trigger.value ? { trigger: trigger.value } : {}),
         ...(parseOverlapPolicy(body['overlapPolicy']) ? { overlapPolicy: parseOverlapPolicy(body['overlapPolicy'])! } : {}),
         ...(typeof body['enabled'] === 'boolean' ? { enabled: body['enabled'] } : {}),
+        ...(typeof body['webhookEnabled'] === 'boolean' ? { webhookEnabled: body['webhookEnabled'] } : {}),
       };
 
       try {

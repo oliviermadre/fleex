@@ -3,6 +3,7 @@ import type { RoutineEntity } from '../../domain/entities/routine.entity.js';
 import { RoutineNotFoundError } from '../../domain/errors.js';
 import { assertTriggerValid, computeNextRunAt } from '../../domain/services/routine-schedule.js';
 import { assertRoutineTargetExists, type RoutineTargetStores } from '../services/routine-target-validator.js';
+import { mintWebhookSecret } from '../services/webhook-secret.js';
 import type { RoutineStorePort } from '../ports/routine-store.port.js';
 
 export class UpdateRoutineUseCase {
@@ -24,6 +25,13 @@ export class UpdateRoutineUseCase {
     // permalink and its workspace/branch prefix, so changing it would orphan
     // existing worktrees.
     routine.update(changes);
+
+    if (changes.webhookEnabled !== undefined) {
+      // Off keeps the secret dormant, so re-enabling never invalidates a URL a
+      // sender already configured — see `RoutineEntity.disableWebhook`.
+      if (changes.webhookEnabled) routine.enableWebhook(mintWebhookSecret);
+      else routine.disableWebhook();
+    }
 
     // Re-arm whenever the schedule *or* the enabled flag moved: re-enabling a
     // routine whose `next_run_at` is months old would otherwise fire it on the

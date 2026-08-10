@@ -33,6 +33,11 @@ export class WorkflowRunEntity {
      * depth of a chain of runs — see `CreateWorkflowRunUseCase`.
      */
     public readonly parentRunId: string | null = null,
+    /**
+     * JSON body of the webhook delivery that fired this run — persisted so a
+     * retried step re-reads the exact payload. Null for every other source.
+     */
+    public readonly triggerPayload: unknown = null,
   ) {
     // Exactly one anchor. A run with neither would be unreachable from every
     // screen (kanban, cockpit, routines); a run with both would have two
@@ -57,6 +62,7 @@ export class WorkflowRunEntity {
     triggeredBy: string;
     triggeredFrom: string;
     parentRunId?: string | null;
+    triggerPayload?: unknown;
   }): WorkflowRunEntity {
     const now = new Date();
     return new WorkflowRunEntity(
@@ -76,6 +82,7 @@ export class WorkflowRunEntity {
       params.subjectSnapshot ?? null,
       null,
       params.parentRunId ?? null,
+      params.triggerPayload ?? null,
     );
   }
 
@@ -144,6 +151,7 @@ export class WorkflowRunEntity {
       parentRunId: this.parentRunId,
       subjectSnapshot: this.subjectSnapshot,
       workspacePath: this.workspacePath,
+      triggerPayload: this.triggerPayload,
       templateId: this.templateId,
       templateSnapshot: this.templateSnapshot,
       status: this.status,

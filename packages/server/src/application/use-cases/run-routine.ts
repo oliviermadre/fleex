@@ -38,6 +38,8 @@ export class RunRoutineUseCase {
     routineId: string;
     triggeredBy: string;
     triggeredFrom: string;
+    /** JSON body of the webhook delivery that fired this launch, when there is one. */
+    triggerPayload?: unknown;
   }): Promise<WorkflowRunEntity> {
     const routine = await this.routineStore.getById(params.routineId);
     if (!routine) throw new RoutineNotFoundError(params.routineId);
@@ -50,19 +52,23 @@ export class RunRoutineUseCase {
         : { templateId: null, templateSnapshot: synthesizePrimitiveSnapshot(routine) }),
       triggeredBy: params.triggeredBy,
       triggeredFrom: params.triggeredFrom,
+      triggerPayload: params.triggerPayload ?? null,
     });
 
     routine.recordRun(run.id);
     await this.routineStore.save(routine);
 
-    // A scheduled launch reports the schedule that fired it; anything else is a
-    // human pressing Launch, whatever the routine's own trigger says.
+    // A scheduled launch reports the schedule that fired it, a webhook delivery
+    // reports itself; anything else is a human pressing Launch, whatever the
+    // routine's own trigger says.
     this.eventBus?.emit({
       type: 'routine.run_started',
       routineId: routine.id,
       routineSlug: routine.slug,
       workflowRunId: run.id,
-      triggerKind: params.triggeredFrom === 'schedule' ? routine.trigger.kind : 'manual',
+      triggerKind: params.triggeredFrom === 'schedule' ? routine.trigger.kind
+        : params.triggeredFrom === 'webhook' ? 'webhook'
+        : 'manual',
       occurredAt: new Date(),
     });
 

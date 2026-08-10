@@ -108,6 +108,9 @@ export class RunWorkflowStepUseCase {
             previousRunAt: run.routineId
               ? await this.deps.runStore.findPreviousRunStartedAt(run.routineId, run.createdAt)
               : null,
+            ...(run.triggerPayload !== null && run.triggerPayload !== undefined
+              ? { triggerPayload: run.triggerPayload }
+              : {}),
           }
         : undefined;
 
