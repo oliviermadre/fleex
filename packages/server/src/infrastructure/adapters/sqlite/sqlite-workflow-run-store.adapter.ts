@@ -52,6 +52,13 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
     return r ? this.toEntity(r) : null;
   }
 
+  async findPreviousRunStartedAt(routineId: string, before: Date): Promise<string | null> {
+    const r = this.conn.db.prepare(
+      'SELECT started_at FROM workflow_runs WHERE routine_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT 1',
+    ).get(routineId, before.toISOString()) as { started_at: string } | undefined;
+    return r?.started_at ?? null;
+  }
+
   async getByStatus(status: WorkflowRunStatus): Promise<WorkflowRunEntity[]> {
     const rows = this.conn.db.prepare('SELECT * FROM workflow_runs WHERE status = ?').all(status) as Row[];
     return rows.map((r) => this.toEntity(r));

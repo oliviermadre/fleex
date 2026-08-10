@@ -79,6 +79,23 @@ export class WorkflowTemplateEntity {
       }
     }
 
+    // A trigger step is "how this run started" — placing it anywhere but the
+    // entry (or having two) would make that statement meaningless, so both are
+    // refused at save time rather than surprising at runtime.
+    const triggerSteps = input.steps.filter((s) => s.executorType === 'trigger');
+    if (triggerSteps.length > 1) {
+      throw new Error('a workflow can have at most one trigger step');
+    }
+    const trigger = triggerSteps[0];
+    if (trigger) {
+      if (trigger.id !== input.entryStepId) {
+        throw new Error(`step ${trigger.id}: a trigger step must be the workflow's entry step`);
+      }
+      if (input.edges.some((e) => e.target === trigger.id)) {
+        throw new Error(`step ${trigger.id}: a trigger step cannot have incoming edges`);
+      }
+    }
+
     // Native steps: actions, parameters and `{{ … }}` references are checked at
     // save time so a misconfigured workflow can never reach a run. Warnings
     // (e.g. a reference to a step on a branch that may not run) are surfaced by

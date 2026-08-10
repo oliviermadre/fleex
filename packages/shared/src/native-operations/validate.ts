@@ -6,6 +6,7 @@ import {
   type NativeOperationParam,
 } from './descriptors.js';
 import { computeAncestors, computeDominators } from '../workflow/graph.js';
+import { effectiveOutputSchema } from '../workflow/trigger-step.js';
 import {
   asFullValueReference,
   findReferences,
@@ -177,7 +178,7 @@ function validateForEach(
     return null;
   }
 
-  const property = source.outputSchema?.properties?.[ref.field ?? ''];
+  const property = effectiveOutputSchema(source)?.properties?.[ref.field ?? ''];
   if (!property) {
     errors.push(
       `${where}: forEach ${ref.raw} — "${source.name || source.id}" declares no output field "${ref.field}"`,
@@ -331,7 +332,8 @@ function validateReference(ctx: ParamValidationCtx, ref: ParsedReference, isFull
     return;
   }
 
-  if (!source.outputSchema) {
+  const sourceSchema = effectiveOutputSchema(source);
+  if (!sourceSchema) {
     errors.push(
       `${label}: ${ref.raw} — step "${source.name || sourceStepId}" declares no output schema, ` +
         `so it produces no fields to read`,
@@ -339,9 +341,9 @@ function validateReference(ctx: ParamValidationCtx, ref: ParsedReference, isFull
     return;
   }
 
-  const property = source.outputSchema.properties?.[ref.field ?? ''];
+  const property = sourceSchema.properties?.[ref.field ?? ''];
   if (!property) {
-    const available = Object.keys(source.outputSchema.properties ?? {});
+    const available = Object.keys(sourceSchema.properties ?? {});
     errors.push(
       `${label}: ${ref.raw} — "${source.name || sourceStepId}" has no output field "${ref.field}"` +
         (available.length > 0 ? ` (available: ${available.join(', ')})` : ''),
@@ -447,7 +449,7 @@ export function nativeReferenceSuggestions(
 
   for (const source of steps) {
     if (!ancestors.has(source.id)) continue;
-    const fields = Object.keys(source.outputSchema?.properties ?? {});
+    const fields = Object.keys(effectiveOutputSchema(source)?.properties ?? {});
     const conditional = dominators ? !dominators.has(source.id) : false;
     const name = source.name || source.id;
     for (const field of fields) {

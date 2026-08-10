@@ -102,6 +102,19 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
     return data ? rowToEntity(data as WorkflowRunRow) : null;
   }
 
+  async findPreviousRunStartedAt(routineId: string, before: Date): Promise<string | null> {
+    const { data, error } = await this.conn.client
+      .from('workflow_runs')
+      .select('started_at')
+      .eq('routine_id', routineId)
+      .lt('created_at', before.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`SupabaseWorkflowRunStore.findPreviousRunStartedAt failed: ${error.message}`);
+    return (data as { started_at: string } | null)?.started_at ?? null;
+  }
+
   async getByStatus(status: WorkflowRunStatus): Promise<WorkflowRunEntity[]> {
     const { data, error } = await this.conn.client
       .from('workflow_runs')

@@ -366,6 +366,7 @@ export {
   describeEdge,
 } from './workflow/edge-conditions.js';
 export { computeAncestors, computeDominators } from './workflow/graph.js';
+export { effectiveOutputSchema, TRIGGER_STEP_META_PROPERTIES } from './workflow/trigger-step.js';
 export type { EdgeValidationResult, EdgeFieldSuggestion } from './workflow/edge-validation.js';
 export { validateEdgeConditions, edgeConditionSuggestions } from './workflow/edge-validation.js';
 

@@ -1,7 +1,14 @@
 import type { DeliverableType, DeliverableStatus } from './ticket.js';
 import type { RunSubject } from './routine.js';
 
-export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route';
+/**
+ * `trigger` is the deterministic entry step that materialises "what started this
+ * run": it exposes the webhook payload (top-level keys) plus the reserved meta
+ * fields `previousRunAt` / `firedVia` / `firedAt` as an ordinary step output, so
+ * everything downstream reads it through `{{ steps.<id>.<field> }}`, `forEach`
+ * and edge conditions — no dedicated reference grammar.
+ */
+export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route' | 'trigger';
 
 export type EdgeOperator =
   | 'eq' | 'neq'

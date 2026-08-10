@@ -32,11 +32,13 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
     setOutputSchemaError(null);
   }, [step.id]);
 
-  // `human_gate`, `native` and `route` are self-contained: none points at a
-  // persona / skill / panel, and none runs an agent, so none has a ref or a mode.
+  // `human_gate`, `native`, `route` and `trigger` are self-contained: none
+  // points at a persona / skill / panel, and none runs an agent, so none has a
+  // ref or a mode.
   const hasExecutorRef = step.executorType !== 'human_gate'
     && step.executorType !== 'native'
-    && step.executorType !== 'route';
+    && step.executorType !== 'route'
+    && step.executorType !== 'trigger';
   // A router produces nothing, so an output schema would be a lie. Its whole
   // configuration is its name — the routing lives on its outgoing edges.
   const isRouter = step.executorType === 'route';
@@ -52,6 +54,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
       case 'human_gate':
       case 'native':
       case 'route':
+      case 'trigger':
         return [];
     }
   })();
@@ -190,6 +193,16 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
           A router performs no action. Use it to converge several branches, then
           re-split them: its outgoing edges can read the output of any step that
           runs before it.
+        </p>
+      )}
+
+      {step.executorType === 'trigger' && (
+        <p className="text-[10px] leading-tight" style={{ color: 'var(--theme-text-muted)' }}>
+          The entry step of the workflow. Its output is what started the run: the
+          webhook payload&apos;s top-level keys, plus <code>previousRunAt</code>,{' '}
+          <code>firedVia</code> and <code>firedAt</code>. Declare the payload
+          fields you expect in the output schema below so downstream steps get
+          typed <code>{'{{ steps.… }}'}</code> references and <code>forEach</code>.
         </p>
       )}
 

@@ -4,7 +4,7 @@ import type { WorkflowStep, WorkflowExecutorType } from '@fleex/shared';
 import { COLOR_ERROR_RED } from '../../lib/constants';
 import { tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
-import { ListChecksIcon, SplitIcon } from './executor-palette';
+import { ListChecksIcon, SplitIcon, TriggerInIcon } from './executor-palette';
 import { nativeStepSummary } from './nativeStepSummary';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
@@ -35,7 +35,7 @@ function XIcon({ className }: IconProps) {
 // so a step node on the canvas shows the SAME icon as the sidebar and the
 // palette. `human_gate` and `native` are not primitives (nothing in the sidebar
 // corresponds to them), so they keep their dedicated glyphs.
-const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native' | 'route'>, PrimitiveKind> = {
+const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native' | 'route' | 'trigger'>, PrimitiveKind> = {
   agent: 'persona',
   panel: 'panel',
   skill: 'skill',
@@ -45,6 +45,7 @@ function StepIcon({ type, className }: { type: WorkflowExecutorType; className?:
   if (type === 'human_gate') return <UserCheckIcon className={className} />;
   if (type === 'native') return <ListChecksIcon className={className} />;
   if (type === 'route') return <SplitIcon className={className} />;
+  if (type === 'trigger') return <TriggerInIcon className={className} />;
   // tinted={false}: the icon inherits the node's executor-type colour (border +
   // icon share one hue) instead of re-applying the tint, keeping each node
   // chromatically coherent.
@@ -58,6 +59,7 @@ const executorColor = {
   human_gate: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor} border-dashed`,
   native: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
   route: `${tintClasses('orange').text} ${tintClasses('orange').borderColor} border-dashed`,
+  trigger: `${tintClasses('pink').text} ${tintClasses('pink').borderColor} border-dashed`,
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -79,6 +81,7 @@ const BORDER_HEX = {
   human_gate: '#f59e0b',  // amber-500
   native: '#14b8a6',      // teal-500
   route: '#f97316',       // orange-500
+  trigger: '#ec4899',     // pink-500
 } as const;
 
 export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
@@ -105,7 +108,10 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   // not a sign of an unfinished step for them.
   const showUnconfigured = step.executorType === 'native'
     ? (step.nativeActions ?? []).length === 0
-    : !step.executorRef && step.executorType !== 'human_gate' && step.executorType !== 'route';
+    : !step.executorRef
+      && step.executorType !== 'human_gate'
+      && step.executorType !== 'route'
+      && step.executorType !== 'trigger';
   const borderColor = BORDER_HEX[step.executorType];
   const handleStyle = {
     width: 12,
@@ -154,8 +160,8 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
           // Theme surface (never transparent) so the node reads on any theme;
           // the executor-type border color stays the identity cue.
           background: 'var(--theme-bg-overlay)',
-          // Dashed for the two step types that run no work of their own.
-          border: `2px ${step.executorType === 'human_gate' || step.executorType === 'route' ? 'dashed' : 'solid'} ${borderColor}`,
+          // Dashed for the step types that run no work of their own.
+          border: `2px ${step.executorType === 'human_gate' || step.executorType === 'route' || step.executorType === 'trigger' ? 'dashed' : 'solid'} ${borderColor}`,
           color: borderColor,
           cursor: 'pointer',
           boxShadow: isSelected ? '0 0 0 2px var(--theme-accent)' : 'none',
@@ -183,7 +189,9 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
             ? <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Unconfigured</span>
             : step.executorType === 'route'
               ? 'routing only'
-              : (nativeSummary ?? step.executorRef ?? '—') || '—'}
+              : step.executorType === 'trigger'
+                ? 'run payload & metadata'
+                : (nativeSummary ?? step.executorRef ?? '—') || '—'}
         </div>
       </div>
 
