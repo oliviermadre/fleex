@@ -26,14 +26,29 @@ type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
-const VALID_SETTINGS_TABS: SettingsTab[] = [
+const VALID_SETTINGS_TABS = [
   'general',
   'appearance',
   'pinned-icons',
   'workspace-actions',
   'agent-tokens',
   'deliverable-types',
-];
+  'memory',
+] as const satisfies readonly SettingsTab[];
+
+/**
+ * Compile-time guard that this list covers every settings tab.
+ *
+ * It is a *runtime* allowlist for a union type, so leaving a tab out type-checks
+ * perfectly and fails only in the product: the nav navigates to `/settings/<tab>`,
+ * an unlisted tab is rejected as unknown, and the panel silently stays where it
+ * was — a menu entry that does nothing when clicked, with no error anywhere. That
+ * happened to `memory`. Adding a tab to `SettingsTab` without adding it here now
+ * breaks the build instead.
+ */
+type UnroutableSettingsTab = Exclude<SettingsTab, (typeof VALID_SETTINGS_TABS)[number]>;
+const _allSettingsTabsAreRoutable: UnroutableSettingsTab extends never ? true : never = true;
+void _allSettingsTabsAreRoutable;
 
 // ─── URL → Store state ───────────────────────────────────────────────────────
 
