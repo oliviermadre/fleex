@@ -84,11 +84,23 @@ export class TransformersEmbeddingAdapter implements EmbeddingProviderPort {
    */
   async isInstalled(): Promise<boolean> {
     if (this.pipeline) return true;
-    this.installed ??= this.importTransformers().then(() => true, () => false);
-    return this.installed;
+
+    // Concurrent callers share one probe, so a polling Settings panel does not
+    // start a resolution per request.
+    if (this.installedProbe) return this.installedProbe;
+    const probe = this.importTransformers().then(() => true, () => false);
+    this.installedProbe = probe;
+
+    const installed = await probe;
+    // Only a positive answer is remembered. The negative is the one the UI acts
+    // on — it is what tells the user to install the package — so caching it made
+    // the app keep insisting the package was missing after they had installed it,
+    // until a restart nobody had told them to do.
+    if (!installed) this.installedProbe = null;
+    return installed;
   }
 
-  private installed: Promise<boolean> | null = null;
+  private installedProbe: Promise<boolean> | null = null;
 
   /** The package that has to be installed for local embeddings to work. */
   static readonly PACKAGE_NAME = '@huggingface/transformers';
@@ -131,7 +143,8 @@ export class TransformersEmbeddingAdapter implements EmbeddingProviderPort {
     this.logger.info('Embedding model ready', { model: this.modelName, dimensions: actual });
   }
 
-  private async importTransformers(): Promise<{
+  /** Overridable so a test can fail the import once and then let it succeed. */
+  protected async importTransformers(): Promise<{
     pipeline: (task: string, model: string, options?: Record<string, unknown>) => Promise<unknown>;
     env: Record<string, unknown>;
   }> {

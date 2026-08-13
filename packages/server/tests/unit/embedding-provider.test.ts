@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EMBEDDING_MODELS, DEFAULT_EMBEDDING_MODEL } from '@fleex/shared';
 import { buildEmbeddingProvider } from '../../src/infrastructure/adapters/embeddings/build-embedding-provider.js';
 import { OllamaEmbeddingAdapter } from '../../src/infrastructure/adapters/embeddings/ollama-embedding.adapter.js';
+import { TransformersEmbeddingAdapter } from '../../src/infrastructure/adapters/embeddings/transformers-embedding.adapter.js';
 import type { AppConfig, ConfigPort } from '../../src/application/ports/config.port.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -51,6 +52,62 @@ describe('buildEmbeddingProvider', () => {
       .toBe('@huggingface/transformers');
     expect(buildEmbeddingProvider(config({ memoryEmbeddingProvider: 'ollama' }), silent as never).runtimeLabel)
       .toContain('ollama');
+  });
+});
+
+describe('TransformersEmbeddingAdapter.isInstalled', () => {
+  /** Adapter whose import fails until `present` is flipped. */
+  class Probeable extends TransformersEmbeddingAdapter {
+    present = false;
+    imports = 0;
+
+    protected override async importTransformers(): Promise<never> {
+      this.imports++;
+      if (!this.present) throw new Error('Cannot find package');
+      return {} as never;
+    }
+  }
+
+  it('notices the package appearing, without a restart', async () => {
+    const adapter = new Probeable(silent as never);
+
+    expect(await adapter.isInstalled()).toBe(false);
+    // The user reads "not installed", installs it, and looks again. Caching the
+    // negative made the panel keep saying no until the process was restarted —
+    // which nothing told them to do.
+    adapter.present = true;
+    expect(await adapter.isInstalled()).toBe(true);
+  });
+
+  it('stops probing once the answer is yes', async () => {
+    const adapter = new Probeable(silent as never);
+    adapter.present = true;
+
+    await adapter.isInstalled();
+    await adapter.isInstalled();
+    await adapter.isInstalled();
+    // A positive cannot become negative without a restart, so it is asked once.
+    expect(adapter.imports).toBe(1);
+  });
+
+  it('shares one probe between concurrent callers', async () => {
+    const adapter = new Probeable(silent as never);
+    adapter.present = true;
+
+    const [a, b, c] = await Promise.all([
+      adapter.isInstalled(), adapter.isInstalled(), adapter.isInstalled(),
+    ]);
+    expect([a, b, c]).toEqual([true, true, true]);
+    // A Settings panel polls this; it must not start a resolution per request.
+    expect(adapter.imports).toBe(1);
+  });
+
+  it('re-probes while the answer is no', async () => {
+    const adapter = new Probeable(silent as never);
+
+    await adapter.isInstalled();
+    await adapter.isInstalled();
+    expect(adapter.imports).toBe(2);
   });
 });
 
