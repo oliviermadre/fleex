@@ -241,6 +241,9 @@ export { computeInitials } from './types/agent-event.js';
 
 export type { DomainEventLog } from './types/domain-event-log.js';
 
+export type { WikiLink, WikiLinkKind } from './wiki-links.js';
+export { parseWikiLinks, collectWikiLinkTargets, linksTo } from './wiki-links.js';
+
 export type {
   HubHelloMessage,
   HubEventMessage,

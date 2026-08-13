@@ -93,6 +93,11 @@ import { MemoryKernel } from '../application/memory/memory-kernel.js';
 import { MemoryEventListener } from '../application/memory/memory-event-listener.js';
 import { BackfillMemoryUseCase } from '../application/use-cases/backfill-memory.js';
 import { AskMemoryUseCase } from '../application/use-cases/ask-memory.js';
+import { MemorySynthesiser } from '../application/memory/memory-synthesiser.js';
+import { CoachPersonaUseCase } from '../application/use-cases/coach-persona.js';
+import { SynthesiseMemoryUseCase } from '../application/use-cases/synthesise-memory.js';
+import { CurateMemoryUseCase } from '../application/use-cases/curate-memory.js';
+import { RememberConversationUseCase } from '../application/use-cases/remember-conversation.js';
 import { TransformersEmbeddingAdapter } from './adapters/embeddings/transformers-embedding.adapter.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
@@ -289,6 +294,16 @@ export async function createContainer() {
   // of the memory wiring above.
   const askMemory = memoryStore ? new AskMemoryUseCase(retrieveContext, sdkLimiter, logger) : null;
 
+  // Everything that reads the index and writes prose shares one synthesiser, so
+  // they all get the same guarantees: no tools, no agentic turns, one slot.
+  const memorySynthesiser = new MemorySynthesiser(sdkLimiter, logger);
+  const coachPersona = memoryStore
+    ? new CoachPersonaUseCase(personaStore_, retrieveContext, memorySynthesiser, logger)
+    : null;
+  const synthesiseMemory = memoryStore
+    ? new SynthesiseMemoryUseCase(retrieveContext, memorySynthesiser, logger, submitDeliverable)
+    : null;
+
   const runPanel = new RunPanelUseCase(panelStore, personaStore_, mentionStore, ticketStore_, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore_, config, logger, sdkLimiter);
 
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore_, config, logger);
@@ -390,6 +405,13 @@ export async function createContainer() {
       })
     : null;
   memoryEventListener?.register();
+
+  const curateMemory = new CurateMemoryUseCase(
+    agentEventStore_, retrieveContext, logger, memoryKernel ?? undefined,
+  );
+  const rememberConversation = new RememberConversationUseCase(
+    retrieveContext, memorySynthesiser, logger, memoryKernel ?? undefined,
+  );
 
   // Remote listener — only broadcasts UI updates from events received via the hub.
   // It SHARES the BroadcastRegistrar instance with the local listener so that
@@ -683,6 +705,10 @@ export async function createContainer() {
     backfillMemory,
     askMemory,
     memoryEventListener,
+    coachPersona,
+    synthesiseMemory,
+    curateMemory,
+    rememberConversation,
     autoReviewWorkflow,
     panelStore,
     createPanel,

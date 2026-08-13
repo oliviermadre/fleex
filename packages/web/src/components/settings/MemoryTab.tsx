@@ -7,14 +7,16 @@ import { cn } from '../../lib/cn';
 
 type MemoryEngine = 'legacy' | 'semantic';
 
-type MemoryFeatureKey = 'paletteSearch' | 'ask' | 'repoScope' | 'duplicateDetection' | 'humanFeedbackBoost';
+type MemoryFeatureKey =
+  | 'paletteSearch' | 'ask' | 'repoScope' | 'duplicateDetection' | 'humanFeedbackBoost'
+  | 'personaCoach' | 'synthesis' | 'curation' | 'assistantMemory' | 'automationMining' | 'wikiLinks';
 
 /**
  * The features that consume the index.
  *
- * `cost` is the honest part: everything here is local and free except `ask`,
- * which spends an LLM call per question. Saying so next to the switch is what
- * lets someone decide, rather than discovering it on a bill.
+ * `cost` is the honest part. Most of these are local and free; the four that
+ * write prose spend a model call each time they run. Saying so next to the switch
+ * is what lets someone decide, rather than discovering it on a bill.
  */
 const FEATURES: Array<{ key: MemoryFeatureKey; label: string; description: string; cost?: string }> = [
   {
@@ -42,6 +44,39 @@ const FEATURES: Array<{ key: MemoryFeatureKey; label: string; description: strin
     key: 'humanFeedbackBoost',
     label: 'Prioritise your corrections',
     description: 'Discussions where you corrected an agent rank above ordinary ones, so the same mistake is less likely to come back.',
+  },
+  {
+    key: 'personaCoach',
+    label: 'Coach your agents',
+    description: 'Proposes amendments to an agent\u2019s memory from the times you corrected it. Always proposed for review, never applied on its own.',
+    cost: 'one LLM call per proposal',
+  },
+  {
+    key: 'synthesis',
+    label: 'Compile what you know',
+    description: 'Builds a sourced reference document about a subject from everything indexed, with contradictions and open questions called out.',
+    cost: 'one LLM call per document',
+  },
+  {
+    key: 'curation',
+    label: 'Save moments from runs',
+    description: 'Lets you lift a paragraph out of an execution and keep it as a note, ranked above the ambient output it came from.',
+  },
+  {
+    key: 'assistantMemory',
+    label: 'Remember conversations',
+    description: 'Distils each assistant conversation as it ends, so preferences and decisions survive it instead of needing restating.',
+    cost: 'one LLM call per conversation',
+  },
+  {
+    key: 'automationMining',
+    label: 'Suggest routines',
+    description: 'Spots work you keep repeating and proposes a schedule for it. Purely arithmetic over the execution log.',
+  },
+  {
+    key: 'wikiLinks',
+    label: 'Link and relate notes',
+    description: 'Resolves [[#42]] and [[org/repo]] links in notes, shows what links back, and surfaces notes nobody thought to link.',
   },
 ];
 

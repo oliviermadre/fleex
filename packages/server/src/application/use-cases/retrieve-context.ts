@@ -28,6 +28,12 @@ export interface MemorySnippet {
   ticketId?: string | null;
   repo?: string | null;
   updatedAt?: string | null;
+  /**
+   * Scoring tags carried by the chunk. Exposed so consumers can select on them —
+   * the persona coach needs the threads actually tagged as corrections, and a
+   * content heuristic would be guesswork.
+   */
+  tags?: string[];
 }
 
 export interface RetrieveContextResult {
@@ -263,6 +269,7 @@ export class RetrieveContextUseCase {
         ticketId: hit.chunk.metadata.ticketId ?? null,
         repo: hit.chunk.metadata.repo ?? null,
         updatedAt: hit.chunk.sourceUpdatedAt?.toISOString() ?? null,
+        tags: hit.chunk.metadata.tags ?? [],
       });
     }
     return out;

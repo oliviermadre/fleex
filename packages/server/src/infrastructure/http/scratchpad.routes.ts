@@ -1,6 +1,39 @@
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { linksTo } from '@fleex/shared';
 import type { Container } from '../container.js';
+import { isMemoryFeatureEnabled } from '../../application/ports/config.port.js';
+
+/**
+ * Notes semantically close to a given one.
+ *
+ * Queries the index with the note's own content, then drops the note itself —
+ * which would otherwise be its own best match by a wide margin.
+ */
+async function relatedNotes(
+  container: Container,
+  sourceKey: string,
+): Promise<Array<{ key: string; label: string; score: number }>> {
+  const kvStore = container.kvStore;
+  if (!kvStore) return [];
+
+  const content = await kvStore.get(`scratchpad:${sourceKey}`);
+  if (!content?.trim()) return [];
+
+  const hits = await container.retrieveContext.search({
+    query: content.slice(0, 2_000),
+    limit: 6,
+    kinds: ['scratchpad'],
+  });
+
+  return hits
+    .filter((hit) => hit.sourceId !== sourceKey)
+    .map((hit) => ({
+      key: hit.sourceId,
+      label: hit.sourceId === '__global__' ? 'Global' : hit.sourceId,
+      score: hit.score,
+    }));
+}
 
 const SCRATCHPAD_DIR = '.fleex';
 const SCRATCHPAD_FILE = 'scratchpad.md';
@@ -29,6 +62,47 @@ export function scratchpadRoutes(container: Container) {
     const announceWrite = (key: string, repo: string | null): void => {
       container.eventBus.emit({ type: 'scratchpad.updated', key, repo, occurredAt: new Date() });
     };
+
+    /**
+     * Which notes link to a target, and which notes are semantically close to one.
+     *
+     * Backlinks are computed by scanning every note rather than kept in a link
+     * table: there are a handful of scratchpads, so a scan is cheaper than keeping
+     * an index consistent through every edit — and a stale link table is worse
+     * than none, because it silently hides connections.
+     */
+    app.get<{ Querystring: { target?: string; key?: string } }>(
+      '/api/scratchpads/links',
+      async (request) => {
+        if (!isMemoryFeatureEnabled(container.config.get(), 'wikiLinks')) {
+          return { backlinks: [], related: [] };
+        }
+
+        const target = request.query.target?.trim();
+        const backlinks: Array<{ key: string; label: string }> = [];
+
+        if (target && kvStore) {
+          for (const entry of await kvStore.listByPrefix('scratchpad:')) {
+            const key = entry.key.slice('scratchpad:'.length);
+            // A note listing itself as its own backlink is noise.
+            if (key === request.query.key) continue;
+            if (linksTo(entry.value, target)) {
+              backlinks.push({ key, label: key === '__global__' ? 'Global' : key });
+            }
+          }
+        }
+
+        // Related notes come from the index, so they surface connections nobody
+        // thought to write a link for — which is the half of a knowledge graph
+        // that manual linking never produces.
+        const sourceKey = request.query.key?.trim();
+        const related = sourceKey && kvStore
+          ? await relatedNotes(container, sourceKey)
+          : [];
+
+        return { backlinks, related };
+      },
+    );
 
     // ── Global scratchpad ──
 

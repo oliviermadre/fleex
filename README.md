@@ -117,6 +117,12 @@ individually switchable in the same panel:
 | Prefer the current repository | Ranks notes and decisions from a ticket's repo above equally similar material elsewhere | local |
 | Warn about similar tickets | Surfaces existing tickets while a new title is typed | local |
 | Prioritise your corrections | Discussions where you corrected an agent rank above ordinary ones | local |
+| Coach your agents | Proposes amendments to an agent's memory from the times you corrected it — always for review, never applied on its own | one LLM call per proposal |
+| Compile what you know | Builds a sourced reference document about a subject, with contradictions and open questions called out | one LLM call per document |
+| Save moments from runs | Lift a paragraph out of an execution and keep it as a note, ranked above the output it came from | local |
+| Remember conversations | Distils each assistant conversation as it ends, so preferences survive it | one LLM call per conversation |
+| Suggest routines | Spots work you keep repeating and proposes a schedule — arithmetic over the execution log, no model | local |
+| Link and relate notes | Resolves `[[#42]]` and `[[org/repo]]` links, shows backlinks, and surfaces notes nobody thought to link | local |
 
 From the terminal:
 

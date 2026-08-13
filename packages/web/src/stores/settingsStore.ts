@@ -82,6 +82,12 @@ export interface AppSettings {
     repoScope?: boolean;
     duplicateDetection?: boolean;
     humanFeedbackBoost?: boolean;
+    personaCoach?: boolean;
+    synthesis?: boolean;
+    curation?: boolean;
+    assistantMemory?: boolean;
+    automationMining?: boolean;
+    wikiLinks?: boolean;
   };
 }
 

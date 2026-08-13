@@ -70,6 +70,18 @@ export interface MemoryFeatureFlags {
   duplicateDetection?: boolean;
   /** Rank human corrections of agent output above ordinary discussion. */
   humanFeedbackBoost?: boolean;
+  /** Propose amendments to a persona's memory from accumulated corrections. */
+  personaCoach?: boolean;
+  /** Compile a sourced document about a subject from everything indexed. */
+  synthesis?: boolean;
+  /** Promote a moment of an execution into a curated memory note. */
+  curation?: boolean;
+  /** Index a digest of each assistant conversation. */
+  assistantMemory?: boolean;
+  /** Detect repeated work and propose turning it into a routine. */
+  automationMining?: boolean;
+  /** Resolve `[[...]]` links in notes and surface backlinks and related notes. */
+  wikiLinks?: boolean;
 }
 
 export const MEMORY_FEATURE_KEYS = [
@@ -78,6 +90,12 @@ export const MEMORY_FEATURE_KEYS = [
   'repoScope',
   'duplicateDetection',
   'humanFeedbackBoost',
+  'personaCoach',
+  'synthesis',
+  'curation',
+  'assistantMemory',
+  'automationMining',
+  'wikiLinks',
 ] as const satisfies ReadonlyArray<keyof MemoryFeatureFlags>;
 
 /**
