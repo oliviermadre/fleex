@@ -100,7 +100,25 @@ function attachCommand(parent: Command, def: CommandDef): void {
 
 async function loadAndRegister(program: Command, file: string): Promise<void> {
   const segments = file.replace(/\\/g, '/').replace(/\/index\.ts$/, '').split('/');
-  const mod = await import(path.join(commandsDir, file));
+
+  // One unloadable command must not take the CLI with it.
+  //
+  // Every command module is imported at startup, so a single import failure used
+  // to kill every command at once — including `self-update`, which is what repairs
+  // the usual cause: `@fleex/shared` resolves to its built `dist/`, so a command
+  // referencing a newly added export is broken until a build has run. That made
+  // the one command that could fix it unreachable. Now the group disappears with a
+  // warning and the rest of the CLI still works.
+  let mod: { default?: CommandDef };
+  try {
+    mod = await import(path.join(commandsDir, file));
+  } catch (error) {
+    process.stderr.write(
+      `fleex: command ${file} failed to load, skipping — ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return;
+  }
+
   const def = mod.default as CommandDef | undefined;
   if (!def) {
     process.stderr.write(`fleex: command ${file} has no default export, skipping\n`);

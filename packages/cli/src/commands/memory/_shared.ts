@@ -34,6 +34,27 @@ export function oneLine(text: string, max = 160): string {
 }
 
 /**
+ * The selectable encoders, mirrored from `@fleex/shared`'s catalogue.
+ *
+ * Deliberately a copy rather than an import. `@fleex/shared` resolves to its
+ * *built* `dist/` at runtime, and the CLI loads every command module at startup —
+ * so a value imported from it here turns a stale build into a CLI that cannot
+ * start, including the `self-update` that would rebuild it. Types are safe to
+ * import (they are erased); values are not.
+ *
+ * Same reasoning as the two lists below: at this boundary the CLI is a contract,
+ * and a rename upstream should break this build rather than a user's terminal.
+ */
+export const CLI_EMBEDDING_MODELS = [
+  { id: 'Xenova/multilingual-e5-small', label: 'multilingual-e5-small', dimensions: 384 },
+  { id: 'Xenova/multilingual-e5-base', label: 'multilingual-e5-base', dimensions: 768 },
+  { id: 'onnx-community/embeddinggemma-300m-ONNX', label: 'EmbeddingGemma-300M', dimensions: 768 },
+] as const;
+
+/** The encoder used when nothing is configured. */
+export const CLI_DEFAULT_EMBEDDING_MODEL = CLI_EMBEDDING_MODELS[0];
+
+/**
  * The switchable features that consume the index — the same set the Settings
  * panel lists, in the same order.
  */

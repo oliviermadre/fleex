@@ -2,8 +2,11 @@ import chalk from 'chalk';
 import type { CommandDef } from '../../../core/types.ts';
 import { apiBase, apiGet, apiPut } from '../../../core/api.ts';
 import { die, info, ok, present } from '../../../core/colors.ts';
-import { EMBEDDING_MODELS, DEFAULT_EMBEDDING_MODEL } from '@fleex/shared';
-import { MEMORY_FEATURE_KEYS } from '../_shared.ts';
+import {
+  CLI_DEFAULT_EMBEDDING_MODEL as DEFAULT_EMBEDDING_MODEL,
+  CLI_EMBEDDING_MODELS as EMBEDDING_MODELS,
+  MEMORY_FEATURE_KEYS,
+} from '../_shared.ts';
 
 type FeatureKey = (typeof MEMORY_FEATURE_KEYS)[number];
 

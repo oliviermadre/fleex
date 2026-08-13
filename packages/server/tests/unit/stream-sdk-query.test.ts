@@ -22,14 +22,18 @@ const RESULT_MSG = {
 /**
  * Stream that yields `messages` then NEVER completes — the observed failure mode:
  * the CLI subprocess delivers its result and leaves the stream open forever.
+ *
+ * `onSilence` fires at the moment it runs dry, which is what lets a test act on
+ * "the stream has gone quiet" without timing it.
  */
-function neverEndingStream(messages: unknown[], onReturn?: () => void) {
+function neverEndingStream(messages: unknown[], onReturn?: () => void, onSilence?: () => void) {
   let i = 0;
   return {
     [Symbol.asyncIterator]() {
       return {
         next: async () => {
           if (i < messages.length) return { value: messages[i++], done: false };
+          onSilence?.();
           return new Promise<IteratorResult<unknown>>(() => {}); // hangs forever
         },
         return: async () => {
@@ -75,9 +79,13 @@ describe('streamSdkQuery', () => {
   it('aborts a stalled stream instead of waiting for the next message', async () => {
     // WHY: the old loop only re-read the abort signal when a message arrived, so
     // the execution timeout could never rescue a stream that had gone silent.
-    mockedQuery.mockReturnValue(neverEndingStream([{ type: 'assistant' }]));
     const ac = new AbortController();
-    setTimeout(() => ac.abort(new Error('timeout')), 10);
+    // Aborted when the stream goes silent rather than after a wall-clock delay: a
+    // timer races the generator's first yield, and on a loaded machine the timer
+    // wins — failing the assertion below for a reason this test is not about.
+    mockedQuery.mockReturnValue(
+      neverEndingStream([{ type: 'assistant' }], undefined, () => ac.abort(new Error('timeout'))),
+    );
 
     const res = await streamSdkQuery({
       prompt: 'go',
