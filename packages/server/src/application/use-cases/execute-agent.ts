@@ -69,6 +69,27 @@ export interface ExecutionTraceInput {
 }
 
 /** Human-readable origin of a retrieved memory snippet, for the Context tab. */
+/**
+ * The shadow retrieval as manifest items.
+ *
+ * Marked with their own section so the Context tab can show them as "would have
+ * been injected" rather than mixing them into what actually was — the whole value
+ * of a shadow is that the distinction is unambiguous.
+ */
+function shadowManifest(snippets: MemorySnippetRef[] | undefined): ContextInjectionItem[] {
+  return (snippets ?? []).map((snippet) => ({
+    kind: 'memory_snippet' as const,
+    section: 'Semantic engine (not injected)',
+    label: snippet.title,
+    provenance: memorySnippetProvenance(snippet),
+    sourceKind: memorySnippetSourceKind(snippet.sourceKind),
+    sourceId: snippet.sourceId,
+    ticketId: snippet.ticketId ?? null,
+    score: snippet.score,
+    charCount: snippet.content.length,
+  }));
+}
+
 function memorySnippetProvenance(snippet: MemorySnippetRef): string {
   const parts: string[] = [snippet.sourceKind.replace(/_/g, ' ')];
   if (snippet.repo) parts.push(snippet.repo);
@@ -919,6 +940,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         effectiveMode,
         maxTurns: runMaxTurns,
         memoryEngine: context.memoryEngine,
+        shadowManifest: shadowManifest(context.shadowSnippets),
       }));
 
       // 9. Setup execution timeout
@@ -1663,6 +1685,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       model: persona.model,
       effectiveMode: 'edit',
       maxTurns: skillMaxTurns,
+      memoryEngine: context?.memoryEngine,
+      shadowManifest: shadowManifest(context?.shadowSnippets),
     }));
 
     // 6. Acquire a global SDK slot before arming the timeout, so time spent
@@ -2135,6 +2159,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         model: persona.model,
         effectiveMode,
         maxTurns: wfMaxTurns,
+        memoryEngine: context?.memoryEngine,
+        shadowManifest: shadowManifest(context?.shadowSnippets),
       }));
 
       // SDK query

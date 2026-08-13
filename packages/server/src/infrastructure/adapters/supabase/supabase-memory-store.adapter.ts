@@ -12,11 +12,16 @@ import type {
 import type { LoggerPort } from '../../../application/ports/logger.port.js';
 import type { SupabaseConnection } from './connection.js';
 import {
+  CLEAR_EMBEDDINGS_SQL,
+  DEFAULT_VECTOR_DIMENSIONS,
+  DROP_EMBEDDING_INDEX_SQL,
+  DROP_LEGACY_MATCH_FN_SQL,
   EMBEDDING_COLUMN_TYPE_SQL,
+  EMBEDDING_COLUMN_WIDTH_SQL,
   EMBEDDING_INDEX_SQL,
   MATCH_FN,
-  MATCH_FUNCTION_SQL,
-  PROMOTE_COLUMN_SQL,
+  matchFunctionSql,
+  promoteColumnSql,
   VECTOR_TYPE_EXISTS_SQL,
 } from './memory-vector-sql.js';
 
@@ -102,7 +107,7 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
    * search still works; only retrieval by meaning is unavailable, and the caller
    * falls back to the legacy ranking.
    */
-  async ensureVectorSearch(): Promise<void> {
+  async ensureVectorSearch(dimensions = DEFAULT_VECTOR_DIMENSIONS): Promise<void> {
     // No direct connection means no DDL — the same condition under which the
     // migrations could not have run either.
     if (!this.conn.canExecuteDDL) return;
@@ -125,20 +130,54 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
 
       const column = await this.conn.query(EMBEDDING_COLUMN_TYPE_SQL);
       const udt = (column.rows[0] as { udt_name?: string } | undefined)?.udt_name;
-      if (udt && udt !== 'vector') {
-        // Written by a boot that had no pgvector. The stored values are already
-        // pgvector's text form, so the cast is a type change, not a rewrite.
-        this.logger.info('Promoting memory_chunks.embedding to vector', { from: udt });
-        await this.conn.query(PROMOTE_COLUMN_SQL);
+      const isVector = udt === 'vector';
+
+      const widthRow = isVector ? await this.conn.query(EMBEDDING_COLUMN_WIDTH_SQL) : null;
+      const currentWidth = (widthRow?.rows[0] as { width?: number } | undefined)?.width ?? 0;
+      // A width change means the configured encoder changed to one of a different
+      // size. Every stored vector is already unusable — wrong space and wrong
+      // length — so they are cleared rather than cast, which puts them in the
+      // sweep's backlog to be recomputed with the new model.
+      const widthChanged = isVector && currentWidth > 0 && currentWidth !== dimensions;
+
+      if (!isVector || widthChanged) {
+        if (widthChanged) {
+          this.logger.info('Resizing memory_chunks.embedding for a new encoder', {
+            from: currentWidth, to: dimensions,
+          });
+          await this.conn.query(CLEAR_EMBEDDINGS_SQL);
+        } else {
+          // Written by a boot that had no pgvector. The stored values are already
+          // pgvector's text form, so the cast is a type change, not a rewrite.
+          this.logger.info('Promoting memory_chunks.embedding to vector', { from: udt ?? 'unknown' });
+        }
+        // An HNSW index is built for one dimensionality and cannot survive the
+        // retype, so it goes first and is recreated below.
+        await this.conn.query(DROP_EMBEDDING_INDEX_SQL);
+        await this.conn.query(promoteColumnSql(dimensions));
       }
 
       await this.conn.query(EMBEDDING_INDEX_SQL);
-      await this.conn.query(MATCH_FUNCTION_SQL);
+      // Before creating: an older signature would otherwise survive as an
+      // overload and keep answering queries without the model filter.
+      await this.conn.query(DROP_LEGACY_MATCH_FN_SQL);
+      await this.conn.query(matchFunctionSql(dimensions));
     } catch (error) {
       this.logger.warn('Could not prepare Supabase vector search', {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  /**
+   * Port hook: make the schema fit this vector width before anything is indexed.
+   *
+   * Named for the port rather than for pgvector so the container does not have to
+   * know which driver it got — the SQLite store stores raw float32 and has nothing
+   * to prepare, which is why the method is optional.
+   */
+  async prepare(dimensions: number): Promise<void> {
+    await this.ensureVectorSearch(dimensions);
   }
 
   async upsertChunks(chunks: MemoryChunkEntity[]): Promise<void> {
@@ -189,6 +228,23 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
     if (error) throw new Error(`memory trim failed: ${error.message}`);
   }
 
+  async listSourceIds(sourceKind: MemorySourceKind): Promise<string[]> {
+    // Paged, like the stats read: PostgREST caps a response at 1000 rows, and a
+    // silently truncated list here would make the pruner keep orphans while
+    // reporting success.
+    const ids = new Set<string>();
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from(TABLE).select('source_id').eq('source_kind', sourceKind).range(from, from + PAGE - 1);
+      if (error) throw new Error(`memory source id read failed: ${error.message}`);
+      const rows = (data ?? []) as Array<{ source_id: string }>;
+      for (const row of rows) ids.add(row.source_id);
+      if (rows.length < PAGE) break;
+    }
+    return [...ids];
+  }
+
   async getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>> {
     const { data, error } = await this.conn.client
       .from(TABLE).select('chunk_index, content_hash')
@@ -229,6 +285,7 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
       filter_repo: filters.repo ?? null,
       filter_board_id: filters.boardId ?? null,
       exclude_ticket_id: filters.excludeTicketId ?? null,
+      filter_model: filters.embeddingModel ?? null,
     });
 
     if (error) {
@@ -275,25 +332,41 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
       .order('source_updated_at', { ascending: false, nullsFirst: false })
       .limit(limit);
 
-    query = applyFilters(query, filters);
+    // No model filter on the keyword path: a substring match reads no vector, so
+    // a chunk awaiting re-embedding is still a valid hit.
+    const { embeddingModel: _ignoredModel, ...keywordFilters } = filters;
+    query = applyFilters(query, keywordFilters);
 
     const { data, error } = await query;
     if (error) throw new Error(`memory keyword search failed: ${error.message}`);
     return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
   }
 
-  async listPendingEmbeddings(limit: number): Promise<MemoryChunkEntity[]> {
-    const { data, error } = await this.conn.client
+  async listPendingEmbeddings(limit: number, activeModel?: string | null): Promise<MemoryChunkEntity[]> {
+    let query = this.conn.client
       .from(TABLE).select(COLUMNS)
-      .is('embedding', null)
       .order('created_at', { ascending: true })
       .limit(limit);
+
+    // Never embedded, or embedded by a model that is no longer configured. The
+    // second arm is what turns a model change into a background migration.
+    query = activeModel
+      ? query.or(`embedding.is.null,embedding_model.is.null,embedding_model.neq.${activeModel}`)
+      : query.is('embedding', null);
+
+    const { data, error } = await query;
     if (error) throw new Error(`memory pending read failed: ${error.message}`);
     return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
   }
 
   async setEmbeddings(
-    entries: Array<{ id: string; embedding: Float32Array; embeddingModel: string }>,
+    entries: Array<{
+      id: string;
+      embedding: Float32Array;
+      embeddingModel: string;
+      expectedContentHash: string;
+      contentHash: string;
+    }>,
   ): Promise<void> {
     if (entries.length === 0) return;
     const now = new Date().toISOString();
@@ -307,15 +380,20 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
           .update({
             embedding: toVectorLiteral(entry.embedding),
             embedding_model: entry.embeddingModel,
+            content_hash: entry.contentHash,
             updated_at: now,
           })
-          .eq('id', entry.id);
+          .eq('id', entry.id)
+          // The guard: a chunk re-ingested while its vector was being computed has
+          // a different hash, so this matches nothing and the stale vector is
+          // dropped rather than attached to text it does not describe.
+          .eq('content_hash', entry.expectedContentHash);
         if (error) throw new Error(`memory embedding write failed: ${error.message}`);
       }));
     }
   }
 
-  async getStats(): Promise<MemoryIndexStats> {
+  async getStats(activeModel?: string | null): Promise<MemoryIndexStats> {
     // `head: true` with an exact count returns the number without the rows, which
     // is the whole point when the table is the corpus.
     const total = await this.conn.client.from(TABLE).select('*', { count: 'exact', head: true });
@@ -340,6 +418,15 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
       if (rows.length < PAGE) break;
     }
 
+    // Counted server-side rather than from the paged rows above: an exact count
+    // with `head` is one cheap request and cannot drift from the page size.
+    const staleCount = activeModel
+      ? await this.conn.client
+          .from(TABLE).select('*', { count: 'exact', head: true })
+          .not('embedding', 'is', null)
+          .neq('embedding_model', activeModel)
+      : null;
+
     const { data: latest } = await this.conn.client
       .from(TABLE).select('updated_at').order('updated_at', { ascending: false }).limit(1);
 
@@ -348,6 +435,7 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
       pendingEmbeddings: pending.count ?? 0,
       chunksByKind,
       embeddingModels: [...models],
+      staleModelChunks: staleCount?.count ?? 0,
       lastIndexedAt: (latest as Array<{ updated_at: string }> | null)?.[0]?.updated_at ?? null,
     };
   }

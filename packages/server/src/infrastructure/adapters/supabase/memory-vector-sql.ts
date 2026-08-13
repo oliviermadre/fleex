@@ -11,8 +11,13 @@
  * what makes running it twice cheap and running it always safe.
  */
 
-/** Vector width. Must match the embedding provider's dimensions. */
-export const VECTOR_DIMENSIONS = 384;
+/**
+ * Width the migrations create the column with.
+ *
+ * The configured encoder may be wider; `ensureVectorSearch` reconciles that at
+ * boot, because a migration runs before anything knows which model is selected.
+ */
+export const DEFAULT_VECTOR_DIMENSIONS = 384;
 
 /** Name of the nearest-neighbour function the adapter calls by RPC. */
 export const MATCH_FN = 'match_memory_chunks';
@@ -28,6 +33,12 @@ export const EMBEDDING_INDEX_SQL = `
 `;
 
 /**
+ * Dropped before a width change: an HNSW index is built for one dimensionality
+ * and cannot survive the column being retyped.
+ */
+export const DROP_EMBEDDING_INDEX_SQL = 'DROP INDEX IF EXISTS idx_memory_chunks_embedding';
+
+/**
  * `<=>` is cosine *distance*, so similarity is 1 minus it — matching the cosine
  * similarity the JS scorer produces, so both drivers hand the ranking layer the
  * same number.
@@ -38,15 +49,20 @@ export const EMBEDDING_INDEX_SQL = `
  *
  * `exclude_ticket_id` keeps rows whose ticket is NULL on purpose — a routine
  * deliverable or a scratchpad has no ticket and must survive the exclusion.
+ *
+ * `filter_model` keeps vectors from a superseded encoder out of the ranking:
+ * different models put their vectors in different spaces, so the distance between
+ * two of them is a number that means nothing.
  */
-export const MATCH_FUNCTION_SQL = `
+export const matchFunctionSql = (dimensions = DEFAULT_VECTOR_DIMENSIONS): string => `
   CREATE OR REPLACE FUNCTION ${MATCH_FN}(
-    query_embedding vector(${VECTOR_DIMENSIONS}),
+    query_embedding vector(${dimensions}),
     match_limit int DEFAULT 8,
     filter_kinds text[] DEFAULT NULL,
     filter_repo text DEFAULT NULL,
     filter_board_id text DEFAULT NULL,
-    exclude_ticket_id text DEFAULT NULL
+    exclude_ticket_id text DEFAULT NULL,
+    filter_model text DEFAULT NULL
   )
   RETURNS TABLE (
     id text,
@@ -81,10 +97,14 @@ export const MATCH_FUNCTION_SQL = `
       AND (filter_repo IS NULL OR m.repo = filter_repo)
       AND (filter_board_id IS NULL OR m.board_id = filter_board_id)
       AND (exclude_ticket_id IS NULL OR m.ticket_id IS NULL OR m.ticket_id <> exclude_ticket_id)
+      AND (filter_model IS NULL OR m.embedding_model = filter_model)
     ORDER BY m.embedding <=> query_embedding
     LIMIT match_limit
   $$
 `;
+
+/** The width the migration installs, for callers that have no config yet. */
+export const MATCH_FUNCTION_SQL = matchFunctionSql();
 
 /**
  * Promote the column written by an instance that booted without pgvector.
@@ -93,11 +113,22 @@ export const MATCH_FUNCTION_SQL = `
  * created — the vectors stored in it are pgvector's own text form, which casts
  * across without a rewrite of the values.
  */
-export const PROMOTE_COLUMN_SQL = `
+export const promoteColumnSql = (dimensions = DEFAULT_VECTOR_DIMENSIONS): string => `
   ALTER TABLE memory_chunks
-    ALTER COLUMN embedding TYPE vector(${VECTOR_DIMENSIONS})
-    USING embedding::vector(${VECTOR_DIMENSIONS})
+    ALTER COLUMN embedding TYPE vector(${dimensions})
+    USING embedding::vector(${dimensions})
 `;
+
+/**
+ * The signature this function had before `filter_model` was added.
+ *
+ * Postgres keys a function by its argument list, so `CREATE OR REPLACE` with an
+ * extra parameter creates a second overload and leaves the old one callable —
+ * which would silently keep serving unfiltered results to a client that omits the
+ * new argument. Dropping it first is what makes the replacement a replacement.
+ */
+export const DROP_LEGACY_MATCH_FN_SQL =
+  `DROP FUNCTION IF EXISTS ${MATCH_FN}(vector, int, text[], text, text, text)`;
 
 /** Whether the `vector` type is present in this database. */
 export const VECTOR_TYPE_EXISTS_SQL = `SELECT 1 AS present FROM pg_type WHERE typname = 'vector'`;
@@ -107,3 +138,26 @@ export const EMBEDDING_COLUMN_TYPE_SQL = `
   SELECT udt_name FROM information_schema.columns
    WHERE table_name = 'memory_chunks' AND column_name = 'embedding'
 `;
+
+/**
+ * Current declared width of the vector column.
+ *
+ * `atttypmod` is where pgvector keeps it; there is no width in
+ * `information_schema`, which reports the type as `vector` and stops there.
+ */
+export const EMBEDDING_COLUMN_WIDTH_SQL = `
+  SELECT atttypmod AS width
+    FROM pg_attribute
+   WHERE attrelid = 'memory_chunks'::regclass AND attname = 'embedding'
+`;
+
+/**
+ * Clear every vector, keeping the content.
+ *
+ * Run before a width change: vectors from the previous model are already
+ * unusable — different space, different width — so the cast would be preserving
+ * numbers that must not be compared to anything. Nulling them puts every row in
+ * the sweep's backlog, which is exactly where they belong.
+ */
+export const CLEAR_EMBEDDINGS_SQL =
+  'UPDATE memory_chunks SET embedding = NULL WHERE embedding IS NOT NULL';

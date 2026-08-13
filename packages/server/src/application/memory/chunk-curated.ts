@@ -141,3 +141,47 @@ export function chunkAssistantDigest(input: AssistantDigestInput): DraftChunk[] 
     sourceUpdatedAt: input.endedAt ?? null,
   }));
 }
+
+export interface CliSessionInput {
+  sessionId: string;
+  /** Repository the session ran in, when it could be resolved from the cwd. */
+  repo?: string | null;
+  /** The distilled session — what was done and what it established. */
+  content: string;
+  endedAt?: Date | null;
+}
+
+/**
+ * Chunk a terminal session that belonged to no ticket.
+ *
+ * A session run in a plain checkout is invisible to Fleex today: the cost hook
+ * finds no `.fleex.json`, discards the transcript, and everything learned in it is
+ * gone. Yet it is often where the exploratory work happens — reading unfamiliar
+ * code, chasing a build failure — and the findings are exactly what a later run
+ * would want.
+ *
+ * Scoped by repository rather than by ticket, because that is the only anchor such
+ * a session has, and it is the anchor that matters: the next agent working in the
+ * same checkout is who this is for.
+ */
+export function chunkCliSession(input: CliSessionInput): DraftChunk[] {
+  const body = input.content.trim();
+  if (!body) return [];
+
+  const label = input.repo ?? 'terminal';
+  const parts = splitMarkdown(body);
+  return parts.map((content, chunkIndex) => ({
+    sourceKind: 'cli_session_summary' as const,
+    sourceId: `cli:${input.sessionId}`,
+    chunkIndex,
+    title: parts.length > 1
+      ? `Terminal session in ${label} (${chunkIndex + 1}/${parts.length})`
+      : `Terminal session in ${label}`,
+    content,
+    metadata: {
+      repo: input.repo ?? null,
+      tags: [CURATED_TAG],
+    },
+    sourceUpdatedAt: input.endedAt ?? null,
+  }));
+}

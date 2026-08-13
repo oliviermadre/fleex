@@ -63,7 +63,7 @@ export class BenchMemoryUseCase {
 
     if (!store || !provider) return { ...base, reason: 'unavailable' };
 
-    const stats = await store.getStats();
+    const stats = await store.getStats(provider.id);
     if (stats.totalChunks === 0) return { ...base, indexedChunks: 0, reason: 'empty_index' };
 
     const cases = await this.buildCases(store, params.cases ?? DEFAULT_CASES);

@@ -40,6 +40,32 @@ export interface AppConfig {
   /** Character budget for injected memory snippets. Unset → engine default. */
   memoryInjectionCharBudget?: number;
   /**
+   * While the legacy engine feeds prompts, also compute what the semantic engine
+   * would have retrieved and record it on the execution without injecting it.
+   *
+   * Its own key rather than a feature flag, because every flag requires the
+   * semantic engine and this is by definition a legacy-mode setting: the point is
+   * to see what adopting the beta would change, before adopting it. Costs one
+   * local embedding and one search per run — no model call.
+   */
+  memoryShadowMode?: boolean;
+  /**
+   * Which local encoder produces the vectors. Unset → the default model.
+   *
+   * Changing it does not invalidate anything by hand: chunks record the model that
+   * embedded them, retrieval only considers vectors from the configured one, and
+   * the sweep re-embeds the rest in the background. So this is a setting rather
+   * than a migration — which is what makes `fleex memory bench` actionable, since
+   * comparing encoders on the real corpus requires being able to switch.
+   */
+  memoryEmbeddingModel?: string;
+  /**
+   * Where embeddings are computed. `transformers` runs in-process with no daemon;
+   * `ollama` delegates to a local Ollama server when one is already part of the
+   * user's setup. Unset → `transformers`, so no external process is ever assumed.
+   */
+  memoryEmbeddingProvider?: 'transformers' | 'ollama';
+  /**
    * Per-feature switches for everything built on top of retrieval.
    *
    * All of them require `memoryEngine: 'semantic'` — they have no meaning without
@@ -84,6 +110,13 @@ export interface MemoryFeatureFlags {
   wikiLinks?: boolean;
   /** Distil each finished run's transferable findings into memory. */
   executionTraces?: boolean;
+  /**
+   * Distil terminal sessions that ran outside a ticket worktree.
+   *
+   * Separate from `executionTraces` because the material and the cost differ: this
+   * one fires on manual `claude` sessions, which a user may have many of per day.
+   */
+  cliSessions?: boolean;
 }
 
 export const MEMORY_FEATURE_KEYS = [
@@ -99,6 +132,7 @@ export const MEMORY_FEATURE_KEYS = [
   'automationMining',
   'wikiLinks',
   'executionTraces',
+  'cliSessions',
 ] as const satisfies ReadonlyArray<keyof MemoryFeatureFlags>;
 
 /**

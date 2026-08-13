@@ -182,6 +182,102 @@ describe('sweepPendingEmbeddings', () => {
     expect(hits.length).toBeGreaterThan(0);
   });
 
+  it('discards a vector whose chunk changed while it was being computed', async () => {
+    // The window is real: embedding a batch takes long enough for a comment to
+    // land, and a vector written by id alone would describe text that is gone —
+    // permanently, since the row would no longer look pending.
+    const deferring = new MemoryKernel(store, {
+      id: provider.id, dimensions: provider.dimensions,
+      init: async () => {}, isReady: () => true,
+      embedPassages: async () => { throw new Error('unavailable'); },
+      embedQuery: async (t) => provider.embedQuery(t),
+    }, silent as never);
+    await deferring.ingest('deliverable', 'src-1', [draft(0, 'the original text')]);
+
+    // A provider that mutates the source mid-embed, standing in for a concurrent
+    // re-ingestion.
+    const racing = new MemoryKernel(store, {
+      id: provider.id, dimensions: provider.dimensions,
+      init: async () => {}, isReady: () => true,
+      embedPassages: async (texts) => {
+        await deferring.ingest('deliverable', 'src-1', [draft(0, 'replaced before the write')]);
+        return provider.embedPassages(texts);
+      },
+      embedQuery: async (t) => provider.embedQuery(t),
+    }, silent as never);
+
+    await racing.sweepPendingEmbeddings();
+
+    // The vector was refused, so the row is still pending — with its new text.
+    expect((await store.getStats()).pendingEmbeddings).toBe(1);
+    const [row] = await store.listPendingEmbeddings(5);
+    expect(row?.content).toBe('replaced before the write');
+
+    // And the next pass embeds the text that is actually there.
+    expect(await kernel.sweepPendingEmbeddings()).toBe(1);
+    expect((await store.getStats()).pendingEmbeddings).toBe(0);
+  });
+
+  it('re-embeds rows left behind by a previous model', async () => {
+    await kernel.ingest('deliverable', 'src-1', [draft(0, 'indexed by the old encoder')]);
+    expect((await store.getStats(provider.id)).staleModelChunks).toBe(0);
+
+    // Same corpus, different encoder — the situation after switching models in
+    // Settings.
+    const other = new FakeEmbeddingProvider(16);
+    await other.init();
+    const renamed: EmbeddingProviderPort = {
+      id: 'fake:another-model',
+      dimensions: other.dimensions,
+      init: async () => {},
+      isReady: () => true,
+      embedPassages: (texts) => other.embedPassages(texts),
+      embedQuery: (t) => other.embedQuery(t),
+    };
+    const migrating = new MemoryKernel(store, renamed, silent as never);
+
+    expect((await store.getStats(renamed.id)).staleModelChunks).toBe(1);
+    // No vector is missing, so the old sweep would have found nothing to do.
+    expect((await store.getStats(renamed.id)).pendingEmbeddings).toBe(0);
+
+    expect(await migrating.sweepPendingEmbeddings()).toBe(1);
+    expect((await store.getStats(renamed.id)).staleModelChunks).toBe(0);
+    expect((await store.getStats(renamed.id)).embeddingModels).toEqual([renamed.id]);
+  });
+
+  it('leaves a migrated chunk recognised as unchanged, so it is not re-embedded forever', async () => {
+    await kernel.ingest('deliverable', 'src-1', [draft(0, 'stable text')]);
+    const renamed: EmbeddingProviderPort = {
+      id: 'fake:another-model', dimensions: provider.dimensions,
+      init: async () => {}, isReady: () => true,
+      embedPassages: (texts) => provider.embedPassages(texts),
+      embedQuery: (t) => provider.embedQuery(t),
+    };
+    const migrating = new MemoryKernel(store, renamed, silent as never);
+    await migrating.sweepPendingEmbeddings();
+
+    // The hash covers the model id, so the sweep has to restate it — otherwise
+    // every later event would see a mismatch and re-embed this chunk.
+    const again = await migrating.ingest('deliverable', 'src-1', [draft(0, 'stable text')]);
+    expect(again).toMatchObject({ unchanged: 1, embedded: 0 });
+  });
+
+  it('keeps a superseded model out of search results', async () => {
+    await kernel.ingest('deliverable', 'src-1', [draft(0, 'session expiry rules')]);
+    const query = await provider.embedQuery('session expiry rules');
+
+    // Same vectors, but the caller declares a different active model: the row
+    // must not be scored, because distances across models are meaningless.
+    expect(await store.search(query, { embeddingModel: provider.id }, 5)).toHaveLength(1);
+    expect(await store.search(query, { embeddingModel: 'fake:another-model' }, 5)).toHaveLength(0);
+  });
+
+  it('still finds a stale-model chunk by keyword, so nothing disappears mid-migration', async () => {
+    await kernel.ingest('deliverable', 'src-1', [draft(0, 'ERR_CONN_RESET on deploy')]);
+    const found = await store.searchKeyword('ERR_CONN_RESET', { embeddingModel: 'fake:another-model' }, 5);
+    expect(found).toHaveLength(1);
+  });
+
   it('reports zero when there is nothing pending, so a caller can stop looping', async () => {
     await kernel.ingest('deliverable', 'src-1', [draft(0, 'already embedded')]);
     expect(await kernel.sweepPendingEmbeddings()).toBe(0);

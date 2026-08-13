@@ -139,7 +139,11 @@ export class MemoryKernel {
    * cannot monopolise the process.
    */
   async sweepPendingEmbeddings(limit = SWEEP_BATCH): Promise<number> {
-    const pending = await this.store.listPendingEmbeddings(limit);
+    const modelId = this.embeddings.id;
+    // Passing the active model widens the backlog to rows embedded by a previous
+    // one, so switching encoders migrates the index in the background instead of
+    // leaving two incomparable vector spaces in the same table.
+    const pending = await this.store.listPendingEmbeddings(limit, modelId);
     if (pending.length === 0) return 0;
 
     const vectors = await this.embeddings.embedPassages(
@@ -149,9 +153,28 @@ export class MemoryKernel {
     await this.store.setEmbeddings(pending.map((chunk, i) => ({
       id: chunk.id,
       embedding: vectors[i]!,
-      embeddingModel: this.embeddings.id,
+      embeddingModel: modelId,
+      // What the vector was computed from. The store refuses the write if the
+      // chunk has been re-ingested since, so a vector never lands on text it does
+      // not describe.
+      expectedContentHash: chunk.contentHash,
+      // The hash covers the model id, so re-embedding under a new model has to
+      // restate it — otherwise the next ingestion diff would see a mismatch and
+      // re-embed this chunk on every event, forever.
+      contentHash: hashChunkContent(chunk.content, modelId),
     })));
     return pending.length;
+  }
+
+  /**
+   * Which sources of a kind the index currently holds.
+   *
+   * Exposed through the kernel rather than reaching past it to the store, so the
+   * backfill keeps talking to one collaborator — the kernel already owns every
+   * other read-modify-write on the index.
+   */
+  async listSourceIds(sourceKind: MemorySourceKind): Promise<string[]> {
+    return this.store.listSourceIds(sourceKind);
   }
 
   /** Forget a source entirely — used when its underlying entity is deleted. */

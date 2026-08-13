@@ -59,12 +59,14 @@ export class GetTicketContextUseCase {
     let relevantSummaries: Awaited<ReturnType<GetRelevantSummariesUseCase['execute']>> = [];
     let memorySnippets: MemorySnippet[] = [];
     let memoryEngine: 'legacy' | 'semantic' | undefined;
+    let shadowSnippets: MemorySnippet[] | undefined;
     if (this.retrieveContext) {
       try {
         const retrieved = await this.retrieveContext.execute({ ticketId: params.ticketId });
         relevantSummaries = retrieved.summaries;
         memorySnippets = retrieved.snippets;
         memoryEngine = retrieved.engine;
+        shadowSnippets = retrieved.shadowSnippets;
       } catch {
         // Non-critical — proceed without retrieved context
       }
@@ -111,6 +113,7 @@ export class GetTicketContextUseCase {
       epics,
       memorySnippets,
       memoryEngine,
+      shadowSnippets,
     };
   }
 }

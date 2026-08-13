@@ -90,6 +90,8 @@ export interface BuildExecutionContextArgs {
   effectiveMode?: string;
   maxTurns?: number;
   memoryEngine?: 'legacy' | 'semantic';
+  /** What the other engine would have injected, in shadow mode. */
+  shadowManifest?: ContextInjectionItem[];
 }
 
 /**
@@ -105,6 +107,7 @@ export function buildExecutionContextData(args: BuildExecutionContextArgs): Exec
     manifest: args.manifest,
     imageCount: args.promptBlocks.filter((b) => b.type === 'image').length,
     memoryEngine: args.memoryEngine,
+    ...(args.shadowManifest?.length ? { shadowManifest: args.shadowManifest } : {}),
     model: args.model,
     effectiveMode: args.effectiveMode,
     maxTurns: args.maxTurns,

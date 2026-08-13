@@ -11,10 +11,30 @@ import {
   chunkDeliverable,
   chunkEpic,
   chunkPersona,
+  chunkScratchpad,
   chunkSkill,
   chunkTicket,
 } from '../memory/chunker.js';
 import type { MemoryKernel, IngestOutcome } from '../memory/memory-kernel.js';
+import type { MemorySourceKind } from '../../domain/entities/memory-chunk.entity.js';
+import type { KvStorePort } from '../ports/kv-store.port.js';
+
+/** KV prefix every scratchpad is stored under. */
+const SCRATCHPAD_PREFIX = 'scratchpad:';
+
+/** Key of the one note that belongs to no repository. */
+const GLOBAL_SCRATCHPAD_KEY = '__global__';
+
+/**
+ * Kinds a full walk is authoritative for, and may therefore prune.
+ *
+ * `qa_pair`, `execution_trace`, `curated_note` and `assistant_conversation` are
+ * absent on purpose: nothing walks them, so every one of them would look orphaned.
+ */
+const PRUNABLE_KINDS: readonly MemorySourceKind[] = [
+  'ticket', 'comment_thread', 'deliverable', 'ticket_summary', 'cli_session_summary',
+  'persona', 'skill', 'epic', 'scratchpad',
+];
 
 export interface BackfillProgress {
   tickets: number;
@@ -23,6 +43,9 @@ export interface BackfillProgress {
   personas: number;
   skills: number;
   epics: number;
+  notes: number;
+  /** Chunks dropped because their source no longer exists. */
+  pruned: number;
   chunksEmbedded: number;
   chunksUnchanged: number;
   chunksDeferred: number;
@@ -30,7 +53,8 @@ export interface BackfillProgress {
 }
 
 const EMPTY: BackfillProgress = {
-  tickets: 0, commentThreads: 0, deliverables: 0, personas: 0, skills: 0, epics: 0,
+  tickets: 0, commentThreads: 0, deliverables: 0, personas: 0, skills: 0, epics: 0, notes: 0,
+  pruned: 0,
   chunksEmbedded: 0, chunksUnchanged: 0, chunksDeferred: 0, errors: 0,
 };
 
@@ -57,11 +81,21 @@ export class BackfillMemoryUseCase {
     private readonly logger: LoggerPort,
     /** Epics. Absent on drivers with no epic store. */
     private readonly ticketGroupStore?: TicketGroupStorePort | null,
+    /** Where notes live. Absent on the filesystem fallback. */
+    private readonly kvStore?: KvStorePort | null,
   ) {}
 
   async execute(): Promise<BackfillProgress> {
     const progress: BackfillProgress = { ...EMPTY };
     const started = Date.now();
+    // What exists right now, per kind. Compared against the index at the end so a
+    // source deleted while nothing was listening does not keep answering queries.
+    const live = new Map<MemorySourceKind, Set<string>>();
+    const seen = (kind: MemorySourceKind, id: string): void => {
+      const set = live.get(kind);
+      if (set) set.add(id);
+      else live.set(kind, new Set([id]));
+    };
 
     const tickets = await this.ticketStore.getAllTickets();
     // Repo affinity is a scoring signal, so it has to be resolved per ticket
@@ -70,6 +104,8 @@ export class BackfillMemoryUseCase {
     const repoByTicket = new Map(tickets.map((t) => [t.id, primaryRepo(t)]));
 
     for (const ticket of tickets) {
+      seen('ticket', ticket.id);
+      seen('comment_thread', ticket.id);
       await this.step(progress, 'ticket', ticket.id, async () => {
         const outcome = await this.kernel.ingest('ticket', ticket.id, chunkTicket({
           id: ticket.id,
@@ -133,6 +169,7 @@ export class BackfillMemoryUseCase {
         // A deliverable maps onto one of three source kinds depending on its
         // type; ingesting under the wrong one would orphan the previous rows.
         const kind = drafts[0]?.sourceKind ?? 'deliverable';
+        seen(kind, deliverable.id);
         const outcome = await this.kernel.ingest(kind, deliverable.id, drafts);
         progress.deliverables++;
         return outcome;
@@ -140,6 +177,7 @@ export class BackfillMemoryUseCase {
     }
 
     for (const persona of await this.personaStore.getAll()) {
+      seen('persona', persona.id);
       await this.step(progress, 'persona', persona.id, async () => {
         const outcome = await this.kernel.ingest('persona', persona.id, chunkPersona({
           id: persona.id,
@@ -154,6 +192,7 @@ export class BackfillMemoryUseCase {
     }
 
     for (const skill of await this.skillStore.getAll()) {
+      seen('skill', skill.id);
       await this.step(progress, 'skill', skill.id, async () => {
         const outcome = await this.kernel.ingest('skill', skill.id, chunkSkill({
           id: skill.id,
@@ -170,6 +209,7 @@ export class BackfillMemoryUseCase {
     // Epics last: they are the fewest and the cheapest, so a run interrupted
     // partway has still covered the bulk of the corpus.
     for (const epic of await this.ticketGroupStore?.getAllTicketGroups() ?? []) {
+      seen('epic', epic.id);
       await this.step(progress, 'epic', epic.id, async () => {
         const outcome = await this.kernel.ingest('epic', epic.id, chunkEpic({
           id: epic.id,
@@ -183,8 +223,60 @@ export class BackfillMemoryUseCase {
       });
     }
 
+    // Notes. Indexed on edit by the listener, which means an instance that opted
+    // in after writing them would never index the ones it already had — the exact
+    // case a backfill exists for.
+    for (const entry of await this.kvStore?.listByPrefix(SCRATCHPAD_PREFIX) ?? []) {
+      const key = entry.key.slice(SCRATCHPAD_PREFIX.length);
+      seen('scratchpad', key);
+      await this.step(progress, 'scratchpad', key, async () => {
+        const outcome = await this.kernel.ingest('scratchpad', key, chunkScratchpad({
+          key,
+          label: key === GLOBAL_SCRATCHPAD_KEY ? 'Global' : key,
+          content: entry.value,
+          repo: key === GLOBAL_SCRATCHPAD_KEY ? null : key,
+        }));
+        progress.notes++;
+        return outcome;
+      });
+    }
+
+    progress.pruned = await this.pruneOrphans(live);
+
     this.logger.info('Memory backfill finished', { ...progress, durationMs: Date.now() - started });
     return progress;
+  }
+
+  /**
+   * Drop indexed sources that no longer exist.
+   *
+   * Only the kinds this walk is authoritative for. Derived kinds — a distilled run
+   * trace, a Q&A pair, a note kept by hand, a conversation digest — are deliberately
+   * left alone: their source is an execution or a mention that may well be gone,
+   * and the memory is the point of them, not a cache of something else.
+   */
+  private async pruneOrphans(live: Map<MemorySourceKind, Set<string>>): Promise<number> {
+    let pruned = 0;
+    for (const kind of PRUNABLE_KINDS) {
+      const present = live.get(kind) ?? new Set<string>();
+      // An empty walk means the store was unreadable rather than empty; pruning on
+      // that would delete the whole index on a transient failure.
+      if (present.size === 0) continue;
+
+      try {
+        for (const sourceId of await this.kernel.listSourceIds(kind)) {
+          if (present.has(sourceId)) continue;
+          await this.kernel.forget(kind, sourceId);
+          pruned++;
+        }
+      } catch (error) {
+        this.logger.warn('Could not prune orphaned memory chunks', {
+          kind, error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (pruned > 0) this.logger.info('Pruned orphaned memory chunks', { chunks: pruned });
+    return pruned;
   }
 
   /**

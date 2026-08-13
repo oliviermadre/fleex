@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { EMBEDDING_MODELS, DEFAULT_EMBEDDING_MODEL } from '@fleex/shared';
 import { Button } from '../ui/Button';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, type AppSettings } from '../../stores/settingsStore';
 import {
   benchMemory,
   fetchMemoryStatus,
@@ -16,7 +17,7 @@ type MemoryEngine = 'legacy' | 'semantic';
 type MemoryFeatureKey =
   | 'paletteSearch' | 'ask' | 'repoScope' | 'duplicateDetection' | 'humanFeedbackBoost'
   | 'personaCoach' | 'synthesis' | 'curation' | 'assistantMemory' | 'automationMining' | 'wikiLinks'
-  | 'executionTraces';
+  | 'executionTraces' | 'cliSessions';
 
 /**
  * The features that consume the index.
@@ -84,6 +85,12 @@ const FEATURES: Array<{ key: MemoryFeatureKey; label: string; description: strin
     key: 'wikiLinks',
     label: 'Link and relate notes',
     description: 'Resolves [[#42]] and [[org/repo]] links in notes, shows what links back, and surfaces notes nobody thought to link.',
+  },
+  {
+    key: 'cliSessions',
+    label: 'Remember terminal sessions',
+    description: 'Distils `claude` sessions run outside a ticket worktree — the exploratory work Fleex would otherwise never see — and files them under their repository.',
+    cost: 'one LLM call per session',
   },
   {
     key: 'executionTraces',
@@ -156,10 +163,48 @@ export function MemoryTab() {
     }
   }, [engine, settings, saveSettings, loadStatus]);
 
+  const handleShadow = useCallback(async (next: boolean) => {
+    setSaving(true);
+    try {
+      await saveSettings({ ...settings, memoryShadowMode: next });
+    } finally {
+      setSaving(false);
+    }
+  }, [settings, saveSettings]);
+
   const handleReindex = useCallback(async () => {
     await reindexMemory();
     await loadStatus();
   }, [loadStatus]);
+
+  const handleSelectModel = useCallback(async (modelId: string) => {
+    setSaving(true);
+    try {
+      await saveSettings({ ...settings, memoryEmbeddingModel: modelId });
+      await loadStatus();
+    } finally {
+      setSaving(false);
+    }
+  }, [settings, saveSettings, loadStatus]);
+
+  const handleSelectRuntime = useCallback(async (next: 'transformers' | 'ollama') => {
+    setSaving(true);
+    try {
+      await saveSettings({ ...settings, memoryEmbeddingProvider: next });
+      await loadStatus();
+    } finally {
+      setSaving(false);
+    }
+  }, [settings, saveSettings, loadStatus]);
+
+  const handleBudget = useCallback(async (chars: number | undefined) => {
+    setSaving(true);
+    try {
+      await saveSettings({ ...settings, memoryInjectionCharBudget: chars });
+    } finally {
+      setSaving(false);
+    }
+  }, [settings, saveSettings]);
 
   const handleToggleFeature = useCallback(async (key: MemoryFeatureKey, next: boolean) => {
     setSaving(true);
@@ -253,6 +298,47 @@ export function MemoryTab() {
         })}
       </div>
 
+      {/* Only offered under the current engine, because that is the only situation
+          it means anything in: it answers "what would switching change", using the
+          run in front of you rather than two different runs. */}
+      {engine === 'legacy' && status?.available && (
+        <label
+          className={cn(
+            'mt-3 flex items-start gap-2.5 rounded border border-dashed border-[var(--theme-border)] px-3 py-2',
+            saving ? 'opacity-50' : 'cursor-pointer hover:bg-[var(--theme-bg-hover)]',
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={settings.memoryShadowMode === true}
+            disabled={saving}
+            onChange={(e) => void handleShadow(e.target.checked)}
+            className="mt-0.5 flex-shrink-0 accent-[var(--theme-accent)]"
+          />
+          <span className="min-w-0">
+            <span className="text-xs font-medium text-[var(--theme-text-primary)]">
+              Show what the semantic engine would have done
+            </span>
+            <span className="block text-[11px] text-[var(--theme-text-muted)]">
+              Every run keeps using the current ranking, and records the semantic engine's choice
+              alongside it — visible in the Context tab, marked as not injected. Local and free: one
+              embedding and one search per run, no model call. Needs an index, so run a reindex first.
+            </span>
+          </span>
+        </label>
+      )}
+
+      {engine === 'semantic' && (
+        <EncoderPanel
+          settings={settings}
+          status={status}
+          saving={saving}
+          onSelectModel={handleSelectModel}
+          onSelectRuntime={handleSelectRuntime}
+          onBudget={handleBudget}
+        />
+      )}
+
       {/* Nested under the engine because none of these mean anything without it:
           shown as read-only rather than hidden when the engine is off, so the
           settings a switch back would restore stay visible. */}
@@ -341,6 +427,168 @@ export function MemoryTab() {
       </div>
 
       {status?.available && engine === 'semantic' && <BenchPanel />}
+    </div>
+  );
+}
+
+/**
+ * Which encoder runs, where it runs, and how much of a prompt memory may take.
+ *
+ * Switching the model is safe by construction and the copy says so: every chunk
+ * records the model that embedded it, retrieval only considers vectors from the
+ * configured one, and the sweep re-embeds the rest in the background. So this is a
+ * setting, not a migration — which is the whole point, because choosing an encoder
+ * from published benchmarks is guesswork and choosing it from `Measure` on the
+ * real corpus is not.
+ */
+function EncoderPanel({
+  settings,
+  status,
+  saving,
+  onSelectModel,
+  onSelectRuntime,
+  onBudget,
+}: {
+  settings: AppSettings;
+  status: MemoryStatus | null;
+  saving: boolean;
+  onSelectModel: (modelId: string) => void;
+  onSelectRuntime: (runtime: 'transformers' | 'ollama') => void;
+  onBudget: (chars: number | undefined) => void;
+}) {
+  const selectedModel = settings.memoryEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL.id;
+  const runtime = settings.memoryEmbeddingProvider ?? 'transformers';
+  const stale = status?.index?.staleModelChunks ?? 0;
+  const [budgetText, setBudgetText] = useState(
+    settings.memoryInjectionCharBudget ? String(settings.memoryInjectionCharBudget) : '',
+  );
+
+  const commitBudget = () => {
+    const trimmed = budgetText.trim();
+    if (!trimmed) return onBudget(undefined);
+    const parsed = Number.parseInt(trimmed, 10);
+    // Out-of-range input reverts rather than being clamped silently: a budget of
+    // 12 characters would quietly starve every prompt.
+    if (!Number.isFinite(parsed) || parsed < 500 || parsed > 60_000) {
+      setBudgetText(settings.memoryInjectionCharBudget ? String(settings.memoryInjectionCharBudget) : '');
+      return;
+    }
+    onBudget(parsed);
+  };
+
+  return (
+    <div className="mt-6 border-t border-[var(--theme-border)] pt-4">
+      <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Encoder</h3>
+      <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+        Which model turns text into vectors. All of them are multilingual and run on this machine.
+        Changing one takes effect on restart; the index re-embeds itself in the background, so nothing
+        has to be rebuilt by hand.
+      </p>
+
+      {stale > 0 && (
+        <div className={cn('mt-3 rounded px-3 py-2 text-xs', tint('blue'))}>
+          {stale} chunk{stale > 1 ? 's' : ''} still carry vectors from the previous model and are
+          being re-embedded. They stay findable by keyword meanwhile.
+        </div>
+      )}
+
+      <div className="mt-3 space-y-1.5">
+        {EMBEDDING_MODELS.map((model) => {
+          const selected = model.id === selectedModel;
+          return (
+            <button
+              key={model.id}
+              disabled={saving}
+              onClick={() => onSelectModel(model.id)}
+              className={cn(
+                'w-full text-left rounded border px-3 py-2 transition-colors',
+                selected
+                  ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
+                  : 'border-[var(--theme-border)] bg-transparent hover:bg-[var(--theme-bg-hover)]',
+                saving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+              )}
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={cn(
+                    'h-3 w-3 rounded-full border flex-shrink-0',
+                    selected
+                      ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]'
+                      : 'border-[var(--theme-border)]',
+                  )}
+                />
+                <span className="text-xs font-medium text-[var(--theme-text-primary)]">
+                  {model.label}
+                </span>
+                <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-mono', tint('gray'))}>
+                  {model.dimensions} dims · {model.sizeMb} MB
+                </span>
+                {model.default && (
+                  <span className="text-[10px] text-[var(--theme-text-faint)]">default</span>
+                )}
+              </div>
+              <p className="mt-0.5 ml-5 text-[11px] text-[var(--theme-text-muted)]">{model.note}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-end gap-6">
+        <div>
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--theme-text-muted)]">
+            Runs on
+          </span>
+          <div className="mt-1 flex gap-1.5">
+            {(['transformers', 'ollama'] as const).map((option) => (
+              <button
+                key={option}
+                disabled={saving}
+                onClick={() => onSelectRuntime(option)}
+                title={option === 'transformers'
+                  ? 'In this process, via ONNX. No daemon, nothing else to run.'
+                  : 'A local Ollama daemon on :11434 — much faster with a GPU behind it.'}
+                className={cn(
+                  'rounded border px-2 py-1 text-[11px] transition-colors',
+                  runtime === option
+                    ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                    : 'border-[var(--theme-border)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                  saving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+                )}
+              >
+                {option === 'transformers' ? 'This process' : 'Ollama'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="memoryBudget"
+            className="text-[10px] uppercase tracking-wider font-semibold text-[var(--theme-text-muted)]"
+          >
+            Injection budget
+          </label>
+          <div className="mt-1 flex items-center gap-1.5">
+            <input
+              id="memoryBudget"
+              type="text"
+              inputMode="numeric"
+              value={budgetText}
+              disabled={saving}
+              placeholder="10000"
+              onChange={(e) => setBudgetText(e.target.value)}
+              onBlur={commitBudget}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitBudget(); }}
+              className="w-24 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 text-[11px] font-mono text-[var(--theme-text-primary)]"
+            />
+            <span className="text-[10px] text-[var(--theme-text-faint)]">characters</span>
+          </div>
+        </div>
+      </div>
+      <p className="mt-1.5 text-[11px] text-[var(--theme-text-muted)]">
+        The ceiling on retrieved memory in one prompt. Higher means more precedent and a longer,
+        costlier prompt; the default is 10 000 characters, about 2 500 tokens.
+      </p>
     </div>
   );
 }

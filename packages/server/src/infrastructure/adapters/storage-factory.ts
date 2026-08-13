@@ -287,11 +287,9 @@ async function createSupabaseStores(deps: {
   const agentEventStore = new SupabaseAgentEventStore(connection);
   await agentEventStore.init();
 
-  // Idempotent, and the only thing that can repair a project whose pgvector
-  // extension was enabled after Fleex first started — a migration has already
-  // recorded itself by then.
+  // The schema's vector width depends on the configured encoder, which is not
+  // known here — the container calls `prepare()` once it has resolved it.
   const memoryStore = new SupabaseMemoryStoreAdapter(connection, deps.logger);
-  await memoryStore.ensureVectorSearch();
 
   deps.logger.info('Supabase storage initialized', { url });
 

@@ -279,12 +279,58 @@ describe('embedding sweep', () => {
     const vectors = await provider.embedPassages(pending.map((c) => c.content));
     await store.setEmbeddings(pending.map((c, i) => ({
       id: c.id, embedding: vectors[i]!, embeddingModel: provider.id,
+      expectedContentHash: c.contentHash, contentHash: c.contentHash,
     })));
 
     expect((await store.getStats()).pendingEmbeddings).toBe(0);
     const hits = await store.search(await provider.embedQuery('deferred embedding content'), {}, 5);
     expect(hits[0]!.chunk.sourceId).toBe('p1');
     expect(hits[0]!.chunk.content).toBe('deferred embedding content');
+  });
+
+  it('refuses a vector whose chunk no longer holds the text it was computed from', async () => {
+    const pendingChunk = await chunk({ sourceId: 'p1', content: 'original', embed: false });
+    await store.upsertChunks([pendingChunk]);
+    const [before] = await store.listPendingEmbeddings(10);
+
+    // The source is re-ingested while the vector is in flight.
+    await store.upsertChunks([await chunk({ sourceId: 'p1', content: 'rewritten', embed: false })]);
+
+    const [vector] = await provider.embedPassages(['original']);
+    await store.setEmbeddings([{
+      id: before!.id, embedding: vector!, embeddingModel: provider.id,
+      expectedContentHash: before!.contentHash, contentHash: before!.contentHash,
+    }]);
+
+    // Still pending, and still holding the new text: the stale vector was dropped
+    // rather than attached to content it does not describe.
+    const after = await store.listPendingEmbeddings(10);
+    expect(after).toHaveLength(1);
+    expect(after[0]!.content).toBe('rewritten');
+  });
+
+  it('returns the top hits in score order after hydrating them', async () => {
+    // The scan phase reads ids only, so this proves the hydration keeps the
+    // ranking rather than inheriting the order `IN (...)` happens to return.
+    await store.upsertChunks([
+      await chunk({ sourceId: 'a', content: 'session tokens expire early' }),
+      await chunk({ sourceId: 'b', content: 'docker layer cache key' }),
+      await chunk({ sourceId: 'c', content: 'session tokens rotate on refresh' }),
+    ]);
+
+    const hits = await store.search(await provider.embedQuery('session tokens'), {}, 3);
+    expect(hits).toHaveLength(3);
+    expect(hits[0]!.similarity).toBeGreaterThanOrEqual(hits[1]!.similarity);
+    expect(hits[1]!.similarity).toBeGreaterThanOrEqual(hits[2]!.similarity);
+    // And the hydrated rows carry their real content, not just ids.
+    expect(hits[0]!.chunk.content).toContain('session tokens');
+  });
+
+  it('honours the limit exactly, even when everything matches', async () => {
+    for (const id of ['a', 'b', 'c', 'd', 'e']) {
+      await store.upsertChunks([await chunk({ sourceId: id, content: `shared vocabulary ${id}` })]);
+    }
+    expect(await store.search(await provider.embedQuery('shared vocabulary'), {}, 2)).toHaveLength(2);
   });
 });
 

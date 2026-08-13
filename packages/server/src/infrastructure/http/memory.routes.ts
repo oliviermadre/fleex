@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
-import { TransformersEmbeddingAdapter } from '../adapters/embeddings/transformers-embedding.adapter.js';
+import { resolveEmbeddingModel } from '@fleex/shared';
 import { isMemoryFeatureEnabled } from '../../application/ports/config.port.js';
 import {
   mineAutomationCandidates,
@@ -306,8 +306,11 @@ export function memoryRoutes(container: Container) {
       }
 
       const provider = container.embeddingProvider;
-      const stats = await store.getStats();
+      // The active model id is what makes "stale" meaningful: the store cannot
+      // know which encoder is configured.
+      const stats = await store.getStats(provider?.id ?? null);
 
+      const settings = container.config.get();
       return {
         engine,
         available: true,
@@ -319,10 +322,15 @@ export function memoryRoutes(container: Container) {
               // Separating "installed" from "ready" is what lets the UI tell the
               // user to install a package versus to wait for a download.
               installed: await provider.isInstalled(),
-              packageName: TransformersEmbeddingAdapter.PACKAGE_NAME,
+              // What is missing when it is not installed — a package for the
+              // in-process runtime, a daemon for Ollama.
+              packageName: provider.runtimeLabel,
+              runtime: settings.memoryEmbeddingProvider ?? 'transformers',
+              model: resolveEmbeddingModel(settings.memoryEmbeddingModel).id,
             }
           : null,
         index: stats,
+        injectionCharBudget: settings.memoryInjectionCharBudget ?? null,
         reindexing: running !== null,
       };
     });

@@ -3,7 +3,7 @@ import type { AgentEvent, ContextInjectionItem, ContextInjectionKind, ExecutionC
 import { useUIStore } from '../../stores/uiStore';
 import { fetchTicketDeliverables } from '../../services/api';
 import { ticketLink } from '../../notifications/links';
-import { tintClasses, type TintHue } from '../../lib/tints';
+import { tint, tintClasses, type TintHue } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
 /**
@@ -130,6 +130,10 @@ function PrettyView({ context }: { context: ExecutionContextData }) {
   return (
     <div className="space-y-4">
       <SystemPromptCard systemPrompt={context.systemPromptRaw} />
+
+      {context.shadowManifest && context.shadowManifest.length > 0 && (
+        <ShadowComparison items={context.shadowManifest} injected={context.manifest} />
+      )}
 
       {sections.length === 0 ? (
         <div className="text-xs text-[var(--theme-text-faint)]">
@@ -265,6 +269,85 @@ function InjectionCard({ item }: { item: ContextInjectionItem }) {
           {item.imageCount ? <span>{item.imageCount} image{item.imageCount > 1 ? 's' : ''}</span> : null}
           {opening && <span>opening…</span>}
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What the other engine would have retrieved for this same run.
+ *
+ * Shown only in shadow mode, and shown as a separate block rather than merged
+ * into the sections above: the reason to look at it is to see the difference, so
+ * anything that blurred "sent" and "would have been sent" would defeat it. Items
+ * the real prompt also contains are marked, because the interesting part is what
+ * only one of the two engines found.
+ */
+function ShadowComparison({
+  items,
+  injected,
+}: {
+  items: ContextInjectionItem[];
+  injected: ContextInjectionItem[];
+}) {
+  const [open, setOpen] = useState(false);
+  const injectedKeys = new Set(injected.map((item) => `${item.sourceKind}:${item.sourceId}`));
+  const novel = items.filter((item) => !injectedKeys.has(`${item.sourceKind}:${item.sourceId}`));
+
+  return (
+    <div className="rounded border border-dashed border-[var(--theme-border)] px-3 py-2">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent text-left"
+      >
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--theme-text-muted)]">
+          Semantic engine — not injected
+        </span>
+        <span className={cn('rounded px-1.5 py-0.5 text-[10px]', tint('blue'))}>
+          {novel.length} of {items.length} new
+        </span>
+        <div className="flex-1" />
+        <svg
+          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+          className={cn('text-[var(--theme-text-muted)] transition-transform', open && 'rotate-180')}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {!open && (
+        <p className="mt-1 text-[11px] text-[var(--theme-text-muted)]">
+          Shadow mode is on: this run used the current ranking, and this is what the semantic engine
+          would have supplied instead.
+        </p>
+      )}
+
+      {open && (
+        <ul className="mt-2 space-y-1">
+          {items.map((item, i) => {
+            const alsoInjected = injectedKeys.has(`${item.sourceKind}:${item.sourceId}`);
+            return (
+              <li key={`${item.sourceId}:${i}`} className="flex items-baseline gap-2 text-[11px]">
+                <span className={cn(
+                  'shrink-0 font-mono text-[10px]',
+                  alsoInjected ? 'text-[var(--theme-text-faint)]' : 'text-[var(--theme-accent)]',
+                )}>
+                  {alsoInjected ? '=' : '+'}
+                </span>
+                <span className="min-w-0">
+                  <span className="text-[var(--theme-text-primary)]">{item.label}</span>
+                  <span className="ml-1.5 text-[var(--theme-text-faint)]">{item.provenance}</span>
+                  {typeof item.score === 'number' && item.score > 0 && (
+                    <span className="ml-1.5 font-mono text-[10px] text-[var(--theme-text-faint)]">
+                      {item.score.toFixed(2)}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

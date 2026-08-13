@@ -626,6 +626,15 @@ export interface TicketContext {
   readonly memorySnippets?: MemorySnippetRef[];
   /** Which engine selected the retrieved context, recorded on the execution. */
   readonly memoryEngine?: 'legacy' | 'semantic';
+  /**
+   * What the semantic engine *would* have retrieved, computed but not injected.
+   *
+   * Populated only in shadow mode, while the legacy engine is the one feeding the
+   * prompt. It exists so the two can be compared on the same run rather than on
+   * two different ones — the only comparison that actually answers "would the beta
+   * have done better here".
+   */
+  readonly shadowSnippets?: MemorySnippetRef[];
 }
 
 // ── WebSocket ──

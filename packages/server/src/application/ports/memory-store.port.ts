@@ -7,6 +7,15 @@ export interface MemorySearchFilters {
   boardId?: string | null;
   /** Never retrieve a ticket's own content back into its own prompt. */
   excludeTicketId?: string | null;
+  /**
+   * Only consider vectors produced by this model.
+   *
+   * Vectors from different encoders live in different spaces, so comparing them
+   * yields a number that looks like a similarity and means nothing. After a model
+   * change the index holds both until the sweep catches up, and this is what keeps
+   * the old ones out of the ranking instead of letting them outrank real matches.
+   */
+  embeddingModel?: string | null;
 }
 
 /** A chunk plus the similarity that retrieved it. */
@@ -23,6 +32,14 @@ export interface MemoryIndexStats {
   chunksByKind: Record<string, number>;
   /** Distinct embedding models present. More than one means a switch is mid-flight. */
   embeddingModels: string[];
+  /**
+   * Chunks holding a vector from a model other than the active one.
+   *
+   * Counted separately from `pendingEmbeddings` because the cause differs: these
+   * are not waiting on a download, they are waiting to be re-embedded after a
+   * model change. Both are drained by the same sweep.
+   */
+  staleModelChunks: number;
   lastIndexedAt: string | null;
 }
 
@@ -47,6 +64,16 @@ export interface MemoryStorePort {
 
   /** Drop chunks whose index is at or beyond `fromIndex`, after a source shrank. */
   deleteBySourceFrom(sourceKind: MemorySourceKind, sourceId: string, fromIndex: number): Promise<void>;
+
+  /**
+   * Distinct source ids currently indexed under a kind.
+   *
+   * Lets a backfill find chunks whose source no longer exists — deleted while the
+   * server was down, or through a path that emitted no event. Without it the index
+   * keeps answering with content the workspace no longer has, which is worse than
+   * missing content because nothing about the answer looks wrong.
+   */
+  listSourceIds(sourceKind: MemorySourceKind): Promise<string[]>;
 
   /** Existing hashes for a source, so unchanged chunks are not re-embedded. */
   getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>>;
@@ -75,14 +102,50 @@ export interface MemoryStorePort {
    */
   searchKeyword(term: string, filters: MemorySearchFilters, limit: number): Promise<MemoryChunkEntity[]>;
 
-  /** Chunks with no vector yet, oldest first. Drives the embedding sweep. */
-  listPendingEmbeddings(limit: number): Promise<MemoryChunkEntity[]>;
+  /**
+   * Chunks the sweep has to embed, oldest first: those with no vector, and —
+   * when `activeModel` is given — those carrying a vector from another model.
+   *
+   * Folding the two into one query is what makes a model switch self-healing: the
+   * same sweep that finishes an interrupted download also migrates the index,
+   * without the user having to know a reindex was needed.
+   */
+  listPendingEmbeddings(limit: number, activeModel?: string | null): Promise<MemoryChunkEntity[]>;
 
-  /** Attach vectors produced by the sweep, without rewriting content. */
-  setEmbeddings(entries: Array<{ id: string; embedding: Float32Array; embeddingModel: string }>): Promise<void>;
+  /**
+   * Attach vectors produced by the sweep, without rewriting content.
+   *
+   * `expectedContentHash` is a guard, not bookkeeping: embedding takes long
+   * enough that the chunk can be re-ingested with new text while its vector is
+   * being computed, and writing that vector by id alone would attach it to text
+   * it does not describe — permanently, since the row would no longer look
+   * pending. A row whose hash moved is left alone for the next pass.
+   */
+  setEmbeddings(entries: Array<{
+    id: string;
+    embedding: Float32Array;
+    embeddingModel: string;
+    expectedContentHash: string;
+    /** Hash for the new model, so the ingestion diff does not see a mismatch. */
+    contentHash: string;
+  }>): Promise<void>;
 
-  getStats(): Promise<MemoryIndexStats>;
+  /**
+   * Index counters. `activeModel` is what makes `staleModelChunks` meaningful —
+   * the store has no opinion on which model is configured.
+   */
+  getStats(activeModel?: string | null): Promise<MemoryIndexStats>;
 
   /** Wipe the index. Used when the embedding model changes. */
   clear(): Promise<void>;
+
+  /**
+   * Optional: make the storage fit a vector width before anything is written.
+   *
+   * Only a driver whose schema declares the width needs this — Supabase's
+   * `vector(N)` column and its index and search function all carry it, while the
+   * SQLite store keeps raw float32 and is width-agnostic. Called once at boot
+   * with the configured encoder's width; failures are logged, never fatal.
+   */
+  prepare?(dimensions: number): Promise<void>;
 }

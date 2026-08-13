@@ -50,6 +50,7 @@ export const MEMORY_FEATURE_KEYS = [
   'automationMining',
   'wikiLinks',
   'executionTraces',
+  'cliSessions',
 ] as const;
 
 /**

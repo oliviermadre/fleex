@@ -125,6 +125,13 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
     this.invalidateCache();
   }
 
+  async listSourceIds(sourceKind: MemorySourceKind): Promise<string[]> {
+    const rows = this.conn.db
+      .prepare('SELECT DISTINCT source_id FROM memory_chunks WHERE source_kind = ?')
+      .all(sourceKind) as Array<{ source_id: string }>;
+    return rows.map((r) => r.source_id);
+  }
+
   async getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>> {
     const rows = this.conn.db
       .prepare('SELECT chunk_index, content_hash FROM memory_chunks WHERE source_kind = ? AND source_id = ?')
@@ -158,29 +165,53 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
   }
 
   async search(queryVector: Float32Array, filters: MemorySearchFilters, limit: number): Promise<MemorySearchHit[]> {
-    // Filter in SQL, score in JS: the WHERE clause is what keeps the scan small
-    // when the caller has narrowed to one repo or kind.
+    // Two phases, because the scan is over the whole corpus and the result is
+    // eight rows. Phase one reads only the ids the filters allow and scores them
+    // from the in-process vector cache; phase two hydrates the winners. Selecting
+    // whole rows to score them instead — content, title, metadata for every chunk
+    // in the index — costs an order of magnitude more than the arithmetic does,
+    // and all of it is discarded.
     const { sql, params } = this.buildFilterClause(filters, 'embedding IS NOT NULL');
-    const rows = this.conn.db
-      .prepare(`SELECT * FROM memory_chunks ${sql}`)
-      .all(...params) as MemoryChunkRow[];
-    if (rows.length === 0) return [];
+    const candidates = this.conn.db
+      .prepare(`SELECT id FROM memory_chunks ${sql}`)
+      .all(...params) as Array<{ id: string }>;
+    if (candidates.length === 0) return [];
 
     const vectors = this.getVectorCache();
-    const scored: MemorySearchHit[] = [];
+    // A bounded top-K rather than sorting the corpus: at 50k chunks the sort
+    // would dominate a search that only ever returns a handful.
+    const top: Array<{ id: string; similarity: number }> = [];
+    let worstKept = -Infinity;
 
-    for (const row of rows) {
-      const cached = vectors.get(row.id);
-      const vector = cached ?? decodeEmbedding(row.embedding);
+    for (const { id } of candidates) {
+      const vector = vectors.get(id);
       if (!vector) continue;
       // Mismatched widths mean the row predates a model switch; skip rather than
       // score it against an incompatible space.
       if (vector.length !== queryVector.length) continue;
-      scored.push({ chunk: this.toEntity(row, vector), similarity: cosineSimilarity(queryVector, vector) });
+
+      const similarity = cosineSimilarity(queryVector, vector);
+      if (top.length >= limit && similarity <= worstKept) continue;
+
+      top.push({ id, similarity });
+      top.sort((a, b) => b.similarity - a.similarity);
+      if (top.length > limit) top.pop();
+      worstKept = top[top.length - 1]!.similarity;
     }
 
-    scored.sort((a, b) => b.similarity - a.similarity);
-    return scored.slice(0, limit);
+    if (top.length === 0) return [];
+
+    const rows = this.conn.db
+      .prepare(`SELECT * FROM memory_chunks WHERE id IN (${top.map(() => '?').join(', ')})`)
+      .all(...top.map((t) => t.id)) as MemoryChunkRow[];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    // Rebuilt in score order: `IN` makes no promise about row order.
+    return top.flatMap(({ id, similarity }) => {
+      const row = byId.get(id);
+      if (!row) return [];
+      return [{ chunk: this.toEntity(row, vectors.get(id) ?? null), similarity }];
+    });
   }
 
   async searchKeyword(term: string, filters: MemorySearchFilters, limit: number): Promise<MemoryChunkEntity[]> {
@@ -189,8 +220,12 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
     // Escape the LIKE wildcards so a query containing `%` or `_` matches
     // literally instead of turning into a full scan match.
     const pattern = `%${trimmed.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    // The model filter is dropped here on purpose: a substring match reads no
+    // vector, so a chunk awaiting re-embedding is still a perfectly good keyword
+    // hit and excluding it would hide content during a model migration.
+    const { embeddingModel: _ignoredModel, ...keywordFilters } = filters;
     const { sql, params } = this.buildFilterClause(
-      filters,
+      keywordFilters,
       "(content LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\')",
       [pattern, pattern],
     );
@@ -200,28 +235,53 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
     return rows.map((r) => this.toEntity(r, decodeEmbedding(r.embedding)));
   }
 
-  async listPendingEmbeddings(limit: number): Promise<MemoryChunkEntity[]> {
-    const rows = this.conn.db
-      .prepare('SELECT * FROM memory_chunks WHERE embedding IS NULL ORDER BY created_at ASC LIMIT ?')
-      .all(limit) as MemoryChunkRow[];
+  async listPendingEmbeddings(limit: number, activeModel?: string | null): Promise<MemoryChunkEntity[]> {
+    // Two backlogs, one query: rows never embedded, and rows embedded by a model
+    // that is no longer configured. The second is what makes switching encoders a
+    // setting rather than a manual migration.
+    const rows = activeModel
+      ? this.conn.db
+          .prepare(
+            `SELECT * FROM memory_chunks
+              WHERE embedding IS NULL OR embedding_model IS NULL OR embedding_model <> ?
+              ORDER BY created_at ASC LIMIT ?`,
+          )
+          .all(activeModel, limit) as MemoryChunkRow[]
+      : this.conn.db
+          .prepare('SELECT * FROM memory_chunks WHERE embedding IS NULL ORDER BY created_at ASC LIMIT ?')
+          .all(limit) as MemoryChunkRow[];
     return rows.map((r) => this.toEntity(r, null));
   }
 
-  async setEmbeddings(entries: Array<{ id: string; embedding: Float32Array; embeddingModel: string }>): Promise<void> {
+  async setEmbeddings(entries: Array<{
+    id: string;
+    embedding: Float32Array;
+    embeddingModel: string;
+    expectedContentHash: string;
+    contentHash: string;
+  }>): Promise<void> {
     if (entries.length === 0) return;
+    // The hash in the WHERE clause is the guard: if the chunk was re-ingested
+    // while its vector was being computed, this matches no row, the vector is
+    // discarded, and the row stays in the sweep's backlog with its new text.
     const stmt = this.conn.db.prepare(
-      'UPDATE memory_chunks SET embedding = ?, embedding_model = ?, updated_at = ? WHERE id = ?',
+      `UPDATE memory_chunks
+          SET embedding = ?, embedding_model = ?, content_hash = ?, updated_at = ?
+        WHERE id = ? AND content_hash = ?`,
     );
     const now = new Date().toISOString();
     this.inTransaction(() => {
       for (const entry of entries) {
-        stmt.run(encodeEmbedding(entry.embedding), entry.embeddingModel, now, entry.id);
+        stmt.run(
+          encodeEmbedding(entry.embedding), entry.embeddingModel, entry.contentHash, now,
+          entry.id, entry.expectedContentHash,
+        );
       }
     });
     this.invalidateCache();
   }
 
-  async getStats(): Promise<MemoryIndexStats> {
+  async getStats(activeModel?: string | null): Promise<MemoryIndexStats> {
     const total = this.conn.db.prepare('SELECT COUNT(*) AS n FROM memory_chunks').get() as { n: number };
     const pending = this.conn.db
       .prepare('SELECT COUNT(*) AS n FROM memory_chunks WHERE embedding IS NULL')
@@ -232,6 +292,13 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
     const models = this.conn.db
       .prepare('SELECT DISTINCT embedding_model AS m FROM memory_chunks WHERE embedding_model IS NOT NULL')
       .all() as Array<{ m: string }>;
+    const stale = activeModel
+      ? (this.conn.db
+          .prepare(
+            'SELECT COUNT(*) AS n FROM memory_chunks WHERE embedding IS NOT NULL AND embedding_model <> ?',
+          )
+          .get(activeModel) as { n: number }).n
+      : 0;
     const last = this.conn.db
       .prepare('SELECT MAX(updated_at) AS t FROM memory_chunks')
       .get() as { t: string | null };
@@ -241,6 +308,7 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
       pendingEmbeddings: pending.n,
       chunksByKind: Object.fromEntries(byKind.map((r) => [r.source_kind, r.n])),
       embeddingModels: models.map((r) => r.m),
+      staleModelChunks: stale,
       lastIndexedAt: last.t ?? null,
     };
   }
@@ -287,6 +355,10 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
       // comparisons against NULL are never true.
       clauses.push('(ticket_id IS NULL OR ticket_id <> ?)');
       params.push(filters.excludeTicketId);
+    }
+    if (filters.embeddingModel) {
+      clauses.push('embedding_model = ?');
+      params.push(filters.embeddingModel);
     }
 
     return {

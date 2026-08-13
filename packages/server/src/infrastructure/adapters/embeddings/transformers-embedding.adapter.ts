@@ -1,34 +1,21 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
+import { FLEEX_DIR, resolveEmbeddingModel, type EmbeddingModelSpec } from '@fleex/shared';
 import type { EmbeddingProviderPort } from '../../../application/ports/embedding-provider.port.js';
 import type { LoggerPort } from '../../../application/ports/logger.port.js';
 
 /**
- * Default model: 384 dimensions, int8-quantised, ~112 MB on disk.
- *
- * Chosen for a bilingual corpus — Fleex tickets and comments mix French and
- * English, so an English-only encoder (all-MiniLM, nomic-embed-text) would
- * degrade on half the content. Among the multilingual options it is the best
- * quality per megabyte and per millisecond of CPU; the heavier ones
- * (EmbeddingGemma-300M, Qwen3-Embedding-0.6B) are configurable alternatives,
- * to be settled by `fleex memory bench` on the real corpus rather than by
- * published leaderboards.
+ * Which encoders exist, what they cost and which prefixes they need lives in the
+ * shared catalogue (`EMBEDDING_MODELS`), because Settings renders the same list
+ * and the Supabase adapter sizes its vector column from the same widths.
  */
-export const DEFAULT_EMBEDDING_MODEL = 'Xenova/multilingual-e5-small';
-export const DEFAULT_EMBEDDING_DIMENSIONS = 384;
 
 /** Where model weights are cached, so the network is touched once. */
 export const MODEL_CACHE_DIR = join(homedir(), FLEEX_DIR, 'models');
 
-/**
- * The e5 family is asymmetric: stored text and queries must carry different
- * prefixes. Omitting them costs a large slice of retrieval quality with no
- * error to show for it, which is why the two paths are separate port methods
- * rather than one `embed()`.
- */
-const PASSAGE_PREFIX = 'passage: ';
-const QUERY_PREFIX = 'query: ';
+// Prefixes come from the model spec: each family has its own retrieval template,
+// and using the wrong one costs quality with no error to show for it. That is why
+// passages and queries are separate port methods rather than one `embed()`.
 
 /** Batch size for `embedPassages`. Bounded to keep peak memory predictable. */
 const BATCH_SIZE = 16;
@@ -39,8 +26,8 @@ type FeatureExtractionPipeline = (
 ) => Promise<{ tolist(): number[][] }>;
 
 export interface TransformersEmbeddingOptions {
-  model?: string;
-  dimensions?: number;
+  /** Catalogue id. Unknown or absent resolves to the default model. */
+  model?: string | null;
   /** Skip the network entirely; fails if weights are not already cached. */
   offlineOnly?: boolean;
 }
@@ -61,6 +48,8 @@ export interface TransformersEmbeddingOptions {
 export class TransformersEmbeddingAdapter implements EmbeddingProviderPort {
   readonly id: string;
   readonly dimensions: number;
+  /** The resolved catalogue entry — model id, width, prefixes. */
+  readonly spec: EmbeddingModelSpec;
 
   private pipeline: FeatureExtractionPipeline | null = null;
   private initPromise: Promise<void> | null = null;
@@ -71,9 +60,13 @@ export class TransformersEmbeddingAdapter implements EmbeddingProviderPort {
     private readonly logger: LoggerPort,
     options: TransformersEmbeddingOptions = {},
   ) {
-    this.modelName = options.model ?? DEFAULT_EMBEDDING_MODEL;
-    this.dimensions = options.dimensions ?? DEFAULT_EMBEDDING_DIMENSIONS;
+    this.spec = resolveEmbeddingModel(options.model);
+    this.modelName = this.spec.id;
+    this.dimensions = this.spec.dimensions;
     this.offlineOnly = options.offlineOnly ?? false;
+    // The model is part of the provider id, and the provider id is what every
+    // chunk records — so switching models is detectable per row rather than
+    // being an undetectable change of meaning.
     this.id = `transformers:${this.modelName}`;
   }
 
@@ -160,7 +153,7 @@ export class TransformersEmbeddingAdapter implements EmbeddingProviderPort {
 
     const out: Float32Array[] = [];
     for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-      const batch = texts.slice(i, i + BATCH_SIZE).map((t) => PASSAGE_PREFIX + t);
+      const batch = texts.slice(i, i + BATCH_SIZE).map((t) => this.spec.passagePrefix + t);
       out.push(...await this.embedRaw(batch));
     }
     return out;
@@ -168,7 +161,7 @@ export class TransformersEmbeddingAdapter implements EmbeddingProviderPort {
 
   async embedQuery(text: string): Promise<Float32Array> {
     await this.init();
-    const [vector] = await this.embedRaw([QUERY_PREFIX + text]);
+    const [vector] = await this.embedRaw([this.spec.queryPrefix + text]);
     if (!vector) throw new Error('Embedding provider returned no vector for query');
     return vector;
   }

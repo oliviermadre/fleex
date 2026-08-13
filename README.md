@@ -91,9 +91,13 @@ retrieves by meaning across everything indexed — summaries, comment threads,
 routine outputs, notes, epics, skills and agent memory.
 
 It is opt-in, under **Settings › Memory**, which also shows what the index holds
-and offers a reindex. Switching is reversible and leaves the index in place, so
-both engines can be compared on the same work through the **Context** tab of any
-execution, which shows the prompt exactly as it was sent.
+and offers a reindex. Switching is reversible and leaves the index in place.
+
+Before switching, **shadow mode** answers what switching would change: runs keep
+using the current ranking, and the semantic engine's choice is recorded alongside
+it — visible in the **Context** tab of any execution, marked as not injected, with
+the items only it found highlighted. That tab also shows the prompt exactly as it
+was sent, in both a browsable outline and raw form.
 
 Embeddings run **locally** — no API, and no network once the model is cached in
 `~/.fleex/models/`. The encoder ships as one optional package, so an instance
@@ -103,10 +107,19 @@ that never enables the beta does not carry an ONNX runtime:
 bun add @huggingface/transformers
 ```
 
-Without it, content is still indexed and findable by keyword, and retrieval falls
-back to the default ranking rather than degrading a run's context. Anything
-indexed while the model was still downloading is embedded by a background sweep
-once it is ready — nothing has to be re-saved to become searchable.
+Without the package, content is still indexed and findable by keyword, and
+retrieval falls back to the default ranking rather than degrading a run's context.
+Anything indexed while the model was still downloading is embedded by a background
+sweep once it is ready — nothing has to be re-saved to become searchable.
+
+Three multilingual encoders are selectable in the same panel, from 112 MB at 384
+dimensions to 300 MB at 768, and switching between them is a setting rather than a
+migration: every chunk records the model that embedded it, retrieval only considers
+vectors from the configured one, and the same sweep re-embeds the rest in the
+background. **Measure** reports recall and MRR on your own corpus — the only
+benchmark that answers which encoder to keep. Embeddings can also be delegated to a
+local **Ollama** daemon when one is already running, which is much faster with a GPU
+behind it; never the default, since it is another process to keep up.
 
 Once the engine is on, the index stays current by itself — a listener re-indexes
 whatever a domain event touched — and everything built on top of it is
@@ -126,6 +139,7 @@ individually switchable in the same panel:
 | Suggest routines | Spots work you keep repeating and proposes a schedule — arithmetic over the execution log, no model | local |
 | Link and relate notes | Resolves `[[#42]]` and `[[org/repo]]` links, shows backlinks, and surfaces notes nobody thought to link | local |
 | Learn from finished runs | Distils what each run discovered about the codebase — what worked, what failed, which files mattered | one LLM call per run |
+| Remember terminal sessions | Distils `claude` sessions run outside a ticket worktree and files them under their repository | one LLM call per session |
 
 Every one of them is reachable from all three surfaces: the API, the CLI, and the
 UI it belongs to — the palette for search and questions, the ticket form for
@@ -136,8 +150,10 @@ notes view for links.
 From the terminal:
 
 ```bash
-fleex memory engine                      # active engine and feature switches
+fleex memory engine                      # engine, encoder, budget, feature switches
 fleex memory engine semantic             # opt into the beta
+fleex memory engine --shadow             # record what the beta would inject
+fleex memory engine --model EmbeddingGemma-300M
 fleex memory engine --disable ask        # same switches as the Settings panel
 fleex memory search "session expiry"     # ranked excerpts, offline, no LLM
 fleex memory ask "why sessions not JWT?" # cited answer

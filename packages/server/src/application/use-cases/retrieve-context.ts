@@ -46,6 +46,11 @@ export interface RetrieveContextResult {
   summaries: TicketSummaryRef[];
   /** Everything beyond summaries. Empty under the legacy engine. */
   snippets: MemorySnippet[];
+  /**
+   * What the semantic engine would have retrieved, when shadow mode is on and
+   * legacy is the engine actually feeding the prompt. Never injected.
+   */
+  shadowSnippets?: MemorySnippet[];
 }
 
 /**
@@ -88,7 +93,12 @@ export class RetrieveContextUseCase {
     repo?: string | null;
   }): Promise<RetrieveContextResult> {
     if (!this.isSemanticEnabled()) {
-      return { engine: 'legacy', summaries: await this.legacySummaries(params.ticketId), snippets: [] };
+      return {
+        engine: 'legacy',
+        summaries: await this.legacySummaries(params.ticketId),
+        snippets: [],
+        shadowSnippets: await this.shadow(params),
+      };
     }
 
     try {
@@ -134,6 +144,10 @@ export class RetrieveContextUseCase {
       kinds: params.kinds,
       repo: params.repo ?? null,
       excludeTicketId: params.excludeTicketId ?? null,
+      // Only vectors from the model that is answering. A superseded encoder's
+      // vectors live in another space, so their distance to this query is a
+      // meaningless number that would still sort into the results.
+      embeddingModel: embeddings.id,
     };
 
     const queryVector = await embeddings.embedQuery(query);
@@ -157,6 +171,45 @@ export class RetrieveContextUseCase {
       boostHumanFeedback: this.isFeatureEnabled('humanFeedbackBoost'),
     }, limit);
     return this.toSnippets(ranked, { includeSummaries: true });
+  }
+
+  /**
+   * What the semantic engine would have injected, for a run the legacy engine is
+   * feeding.
+   *
+   * Best-effort and silent on failure: this is an observation, so a shadow that
+   * cannot be computed must not affect — or even be visible to — the run it is
+   * observing.
+   */
+  private async shadow(params: {
+    ticketId?: string;
+    query?: string;
+    limit?: number;
+    kinds?: MemorySourceKind[];
+    repo?: string | null;
+  }): Promise<MemorySnippet[] | undefined> {
+    if (!this.config.get().memoryShadowMode) return undefined;
+    if (!this.memoryStore || !this.embeddings) return undefined;
+
+    try {
+      const result = await this.semantic(params);
+      // Summaries too: under the semantic engine they would have been chosen
+      // differently, and a comparison that hides that is not a comparison.
+      return [
+        ...result.snippets,
+        ...result.summaries.map((summary) => ({
+          sourceKind: 'ticket_summary' as MemorySourceKind,
+          sourceId: summary.ticketId,
+          title: summary.ticketTitle,
+          content: summary.content,
+          score: 0,
+          ticketId: summary.ticketId,
+          updatedAt: summary.updatedAt,
+        })),
+      ];
+    } catch {
+      return undefined;
+    }
   }
 
   /** The pre-existing ranking, unchanged and still the default. */
@@ -198,6 +251,7 @@ export class RetrieveContextUseCase {
       kinds: params.kinds,
       repo: params.repo ?? null,
       excludeTicketId: params.ticketId ?? null,
+      embeddingModel: embeddings.id,
     };
 
     const queryVector = await embeddings.embedQuery(queryText);

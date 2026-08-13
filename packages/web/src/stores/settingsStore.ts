@@ -89,7 +89,19 @@ export interface AppSettings {
     automationMining?: boolean;
     wikiLinks?: boolean;
     executionTraces?: boolean;
+    cliSessions?: boolean;
   };
+  /** Catalogue id of the encoder that produces vectors. */
+  memoryEmbeddingModel?: string;
+  /** Where embeddings are computed: in-process, or a local Ollama daemon. */
+  memoryEmbeddingProvider?: 'transformers' | 'ollama';
+  /** Character ceiling on injected memory snippets. Unset → engine default. */
+  memoryInjectionCharBudget?: number;
+  /**
+   * Under the current engine, also compute what the semantic engine would have
+   * retrieved and record it on the run without injecting it.
+   */
+  memoryShadowMode?: boolean;
 }
 
 interface SettingsState {

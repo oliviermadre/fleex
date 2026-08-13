@@ -197,6 +197,11 @@ export interface ExecutionContextData {
   readonly imageCount: number;
   /** Which retrieval strategy picked the injected memory items. */
   readonly memoryEngine?: 'legacy' | 'semantic';
+  /**
+   * What the other engine would have injected, when shadow mode is on. Recorded
+   * alongside the real manifest so a run can be read as a side-by-side.
+   */
+  readonly shadowManifest?: ContextInjectionItem[];
   readonly model: string;
   readonly effectiveMode?: string;
   readonly maxTurns?: number;

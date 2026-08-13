@@ -34,6 +34,7 @@ import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-cla
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
 import { ProcessHookEventUseCase } from '../application/use-cases/process-hook-event.js';
 import { IngestCliSessionUseCase } from '../application/use-cases/ingest-cli-session.js';
+import { RememberCliSessionUseCase } from '../application/use-cases/remember-cli-session.js';
 import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
 import type { SessionManager } from './auth/session-manager.js';
 import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
@@ -92,6 +93,7 @@ import { RetrieveContextUseCase } from '../application/use-cases/retrieve-contex
 import { MemoryKernel } from '../application/memory/memory-kernel.js';
 import { MemoryEventListener } from '../application/memory/memory-event-listener.js';
 import { MemorySweeper } from '../application/memory/memory-sweeper.js';
+import { buildEmbeddingProvider } from './adapters/embeddings/build-embedding-provider.js';
 import { BackfillMemoryUseCase } from '../application/use-cases/backfill-memory.js';
 import { AskMemoryUseCase } from '../application/use-cases/ask-memory.js';
 import { MemorySynthesiser } from '../application/memory/memory-synthesiser.js';
@@ -259,20 +261,35 @@ export async function createContainer() {
   const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
   // The embedding provider is constructed unconditionally but loads its model
   // lazily, so an instance that never opts into the semantic engine pays nothing.
-  const embeddingProvider = memoryStore ? new TransformersEmbeddingAdapter(logger) : undefined;
+  // Which encoder, and where it runs, are both settings. The provider is built
+  // eagerly but loads nothing until asked, so an instance on the default engine
+  // pays for neither.
+  const embeddingProvider = memoryStore ? buildEmbeddingProvider(config, logger) : undefined;
   const retrieveContext = new RetrieveContextUseCase(
     config, getRelevantSummaries, ticketStore_, logger, memoryStore ?? undefined, embeddingProvider,
   );
   const getTicketContext = new GetTicketContextUseCase(
     ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore, retrieveContext,
   );
+  // Let a width-declaring store (Supabase's `vector(N)` column, its index and its
+  // search function) match the configured encoder. Idempotent, and the only thing
+  // that can repair a project whose pgvector extension was enabled — or whose
+  // encoder was changed — after the migrations had already recorded themselves.
+  if (memoryStore?.prepare && embeddingProvider) {
+    await memoryStore.prepare(embeddingProvider.dimensions).catch((error: unknown) => {
+      logger.warn('Memory store could not be prepared for the configured encoder', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
   const memoryKernel = memoryStore && embeddingProvider
     ? new MemoryKernel(memoryStore, embeddingProvider, logger)
     : null;
   const backfillMemory = memoryKernel
     ? new BackfillMemoryUseCase(
         memoryKernel, ticketStore_, commentStore, deliverableStore, personaStore_, skillStore, logger,
-        ticketGroupStore,
+        ticketGroupStore, kvStore,
       )
     : null;
 
@@ -653,9 +670,16 @@ export async function createContainer() {
   // ingests finished manual CLI sessions (source='cli') for cost tracking, then
   // persists their decision trail as a `cli-session-summary` deliverable.
   const ingestCliSession = new IngestCliSessionUseCase(ticketStore_, agentEventStore_, logger);
+  // Terminal sessions with no ticket to attach to: the cost hook discards them, so
+  // this is the only thing that keeps what they discovered.
+  const rememberCliSession = new RememberCliSessionUseCase(
+    retrieveContext, memorySynthesiser, execFn, logger, memoryKernel ?? undefined,
+  );
   const generateCliSessionSummary = new GenerateCliSessionSummaryUseCase(deliverableStore, logger, sdkLimiter);
   generateCliSessionSummary.eventBus = eventBus;
-  const processHookEvent = new ProcessHookEventUseCase(sessionStore_, eventBus, logger, ingestCliSession, generateCliSessionSummary);
+  const processHookEvent = new ProcessHookEventUseCase(
+    sessionStore_, eventBus, logger, ingestCliSession, generateCliSessionSummary, rememberCliSession,
+  );
 
   return {
     logger,
@@ -730,6 +754,7 @@ export async function createContainer() {
     askMemory,
     memoryEventListener,
     memorySweeper,
+    rememberCliSession,
     coachPersona,
     synthesiseMemory,
     curateMemory,

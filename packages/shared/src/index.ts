@@ -471,3 +471,10 @@ export {
   MINUTES_IN_HOUR,
   HOURS_IN_DAY,
 } from './constants.js';
+
+export type { EmbeddingModelSpec } from './types/embedding-model.js';
+export {
+  EMBEDDING_MODELS,
+  DEFAULT_EMBEDDING_MODEL,
+  resolveEmbeddingModel,
+} from './types/embedding-model.js';

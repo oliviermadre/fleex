@@ -1144,14 +1144,22 @@ export interface MemoryStatus {
     /** Optional embedding package present. False means an install is needed. */
     installed: boolean;
     packageName: string;
+    /** Where the arithmetic runs. */
+    runtime: 'transformers' | 'ollama';
+    /** Configured catalogue model id. */
+    model: string;
   } | null;
   index: {
     totalChunks: number;
     pendingEmbeddings: number;
+    /** Vectors from a superseded encoder, waiting for the sweep to redo them. */
+    staleModelChunks: number;
     chunksByKind: Record<string, number>;
     embeddingModels: string[];
     lastIndexedAt: string | null;
   } | null;
+  /** Configured injection budget, or null for the engine default. */
+  injectionCharBudget: number | null;
   /** True while a backfill is walking the corpus. */
   reindexing: boolean;
 }
