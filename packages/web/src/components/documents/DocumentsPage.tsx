@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { DeliverableListItem } from '@fleex/shared';
 import { DOCUMENTS_PAGE_SIZE, useDocumentsStore } from '../../stores/documentsStore';
 import { DocumentsFilterSidebar } from './DocumentsFilterSidebar';
+import { CompileMemoryPanel } from './CompileMemoryPanel';
 import { DocumentRow } from './DocumentRow';
 import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
 
@@ -111,6 +112,12 @@ export function DocumentsPage() {
             ({deliverables.length} of {total})
           </span>
         </div>
+      </div>
+
+      {/* Its own row: collapsed it is one button, expanded it is a full panel with
+          a document in it, which would be squeezed inside the header line. */}
+      <div className="border-b border-[var(--theme-border)] px-6 py-2">
+        <CompileMemoryPanel />
       </div>
 
       {/* Body */}

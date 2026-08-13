@@ -41,6 +41,11 @@ const MUTATING_LEAVES = new Set([
   'run', 'enable', 'disable', 'resolve', 'retry', 'route', 'cancel',
   // rebuilds the memory index: heavy, and worth confirming before it starts
   'reindex',
+  // memory writes: `keep` indexes a note, `coach --apply` rewrites an agent's
+  // memory document — which is prepended to every future run of that agent
+  'keep', 'coach',
+  // changes which engine feeds every future prompt, and which features are on
+  'engine',
 ]);
 
 /** Options we never expose as tool params (handled specially or noise). */

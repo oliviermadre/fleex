@@ -8,8 +8,11 @@ import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../s
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
 import { preprocessTicketMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { decodeWikiTarget, preprocessWikiLinks, WIKI_LINK_HREF_PREFIX } from '../markdown/wiki';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
+import { WikiLinkChip } from '../markdown/WikiLinkChip';
 import { remarkPluginsFor, type MarkdownProfile } from '../markdown/profiles';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 interface MarkdownRendererProps {
   content: string;
@@ -166,6 +169,12 @@ function MarkdownSection({
 }) {
   const colorMode = useColorMode();
 
+  // Wiki-links are part of the semantic memory beta: the same syntax the server
+  // resolves into backlinks. Rendering them while the feature is off would offer
+  // a graph with only half its edges.
+  const wikiEnabled = useSettingsStore((s) => s.settings.memoryEngine === 'semantic'
+    && s.settings.memoryFeatures?.wikiLinks !== false);
+
   // Extract images — gallery strip at top, inline placeholders in text
   const { images, cleaned: contentWithoutImages } = useMemo(
     () => extractMarkdownImages(content),
@@ -176,8 +185,11 @@ function MarkdownSection({
   // render them as chips. This is inline-only (no line added/removed), so the
   // checkbox line indices computed from `contentWithoutImages` stay valid.
   const processed = useMemo(
-    () => preprocessTicketMentions(contentWithoutImages),
-    [contentWithoutImages],
+    () => {
+      const withMentions = preprocessTicketMentions(contentWithoutImages);
+      return wikiEnabled ? preprocessWikiLinks(withMentions) : withMentions;
+    },
+    [contentWithoutImages, wikiEnabled],
   );
 
   // Pre-compute checkbox line indices within this segment (0-indexed, local)
@@ -210,6 +222,10 @@ function MarkdownSection({
       // Ticket mention — clickable chip that navigates to the referenced ticket
       if (href?.startsWith(TICKET_MENTION_HREF_PREFIX)) {
         return <TicketMentionChip idRef={href.slice(TICKET_MENTION_HREF_PREFIX.length)} />;
+      }
+      // Wiki-link — a ticket or a note, by the `[[…]]` syntax
+      if (href?.startsWith(WIKI_LINK_HREF_PREFIX)) {
+        return <WikiLinkChip target={decodeWikiTarget(href)}>{children}</WikiLinkChip>;
       }
       return (
         <a

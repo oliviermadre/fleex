@@ -88,6 +88,7 @@ export interface AppSettings {
     assistantMemory?: boolean;
     automationMining?: boolean;
     wikiLinks?: boolean;
+    executionTraces?: boolean;
   };
 }
 

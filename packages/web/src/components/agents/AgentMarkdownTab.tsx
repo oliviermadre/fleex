@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { AgentPersona } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
+import { PersonaCoachPanel } from './PersonaCoachPanel';
 
 interface AgentMarkdownTabProps {
   persona: AgentPersona;
@@ -69,15 +70,25 @@ export function AgentMarkdownTab({ persona, field }: AgentMarkdownTabProps) {
       </div>
 
       {/* Content */}
-      <div className="flex flex-1 overflow-hidden p-6">
-        <MarkdownEditor
-          surfaceKind="agent_persona_md"
-          defaultMode="write"
-          value={content}
-          onChange={handleChange}
-          placeholder={`Write ${meta.title.toLowerCase()} content in Markdown...`}
-          textareaProps={{ spellCheck: false }}
-        />
+      <div className="flex flex-1 flex-col overflow-y-auto p-6">
+        <div className="flex min-h-64 flex-1">
+          <MarkdownEditor
+            surfaceKind="agent_persona_md"
+            defaultMode="write"
+            value={content}
+            onChange={handleChange}
+            placeholder={`Write ${meta.title.toLowerCase()} content in Markdown...`}
+            textareaProps={{ spellCheck: false }}
+          />
+        </div>
+
+        {/* Only under Memory: the coach amends learned lessons, not tone or role. */}
+        {field === 'memoryMd' && (
+          <PersonaCoachPanel
+            personaId={persona.id}
+            onApplied={(memoryMd) => setContent(memoryMd)}
+          />
+        )}
       </div>
     </div>
   );

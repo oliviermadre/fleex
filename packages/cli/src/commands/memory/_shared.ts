@@ -34,6 +34,25 @@ export function oneLine(text: string, max = 160): string {
 }
 
 /**
+ * The switchable features that consume the index — the same set the Settings
+ * panel lists, in the same order.
+ */
+export const MEMORY_FEATURE_KEYS = [
+  'paletteSearch',
+  'ask',
+  'repoScope',
+  'duplicateDetection',
+  'humanFeedbackBoost',
+  'personaCoach',
+  'synthesis',
+  'curation',
+  'assistantMemory',
+  'automationMining',
+  'wikiLinks',
+  'executionTraces',
+] as const;
+
+/**
  * The source kinds a `--kind` filter accepts.
  *
  * Listed explicitly rather than derived, because the CLI is a contract: an

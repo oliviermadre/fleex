@@ -4,6 +4,7 @@ import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useUIStore } from '../../stores/uiStore';
 import type { RoutineListItem as RoutineListItemDto } from '../../services/api';
 import { RoutineEditor } from './RoutineEditor';
+import { AutomationSuggestions } from './AutomationSuggestions';
 import { describeTrigger, formatRelativeTime } from './RoutineDetail';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { TrashIcon } from '../ui/TrashIcon';
@@ -111,6 +112,9 @@ export function RoutinesContentPanel() {
           />
         ))}
       </div>
+
+      {/* Sits below the list because it is a prompt to add one, not part of it. */}
+      <AutomationSuggestions onCreate={() => setCreating(true)} />
 
       {(creating || editing) && (
         <RoutineEditor

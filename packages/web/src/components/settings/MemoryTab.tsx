@@ -9,7 +9,8 @@ type MemoryEngine = 'legacy' | 'semantic';
 
 type MemoryFeatureKey =
   | 'paletteSearch' | 'ask' | 'repoScope' | 'duplicateDetection' | 'humanFeedbackBoost'
-  | 'personaCoach' | 'synthesis' | 'curation' | 'assistantMemory' | 'automationMining' | 'wikiLinks';
+  | 'personaCoach' | 'synthesis' | 'curation' | 'assistantMemory' | 'automationMining' | 'wikiLinks'
+  | 'executionTraces';
 
 /**
  * The features that consume the index.
@@ -77,6 +78,12 @@ const FEATURES: Array<{ key: MemoryFeatureKey; label: string; description: strin
     key: 'wikiLinks',
     label: 'Link and relate notes',
     description: 'Resolves [[#42]] and [[org/repo]] links in notes, shows what links back, and surfaces notes nobody thought to link.',
+  },
+  {
+    key: 'executionTraces',
+    label: 'Learn from finished runs',
+    description: 'Distils what each agent run discovered about the codebase — what worked, what failed, which files mattered — so the next run starts from it.',
+    cost: 'one LLM call per run',
   },
 ];
 

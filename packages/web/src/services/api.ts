@@ -1174,6 +1174,20 @@ export async function fetchMemorySearch(query: string, limit = 10): Promise<Memo
   return res.results;
 }
 
+/** A cited answer drawn from the index. */
+export interface MemoryAnswer {
+  answer: string | null;
+  sources: MemorySnippetResult[];
+  reason?: 'no_results' | 'synthesis_failed' | 'unavailable';
+}
+
+export async function askMemory(question: string, limit?: number): Promise<MemoryAnswer> {
+  return request<MemoryAnswer>('/memory/ask', {
+    method: 'POST',
+    body: JSON.stringify(limit ? { question, limit } : { question }),
+  });
+}
+
 /** An existing ticket that looks like the one being typed. */
 export interface SimilarTicketCandidate {
   ticketId: string;
@@ -1186,6 +1200,89 @@ export async function fetchSimilarTickets(title: string, limit = 3): Promise<Sim
   const params = new URLSearchParams({ title, limit: String(limit) });
   const res = await request<{ candidates: SimilarTicketCandidate[] }>(`/memory/similar-tickets?${params.toString()}`);
   return res.candidates;
+}
+
+/** A drafted amendment to an agent's memory, awaiting review. */
+export interface PersonaCoachProposal {
+  personaId: string;
+  personaName: string;
+  currentMemoryMd: string;
+  proposedMemoryMd: string | null;
+  evidence: MemorySnippetResult[];
+  reason?: string;
+}
+
+export async function fetchPersonaCoachProposal(personaId: string): Promise<PersonaCoachProposal> {
+  return request<PersonaCoachProposal>(`/memory/personas/${encodeURIComponent(personaId)}/coach`);
+}
+
+export async function applyPersonaCoachProposal(personaId: string, memoryMd: string): Promise<void> {
+  await request<{ ok: boolean }>(`/memory/personas/${encodeURIComponent(personaId)}/coach/apply`, {
+    method: 'POST', body: JSON.stringify({ memoryMd }),
+  });
+}
+
+/** A compiled reference document about a subject. */
+export interface SynthesisResult {
+  subject: string;
+  document: string | null;
+  sources: MemorySnippetResult[];
+  deliverableId?: string;
+  reason?: string;
+}
+
+export async function synthesiseMemory(
+  subject: string,
+  opts: { limit?: number; repo?: string | null; saveToTicketId?: string | null } = {},
+): Promise<SynthesisResult> {
+  return request<SynthesisResult>('/memory/synthesise', {
+    method: 'POST',
+    body: JSON.stringify({ subject, ...opts }),
+  });
+}
+
+export async function curateMemory(input: {
+  executionId: string;
+  title?: string;
+  content?: string;
+  comment?: string | null;
+  ticketId?: string | null;
+  repo?: string | null;
+}): Promise<{ ok: boolean; noteId?: string; reason?: string }> {
+  return request<{ ok: boolean; noteId?: string; reason?: string }>('/memory/curate', {
+    method: 'POST', body: JSON.stringify(input),
+  });
+}
+
+/** Work repeated often enough that a routine could do it. */
+export interface AutomationCandidate {
+  key: string;
+  kind: 'skill' | 'agent';
+  target: string;
+  occurrences: number;
+  firstSeen: string;
+  lastSeen: string;
+  meanGapHours: number;
+  suggestedCron?: string;
+  rationale: string;
+  totalCostUsd: number;
+}
+
+export async function fetchAutomationCandidates(): Promise<AutomationCandidate[]> {
+  const res = await request<{ candidates: AutomationCandidate[] }>('/memory/automation-candidates');
+  return res.candidates;
+}
+
+/** Notes linking to a target, and notes semantically close to one. */
+export interface NoteLinks {
+  backlinks: Array<{ key: string; label: string }>;
+  related: Array<{ key: string; label: string; score: number }>;
+}
+
+export async function fetchNoteLinks(key: string, target?: string): Promise<NoteLinks> {
+  const params = new URLSearchParams({ key });
+  if (target) params.set('target', target);
+  return request<NoteLinks>(`/scratchpads/links?${params.toString()}`);
 }
 
 export async function fetchMemoryStatus(): Promise<MemoryStatus> {

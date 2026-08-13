@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { SaveStatus } from './SaveStatus';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
+import { NoteLinksPanel } from './NoteLinksPanel';
 
 interface Props {
   scratchpadKey: string;
@@ -65,6 +66,8 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
         placeholder={'# Scratchpad\n\nWrite your notes here...'}
         textareaProps={{ spellCheck: false }}
       />
+
+      <NoteLinksPanel scratchpadKey={scratchpadKey} />
     </div>
   );
 }

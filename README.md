@@ -123,21 +123,38 @@ individually switchable in the same panel:
 | Remember conversations | Distils each assistant conversation as it ends, so preferences survive it | one LLM call per conversation |
 | Suggest routines | Spots work you keep repeating and proposes a schedule — arithmetic over the execution log, no model | local |
 | Link and relate notes | Resolves `[[#42]]` and `[[org/repo]]` links, shows backlinks, and surfaces notes nobody thought to link | local |
+| Learn from finished runs | Distils what each run discovered about the codebase — what worked, what failed, which files mattered | one LLM call per run |
+
+Every one of them is reachable from all three surfaces: the API, the CLI, and the
+UI it belongs to — the palette for search and questions, the ticket form for
+duplicates, the agent editor for coaching, the execution log for curation, the
+routines panel for suggestions, the documents library for compilations, and the
+notes view for links.
 
 From the terminal:
 
 ```bash
+fleex memory engine                      # active engine and feature switches
+fleex memory engine semantic             # opt into the beta
+fleex memory engine --disable ask        # same switches as the Settings panel
 fleex memory search "session expiry"     # ranked excerpts, offline, no LLM
 fleex memory ask "why sessions not JWT?" # cited answer
+fleex memory similar "login times out"   # is this ticket already filed?
+fleex memory compile "the auth module"   # a sourced reference document
+fleex memory coach Builder               # what an agent should have learned
+fleex memory keep <executionId>          # keep a moment of a run
+fleex memory links owner/app             # backlinks and related notes
+fleex memory suggest                     # work you keep repeating by hand
 fleex memory status                      # what the index holds
 fleex memory reindex                     # walk the corpus again (safe to re-run)
+fleex memory bench                       # how well retrieval does on this corpus
 ```
 
 | Storage driver | Semantic engine |
 |---|---|
 | `sqlite` (default) | Supported. Vectors are stored as float32 blobs and scored in process — at single-user scale a full scan is a few milliseconds. |
+| `supabase` | Supported. Vectors live in a `pgvector` column with an HNSW index and are scored by a `match_memory_chunks` function, so a query never ships the corpus over the network. |
 | `pgsql` | Not yet — no index implementation, so the engine reports itself unavailable. |
-| `supabase` | Not yet — needs a pgvector-backed adapter, since scoring client-side would ship the whole corpus per query. |
 
 ## CLI Reference
 

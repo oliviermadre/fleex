@@ -18,12 +18,17 @@ const def: CommandDef = {
   ${DIM('$')} fleex memory coach Builder --sources        ${DIM('# what this agent should have learned')}
   ${DIM('$')} fleex memory keep <executionId> -m "why"    ${DIM('# keep a moment of a run')}
   ${DIM('$')} fleex memory suggest                        ${DIM('# work you keep repeating by hand')}
+  ${DIM('$')} fleex memory similar "login times out"      ${DIM('# is this ticket already filed?')}
+  ${DIM('$')} fleex memory links owner/app                ${DIM('# what links to a note, what resembles it')}
+  ${DIM('$')} fleex memory engine                         ${DIM('# which engine is active, which features are on')}
+  ${DIM('$')} fleex memory engine semantic                ${DIM('# opt into the beta')}
+  ${DIM('$')} fleex memory engine --disable ask curation
   ${DIM('$')} fleex memory status                         ${DIM('# what the index holds')}
   ${DIM('$')} fleex memory reindex                        ${DIM('# walk the corpus again (safe to re-run)')}
   ${DIM('$')} fleex memory bench                          ${DIM('# how well retrieval finds things here')}
 
 ${SECTION('Notes:')}
-  ${DIM('search')}, ${DIM('suggest')} and ${DIM('bench')} are local and free — no network, no model.
+  ${DIM('search')}, ${DIM('similar')}, ${DIM('links')}, ${DIM('suggest')} and ${DIM('bench')} are local and free — no network, no model.
   ${DIM('ask')}, ${DIM('compile')} and ${DIM('coach')} each spend one LLM call.
   All of them need the semantic engine on (Settings › Memory).
 `,
