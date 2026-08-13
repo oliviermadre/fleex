@@ -62,6 +62,12 @@ export type AgentEventType =
    * is unmistakable in the log instead of looking like a normal completion.
    */
   | 'max_turns_reached'
+  /**
+   * The exact context handed to the SDK for this run: both prompts verbatim
+   * plus a manifest describing every injected item and where it came from.
+   * Emitted once, right after `execution_start`.
+   */
+  | 'execution_context'
   | 'error';
 
 /**
@@ -129,6 +135,71 @@ export interface ExecutionStartData {
   readonly workflowRunId?: string | null;
   readonly stepRunId?: string | null;
   readonly context: ExecutionStartContext;
+}
+
+/**
+ * What a single injected piece of the user prompt is. Distinguishes the
+ * scaffolding an agent always gets (`ticket_header`, `task_instruction`) from
+ * retrieved content whose selection is a decision worth auditing
+ * (`ticket_summary`, `memory_snippet`).
+ */
+export type ContextInjectionKind =
+  | 'ticket_header'
+  | 'description'
+  | 'comment'
+  | 'deliverable'
+  | 'epic'
+  | 'ticket_summary'
+  | 'memory_snippet'
+  | 'skill_instructions'
+  | 'skill_arguments'
+  | 'workflow_instructions'
+  | 'routine_brief'
+  | 'routine_repositories'
+  | 'task_instruction';
+
+/**
+ * One entry of the injection manifest: a piece of the user prompt, labelled
+ * with where it came from. `sourceKind` + `sourceId` make the entry openable in
+ * the UI, so a reader can jump from "this deliverable was injected" to its
+ * content; `score` is set when a memory engine ranked the item in.
+ */
+export interface ContextInjectionItem {
+  readonly kind: ContextInjectionKind;
+  /** Prompt section it belongs to, e.g. `Comments`, `Related Ticket Summaries`. */
+  readonly section: string;
+  /** Short human label — a deliverable title, a comment author, an epic name. */
+  readonly label: string;
+  /** Origin sentence, e.g. `Ticket #42 — done 2026-05-12`. */
+  readonly provenance?: string;
+  readonly sourceKind?: 'ticket' | 'comment' | 'deliverable' | 'epic' | 'scratchpad' | 'persona' | 'skill';
+  readonly sourceId?: string;
+  readonly ticketId?: string | null;
+  /** Retrieval score, when the item was selected by a memory engine. */
+  readonly score?: number;
+  readonly charCount: number;
+  /** Image blocks this item resolved to (file attachments in its markdown). */
+  readonly imageCount?: number;
+}
+
+/**
+ * Payload of the `execution_context` agent event — the answer to "what was
+ * actually sent to the model?". `systemPromptRaw` / `userPromptRaw` are the
+ * verbatim strings handed to the SDK (the raw view); `manifest` is the same
+ * content described item by item (the pretty view).
+ */
+export interface ExecutionContextData {
+  readonly executionId: string;
+  readonly systemPromptRaw: string;
+  readonly userPromptRaw: string;
+  readonly manifest: ContextInjectionItem[];
+  /** Image blocks sent alongside the text, across the whole prompt. */
+  readonly imageCount: number;
+  /** Which retrieval strategy picked the injected memory items. */
+  readonly memoryEngine?: 'legacy' | 'semantic';
+  readonly model: string;
+  readonly effectiveMode?: string;
+  readonly maxTurns?: number;
 }
 
 export interface AgentEvent {

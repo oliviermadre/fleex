@@ -231,6 +231,9 @@ export type {
   ExecutionKind,
   ExecutionStartContext,
   ExecutionStartData,
+  ContextInjectionKind,
+  ContextInjectionItem,
+  ExecutionContextData,
 } from './types/agent-event.js';
 
 export { computeInitials } from './types/agent-event.js';
