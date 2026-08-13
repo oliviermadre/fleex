@@ -350,8 +350,11 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
 
     // Never embedded, or embedded by a model that is no longer configured. The
     // second arm is what turns a model change into a background migration.
+    // The model id is double-quoted: inside an `or` list PostgREST reads `,` as a
+    // separator and `.` as the operator delimiter, and a provider id carries both a
+    // path and a colon.
     query = activeModel
-      ? query.or(`embedding.is.null,embedding_model.is.null,embedding_model.neq.${activeModel}`)
+      ? query.or(`embedding.is.null,embedding_model.is.null,embedding_model.neq."${activeModel.replace(/"/g, '\\"')}"`)
       : query.is('embedding', null);
 
     const { data, error } = await query;
