@@ -1128,3 +1128,24 @@ export async function previewRoutineTrigger(trigger: RoutineTrigger, count = 5):
   });
   return res.nextRuns;
 }
+
+// ── Memory kernel ──
+
+export interface MemoryStatus {
+  engine: 'legacy' | 'semantic';
+  /** False when this storage driver has no memory index implementation. */
+  available: boolean;
+  reason?: string;
+  provider: { id: string; dimensions: number; ready: boolean } | null;
+  index: {
+    totalChunks: number;
+    pendingEmbeddings: number;
+    chunksByKind: Record<string, number>;
+    embeddingModels: string[];
+    lastIndexedAt: string | null;
+  } | null;
+}
+
+export async function fetchMemoryStatus(): Promise<MemoryStatus> {
+  return request<MemoryStatus>('/memory/status');
+}

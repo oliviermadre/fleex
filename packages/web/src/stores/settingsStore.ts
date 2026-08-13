@@ -66,6 +66,11 @@ export interface AppSettings {
    * to the workspace the user is actually viewing — see assistantStore.
    */
   workspace: string;
+  /**
+   * Which strategy selects the context injected into agent prompts. Absent means
+   * `legacy`, the ranking that shipped before the semantic engine existed.
+   */
+  memoryEngine?: 'legacy' | 'semantic';
 }
 
 interface SettingsState {
