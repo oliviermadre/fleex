@@ -71,6 +71,18 @@ export interface AppSettings {
    * `legacy`, the ranking that shipped before the semantic engine existed.
    */
   memoryEngine?: 'legacy' | 'semantic';
+  /**
+   * Per-feature switches for everything built on retrieval. Each requires the
+   * semantic engine; absent means enabled, so opting into the engine turns them
+   * all on and a user disables individually.
+   */
+  memoryFeatures?: {
+    paletteSearch?: boolean;
+    ask?: boolean;
+    repoScope?: boolean;
+    duplicateDetection?: boolean;
+    humanFeedbackBoost?: boolean;
+  };
 }
 
 interface SettingsState {

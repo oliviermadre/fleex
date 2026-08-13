@@ -56,14 +56,18 @@ function snippet(overrides: Partial<MemorySnippet> = {}): MemorySnippet {
 }
 
 function makeRetrieve(opts: { enabled?: boolean; results?: MemorySnippet[] } = {}): RetrieveContextUseCase {
+  const enabled = opts.enabled ?? true;
   return {
-    isSemanticEnabled: () => opts.enabled ?? true,
+    isSemanticEnabled: () => enabled,
+    // `ask` gates on its own flag, not just the engine — it is the one memory
+    // feature with a per-call LLM cost.
+    isFeatureEnabled: (feature: string) => enabled && feature === 'ask',
     search: vi.fn(async () => opts.results ?? []),
   } as unknown as RetrieveContextUseCase;
 }
 
 describe('AskMemoryUseCase refuses to answer without evidence', () => {
-  it('reports unavailable when the semantic engine is off', async () => {
+  it('reports unavailable when the ask feature is off', async () => {
     const useCase = new AskMemoryUseCase(makeRetrieve({ enabled: false }), makeLimiter(), silent as never);
     const result = await useCase.execute({ question: 'why sessions?' });
 

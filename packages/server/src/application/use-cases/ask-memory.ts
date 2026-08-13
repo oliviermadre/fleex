@@ -51,7 +51,10 @@ export class AskMemoryUseCase {
     const question = params.question.trim();
     if (!question) return { answer: null, sources: [], reason: 'no_results' };
 
-    if (!this.retrieveContext.isSemanticEnabled()) {
+    // Gated on its own flag, not just the engine: `ask` is the one memory feature
+    // with a per-call LLM cost, so it must be switchable off while retrieval and
+    // search stay on.
+    if (!this.retrieveContext.isFeatureEnabled('ask')) {
       return { answer: null, sources: [], reason: 'unavailable' };
     }
 

@@ -1,5 +1,5 @@
 import type { TicketSummaryRef } from '@fleex/shared';
-import type { ConfigPort } from '../ports/config.port.js';
+import { isMemoryFeatureEnabled, type ConfigPort, type MemoryFeatureFlags } from '../ports/config.port.js';
 import type { EmbeddingProviderPort } from '../ports/embedding-provider.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { MemorySearchFilters, MemoryStorePort } from '../ports/memory-store.port.js';
@@ -8,6 +8,7 @@ import type { MemorySourceKind } from '../../domain/entities/memory-chunk.entity
 import { embeddableText } from '../memory/chunker.js';
 import { rankHits, type ScoredHit } from '../memory/scoring.js';
 import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
+import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 
 /** Default number of memory chunks returned for a prompt injection. */
 const DEFAULT_LIMIT = 8;
@@ -65,6 +66,11 @@ export class RetrieveContextUseCase {
   /** True when the semantic engine is selected AND actually usable. */
   isSemanticEnabled(): boolean {
     return this.config.get().memoryEngine === 'semantic' && !!this.memoryStore && !!this.embeddings;
+  }
+
+  /** True when a memory-dependent feature is both switched on and usable. */
+  isFeatureEnabled(feature: keyof MemoryFeatureFlags): boolean {
+    return this.isSemanticEnabled() && isMemoryFeatureEnabled(this.config.get(), feature);
   }
 
   async execute(params: {
@@ -140,7 +146,10 @@ export class RetrieveContextUseCase {
       }
     }
 
-    const ranked = rankHits([...bySource.values()], { repo: params.repo ?? null }, limit);
+    const ranked = rankHits([...bySource.values()], {
+      repo: params.repo ?? null,
+      boostHumanFeedback: this.isFeatureEnabled('humanFeedbackBoost'),
+    }, limit);
     return this.toSnippets(ranked, { includeSummaries: true });
   }
 
@@ -172,6 +181,13 @@ export class RetrieveContextUseCase {
       : '');
     if (!queryText.trim()) return { engine: 'semantic', summaries: [], snippets: [] };
 
+    // Repo affinity, when enabled, is applied as a *boost* rather than a filter:
+    // the conventions and pitfalls of the repo an agent is working in should
+    // outrank equally similar material from elsewhere, but excluding everything
+    // else would hide the cross-repo decision that explains why the code is the
+    // way it is. An explicit `repo` from the caller still filters.
+    const anchorRepo = this.isFeatureEnabled('repoScope') ? primaryRepo(anchor) : null;
+
     const filters: MemorySearchFilters = {
       kinds: params.kinds,
       repo: params.repo ?? null,
@@ -186,7 +202,8 @@ export class RetrieveContextUseCase {
     const ranked = rankHits(candidates, {
       tags: anchor?.tags ?? [],
       boardId: anchor?.boardId ?? null,
-      repo: params.repo ?? null,
+      repo: params.repo ?? anchorRepo,
+      boostHumanFeedback: this.isFeatureEnabled('humanFeedbackBoost'),
     }, limit);
 
     return {
@@ -250,4 +267,15 @@ export class RetrieveContextUseCase {
     }
     return out;
   }
+}
+
+/**
+ * First linked repository of a ticket — its repo affinity for scoring.
+ *
+ * Guards against a ticket with no `links` array. Not hypothetical bookkeeping: a
+ * throw here is swallowed by the caller's fallback, which would silently drop the
+ * whole run back to the legacy ranking with nothing to show why.
+ */
+function primaryRepo(ticket: TicketEntity | null): string | null {
+  return ticket?.links?.find((l) => l.type === 'repository')?.ref ?? null;
 }

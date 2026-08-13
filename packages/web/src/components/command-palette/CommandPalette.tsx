@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useCommandItems } from './useCommandItems';
+import { useMemorySearchItems } from './useMemorySearchItems';
 import type { CommandItem } from './commandPaletteTypes';
 
 export function CommandPalette() {
@@ -14,7 +15,11 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  const items = useCommandItems(query);
+  const commandItems = useCommandItems(query);
+  // Appended, never interleaved: a command must keep its place at the top of the
+  // list, and memory only fills the gap when nothing local matched.
+  const memoryItems = useMemorySearchItems(query, commandItems.length > 0);
+  const items = memoryItems.length > 0 ? [...commandItems, ...memoryItems] : commandItems;
 
   // Reset state on open
   useEffect(() => {

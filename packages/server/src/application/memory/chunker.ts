@@ -177,6 +177,34 @@ export interface CommentChunkInput {
 }
 
 /**
+ * Tag marking a thread where a human corrected an agent.
+ *
+ * The highest-signal memory in the instance is the moment someone said "no, not
+ * like that": it records a decision the agents would otherwise keep re-deriving
+ * wrongly. Carried as a tag rather than a separate source kind so it composes
+ * with the existing tag-overlap scoring and stays visible in the manifest.
+ */
+export const HUMAN_FEEDBACK_TAG = 'human-feedback';
+
+/**
+ * Whether a thread contains a human replying after an agent spoke.
+ *
+ * Deliberately structural rather than semantic: judging whether a reply is a
+ * *correction* would need a model call per thread, and the ordering alone —
+ * agent produced something, human answered — already isolates the exchanges
+ * worth ranking up. False positives are cheap here (a "thanks" ranks slightly
+ * high); a missed correction is not.
+ */
+export function hasHumanFeedback(comments: CommentChunkInput[]): boolean {
+  let sawAgent = false;
+  for (const comment of comments) {
+    if (comment.authorType === 'agent') sawAgent = true;
+    else if (sawAgent && comment.authorType === 'user') return true;
+  }
+  return false;
+}
+
+/**
  * Window a ticket's comment thread.
  *
  * Comments are windowed rather than embedded one by one because a single comment
@@ -217,11 +245,15 @@ export function chunkCommentThread(
   if (buffer.length > 0) windows.push({ text: buffer.join('\n\n'), last: lastDate });
 
   const label = ticket.displayId ? `Ticket #${ticket.displayId}` : 'Ticket';
+  const tags = [...(ticket.tags ?? [])];
+  if (hasHumanFeedback(comments) && !tags.includes(HUMAN_FEEDBACK_TAG)) {
+    tags.push(HUMAN_FEEDBACK_TAG);
+  }
   const metadata: MemoryChunkMetadata = {
     ticketId: ticket.id,
     boardId: ticket.boardId ?? null,
     repo: ticket.repo ?? null,
-    tags: ticket.tags ?? [],
+    tags,
   };
 
   return windows.map((w, chunkIndex) => ({

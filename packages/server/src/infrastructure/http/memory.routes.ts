@@ -100,6 +100,35 @@ export function memoryRoutes(container: Container) {
       },
     );
 
+    app.get<{ Querystring: { title?: string; limit?: string } }>(
+      '/api/memory/similar-tickets',
+      async (request) => {
+        const retrieve = container.retrieveContext;
+        const title = request.query.title?.trim();
+        // Answers with an empty list rather than an error when the feature is off:
+        // this is called speculatively while someone types, and a 4xx per
+        // keystroke would be noise in the console for a feature they disabled.
+        if (!title || !retrieve.isFeatureEnabled('duplicateDetection')) {
+          return { candidates: [] };
+        }
+
+        const limit = clampLimit(request.query.limit, 3, 10);
+        // Ticket-shaped sources only. A deliverable or a note that merely mentions
+        // the same subject is not a duplicate, and offering it as one would train
+        // the reader to ignore the warning.
+        const snippets = await retrieve.search({
+          query: title,
+          limit,
+          kinds: ['ticket', 'ticket_summary'],
+        });
+
+        const candidates = snippets
+          .filter((s) => s.ticketId)
+          .map((s) => ({ ticketId: s.ticketId!, title: s.title, score: s.score, excerpt: s.content.slice(0, 200) }));
+        return { candidates };
+      },
+    );
+
     app.get('/api/memory/status', async () => {
       const engine = container.config.get().memoryEngine ?? 'legacy';
       const store = container.memoryStore;

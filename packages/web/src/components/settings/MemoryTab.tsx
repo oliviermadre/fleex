@@ -7,6 +7,44 @@ import { cn } from '../../lib/cn';
 
 type MemoryEngine = 'legacy' | 'semantic';
 
+type MemoryFeatureKey = 'paletteSearch' | 'ask' | 'repoScope' | 'duplicateDetection' | 'humanFeedbackBoost';
+
+/**
+ * The features that consume the index.
+ *
+ * `cost` is the honest part: everything here is local and free except `ask`,
+ * which spends an LLM call per question. Saying so next to the switch is what
+ * lets someone decide, rather than discovering it on a bill.
+ */
+const FEATURES: Array<{ key: MemoryFeatureKey; label: string; description: string; cost?: string }> = [
+  {
+    key: 'paletteSearch',
+    label: 'Search in the command palette',
+    description: 'Typing something that matches no command searches memory instead.',
+  },
+  {
+    key: 'ask',
+    label: 'Answer questions from memory',
+    description: 'Enables `fleex memory ask` and the matching assistant tool: a cited answer drawn from past work.',
+    cost: 'one LLM call per question',
+  },
+  {
+    key: 'repoScope',
+    label: 'Prefer the current repository',
+    description: 'Ranks notes and decisions from the repo a ticket is attached to above equally similar material from elsewhere.',
+  },
+  {
+    key: 'duplicateDetection',
+    label: 'Warn about similar tickets',
+    description: 'While typing a new ticket title, surfaces existing tickets that look like the same thing.',
+  },
+  {
+    key: 'humanFeedbackBoost',
+    label: 'Prioritise your corrections',
+    description: 'Discussions where you corrected an agent rank above ordinary ones, so the same mistake is less likely to come back.',
+  },
+];
+
 const ENGINES: Array<{ key: MemoryEngine; label: string; description: string }> = [
   {
     key: 'legacy',
@@ -74,6 +112,18 @@ export function MemoryTab() {
     await reindexMemory();
     await loadStatus();
   }, [loadStatus]);
+
+  const handleToggleFeature = useCallback(async (key: MemoryFeatureKey, next: boolean) => {
+    setSaving(true);
+    try {
+      await saveSettings({
+        ...settings,
+        memoryFeatures: { ...settings.memoryFeatures, [key]: next },
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [settings, saveSettings]);
 
   // A reindex embeds the whole corpus, so poll while it runs rather than leaving
   // the counters frozen at whatever they were when the page loaded.
@@ -153,6 +203,61 @@ export function MemoryTab() {
             </button>
           );
         })}
+      </div>
+
+      {/* Nested under the engine because none of these mean anything without it:
+          shown as read-only rather than hidden when the engine is off, so the
+          settings a switch back would restore stay visible. */}
+      <div className="mt-6 border-t border-[var(--theme-border)] pt-4">
+        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
+          What uses memory
+        </h3>
+        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+          {engine === 'semantic'
+            ? 'Turn off anything you would rather not have drawing on the index.'
+            : 'These become active when the semantic engine is selected.'}
+        </p>
+
+        <div className="mt-3 space-y-1">
+          {FEATURES.map((feature) => {
+            // Absent means enabled: opting into the engine is already the
+            // deliberate choice, so a user disables rather than opting in twice.
+            const on = settings.memoryFeatures?.[feature.key] !== false;
+            const disabled = saving || engine !== 'semantic';
+            return (
+              <label
+                key={feature.key}
+                className={cn(
+                  'flex items-start gap-2.5 rounded px-2 py-2 transition-colors',
+                  disabled ? 'opacity-50' : 'cursor-pointer hover:bg-[var(--theme-bg-hover)]',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={on && engine === 'semantic'}
+                  disabled={disabled}
+                  onChange={(e) => void handleToggleFeature(feature.key, e.target.checked)}
+                  className="mt-0.5 flex-shrink-0 accent-[var(--theme-accent)]"
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-medium text-[var(--theme-text-primary)]">
+                      {feature.label}
+                    </span>
+                    {feature.cost && (
+                      <span className={cn('rounded px-1.5 py-0.5 text-[10px]', tint('orange'))}>
+                        {feature.cost}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-[11px] text-[var(--theme-text-muted)]">
+                    {feature.description}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-6 border-t border-[var(--theme-border)] pt-4">

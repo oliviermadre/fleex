@@ -29,12 +29,32 @@ const RECENCY_HALFLIFE_DAYS = 45;
  */
 export const MAX_CHUNKS_PER_SOURCE = 2;
 
+/**
+ * Additive bonus for a chunk carrying human corrections.
+ *
+ * Additive rather than a weight, because it is not a similarity signal: a thread
+ * where someone corrected an agent is more *worth injecting* at equal relevance,
+ * so it lifts an already-relevant hit rather than dragging in an irrelevant one.
+ * Sized to reorder near-ties, not to dominate — a correction about another
+ * subject must still lose to an on-topic hit.
+ */
+export const HUMAN_FEEDBACK_BONUS = 0.08;
+
+/** Tag that marks a chunk as carrying human corrections. */
+const HUMAN_FEEDBACK_TAG = 'human-feedback';
+
 export interface ScoringAnchor {
   tags?: string[];
   boardId?: string | null;
   repo?: string | null;
   /** Reference point for recency; defaults to now. */
   now?: Date;
+  /**
+   * Rank human corrections above ordinary discussion. Off unless the feature is
+   * enabled, so the ranking stays exactly as it was for anyone who has not asked
+   * for it.
+   */
+  boostHumanFeedback?: boolean;
 }
 
 export interface ScoredHit extends MemorySearchHit {
@@ -82,13 +102,21 @@ export function hybridScore(hit: MemorySearchHit, anchor: ScoringAnchor): number
   const sameBoard = anchor.boardId && meta.boardId && anchor.boardId === meta.boardId ? 1 : 0;
   const recency = recencyScore(hit.chunk.sourceUpdatedAt, now);
 
-  return (
+  const weighted = (
     SCORING_WEIGHTS.similarity * similarity
     + SCORING_WEIGHTS.tagOverlap * tags
     + SCORING_WEIGHTS.sameRepo * sameRepo
     + SCORING_WEIGHTS.sameBoard * sameBoard
     + SCORING_WEIGHTS.recency * recency
   );
+
+  const bonus = anchor.boostHumanFeedback && meta.tags?.includes(HUMAN_FEEDBACK_TAG)
+    ? HUMAN_FEEDBACK_BONUS
+    : 0;
+
+  // Clamped so the score stays a comparable [0, 1] value whether or not the
+  // bonus applied.
+  return Math.min(1, weighted + bonus);
 }
 
 /**

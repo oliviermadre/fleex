@@ -106,6 +106,27 @@ bun add @huggingface/transformers
 Without it, content is still indexed and findable by keyword, and retrieval falls
 back to the default ranking rather than degrading a run's context.
 
+Once the engine is on, the index stays current by itself — a listener re-indexes
+whatever a domain event touched — and everything built on top of it is
+individually switchable in the same panel:
+
+| Feature | What it does | Cost |
+|---|---|---|
+| Search in the command palette | `⌘K` text matching no command searches memory instead | local |
+| Answer questions from memory | `fleex memory ask` and the matching assistant tool: a cited answer drawn from past work | one LLM call per question |
+| Prefer the current repository | Ranks notes and decisions from a ticket's repo above equally similar material elsewhere | local |
+| Warn about similar tickets | Surfaces existing tickets while a new title is typed | local |
+| Prioritise your corrections | Discussions where you corrected an agent rank above ordinary ones | local |
+
+From the terminal:
+
+```bash
+fleex memory search "session expiry"     # ranked excerpts, offline, no LLM
+fleex memory ask "why sessions not JWT?" # cited answer
+fleex memory status                      # what the index holds
+fleex memory reindex                     # walk the corpus again (safe to re-run)
+```
+
 | Storage driver | Semantic engine |
 |---|---|
 | `sqlite` (default) | Supported. Vectors are stored as float32 blobs and scored in process — at single-user scale a full scan is a few milliseconds. |

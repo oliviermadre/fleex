@@ -29,11 +29,13 @@ function makeConfig(overrides: Partial<AppConfig> = {}): ConfigPort {
   };
 }
 
-function makeTicketStore(ticket: Partial<{ id: string; title: string; description: string; tags: string[]; boardId: string }> = {}): TicketStorePort {
+function makeTicketStore(
+  ticket: Partial<{ id: string; title: string; description: string; tags: string[]; boardId: string; links: Array<{ type: string; ref: string }> }> = {},
+): TicketStorePort {
   return {
     getTicketById: async () => ({
       id: 't1', title: 'Fix login session expiry', description: 'sessions expire too early',
-      tags: ['auth'], boardId: 'b1', ...ticket,
+      tags: ['auth'], boardId: 'b1', links: [{ type: 'repository', ref: 'org/app' }], ...ticket,
     }),
   } as unknown as TicketStorePort;
 }
@@ -208,7 +210,7 @@ describe('semantic engine', () => {
   it('returns nothing when neither a query nor ticket text is available', async () => {
     const provider = new FakeEmbeddingProvider();
     await provider.init();
-    const emptyTicket = { getTicketById: async () => ({ id: 't1', title: '', description: '', tags: [], boardId: null }) } as unknown as TicketStorePort;
+    const emptyTicket = { getTicketById: async () => ({ id: 't1', title: '', description: '', tags: [], boardId: null, links: [] }) } as unknown as TicketStorePort;
     const useCase = new RetrieveContextUseCase(
       makeConfig({ memoryEngine: 'semantic' }), makeSummaries([]), emptyTicket, silent as never,
       makeMemoryStore([]), provider,

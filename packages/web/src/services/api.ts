@@ -1156,6 +1156,38 @@ export interface MemoryStatus {
   reindexing: boolean;
 }
 
+/** One retrieved excerpt, as /api/memory/search returns it. */
+export interface MemorySnippetResult {
+  sourceKind: string;
+  sourceId: string;
+  title: string;
+  content: string;
+  score: number;
+  ticketId?: string | null;
+  repo?: string | null;
+  updatedAt?: string | null;
+}
+
+export async function fetchMemorySearch(query: string, limit = 10): Promise<MemorySnippetResult[]> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const res = await request<{ query: string; results: MemorySnippetResult[] }>(`/memory/search?${params.toString()}`);
+  return res.results;
+}
+
+/** An existing ticket that looks like the one being typed. */
+export interface SimilarTicketCandidate {
+  ticketId: string;
+  title: string;
+  score: number;
+  excerpt: string;
+}
+
+export async function fetchSimilarTickets(title: string, limit = 3): Promise<SimilarTicketCandidate[]> {
+  const params = new URLSearchParams({ title, limit: String(limit) });
+  const res = await request<{ candidates: SimilarTicketCandidate[] }>(`/memory/similar-tickets?${params.toString()}`);
+  return res.candidates;
+}
+
 export async function fetchMemoryStatus(): Promise<MemoryStatus> {
   return request<MemoryStatus>('/memory/status');
 }
