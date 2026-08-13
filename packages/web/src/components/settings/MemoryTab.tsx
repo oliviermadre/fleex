@@ -242,16 +242,30 @@ export function MemoryTab() {
         </div>
       )}
 
+      {/* The encoder ships as an optional dependency, so a normal install has it.
+          Reaching this message means the install skipped it — an unsupported
+          platform for the ONNX runtime, or `--omit=optional`. */}
       {status?.available && status.provider && !status.provider.installed && (
         <div className={cn('mt-3 rounded px-3 py-2 text-xs', tint('yellow'))}>
           <p>
-            Local embeddings need one optional package, which is not installed. Content still gets
-            indexed and stays findable by keyword, but retrieval by meaning stays off until it is
-            present — the semantic engine falls back to the current ranking meanwhile.
+            {status.provider.runtime === 'ollama'
+              ? 'No Ollama daemon is answering, so embeddings cannot be computed. Content still gets '
+                + 'indexed and stays findable by keyword, and retrieval by meaning resumes as soon as '
+                + 'the daemon is up — no restart needed.'
+              : 'The local encoder is not available in this install. Content still gets indexed and '
+                + 'stays findable by keyword, but retrieval by meaning stays off until it is present — '
+                + 'the semantic engine falls back to the current ranking meanwhile.'}
           </p>
           <p className="mt-1.5 font-mono text-[11px] text-[var(--theme-text-primary)]">
-            bun add {status.provider.packageName}
+            {status.provider.runtime === 'ollama'
+              ? `ollama serve  ·  ollama pull ${status.provider.model}`
+              : 'fleex self-update'}
           </p>
+          {status.provider.runtime !== 'ollama' && (
+            <p className="mt-1 text-[11px] text-[var(--theme-text-muted)]">
+              Reinstalling dependencies is enough; it is picked up without restarting Fleex.
+            </p>
+          )}
         </div>
       )}
 

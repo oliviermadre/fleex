@@ -100,15 +100,13 @@ the items only it found highlighted. That tab also shows the prompt exactly as i
 was sent, in both a browsable outline and raw form.
 
 Embeddings run **locally** — no API, and no network once the model is cached in
-`~/.fleex/models/`. The encoder ships as one optional package, so an instance
-that never enables the beta does not carry an ONNX runtime:
+`~/.fleex/models/`. The encoder (`@huggingface/transformers`) is an optional
+dependency, so a normal install provides it and there is nothing to add by hand;
+an install that skipped it — an unsupported platform for the ONNX runtime, or
+`--omit=optional` — still indexes everything and keeps it findable by keyword,
+with retrieval falling back to the default ranking rather than degrading a run's
+context. It is picked up as soon as it appears, without restarting Fleex.
 
-```bash
-bun add @huggingface/transformers
-```
-
-Without the package, content is still indexed and findable by keyword, and
-retrieval falls back to the default ranking rather than degrading a run's context.
 Anything indexed while the model was still downloading is embedded by a background
 sweep once it is ready — nothing has to be re-saved to become searchable.
 
