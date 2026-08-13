@@ -27,6 +27,18 @@ export interface AppConfig {
    * default preset (see DEFAULT_DELIVERABLE_TYPES in @fleex/shared).
    */
   deliverableTypes?: DeliverableTypeDef[];
+  /**
+   * Which strategy selects the context injected into agent prompts.
+   *
+   * `legacy` (the default, and what an unset value means) is the tag-overlap and
+   * recency ranking over ticket summaries. `semantic` is the opt-in beta that
+   * retrieves across the whole indexed corpus. Unset must keep behaving exactly
+   * as before this setting existed — an instance that never opts in pays no
+   * indexing cost and sees no change in what its agents receive.
+   */
+  memoryEngine?: 'legacy' | 'semantic';
+  /** Character budget for injected memory snippets. Unset → engine default. */
+  memoryInjectionCharBudget?: number;
 }
 
 export interface ConfigPort {

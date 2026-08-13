@@ -156,6 +156,7 @@ export type {
   TicketSummaryRef,
   TicketContext,
   TicketContextEpic,
+  MemorySnippetRef,
   TicketReadCursors,
   TicketUnreadCounts,
   AgentActivityState,

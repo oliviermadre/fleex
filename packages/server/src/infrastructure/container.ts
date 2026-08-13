@@ -88,6 +88,8 @@ import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
 import { CancelWorkflowRunUseCase } from '../application/use-cases/cancel-workflow-run.js';
 import { RecoverOrphanedWorkflowStepsUseCase } from '../application/use-cases/recover-orphaned-workflow-steps.js';
 import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
+import { RetrieveContextUseCase } from '../application/use-cases/retrieve-context.js';
+import { TransformersEmbeddingAdapter } from './adapters/embeddings/transformers-embedding.adapter.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -147,6 +149,7 @@ export async function createContainer() {
     workflowRunStore,
     stepRunStore,
     routineStore,
+    memoryStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
@@ -242,7 +245,15 @@ export async function createContainer() {
   const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore_, logger);
   const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore_, config, logger);
   const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
-  const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore);
+  // The embedding provider is constructed unconditionally but loads its model
+  // lazily, so an instance that never opts into the semantic engine pays nothing.
+  const embeddingProvider = memoryStore ? new TransformersEmbeddingAdapter(logger) : undefined;
+  const retrieveContext = new RetrieveContextUseCase(
+    config, getRelevantSummaries, ticketStore_, logger, memoryStore ?? undefined, embeddingProvider,
+  );
+  const getTicketContext = new GetTicketContextUseCase(
+    ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore, retrieveContext,
+  );
 
   // Agent personas use cases
   const createPersona = new CreatePersonaUseCase(personaStore_, logger);
@@ -628,6 +639,9 @@ export async function createContainer() {
     wakeWaitingAgents,
     generateTicketSummary,
     getRelevantSummaries,
+    retrieveContext,
+    memoryStore,
+    embeddingProvider,
     autoReviewWorkflow,
     panelStore,
     createPanel,

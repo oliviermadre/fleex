@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject, ContextInjectionItem } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject, ContextInjectionItem, MemorySnippetRef } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel, parseRepoRef } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
@@ -49,6 +49,41 @@ import type { DeliverableTypeDef } from '@fleex/shared';
 interface ComposedPrompt {
   blocks: PromptContentBlock[];
   manifest: ContextInjectionItem[];
+}
+
+/** Human-readable origin of a retrieved memory snippet, for the Context tab. */
+function memorySnippetProvenance(snippet: MemorySnippetRef): string {
+  const parts: string[] = [snippet.sourceKind.replace(/_/g, ' ')];
+  if (snippet.repo) parts.push(snippet.repo);
+  if (snippet.updatedAt) parts.push(snippet.updatedAt.slice(0, 10));
+  return parts.join(' — ');
+}
+
+/**
+ * Map a memory source kind onto the entity the UI can open. Kinds with no
+ * openable counterpart (an execution trace, a Q&A pair) return undefined, which
+ * renders the card inert rather than as a dead link.
+ */
+function memorySnippetSourceKind(sourceKind: string): ContextInjectionItem['sourceKind'] {
+  switch (sourceKind) {
+    case 'ticket':
+    case 'ticket_summary':
+    case 'comment_thread':
+      return 'ticket';
+    case 'deliverable':
+    case 'cli_session_summary':
+      return 'deliverable';
+    case 'scratchpad':
+      return 'scratchpad';
+    case 'persona':
+      return 'persona';
+    case 'skill':
+      return 'skill';
+    case 'epic':
+      return 'epic';
+    default:
+      return undefined;
+  }
 }
 
 interface ActiveExecution {
@@ -857,6 +892,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         model: resolved.model,
         effectiveMode,
         maxTurns: runMaxTurns,
+        memoryEngine: context.memoryEngine,
       }));
 
       // 9. Setup execution timeout
@@ -2602,6 +2638,28 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             ticketId: s.ticketId,
           },
           `---\n${s.content}\n`,
+        );
+      }
+    }
+
+    // Retrieved memory beyond summaries. Only the semantic engine produces this,
+    // so the section is absent by default and appears the moment it is opted into.
+    if (context.memorySnippets && context.memorySnippets.length > 0) {
+      composer.scaffold('\n## Relevant Memory\n');
+      composer.scaffold('Retrieved from past work across this instance. Each item states its source.\n');
+      for (const snippet of context.memorySnippets) {
+        composer.track(
+          {
+            kind: 'memory_snippet',
+            section: 'Relevant Memory',
+            label: snippet.title,
+            provenance: memorySnippetProvenance(snippet),
+            sourceKind: memorySnippetSourceKind(snippet.sourceKind),
+            sourceId: snippet.sourceId,
+            ticketId: snippet.ticketId ?? null,
+            score: snippet.score,
+          },
+          `---\n### ${snippet.title}\n${snippet.content}\n`,
         );
       }
     }
