@@ -89,6 +89,8 @@ import { CancelWorkflowRunUseCase } from '../application/use-cases/cancel-workfl
 import { RecoverOrphanedWorkflowStepsUseCase } from '../application/use-cases/recover-orphaned-workflow-steps.js';
 import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
 import { RetrieveContextUseCase } from '../application/use-cases/retrieve-context.js';
+import { MemoryKernel } from '../application/memory/memory-kernel.js';
+import { BackfillMemoryUseCase } from '../application/use-cases/backfill-memory.js';
 import { TransformersEmbeddingAdapter } from './adapters/embeddings/transformers-embedding.adapter.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
@@ -254,6 +256,14 @@ export async function createContainer() {
   const getTicketContext = new GetTicketContextUseCase(
     ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore, retrieveContext,
   );
+  const memoryKernel = memoryStore && embeddingProvider
+    ? new MemoryKernel(memoryStore, embeddingProvider, logger)
+    : null;
+  const backfillMemory = memoryKernel
+    ? new BackfillMemoryUseCase(
+        memoryKernel, ticketStore_, commentStore, deliverableStore, personaStore_, skillStore, logger,
+      )
+    : null;
 
   // Agent personas use cases
   const createPersona = new CreatePersonaUseCase(personaStore_, logger);
@@ -642,6 +652,8 @@ export async function createContainer() {
     retrieveContext,
     memoryStore,
     embeddingProvider,
+    memoryKernel,
+    backfillMemory,
     autoReviewWorkflow,
     panelStore,
     createPanel,

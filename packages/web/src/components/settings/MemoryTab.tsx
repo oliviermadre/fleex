@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { fetchMemoryStatus, type MemoryStatus } from '../../services/api';
+import { fetchMemoryStatus, reindexMemory, type MemoryStatus } from '../../services/api';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
@@ -70,6 +70,19 @@ export function MemoryTab() {
     }
   }, [engine, settings, saveSettings, loadStatus]);
 
+  const handleReindex = useCallback(async () => {
+    await reindexMemory();
+    await loadStatus();
+  }, [loadStatus]);
+
+  // A reindex embeds the whole corpus, so poll while it runs rather than leaving
+  // the counters frozen at whatever they were when the page loaded.
+  useEffect(() => {
+    if (!status?.reindexing) return;
+    const timer = setInterval(() => void loadStatus(), 3000);
+    return () => clearInterval(timer);
+  }, [status?.reindexing, loadStatus]);
+
   const unavailable = status?.available === false;
 
   return (
@@ -127,7 +140,21 @@ export function MemoryTab() {
           <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Index</h3>
           <div className="flex-1" />
           <Button variant="secondary" onClick={() => void loadStatus()}>Refresh</Button>
+          {status?.available && (
+            <Button
+              variant="secondary"
+              disabled={status.reindexing}
+              onClick={() => void handleReindex()}
+            >
+              {status.reindexing ? 'Reindexing…' : 'Reindex now'}
+            </Button>
+          )}
         </div>
+
+        <p className="mt-2 text-xs text-[var(--theme-text-muted)]">
+          Reindexing walks every ticket, comment thread, deliverable, agent memory and skill.
+          It is safe to re-run and resumes where it left off — unchanged content is not re-embedded.
+        </p>
 
         {loadFailed ? (
           <p className="mt-2 text-xs text-[var(--theme-text-muted)]">

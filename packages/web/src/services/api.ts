@@ -1144,8 +1144,18 @@ export interface MemoryStatus {
     embeddingModels: string[];
     lastIndexedAt: string | null;
   } | null;
+  /** True while a backfill is walking the corpus. */
+  reindexing: boolean;
 }
 
 export async function fetchMemoryStatus(): Promise<MemoryStatus> {
   return request<MemoryStatus>('/memory/status');
+}
+
+/**
+ * Kick off a full reindex. Returns as soon as the walk has started — it outlives
+ * any request timeout, so progress is read from `fetchMemoryStatus` instead.
+ */
+export async function reindexMemory(): Promise<void> {
+  await request<{ started: boolean }>('/memory/reindex', { method: 'POST' });
 }
