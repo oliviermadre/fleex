@@ -83,6 +83,35 @@ fleex start
 Or set it once per workspace in the `env` block of `~/.fleex/workspaces.json` (see
 [Workspaces](#workspaces) below), which keeps secrets in a single `0600` file.
 
+## Semantic memory (beta)
+
+By default, the context injected into agent prompts is chosen by ranking past
+ticket summaries on shared tags, board and recency. The semantic engine instead
+retrieves by meaning across everything indexed — summaries, comment threads,
+routine outputs, scratchpads and agent memory.
+
+It is opt-in, under **Settings › Memory**, which also shows what the index holds
+and offers a reindex. Switching is reversible and leaves the index in place, so
+both engines can be compared on the same work through the **Context** tab of any
+execution, which shows the prompt exactly as it was sent.
+
+Embeddings run **locally** — no API, and no network once the model is cached in
+`~/.fleex/models/`. The encoder ships as one optional package, so an instance
+that never enables the beta does not carry an ONNX runtime:
+
+```bash
+bun add @huggingface/transformers
+```
+
+Without it, content is still indexed and findable by keyword, and retrieval falls
+back to the default ranking rather than degrading a run's context.
+
+| Storage driver | Semantic engine |
+|---|---|
+| `sqlite` (default) | Supported. Vectors are stored as float32 blobs and scored in process — at single-user scale a full scan is a few milliseconds. |
+| `pgsql` | Not yet — no index implementation, so the engine reports itself unavailable. |
+| `supabase` | Not yet — needs a pgvector-backed adapter, since scoring client-side would ship the whole corpus per query. |
+
 ## CLI Reference
 
 | Command | Description |

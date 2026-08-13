@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
+import { TransformersEmbeddingAdapter } from '../adapters/embeddings/transformers-embedding.adapter.js';
 
 /**
  * Status of the memory kernel, for the Settings panel.
@@ -65,7 +66,15 @@ export function memoryRoutes(container: Container) {
         engine,
         available: true,
         provider: provider
-          ? { id: provider.id, dimensions: provider.dimensions, ready: provider.isReady() }
+          ? {
+              id: provider.id,
+              dimensions: provider.dimensions,
+              ready: provider.isReady(),
+              // Separating "installed" from "ready" is what lets the UI tell the
+              // user to install a package versus to wait for a download.
+              installed: await provider.isInstalled(),
+              packageName: TransformersEmbeddingAdapter.PACKAGE_NAME,
+            }
           : null,
         index: stats,
         reindexing: running !== null,

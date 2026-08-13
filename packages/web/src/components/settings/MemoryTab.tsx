@@ -99,6 +99,26 @@ export function MemoryTab() {
         </div>
       )}
 
+      {status?.available && status.provider && !status.provider.installed && (
+        <div className={cn('mt-3 rounded px-3 py-2 text-xs', tint('yellow'))}>
+          <p>
+            Local embeddings need one optional package, which is not installed. Content still gets
+            indexed and stays findable by keyword, but retrieval by meaning stays off until it is
+            present — the semantic engine falls back to the current ranking meanwhile.
+          </p>
+          <p className="mt-1.5 font-mono text-[11px] text-[var(--theme-text-primary)]">
+            bun add {status.provider.packageName}
+          </p>
+        </div>
+      )}
+
+      {status?.available && status.provider?.installed && !status.provider.ready && (
+        <div className={cn('mt-3 rounded px-3 py-2 text-xs', tint('blue'))}>
+          The embedding model has not been loaded yet. It is fetched once, on the first indexing run,
+          and cached locally — everything after that works offline.
+        </div>
+      )}
+
       <div className="mt-4 space-y-2">
         {ENGINES.map((option) => {
           const selected = engine === option.key;

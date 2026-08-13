@@ -1136,7 +1136,15 @@ export interface MemoryStatus {
   /** False when this storage driver has no memory index implementation. */
   available: boolean;
   reason?: string;
-  provider: { id: string; dimensions: number; ready: boolean } | null;
+  provider: {
+    id: string;
+    dimensions: number;
+    /** Model loaded and usable now. */
+    ready: boolean;
+    /** Optional embedding package present. False means an install is needed. */
+    installed: boolean;
+    packageName: string;
+  } | null;
   index: {
     totalChunks: number;
     pendingEmbeddings: number;

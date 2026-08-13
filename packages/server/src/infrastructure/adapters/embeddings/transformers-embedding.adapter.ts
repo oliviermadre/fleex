@@ -81,6 +81,25 @@ export class TransformersEmbeddingAdapter implements EmbeddingProviderPort {
     return this.pipeline !== null;
   }
 
+  /**
+   * Whether the optional package is installed, without loading a model.
+   *
+   * Distinct from `isReady()` on purpose: "the package is missing" and "the model
+   * has not been fetched yet" need different actions from the user — one is an
+   * install, the other is a wait — and a single boolean cannot say which. Cached
+   * because the answer only changes when dependencies do.
+   */
+  async isInstalled(): Promise<boolean> {
+    if (this.pipeline) return true;
+    this.installed ??= this.importTransformers().then(() => true, () => false);
+    return this.installed;
+  }
+
+  private installed: Promise<boolean> | null = null;
+
+  /** The package that has to be installed for local embeddings to work. */
+  static readonly PACKAGE_NAME = '@huggingface/transformers';
+
   /** Idempotent and concurrency-safe: parallel callers share one model load. */
   async init(): Promise<void> {
     if (this.pipeline) return;
