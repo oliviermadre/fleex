@@ -33,6 +33,7 @@ import {
   findWorkspaceServerPort,
   instanceBranch,
 } from './instance-discovery.ts';
+import { scheduleRemember, cancelRemember } from './remember.ts';
 
 interface PageRef { url?: string; title?: string; content: string }
 interface WsData { id: string }
@@ -252,6 +253,10 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
     store.setStatus(sessionId, 'idle');
     store.save(sessionId);
     broadcastSessions();
+    // Arm the idle timer: when this conversation goes quiet, offer it to the
+    // workspace's memory. Resets on each turn, so an active conversation is
+    // distilled once at the end rather than after every exchange.
+    scheduleRemember(session, (msg, meta) => console.log(msg, meta ?? ''));
   }
 }
 
@@ -334,6 +339,7 @@ Bun.serve<WsData>({
         case 'delete_session': {
           const id = asString(msg.id);
           if (id) {
+            cancelRemember(id);
             store.delete(id);
             pendingPages.delete(id);
             broadcastSessions();

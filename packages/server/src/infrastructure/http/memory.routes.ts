@@ -274,6 +274,18 @@ export function memoryRoutes(container: Container) {
       },
     );
 
+    app.get<{ Querystring: { cases?: string; k?: string } }>(
+      '/api/memory/bench',
+      async (request) => {
+        // Not flag-gated: measuring retrieval is how someone decides whether to
+        // trust it, so it must be available precisely when they are unsure.
+        return container.benchMemory.execute({
+          cases: clampLimit(request.query.cases, 30, 200),
+          k: clampLimit(request.query.k, 5, 50),
+        });
+      },
+    );
+
     app.get('/api/memory/status', async () => {
       const engine = container.config.get().memoryEngine ?? 'legacy';
       const store = container.memoryStore;

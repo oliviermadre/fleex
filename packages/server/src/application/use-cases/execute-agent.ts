@@ -51,6 +51,23 @@ interface ComposedPrompt {
   manifest: ContextInjectionItem[];
 }
 
+/**
+ * What a finished run offers the memory kernel.
+ *
+ * The agent's own final text plus the diff it left behind: together they say what
+ * was attempted and what actually changed, which is the pair a later run needs and
+ * neither half provides alone.
+ */
+export interface ExecutionTraceInput {
+  executionId: string;
+  ticketId: string;
+  personaName: string;
+  /** The run's final text. */
+  resultText: string;
+  /** Where the work happened, for the diff. */
+  worktreePath?: string | null;
+}
+
 /** Human-readable origin of a retrieved memory snippet, for the Context tab. */
 function memorySnippetProvenance(snippet: MemorySnippetRef): string {
   const parts: string[] = [snippet.sourceKind.replace(/_/g, ' ')];
@@ -190,6 +207,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
   /** Set by WS plugin to broadcast execution completion */
   public onExecutionComplete: ((personaId: string, status: 'completed' | 'failed', mentionId: string) => void) | null = null;
+
+  /**
+   * Called after a run finishes successfully, with what it produced.
+   *
+   * A callback rather than inline work: distilling a trace is a memory concern,
+   * and this file is already the agent execution engine. Fire-and-forget — a run
+   * must never fail, or be delayed, because its trace could not be summarised.
+   */
+  public onExecutionTrace: ((trace: ExecutionTraceInput) => void) | null = null;
 
   /** Set by container after construction (avoids circular dep) */
   public eventBus: EventBus | null = null;
@@ -1347,6 +1373,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         deliverableId: resultDeliverableId,
       });
       this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'completed', abortController });
+
+      // Offer the run to the memory kernel. Fire-and-forget: a trace that cannot
+      // be distilled must not affect the run that produced it.
+      this.onExecutionTrace?.({
+        executionId,
+        ticketId: mention.ticketId,
+        personaName: persona.name,
+        resultText,
+        worktreePath,
+      });
       this.onExecutionComplete?.(persona.id, 'completed', mention.id);
 
       this.logger.info('Agent execution completed', {

@@ -98,6 +98,8 @@ import { CoachPersonaUseCase } from '../application/use-cases/coach-persona.js';
 import { SynthesiseMemoryUseCase } from '../application/use-cases/synthesise-memory.js';
 import { CurateMemoryUseCase } from '../application/use-cases/curate-memory.js';
 import { RememberConversationUseCase } from '../application/use-cases/remember-conversation.js';
+import { DistilExecutionTraceUseCase } from '../application/use-cases/distil-execution-trace.js';
+import { BenchMemoryUseCase } from '../application/use-cases/bench-memory.js';
 import { TransformersEmbeddingAdapter } from './adapters/embeddings/transformers-embedding.adapter.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
@@ -300,6 +302,7 @@ export async function createContainer() {
   const coachPersona = memoryStore
     ? new CoachPersonaUseCase(personaStore_, retrieveContext, memorySynthesiser, logger)
     : null;
+  const benchMemory = new BenchMemoryUseCase(logger, memoryStore ?? undefined, embeddingProvider);
   const synthesiseMemory = memoryStore
     ? new SynthesiseMemoryUseCase(retrieveContext, memorySynthesiser, logger, submitDeliverable)
     : null;
@@ -401,6 +404,7 @@ export async function createContainer() {
         personaStore: personaStore_,
         skillStore,
         kvStore,
+        mentionStore,
         logger,
       })
     : null;
@@ -412,6 +416,18 @@ export async function createContainer() {
   const rememberConversation = new RememberConversationUseCase(
     retrieveContext, memorySynthesiser, logger, memoryKernel ?? undefined,
   );
+  const distilExecutionTrace = new DistilExecutionTraceUseCase(
+    ticketStore_, retrieveContext, memorySynthesiser, git, logger, memoryKernel ?? undefined,
+  );
+  // Fire-and-forget, so a trace that cannot be distilled never affects the run.
+  executeAgent.onExecutionTrace = (trace) => {
+    distilExecutionTrace.execute(trace).catch((error: unknown) => {
+      logger.warn('Execution trace distillation failed', {
+        executionId: trace.executionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  };
 
   // Remote listener — only broadcasts UI updates from events received via the hub.
   // It SHARES the BroadcastRegistrar instance with the local listener so that
@@ -709,6 +725,8 @@ export async function createContainer() {
     synthesiseMemory,
     curateMemory,
     rememberConversation,
+    distilExecutionTrace,
+    benchMemory,
     autoReviewWorkflow,
     panelStore,
     createPanel,

@@ -5,6 +5,7 @@ import type {
   DeliverableCreatedEvent,
   DeliverableDeletedEvent,
   DeliverableUpdatedEvent,
+  MentionWokenUpEvent,
   ScratchpadUpdatedEvent,
   TicketDeletedEvent,
 } from '../../domain/events.js';
@@ -12,6 +13,7 @@ import type { EventBus } from '../event-bus.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { KvStorePort } from '../ports/kv-store.port.js';
+import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
@@ -27,6 +29,7 @@ import {
   chunkSkill,
   chunkTicket,
 } from './chunker.js';
+import { chunkQaPair } from './chunk-curated.js';
 import type { MemoryKernel } from './memory-kernel.js';
 
 /**
@@ -50,6 +53,8 @@ export interface MemoryEventListenerDeps {
   skillStore: SkillStorePort;
   /** Where scratchpads live. Null on the filesystem fallback. */
   kvStore?: KvStorePort | null;
+  /** Needed to pair an agent's question with the answer that unblocked it. */
+  mentionStore?: MentionStorePort | null;
   logger: LoggerPort;
 }
 
@@ -126,6 +131,7 @@ export class MemoryEventListener {
     bus.on('skill.deleted', (e) => this.forget('skill', (e as { skillId: string }).skillId));
 
     bus.on('scratchpad.updated', (e) => this.onScratchpadChanged(e as ScratchpadUpdatedEvent));
+    bus.on('mention.woken_up', (e) => this.onMentionWokenUp(e as MentionWokenUpEvent));
 
     this.deps.logger.info('Memory event listener registered');
   }
@@ -256,6 +262,47 @@ export class MemoryEventListener {
         displayName: skill.displayName,
         markdownContent: skill.markdownContent,
         updatedAt: skill.updatedAt,
+      }));
+    });
+  }
+
+  /**
+   * Capture the question an agent asked and the answer that unblocked it.
+   *
+   * `mention.woken_up` is the one instant where the pairing is unambiguous: the
+   * mention names the question's comment, and the answer is the latest human
+   * comment on the ticket. A minute later the two are separated by whatever else
+   * was said, and reconstructing the pair becomes guesswork.
+   */
+  private onMentionWokenUp(event: MentionWokenUpEvent): void {
+    this.enqueue('qa_pair', event.mentionId, async () => {
+      const mentionStore = this.deps.mentionStore;
+      if (!mentionStore) return;
+
+      const mention = await mentionStore.getById(event.mentionId);
+      if (!mention) return;
+
+      const ticket = await this.deps.ticketStore.getTicketById(event.ticketId);
+      if (!ticket) return;
+
+      const comments = await this.deps.commentStore.getByTicket(event.ticketId);
+      const question = comments.find((c) => c.id === mention.commentId);
+      // The answer is the most recent human comment: whatever woke the agent.
+      const answer = [...comments].reverse().find((c) => c.authorType === 'user');
+      if (!question || !answer) return;
+
+      await this.deps.kernel.ingest('qa_pair', event.mentionId, chunkQaPair({
+        mentionId: event.mentionId,
+        ticketId: ticket.id,
+        ticketTitle: ticket.title,
+        ticketDisplayId: ticket.displayId,
+        agentName: mention.targetAgent,
+        question: question.body,
+        answer: answer.body,
+        repo: primaryRepo(ticket),
+        boardId: ticket.boardId,
+        tags: ticket.tags,
+        answeredAt: answer.createdAt,
       }));
     });
   }

@@ -271,6 +271,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseWorkflowRunStore } = await import('./supabase/supabase-workflow-run-store.adapter.js');
   const { SupabaseStepRunStore } = await import('./supabase/supabase-step-run-store.adapter.js');
   const { SupabaseRoutineStore } = await import('./supabase/supabase-routine-store.adapter.js');
+  const { SupabaseMemoryStoreAdapter } = await import('./supabase/supabase-memory-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const connection = new SupabaseConnection(url, key, dbUrl, deps.logger);
@@ -308,7 +309,6 @@ async function createSupabaseStores(deps: {
     workflowRunStore: new SupabaseWorkflowRunStore(connection),
     stepRunStore: new SupabaseStepRunStore(connection),
     routineStore: new SupabaseRoutineStore(connection),
-    // supabase needs a pgvector-backed adapter; not implemented yet.
-    memoryStore: null,
+    memoryStore: new SupabaseMemoryStoreAdapter(connection, deps.logger),
   };
 }

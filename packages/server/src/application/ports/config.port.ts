@@ -82,6 +82,8 @@ export interface MemoryFeatureFlags {
   automationMining?: boolean;
   /** Resolve `[[...]]` links in notes and surface backlinks and related notes. */
   wikiLinks?: boolean;
+  /** Distil each finished run's transferable findings into memory. */
+  executionTraces?: boolean;
 }
 
 export const MEMORY_FEATURE_KEYS = [
@@ -96,6 +98,7 @@ export const MEMORY_FEATURE_KEYS = [
   'assistantMemory',
   'automationMining',
   'wikiLinks',
+  'executionTraces',
 ] as const satisfies ReadonlyArray<keyof MemoryFeatureFlags>;
 
 /**

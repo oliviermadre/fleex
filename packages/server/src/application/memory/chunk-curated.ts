@@ -51,6 +51,60 @@ export function chunkCuratedNote(input: CuratedNoteInput): DraftChunk[] {
   }));
 }
 
+export interface QaPairInput {
+  /** The mention that was waiting — the identity of this exchange. */
+  mentionId: string;
+  ticketId: string;
+  ticketTitle: string;
+  ticketDisplayId?: number | string | null;
+  agentName: string;
+  /** What the agent asked for before it paused. */
+  question: string;
+  /** The reply that unblocked it. */
+  answer: string;
+  repo?: string | null;
+  boardId?: string | null;
+  tags?: string[];
+  answeredAt?: Date | null;
+}
+
+/**
+ * Chunk a question an agent asked and the answer it got.
+ *
+ * These exchanges are the workspace's FAQ, and they were being lost: the pairing
+ * exists only for the instant an agent wakes, then dissolves back into an
+ * ordinary comment thread where the question and its answer may be separated by
+ * a dozen unrelated messages.
+ *
+ * Kept as one chunk, never split. A question without its answer retrieves as an
+ * open problem, and an answer without its question retrieves as an assertion
+ * about nothing — the pair only means something whole.
+ */
+export function chunkQaPair(input: QaPairInput): DraftChunk[] {
+  const question = input.question.trim();
+  const answer = input.answer.trim();
+  if (!question || !answer) return [];
+
+  const label = input.ticketDisplayId ? `Ticket #${input.ticketDisplayId}` : 'Ticket';
+  return [{
+    sourceKind: 'qa_pair',
+    sourceId: input.mentionId,
+    chunkIndex: 0,
+    title: `${label}: ${input.ticketTitle} > ${input.agentName} asked`,
+    content: `**Question** (${input.agentName}):\n${question}\n\n**Answer**:\n${answer}`,
+    metadata: {
+      ticketId: input.ticketId,
+      boardId: input.boardId ?? null,
+      repo: input.repo ?? null,
+      agentName: input.agentName,
+      // Tagged as curated: an answered question is settled knowledge, which is
+      // worth more at equal relevance than the discussion around it.
+      tags: [...(input.tags ?? []), CURATED_TAG],
+    },
+    sourceUpdatedAt: input.answeredAt ?? null,
+  }];
+}
+
 export interface AssistantDigestInput {
   conversationId: string;
   title: string;
