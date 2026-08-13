@@ -25,6 +25,7 @@ import { normalizeDeliverableTypes } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { streamSdkQuery } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
+import { buildExecutionContextData } from '../utils/prompt-composer.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
@@ -642,6 +643,20 @@ export class RunPanelUseCase {
       deliverablesCount: ticketMeta.deliverablesCount,
     }));
 
+    // The prompt as sent, so a panel member's run is as inspectable as a
+    // mention's. The manifest is left empty rather than invented: this path
+    // assembles its blocks directly instead of through `PromptComposer`, and the
+    // Context tab says so and points at the raw view.
+    await emitEvent('execution_context', buildExecutionContextData({
+      executionId,
+      systemPrompt,
+      promptBlocks,
+      manifest: [],
+      model,
+      effectiveMode,
+      memoryEngine: this.config.get().memoryEngine ?? 'legacy',
+    }));
+
     try {
       const { text, metrics } = await this.querySDK(userPrompt, {
         model,
@@ -937,7 +952,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
     return parts.join('\n');
   }
 
-  private async buildTicketContextBlocks(context: { ticket: { title: string; description: string }; comments: Array<{ authorName: string; body: string }>; deliverables: Array<{ title: string; type: string; content: string; status: string; agentName: string }>; epics?: Array<{ name: string; emoji: string; description: string; timeframe: string; groupStatus: string }> }): Promise<PromptContentBlock[]> {
+  private async buildTicketContextBlocks(context: { ticket: { title: string; description: string }; comments: Array<{ authorName: string; body: string }>; deliverables: Array<{ title: string; type: string; content: string; status: string; agentName: string }>; epics?: Array<{ name: string; emoji: string; description: string; timeframe: string; groupStatus: string }>; memorySnippets?: Array<{ title: string; content: string }> }): Promise<PromptContentBlock[]> {
     const blocks: PromptContentBlock[] = [];
     const pushText = (text: string) => blocks.push({ type: 'text', text });
 
@@ -969,6 +984,17 @@ Be concise and decision-oriented. Write in the same language as the panel member
         if (epic.description) {
           blocks.push(...await this.resolveText(epic.description));
         }
+      }
+    }
+
+    // Retrieved memory, the same section a mention gets. A panel debates the very
+    // questions past work already answered, so leaving it out would make the one
+    // surface that most needs precedent the only one without it. Only the semantic
+    // engine populates this, so the section is absent by default.
+    if (context.memorySnippets && context.memorySnippets.length > 0) {
+      pushText('\n## Relevant Memory');
+      for (const snippet of context.memorySnippets) {
+        pushText(`\n### ${snippet.title}\n${snippet.content}`);
       }
     }
 

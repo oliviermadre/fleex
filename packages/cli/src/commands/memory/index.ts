@@ -17,6 +17,7 @@ const def: CommandDef = {
   ${DIM('$')} fleex memory compile "the auth module"      ${DIM('# a sourced reference document')}
   ${DIM('$')} fleex memory coach Builder --sources        ${DIM('# what this agent should have learned')}
   ${DIM('$')} fleex memory keep <executionId> -m "why"    ${DIM('# keep a moment of a run')}
+  ${DIM('$')} fleex memory forget <noteId>                ${DIM('# and undo it')}
   ${DIM('$')} fleex memory suggest                        ${DIM('# work you keep repeating by hand')}
   ${DIM('$')} fleex memory similar "login times out"      ${DIM('# is this ticket already filed?')}
   ${DIM('$')} fleex memory links owner/app                ${DIM('# what links to a note, what resembles it')}

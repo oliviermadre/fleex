@@ -71,4 +71,6 @@ export const MEMORY_SOURCE_KINDS = [
   'epic',
   'execution_trace',
   'qa_pair',
+  'curated_note',
+  'assistant_conversation',
 ] as const;

@@ -357,6 +357,33 @@ export function chunkScratchpad(input: {
 }
 
 /**
+ * Index an epic's description.
+ *
+ * An epic is where the *why* of a body of work is written — the goal, the
+ * constraints, what is deliberately out of scope — and it long outlives the
+ * tickets under it. Indexing only the description: the name alone is a label, and
+ * the member tickets are already indexed as themselves.
+ */
+export function chunkEpic(input: {
+  id: string;
+  name: string;
+  description: string;
+  boardId?: string | null;
+  updatedAt?: Date | null;
+}): DraftChunk[] {
+  const parts = splitMarkdown(input.description);
+  return parts.map((content, chunkIndex) => ({
+    sourceKind: 'epic' as const,
+    sourceId: input.id,
+    chunkIndex,
+    title: `Epic: ${input.name}${parts.length > 1 ? ` (${chunkIndex + 1}/${parts.length})` : ''}`,
+    content,
+    metadata: { boardId: input.boardId ?? null },
+    sourceUpdatedAt: input.updatedAt ?? null,
+  }));
+}
+
+/**
  * Index a persona's learned knowledge.
  *
  * `memoryMd` and `identityMd` only. `soulMd` is deliberately excluded: it sets

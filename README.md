@@ -88,7 +88,7 @@ Or set it once per workspace in the `env` block of `~/.fleex/workspaces.json` (s
 By default, the context injected into agent prompts is chosen by ranking past
 ticket summaries on shared tags, board and recency. The semantic engine instead
 retrieves by meaning across everything indexed — summaries, comment threads,
-routine outputs, scratchpads and agent memory.
+routine outputs, notes, epics, skills and agent memory.
 
 It is opt-in, under **Settings › Memory**, which also shows what the index holds
 and offers a reindex. Switching is reversible and leaves the index in place, so
@@ -104,7 +104,9 @@ bun add @huggingface/transformers
 ```
 
 Without it, content is still indexed and findable by keyword, and retrieval falls
-back to the default ranking rather than degrading a run's context.
+back to the default ranking rather than degrading a run's context. Anything
+indexed while the model was still downloading is embedded by a background sweep
+once it is ready — nothing has to be re-saved to become searchable.
 
 Once the engine is on, the index stays current by itself — a listener re-indexes
 whatever a domain event touched — and everything built on top of it is

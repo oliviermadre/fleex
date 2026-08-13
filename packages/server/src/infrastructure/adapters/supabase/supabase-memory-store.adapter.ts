@@ -11,6 +11,14 @@ import type {
 } from '../../../application/ports/memory-store.port.js';
 import type { LoggerPort } from '../../../application/ports/logger.port.js';
 import type { SupabaseConnection } from './connection.js';
+import {
+  EMBEDDING_COLUMN_TYPE_SQL,
+  EMBEDDING_INDEX_SQL,
+  MATCH_FN,
+  MATCH_FUNCTION_SQL,
+  PROMOTE_COLUMN_SQL,
+  VECTOR_TYPE_EXISTS_SQL,
+} from './memory-vector-sql.js';
 
 /**
  * Split a list into batches.
@@ -26,8 +34,15 @@ function chunked<T>(items: T[], size: number): T[][] {
 
 const TABLE = 'memory_chunks';
 
-/** Name of the SQL function migration 034 installs. */
-const MATCH_FN = 'match_memory_chunks';
+/**
+ * Every column except `embedding`.
+ *
+ * `select('*')` would ship the vector back as its ~5 KB text form on every row
+ * of every keyword search, to be thrown away — nothing outside the database ever
+ * reads a stored vector.
+ */
+const COLUMNS = 'id,source_kind,source_id,chunk_index,ticket_id,board_id,repo,agent_name,'
+  + 'tags,title,content,content_hash,embedding_model,source_updated_at,created_at,updated_at';
 
 interface MemoryChunkRow {
   id: string;
@@ -72,6 +87,59 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
     private readonly conn: SupabaseConnection,
     private readonly logger: LoggerPort,
   ) {}
+
+  /**
+   * Bring the pgvector half of the schema up to date, at every boot.
+   *
+   * A migration cannot do this job alone: it records itself as applied whether or
+   * not the extension was available, so a project that enabled pgvector *after*
+   * its first Fleex boot would keep the TEXT column and the missing search
+   * function forever, with no migration left to fix it. Every statement here is
+   * idempotent, so running it on an already-correct database costs one catalogue
+   * query and two no-op DDL statements.
+   *
+   * Failure is never fatal. Without pgvector the index still fills and keyword
+   * search still works; only retrieval by meaning is unavailable, and the caller
+   * falls back to the legacy ranking.
+   */
+  async ensureVectorSearch(): Promise<void> {
+    // No direct connection means no DDL — the same condition under which the
+    // migrations could not have run either.
+    if (!this.conn.canExecuteDDL) return;
+
+    try {
+      try {
+        await this.conn.query('CREATE EXTENSION IF NOT EXISTS vector');
+      } catch {
+        // Managed projects may forbid it; the check below decides what follows.
+      }
+
+      const present = await this.conn.query(VECTOR_TYPE_EXISTS_SQL);
+      if (present.rows.length === 0) {
+        this.logger.warn('Semantic memory search unavailable on Supabase', {
+          reason: 'the pgvector extension is not installed',
+          hint: 'Enable the "vector" extension on the project; Fleex repairs the schema on the next start.',
+        });
+        return;
+      }
+
+      const column = await this.conn.query(EMBEDDING_COLUMN_TYPE_SQL);
+      const udt = (column.rows[0] as { udt_name?: string } | undefined)?.udt_name;
+      if (udt && udt !== 'vector') {
+        // Written by a boot that had no pgvector. The stored values are already
+        // pgvector's text form, so the cast is a type change, not a rewrite.
+        this.logger.info('Promoting memory_chunks.embedding to vector', { from: udt });
+        await this.conn.query(PROMOTE_COLUMN_SQL);
+      }
+
+      await this.conn.query(EMBEDDING_INDEX_SQL);
+      await this.conn.query(MATCH_FUNCTION_SQL);
+    } catch (error) {
+      this.logger.warn('Could not prepare Supabase vector search', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   async upsertChunks(chunks: MemoryChunkEntity[]): Promise<void> {
     if (chunks.length === 0) return;
@@ -191,13 +259,18 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
     const trimmed = term.trim();
     if (!trimmed) return [];
 
-    // PostgREST's `or` takes a comma-separated filter list, so a term containing a
-    // comma would be read as two filters. Escaping the PostgREST metacharacters
-    // keeps the search literal.
-    const pattern = `%${trimmed.replace(/[,()%_\\]/g, (c) => `\\${c}`)}%`;
+    // Two levels of escaping, because there are two parsers. `%` and `_` are
+    // ILIKE wildcards and are backslash-escaped so a search for `ERR_CONN` does
+    // not match `ERRXCONN`. Then the whole pattern is double-quoted: PostgREST
+    // reads `or=(…)` as a comma-separated list, so a term containing a comma or a
+    // parenthesis would otherwise be parsed as another filter.
+    const escaped = trimmed
+      .replace(/[\\%_]/g, (c) => `\\${c}`)
+      .replace(/"/g, '\\"');
+    const pattern = `"%${escaped}%"`;
     let query = this.conn.client
       .from(TABLE)
-      .select('*')
+      .select(COLUMNS)
       .or(`content.ilike.${pattern},title.ilike.${pattern}`)
       .order('source_updated_at', { ascending: false, nullsFirst: false })
       .limit(limit);
@@ -206,17 +279,17 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
 
     const { data, error } = await query;
     if (error) throw new Error(`memory keyword search failed: ${error.message}`);
-    return (data as MemoryChunkRow[] ?? []).map(toEntity);
+    return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
   }
 
   async listPendingEmbeddings(limit: number): Promise<MemoryChunkEntity[]> {
     const { data, error } = await this.conn.client
-      .from(TABLE).select('*')
+      .from(TABLE).select(COLUMNS)
       .is('embedding', null)
       .order('created_at', { ascending: true })
       .limit(limit);
     if (error) throw new Error(`memory pending read failed: ${error.message}`);
-    return (data as MemoryChunkRow[] ?? []).map(toEntity);
+    return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
   }
 
   async setEmbeddings(
@@ -249,12 +322,22 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
     const pending = await this.conn.client
       .from(TABLE).select('*', { count: 'exact', head: true }).is('embedding', null);
 
-    const { data: kindRows } = await this.conn.client.from(TABLE).select('source_kind, embedding_model');
+    // Paged explicitly: PostgREST caps a response at 1000 rows, so a single
+    // select would have counted the first page and reported a corpus of 1000 —
+    // a wrong number that looks plausible, which is the worst kind.
     const chunksByKind: Record<string, number> = {};
     const models = new Set<string>();
-    for (const row of (kindRows ?? []) as Array<{ source_kind: string; embedding_model: string | null }>) {
-      chunksByKind[row.source_kind] = (chunksByKind[row.source_kind] ?? 0) + 1;
-      if (row.embedding_model) models.add(row.embedding_model);
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from(TABLE).select('source_kind, embedding_model').range(from, from + PAGE - 1);
+      if (error) throw new Error(`memory stats read failed: ${error.message}`);
+      const rows = (data ?? []) as Array<{ source_kind: string; embedding_model: string | null }>;
+      for (const row of rows) {
+        chunksByKind[row.source_kind] = (chunksByKind[row.source_kind] ?? 0) + 1;
+        if (row.embedding_model) models.add(row.embedding_model);
+      }
+      if (rows.length < PAGE) break;
     }
 
     const { data: latest } = await this.conn.client

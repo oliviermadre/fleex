@@ -1174,6 +1174,21 @@ export async function fetchMemorySearch(query: string, limit = 10): Promise<Memo
   return res.results;
 }
 
+/** How well retrieval finds things on this corpus. */
+export interface MemoryBenchResult {
+  model: string;
+  dimensions: number;
+  report: { cases: number; recallAtK: number; k: number; mrr: number; misses: Array<{ query: string }> };
+  meanQueryMs: number;
+  indexedChunks: number;
+  reason?: 'unavailable' | 'empty_index' | 'no_cases';
+}
+
+export async function benchMemory(cases?: number): Promise<MemoryBenchResult> {
+  const params = cases ? `?cases=${cases}` : '';
+  return request<MemoryBenchResult>(`/memory/bench${params}`);
+}
+
 /** A cited answer drawn from the index. */
 export interface MemoryAnswer {
   answer: string | null;
@@ -1251,6 +1266,13 @@ export async function curateMemory(input: {
 }): Promise<{ ok: boolean; noteId?: string; reason?: string }> {
   return request<{ ok: boolean; noteId?: string; reason?: string }>('/memory/curate', {
     method: 'POST', body: JSON.stringify(input),
+  });
+}
+
+/** Drop a kept note again. A wrong note outranks ordinary output, so it has to be undoable. */
+export async function forgetCuratedMemory(noteId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/memory/curated/${encodeURIComponent(noteId)}`, {
+    method: 'DELETE',
   });
 }
 

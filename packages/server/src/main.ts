@@ -55,6 +55,14 @@ import { modelsRoutes } from './infrastructure/http/models.routes.js';
 import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
 import { ModelService } from './application/services/model.service.js';
 
+/**
+ * How often to look for chunks left unembedded.
+ *
+ * A minute: the wait it covers is a model download or a package install, so
+ * checking more often would only spend CPU discovering the same "not yet".
+ */
+const MEMORY_SWEEP_INTERVAL_MS = 60_000;
+
 async function main() {
   const container = await createContainer();
 
@@ -265,6 +273,11 @@ async function main() {
       );
     }
   }
+
+  // Catch up on chunks that were indexed while the embedding model was still
+  // downloading. The sweeper reads the engine setting per pass, so starting it
+  // unconditionally costs nothing on the default engine.
+  container.memorySweeper?.start(MEMORY_SWEEP_INTERVAL_MS);
 
   // Wire repo-exists check so refresh summaries include isClonedLocally
   container.repositoryRefreshScheduler.setCheckRepoExists(async (org, name) => {

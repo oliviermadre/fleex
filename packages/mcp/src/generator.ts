@@ -43,7 +43,7 @@ const MUTATING_LEAVES = new Set([
   'reindex',
   // memory writes: `keep` indexes a note, `coach --apply` rewrites an agent's
   // memory document — which is prepended to every future run of that agent
-  'keep', 'coach',
+  'keep', 'coach', 'forget',
   // changes which engine feeds every future prompt, and which features are on
   'engine',
 ]);

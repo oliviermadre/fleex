@@ -1,7 +1,7 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ExecutionLogEntry, TicketType, PanelMemberSummary, WorkflowStepSummary } from '@fleex/shared';
-import { cancelExecution, curateMemory } from '../../services/api';
+import { cancelExecution, curateMemory, forgetCuratedMemory } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useRoutineStore } from '../../stores/routineStore';
@@ -424,10 +424,27 @@ export const ExecutionRow = memo(function ExecutionRow({
   const curationEnabled = useSettingsStore((s) => s.settings.memoryEngine === 'semantic'
     && s.settings.memoryFeatures?.curation !== false);
   const [keepState, setKeepState] = useState<'idle' | 'saving' | 'kept' | 'empty'>('idle');
+  // Held so the same button can undo: a kept note is ranked above ordinary run
+  // output, so keeping the wrong one degrades every later retrieval until it goes.
+  const [keptNoteId, setKeptNoteId] = useState<string | null>(null);
 
   const handleKeep = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (keepState === 'kept') return;
+    if (keepState === 'saving') return;
+
+    if (keepState === 'kept') {
+      if (!keptNoteId) return;
+      setKeepState('saving');
+      try {
+        await forgetCuratedMemory(keptNoteId);
+        setKeptNoteId(null);
+        setKeepState('idle');
+      } catch {
+        setKeepState('kept');
+      }
+      return;
+    }
+
     setKeepState('saving');
     try {
       const result = await curateMemory({
@@ -435,11 +452,12 @@ export const ExecutionRow = memo(function ExecutionRow({
         title: `${entry.executorName} on ${entry.ticketTitle ?? entry.routineName ?? 'a run'}`,
         ticketId: entry.ticketId ?? null,
       });
+      setKeptNoteId(result.noteId ?? null);
       setKeepState(result.ok ? 'kept' : 'empty');
     } catch {
       setKeepState('idle');
     }
-  }, [entry, keepState]);
+  }, [entry, keepState, keptNoteId]);
   const [cancelState, setCancelState] = useState<'idle' | 'confirming' | 'cancelling'>('idle');
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectTicket = useTicketStore((s) => s.selectTicket);
@@ -735,7 +753,8 @@ export const ExecutionRow = memo(function ExecutionRow({
               disabled={keepState === 'saving'}
               className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px disabled:cursor-wait"
               title={
-                keepState === 'kept' ? 'Kept in memory'
+                keepState === 'kept'
+                  ? (keptNoteId ? 'Kept in memory \u2014 click to remove' : 'Kept in memory')
                   : keepState === 'empty' ? 'This run produced no text to keep'
                   : 'Keep this run\u2019s findings in memory'
               }

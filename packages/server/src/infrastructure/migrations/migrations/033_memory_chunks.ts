@@ -1,4 +1,14 @@
-import type { Migration } from '../types.js';
+import type { Migration, MigrationContext } from '../types.js';
+import { VECTOR_TYPE_EXISTS_SQL } from '../../adapters/supabase/memory-vector-sql.js';
+
+/** Whether pgvector's `vector` type can be referenced in a column definition. */
+async function hasVectorType(ctx: MigrationContext): Promise<boolean> {
+  try {
+    return (await ctx.query(VECTOR_TYPE_EXISTS_SQL)).length > 0;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * `memory_chunks` — the retrieval index behind the semantic memory engine.
@@ -39,7 +49,7 @@ const migration: Migration = {
     // Nullable on purpose: a chunk is stored the moment its content is known and
     // embedded afterwards, so a provider that is still downloading its model
     // never blocks ingestion. A sweep fills the gaps.
-    const embeddingType = ctx.dialect({
+    let embeddingType = ctx.dialect({
       sqlite: 'BLOB',
       pgsql: 'BYTEA',
       supabase: 'vector(384)',
@@ -50,9 +60,15 @@ const migration: Migration = {
       try {
         await ctx.exec('CREATE EXTENSION IF NOT EXISTS vector');
       } catch {
-        // Managed instances may forbid it; the adapter reports the shortfall at
-        // boot rather than failing the whole migration chain here.
+        // Managed instances may forbid it.
       }
+      // Whether it worked decides the column type. Declaring `vector(384)` when
+      // the type does not exist would fail the CREATE TABLE below, and with it
+      // the migration chain and the whole boot — a missing optional extension
+      // must cost the semantic engine, not the instance. The vectors are stored
+      // in pgvector's text form either way, so `ensureVectorSearch` can promote
+      // the column with a plain cast once the extension appears.
+      if (!(await hasVectorType(ctx))) embeddingType = 'TEXT';
     }
 
     await ctx.exec(`

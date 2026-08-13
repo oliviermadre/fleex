@@ -18,12 +18,14 @@ import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
+import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { MemorySourceKind } from '../../domain/entities/memory-chunk.entity.js';
 import {
   chunkCommentThread,
   chunkDeliverable,
+  chunkEpic,
   chunkPersona,
   chunkScratchpad,
   chunkSkill,
@@ -51,6 +53,8 @@ export interface MemoryEventListenerDeps {
   deliverableStore: DeliverableStorePort;
   personaStore: PersonaStorePort;
   skillStore: SkillStorePort;
+  /** Epics. Null on drivers that have no epic store. */
+  ticketGroupStore?: TicketGroupStorePort | null;
   /** Where scratchpads live. Null on the filesystem fallback. */
   kvStore?: KvStorePort | null;
   /** Needed to pair an agent's question with the answer that unblocked it. */
@@ -129,6 +133,11 @@ export class MemoryEventListener {
       bus.on(type, (e) => this.onSkillChanged((e as { skillId: string }).skillId));
     }
     bus.on('skill.deleted', (e) => this.forget('skill', (e as { skillId: string }).skillId));
+
+    for (const type of ['ticketGroup.created', 'ticketGroup.updated'] as const) {
+      bus.on(type, (e) => this.onEpicChanged((e as { groupId: string }).groupId));
+    }
+    bus.on('ticketGroup.deleted', (e) => this.forget('epic', (e as { groupId: string }).groupId));
 
     bus.on('scratchpad.updated', (e) => this.onScratchpadChanged(e as ScratchpadUpdatedEvent));
     bus.on('mention.woken_up', (e) => this.onMentionWokenUp(e as MentionWokenUpEvent));
@@ -303,6 +312,29 @@ export class MemoryEventListener {
         boardId: ticket.boardId,
         tags: ticket.tags,
         answeredAt: answer.createdAt,
+      }));
+    });
+  }
+
+  /**
+   * An epic's description — the goal and the constraints behind a body of work.
+   *
+   * Only the description is indexed. The member tickets are already indexed as
+   * themselves, and an epic with an empty description ingests nothing, which the
+   * kernel reads as "forget this source".
+   */
+  private onEpicChanged(groupId: string): void {
+    this.enqueue('epic', groupId, async () => {
+      const store = this.deps.ticketGroupStore;
+      if (!store) return;
+      const group = await store.getTicketGroupById(groupId);
+      if (!group) return;
+      await this.deps.kernel.ingest('epic', group.id, chunkEpic({
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        boardId: group.boardIds[0] ?? null,
+        updatedAt: group.updatedAt,
       }));
     });
   }

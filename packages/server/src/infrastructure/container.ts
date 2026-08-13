@@ -91,6 +91,7 @@ import { GetRelevantSummariesUseCase } from '../application/use-cases/get-releva
 import { RetrieveContextUseCase } from '../application/use-cases/retrieve-context.js';
 import { MemoryKernel } from '../application/memory/memory-kernel.js';
 import { MemoryEventListener } from '../application/memory/memory-event-listener.js';
+import { MemorySweeper } from '../application/memory/memory-sweeper.js';
 import { BackfillMemoryUseCase } from '../application/use-cases/backfill-memory.js';
 import { AskMemoryUseCase } from '../application/use-cases/ask-memory.js';
 import { MemorySynthesiser } from '../application/memory/memory-synthesiser.js';
@@ -271,6 +272,7 @@ export async function createContainer() {
   const backfillMemory = memoryKernel
     ? new BackfillMemoryUseCase(
         memoryKernel, ticketStore_, commentStore, deliverableStore, personaStore_, skillStore, logger,
+        ticketGroupStore,
       )
     : null;
 
@@ -403,12 +405,18 @@ export async function createContainer() {
         deliverableStore,
         personaStore: personaStore_,
         skillStore,
+        ticketGroupStore,
         kvStore,
         mentionStore,
         logger,
       })
     : null;
   memoryEventListener?.register();
+
+  // Comes back for the rows ingestion had to store without a vector — the model
+  // is fetched once, and everything written while that is in flight would
+  // otherwise stay in the table and out of every query. Started in main.ts.
+  const memorySweeper = memoryKernel ? new MemorySweeper(memoryKernel, config, logger) : null;
 
   const curateMemory = new CurateMemoryUseCase(
     agentEventStore_, retrieveContext, logger, memoryKernel ?? undefined,
@@ -721,6 +729,7 @@ export async function createContainer() {
     backfillMemory,
     askMemory,
     memoryEventListener,
+    memorySweeper,
     coachPersona,
     synthesiseMemory,
     curateMemory,

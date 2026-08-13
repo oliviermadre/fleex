@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { fetchMemoryStatus, reindexMemory, type MemoryStatus } from '../../services/api';
+import {
+  benchMemory,
+  fetchMemoryStatus,
+  reindexMemory,
+  type MemoryBenchResult,
+  type MemoryStatus,
+} from '../../services/api';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
@@ -319,7 +325,7 @@ export function MemoryTab() {
         </div>
 
         <p className="mt-2 text-xs text-[var(--theme-text-muted)]">
-          Reindexing walks every ticket, comment thread, deliverable, agent memory and skill.
+          Reindexing walks every ticket, comment thread, deliverable, note, epic, agent memory and skill.
           It is safe to re-run and resumes where it left off — unchanged content is not re-embedded.
         </p>
 
@@ -333,6 +339,80 @@ export function MemoryTab() {
           <IndexSummary status={status} />
         )}
       </div>
+
+      {status?.available && engine === 'semantic' && <BenchPanel />}
+    </div>
+  );
+}
+
+/**
+ * How well retrieval actually does on this corpus.
+ *
+ * The number that matters is not the one on a public leaderboard: a workspace of
+ * French tickets and English deliverables is not the distribution those measure.
+ * This runs the queries against the real index, which is what tells someone
+ * whether to trust the beta with their prompts — so it belongs next to the switch
+ * that turns it on, not only in a terminal.
+ */
+function BenchPanel() {
+  const [result, setResult] = useState<MemoryBenchResult | null>(null);
+  const [running, setRunning] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const run = useCallback(async () => {
+    setRunning(true);
+    setFailed(false);
+    try {
+      setResult(await benchMemory());
+    } catch {
+      setFailed(true);
+    } finally {
+      setRunning(false);
+    }
+  }, []);
+
+  return (
+    <div className="mt-6 border-t border-[var(--theme-border)] pt-4">
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Retrieval quality</h3>
+        <div className="flex-1" />
+        <Button variant="secondary" disabled={running} onClick={() => void run()}>
+          {running ? 'Measuring…' : result ? 'Measure again' : 'Measure'}
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-[var(--theme-text-muted)]">
+        Runs queries drawn from the index against the index itself and reports how often the right
+        source comes back. Local and free — no model call. Switch the encoder, reindex, and compare.
+      </p>
+
+      {failed && <p className="mt-2 text-xs text-[var(--theme-danger)]">Could not run the measurement.</p>}
+
+      {result?.reason && (
+        <p className={cn('mt-3 rounded px-3 py-2 text-xs', tint('yellow'))}>
+          {result.reason === 'empty_index'
+            ? 'Nothing indexed yet — reindex first.'
+            : result.reason === 'no_cases'
+            ? 'The index is too small to draw meaningful queries from.'
+            : 'The semantic engine is not available.'}
+        </p>
+      )}
+
+      {result && !result.reason && (
+        <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+          <Row
+            label={`Found in top ${result.report.k}`}
+            value={`${Math.round(result.report.recallAtK * 100)}%`}
+            hint={`over ${result.report.cases} queries`}
+          />
+          <Row
+            label="Mean reciprocal rank"
+            value={result.report.mrr.toFixed(2)}
+            hint="1.00 means the answer was always first"
+          />
+          <Row label="Mean query time" value={`${Math.round(result.meanQueryMs)} ms`} />
+          <Row label="Chunks searched" value={String(result.indexedChunks)} />
+        </dl>
+      )}
     </div>
   );
 }

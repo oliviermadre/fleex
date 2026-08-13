@@ -47,6 +47,10 @@ export function memoryRoutes(container: Container) {
       // Answer immediately: a full backfill outlives any sensible request
       // timeout, and progress is readable from /api/memory/status meanwhile.
       running = backfill.execute()
+        // A backfill that ran while the model was still downloading leaves the
+        // whole corpus deferred. Draining here rather than waiting for the next
+        // sweep tick is what makes the reindex button finish the job.
+        .then(() => container.memorySweeper?.sweep())
         .catch((error: unknown) => {
           container.logger.error('Memory reindex failed', {
             error: error instanceof Error ? error.message : String(error),

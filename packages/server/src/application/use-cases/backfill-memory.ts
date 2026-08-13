@@ -3,11 +3,13 @@ import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
+import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import {
   chunkCommentThread,
   chunkDeliverable,
+  chunkEpic,
   chunkPersona,
   chunkSkill,
   chunkTicket,
@@ -20,6 +22,7 @@ export interface BackfillProgress {
   deliverables: number;
   personas: number;
   skills: number;
+  epics: number;
   chunksEmbedded: number;
   chunksUnchanged: number;
   chunksDeferred: number;
@@ -27,7 +30,7 @@ export interface BackfillProgress {
 }
 
 const EMPTY: BackfillProgress = {
-  tickets: 0, commentThreads: 0, deliverables: 0, personas: 0, skills: 0,
+  tickets: 0, commentThreads: 0, deliverables: 0, personas: 0, skills: 0, epics: 0,
   chunksEmbedded: 0, chunksUnchanged: 0, chunksDeferred: 0, errors: 0,
 };
 
@@ -52,6 +55,8 @@ export class BackfillMemoryUseCase {
     private readonly personaStore: PersonaStorePort,
     private readonly skillStore: SkillStorePort,
     private readonly logger: LoggerPort,
+    /** Epics. Absent on drivers with no epic store. */
+    private readonly ticketGroupStore?: TicketGroupStorePort | null,
   ) {}
 
   async execute(): Promise<BackfillProgress> {
@@ -158,6 +163,22 @@ export class BackfillMemoryUseCase {
           updatedAt: skill.updatedAt,
         }));
         progress.skills++;
+        return outcome;
+      });
+    }
+
+    // Epics last: they are the fewest and the cheapest, so a run interrupted
+    // partway has still covered the bulk of the corpus.
+    for (const epic of await this.ticketGroupStore?.getAllTicketGroups() ?? []) {
+      await this.step(progress, 'epic', epic.id, async () => {
+        const outcome = await this.kernel.ingest('epic', epic.id, chunkEpic({
+          id: epic.id,
+          name: epic.name,
+          description: epic.description,
+          boardId: epic.boardIds[0] ?? null,
+          updatedAt: epic.updatedAt,
+        }));
+        progress.epics++;
         return outcome;
       });
     }

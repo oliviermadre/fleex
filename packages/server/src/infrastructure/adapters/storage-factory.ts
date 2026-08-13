@@ -287,6 +287,12 @@ async function createSupabaseStores(deps: {
   const agentEventStore = new SupabaseAgentEventStore(connection);
   await agentEventStore.init();
 
+  // Idempotent, and the only thing that can repair a project whose pgvector
+  // extension was enabled after Fleex first started — a migration has already
+  // recorded itself by then.
+  const memoryStore = new SupabaseMemoryStoreAdapter(connection, deps.logger);
+  await memoryStore.ensureVectorSearch();
+
   deps.logger.info('Supabase storage initialized', { url });
 
   return {
@@ -309,6 +315,6 @@ async function createSupabaseStores(deps: {
     workflowRunStore: new SupabaseWorkflowRunStore(connection),
     stepRunStore: new SupabaseStepRunStore(connection),
     routineStore: new SupabaseRoutineStore(connection),
-    memoryStore: new SupabaseMemoryStoreAdapter(connection, deps.logger),
+    memoryStore,
   };
 }

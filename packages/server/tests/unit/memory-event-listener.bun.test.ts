@@ -22,6 +22,7 @@ import type { PersonaStorePort } from '../../src/application/ports/persona-store
 import type { SkillStorePort } from '../../src/application/ports/skill-store.port.js';
 import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
 import type { KvStorePort } from '../../src/application/ports/kv-store.port.js';
+import type { TicketGroupStorePort } from '../../src/application/ports/ticket-group-store.port.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 
@@ -40,6 +41,7 @@ let ticket: {
 };
 let comments: Array<{ id: string; authorName: string; authorType: string; body: string; visibility: string; createdAt: Date }>;
 let scratchpadContent: string;
+let epic: { id: string; name: string; description: string; boardIds: string[]; updatedAt: Date };
 
 function makeConfig(): ConfigPort {
   return {
@@ -62,6 +64,11 @@ beforeEach(async () => {
   };
   comments = [];
   scratchpadContent = 'remember the migration order before deploying';
+  epic = {
+    id: 'g1', name: 'Auth rework', boardIds: ['b1'],
+    description: 'Goal: one session model across web and mobile. Out of scope: SSO, which stays on the old flow.',
+    updatedAt: new Date('2026-08-01T00:00:00Z'),
+  };
 
   conn = new SqliteConnection(':memory:');
   await conn.init();
@@ -82,6 +89,9 @@ beforeEach(async () => {
     personaStore: { getById: async () => null } as unknown as PersonaStorePort,
     skillStore: { getById: async () => null } as unknown as SkillStorePort,
     kvStore: { get: async () => scratchpadContent } as unknown as KvStorePort,
+    ticketGroupStore: {
+      getTicketGroupById: async (id: string) => (id === epic.id ? epic : null),
+    } as unknown as TicketGroupStorePort,
     logger: silent as never,
   });
   listener.register();
@@ -276,6 +286,49 @@ describe('scratchpad ingestion', () => {
     bus.emit({ type: 'scratchpad.updated', key: 'org/app', repo: 'org/app', occurredAt: new Date() } as never);
     await settle();
     // An emptied note must stop answering queries, not linger as a stale chunk.
+    expect((await store.getStats()).totalChunks).toBe(0);
+  });
+});
+
+describe('epic ingestion', () => {
+  it('indexes the description, which is where the why of a body of work lives', async () => {
+    bus.emit({ type: 'ticketGroup.created', groupId: epic.id, occurredAt: new Date() } as never);
+    await settle();
+
+    const found = await store.searchKeyword('out of scope', { kinds: ['epic'] }, 5);
+    expect(found).toHaveLength(1);
+    expect(found[0]?.title).toBe('Epic: Auth rework');
+    // The board is carried for scoring, the same as a ticket's.
+    expect(found[0]?.metadata.boardId).toBe('b1');
+  });
+
+  it('re-indexes on update', async () => {
+    bus.emit({ type: 'ticketGroup.created', groupId: epic.id, occurredAt: new Date() } as never);
+    await settle();
+
+    epic.description = 'Goal changed: keep two session models, bridge them at the edge.';
+    bus.emit({ type: 'ticketGroup.updated', groupId: epic.id, occurredAt: new Date() } as never);
+    await settle();
+
+    expect(await store.searchKeyword('out of scope', { kinds: ['epic'] }, 5)).toHaveLength(0);
+    expect(await store.searchKeyword('bridge them', { kinds: ['epic'] }, 5)).toHaveLength(1);
+  });
+
+  it('purges on delete', async () => {
+    bus.emit({ type: 'ticketGroup.created', groupId: epic.id, occurredAt: new Date() } as never);
+    await settle();
+    bus.emit({ type: 'ticketGroup.deleted', groupId: epic.id, occurredAt: new Date() } as never);
+    await settle();
+
+    expect((await store.getStats()).chunksByKind['epic']).toBeUndefined();
+  });
+
+  it('indexes nothing for an epic with no description', async () => {
+    epic.description = '';
+    bus.emit({ type: 'ticketGroup.created', groupId: epic.id, occurredAt: new Date() } as never);
+    await settle();
+
+    // A name alone is a label, not knowledge.
     expect((await store.getStats()).totalChunks).toBe(0);
   });
 });

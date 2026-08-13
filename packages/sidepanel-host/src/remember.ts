@@ -55,8 +55,7 @@ export function stopAllRemember(): void {
 /**
  * Post the conversation to its workspace's server for distillation.
  *
- * Exported so `fleex companion` can force it, and so it is testable without
- * waiting out the idle timer.
+ * Exported so it is testable without waiting out the idle timer.
  */
 export async function rememberNow(
   session: SessionData,
