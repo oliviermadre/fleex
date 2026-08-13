@@ -16,7 +16,10 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * routines, workflow runs) through the API and has no effect on the local
  * environment.** `routine` and `workflow` are in for headless parity: a run
  * paused on a human gate or a question must be resolvable from an MCP host,
- * and routine runs have no ticket to reach it through. Infra commands
+ * and routine runs have no ticket to reach it through. `memory` is in because
+ * "what do we already know about this?" is the question an assistant most needs
+ * answered before acting, and the answer lives in this workspace's own history.
+ * Infra commands
  * (`start`, `stop`, `logs`, `doctor`, `self-update`, `token`, shell helpers)
  * drive processes on the host machine and stay off the surface on purpose.
  *
@@ -25,7 +28,7 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * `tests/parity.bun.test.ts`). Narrowing the perimeter is a deliberate product
  * decision; silently dropping an option is a bug.
  */
-export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow'] as const;
+export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow', 'memory'] as const;
 
 /**
  * Leaf command names that mutate state. The host gates these (e.g. asks the
@@ -36,6 +39,8 @@ const MUTATING_LEAVES = new Set([
   'add', 'link', 'unlink', 'import', 'comment', 'edit', 'archive', 'unarchive',
   // routine / workflow-run verbs — they all write through the API
   'run', 'enable', 'disable', 'resolve', 'retry', 'route', 'cancel',
+  // rebuilds the memory index: heavy, and worth confirming before it starts
+  'reindex',
 ]);
 
 /** Options we never expose as tool params (handled specially or noise). */

@@ -96,6 +96,54 @@ export class RetrieveContextUseCase {
     }
   }
 
+  /**
+   * Free-text retrieval, for surfaces that search rather than inject: the CLI,
+   * the command palette, the question-answering path.
+   *
+   * Unlike `execute`, this never falls back to the legacy ranking — that ranking
+   * only knows how to answer "what relates to this ticket", which is not a
+   * search. An empty result is the honest answer when the index has nothing.
+   */
+  async search(params: {
+    query: string;
+    limit?: number;
+    kinds?: MemorySourceKind[];
+    repo?: string | null;
+    excludeTicketId?: string | null;
+  }): Promise<MemorySnippet[]> {
+    if (!this.isSemanticEnabled()) return [];
+    const query = params.query.trim();
+    if (!query) return [];
+
+    const store = this.memoryStore!;
+    const embeddings = this.embeddings!;
+    const limit = params.limit ?? DEFAULT_LIMIT;
+    const filters: MemorySearchFilters = {
+      kinds: params.kinds,
+      repo: params.repo ?? null,
+      excludeTicketId: params.excludeTicketId ?? null,
+    };
+
+    const queryVector = await embeddings.embedQuery(query);
+    const candidates = await store.search(queryVector, filters, limit * 4);
+
+    // A keyword pass alongside the vector one, because exact identifiers — error
+    // codes, file paths — are precisely what embeddings blur away, and a search
+    // box is where a user types them.
+    const keywordHits = await store.searchKeyword(query, filters, limit);
+    const bySource = new Map(candidates.map((c) => [c.chunk.id, c]));
+    for (const chunk of keywordHits) {
+      if (!bySource.has(chunk.id)) {
+        // Slot keyword-only matches in below the vector hits rather than above:
+        // a substring match is weaker evidence than semantic proximity.
+        bySource.set(chunk.id, { chunk, similarity: 0 });
+      }
+    }
+
+    const ranked = rankHits([...bySource.values()], { repo: params.repo ?? null }, limit);
+    return this.toSnippets(ranked, { includeSummaries: true });
+  }
+
   /** The pre-existing ranking, unchanged and still the default. */
   private async legacySummaries(ticketId?: string): Promise<TicketSummaryRef[]> {
     if (!ticketId) return [];
@@ -172,14 +220,21 @@ export class RetrieveContextUseCase {
     return out;
   }
 
-  /** Non-summary hits, trimmed to the configured character budget. */
-  private toSnippets(hits: ScoredHit[]): MemorySnippet[] {
+  /**
+   * Hits as snippets, trimmed to the configured character budget.
+   *
+   * `includeSummaries` separates the two callers: prompt injection routes
+   * summaries into their own long-standing section and must not duplicate them
+   * here, whereas a search result would be strange for omitting the very
+   * summaries that best answer the query.
+   */
+  private toSnippets(hits: ScoredHit[], opts: { includeSummaries?: boolean } = {}): MemorySnippet[] {
     const budget = this.config.get().memoryInjectionCharBudget ?? DEFAULT_CHAR_BUDGET;
     const out: MemorySnippet[] = [];
     let used = 0;
 
     for (const hit of hits) {
-      if (hit.chunk.sourceKind === 'ticket_summary') continue;
+      if (!opts.includeSummaries && hit.chunk.sourceKind === 'ticket_summary') continue;
       if (used + hit.chunk.content.length > budget) continue;
       used += hit.chunk.content.length;
       out.push({

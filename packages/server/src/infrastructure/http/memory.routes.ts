@@ -2,6 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 import { TransformersEmbeddingAdapter } from '../adapters/embeddings/transformers-embedding.adapter.js';
 
+/** Parse a query-string limit, falling back and capping rather than erroring. */
+function clampLimit(raw: string | undefined, fallback: number, max: number): number {
+  const parsed = Number.parseInt(raw ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
+
 /**
  * Status of the memory kernel, for the Settings panel.
  *
@@ -43,6 +50,55 @@ export function memoryRoutes(container: Container) {
 
       return reply.code(202).send({ started: true });
     });
+
+    app.get<{ Querystring: { q?: string; limit?: string; repo?: string } }>(
+      '/api/memory/search',
+      async (request, reply) => {
+        const retrieve = container.retrieveContext;
+        const query = request.query.q?.trim();
+        if (!query) return reply.code(400).send({ error: 'Missing query parameter `q`.' });
+        if (!retrieve.isSemanticEnabled()) {
+          return reply.code(409).send({
+            error: 'The semantic memory engine is not enabled. Turn it on in Settings › Memory.',
+          });
+        }
+
+        const limit = clampLimit(request.query.limit, 10, 50);
+        const results = await retrieve.search({
+          query,
+          limit,
+          repo: request.query.repo ?? null,
+        });
+        return { query, results };
+      },
+    );
+
+    app.post<{ Body: { question?: string; limit?: number; repo?: string | null } }>(
+      '/api/memory/ask',
+      async (request, reply) => {
+        const askMemory = container.askMemory;
+        const question = request.body?.question?.trim();
+        if (!question) return reply.code(400).send({ error: 'Missing `question`.' });
+        if (!askMemory) {
+          return reply.code(503).send({ error: 'Memory questions are unavailable on this instance.' });
+        }
+
+        const result = await askMemory.execute({
+          question,
+          limit: request.body.limit,
+          repo: request.body.repo ?? null,
+        });
+
+        // A question the memory cannot answer is a normal outcome, not an error:
+        // the caller still gets the sources so it can say what *is* known.
+        if (result.reason === 'unavailable') {
+          return reply.code(409).send({
+            error: 'The semantic memory engine is not enabled. Turn it on in Settings › Memory.',
+          });
+        }
+        return result;
+      },
+    );
 
     app.get('/api/memory/status', async () => {
       const engine = container.config.get().memoryEngine ?? 'legacy';

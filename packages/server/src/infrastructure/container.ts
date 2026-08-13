@@ -91,6 +91,7 @@ import { GetRelevantSummariesUseCase } from '../application/use-cases/get-releva
 import { RetrieveContextUseCase } from '../application/use-cases/retrieve-context.js';
 import { MemoryKernel } from '../application/memory/memory-kernel.js';
 import { BackfillMemoryUseCase } from '../application/use-cases/backfill-memory.js';
+import { AskMemoryUseCase } from '../application/use-cases/ask-memory.js';
 import { TransformersEmbeddingAdapter } from './adapters/embeddings/transformers-embedding.adapter.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
@@ -282,6 +283,10 @@ export async function createContainer() {
   // The ONE global limit on concurrent Claude Agent SDK executions, shared by
   // every source (mentions, skills, panels, workflow steps, summaries).
   const sdkLimiter = new SdkConcurrencyLimiter(() => config.get().agentMaxConcurrency ?? DEFAULT_AGENT_MAX_CONCURRENCY);
+
+  // Depends on the SDK limiter, so it is built here rather than beside the rest
+  // of the memory wiring above.
+  const askMemory = memoryStore ? new AskMemoryUseCase(retrieveContext, sdkLimiter, logger) : null;
 
   const runPanel = new RunPanelUseCase(panelStore, personaStore_, mentionStore, ticketStore_, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore_, config, logger, sdkLimiter);
 
@@ -654,6 +659,7 @@ export async function createContainer() {
     embeddingProvider,
     memoryKernel,
     backfillMemory,
+    askMemory,
     autoReviewWorkflow,
     panelStore,
     createPanel,
