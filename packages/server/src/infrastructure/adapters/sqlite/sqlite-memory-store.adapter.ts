@@ -2,6 +2,7 @@ import {
   MemoryChunkEntity,
   decodeEmbedding,
   encodeEmbedding,
+  type MemoryChunkMetadata,
   type MemorySourceKind,
 } from '../../../domain/entities/memory-chunk.entity.js';
 import type {
@@ -129,6 +130,31 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
       .prepare('SELECT chunk_index, content_hash FROM memory_chunks WHERE source_kind = ? AND source_id = ?')
       .all(sourceKind, sourceId) as Array<{ chunk_index: number; content_hash: string }>;
     return new Map(rows.map((r) => [r.chunk_index, r.content_hash]));
+  }
+
+  async refreshMetadata(
+    sourceKind: MemorySourceKind,
+    sourceId: string,
+    metadata: MemoryChunkMetadata,
+  ): Promise<void> {
+    this.conn.db
+      .prepare(`
+        UPDATE memory_chunks
+           SET ticket_id = ?, board_id = ?, repo = ?, agent_name = ?, tags = ?, updated_at = ?
+         WHERE source_kind = ? AND source_id = ?
+      `)
+      .run(
+        metadata.ticketId ?? null,
+        metadata.boardId ?? null,
+        metadata.repo ?? null,
+        metadata.agentName ?? null,
+        JSON.stringify(metadata.tags ?? []),
+        new Date().toISOString(),
+        sourceKind,
+        sourceId,
+      );
+    // Vectors are untouched, so the cache stays valid — only the metadata read
+    // back alongside them changed, and that is re-read from the row each query.
   }
 
   async search(queryVector: Float32Array, filters: MemorySearchFilters, limit: number): Promise<MemorySearchHit[]> {

@@ -90,6 +90,7 @@ import { RecoverOrphanedWorkflowStepsUseCase } from '../application/use-cases/re
 import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
 import { RetrieveContextUseCase } from '../application/use-cases/retrieve-context.js';
 import { MemoryKernel } from '../application/memory/memory-kernel.js';
+import { MemoryEventListener } from '../application/memory/memory-event-listener.js';
 import { BackfillMemoryUseCase } from '../application/use-cases/backfill-memory.js';
 import { AskMemoryUseCase } from '../application/use-cases/ask-memory.js';
 import { TransformersEmbeddingAdapter } from './adapters/embeddings/transformers-embedding.adapter.js';
@@ -368,6 +369,27 @@ export async function createContainer() {
     logger,
   });
   domainEventListener.register();
+
+  // Keeps the retrieval index current. A sibling of the listener above, on the
+  // same local bus: ingestion is a side-effect, so hub-relayed events must not
+  // reach it or every instance would re-embed every other instance's writes. It
+  // checks the engine setting per event, so an instance on the default engine
+  // queues nothing.
+  const memoryEventListener = memoryKernel
+    ? new MemoryEventListener({
+        bus: eventBus,
+        kernel: memoryKernel,
+        config,
+        ticketStore: ticketStore_,
+        commentStore,
+        deliverableStore,
+        personaStore: personaStore_,
+        skillStore,
+        kvStore,
+        logger,
+      })
+    : null;
+  memoryEventListener?.register();
 
   // Remote listener — only broadcasts UI updates from events received via the hub.
   // It SHARES the BroadcastRegistrar instance with the local listener so that
@@ -660,6 +682,7 @@ export async function createContainer() {
     memoryKernel,
     backfillMemory,
     askMemory,
+    memoryEventListener,
     autoReviewWorkflow,
     panelStore,
     createPanel,

@@ -1,4 +1,4 @@
-import type { MemoryChunkEntity, MemorySourceKind } from '../../domain/entities/memory-chunk.entity.js';
+import type { MemoryChunkEntity, MemoryChunkMetadata, MemorySourceKind } from '../../domain/entities/memory-chunk.entity.js';
 
 /** Structural narrowing applied before similarity is considered. */
 export interface MemorySearchFilters {
@@ -50,6 +50,22 @@ export interface MemoryStorePort {
 
   /** Existing hashes for a source, so unchanged chunks are not re-embedded. */
   getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>>;
+
+  /**
+   * Update the scoring metadata of every chunk of a source, leaving content and
+   * vectors alone.
+   *
+   * Needed because the content hash covers text only: retagging a ticket or
+   * linking a repo changes how its chunks should score without changing a word of
+   * them. Without this, unchanged chunks would keep the metadata they were first
+   * indexed with — and re-embedding them just to refresh a tag would be pure
+   * waste, since the vector is identical.
+   */
+  refreshMetadata(
+    sourceKind: MemorySourceKind,
+    sourceId: string,
+    metadata: MemoryChunkMetadata,
+  ): Promise<void>;
 
   search(queryVector: Float32Array, filters: MemorySearchFilters, limit: number): Promise<MemorySearchHit[]>;
 

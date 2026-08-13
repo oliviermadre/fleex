@@ -78,6 +78,14 @@ export class MemoryKernel {
     }
     if (removed > 0) await this.store.deleteBySourceFrom(sourceKind, sourceId, maxIndex + 1);
 
+    // Metadata is not part of the hash, because retagging a ticket or linking a
+    // repo changes how its chunks should score without changing a word of them.
+    // Unchanged chunks are therefore skipped by the diff but still need their
+    // metadata brought up to date — re-embedding them for a tag would be waste.
+    if (unchanged > 0 && drafts[0]) {
+      await this.store.refreshMetadata(sourceKind, sourceId, drafts[0].metadata);
+    }
+
     if (changed.length === 0) return { embedded: 0, unchanged, removed, deferred: 0 };
 
     const vectors = await this.embedOrDefer(changed);

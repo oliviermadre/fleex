@@ -18,6 +18,18 @@ export function scratchpadRoutes(container: Container) {
     const filePath = join(dirPath, SCRATCHPAD_FILE);
     const scratchpadsDir = join(dirPath, SCRATCHPADS_SUBDIR);
 
+    /**
+     * Announce a scratchpad write on the domain bus.
+     *
+     * These notes were the one body of hand-written knowledge in the workspace
+     * that nothing could react to, because writes went straight to the KV store.
+     * The event carries the same key the list endpoint reports, so a consumer
+     * identifies a note the same way the UI does.
+     */
+    const announceWrite = (key: string, repo: string | null): void => {
+      container.eventBus.emit({ type: 'scratchpad.updated', key, repo, occurredAt: new Date() });
+    };
+
     // ── Global scratchpad ──
 
     app.get('/api/scratchpad', async () => {
@@ -42,10 +54,12 @@ export function scratchpadRoutes(container: Container) {
       const { content } = request.body;
       if (kvStore) {
         await kvStore.set(KV_GLOBAL, content);
+        announceWrite('__global__', null);
         return { ok: true };
       }
       if (!(await hostFs.exists(dirPath))) await hostFs.mkdir(dirPath);
       await hostFs.writeFile(filePath, content);
+      announceWrite('__global__', null);
       return { ok: true };
     });
 
@@ -90,8 +104,10 @@ export function scratchpadRoutes(container: Container) {
       async (request) => {
         const { org, name } = request.params;
         const { content } = request.body;
+        const repo = `${org.toLowerCase()}/${name.toLowerCase()}`;
         if (kvStore) {
           await kvStore.set(kvKey(org, name), content);
+          announceWrite(repo, repo);
           return { ok: true };
         }
         const orgDir = join(scratchpadsDir, org);
@@ -101,6 +117,7 @@ export function scratchpadRoutes(container: Container) {
           await hostFs.mkdir(orgDir);
         }
         await hostFs.writeFile(join(orgDir, `${name}.md`), content);
+        announceWrite(repo, repo);
         return { ok: true };
       },
     );
