@@ -184,6 +184,10 @@ async function createPgsqlStores(deps: {
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { PgFileMetaStore } = await import('./pgsql/pg-file-meta-store.adapter.js');
   const { PgTicketGroupStore } = await import('./pgsql/pg-ticket-group-store.adapter.js');
+  const { PgWorkflowTemplateStore } = await import('./pgsql/pg-workflow-template-store.adapter.js');
+  const { PgWorkflowRunStore } = await import('./pgsql/pg-workflow-run-store.adapter.js');
+  const { PgStepRunStore } = await import('./pgsql/pg-step-run-store.adapter.js');
+  const { PgRoutineStore } = await import('./pgsql/pg-routine-store.adapter.js');
 
   const connection = new PgConnection(url);
   await connection.init();
@@ -219,10 +223,10 @@ async function createPgsqlStores(deps: {
     fileStore: new DiskFileStoreAdapter(deps.homedir),
     fileMetaStore: new PgFileMetaStore(connection),
     ticketGroupStore: new PgTicketGroupStore(connection),
-    workflowTemplateStore: null,
-    workflowRunStore: null,
-    stepRunStore: null,
-    routineStore: null,
+    workflowTemplateStore: new PgWorkflowTemplateStore(connection),
+    workflowRunStore: new PgWorkflowRunStore(connection),
+    stepRunStore: new PgStepRunStore(connection),
+    routineStore: new PgRoutineStore(connection),
   };
 }
 
