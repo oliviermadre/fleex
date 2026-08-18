@@ -51,8 +51,32 @@ const MUTATING_LEAVES = new Set([
 /** Options we never expose as tool params (handled specially or noise). */
 const HIDDEN_OPTION_LONGS = new Set(['--help', '--workspace', '--json']);
 
-function camelCase(name: string): string {
-  return name.replace(/[-_\s]+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase());
+/**
+ * Characters the API accepts in a tool's input-schema property key.
+ *
+ * Exported so a test can assert the whole generated surface against it: one
+ * invalid key makes the API reject the *entire* request, so a single odd argument
+ * name takes down every tool at once — which is exactly what `<id|slug>` did to
+ * the assistant.
+ */
+export const PROPERTY_KEY_PATTERN = /^[a-zA-Z0-9_.-]{1,64}$/;
+
+/**
+ * Turn a Commander argument or option name into a valid property key.
+ *
+ * A CLI name is help text first: `<id|slug>` reads well in `--help` and says more
+ * than `<idOrSlug>` would. So the pipe is folded into a camel hump here rather
+ * than being banned there — the same treatment `-` and `_` already get.
+ */
+function toPropertyKey(name: string): string {
+  return name
+    // Long-standing behaviour: separators introduce a hump.
+    .replace(/[-_\s]+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase())
+    // And so does anything the API forbids, so `id|slug` becomes `idSlug`.
+    .replace(/[^a-zA-Z0-9_.-]+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase())
+    // A forbidden character with nothing after it has no hump to fold into.
+    .replace(/[^a-zA-Z0-9_.-]/g, '')
+    .slice(0, 64);
 }
 
 /** Minimal walk of the Commander tree (root included), self-contained. */
@@ -77,7 +101,7 @@ function readArguments(cmd: Command): ArgSpec[] {
   const raw = cmd as unknown as { registeredArguments?: Argument[]; _args?: Argument[] };
   const list: Argument[] = (raw.registeredArguments ?? raw._args ?? []) as Argument[];
   return list.map((a) => ({
-    key: camelCase(a.name()),
+    key: toPropertyKey(a.name()),
     required: (a as unknown as { required?: boolean }).required ?? false,
     variadic: (a as unknown as { variadic?: boolean }).variadic ?? false,
   }));
@@ -117,7 +141,7 @@ function readOptions(cmd: Command): OptInfo[] {
     // `.option('--tag <t>', desc, collectFn, [])` is not — its only signal is an
     // array default. Treat either as array-valued.
     const variadic = Boolean(o.variadic) || Array.isArray((o as unknown as { defaultValue?: unknown }).defaultValue);
-    const key = o.attributeName();
+    const key = toPropertyKey(o.attributeName());
     positives.set(key, {
       key,
       flag,
@@ -130,7 +154,7 @@ function readOptions(cmd: Command): OptInfo[] {
   }
 
   for (const o of negatives) {
-    const key = o.attributeName();
+    const key = toPropertyKey(o.attributeName());
     const flag = o.long ?? o.short;
     if (!flag) continue;
     const positive = positives.get(key);
