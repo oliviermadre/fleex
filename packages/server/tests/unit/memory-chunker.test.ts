@@ -9,6 +9,9 @@ import {
   chunkScratchpad,
   TARGET_CHUNK_CHARS,
   MAX_CHUNK_CHARS,
+  looksLikeMarkup,
+  hasBodyText,
+  splitRetrievable,
 } from '../../src/application/memory/chunker.js';
 
 const para = (n: number, char = 'a') => char.repeat(n);
@@ -241,5 +244,97 @@ describe('chunkScratchpad', () => {
     const chunks = chunkScratchpad({ key: 'repo:org/app', label: 'org/app', content: 'remember the migration order', repo: 'org/app' });
     expect(chunks[0]?.metadata.repo).toBe('org/app');
     expect(chunks[0]?.title).toBe('Scratchpad: org/app');
+  });
+});
+
+describe('keeping markup out of the index', () => {
+  // Thresholds calibrated on a live instance: prose chunks measured a structural
+  // symbol density of 0.000–0.020, deck and prototype chunks 0.039–0.073.
+  const css = `/* lineage strip */ .lin{display:inline-flex;align-items:center;gap:0;margin-right:9px}
+    .lin i{width:7px;height:7px;border-radius:50%;display:block}
+    .switcher{position:sticky;top:0;z-index:20;margin:0 -28px 26px;padding:14px 28px}`;
+
+  const html = '<section class="slide"><div class="container"><h2>Vision</h2>'
+    + '<p>Ce que nous faisons</p></div></section><div class="divider"></div>';
+
+  const prose = `## Décision
+
+Nous gardons les sessions plutôt que des JWT, parce que la révocation immédiate
+est une exigence produit et qu'un token signé ne se révoque pas.`;
+
+  it('recognises a stylesheet as markup', () => {
+    expect(looksLikeMarkup(css)).toBe(true);
+  });
+
+  it('recognises tag soup as markup', () => {
+    expect(looksLikeMarkup(html)).toBe(true);
+  });
+
+  it('leaves prose alone', () => {
+    expect(looksLikeMarkup(prose)).toBe(false);
+  });
+
+  it('leaves prose containing a little inline code alone', () => {
+    // The point is to drop documents that are markup, not technical writing.
+    const technical = `## Migration
+
+Ajouter \`ALTER TABLE memory_chunks\` dans un nouveau fichier de migration; ne
+jamais modifier une migration déjà commitée, même pour une faute de frappe.`;
+    expect(looksLikeMarkup(technical)).toBe(false);
+  });
+
+  it('treats a chunk with no letters as markup', () => {
+    expect(looksLikeMarkup('{{{;;;}}}<><>')).toBe(true);
+  });
+
+  it('says nothing about an empty chunk', () => {
+    expect(looksLikeMarkup('')).toBe(false);
+  });
+
+  it('drops a heading with no body', () => {
+    expect(hasBodyText('## Expert Opinions')).toBe(false);
+    expect(hasBodyText('### 🏗️ Découpage Technique')).toBe(false);
+  });
+
+  it('keeps a heading that has a body', () => {
+    expect(hasBodyText('## Titre\n\nUn paragraphe qui dit quelque chose.')).toBe(true);
+  });
+
+  it('keeps terse content, because agent memory legitimately is', () => {
+    // "Be terse." is a real persona identity; a word-count policy would delete it.
+    expect(hasBodyText('I am terse')).toBe(true);
+  });
+
+  it('drops a body that is punctuation', () => {
+    expect(hasBodyText('## Notes\n\n---')).toBe(false);
+  });
+
+  it('keeps only the prose sections of a deliverable that embeds a mock', () => {
+    // Sized like a real deliverable, where each section is its own chunk. That is
+    // the shape this filter is for: the decks on a live instance split into 27 to
+    // 86 parts, and the prose ones are exactly the parts worth keeping.
+    const section = 'Le sélecteur de session doit distinguer la reprise et le démarrage à neuf. '.repeat(12);
+    const parts = splitRetrievable(`## Contexte\n\n${section}\n\n## Maquette\n\n${css.repeat(12)}`);
+
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toContain('sélecteur de session');
+  });
+
+  it('drops a short document whose prose and markup share one chunk', () => {
+    // A known limit, stated rather than hidden: the filter judges chunks, and
+    // chunk boundaries are size-driven, so a document too small to split is kept
+    // or dropped whole. It costs a sentence on a tiny mixed document and saves
+    // the index from thousands of stylesheet chunks, which is the trade taken.
+    const parts = splitRetrievable(`## Contexte\n\nUne phrase.\n\n## Maquette\n\n${css}`);
+    expect(parts).toEqual([]);
+  });
+
+  it('indexes nothing for a deliverable that is entirely markup', () => {
+    // Returning no chunks is what makes the kernel forget the source, so a
+    // reindex clears what an earlier version had let in.
+    expect(chunkDeliverable({
+      id: 'd1', title: 'Deck', type: 'report', content: `${css}\n\n${html}`,
+      agentName: 'Builder', ticketId: 't1',
+    })).toEqual([]);
   });
 });

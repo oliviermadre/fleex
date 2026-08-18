@@ -289,6 +289,87 @@ export interface DeliverableChunkInput {
  * fixed ~400-word shape precisely so they can be retrieved and injected whole,
  * and cutting them would strand the decision from its rationale.
  */
+/** How much of a chunk to inspect when deciding whether it is markup. */
+const MARKUP_SAMPLE_CHARS = 4_000;
+
+/** Structural symbols per character. Minified CSS sits far above; prose far below. */
+const MARKUP_SYMBOL_DENSITY = 0.03;
+
+/** Structural symbols relative to letters — catches long, sparse tag soup. */
+const MARKUP_SYMBOL_TO_LETTER_RATIO = 0.12;
+
+/**
+ * Letters a part needs outside its headings — one word, not one bullet glyph.
+ *
+ * Deliberately the lowest bar that still excludes a body of `---` or `N/A`:
+ * persona memory and skill instructions are legitimately terse ("Be terse."),
+ * and a word-count policy invented here would silently delete them.
+ */
+const MIN_BODY_LETTERS = 2;
+
+/**
+ * Whether a chunk is markup rather than knowledge.
+ *
+ * Fleex deliverables include self-contained HTML decks and interactive
+ * prototypes. Split by markdown headings, a document like that yields chunks of
+ * minified CSS and tag soup — text with no meaning for a prose encoder, whose
+ * vectors land near the middle of the space and are therefore *moderately* close
+ * to every query. Measured on a live instance, those chunks sat at a symbol
+ * density of 0.039–0.073 while prose sat at 0.000–0.020, and being 80% of the
+ * corpus they crowded real answers out of the top-K entirely: a search for a
+ * ticket's own title returned nothing but deck stylesheets.
+ *
+ * Deliberately about the chunk, not the document: a report that embeds one HTML
+ * mock keeps its prose sections and loses only the markup ones.
+ */
+export function looksLikeMarkup(text: string): boolean {
+  const sample = text.slice(0, MARKUP_SAMPLE_CHARS).trim();
+  if (!sample) return false;
+
+  // Punctuation prose does not use at volume: tag brackets, and the braces and
+  // semicolons of a CSS rule or a script block.
+  const structural = (sample.match(/[<>{};]/g) ?? []).length;
+  const letters = countLetters(sample);
+  if (letters === 0) return true;
+
+  // Two independent reads, because density alone misjudges both a short snippet
+  // and a very long one: symbols per character, and symbols against prose mass.
+  return structural / sample.length >= MARKUP_SYMBOL_DENSITY
+    || structural > letters * MARKUP_SYMBOL_TO_LETTER_RATIO;
+}
+
+/**
+ * Whether a part has a body, and not just headings.
+ *
+ * A section whose body is empty — because the next heading follows immediately —
+ * otherwise becomes a chunk holding `## Expert Opinions` and nothing else, which
+ * can answer no question yet competes with real content for a place in the
+ * top-K. Observed on a live index across skills and deliverables alike.
+ */
+export function hasBodyText(text: string): boolean {
+  const body = text.replace(/^\s*#{1,6}\s.*$/gm, '');
+  return countLetters(body) >= MIN_BODY_LETTERS;
+}
+
+/** Letters only — digits and punctuation say nothing about prose mass. */
+function countLetters(text: string): number {
+  return (text.match(/\p{L}/gu) ?? []).length;
+}
+
+/**
+ * Split a markdown document into the parts worth embedding.
+ *
+ * The filter belongs here rather than in each caller: every content type that
+ * goes through `splitMarkdown` — deliverables, agent memory, skills, notes,
+ * epics — can contain an embedded mock or a bare heading, and an index is only
+ * as good as the worst thing allowed into it.
+ */
+export function splitRetrievable(content: string): string[] {
+  return splitMarkdown(content).filter(
+    (part) => hasBodyText(part) && !looksLikeMarkup(part),
+  );
+}
+
 export function chunkDeliverable(deliverable: DeliverableChunkInput): DraftChunk[] {
   const kind = summaryKind(deliverable.type);
   const metadata: MemoryChunkMetadata = {
@@ -314,7 +395,7 @@ export function chunkDeliverable(deliverable: DeliverableChunkInput): DraftChunk
     }];
   }
 
-  const parts = splitMarkdown(content);
+  const parts = splitRetrievable(content);
   return parts.map((part, chunkIndex) => ({
     sourceKind: 'deliverable' as const,
     sourceId: deliverable.id,
@@ -344,7 +425,7 @@ export function chunkScratchpad(input: {
   repo?: string | null;
   updatedAt?: Date | null;
 }): DraftChunk[] {
-  const parts = splitMarkdown(input.content);
+  const parts = splitRetrievable(input.content);
   return parts.map((content, chunkIndex) => ({
     sourceKind: 'scratchpad' as const,
     sourceId: input.key,
@@ -371,7 +452,7 @@ export function chunkEpic(input: {
   boardId?: string | null;
   updatedAt?: Date | null;
 }): DraftChunk[] {
-  const parts = splitMarkdown(input.description);
+  const parts = splitRetrievable(input.description);
   return parts.map((content, chunkIndex) => ({
     sourceKind: 'epic' as const,
     sourceId: input.id,
@@ -401,7 +482,7 @@ export function chunkPersona(input: {
   let chunkIndex = 0;
 
   for (const [label, body] of [['memory', input.memoryMd], ['identity', input.identityMd]] as const) {
-    for (const content of splitMarkdown(body?.trim() ?? '')) {
+    for (const content of splitRetrievable(body?.trim() ?? '')) {
       out.push({
         sourceKind: 'persona',
         sourceId: input.id,
@@ -424,7 +505,7 @@ export function chunkSkill(input: {
   markdownContent: string;
   updatedAt?: Date | null;
 }): DraftChunk[] {
-  const parts = splitMarkdown(input.markdownContent);
+  const parts = splitRetrievable(input.markdownContent);
   return parts.map((content, chunkIndex) => ({
     sourceKind: 'skill' as const,
     sourceId: input.id,
