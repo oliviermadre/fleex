@@ -16,10 +16,13 @@ const MAX_RESULTS = 5;
 /**
  * Memory results for the command palette.
  *
- * Only runs when the typed text matches nothing the palette already knows: the
- * palette's job is to get you somewhere in one keystroke, so a command must never
- * be pushed down the list by a semantic match. When there is no command to offer,
- * the same box becomes a search over everything the workspace remembers.
+ * The excerpts only appear when the typed text matches nothing the palette
+ * already knows: its job is to get you somewhere in one keystroke, so a command
+ * must never be pushed down the list by a semantic match. When there is no command
+ * to offer, the same box becomes a search over everything the workspace remembers.
+ *
+ * Asking is the exception, and is always offered: it is a different intent from
+ * navigating, not a fallback for when navigation fails.
  */
 export function useMemorySearchItems(query: string, hasLocalMatches: boolean): CommandItem[] {
   const enabled = useSettingsStore((s) => s.settings.memoryEngine === 'semantic'
@@ -56,7 +59,13 @@ export function useMemorySearchItems(query: string, hasLocalMatches: boolean): C
     };
   }, [shouldSearch, trimmed]);
 
-  const showAsk = askEnabled && !hasLocalMatches && trimmed.length >= MIN_QUERY_LENGTH;
+  // Offered whether or not a command matched, unlike the excerpts above. A
+  // question and a navigation are different intents that produce the same
+  // keystrokes — "routines" matches a ticket title *and* is something you might
+  // want answered — so hiding the choice as soon as anything matched removed it
+  // exactly when it was most plausible. It stays last, so nothing it does pushes
+  // a command down the list.
+  const showAsk = askEnabled && trimmed.length >= MIN_QUERY_LENGTH;
   if (!shouldSearch && !showAsk) return [];
 
   const items: CommandItem[] = results.map((snippet, i) => ({
