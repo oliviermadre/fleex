@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import type { CommandDef } from '../../../core/types.ts';
-import { apiGet } from '../../../core/api.ts';
+import { apiGet, BENCH_TIMEOUT_MS } from '../../../core/api.ts';
 import { info, present, warn } from '../../../core/colors.ts';
 import { memoryApi } from '../_shared.ts';
 
@@ -36,7 +36,7 @@ const def: CommandDef = {
     if (opts.k) params.set('k', opts.k);
 
     const query = params.toString();
-    const res = await apiGet<BenchResult>(memoryApi(`/bench${query ? `?${query}` : ''}`));
+    const res = await apiGet<BenchResult>(memoryApi(`/bench${query ? `?${query}` : ''}`), BENCH_TIMEOUT_MS);
 
     present(res, () => {
       if (res.reason === 'unavailable') {

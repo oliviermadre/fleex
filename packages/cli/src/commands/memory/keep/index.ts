@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { apiPost } from '../../../core/api.ts';
+import { apiPost, LLM_TIMEOUT_MS } from '../../../core/api.ts';
 import { die, info, ok, present } from '../../../core/colors.ts';
 import { memoryApi } from '../_shared.ts';
 
@@ -35,8 +35,7 @@ const def: CommandDef = {
         comment: opts.note ?? null,
         ticketId: opts.ticket ?? null,
         repo: opts.repo ?? null,
-      },
-    );
+      }, LLM_TIMEOUT_MS);
 
     present(result, () => {
       if (!result.ok) {

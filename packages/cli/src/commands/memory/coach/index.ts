@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import type { CommandDef } from '../../../core/types.ts';
-import { apiGet, apiPost } from '../../../core/api.ts';
+import { apiGet, apiPost, LLM_TIMEOUT_MS } from '../../../core/api.ts';
 import { die, info, ok, present, warn } from '../../../core/colors.ts';
 import { fetchPersonas } from '../../../core/agentic.ts';
 import { describeOrigin, memoryApi, type MemorySnippet } from '../_shared.ts';
@@ -42,7 +42,7 @@ const def: CommandDef = {
       ?? personas.find((p) => p.name.toLowerCase() === needle);
     if (!persona) die(`Unknown agent "${agentRef}".`);
 
-    const proposal = await apiGet<CoachProposal>(memoryApi(`/personas/${encodeURIComponent(persona.id)}/coach`));
+    const proposal = await apiGet<CoachProposal>(memoryApi(`/personas/${encodeURIComponent(persona.id)}/coach`), LLM_TIMEOUT_MS);
 
     if (!proposal.proposedMemoryMd) {
       present(proposal, () => info(REASONS[proposal.reason ?? ''] ?? 'No proposal.'));
@@ -52,7 +52,7 @@ const def: CommandDef = {
     if (opts.apply) {
       await apiPost(memoryApi(`/personas/${encodeURIComponent(persona.id)}/coach/apply`), {
         memoryMd: proposal.proposedMemoryMd,
-      });
+      }, LLM_TIMEOUT_MS);
       present({ ...proposal, applied: true }, () => {
         ok(`Updated ${proposal.personaName}'s memory.`);
       });

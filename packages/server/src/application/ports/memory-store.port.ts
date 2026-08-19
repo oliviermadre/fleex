@@ -75,6 +75,15 @@ export interface MemoryStorePort {
    */
   listSourceIds(sourceKind: MemorySourceKind): Promise<string[]>;
 
+  /**
+   * A spread of chunks from across the index, for measuring retrieval.
+   *
+   * Not the newest rows: a benchmark drawn from the head of the index measures
+   * whatever was touched last week and calls it "this corpus". The spread is what
+   * makes the number comparable between two encoders.
+   */
+  sampleChunks(limit: number): Promise<MemoryChunkEntity[]>;
+
   /** Existing hashes for a source, so unchanged chunks are not re-embedded. */
   getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>>;
 

@@ -245,6 +245,22 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
     return [...ids];
   }
 
+  async sampleChunks(limit: number): Promise<MemoryChunkEntity[]> {
+    // PostgREST cannot order randomly, so the spread comes from a random window
+    // instead: count the rows, start somewhere that leaves room for `limit`, and
+    // read forward. One extra request, and no ordering bias towards the newest.
+    const { count } = await this.conn.client
+      .from(TABLE).select('*', { count: 'exact', head: true });
+    const total = count ?? 0;
+    if (total === 0) return [];
+
+    const from = Math.max(0, Math.floor(Math.random() * Math.max(1, total - limit)));
+    const { data, error } = await this.conn.client
+      .from(TABLE).select(COLUMNS).order('id').range(from, from + limit - 1);
+    if (error) throw new Error(`memory sample failed: ${error.message}`);
+    return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
+  }
+
   async getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>> {
     const { data, error } = await this.conn.client
       .from(TABLE).select('chunk_index, content_hash')

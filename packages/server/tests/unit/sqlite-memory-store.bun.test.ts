@@ -377,3 +377,32 @@ describe('vector cache coherence', () => {
     expect(await store.search(await provider.embedQuery('transient content here'), {}, 5)).toEqual([]);
   });
 });
+
+describe('sampling for the benchmark', () => {
+  it('spreads across the index instead of returning its head', async () => {
+    // The benchmark used to sample through the keyword path, which orders by
+    // recency — so it measured the newest rows and called it "this corpus".
+    for (let i = 0; i < 60; i++) {
+      await store.upsertChunks([await chunk({
+        sourceId: `s${i}`, content: `body number ${i} with enough words to be indexed`,
+        sourceUpdatedAt: new Date(2026, 0, 1 + i),
+      })]);
+    }
+
+    const sample = await store.sampleChunks(20);
+    expect(sample).toHaveLength(20);
+
+    // Not simply the 20 most recent: at least one row from the older half.
+    const indices = sample.map((c) => Number(c.sourceId.slice(1)));
+    expect(Math.min(...indices)).toBeLessThan(30);
+  });
+
+  it('returns everything when the index is smaller than the sample', async () => {
+    await store.upsertChunks([await chunk({ sourceId: 'only', content: 'the sole chunk here' })]);
+    expect(await store.sampleChunks(50)).toHaveLength(1);
+  });
+
+  it('returns nothing for an empty index', async () => {
+    expect(await store.sampleChunks(10)).toEqual([]);
+  });
+});

@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import type { CommandDef } from '../../../core/types.ts';
-import { apiPost } from '../../../core/api.ts';
+import { apiPost, LLM_TIMEOUT_MS } from '../../../core/api.ts';
 import { die, info, present, warn } from '../../../core/colors.ts';
 import { describeOrigin, memoryApi, type MemorySnippet } from '../_shared.ts';
 
@@ -35,7 +35,7 @@ const def: CommandDef = {
       question,
       limit: opts.limit ? Number.parseInt(opts.limit, 10) : undefined,
       repo: opts.repo ?? null,
-    });
+    }, LLM_TIMEOUT_MS);
 
     present(res, () => {
       if (!res.answer) {

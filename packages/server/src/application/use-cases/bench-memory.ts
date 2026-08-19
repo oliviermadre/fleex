@@ -101,14 +101,17 @@ export class BenchMemoryUseCase {
   /**
    * Sample the index to build cases.
    *
-   * Read through the keyword path with an empty-ish term because the port has no
-   * "list rows" method by design — nothing else needs one, and adding it would
-   * invite callers to page the corpus into memory.
+   * `sampleChunks` exists for exactly this: a spread the store can produce
+   * cheaply on either driver, without inviting callers to page the whole corpus
+   * into memory.
    */
   private async buildCases(store: MemoryStorePort, limit: number): Promise<EvalCase[]> {
-    // A single space matches nothing useful, so sample on a common letter instead:
-    // any prose chunk contains an "e", and the LIKE path is cheap.
-    const sample = await store.searchKeyword('e', {}, limit * 4);
+    // A spread across the index, not its head. Sampling used to be a keyword
+    // search for "e", which orders by recency — so the benchmark measured last
+    // week's work and called it "this corpus", and the one-case-per-source rule
+    // collapsed it to a handful of cases. Over-fetched because
+    // `deriveCasesFromCorpus` discards chunks too short to make a case.
+    const sample = await store.sampleChunks(limit * 12);
     return deriveCasesFromCorpus(
       sample.map((chunk) => ({ sourceId: chunk.sourceId, title: chunk.title, content: chunk.content })),
       limit,
