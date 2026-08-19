@@ -17,6 +17,8 @@ Rules:
 - When the excerpts do not answer the question, say so plainly and state what they
   do cover. Do not speculate to fill the gap.
 - Be concise: a short answer with citations beats a thorough guess.
+- Answer in the language of the question. A workspace is not monolingual, and an
+  answer in the wrong language is one the reader has to translate before using.
 `.trim();
 
 export interface AskMemoryResult {

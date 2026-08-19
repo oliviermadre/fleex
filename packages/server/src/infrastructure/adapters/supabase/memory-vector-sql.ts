@@ -33,6 +33,21 @@ export const EMBEDDING_INDEX_SQL = `
 `;
 
 /**
+ * Partial index for the sweep's backlog.
+ *
+ * The sweep asks "which rows have no vector yet" every minute. Without an index
+ * that predicate is a sequential scan of the heaviest table in the schema — the
+ * heap carries a 1.5 kB vector per row — and on a live instance it exceeded
+ * Postgres' statement timeout, so the sweep failed silently every minute and
+ * deferred chunks were never embedded. Partial, so it holds only the backlog and
+ * is empty once the index has caught up.
+ */
+export const PENDING_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_memory_chunks_pending
+    ON memory_chunks (created_at) WHERE embedding IS NULL
+`;
+
+/**
  * Dropped before a width change: an HNSW index is built for one dimensionality
  * and cannot survive the column being retyped.
  */

@@ -26,6 +26,8 @@ Write a markdown document. Rules:
 
 If the excerpts have nothing coherent to say about the subject, output the single
 token ${NOTHING_SENTINEL}.
+- Write in the language the subject and its sources are in, not in English by
+  default.
 `.trim();
 
 export interface SynthesisResult {

@@ -100,8 +100,11 @@ function packParagraphs(text: string, targetChars: number): string[] {
   for (const paragraph of paragraphs) {
     if (paragraph.length > targetChars) {
       flush();
-      for (let i = 0; i < paragraph.length; i += targetChars) {
-        out.push(paragraph.slice(i, i + targetChars).trim());
+      let i = 0;
+      while (i < paragraph.length) {
+        const end = safeBoundary(paragraph, Math.min(i + targetChars, paragraph.length));
+        out.push(paragraph.slice(i, end).trim());
+        i = end;
       }
       continue;
     }
@@ -110,6 +113,28 @@ function packParagraphs(text: string, targetChars: number): string[] {
   }
   flush();
   return out;
+}
+
+/**
+ * Move a cut off the middle of a surrogate pair.
+ *
+ * JavaScript string indices count UTF-16 code units, so a character outside the
+ * BMP — every emoji — occupies two of them. Cutting between the halves leaves one
+ * chunk ending in a high surrogate and the next starting with its orphan, and
+ * `JSON.stringify` emits those as unpaired escapes: text that is valid JavaScript
+ * and invalid JSON. Postgres rejects the whole batch with "invalid input syntax
+ * for type json", so a single 🟡 on a chunk boundary silently kept an entire
+ * ticket out of the index. Observed on a live instance, not hypothesised.
+ *
+ * Retreating by one code unit keeps the pair whole in the next chunk, which costs
+ * one character of the current one.
+ */
+function safeBoundary(text: string, index: number): number {
+  if (index <= 0 || index >= text.length) return index;
+  const code = text.charCodeAt(index - 1);
+  // A high surrogate as the last unit means its pair continues past the cut.
+  const isHighSurrogate = code >= 0xd800 && code <= 0xdbff;
+  return isHighSurrogate ? index - 1 : index;
 }
 
 /**

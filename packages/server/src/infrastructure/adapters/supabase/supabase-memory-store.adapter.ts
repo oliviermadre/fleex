@@ -359,23 +359,38 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
   }
 
   async listPendingEmbeddings(limit: number, activeModel?: string | null): Promise<MemoryChunkEntity[]> {
-    let query = this.conn.client
-      .from(TABLE).select(COLUMNS)
-      .order('created_at', { ascending: true })
-      .limit(limit);
+    // Two queries rather than one `or`, because each arm has an index and their
+    // disjunction has none: an `or` across three predicates forced a sequential
+    // scan of a table whose heap carries a vector per row, which on a live instance
+    // ran past Postgres' statement timeout every single minute — so the sweep
+    // failed silently and deferred chunks were never embedded.
+    const missing = await this.readPending(
+      this.conn.client.from(TABLE).select(COLUMNS)
+        .is('embedding', null)
+        .order('created_at', { ascending: true })
+        .limit(limit),
+    );
+    if (!activeModel || missing.length >= limit) return missing;
 
-    // Never embedded, or embedded by a model that is no longer configured. The
-    // second arm is what turns a model change into a background migration.
-    // The model id is double-quoted: inside an `or` list PostgREST reads `,` as a
-    // separator and `.` as the operator delimiter, and a provider id carries both a
-    // path and a colon.
-    query = activeModel
-      ? query.or(`embedding.is.null,embedding_model.is.null,embedding_model.neq."${activeModel.replace(/"/g, '\\"')}"`)
-      : query.is('embedding', null);
+    // Embedded by a superseded model. Served by the index migration 033 created on
+    // `embedding_model`, and unordered on purpose: any stale row will do, and an
+    // ordering would cost a sort the index cannot provide.
+    const stale = await this.readPending(
+      this.conn.client.from(TABLE).select(COLUMNS)
+        .not('embedding', 'is', null)
+        .neq('embedding_model', activeModel)
+        .limit(limit - missing.length),
+    );
+    return [...missing, ...stale];
+  }
 
+  /** Shared tail of the two backlog queries. */
+  private async readPending(
+    query: PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  ): Promise<MemoryChunkEntity[]> {
     const { data, error } = await query;
     if (error) throw new Error(`memory pending read failed: ${error.message}`);
-    return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
+    return (data as MemoryChunkRow[] ?? []).map(toEntity);
   }
 
   async setEmbeddings(

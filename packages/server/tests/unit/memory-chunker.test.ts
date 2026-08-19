@@ -13,6 +13,10 @@ import {
   hasBodyText,
   splitRetrievable,
 } from '../../src/application/memory/chunker.js';
+import {
+  MemoryChunkEntity,
+  dropLoneSurrogates,
+} from '../../src/domain/entities/memory-chunk.entity.js';
 
 const para = (n: number, char = 'a') => char.repeat(n);
 
@@ -336,5 +340,61 @@ jamais modifier une migration déjà commitée, même pour une faute de frappe.`
       id: 'd1', title: 'Deck', type: 'report', content: `${css}\n\n${html}`,
       agentName: 'Builder', ticketId: 't1',
     })).toEqual([]);
+  });
+});
+
+describe('not cutting characters in half', () => {
+  // Reproduced from a live instance: ticket #187 held one 🟡 that fell on a
+  // 1500-character boundary, so a chunk ended in a high surrogate, JSON.stringify
+  // emitted an unpaired escape, and Postgres refused the batch with "invalid input
+  // syntax for type json" — the whole ticket never reached the index.
+  const yellow = '\u{1F7E1}';
+
+  function emojiAtBoundary(): string {
+    // One paragraph, with the emoji sitting exactly on the split.
+    const head = 'a'.repeat(TARGET_CHUNK_CHARS - 1);
+    return `${head}${yellow}${'b'.repeat(400)}`;
+  }
+
+  function loneSurrogates(text: string): number {
+    return (text.match(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g) ?? []).length;
+  }
+
+  it('never splits a surrogate pair across chunks', () => {
+    const parts = splitMarkdown(emojiAtBoundary());
+    expect(parts.length).toBeGreaterThan(1);
+    for (const part of parts) expect(loneSurrogates(part)).toBe(0);
+  });
+
+  it('keeps the character whole rather than dropping it', () => {
+    const parts = splitMarkdown(emojiAtBoundary());
+    expect(parts.join('')).toContain(yellow);
+  });
+
+  it('produces chunks a JSON parser accepts', () => {
+    // What PostgREST does with the payload, and what used to fail.
+    for (const part of splitMarkdown(emojiAtBoundary())) {
+      expect(() => JSON.parse(JSON.stringify({ content: part }))).not.toThrow();
+    }
+  });
+
+  it('drops an orphan that was already in the source', () => {
+    // Half a character cannot be repaired, and it is what makes a row unwritable.
+    const broken = `texte avec un surrogate cassé \uD83D et la suite du paragraphe`;
+    expect(dropLoneSurrogates(broken)).not.toContain('\uD83D');
+    expect(dropLoneSurrogates(broken)).toContain('et la suite');
+  });
+
+  it('leaves a well-formed pair alone', () => {
+    expect(dropLoneSurrogates(`ok ${yellow} ok`)).toBe(`ok ${yellow} ok`);
+  });
+
+  it('sanitises at entity creation, whatever produced the chunk', () => {
+    const entity = MemoryChunkEntity.create({
+      sourceKind: 'deliverable', sourceId: 'd1', chunkIndex: 0,
+      title: `titre \uD83D`, content: `corps \uDC4D avec du texte`,
+    });
+    expect(loneSurrogates(entity.title)).toBe(0);
+    expect(loneSurrogates(entity.content)).toBe(0);
   });
 });
