@@ -80,6 +80,16 @@ function codeRanges(text: string): Array<[number, number]> {
  * the reader nothing about whether to open it — and it is the part that pushes a
  * long title onto a second line.
  */
-export function sourceLabel(title: string): string {
-  return title.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
+export function sourceLabel(title: string, originTitle?: string | null): string {
+  const withoutCounter = title.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
+  if (!originTitle) return withoutCounter;
+
+  // A deliverable's breadcrumb ends with the title of the ticket it belongs to, so
+  // every row repeated the same parenthetical. Removed by comparison rather than by
+  // pattern — the ticket is shown as its own reference beside the row, and guessing
+  // which parenthetical is structural would eventually eat a real one.
+  const suffix = `(${originTitle.trim()})`;
+  return withoutCounter.endsWith(suffix)
+    ? withoutCounter.slice(0, -suffix.length).trim()
+    : withoutCounter;
 }

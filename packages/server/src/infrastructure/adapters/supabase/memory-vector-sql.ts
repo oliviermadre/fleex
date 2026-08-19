@@ -23,6 +23,21 @@ export const DEFAULT_VECTOR_DIMENSIONS = 384;
 export const MATCH_FN = 'match_memory_chunks';
 
 /**
+ * How wide the HNSW traversal goes, set on the function so every RPC gets it.
+ *
+ * pgvector returns at most `ef_search` rows from an index scan whatever the `LIMIT`
+ * asks for, and the default is 40. That silently capped every search at 40 chunks —
+ * which on a real corpus is five large documents, since one deliverable can hold
+ * fifty chunks. A request for twelve distinct sources could not be satisfied, and
+ * nothing in the result said so.
+ *
+ * 200 keeps the scan index-based while giving the ranker enough different sources
+ * to choose from. It costs some latency per query; an answer that cannot reach the
+ * right document costs more.
+ */
+const HNSW_EF_SEARCH = 200;
+
+/**
  * HNSW over cosine distance. Chosen over IVFFlat because it needs no training
  * pass and stays accurate as the corpus grows — an IVFFlat index built on an
  * empty table would have to be rebuilt after the first backfill.
@@ -99,6 +114,7 @@ export const matchFunctionSql = (dimensions = DEFAULT_VECTOR_DIMENSIONS): string
     similarity float
   )
   LANGUAGE sql STABLE
+  SET hnsw.ef_search = ${HNSW_EF_SEARCH}
   AS $$
     SELECT
       m.id, m.source_kind, m.source_id, m.chunk_index,

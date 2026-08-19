@@ -73,6 +73,7 @@ function makeMemoryStore(hits: MemorySearchHit[]): MemoryStorePort {
     upsertChunks: vi.fn(), deleteBySource: vi.fn(), deleteBySourceFrom: vi.fn(),
     getHashesBySource: vi.fn(async () => new Map()), listPendingEmbeddings: vi.fn(async () => []),
     setEmbeddings: vi.fn(), getStats: vi.fn(), clear: vi.fn(),
+    listSourceIds: vi.fn(async () => []), sampleChunks: vi.fn(async () => []),
   } as unknown as MemoryStorePort;
 }
 
@@ -264,5 +265,67 @@ describe('semantic engine', () => {
       expect.objectContaining({ repo: 'org/app' }),
       expect.any(Number),
     );
+  });
+});
+
+describe('a list is bounded by its count, a prompt by its size', () => {
+  /** Chunks the size of a ticket summary, which is stored unsplit. */
+  function bigHits() {
+    return [
+      chunkHit({ sourceId: 'a', content: 'x'.repeat(6_000), similarity: 0.95 }),
+      chunkHit({ sourceId: 'b', content: 'y'.repeat(6_000), similarity: 0.94 }),
+      chunkHit({ sourceId: 'c', content: 'z'.repeat(6_000), similarity: 0.93 }),
+    ];
+  }
+
+  it('returns everything asked for, however long the chunks are', async () => {
+    // The injection budget used to apply here too: thirty results requested, nine
+    // returned, with nothing saying why.
+    const useCase = await semanticUseCase(bigHits());
+    const found = await useCase.search({ query: 'anything', limit: 3 });
+    expect(found.map((s) => s.sourceId)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('returns a chunk larger than the whole budget', async () => {
+    // A ticket summary routinely exceeds 10 000 characters. Under the shared budget
+    // it could never be returned by any surface — it was skipped, silently, always.
+    const useCase = await semanticUseCase(
+      [chunkHit({ sourceId: 'summary', content: 'x'.repeat(20_000), similarity: 0.9 })],
+      makeConfig({ memoryEngine: 'semantic', memoryInjectionCharBudget: 10_000 }),
+    );
+    const found = await useCase.search({ query: 'anything', limit: 5 });
+    expect(found.map((s) => s.sourceId)).toEqual(['summary']);
+  });
+
+  it('still bounds a prompt by the configured budget', async () => {
+    const useCase = await semanticUseCase(
+      bigHits(),
+      makeConfig({ memoryEngine: 'semantic', memoryInjectionCharBudget: 10_000 }),
+    );
+    const result = await useCase.execute({ ticketId: 't1' });
+    // One 6 000-character chunk fits; a second would not.
+    expect(result.snippets).toHaveLength(1);
+  });
+
+  it('keeps one chunk per source when the caller lists references', async () => {
+    const useCase = await semanticUseCase([
+      chunkHit({ sourceId: 'doc', title: 'Doc (1/9)', content: 'first passage', similarity: 0.95 }),
+      chunkHit({ sourceId: 'doc', title: 'Doc (4/9)', content: 'second passage', similarity: 0.94 }),
+      chunkHit({ sourceId: 'other', content: 'elsewhere', similarity: 0.90 }),
+    ]);
+
+    const listed = await useCase.search({ query: 'anything', limit: 5, oneChunkPerSource: true });
+    expect(listed.map((s) => s.sourceId)).toEqual(['doc', 'other']);
+    // And the passage kept is the stronger one.
+    expect(listed[0]!.content).toBe('first passage');
+  });
+
+  it('keeps both passages when the caller wants evidence', async () => {
+    const useCase = await semanticUseCase([
+      chunkHit({ sourceId: 'doc', content: 'first passage', similarity: 0.95 }),
+      chunkHit({ sourceId: 'doc', content: 'second passage', similarity: 0.94 }),
+    ]);
+    const found = await useCase.search({ query: 'anything', limit: 5 });
+    expect(found).toHaveLength(2);
   });
 });

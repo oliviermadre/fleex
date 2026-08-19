@@ -6,6 +6,7 @@ import { linkifyCitations, sourceLabel } from '../markdown/citations';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { askMemory, type MemoryAnswer, type MemorySnippetResult } from '../../services/api';
+import type { Ticket } from '@fleex/shared';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
@@ -30,9 +31,18 @@ interface SourceGroup {
   title: string;
   kind: string;
   ticketId: string | null;
+  /** Display id of the ticket this came from, when it is not the ticket itself. */
+  ticketRef: number | null;
 }
 
-function groupSources(sources: MemorySnippetResult[]): SourceGroup[] {
+/**
+ * @param ticketOf resolves a ticket id to the live ticket, for the reference and
+ * for removing its title where the breadcrumb already repeats it.
+ */
+function groupSources(
+  sources: MemorySnippetResult[],
+  ticketOf: (id: string) => Ticket | null,
+): SourceGroup[] {
   const groups = new Map<string, SourceGroup>();
   sources.forEach((snippet, i) => {
     const key = `${snippet.sourceKind}:${snippet.sourceId}`;
@@ -41,12 +51,19 @@ function groupSources(sources: MemorySnippetResult[]): SourceGroup[] {
       existing.numbers.push(i + 1);
       return;
     }
+
+    const isTicket = snippet.sourceKind === 'ticket';
+    const ticketId = snippet.ticketId ?? (isTicket ? snippet.sourceId : null);
+    const ticket = ticketId ? ticketOf(ticketId) : null;
+
     groups.set(key, {
       key,
       numbers: [i + 1],
-      title: sourceLabel(snippet.title),
+      title: sourceLabel(snippet.title, ticket?.title),
       kind: snippet.sourceKind.replace(/_/g, ' '),
-      ticketId: snippet.ticketId ?? (snippet.sourceKind === 'ticket' ? snippet.sourceId : null),
+      ticketId,
+      // A ticket row does not need to point at itself.
+      ticketRef: !isTicket && ticket ? ticket.displayId : null,
     });
   });
   return [...groups.values()];
@@ -121,7 +138,13 @@ export function AskMemoryModal() {
     else useUIStore.getState().openAskMemory(next);
   }, [draft, loading, question, ask]);
 
-  const groups = useMemo(() => groupSources(result?.sources ?? []), [result]);
+  // Read from the live store: a deliverable knows the id of its ticket, and the
+  // reader wants its number.
+  const tickets = useTicketStore((s) => s.tickets);
+  const groups = useMemo(
+    () => groupSources(result?.sources ?? [], (id) => tickets.find((t) => t.id === id) ?? null),
+    [result, tickets],
+  );
 
   // Rendered once per answer: the citation rewrite walks the whole text.
   const answerMarkdown = useMemo(
@@ -230,6 +253,16 @@ export function AskMemoryModal() {
                   >
                     {group.title}
                   </span>
+                )}
+                {group.ticketRef !== null && (
+                  <button
+                    type="button"
+                    onClick={() => openSource(group.ticketId!)}
+                    title={`Open ticket #${group.ticketRef}`}
+                    className="flex-shrink-0 cursor-pointer rounded-sm border-none bg-[var(--theme-accent)]/12 px-1 font-mono text-[10px] text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-accent)]/25"
+                  >
+                    #{group.ticketRef}
+                  </button>
                 )}
                 <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">
                   {group.kind}

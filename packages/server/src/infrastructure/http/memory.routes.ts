@@ -78,6 +78,10 @@ export function memoryRoutes(container: Container) {
           query,
           limit,
           repo: request.query.repo ?? null,
+          // Both consumers of this route — the command palette and the CLI — show a
+          // list of references, where two passages of one document read as the same
+          // result twice.
+          oneChunkPerSource: true,
         });
         return { query, results };
       },
@@ -132,9 +136,22 @@ export function memoryRoutes(container: Container) {
           kinds: ['ticket', 'ticket_summary'],
         });
 
-        const candidates = snippets
-          .filter((s) => s.ticketId)
-          .map((s) => ({ ticketId: s.ticketId!, title: s.title, score: s.score, excerpt: s.content.slice(0, 200) }));
+        // One row per ticket: a ticket and its summary are both retrievable, and
+        // warning about the same ticket twice trains the reader to ignore the
+        // warning.
+        const seen = new Set<string>();
+        const candidates: Array<{ ticketId: string; title: string; score: number; excerpt: string }> = [];
+        for (const snippet of snippets) {
+          const ticketId = snippet.ticketId;
+          if (!ticketId || seen.has(ticketId)) continue;
+          seen.add(ticketId);
+          candidates.push({
+            ticketId,
+            title: snippet.title,
+            score: snippet.score,
+            excerpt: snippet.content.slice(0, 200),
+          });
+        }
         return { candidates };
       },
     );

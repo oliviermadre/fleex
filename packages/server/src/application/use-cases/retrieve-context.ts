@@ -13,6 +13,18 @@ import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 /** Default number of memory chunks returned for a prompt injection. */
 const DEFAULT_LIMIT = 8;
 
+/**
+ * Candidate multiplier when the caller wants one row per object.
+ *
+ * Deliberately wide: the winners are chosen per source, so the pre-fetch has to
+ * contain enough *different* sources to choose from, and a single document can
+ * contribute fifty chunks.
+ */
+const DIVERSE_OVER_FETCH = 20;
+
+/** Ceiling on the pre-fetch, so a large `limit` cannot ask for the whole index. */
+const MAX_OVER_FETCH = 500;
+
 /** Default character budget for the injected snippets. */
 const DEFAULT_CHAR_BUDGET = 10_000;
 
@@ -74,6 +86,11 @@ export class RetrieveContextUseCase {
     private readonly embeddings?: EmbeddingProviderPort,
   ) {}
 
+  /** Character ceiling on what goes into a prompt. Never applied to a list. */
+  private injectionBudget(): number {
+    return this.config.get().memoryInjectionCharBudget ?? DEFAULT_CHAR_BUDGET;
+  }
+
   /** True when the semantic engine is selected AND actually usable. */
   isSemanticEnabled(): boolean {
     return this.config.get().memoryEngine === 'semantic' && !!this.memoryStore && !!this.embeddings;
@@ -132,6 +149,8 @@ export class RetrieveContextUseCase {
     kinds?: MemorySourceKind[];
     repo?: string | null;
     excludeTicketId?: string | null;
+    /** Keep only the best-scoring chunk of each source. */
+    oneChunkPerSource?: boolean;
   }): Promise<MemorySnippet[]> {
     if (!this.isSemanticEnabled()) return [];
     const query = params.query.trim();
@@ -151,7 +170,15 @@ export class RetrieveContextUseCase {
     };
 
     const queryVector = await embeddings.embedQuery(query);
-    const candidates = await store.search(queryVector, filters, limit * 4);
+    // The pre-fetch is measured in chunks, and a large document brings dozens of
+    // them: on a live instance the top 48 chunks for one query all belonged to five
+    // documents, so nothing else — including the ticket those documents hang off —
+    // could reach the ranker. A list of distinct objects therefore has to look much
+    // deeper than a list of passages.
+    const overFetch = params.oneChunkPerSource
+      ? Math.min(limit * DIVERSE_OVER_FETCH, MAX_OVER_FETCH)
+      : limit * 4;
+    const candidates = await store.search(queryVector, filters, overFetch);
 
     // A keyword pass alongside the vector one, because exact identifiers — error
     // codes, file paths — are precisely what embeddings blur away, and a search
@@ -166,10 +193,15 @@ export class RetrieveContextUseCase {
       }
     }
 
+    // A surface that lists *references* wants one row per thing. Applied as the
+    // ranker's per-source cap rather than as a filter afterwards: filtering spent
+    // the limit on two passages of each document and then discarded one, so a
+    // request for twelve results came back with five.
     const ranked = rankHits([...bySource.values()], {
       repo: params.repo ?? null,
       boostHumanFeedback: this.isFeatureEnabled('humanFeedbackBoost'),
-    }, limit);
+    }, limit, params.oneChunkPerSource ? 1 : undefined);
+
     return this.toSnippets(ranked, { includeSummaries: true });
   }
 
@@ -269,7 +301,7 @@ export class RetrieveContextUseCase {
     return {
       engine: 'semantic',
       summaries: this.toSummaryRefs(ranked),
-      snippets: this.toSnippets(ranked),
+      snippets: this.toSnippets(ranked, { budget: this.injectionBudget() }),
     };
   }
 
@@ -298,15 +330,24 @@ export class RetrieveContextUseCase {
   }
 
   /**
-   * Hits as snippets, trimmed to the configured character budget.
+   * Hits as snippets.
    *
    * `includeSummaries` separates the two callers: prompt injection routes
    * summaries into their own long-standing section and must not duplicate them
    * here, whereas a search result would be strange for omitting the very
    * summaries that best answer the query.
+   *
+   * `budget` applies to injection only. Sharing it with search made a list silently
+   * shorter than asked for — thirty requested, nine returned — and made any chunk
+   * larger than the whole budget permanently unreachable, which is what ticket
+   * summaries are: stored unsplit, and routinely longer than 10 000 characters. A
+   * list of references is bounded by its count; only a prompt is bounded by size.
    */
-  private toSnippets(hits: ScoredHit[], opts: { includeSummaries?: boolean } = {}): MemorySnippet[] {
-    const budget = this.config.get().memoryInjectionCharBudget ?? DEFAULT_CHAR_BUDGET;
+  private toSnippets(
+    hits: ScoredHit[],
+    opts: { includeSummaries?: boolean; budget?: number } = {},
+  ): MemorySnippet[] {
+    const budget = opts.budget ?? Infinity;
     const out: MemorySnippet[] = [];
     let used = 0;
 
