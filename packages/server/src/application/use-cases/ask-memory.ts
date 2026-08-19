@@ -19,6 +19,9 @@ Rules:
 - Be concise: a short answer with citations beats a thorough guess.
 - Answer in the language of the question. A workspace is not monolingual, and an
   answer in the wrong language is one the reader has to translate before using.
+- Never ask the reader a question back. A broad question deserves a broad answer:
+  summarise what the excerpts establish, organised by theme. Asking what they meant
+  spends the call and returns nothing they can act on.
 `.trim();
 
 export interface AskMemoryResult {

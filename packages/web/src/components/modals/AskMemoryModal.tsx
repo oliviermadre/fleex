@@ -75,8 +75,10 @@ export function AskMemoryModal() {
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [flashed, setFlashed] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
 
   const rowRefs = useRef(new Map<number, HTMLLIElement>());
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const ask = useCallback(async (q: string) => {
     setLoading(true);
@@ -93,7 +95,31 @@ export function AskMemoryModal() {
 
   useEffect(() => {
     if (question) void ask(question);
+    // The input starts on what was asked, so a follow-up is an edit rather than a
+    // retype — most of them are a narrowing of the same question.
+    setDraft(question ?? '');
   }, [question, ask]);
+
+  // Focused on open: the panel is somewhere you ask things, not only somewhere an
+  // answer lands. Escape still closes it — the Modal listens in the capture phase.
+  useEffect(() => {
+    if (question !== null) requestAnimationFrame(() => inputRef.current?.focus());
+  }, [question]);
+
+  /**
+   * Ask what is in the box.
+   *
+   * Routed through the store when the text changed, so the header and the panel
+   * agree on what was asked. An unchanged question would not move that state, so it
+   * is re-run directly — which is what the old "Ask again" did, kept for the case
+   * where a retry is genuinely what you want.
+   */
+  const submit = useCallback(() => {
+    const next = draft.trim();
+    if (!next || loading) return;
+    if (next === question) void ask(next);
+    else useUIStore.getState().openAskMemory(next);
+  }, [draft, loading, question, ask]);
 
   const groups = useMemo(() => groupSources(result?.sources ?? []), [result]);
 
@@ -214,12 +240,32 @@ export function AskMemoryModal() {
         </div>
       )}
 
-      <div className="mt-3 flex flex-shrink-0 justify-end gap-2">
-        {question && (
-          <Button variant="secondary" disabled={loading} onClick={() => void ask(question)}>
-            Ask again
-          </Button>
-        )}
+      {/* An answer can end on a clarifying question, and a panel with no input made
+          that a dead end: the only button re-ran the identical query. Asking again
+          from here also saves reopening the palette for every follow-up. */}
+      <div className="mt-3 flex flex-shrink-0 items-center gap-2">
+        <input
+          ref={inputRef}
+          type="text"
+          value={draft}
+          disabled={loading}
+          placeholder="Ask something else…"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2.5 py-1.5 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] disabled:opacity-50"
+        />
+        <Button
+          variant="secondary"
+          disabled={loading || !draft.trim()}
+          onClick={submit}
+        >
+          {loading ? 'Asking…' : 'Ask'}
+        </Button>
         <Button variant="primary" onClick={close}>Close</Button>
       </div>
     </Modal>
