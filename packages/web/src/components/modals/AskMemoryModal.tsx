@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { linkifyCitations, sourceLabel } from '../markdown/citations';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { askMemory, type MemoryAnswer } from '../../services/api';
+import { askMemory, type MemoryAnswer, type MemorySnippetResult } from '../../services/api';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
@@ -14,16 +16,54 @@ const REASONS: Record<string, string> = {
 };
 
 /**
+ * One entry of the source list: a document, and every citation number pointing at
+ * it.
+ *
+ * Grouped because retrieval returns up to two chunks per document, so a list built
+ * one row per citation showed the same title twice and doubled the space the
+ * sources take. The numbers stay individually addressable — they are what the
+ * answer's brackets refer to — while the title is stated once.
+ */
+interface SourceGroup {
+  key: string;
+  numbers: number[];
+  title: string;
+  kind: string;
+  ticketId: string | null;
+}
+
+function groupSources(sources: MemorySnippetResult[]): SourceGroup[] {
+  const groups = new Map<string, SourceGroup>();
+  sources.forEach((snippet, i) => {
+    const key = `${snippet.sourceKind}:${snippet.sourceId}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.numbers.push(i + 1);
+      return;
+    }
+    groups.set(key, {
+      key,
+      numbers: [i + 1],
+      title: sourceLabel(snippet.title),
+      kind: snippet.sourceKind.replace(/_/g, ' '),
+      ticketId: snippet.ticketId ?? (snippet.sourceKind === 'ticket' ? snippet.sourceId : null),
+    });
+  });
+  return [...groups.values()];
+}
+
+/**
  * A cited answer drawn from past work.
  *
- * Opened from the command palette with the question already typed, because that
- * is where the question forms: someone reaches for ⌘K to find a thing, fails to
- * name it, and what they actually want is the answer rather than the document.
+ * Three things decide the layout. The answer is markdown and is rendered as such,
+ * because a model writes `**bold**` and a reader should not have to. The panel is a
+ * bounded column with one scrolling region, because an answer with a dozen sources
+ * is taller than a screen. And the sources are a compact footer rather than half
+ * the panel: they exist to be *checked*, which needs a line each, not a paragraph.
  *
- * The sources are numbered and clickable, and the answer cites them by number.
- * That is the whole point of the surface: an uncited answer about your own work is
- * indistinguishable from a guess, and this one is drawn from excerpts that can be
- * opened and checked.
+ * Citations are clickable. An uncited answer about your own work is
+ * indistinguishable from a guess, and a citation you cannot follow is barely
+ * better — clicking `[3]` brings its source into view and flashes it.
  */
 export function AskMemoryModal() {
   const question = useUIStore((s) => s.askMemoryQuestion);
@@ -34,6 +74,9 @@ export function AskMemoryModal() {
   const [result, setResult] = useState<MemoryAnswer | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [flashed, setFlashed] = useState<string | null>(null);
+
+  const rowRefs = useRef(new Map<number, HTMLLIElement>());
 
   const ask = useCallback(async (q: string) => {
     setLoading(true);
@@ -52,69 +95,126 @@ export function AskMemoryModal() {
     if (question) void ask(question);
   }, [question, ask]);
 
-  const openSource = (ticketId: string) => {
+  const groups = useMemo(() => groupSources(result?.sources ?? []), [result]);
+
+  // Rendered once per answer: the citation rewrite walks the whole text.
+  const answerMarkdown = useMemo(
+    () => (result?.answer ? linkifyCitations(result.answer, result.sources.length) : ''),
+    [result],
+  );
+
+  const handleCitation = useCallback((index: number) => {
+    const row = rowRefs.current.get(index);
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // A flash rather than a persistent selection: it answers "which one is that"
+    // and then gets out of the way.
+    const group = groups.find((g) => g.numbers.includes(index));
+    setFlashed(group?.key ?? null);
+    setTimeout(() => setFlashed(null), 1200);
+  }, [groups]);
+
+  const openSource = useCallback((ticketId: string) => {
     close();
     setActivePanel('tickets');
     selectTicket(ticketId);
-  };
+  }, [close, setActivePanel, selectTicket]);
 
   return (
-    <Modal open={question !== null} onClose={close} maxWidth="max-w-2xl">
-      <div className="flex items-baseline gap-2">
-        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">{question}</h3>
-        <div className="flex-1" />
-        <span className={cn('rounded px-1.5 py-0.5 text-[10px]', tint('orange'))}>one LLM call</span>
+    <Modal
+      open={question !== null}
+      onClose={close}
+      maxWidth="max-w-3xl"
+      className="flex max-h-[85vh] flex-col overflow-hidden"
+    >
+      <div className="flex flex-shrink-0 items-baseline gap-2">
+        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+          {question}
+        </h3>
+        <span className={cn('flex-shrink-0 rounded px-1.5 py-0.5 text-[10px]', tint('orange'))}>
+          one LLM call
+        </span>
       </div>
 
-      {loading && (
-        <p className="mt-4 text-xs text-[var(--theme-text-muted)]">Reading what this workspace remembers…</p>
-      )}
+      {/* The one scrolling region. Everything around it is fixed, so the panel
+          cannot outgrow the viewport however long the answer runs. */}
+      <div className="-mr-2 mt-3 min-h-0 flex-1 overflow-y-auto pr-2">
+        {loading && (
+          <p className="text-xs text-[var(--theme-text-muted)]">
+            Reading what this workspace remembers…
+          </p>
+        )}
 
-      {failed && (
-        <p className="mt-4 text-xs text-[var(--theme-danger)]">Could not reach memory.</p>
-      )}
+        {failed && <p className="text-xs text-[var(--theme-danger)]">Could not reach memory.</p>}
 
-      {result && !result.answer && (
-        <p className={cn('mt-4 rounded px-3 py-2 text-xs', tint('yellow'))}>
-          {REASONS[result.reason ?? ''] ?? 'No answer.'}
-        </p>
-      )}
+        {result && !result.answer && (
+          <p className={cn('rounded px-3 py-2 text-xs', tint('yellow'))}>
+            {REASONS[result.reason ?? ''] ?? 'No answer.'}
+          </p>
+        )}
 
-      {result?.answer && (
-        <div className="mt-3 max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words text-sm leading-5 text-[var(--theme-text-primary)]">
-          {result.answer}
+        {result?.answer && (
+          <MarkdownRenderer
+            content={answerMarkdown}
+            profile="doc"
+            onToggleCheckbox={() => {}}
+            onCitation={handleCitation}
+          />
+        )}
+      </div>
+
+      {groups.length > 0 && (
+        <div className="mt-3 flex-shrink-0 border-t border-[var(--theme-border)] pt-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            {result!.sources.length} source{result!.sources.length > 1 ? 's' : ''}
+          </span>
+          {/* Capped and scrollable: a dozen sources must not push the answer off
+              the screen, which is what they were doing. */}
+          <ol className="mt-1 max-h-32 space-y-px overflow-y-auto">
+            {groups.map((group) => (
+              <li
+                key={group.key}
+                ref={(el) => {
+                  for (const n of group.numbers) {
+                    if (el) rowRefs.current.set(n, el);
+                    else rowRefs.current.delete(n);
+                  }
+                }}
+                className={cn(
+                  'flex items-baseline gap-1.5 rounded px-1 py-0.5 transition-colors',
+                  flashed === group.key && 'bg-[var(--theme-accent)]/15',
+                )}
+              >
+                <span className="flex-shrink-0 font-mono text-[10px] text-[var(--theme-text-faint)]">
+                  {group.numbers.map((n) => `[${n}]`).join('')}
+                </span>
+                {group.ticketId ? (
+                  <button
+                    type="button"
+                    onClick={() => openSource(group.ticketId!)}
+                    title={group.title}
+                    className="min-w-0 flex-1 cursor-pointer truncate border-none bg-transparent p-0 text-left text-[11px] text-[var(--theme-accent)] hover:underline"
+                  >
+                    {group.title}
+                  </button>
+                ) : (
+                  <span
+                    title={group.title}
+                    className="min-w-0 flex-1 truncate text-[11px] text-[var(--theme-text-secondary)]"
+                  >
+                    {group.title}
+                  </span>
+                )}
+                <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">
+                  {group.kind}
+                </span>
+              </li>
+            ))}
+          </ol>
         </div>
       )}
 
-      {result && result.sources.length > 0 && (
-        <ol className="mt-3 space-y-1 border-t border-[var(--theme-border)] pt-2">
-          {result.sources.map((snippet, i) => {
-            const ticketId = snippet.ticketId
-              ?? (snippet.sourceKind === 'ticket' ? snippet.sourceId : null);
-            return (
-              <li key={`${snippet.sourceKind}:${snippet.sourceId}:${i}`} className="text-[11px]">
-                <span className="text-[var(--theme-text-faint)]">[{i + 1}]</span>{' '}
-                {ticketId ? (
-                  <button
-                    type="button"
-                    onClick={() => openSource(ticketId)}
-                    className="cursor-pointer border-none bg-transparent p-0 text-left text-[var(--theme-accent)] hover:underline"
-                  >
-                    {snippet.title}
-                  </button>
-                ) : (
-                  <span className="text-[var(--theme-text-muted)]">{snippet.title}</span>
-                )}
-                <span className="ml-1.5 text-[var(--theme-text-faint)]">
-                  {snippet.sourceKind.replace(/_/g, ' ')}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-3 flex flex-shrink-0 justify-end gap-2">
         {question && (
           <Button variant="secondary" disabled={loading} onClick={() => void ask(question)}>
             Ask again

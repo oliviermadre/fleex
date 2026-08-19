@@ -9,6 +9,7 @@ import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/Merma
 import { useColorMode } from '../../hooks/useActiveTheme';
 import { preprocessTicketMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { decodeWikiTarget, preprocessWikiLinks, WIKI_LINK_HREF_PREFIX } from '../markdown/wiki';
+import { CITATION_HREF_PREFIX, decodeCitation } from '../markdown/citations';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
 import { WikiLinkChip } from '../markdown/WikiLinkChip';
 import { remarkPluginsFor, type MarkdownProfile } from '../markdown/profiles';
@@ -17,6 +18,13 @@ import { useSettingsStore } from '../../stores/settingsStore';
 interface MarkdownRendererProps {
   content: string;
   onToggleCheckbox: (lineIndex: number) => void;
+  /**
+   * Handle a `[3]` citation the caller encoded with `linkifyCitations`.
+   *
+   * Passed in rather than resolved here because only the caller knows what the
+   * numbers point at — a cited answer owns its own source list.
+   */
+  onCitation?: (index: number) => void;
   /**
    * `user` (default) renders a lone `\n` as a <br> — the right behaviour for
    * everything Fleex displays today. Use `doc` for hand-wrapped authored
@@ -120,6 +128,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   content,
   onToggleCheckbox,
   profile = 'user',
+  onCitation,
 }: MarkdownRendererProps) {
   const segments = useMemo(() => parseSegments(content), [content]);
 
@@ -132,6 +141,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
               <MarkdownRenderer
                 content={segment.content}
                 profile={profile}
+                onCitation={onCitation}
                 onToggleCheckbox={(localLine) =>
                   onToggleCheckbox(segment.contentStartLine + localLine)
                 }
@@ -147,6 +157,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             startLine={segment.startLine}
             profile={profile}
             onToggleCheckbox={onToggleCheckbox}
+            onCitation={onCitation}
           />
         );
       })}
@@ -161,11 +172,13 @@ function MarkdownSection({
   startLine,
   profile,
   onToggleCheckbox,
+  onCitation,
 }: {
   content: string;
   startLine: number;
   profile: MarkdownProfile;
   onToggleCheckbox: (lineIndex: number) => void;
+  onCitation?: (index: number) => void;
 }) {
   const colorMode = useColorMode();
 
@@ -222,6 +235,22 @@ function MarkdownSection({
       // Ticket mention — clickable chip that navigates to the referenced ticket
       if (href?.startsWith(TICKET_MENTION_HREF_PREFIX)) {
         return <TicketMentionChip idRef={href.slice(TICKET_MENTION_HREF_PREFIX.length)} />;
+      }
+      // Citation — `[3]` in a cited answer, pointing at its source list
+      if (onCitation && href?.startsWith(CITATION_HREF_PREFIX)) {
+        const index = decodeCitation(href);
+        if (index !== null) {
+          return (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onCitation(index); }}
+              title={`Source ${index}`}
+              className="mx-px cursor-pointer rounded-sm border-none bg-[var(--theme-accent)]/12 px-1 align-baseline text-[0.85em] font-medium text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-accent)]/25"
+            >
+              {children}
+            </button>
+          );
+        }
       }
       // Wiki-link — a ticket or a note, by the `[[…]]` syntax
       if (href?.startsWith(WIKI_LINK_HREF_PREFIX)) {
