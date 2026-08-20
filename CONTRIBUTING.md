@@ -39,6 +39,35 @@ A maintainer will record your signature in the table at the bottom of
 [CLA.md](CLA.md). New pull requests from contributors who have not signed may be
 held until the CLA is accepted.
 
+## Development setup
+
+End users install with the [installer](README.md#installation). Working on the
+code means cloning it, and a clone needs two steps before it runs:
+
+```bash
+git clone git@github.com:oliviermadre/fleex.git
+cd fleex
+bun install
+bun run build      # builds packages/shared, web and server
+```
+
+`bun install` alone is enough for the CLI and anything else Bun executes
+directly. The build is what the production server (`node packages/server/dist`)
+and the web bundle need, so run it before `fleex start`.
+
+If a `fleex` command reports that dependencies are not installed, it is telling
+you the truth — run `bun install` in the repository root, or `fleex self-update`,
+which installs and builds in one pass.
+
+Before requesting review:
+
+```bash
+bun run lint       # palette check + tsc across every package
+bun run test       # vitest
+bun run test:bun   # the suites that need the Bun runtime
+bun run build
+```
+
 ## Opening a pull request
 
 - Keep PRs focused and reasonably small.
