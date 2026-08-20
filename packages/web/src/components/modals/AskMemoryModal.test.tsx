@@ -38,10 +38,12 @@ beforeEach(() => {
   useUIStore.setState({ askMemoryQuestion: 'routines' });
 });
 
-let seedSession: ReturnType<typeof vi.fn>;
+let recordExchange: ReturnType<typeof vi.fn>;
+let openSession: ReturnType<typeof vi.fn>;
 beforeEach(() => {
-  seedSession = vi.fn();
-  useAssistantStore.setState({ seedSession });
+  recordExchange = vi.fn();
+  openSession = vi.fn();
+  useAssistantStore.setState({ recordExchange, openSession });
 });
 
 afterEach(() => {
@@ -49,8 +51,8 @@ afterEach(() => {
   useUIStore.setState({ askMemoryQuestion: null, deliverableOverlay: null, activePanel: 'tickets' });
 });
 
-/** The input the panel offers once an answer is on screen. */
-const FOLLOW_UP = 'Follow up in the assistant…';
+/** The panel's follow-up input — a follow-up is still answered here. */
+const FOLLOW_UP = 'Ask something else…';
 
 /**
  * The panel is a single exchange, and an answer can end on a clarifying question.
@@ -306,19 +308,44 @@ describe('AskMemoryModal — the wait shows time passing', () => {
 });
 
 /**
- * Continuing in the assistant.
+ * Every exchange is kept.
  *
- * The panel answers once and forgets. The assistant persists its conversations,
- * carries them as real history, and holds the whole fleex tool surface — memory
- * included — so a follow-up there can go back to the index rather than only
- * re-reading what was already retrieved.
+ * The panel answers and forgets; the assistant persists its conversations and
+ * carries them to the model as real history. Recording as we go means asking
+ * something is never a thing you lose, and the "continue" button has nothing to
+ * transfer — it only goes where the history already is.
  */
-describe('AskMemoryModal — hand-off to the assistant', () => {
+describe('AskMemoryModal — recorded history', () => {
   const withAnswer = (text = 'Trois objectifs [1].', sources: unknown[] = [
     { sourceKind: 'deliverable', sourceId: 'd1', title: 'OKR Q3 (2/4)', content: 'a', score: 0.7 },
   ]) => askMemoryStream.mockImplementation(streaming(answer(text, sources)));
 
-  it('hands the exchange over on a second question', async () => {
+  it('records the exchange as soon as it is answered', async () => {
+    withAnswer();
+    const { getByText } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
+
+    expect(recordExchange).toHaveBeenCalledWith(
+      expect.any(String),
+      'routines',
+      expect.stringContaining('Trois objectifs [1].'),
+    );
+  });
+
+  it('carries the sources, so the citations still mean something', async () => {
+    // A bare `[1]` in a conversation with no list to point into is noise.
+    withAnswer();
+    const { getByText } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
+
+    const recorded = recordExchange.mock.calls[0]![2] as string;
+    expect(recorded).toContain('Sources:');
+    expect(recorded).toContain('[1] OKR Q3 (deliverable)');
+  });
+
+  it('keeps a follow-up in this panel, and in the same conversation', async () => {
+    // Both halves of what was asked for: the follow-up is answered here, and the
+    // thread over there is one conversation rather than two of one turn each.
     withAnswer();
     const { getByPlaceholderText, getByText } = render(<AskMemoryModal />);
     await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
@@ -327,37 +354,32 @@ describe('AskMemoryModal — hand-off to the assistant', () => {
     fireEvent.change(input, { target: { value: 'et le KR2.1 ?' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    // The question travels with the hand-off rather than being sent separately:
-    // the companion replaces a conversation's items when its history arrives, so
-    // anything sent sooner is wiped.
-    expect(seedSession).toHaveBeenCalledWith(
-      'routines',
-      expect.stringContaining('Trois objectifs [1].'),
-      'et le KR2.1 ?',
-    );
-    // And the panel gets out of the way.
-    expect(useUIStore.getState().activePanel).toBe('assistant');
+    // Answered here — the panel did not navigate away.
+    await waitFor(() => expect(useUIStore.getState().askMemoryQuestion).toBe('et le KR2.1 ?'));
+    expect(useUIStore.getState().activePanel).not.toBe('assistant');
+
+    await waitFor(() => expect(recordExchange).toHaveBeenCalledTimes(2));
+    const [firstId] = recordExchange.mock.calls[0] as [string];
+    const [secondId] = recordExchange.mock.calls[1] as [string];
+    expect(secondId).toBe(firstId);
   });
 
-  it('carries the sources, so the citations still mean something', async () => {
-    // A bare `[1]` in a conversation with no list to point into is noise.
-    withAnswer();
-    const { getByPlaceholderText, getByText } = render(<AskMemoryModal />);
-    await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
-
-    fireEvent.click(getByText('Continue in Assistant'));
-    const seeded = seedSession.mock.calls[0]![1] as string;
-    expect(seeded).toContain('Sources:');
-    expect(seeded).toContain('[1] OKR Q3 (deliverable)');
+  it('files nothing when memory had nothing to say', async () => {
+    // A refusal is a question that found nothing, not an exchange.
+    askMemoryStream.mockImplementation(streaming({ answer: null, sources: [], reason: 'no_results' }));
+    const { getByText } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText(/Nothing indexed relates/)).toBeTruthy());
+    expect(recordExchange).not.toHaveBeenCalled();
   });
 
-  it('hands over with no question attached, from the button', async () => {
+  it('opens the conversation it has been writing into', async () => {
     withAnswer();
     const { getByText } = render(<AskMemoryModal />);
     await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
 
     fireEvent.click(getByText('Continue in Assistant'));
-    expect(seedSession).toHaveBeenCalledWith('routines', expect.any(String), undefined);
+    const [recordedId] = recordExchange.mock.calls[0] as [string];
+    expect(openSession).toHaveBeenCalledWith(recordedId);
     expect(useUIStore.getState().activePanel).toBe('assistant');
   });
 
@@ -370,23 +392,5 @@ describe('AskMemoryModal — hand-off to the assistant', () => {
     expect(queryByText('Continue in Assistant')).toBeNull();
 
     release();
-  });
-
-  it('re-asks here rather than handing over when the question is unchanged', async () => {
-    // Retrying is not continuing.
-    withAnswer();
-    const { getByPlaceholderText, getByText } = render(<AskMemoryModal />);
-    await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
-
-    fireEvent.keyDown(getByPlaceholderText(FOLLOW_UP), { key: 'Enter' });
-    expect(seedSession).not.toHaveBeenCalled();
-    await waitFor(() => expect(askMemoryStream).toHaveBeenCalledTimes(2));
-  });
-
-  it('leaves a refusal in the panel, with nothing to hand over', async () => {
-    askMemoryStream.mockImplementation(streaming({ answer: null, sources: [], reason: 'no_results' }));
-    const { getByText, queryByText } = render(<AskMemoryModal />);
-    await waitFor(() => expect(getByText(/Nothing indexed relates/)).toBeTruthy());
-    expect(queryByText('Continue in Assistant')).toBeNull();
   });
 });

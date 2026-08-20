@@ -322,24 +322,30 @@ Bun.serve<WsData>({
           break;
         }
         /**
-         * Continue an exchange that happened somewhere else.
+         * File an exchange that happened somewhere else into a conversation.
          *
-         * The command palette answers a question from memory in one shot; this is
-         * how that becomes a conversation with history and follow-ups, without
-         * retyping the question or paying for the retrieval a second time.
+         * Every question the command palette answers from memory is kept here, so
+         * asking something is never a thing you lose. Repeated calls with the same
+         * id append, which is what keeps a run of follow-ups as one thread rather
+         * than a list of one-turn conversations.
+         *
+         * Deliberately does not reply `session_created`: that activates and opens
+         * the conversation, and recording must not yank the assistant view around
+         * every time someone uses the palette.
          */
-        case 'seed_session': {
+        case 'record_exchange': {
+          const id = asString(msg.id);
           const question = asString(msg.question);
           const answer = asString(msg.answer);
-          if (!question || !answer) break;
-          const s = store.seed({
+          if (!id || !question || !answer) break;
+          store.recordExchange({
+            id,
             question,
             answer,
             ...(asString(msg.workspace) ? { workspace: asString(msg.workspace)! } : {}),
             ...(asString(msg.model) ? { model: asString(msg.model)! } : {}),
           });
           broadcastSessions();
-          send(ws, { type: 'session_created', id: s.id });
           break;
         }
         case 'open_session': {

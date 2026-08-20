@@ -177,19 +177,20 @@ describe('isToolAutoApproved / isAutoApproveActive', () => {
 });
 
 /**
- * A conversation that starts with an exchange that already happened.
+ * Exchanges filed from elsewhere.
  *
- * Asking memory a question in the command palette is a complete exchange.
- * Continuing it used to mean retyping the question here and paying for the
- * retrieval a second time.
+ * Every question the command palette answers from memory is kept here, so asking
+ * something is never a thing you lose. Repeated calls under one id append, which
+ * is what keeps a run of follow-ups as one thread rather than a list of
+ * one-turn conversations.
  */
-describe('SessionStore.seed', () => {
+describe('SessionStore.recordExchange', () => {
   it('carries the exchange as real history, not just as something to look at', () => {
     // `transcript` is what the reader sees; `messages` is what the model gets. A
-    // seed that filled only the first would look like history and behave like an
+    // record that filled only the first would look like history and behave like an
     // empty conversation.
     const store = new SessionStore(dir);
-    const s = store.seed({ question: 'les OKR Q3 2026', answer: 'Trois objectifs.' });
+    const s = store.recordExchange({ id: 'c1', question: 'les OKR Q3 2026', answer: 'Trois objectifs.' });
 
     expect(s.messages).toEqual([
       { role: 'user', content: 'les OKR Q3 2026' },
@@ -201,35 +202,55 @@ describe('SessionStore.seed', () => {
     ]);
   });
 
-  it('titles the conversation from the question', () => {
+  it('appends under the same id instead of starting another conversation', () => {
     const store = new SessionStore(dir);
-    const s = store.seed({ question: 'les OKR Q3 2026', answer: 'Trois objectifs.' });
+    store.recordExchange({ id: 'c1', question: 'q1', answer: 'a1' });
+    const s = store.recordExchange({ id: 'c1', question: 'q2', answer: 'a2' });
+
+    expect(s.messages).toHaveLength(4);
+    expect(store.list()).toHaveLength(1);
+  });
+
+  it('takes its title from the first question, and keeps it', () => {
+    // A follow-up joins a thread; it does not rename it.
+    const store = new SessionStore(dir);
+    store.recordExchange({ id: 'c1', question: 'les OKR Q3 2026', answer: 'a' });
+    const s = store.recordExchange({ id: 'c1', question: 'et le KR2.1 ?', answer: 'a' });
     expect(s.title).toBe('les OKR Q3 2026');
   });
 
   it('persists, so the conversation survives a restart', () => {
     const store = new SessionStore(dir);
-    const id = store.seed({ question: 'q', answer: 'a' }).id;
+    store.recordExchange({ id: 'c1', question: 'q', answer: 'a' });
 
-    const reopened = new SessionStore(dir).get(id);
+    const reopened = new SessionStore(dir).get('c1');
     expect(reopened?.messages).toHaveLength(2);
+  });
+
+  it('appends to a conversation it did not create in this process', () => {
+    // The id is minted by the caller, so a record can land on a thread this store
+    // only knows from disk.
+    new SessionStore(dir).recordExchange({ id: 'c1', question: 'q1', answer: 'a1' });
+    const s = new SessionStore(dir).recordExchange({ id: 'c1', question: 'q2', answer: 'a2' });
+    expect(s.messages).toHaveLength(4);
   });
 
   it('stamps a last-message time, so it sorts with the live conversations', () => {
     const store = new SessionStore(dir);
-    expect(store.seed({ question: 'q', answer: 'a' }).lastMessageAt).toBeTruthy();
+    expect(store.recordExchange({ id: 'c1', question: 'q', answer: 'a' }).lastMessageAt).toBeTruthy();
   });
 
   it('grants no standing approvals', () => {
-    // Consent is never inherited, and an exchange handed over from elsewhere is
-    // no reason to start one.
+    // Consent is never inherited, and an exchange filed from elsewhere is no
+    // reason to start one.
     const store = new SessionStore(dir);
-    const s = store.seed({ question: 'q', answer: 'a' });
+    const s = store.recordExchange({ id: 'c1', question: 'q', answer: 'a' });
     expect(isAutoApproveActive(s.autoApprove)).toBe(false);
   });
 
   it('honours the workspace it was asked for', () => {
     const store = new SessionStore(dir);
-    expect(store.seed({ question: 'q', answer: 'a', workspace: 'staging' }).workspace).toBe('staging');
+    expect(store.recordExchange({ id: 'c1', question: 'q', answer: 'a', workspace: 'staging' }).workspace)
+      .toBe('staging');
   });
 });

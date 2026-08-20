@@ -258,7 +258,18 @@ export function AskMemoryModal() {
   const close = useUIStore((s) => s.closeAskMemory);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const selectTicket = useTicketStore((s) => s.selectTicket);
-  const seedSession = useAssistantStore((s) => s.seedSession);
+  const recordExchange = useAssistantStore((s) => s.recordExchange);
+  const openSession = useAssistantStore((s) => s.openSession);
+
+  /**
+   * The assistant conversation this panel is writing into.
+   *
+   * Minted here rather than asked for, so the second question can be recorded
+   * without waiting to hear about the first, and so a run of follow-ups lands in
+   * one thread. One conversation per time the panel is opened: a later, unrelated
+   * question deserves its own.
+   */
+  const conversationId = useRef(crypto.randomUUID());
 
   const [result, setResult] = useState<MemoryAnswer | null>(null);
   const [loading, setLoading] = useState(false);
@@ -284,17 +295,30 @@ export function AskMemoryModal() {
     setStages([]);
     setPartial('');
     try {
-      setResult(await askMemoryStream(
+      const answered = await askMemoryStream(
         q,
         (stage) => setStages((s) => [...s, stage]),
         (delta) => setPartial((text) => text + delta),
-      ));
+      );
+      setResult(answered);
+      // Every answer is kept, so asking something is never a thing you lose. A
+      // refusal is not: there is no exchange to file, only a question that found
+      // nothing.
+      if (answered.answer) {
+        recordExchange(conversationId.current, q, answerForHandoff(answered.answer, answered.sources));
+      }
     } catch (error) {
       setFailure(error instanceof Error ? error.message : 'Could not reach memory.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [recordExchange]);
+
+  // A fresh panel is a fresh thread; follow-ups within it keep the same one.
+  const opened = question !== null;
+  useEffect(() => {
+    if (opened) conversationId.current = crypto.randomUUID();
+  }, [opened]);
 
   useEffect(() => {
     if (question) void ask(question);
@@ -318,40 +342,32 @@ export function AskMemoryModal() {
    * where a retry is genuinely what you want.
    */
   /**
-   * Hand the exchange to the assistant and go there.
+   * Open the conversation this panel has been writing into.
    *
-   * The assistant persists its conversations and carries them as real history, so
-   * this is what turns a one-shot lookup into something with follow-ups. It also
-   * holds the whole fleex tool surface, memory included, so a follow-up can go
-   * back to the index rather than only re-reading what was already retrieved.
+   * Nothing is transferred here — every exchange was already recorded as it
+   * happened. This only goes and stands where the history is, which is also where
+   * the whole fleex tool surface lives: a follow-up there can go back to the index
+   * rather than only re-reading what was already retrieved.
    */
-  const continueInAssistant = useCallback((followUp?: string) => {
-    if (!result?.answer || !question) return;
-    // The follow-up travels with the hand-off: the store holds it until the seeded
-    // conversation's transcript has arrived, because the companion's history reply
-    // replaces the conversation's items and would wipe a message sent any sooner.
-    seedSession(question, answerForHandoff(result.answer, result.sources), followUp);
+  const continueInAssistant = useCallback(() => {
+    openSession(conversationId.current);
     close();
     setActivePanel('assistant');
-  }, [result, question, seedSession, close, setActivePanel]);
+  }, [openSession, close, setActivePanel]);
 
   /**
    * Ask what is in the box.
    *
-   * A second question is the moment a lookup became a conversation, so it moves
-   * to the assistant carrying the first exchange — rather than replacing an
-   * answer the reader may still want. With no answer yet to carry, it stays here.
+   * Stays in this panel. A follow-up here is still a memory question, and the
+   * assistant gets it either way — the conversation is being written as we go,
+   * under one id, so the thread there mirrors this one.
    */
   const submit = useCallback(() => {
     const next = draft.trim();
     if (!next || loading) return;
-    if (result?.answer && next !== question) {
-      continueInAssistant(next);
-      return;
-    }
     if (next === question) void ask(next);
     else useUIStore.getState().openAskMemory(next);
-  }, [draft, loading, question, ask, result, continueInAssistant]);
+  }, [draft, loading, question, ask]);
 
   // Read from the live store: a deliverable knows the id of its ticket, and the
   // reader wants its number.
@@ -539,8 +555,7 @@ export function AskMemoryModal() {
           type="text"
           value={draft}
           disabled={loading}
-          // Says where the answer will land, because it is no longer this panel.
-          placeholder={result?.answer ? 'Follow up in the assistant…' : 'Ask something else…'}
+          placeholder="Ask something else…"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -557,10 +572,10 @@ export function AskMemoryModal() {
         >
           {loading ? 'Asking…' : 'Ask'}
         </Button>
-        {/* The hand-off without a question attached: keep this exchange, decide
-            what to do with it there. Only once there is an answer to keep. */}
+        {/* Not a hand-off — the exchanges are already there. This goes and stands
+            where the history is, and where the tools are. */}
         {result?.answer && (
-          <Button variant="secondary" onClick={() => continueInAssistant()}>
+          <Button variant="secondary" onClick={continueInAssistant}>
             Continue in Assistant
           </Button>
         )}
