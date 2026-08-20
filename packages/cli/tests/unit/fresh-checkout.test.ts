@@ -50,6 +50,41 @@ describe('@fleex/shared resolution', () => {
   });
 });
 
+/**
+ * Resolution on a checkout with no `node_modules` at all.
+ *
+ * The export condition above covers an installed checkout. A bare clone has no
+ * workspace symlink to follow, so Bun falls back to auto-install, which cannot
+ * fetch a `workspace:*` package from a registry — it reports the failure at
+ * process teardown, eight times, long after whatever the CLI was doing. That is
+ * why `fleex --help` looked clean (it exits immediately) while `fleex
+ * self-update` ended in a wall of errors after saying it had succeeded.
+ *
+ * A `paths` mapping resolves the sibling package directly, with no install
+ * involved. It points at the same file the `bun` export condition selects, so
+ * the two cannot drift.
+ */
+describe('CLI module resolution on a bare clone', () => {
+  const tsconfig = JSON.parse(
+    fs.readFileSync(path.join(repoDir, 'packages/cli/tsconfig.json'), 'utf8'),
+  ) as { compilerOptions: { baseUrl?: string; paths?: Record<string, string[]> } };
+
+  it('maps @fleex/shared to the sibling source', () => {
+    expect(tsconfig.compilerOptions.paths?.['@fleex/shared']).toEqual(['../shared/src/index.ts']);
+  });
+
+  it('declares baseUrl, without which Bun ignores paths entirely', () => {
+    // Measured: paths alone left all eight errors in place and the CLI still
+    // fifteen commands short. The mapping is inert until baseUrl is set.
+    expect(tsconfig.compilerOptions.baseUrl).toBe('.');
+  });
+
+  it('points at a file that exists', () => {
+    const target = path.join(repoDir, 'packages/cli', tsconfig.compilerOptions.paths!['@fleex/shared']![0]!);
+    expect(fs.existsSync(target)).toBe(true);
+  });
+});
+
 describe('missingPackageFrom', () => {
   it('names the package behind an unresolved bare specifier', () => {
     expect(missingPackageFrom(

@@ -6,7 +6,11 @@
     "target": "ESNext",
     "types": ["bun", "node"],
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@fleex/shared": ["../shared/src/index.ts"]
+    }
   },
   "include": ["index.ts", "src/**/*.ts"]
 }

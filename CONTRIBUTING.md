@@ -51,9 +51,12 @@ bun install
 bun run build      # builds packages/shared, web and server
 ```
 
-`bun install` alone is enough for the CLI and anything else Bun executes
-directly. The build is what the production server (`node packages/server/dist`)
-and the web bundle need, so run it before `fleex start`.
+The build is what the production server (`node packages/server/dist`) and the
+web bundle need, so run it before `fleex start`. The CLI needs neither step:
+`fleex` runs from a bare clone, because `@fleex/shared` resolves through the
+`bun` export condition and a `paths` mapping in `packages/cli/tsconfig.json`,
+both pointing at `packages/shared/src`. Keep them pointing at the same file —
+`packages/cli/tests/unit/fresh-checkout.test.ts` fails if either goes missing.
 
 If a `fleex` command reports that dependencies are not installed, it is telling
 you the truth — run `bun install` in the repository root, or `fleex self-update`,
