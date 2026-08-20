@@ -86,6 +86,14 @@ interface AssistantState {
   /** Connect once and keep the socket for the app's lifetime (idempotent). */
   ensureConnected: () => void;
   newSession: (workspace?: string) => void;
+  /**
+   * Start a conversation from an exchange that already happened elsewhere.
+   *
+   * The command palette answers a question from memory in one shot. This is how
+   * that becomes a conversation with history and follow-ups, without retyping the
+   * question or paying for the retrieval twice.
+   */
+  seedSession: (question: string, answer: string, followUp?: string) => void;
   openSession: (id: string) => void;
   deleteSession: (id: string) => void;
   renameSession: (id: string, title: string) => void;
@@ -100,6 +108,17 @@ interface AssistantState {
 
 // Socket lives outside the store: reconnects must not re-render on their own.
 let ws: WebSocket | null = null;
+
+/**
+ * A follow-up waiting for the seeded conversation to be ready.
+ *
+ * Two races make this necessary. `seedSession` cannot send the follow-up itself
+ * because the conversation's id only arrives with the companion's reply; and it
+ * cannot be sent on `session_created` either, because the history that follows
+ * *replaces* the conversation's items and would wipe an optimistically appended
+ * message. So it waits for the history of that exact id.
+ */
+let pendingSeed: { id: string | null; followUp: string } | null = null;
 let started = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -125,6 +144,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         break;
       case 'session_created': {
         const id = msg.id as string;
+        if (pendingSeed && pendingSeed.id === null) pendingSeed.id = id;
         set({ activeId: id });
         sendMsg({ type: 'open_session', id });
         break;
@@ -154,6 +174,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
           return { kind: o.role === 'user' ? 'user' : 'assistant', text: (o.text as string) ?? '' };
         });
         set((s) => ({ itemsBySession: { ...s.itemsBySession, [id]: items } }));
+        if (pendingSeed?.id === id) {
+          const { followUp } = pendingSeed;
+          pendingSeed = null;
+          get().sendUser(followUp);
+        }
         break;
       }
       case 'text': {
@@ -283,6 +308,17 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       // session reasons and runs tools against the current workspace.
       const active = workspace || useSettingsStore.getState().settings.workspace || undefined;
       sendMsg({ type: 'new_session', ...(active ? { workspace: active } : {}) });
+    },
+
+    seedSession: (question, answer, followUp) => {
+      // Same workspace reasoning as newSession: the companion is machine-wide and
+      // would otherwise pin the configured default rather than the one in view.
+      const active = useSettingsStore.getState().settings.workspace || undefined;
+      set({ errorMsg: null });
+      // The companion answers with `session_created`, which already activates and
+      // opens it — so there is nothing to await here.
+      pendingSeed = followUp?.trim() ? { id: null, followUp: followUp.trim() } : null;
+      sendMsg({ type: 'seed_session', question, answer, ...(active ? { workspace: active } : {}) });
     },
 
     openSession: (id) => {

@@ -260,6 +260,29 @@ export class SessionStore {
     this.save(id);
   }
 
+  /**
+   * A conversation that starts with an exchange that already happened.
+   *
+   * Asking memory a question in the command palette is a complete exchange, and
+   * continuing it used to mean retyping the question here and paying for the
+   * retrieval twice. Seeded into `messages` as well as `transcript`, so the model
+   * carries the exchange as real history rather than the reader merely seeing it.
+   */
+  seed(opts: { question: string; answer: string; workspace?: string; model?: string }): SessionData {
+    const s = this.create({
+      ...(opts.workspace ? { workspace: opts.workspace } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
+    });
+    s.messages.push({ role: 'user', content: opts.question });
+    s.messages.push({ role: 'assistant', content: opts.answer });
+    s.transcript.push({ role: 'user', text: opts.question });
+    s.transcript.push({ role: 'assistant', text: opts.answer });
+    s.lastMessageAt = new Date().toISOString();
+    this.save(s.id);
+    this.maybeTitleFrom(s.id, opts.question);
+    return s;
+  }
+
   /** Set the title from the first user message if it's still the default. */
   maybeTitleFrom(id: string, text: string): void {
     const s = this.sessions.get(id);

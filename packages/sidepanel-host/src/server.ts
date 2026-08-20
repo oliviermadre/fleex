@@ -321,6 +321,27 @@ Bun.serve<WsData>({
           send(ws, { type: 'session_created', id: s.id });
           break;
         }
+        /**
+         * Continue an exchange that happened somewhere else.
+         *
+         * The command palette answers a question from memory in one shot; this is
+         * how that becomes a conversation with history and follow-ups, without
+         * retyping the question or paying for the retrieval a second time.
+         */
+        case 'seed_session': {
+          const question = asString(msg.question);
+          const answer = asString(msg.answer);
+          if (!question || !answer) break;
+          const s = store.seed({
+            question,
+            answer,
+            ...(asString(msg.workspace) ? { workspace: asString(msg.workspace)! } : {}),
+            ...(asString(msg.model) ? { model: asString(msg.model)! } : {}),
+          });
+          broadcastSessions();
+          send(ws, { type: 'session_created', id: s.id });
+          break;
+        }
         case 'open_session': {
           const id = asString(msg.id);
           const s = id ? store.get(id) : undefined;

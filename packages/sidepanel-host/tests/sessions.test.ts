@@ -175,3 +175,61 @@ describe('isToolAutoApproved / isAutoApproveActive', () => {
     expect(isAutoApproveActive({ all: true, tools: [] })).toBe(true);
   });
 });
+
+/**
+ * A conversation that starts with an exchange that already happened.
+ *
+ * Asking memory a question in the command palette is a complete exchange.
+ * Continuing it used to mean retyping the question here and paying for the
+ * retrieval a second time.
+ */
+describe('SessionStore.seed', () => {
+  it('carries the exchange as real history, not just as something to look at', () => {
+    // `transcript` is what the reader sees; `messages` is what the model gets. A
+    // seed that filled only the first would look like history and behave like an
+    // empty conversation.
+    const store = new SessionStore(dir);
+    const s = store.seed({ question: 'les OKR Q3 2026', answer: 'Trois objectifs.' });
+
+    expect(s.messages).toEqual([
+      { role: 'user', content: 'les OKR Q3 2026' },
+      { role: 'assistant', content: 'Trois objectifs.' },
+    ]);
+    expect(s.transcript).toEqual([
+      { role: 'user', text: 'les OKR Q3 2026' },
+      { role: 'assistant', text: 'Trois objectifs.' },
+    ]);
+  });
+
+  it('titles the conversation from the question', () => {
+    const store = new SessionStore(dir);
+    const s = store.seed({ question: 'les OKR Q3 2026', answer: 'Trois objectifs.' });
+    expect(s.title).toBe('les OKR Q3 2026');
+  });
+
+  it('persists, so the conversation survives a restart', () => {
+    const store = new SessionStore(dir);
+    const id = store.seed({ question: 'q', answer: 'a' }).id;
+
+    const reopened = new SessionStore(dir).get(id);
+    expect(reopened?.messages).toHaveLength(2);
+  });
+
+  it('stamps a last-message time, so it sorts with the live conversations', () => {
+    const store = new SessionStore(dir);
+    expect(store.seed({ question: 'q', answer: 'a' }).lastMessageAt).toBeTruthy();
+  });
+
+  it('grants no standing approvals', () => {
+    // Consent is never inherited, and an exchange handed over from elsewhere is
+    // no reason to start one.
+    const store = new SessionStore(dir);
+    const s = store.seed({ question: 'q', answer: 'a' });
+    expect(isAutoApproveActive(s.autoApprove)).toBe(false);
+  });
+
+  it('honours the workspace it was asked for', () => {
+    const store = new SessionStore(dir);
+    expect(store.seed({ question: 'q', answer: 'a', workspace: 'staging' }).workspace).toBe('staging');
+  });
+});
