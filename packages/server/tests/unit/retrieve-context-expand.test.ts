@@ -115,3 +115,63 @@ describe('search with expandSources', () => {
     expect(result).toHaveLength(1);
   });
 });
+
+/**
+ * The exact-match pass, and what it must never cost.
+ *
+ * A leading-wildcard substring search reads the whole table. Warm it took 500 ms;
+ * cold, Postgres cancelled the statement and the whole request became a 500 —
+ * even though vector search had already succeeded. And the query that triggered
+ * it, "les routines c'est quoi ?", could never have matched a literal anyway.
+ */
+describe('the keyword pass', () => {
+  const doc = chunk('doc', 0, 'body');
+
+  function store(keyword: { hits?: MemoryChunkEntity[]; fails?: boolean }) {
+    const searchKeyword = keyword.fails
+      ? vi.fn(async () => { throw new Error('canceling statement due to statement timeout'); })
+      : vi.fn(async () => keyword.hits ?? []);
+    return {
+      s: {
+        search: vi.fn(async () => [hit(doc, 0.5)]),
+        searchKeyword,
+        chunksBySource: vi.fn(async () => []),
+        upsertChunks: vi.fn(), deleteBySource: vi.fn(), deleteBySourceFrom: vi.fn(),
+        getHashesBySource: vi.fn(async () => new Map()), listPendingEmbeddings: vi.fn(async () => []),
+        setEmbeddings: vi.fn(), getStats: vi.fn(), clear: vi.fn(),
+        listSourceIds: vi.fn(async () => []), sampleChunks: vi.fn(async () => []),
+      } as unknown as MemoryStorePort,
+      searchKeyword,
+    };
+  }
+
+  it('runs for a single token, which is what an identifier looks like', async () => {
+    const { s, searchKeyword } = store({});
+    await (await useCase(s)).search({ query: 'ERR_CONN_RESET' });
+    expect(searchKeyword).toHaveBeenCalled();
+  });
+
+  it('is skipped for a question asked in prose', async () => {
+    // No document contains that literal string, so the table scan was guaranteed
+    // to return nothing.
+    const { s, searchKeyword } = store({});
+    await (await useCase(s)).search({ query: "les routines c'est quoi ?" });
+    expect(searchKeyword).not.toHaveBeenCalled();
+  });
+
+  it('still returns the vector results when it fails', async () => {
+    // The regression that mattered: an optional enrichment turned a good answer
+    // into a 500.
+    const { s } = store({ fails: true });
+    const result = await (await useCase(s)).search({ query: 'ERR_CONN_RESET' });
+    expect(result).toHaveLength(1);
+  });
+
+  it('contributes a hit the vector pass missed', async () => {
+    // The reason it exists: a rare literal is what embeddings blur away.
+    const literal = chunk('other', 0, 'record recBAjhy9RgPu1tFx absent');
+    const { s } = store({ hits: [literal] });
+    const result = await (await useCase(s)).search({ query: 'recBAjhy9RgPu1tFx' });
+    expect(result.map((r) => r.sourceId)).toContain('other');
+  });
+});

@@ -204,9 +204,9 @@ export class RetrieveContextUseCase {
     const candidates = await store.search(queryVector, filters, overFetch);
 
     // A keyword pass alongside the vector one, because exact identifiers — error
-    // codes, file paths — are precisely what embeddings blur away, and a search
-    // box is where a user types them.
-    const keywordHits = await store.searchKeyword(query, filters, limit);
+    // codes, file paths, record ids — are precisely what embeddings blur away, and
+    // a search box is where a user types them.
+    const keywordHits = await this.keywordPass(query, filters, limit);
     const bySource = new Map(candidates.map((c) => [c.chunk.id, c]));
     for (const chunk of keywordHits) {
       if (!bySource.has(chunk.id)) {
@@ -230,6 +230,37 @@ export class RetrieveContextUseCase {
 
     const hits = params.expandSources ? await this.expand(ranked) : ranked;
     return this.toSnippets(hits, { includeSummaries: true });
+  }
+
+  /**
+   * The exact-match pass, run only where it can pay for itself.
+   *
+   * A substring search with a leading wildcard cannot use an index, so it reads
+   * the whole table — fine at 500 ms while Postgres has those rows cached, and a
+   * cancelled statement when it does not. A question asked in prose could never
+   * have earned that cost anyway: no document contains the literal text "les
+   * routines c'est quoi ?", so the scan was guaranteed to return nothing. What
+   * this pass is for is the identifier embeddings blur away, and an identifier is
+   * one token.
+   *
+   * A failure here is logged and swallowed. Vector search has already succeeded by
+   * this point, and letting an optional enrichment turn a good answer into a 500
+   * is the wrong trade every time — which is exactly what it did.
+   */
+  private async keywordPass(
+    query: string,
+    filters: MemorySearchFilters,
+    limit: number,
+  ): Promise<MemoryChunkEntity[]> {
+    if (/\s/.test(query)) return [];
+    try {
+      return await this.memoryStore!.searchKeyword(query, filters, limit);
+    } catch (error) {
+      this.logger.warn('Keyword pass skipped', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
   }
 
   /**
