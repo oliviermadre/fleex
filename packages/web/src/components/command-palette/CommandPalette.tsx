@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useCommandItems } from './useCommandItems';
 import { useMemorySearchItems } from './useMemorySearchItems';
 import type { CommandItem } from './commandPaletteTypes';
+import { useBackdropDismiss } from '../../hooks/useBackdropDismiss';
 
 export function CommandPalette() {
   const open = useUIStore((s) => s.commandPaletteOpen);
@@ -80,11 +81,9 @@ export function CommandPalette() {
     return () => window.removeEventListener('keydown', handleKey, true);
   }, [open, items, highlightedIndex, closeCommandPalette]);
 
-  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === backdropRef.current) {
-      closeCommandPalette();
-    }
-  }, [closeCommandPalette]);
+  // Both ends of the gesture: selecting the text of a result and releasing past
+  // the palette's edge must not dismiss it.
+  const dismiss = useBackdropDismiss(backdropRef, closeCommandPalette);
 
   if (!open) return null;
 
@@ -105,7 +104,7 @@ export function CommandPalette() {
     <div
       ref={backdropRef}
       className="command-palette-backdrop"
-      onClick={handleBackdropClick}
+      {...dismiss}
     >
       <div className="command-palette-container" style={{ alignSelf: 'flex-start' }}>
         {/* Search input */}

@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { SaveStatus } from './SaveStatus';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
+import { useBackdropDismiss } from '../../hooks/useBackdropDismiss';
 
 export function ScratchpadPanel() {
   const open = useUIStore((s) => s.scratchpadOpen);
@@ -62,14 +63,9 @@ export function ScratchpadPanel() {
     return () => window.removeEventListener('keydown', handleKey, true);
   }, [open, toggleScratchpad]);
 
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === backdropRef.current) {
-        toggleScratchpad();
-      }
-    },
-    [toggleScratchpad],
-  );
+  // Both ends of the gesture, so selecting a note's text and releasing past the
+  // panel's edge no longer closes it.
+  const dismiss = useBackdropDismiss(backdropRef, toggleScratchpad);
 
   const handleToggleCheckbox = useCallback(
     (lineIndex: number) => toggleCheckbox(storeKey, lineIndex),
@@ -91,7 +87,7 @@ export function ScratchpadPanel() {
     <div
       ref={backdropRef}
       className="scratchpad-backdrop"
-      onClick={handleBackdropClick}
+      {...dismiss}
     >
       <div className={`scratchpad-panel ${markdownMode !== 'write' ? 'scratchpad-panel-wide' : ''}`}>
         {/* Header */}

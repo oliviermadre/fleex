@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useBackdropDismiss } from '../../hooks/useBackdropDismiss';
 import { cn } from '../../lib/cn';
 
 interface ModalProps {
@@ -12,6 +13,8 @@ interface ModalProps {
 
 export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg' }: ModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
+  // Selecting the text of a dialog and releasing past its edge used to close it.
+  const dismiss = useBackdropDismiss(backdropRef, onClose);
 
   useEffect(() => {
     if (!open) return;
@@ -35,9 +38,7 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
       ref={backdropRef}
       data-overlay-top
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === backdropRef.current) onClose();
-      }}
+      {...dismiss}
     >
       <div
         className={cn(
