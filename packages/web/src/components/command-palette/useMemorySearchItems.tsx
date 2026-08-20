@@ -63,8 +63,7 @@ export function useMemorySearchItems(query: string, hasLocalMatches: boolean): C
   // question and a navigation are different intents that produce the same
   // keystrokes — "routines" matches a ticket title *and* is something you might
   // want answered — so hiding the choice as soon as anything matched removed it
-  // exactly when it was most plausible. It stays last, so nothing it does pushes
-  // a command down the list.
+  // exactly when it was most plausible.
   const showAsk = askEnabled && trimmed.length >= MIN_QUERY_LENGTH;
   if (!shouldSearch && !showAsk) return [];
 
@@ -84,11 +83,8 @@ export function useMemorySearchItems(query: string, hasLocalMatches: boolean): C
     },
   }));
 
-  // Last, not first: the excerpts above are free and instant, and this spends a
-  // model call. It stays offered even when the search found nothing, because that
-  // is exactly when a question beats a lookup.
   if (showAsk) {
-    items.push({
+    const ask: CommandItem = {
       id: 'memory:ask',
       label: `Ask memory: ${trimmed}`,
       category: 'memory' as const,
@@ -96,10 +92,31 @@ export function useMemorySearchItems(query: string, hasLocalMatches: boolean): C
       icon: askIcon(),
       description: 'A cited answer drawn from past work — one LLM call',
       onExecute: () => openAskMemory(trimmed),
-    });
+    };
+    // First when it is plainly the point, last otherwise.
+    //
+    // Last is the safe default: the excerpts are free and instant while this
+    // spends a model call, and a command must never be pushed down the list by
+    // something semantic. But when nothing local matched and the text reads as a
+    // question, there is no command to protect and no lookup that fits — the list
+    // is memory either way, and burying the one entry that answers the question
+    // makes the palette argue with the person using it.
+    if (looksLikeAQuestion(trimmed) && !hasLocalMatches) items.unshift(ask);
+    else items.push(ask);
   }
 
   return items;
+}
+
+/**
+ * Whether the text reads as something asked rather than something looked up.
+ *
+ * A single word is a name — you type `routines` to get to the routines. Several
+ * words is a sentence, and nobody navigates by sentence. A question mark settles
+ * it outright, however few words carry it.
+ */
+function looksLikeAQuestion(text: string): boolean {
+  return text.endsWith('?') || text.split(/\s+/).length >= 2;
 }
 
 /** One line of the matched text, so a result is recognisable without opening it. */

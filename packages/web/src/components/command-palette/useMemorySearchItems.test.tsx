@@ -84,3 +84,66 @@ describe('useMemorySearchItems', () => {
     expect(result.current).toEqual([]);
   });
 });
+
+/**
+ * Where the Ask entry sits.
+ *
+ * Last is the safe default — the excerpts are free while asking spends a model
+ * call, and a command must never be pushed down by something semantic. But when
+ * nothing local matched and the text reads as a question, there is no command to
+ * protect and no lookup that fits, so burying the one entry that answers it makes
+ * the palette argue with the person using it.
+ */
+describe('useMemorySearchItems — where Ask sits', () => {
+  /** Search results the hook will fold in, so ordering has something to order. */
+  function withResults(results: unknown[]) {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ query: 'x', results }),
+    } as Response)) as unknown as typeof fetch;
+  }
+
+  const excerpt = (id: string, title: string) =>
+    ({ sourceKind: 'ticket', sourceId: id, title, content: 'body', score: 0.7 });
+
+  it('puts Ask first for a question that matched no command', async () => {
+    withResults([excerpt('t1', 'Routines'), excerpt('t2', 'Autre')]);
+    const { result } = renderHook(() => useMemorySearchItems('les routines c est quoi', false));
+
+    await waitFor(() => expect(result.current.length).toBe(3));
+    expect(result.current[0]!.id).toBe('memory:ask');
+  });
+
+  it('promotes on a question mark, however few words carry it', async () => {
+    withResults([excerpt('t1', 'Routines')]);
+    const { result } = renderHook(() => useMemorySearchItems('routines?', false));
+
+    await waitFor(() => expect(result.current.length).toBe(2));
+    expect(result.current[0]!.id).toBe('memory:ask');
+  });
+
+  it('keeps Ask last for a single word, which is a name and not a question', async () => {
+    // You type `routines` to get to the routines.
+    withResults([excerpt('t1', 'Routines')]);
+    const { result } = renderHook(() => useMemorySearchItems('routines', false));
+
+    await waitFor(() => expect(result.current.length).toBe(2));
+    expect(result.current[0]!.id).not.toBe('memory:ask');
+    expect(result.current.at(-1)!.id).toBe('memory:ask');
+  });
+
+  it('keeps Ask last when a command matched, however question-like the text', async () => {
+    // A command is a precise intent and must keep the top of the list.
+    const { result } = renderHook(() => useMemorySearchItems('create a new ticket?', true));
+    await waitFor(() => expect(result.current.length).toBe(1));
+    expect(result.current.at(-1)!.id).toBe('memory:ask');
+  });
+
+  it('offers Ask alone when the search found nothing', async () => {
+    withResults([]);
+    const { result } = renderHook(() => useMemorySearchItems('pourquoi ce choix', false));
+    await waitFor(() => expect(result.current.length).toBe(1));
+    expect(result.current[0]!.id).toBe('memory:ask');
+  });
+});
