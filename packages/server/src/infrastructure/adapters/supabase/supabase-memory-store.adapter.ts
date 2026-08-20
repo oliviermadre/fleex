@@ -261,6 +261,24 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
     return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
   }
 
+  async chunksBySource(
+    sourceKind: MemorySourceKind,
+    sourceId: string,
+    limit: number,
+  ): Promise<MemoryChunkEntity[]> {
+    // Ordered by index, not by score: the caller is reassembling a document, and
+    // sections read in the order they were written. COLUMNS deliberately omits
+    // the vector — nothing downstream needs 384 floats per chunk to read text.
+    const { data, error } = await this.conn.client
+      .from(TABLE).select(COLUMNS)
+      .eq('source_kind', sourceKind).eq('source_id', sourceId)
+      .order('chunk_index')
+      .limit(limit);
+    if (error) throw new Error(`memory source read failed: ${error.message}`);
+
+    return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
+  }
+
   async getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>> {
     const { data, error } = await this.conn.client
       .from(TABLE).select('chunk_index, content_hash')

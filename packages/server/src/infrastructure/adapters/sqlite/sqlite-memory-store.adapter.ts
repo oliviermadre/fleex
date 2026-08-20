@@ -139,6 +139,24 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
     return rows.map((r) => this.toEntity(r, null));
   }
 
+  async chunksBySource(
+    sourceKind: MemorySourceKind,
+    sourceId: string,
+    limit: number,
+  ): Promise<MemoryChunkEntity[]> {
+    // Ordered by index, not by score: the caller is reassembling a document, and
+    // sections read in the order they were written.
+    const rows = this.conn.db
+      .prepare(`
+        SELECT * FROM memory_chunks
+         WHERE source_kind = ? AND source_id = ?
+         ORDER BY chunk_index
+         LIMIT ?
+      `)
+      .all(sourceKind, sourceId, limit) as MemoryChunkRow[];
+    return rows.map((r) => this.toEntity(r, null));
+  }
+
   async getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>> {
     const rows = this.conn.db
       .prepare('SELECT chunk_index, content_hash FROM memory_chunks WHERE source_kind = ? AND source_id = ?')

@@ -279,6 +279,23 @@ async function main() {
   // unconditionally costs nothing on the default engine.
   container.memorySweeper?.start(MEMORY_SWEEP_INTERVAL_MS);
 
+  // Load the encoder in the background rather than on the first question.
+  //
+  // `init()` is deliberately lazy so boot never waits on a model download, but
+  // lazy meant the first person to ask something paid the load on top of their own
+  // latency. A warm answer takes about fifteen seconds; a cold one took long
+  // enough that the browser gave up, and nothing logged a thing because the
+  // server was still working. Fired and forgotten, so boot is as fast as before
+  // and a failure here changes nothing — the model still loads on first use.
+  if (container.config.get().memoryEngine === 'semantic' && container.embeddingProvider) {
+    void container.embeddingProvider.init().then(
+      () => container.logger.info('Encoder ready'),
+      (error: unknown) => container.logger.warn('Encoder warm-up failed; it will load on first use', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+
   // Wire repo-exists check so refresh summaries include isClonedLocally
   container.repositoryRefreshScheduler.setCheckRepoExists(async (org, name) => {
     const barePath = container.resolver.barePath(org, name);

@@ -1009,6 +1009,16 @@ export function ticketRoutes(container: Container) {
     // Filtering, ordering (newest-updated first) and counting all happen in the
     // database — loading the whole table here truncated silently on Supabase and
     // hid the most recent documents.
+    // One document by id, for surfaces that hold a reference rather than a list.
+    // Memory search returns deliverables produced outside any ticket — a routine's
+    // output has no ticket to navigate to — and without this they were rendered as
+    // dead text at the top of the source list.
+    app.get<{ Params: { id: string } }>('/api/deliverables/:id', async (request, reply) => {
+      const deliverable = await container.deliverableStore.getById(request.params.id);
+      if (!deliverable) return reply.code(404).send({ error: 'Deliverable not found' });
+      return deliverable.toDTO();
+    });
+
     app.get<{
       Querystring: {
         type?: string | string[];

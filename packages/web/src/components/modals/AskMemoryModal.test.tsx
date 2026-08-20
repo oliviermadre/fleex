@@ -4,7 +4,8 @@ import { AskMemoryModal } from './AskMemoryModal';
 import { useUIStore } from '../../stores/uiStore';
 
 const askMemory = vi.hoisted(() => vi.fn());
-vi.mock('../../services/api', () => ({ askMemory }));
+const fetchDeliverable = vi.hoisted(() => vi.fn());
+vi.mock('../../services/api', () => ({ askMemory, fetchDeliverable }));
 
 function answer(text: string, sources: unknown[] = []) {
   return { answer: text, sources };
@@ -12,13 +13,14 @@ function answer(text: string, sources: unknown[] = []) {
 
 beforeEach(() => {
   askMemory.mockReset();
+  fetchDeliverable.mockReset();
   askMemory.mockResolvedValue(answer('Une réponse.'));
   useUIStore.setState({ askMemoryQuestion: 'routines' });
 });
 
 afterEach(() => {
   cleanup();
-  useUIStore.setState({ askMemoryQuestion: null });
+  useUIStore.setState({ askMemoryQuestion: null, deliverableOverlay: null });
 });
 
 /**
@@ -73,7 +75,7 @@ describe('AskMemoryModal', () => {
   });
 
   it('groups the sources of one document under a single row', async () => {
-    // Retrieval returns up to two chunks per document; the list used to show the
+    // Retrieval returns several chunks per document; the list used to show the
     // same title twice and take half the panel for it.
     askMemory.mockResolvedValue(answer('Réponse [1] [2].', [
       { sourceKind: 'deliverable', sourceId: 'd1', title: 'Routines — 5 axes (3/13)', content: 'a', score: 0.7 },
@@ -84,12 +86,67 @@ describe('AskMemoryModal', () => {
     // Queried from the document: the Modal renders through a portal, so the render
     // container holds none of it.
     const { getByText, baseElement } = render(<AskMemoryModal />);
-    await waitFor(() => expect(getByText('3 sources')).toBeTruthy());
+    await waitFor(() => expect(getByText('1 cited of 2 retrieved')).toBeTruthy());
 
-    expect(baseElement.querySelectorAll('ol > li')).toHaveLength(2);
+    // Only the cited document is listed up front; the ticket nobody cited waits
+    // behind the toggle.
+    expect(baseElement.querySelectorAll('ol > li')).toHaveLength(1);
     // Both numbers on the shared row, and the chunk counter gone from the label.
     expect(getByText('[1][2]')).toBeTruthy();
     expect(getByText('Routines — 5 axes')).toBeTruthy();
+  });
+
+  it('keeps the uncited sources one click away', async () => {
+    // Retrieval hands the model far more than it uses — four of eighteen, on the
+    // question that prompted this. Hiding them outright would be dishonest;
+    // listing them alongside the evidence buried it.
+    askMemory.mockResolvedValue(answer('Réponse [1].', [
+      { sourceKind: 'deliverable', sourceId: 'd1', title: 'OKR Q3', content: 'a', score: 0.7 },
+      { sourceKind: 'deliverable', sourceId: 'd2', title: 'Monthly coffee', content: 'b', score: 0.6 },
+    ]));
+
+    const { getByText, baseElement } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText('1 cited of 2 retrieved')).toBeTruthy());
+    expect(baseElement.querySelectorAll('ol > li')).toHaveLength(1);
+
+    fireEvent.click(getByText('Show 1 retrieved but not cited'));
+    expect(baseElement.querySelectorAll('ol > li')).toHaveLength(2);
+    expect(getByText('Monthly coffee')).toBeTruthy();
+  });
+
+  it('lists every source when the answer cited none', async () => {
+    askMemory.mockResolvedValue(answer('Pas de citation ici.', [
+      { sourceKind: 'deliverable', sourceId: 'd1', title: 'OKR Q3', content: 'a', score: 0.7 },
+    ]));
+
+    const { getByText, baseElement } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText('1 retrieved')).toBeTruthy());
+    expect(baseElement.querySelectorAll('ol > li')).toHaveLength(1);
+  });
+
+  it('opens a document that belongs to no ticket', async () => {
+    // A routine produces deliverables outside any ticket. Those rows used to be
+    // inert text, and they ranked first — so the top of the list was the part
+    // nothing could be done with.
+    fetchDeliverable.mockResolvedValue({ id: 'd1', title: 'OKR Q3' });
+    askMemory.mockResolvedValue(answer('Réponse [1].', [
+      { sourceKind: 'deliverable', sourceId: 'd1', title: 'OKR Q3', content: 'a', score: 0.7 },
+    ]));
+
+    const { getByText } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText('OKR Q3')).toBeTruthy());
+
+    fireEvent.click(getByText('OKR Q3'));
+    await waitFor(() => expect(fetchDeliverable).toHaveBeenCalledWith('d1'));
+    await waitFor(() => expect(useUIStore.getState().deliverableOverlay).toMatchObject({ id: 'd1' }));
+  });
+
+  it('reports why answering failed, not just that it did', async () => {
+    // A timeout says the encoder may still be loading, which the reader can act
+    // on. "Could not reach memory" threw that away.
+    askMemory.mockRejectedValue(new Error('Answering took longer than 180s.'));
+    const { getByText } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText(/longer than 180s/)).toBeTruthy());
   });
 
   it('reports a refusal instead of an empty panel', async () => {

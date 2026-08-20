@@ -88,6 +88,22 @@ export interface MemoryStorePort {
   getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>>;
 
   /**
+   * Every chunk of one source, in document order, capped at `limit`.
+   *
+   * Search returns the passages that matched; this returns the document they came
+   * from. A question about one document needs the document — the per-source cap
+   * that keeps a long deliverable from monopolising an agent's context is exactly
+   * wrong when the reader asked about that deliverable. Measured on a real corpus:
+   * a four-chunk OKR document surfaced two chunks, and the answer covered one of
+   * its three objectives because the other two were never sent.
+   */
+  chunksBySource(
+    sourceKind: MemorySourceKind,
+    sourceId: string,
+    limit: number,
+  ): Promise<MemoryChunkEntity[]>;
+
+  /**
    * Update the scoring metadata of every chunk of a source, leaving content and
    * vectors alone.
    *

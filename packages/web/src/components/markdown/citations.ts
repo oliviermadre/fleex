@@ -63,6 +63,34 @@ export function linkifyCitations(answer: string, sourceCount: number): string {
   return out + answer.slice(cursor);
 }
 
+/**
+ * The source numbers an answer actually cites.
+ *
+ * Retrieval hands the model far more than it ends up using — measured on a live
+ * corpus, four of eighteen — and a list that mixes the evidence with the
+ * also-considered buries the part worth checking. Same scan as `linkifyCitations`
+ * so the two can never disagree about what counts as a citation.
+ */
+export function citedSources(answer: string, sourceCount: number): Set<number> {
+  const cited = new Set<number>();
+  if (sourceCount <= 0) return cited;
+
+  const protectedRanges = codeRanges(answer);
+  const re = new RegExp(CITATION_RE.source, 'g');
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(answer)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (protectedRanges.some(([from, to]) => start >= from && end <= to)) continue;
+    for (const part of match[1]!.split(',')) {
+      const n = Number.parseInt(part.trim(), 10);
+      if (n >= 1 && n <= sourceCount) cited.add(n);
+    }
+  }
+  return cited;
+}
+
 function codeRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   const re = new RegExp(CODE_SPAN_RE.source, 'g');

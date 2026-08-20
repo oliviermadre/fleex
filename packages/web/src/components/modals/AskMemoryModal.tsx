@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
-import { linkifyCitations, sourceLabel } from '../markdown/citations';
+import { citedSources, linkifyCitations, sourceLabel } from '../markdown/citations';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { askMemory, type MemoryAnswer, type MemorySnippetResult } from '../../services/api';
+import { askMemory, fetchDeliverable, type MemoryAnswer, type MemorySnippetResult } from '../../services/api';
 import type { Ticket } from '@fleex/shared';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
@@ -33,6 +33,14 @@ interface SourceGroup {
   ticketId: string | null;
   /** Display id of the ticket this came from, when it is not the ticket itself. */
   ticketRef: number | null;
+  /**
+   * Deliverable id to open directly, when there is no ticket behind it.
+   *
+   * A routine produces documents outside any ticket, and those rows used to be
+   * inert text — worse, they ranked first, so the top of the list was the part
+   * nothing could be done with.
+   */
+  deliverableId: string | null;
 }
 
 /**
@@ -64,9 +72,71 @@ function groupSources(
       ticketId,
       // A ticket row does not need to point at itself.
       ticketRef: !isTicket && ticket ? ticket.displayId : null,
+      deliverableId: !ticketId && snippet.sourceKind === 'deliverable' ? snippet.sourceId : null,
     });
   });
   return [...groups.values()];
+}
+
+interface SourceRowProps {
+  group: SourceGroup;
+  flashed: boolean;
+  register: (el: HTMLLIElement | null) => void;
+  onOpenTicket: (ticketId: string) => void;
+  onOpenDocument: (deliverableId: string) => void;
+}
+
+/** One line of the source list: its numbers, what it is, and how to open it. */
+function SourceRow({ group, flashed, register, onOpenTicket, onOpenDocument }: SourceRowProps) {
+  const open = group.ticketId
+    ? () => onOpenTicket(group.ticketId!)
+    : group.deliverableId
+      ? () => onOpenDocument(group.deliverableId!)
+      : null;
+
+  return (
+    <li
+      ref={register}
+      className={cn(
+        'flex items-baseline gap-1.5 rounded px-1 py-0.5 transition-colors',
+        flashed && 'bg-[var(--theme-accent)]/15',
+      )}
+    >
+      <span className="flex-shrink-0 font-mono text-[10px] text-[var(--theme-text-faint)]">
+        {group.numbers.map((n) => `[${n}]`).join('')}
+      </span>
+      {open ? (
+        <button
+          type="button"
+          onClick={open}
+          title={group.title}
+          className="min-w-0 flex-1 cursor-pointer truncate border-none bg-transparent p-0 text-left text-[11px] text-[var(--theme-accent)] hover:underline"
+        >
+          {group.title}
+        </button>
+      ) : (
+        <span
+          title={group.title}
+          className="min-w-0 flex-1 truncate text-[11px] text-[var(--theme-text-secondary)]"
+        >
+          {group.title}
+        </span>
+      )}
+      {group.ticketRef !== null && (
+        <button
+          type="button"
+          onClick={() => onOpenTicket(group.ticketId!)}
+          title={`Open ticket #${group.ticketRef}`}
+          className="flex-shrink-0 cursor-pointer rounded-sm border-none bg-[var(--theme-accent)]/12 px-1 font-mono text-[10px] text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-accent)]/25"
+        >
+          #{group.ticketRef}
+        </button>
+      )}
+      <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">
+        {group.kind}
+      </span>
+    </li>
+  );
 }
 
 /**
@@ -90,21 +160,25 @@ export function AskMemoryModal() {
 
   const [result, setResult] = useState<MemoryAnswer | null>(null);
   const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // The message, not a boolean: a timeout says the encoder may still be loading,
+  // which is actionable, and "Could not reach memory" threw that away.
+  const [failure, setFailure] = useState<string | null>(null);
   const [flashed, setFlashed] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [showOthers, setShowOthers] = useState(false);
 
   const rowRefs = useRef(new Map<number, HTMLLIElement>());
   const inputRef = useRef<HTMLInputElement>(null);
 
   const ask = useCallback(async (q: string) => {
     setLoading(true);
-    setFailed(false);
+    setFailure(null);
     setResult(null);
+    setShowOthers(false);
     try {
       setResult(await askMemory(q));
-    } catch {
-      setFailed(true);
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'Could not reach memory.');
     } finally {
       setLoading(false);
     }
@@ -152,6 +226,20 @@ export function AskMemoryModal() {
     [result],
   );
 
+  /**
+   * The evidence, and everything else that was considered.
+   *
+   * Retrieval hands the model far more than it uses — four of eighteen, on the
+   * question that prompted this — and one flat list made the part worth checking
+   * indistinguishable from the part that was passed over. Nothing is hidden: the
+   * rest is one click away and still counted in the header.
+   */
+  const [cited, others] = useMemo(() => {
+    const numbers = citedSources(result?.answer ?? '', result?.sources.length ?? 0);
+    const used = groups.filter((g) => g.numbers.some((n) => numbers.has(n)));
+    return [used, groups.filter((g) => !used.includes(g))];
+  }, [groups, result]);
+
   const handleCitation = useCallback((index: number) => {
     const row = rowRefs.current.get(index);
     if (!row) return;
@@ -168,6 +256,22 @@ export function AskMemoryModal() {
     setActivePanel('tickets');
     selectTicket(ticketId);
   }, [close, setActivePanel, selectTicket]);
+
+  /**
+   * Open a document that belongs to no ticket, in the reading overlay.
+   *
+   * Fetched on click rather than up front: most sources have a ticket, and
+   * pre-loading a document nobody opens would spend a request per row.
+   */
+  const openDocument = useCallback(async (deliverableId: string) => {
+    try {
+      const deliverable = await fetchDeliverable(deliverableId);
+      close();
+      useUIStore.getState().openDeliverableOverlay(deliverable);
+    } catch {
+      setFailure('That document could no longer be found.');
+    }
+  }, [close]);
 
   return (
     <Modal
@@ -194,7 +298,7 @@ export function AskMemoryModal() {
           </p>
         )}
 
-        {failed && <p className="text-xs text-[var(--theme-danger)]">Could not reach memory.</p>}
+        {failure && <p className="text-xs text-[var(--theme-danger)]">{failure}</p>}
 
         {result && !result.answer && (
           <p className={cn('rounded px-3 py-2 text-xs', tint('yellow'))}>
@@ -212,66 +316,68 @@ export function AskMemoryModal() {
         )}
       </div>
 
-      {groups.length > 0 && (
-        <div className="mt-3 flex-shrink-0 border-t border-[var(--theme-border)] pt-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-            {result!.sources.length} source{result!.sources.length > 1 ? 's' : ''}
-          </span>
-          {/* Capped and scrollable: a dozen sources must not push the answer off
-              the screen, which is what they were doing. */}
-          <ol className="mt-1 max-h-32 space-y-px overflow-y-auto">
-            {groups.map((group) => (
-              <li
-                key={group.key}
-                ref={(el) => {
-                  for (const n of group.numbers) {
-                    if (el) rowRefs.current.set(n, el);
-                    else rowRefs.current.delete(n);
-                  }
-                }}
-                className={cn(
-                  'flex items-baseline gap-1.5 rounded px-1 py-0.5 transition-colors',
-                  flashed === group.key && 'bg-[var(--theme-accent)]/15',
+      {groups.length > 0 && (() => {
+        // With no citations to go by — a refusal, or an answer that cited nothing —
+        // every source is shown rather than none.
+        const primary = cited.length > 0 ? cited : groups;
+        const secondary = cited.length > 0 ? others : [];
+        const register = (group: SourceGroup) => (el: HTMLLIElement | null) => {
+          for (const n of group.numbers) {
+            if (el) rowRefs.current.set(n, el);
+            else rowRefs.current.delete(n);
+          }
+        };
+
+        return (
+          <div className="mt-3 flex-shrink-0 border-t border-[var(--theme-border)] pt-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+              {cited.length > 0
+                ? `${primary.length} cited of ${groups.length} retrieved`
+                : `${groups.length} retrieved`}
+            </span>
+            {/* Capped and scrollable: a dozen sources must not push the answer off
+                the screen, which is what they were doing. */}
+            <ol className="mt-1 max-h-32 space-y-px overflow-y-auto">
+              {primary.map((group) => (
+                <SourceRow
+                  key={group.key}
+                  group={group}
+                  flashed={flashed === group.key}
+                  register={register(group)}
+                  onOpenTicket={openSource}
+                  onOpenDocument={openDocument}
+                />
+              ))}
+            </ol>
+
+            {secondary.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowOthers((v) => !v)}
+                  className="mt-1 cursor-pointer border-none bg-transparent p-0 text-[10px] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
+                >
+                  {showOthers ? 'Hide' : 'Show'} {secondary.length} retrieved but not cited
+                </button>
+                {showOthers && (
+                  <ol className="mt-1 max-h-24 space-y-px overflow-y-auto opacity-60">
+                    {secondary.map((group) => (
+                      <SourceRow
+                        key={group.key}
+                        group={group}
+                        flashed={flashed === group.key}
+                        register={register(group)}
+                        onOpenTicket={openSource}
+                        onOpenDocument={openDocument}
+                      />
+                    ))}
+                  </ol>
                 )}
-              >
-                <span className="flex-shrink-0 font-mono text-[10px] text-[var(--theme-text-faint)]">
-                  {group.numbers.map((n) => `[${n}]`).join('')}
-                </span>
-                {group.ticketId ? (
-                  <button
-                    type="button"
-                    onClick={() => openSource(group.ticketId!)}
-                    title={group.title}
-                    className="min-w-0 flex-1 cursor-pointer truncate border-none bg-transparent p-0 text-left text-[11px] text-[var(--theme-accent)] hover:underline"
-                  >
-                    {group.title}
-                  </button>
-                ) : (
-                  <span
-                    title={group.title}
-                    className="min-w-0 flex-1 truncate text-[11px] text-[var(--theme-text-secondary)]"
-                  >
-                    {group.title}
-                  </span>
-                )}
-                {group.ticketRef !== null && (
-                  <button
-                    type="button"
-                    onClick={() => openSource(group.ticketId!)}
-                    title={`Open ticket #${group.ticketRef}`}
-                    className="flex-shrink-0 cursor-pointer rounded-sm border-none bg-[var(--theme-accent)]/12 px-1 font-mono text-[10px] text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-accent)]/25"
-                  >
-                    #{group.ticketRef}
-                  </button>
-                )}
-                <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">
-                  {group.kind}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* An answer can end on a clarifying question, and a panel with no input made
           that a dead end: the only button re-ran the identical query. Asking again

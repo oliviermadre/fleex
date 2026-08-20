@@ -67,6 +67,10 @@ export class AskMemoryUseCase {
       query: question,
       limit: params.limit ?? DEFAULT_LIMIT,
       repo: params.repo ?? null,
+      // A question is about a document, not about the two passages of it that
+      // happened to match. Without this, "the quarter's OKRs" got two of the OKR
+      // document's four chunks and the answer covered one of three objectives.
+      expandSources: true,
     });
     if (retrieved.length === 0) return { answer: null, sources: [], reason: 'no_results' };
 

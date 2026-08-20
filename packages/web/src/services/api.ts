@@ -503,6 +503,17 @@ export interface DeliverableTypesView {
   usage: Record<string, number>;
 }
 
+/**
+ * One document by id.
+ *
+ * For surfaces that hold a reference rather than a list — a memory source, say,
+ * where the document may have been produced outside any ticket and so has no
+ * ticket to open instead.
+ */
+export async function fetchDeliverable(id: string): Promise<TicketDeliverable> {
+  return request<TicketDeliverable>(`/deliverables/${encodeURIComponent(id)}`);
+}
+
 export async function fetchDeliverableTypes(): Promise<DeliverableTypesView> {
   return request<DeliverableTypesView>('/deliverable-types');
 }
@@ -1204,11 +1215,33 @@ export interface MemoryAnswer {
   reason?: 'no_results' | 'synthesis_failed' | 'unavailable';
 }
 
+/**
+ * How long to wait for a cited answer.
+ *
+ * Answering means one embedding, one search and one model call, which measures
+ * around fifteen seconds warm. Cold — with the encoder still loading — it is far
+ * longer, and with no ceiling at all the browser eventually gave up on its own
+ * and reported a bare network failure for what was really a slow success. Three
+ * minutes is well past the worst observed, and the abort is reported as what it
+ * is.
+ */
+const ASK_TIMEOUT_MS = 180_000;
+
 export async function askMemory(question: string, limit?: number): Promise<MemoryAnswer> {
-  return request<MemoryAnswer>('/memory/ask', {
-    method: 'POST',
-    body: JSON.stringify(limit ? { question, limit } : { question }),
-  });
+  try {
+    return await request<MemoryAnswer>('/memory/ask', {
+      method: 'POST',
+      body: JSON.stringify(limit ? { question, limit } : { question }),
+      signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error(
+        `Answering took longer than ${ASK_TIMEOUT_MS / 1000}s. The encoder may still be loading — try again in a moment.`,
+      );
+    }
+    throw error;
+  }
 }
 
 /** An existing ticket that looks like the one being typed. */

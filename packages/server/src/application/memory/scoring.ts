@@ -43,6 +43,109 @@ export const HUMAN_FEEDBACK_BONUS = 0.08;
 /** Tag that marks a chunk as carrying human corrections. */
 const HUMAN_FEEDBACK_TAG = 'human-feedback';
 
+/**
+ * Additive bonus for a chunk whose title answers the words of the question.
+ *
+ * Sized against a measurement, not a feeling. On a real corpus — 12 884 of
+ * 16 959 chunks being meeting transcripts — the twelve results for "les OKR Q3
+ * 2026" spanned 0.643 down to 0.629. Cosine cannot tell the document that
+ * *defines* the OKRs from a meeting that *mentions* them, so the OKR document
+ * ranked fourth behind three transcripts. Fourteen thousandths of a point is not
+ * a ranking, it is a coin toss, and a title match is the cheapest signal that
+ * breaks it: at 2/3 of the query's words matched this adds 0.08, enough to
+ * settle the question.
+ *
+ * Additive and query-only, like the human-feedback bonus: it lifts a hit that
+ * similarity already found rather than dragging in a title-alike, and it never
+ * applies to ticket-anchored injection, which has no query to match against.
+ */
+export const TITLE_MATCH_BONUS = 0.12;
+
+/**
+ * Words carrying no retrieval signal, in the two languages this corpus mixes.
+ *
+ * Without them "les OKR" and "the OKR" would score a title containing only "les"
+ * or "the" as a third of a match.
+ */
+const STOPWORDS = new Set([
+  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'ou', 'que', 'qui',
+  'quoi', 'dans', 'sur', 'pour', 'par', 'avec', 'sans', 'est', 'sont', 'au',
+  'aux', 'ce', 'ces', 'cet', 'cette', 'mon', 'ma', 'mes', 'son', 'sa', 'ses',
+  'the', 'a', 'an', 'of', 'and', 'or', 'in', 'on', 'for', 'by', 'with', 'to',
+  'is', 'are', 'what', 'which', 'that', 'this', 'these', 'from', 'at', 'it',
+]);
+
+/** Lowercase, unaccented content words of at least two characters. */
+function contentWords(text: string): string[] {
+  return text
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+}
+
+/**
+ * Share of the question's content words that the title carries.
+ *
+ * Measured against the title rather than the body on purpose: a transcript of a
+ * meeting about OKRs contains the word everywhere, which is exactly why the body
+ * cannot separate it from the OKR document. A title is what someone chose to
+ * call the thing.
+ */
+export function titleMatchRatio(
+  query: string | undefined,
+  title: string,
+  weights?: Map<string, number>,
+): number {
+  if (!query) return 0;
+  const wanted = new Set(contentWords(query));
+  if (wanted.size === 0) return 0;
+
+  const present = new Set(contentWords(title));
+  let matched = 0;
+  let total = 0;
+  for (const word of wanted) {
+    const weight = weights?.get(word) ?? 1;
+    total += weight;
+    if (present.has(word)) matched += weight;
+  }
+  return total > 0 ? matched / total : 0;
+}
+
+/**
+ * How much each word of the question is worth, from how common it is here.
+ *
+ * Counting words equally rewarded the wrong thing. Asked for "les OKR Q3 2026",
+ * two discussion threads outranked the OKR document itself on the strength of
+ * `2026` alone — a word in hundreds of titles, which distinguishes nothing. `okr`
+ * appears in a handful, and is the entire question.
+ *
+ * The document frequency is taken over the candidates already in hand, so this
+ * costs no query and adapts to the corpus: in a workspace where every document
+ * says OKR, the word stops earning its keep, which is correct.
+ */
+export function titleWordWeights(query: string, titles: string[]): Map<string, number> {
+  const wanted = new Set(contentWords(query));
+  const weights = new Map<string, number>();
+  if (wanted.size === 0) return weights;
+
+  const seenIn = new Map<string, number>();
+  for (const title of titles) {
+    for (const word of new Set(contentWords(title))) {
+      if (wanted.has(word)) seenIn.set(word, (seenIn.get(word) ?? 0) + 1);
+    }
+  }
+
+  const total = Math.max(1, titles.length);
+  for (const word of wanted) {
+    // Standard inverse document frequency, smoothed so a word absent from every
+    // candidate title still yields a finite weight rather than dominating.
+    weights.set(word, Math.log(1 + total / (1 + (seenIn.get(word) ?? 0))));
+  }
+  return weights;
+}
+
 export interface ScoringAnchor {
   tags?: string[];
   boardId?: string | null;
@@ -55,6 +158,19 @@ export interface ScoringAnchor {
    * for it.
    */
   boostHumanFeedback?: boolean;
+  /**
+   * The question being asked, when there is one.
+   *
+   * Set by search and by question answering; absent for ticket-anchored
+   * injection, which has an anchor rather than a query. Its only use is the title
+   * match, so leaving it unset keeps that ranking byte-for-byte unchanged.
+   */
+  query?: string;
+  /**
+   * Per-word weights for the title match, derived from the candidate pool by
+   * `rankHits`. Absent means every word counts the same.
+   */
+  titleWeights?: Map<string, number>;
 }
 
 export interface ScoredHit extends MemorySearchHit {
@@ -110,13 +226,15 @@ export function hybridScore(hit: MemorySearchHit, anchor: ScoringAnchor): number
     + SCORING_WEIGHTS.recency * recency
   );
 
-  const bonus = anchor.boostHumanFeedback && meta.tags?.includes(HUMAN_FEEDBACK_TAG)
+  const feedbackBonus = anchor.boostHumanFeedback && meta.tags?.includes(HUMAN_FEEDBACK_TAG)
     ? HUMAN_FEEDBACK_BONUS
     : 0;
+  const titleBonus = TITLE_MATCH_BONUS
+    * titleMatchRatio(anchor.query, hit.chunk.title, anchor.titleWeights);
 
   // Clamped so the score stays a comparable [0, 1] value whether or not the
-  // bonus applied.
-  return Math.min(1, weighted + bonus);
+  // bonuses applied.
+  return Math.min(1, weighted + feedbackBonus + titleBonus);
 }
 
 /**
@@ -133,8 +251,14 @@ export function rankHits(
   limit: number,
   maxPerSource: number = MAX_CHUNKS_PER_SOURCE,
 ): ScoredHit[] {
+  // Word weights come from the candidates themselves, so they are computed once
+  // per ranking rather than once per hit.
+  const scoringAnchor: ScoringAnchor = anchor.query
+    ? { ...anchor, titleWeights: titleWordWeights(anchor.query, hits.map((h) => h.chunk.title)) }
+    : anchor;
+
   const scored: ScoredHit[] = hits
-    .map((hit) => ({ ...hit, score: hybridScore(hit, anchor) }))
+    .map((hit) => ({ ...hit, score: hybridScore(hit, scoringAnchor) }))
     .sort((a, b) => (b.score - a.score) || (b.similarity - a.similarity));
 
   const perSource = new Map<string, number>();

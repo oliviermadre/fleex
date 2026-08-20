@@ -4,7 +4,7 @@ import type { EmbeddingProviderPort } from '../ports/embedding-provider.port.js'
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { MemorySearchFilters, MemoryStorePort } from '../ports/memory-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { MemorySourceKind } from '../../domain/entities/memory-chunk.entity.js';
+import type { MemoryChunkEntity, MemorySourceKind } from '../../domain/entities/memory-chunk.entity.js';
 import { embeddableText } from '../memory/chunker.js';
 import { rankHits, type ScoredHit } from '../memory/scoring.js';
 import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
@@ -24,6 +24,24 @@ const DIVERSE_OVER_FETCH = 20;
 
 /** Ceiling on the pre-fetch, so a large `limit` cannot ask for the whole index. */
 const MAX_OVER_FETCH = 500;
+
+/**
+ * How many of the best-ranked documents get reassembled in full.
+ *
+ * Three, because an answer usually rests on one document with a couple of others
+ * corroborating it, and because every chunk added here displaces evidence from
+ * somewhere else.
+ */
+const EXPAND_TOP_SOURCES = 3;
+
+/**
+ * Above this many chunks, a source is a transcript rather than a document.
+ *
+ * Eight covers the documents people actually ask about — a live corpus put its
+ * OKR document at four — while leaving a ninety-four-chunk meeting transcript to
+ * contribute only the passages that matched.
+ */
+const EXPAND_MAX_CHUNKS = 8;
 
 /** Default character budget for the injected snippets. */
 const DEFAULT_CHAR_BUDGET = 10_000;
@@ -151,6 +169,11 @@ export class RetrieveContextUseCase {
     excludeTicketId?: string | null;
     /** Keep only the best-scoring chunk of each source. */
     oneChunkPerSource?: boolean;
+    /**
+     * Reassemble the best-ranked documents in full instead of passing the two
+     * passages that matched. For answering a question about a document.
+     */
+    expandSources?: boolean;
   }): Promise<MemorySnippet[]> {
     if (!this.isSemanticEnabled()) return [];
     const query = params.query.trim();
@@ -200,9 +223,69 @@ export class RetrieveContextUseCase {
     const ranked = rankHits([...bySource.values()], {
       repo: params.repo ?? null,
       boostHumanFeedback: this.isFeatureEnabled('humanFeedbackBoost'),
+      // Lets the title match break the near-ties that cosine leaves behind on a
+      // corpus dominated by meeting transcripts.
+      query,
     }, limit, params.oneChunkPerSource ? 1 : undefined);
 
-    return this.toSnippets(ranked, { includeSummaries: true });
+    const hits = params.expandSources ? await this.expand(ranked) : ranked;
+    return this.toSnippets(hits, { includeSummaries: true });
+  }
+
+  /**
+   * Replace the matched passages of the best documents with the whole document.
+   *
+   * Search finds passages; a question is usually about a document. Measured on a
+   * live corpus: asked for the quarter's OKRs, retrieval returned two of the OKR
+   * document's four chunks and the answer covered one of its three objectives —
+   * the model cited everything it was given, and the other two objectives had
+   * never left the index.
+   *
+   * Only short documents are reassembled. A source running past
+   * `EXPAND_MAX_CHUNKS` is a meeting transcript or a log, not a document someone
+   * asked about; pasting ninety chunks of it would bury the answer it was meant to
+   * support. Detected by asking for one chunk more than the cap, so the decision
+   * costs no extra round trip.
+   */
+  private async expand(ranked: ScoredHit[]): Promise<ScoredHit[]> {
+    const store = this.memoryStore!;
+    const order: string[] = [];
+    const groups = new Map<string, ScoredHit[]>();
+    for (const hit of ranked) {
+      const key = `${hit.chunk.sourceKind}:${hit.chunk.sourceId}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        order.push(key);
+      }
+      groups.get(key)!.push(hit);
+    }
+
+    for (const key of order.slice(0, EXPAND_TOP_SOURCES)) {
+      const group = groups.get(key)!;
+      const best = group[0]!;
+      let whole: MemoryChunkEntity[];
+      try {
+        whole = await store.chunksBySource(
+          best.chunk.sourceKind,
+          best.chunk.sourceId,
+          EXPAND_MAX_CHUNKS + 1,
+        );
+      } catch (error) {
+        // A document read failing must not cost the caller its search results.
+        this.logger.warn('Memory source expansion failed', {
+          sourceId: best.chunk.sourceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+      if (whole.length > EXPAND_MAX_CHUNKS || whole.length <= group.length) continue;
+
+      // Every chunk carries the document's best score, so the group keeps the rank
+      // its strongest passage earned rather than sinking on its weakest.
+      groups.set(key, whole.map((chunk) => ({ chunk, similarity: best.similarity, score: best.score })));
+    }
+
+    return order.flatMap((key) => groups.get(key)!);
   }
 
   /**

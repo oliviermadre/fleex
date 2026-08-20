@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CITATION_HREF_PREFIX,
+  citedSources,
   decodeCitation,
   linkifyCitations,
   sourceLabel,
@@ -79,5 +80,29 @@ describe('sourceLabel', () => {
 
   it('leaves a plain title alone', () => {
     expect(sourceLabel('Ticket #539: idées d’évolutions')).toBe('Ticket #539: idées d’évolutions');
+  });
+});
+
+describe('citedSources', () => {
+  it('collects the numbers an answer cites', () => {
+    expect([...citedSources('as decided [3] and [1, 5].', 5)].sort()).toEqual([1, 3, 5]);
+  });
+
+  it('ignores a number with no source behind it', () => {
+    // Same bound as the linkifier, so the two cannot disagree about what a
+    // citation is.
+    expect([...citedSources('see [9]', 3)]).toEqual([]);
+  });
+
+  it('ignores an index inside code', () => {
+    expect([...citedSources('use `items[1]` and [2]', 3)]).toEqual([2]);
+  });
+
+  it('returns nothing for an answer that cites nothing', () => {
+    expect([...citedSources('no citations here', 5)]).toEqual([]);
+  });
+
+  it('returns nothing when there are no sources', () => {
+    expect([...citedSources('cited [1]', 0)]).toEqual([]);
   });
 });
