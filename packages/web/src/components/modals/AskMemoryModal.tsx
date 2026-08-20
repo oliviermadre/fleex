@@ -5,8 +5,8 @@ import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { citedSources, linkifyCitations, sourceLabel } from '../markdown/citations';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { askMemory, fetchDeliverable, type MemoryAnswer, type MemorySnippetResult } from '../../services/api';
-import type { Ticket } from '@fleex/shared';
+import { askMemoryStream, fetchDeliverable, type MemoryAnswer, type MemorySnippetResult } from '../../services/api';
+import type { MemoryAskStage, Ticket } from '@fleex/shared';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
@@ -76,6 +76,87 @@ function groupSources(
     });
   });
   return [...groups.values()];
+}
+
+/** What each stage is doing, in the reader's terms rather than the code's. */
+function stageLabel(stage: MemoryAskStage): string {
+  switch (stage.stage) {
+    case 'encoding': return 'Encoding the question';
+    case 'searching': return 'Searching what this workspace remembers';
+    case 'retrieved':
+      return `Found ${stage.passages} passage${stage.passages === 1 ? '' : 's'} `
+        + `across ${stage.documents} document${stage.documents === 1 ? '' : 's'}`;
+    case 'reading': return 'Reading the closest documents in full';
+    case 'drafting': return 'Drafting the answer';
+  }
+}
+
+function CheckIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  );
+}
+
+/**
+ * What the wait is spending its time on.
+ *
+ * One frozen line for ten seconds of work read as nothing happening. Every stage
+ * the server reports is kept on screen: the finished ones tick, the current one
+ * pulses, and the documents found are named — which is the part that tells the
+ * reader whether the answer coming is going to be any good.
+ */
+function StageProgress({ stages }: { stages: MemoryAskStage[] }) {
+  // Seconds on the stage in progress. Retrieval finishes in well under one, but
+  // drafting waits about ten before the model's first word — the SDK spawns a
+  // subprocess — and a line that never changes for ten seconds is the thing that
+  // looked broken. Held back for two seconds so the fast stages stay quiet.
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [stages.length]);
+
+  return (
+    <ol className="space-y-1">
+      {stages.map((stage, i) => {
+        const current = i === stages.length - 1;
+        return (
+          <li key={`${stage.stage}-${i}`} className="flex items-baseline gap-2 text-xs">
+            <span
+              className={cn(
+                'w-3 flex-shrink-0 translate-y-px',
+                current ? 'animate-pulse text-[var(--theme-accent)]' : 'text-[var(--theme-success)]',
+              )}
+            >
+              {current ? '·' : <CheckIcon />}
+            </span>
+            <span className="min-w-0">
+              <span className={current ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]'}>
+                {stageLabel(stage)}
+              </span>
+              {current && elapsed >= 2 && (
+                <span className="ml-1.5 font-mono text-[10px] tabular-nums text-[var(--theme-text-faint)]">
+                  {elapsed}s
+                </span>
+              )}
+              {stage.stage === 'reading' && (
+                <ul className="mt-0.5 space-y-px">
+                  {stage.titles.map((title) => (
+                    <li key={title} className="truncate text-[11px] text-[var(--theme-text-faint)]">
+                      {sourceLabel(title)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 interface SourceRowProps {
@@ -166,6 +247,10 @@ export function AskMemoryModal() {
   const [flashed, setFlashed] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [showOthers, setShowOthers] = useState(false);
+  const [stages, setStages] = useState<MemoryAskStage[]>([]);
+  // The answer as it is written. Retrieval takes under a second and the model
+  // thirteen, so this is where nearly all of the wait actually happens.
+  const [partial, setPartial] = useState('');
 
   const rowRefs = useRef(new Map<number, HTMLLIElement>());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -175,8 +260,14 @@ export function AskMemoryModal() {
     setFailure(null);
     setResult(null);
     setShowOthers(false);
+    setStages([]);
+    setPartial('');
     try {
-      setResult(await askMemory(q));
+      setResult(await askMemoryStream(
+        q,
+        (stage) => setStages((s) => [...s, stage]),
+        (delta) => setPartial((text) => text + delta),
+      ));
     } catch (error) {
       setFailure(error instanceof Error ? error.message : 'Could not reach memory.');
     } finally {
@@ -292,10 +383,19 @@ export function AskMemoryModal() {
       {/* The one scrolling region. Everything around it is fixed, so the panel
           cannot outgrow the viewport however long the answer runs. */}
       <div className="-mr-2 mt-3 min-h-0 flex-1 overflow-y-auto pr-2">
-        {loading && (
-          <p className="text-xs text-[var(--theme-text-muted)]">
-            Reading what this workspace remembers…
-          </p>
+        {/* Once text starts arriving it takes over: the stages describe a second
+            of work, the writing is the other thirteen. Rendered as markdown while
+            it grows, so the layout does not jump when it finishes. */}
+        {loading && partial && (
+          <MarkdownRenderer content={partial} profile="doc" onToggleCheckbox={() => {}} />
+        )}
+
+        {loading && !partial && (
+          stages.length > 0
+            ? <StageProgress stages={stages} />
+            // A flash before the first stage lands, and deliberately not the
+            // button's word: two "Asking…" on one panel says less than one.
+            : <p className="text-xs text-[var(--theme-text-muted)]">Starting…</p>
         )}
 
         {failure && <p className="text-xs text-[var(--theme-danger)]">{failure}</p>}

@@ -114,6 +114,60 @@ export function memoryRoutes(container: Container) {
       },
     );
 
+    /**
+     * The same answer, with its progress.
+     *
+     * Newline-delimited JSON: one object per stage as it starts, then the result.
+     * A separate route rather than content negotiation on the one above, because
+     * the CLI and the MCP tools consume that one as a single JSON body and a
+     * streamed reply would break both.
+     *
+     * Written straight to the raw socket. Fastify would otherwise buffer the whole
+     * reply, which is the one thing that must not happen here — the progress is
+     * worthless if it arrives with the answer.
+     */
+    app.post<{ Body: { question?: string; limit?: number; repo?: string | null } }>(
+      '/api/memory/ask/stream',
+      async (request, reply) => {
+        const askMemory = container.askMemory;
+        const question = request.body?.question?.trim();
+        if (!question) return reply.code(400).send({ error: 'Missing `question`.' });
+        if (!askMemory) {
+          return reply.code(503).send({ error: 'Memory questions are unavailable on this instance.' });
+        }
+
+        reply.raw.writeHead(200, {
+          'Content-Type': 'application/x-ndjson',
+          'Cache-Control': 'no-cache',
+          // Proxies that buffer would defeat the whole point of the route.
+          'X-Accel-Buffering': 'no',
+        });
+        const write = (payload: unknown): void => {
+          reply.raw.write(`${JSON.stringify(payload)}\n`);
+        };
+
+        try {
+          const result = await askMemory.execute({
+            question,
+            limit: request.body.limit,
+            repo: request.body.repo ?? null,
+            onStage: write,
+            onDelta: (delta) => write({ delta }),
+          });
+          write(result);
+        } catch (error) {
+          // The status line is long gone, so a failure has to travel in the body.
+          container.logger.error('Streamed memory question failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          write({ error: error instanceof Error ? error.message : String(error) });
+        } finally {
+          reply.raw.end();
+        }
+        return reply;
+      },
+    );
+
     app.get<{ Querystring: { title?: string; limit?: string } }>(
       '/api/memory/similar-tickets',
       async (request) => {

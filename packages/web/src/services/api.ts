@@ -42,6 +42,8 @@ import type {
   UpdateRoutineInput,
   RoutineTrigger,
   TicketDeliverable,
+  MemoryAskStage,
+  MemoryAskEvent,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -1227,6 +1229,12 @@ export interface MemoryAnswer {
  */
 const ASK_TIMEOUT_MS = 180_000;
 
+function askTimeoutError(): Error {
+  return new Error(
+    `Answering took longer than ${ASK_TIMEOUT_MS / 1000}s. The encoder may still be loading — try again in a moment.`,
+  );
+}
+
 export async function askMemory(question: string, limit?: number): Promise<MemoryAnswer> {
   try {
     return await request<MemoryAnswer>('/memory/ask', {
@@ -1235,13 +1243,76 @@ export async function askMemory(question: string, limit?: number): Promise<Memor
       signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new Error(
-        `Answering took longer than ${ASK_TIMEOUT_MS / 1000}s. The encoder may still be loading — try again in a moment.`,
-      );
-    }
+    if (error instanceof DOMException && error.name === 'TimeoutError') throw askTimeoutError();
     throw error;
   }
+}
+
+/**
+ * Ask, reporting each stage as the server reaches it.
+ *
+ * Answering is several seconds of real work and the panel used to show one frozen
+ * line for all of it. The stream carries one JSON object per stage, then the
+ * result — so `onStage` fires as the work happens and the return value is still
+ * just the answer.
+ *
+ * Falls back to nothing clever if the stream breaks mid-way: an incomplete answer
+ * is not an answer, so a truncated stream is an error like any other.
+ */
+export async function askMemoryStream(
+  question: string,
+  onStage: (stage: MemoryAskStage) => void,
+  onDelta?: (text: string) => void,
+  limit?: number,
+): Promise<MemoryAnswer> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/memory/ask/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(limit ? { question, limit } : { question }),
+      signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') throw askTimeoutError();
+    throw error;
+  }
+
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(body, res.statusText));
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let answer: MemoryAnswer | null = null;
+
+  const handle = (line: string): void => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const payload = JSON.parse(trimmed) as MemoryAskEvent | MemoryAnswer | { error: string };
+    // The status line was sent before the work began, so a failure arrives here
+    // rather than as an HTTP code.
+    if ('error' in payload) throw new Error(payload.error);
+    if ('stage' in payload) onStage(payload);
+    else if ('delta' in payload) onDelta?.(payload.delta);
+    else answer = payload;
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // A chunk boundary can land mid-line; the tail waits for the next read.
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) handle(line);
+  }
+  handle(buffer);
+
+  if (!answer) throw new Error('The answer stream ended before an answer arrived.');
+  return answer;
 }
 
 /** An existing ticket that looks like the one being typed. */

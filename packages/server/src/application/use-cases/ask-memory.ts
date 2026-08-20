@@ -1,3 +1,4 @@
+import type { MemoryAskStage } from '@fleex/shared';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 import type { MemorySnippet, RetrieveContextUseCase } from './retrieve-context.js';
@@ -52,7 +53,15 @@ export class AskMemoryUseCase {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(params: { question: string; limit?: number; repo?: string | null }): Promise<AskMemoryResult> {
+  async execute(params: {
+    question: string;
+    limit?: number;
+    repo?: string | null;
+    /** Reports each phase as it starts, for a caller streaming progress. */
+    onStage?: (stage: MemoryAskStage) => void;
+    /** Receives the answer in slices as the model writes it. */
+    onDelta?: (text: string) => void;
+  }): Promise<AskMemoryResult> {
     const question = params.question.trim();
     if (!question) return { answer: null, sources: [], reason: 'no_results' };
 
@@ -71,10 +80,12 @@ export class AskMemoryUseCase {
       // happened to match. Without this, "the quarter's OKRs" got two of the OKR
       // document's four chunks and the answer covered one of three objectives.
       expandSources: true,
+      onStage: params.onStage,
     });
     if (retrieved.length === 0) return { answer: null, sources: [], reason: 'no_results' };
 
-    const answer = await this.synthesise(question, retrieved);
+    params.onStage?.({ stage: 'drafting' });
+    const answer = await this.synthesise(question, retrieved, params.onDelta);
     if (!answer) return { answer: null, sources: retrieved, reason: 'synthesis_failed' };
 
     return { answer, sources: retrieved };
@@ -85,7 +96,11 @@ export class AskMemoryUseCase {
    * read the excerpts and answer, so giving it tools would only let it wander off
    * the evidence the citations promise.
    */
-  private async synthesise(question: string, sources: MemorySnippet[]): Promise<string | null> {
+  private async synthesise(
+    question: string,
+    sources: MemorySnippet[],
+    onDelta?: (text: string) => void,
+  ): Promise<string | null> {
     const release = await this.sdkLimiter.acquire();
     try {
       const { query } = await import('@anthropic-ai/claude-agent-sdk');
@@ -98,9 +113,13 @@ export class AskMemoryUseCase {
           allowedTools: [],
           permissionMode: 'dontAsk' as const,
           maxTurns: 0,
+          // Only requested when someone is listening: the partial messages are
+          // pure overhead for the CLI and MCP callers, which want one string.
+          ...(onDelta ? { includePartialMessages: true } : {}),
         },
       })) {
         if ('result' in message) resultText = (message as { result: string }).result;
+        else if (onDelta) forwardTextDelta(message, onDelta);
       }
       return resultText.trim() || null;
     } catch (error) {
@@ -112,6 +131,23 @@ export class AskMemoryUseCase {
       release();
     }
   }
+}
+
+/**
+ * Pull the text out of an SDK partial message, if that is what it is.
+ *
+ * Narrowed by shape rather than by imported type: the SDK's message union is
+ * thirty-odd members wide and this cares about exactly one field of one of them.
+ * Anything else — tool events, status, retries — is silently not a text delta.
+ */
+export function forwardTextDelta(message: unknown, onDelta: (text: string) => void): void {
+  if (!message || typeof message !== 'object') return;
+  const msg = message as { type?: string; event?: { type?: string; delta?: { type?: string; text?: string } } };
+  if (msg.type !== 'stream_event') return;
+  if (msg.event?.type !== 'content_block_delta') return;
+  if (msg.event.delta?.type !== 'text_delta') return;
+  const text = msg.event.delta.text;
+  if (text) onDelta(text);
 }
 
 /**

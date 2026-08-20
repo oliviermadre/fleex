@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: vi.fn() }));
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { AskMemoryUseCase, buildPrompt } from '../../src/application/use-cases/ask-memory.js';
+import { AskMemoryUseCase, buildPrompt, forwardTextDelta } from '../../src/application/use-cases/ask-memory.js';
 import type { MemorySnippet, RetrieveContextUseCase } from '../../src/application/use-cases/retrieve-context.js';
 import type { SdkConcurrencyLimiter } from '../../src/application/services/sdk-concurrency-limiter.js';
 
@@ -183,5 +183,40 @@ describe('buildPrompt', () => {
     const prompt = buildPrompt('why sessions?', [snippet()]);
     expect(prompt).toContain('Question: why sessions?');
     expect(prompt).toContain('using only the excerpts above');
+  });
+});
+
+describe('forwardTextDelta', () => {
+  it('forwards the text of a content_block_delta', () => {
+    const seen: string[] = [];
+    forwardTextDelta(
+      { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Les ' } } },
+      (t) => seen.push(t),
+    );
+    expect(seen).toEqual(['Les ']);
+  });
+
+  it('ignores everything that is not a text delta', () => {
+    // The SDK union is thirty-odd members wide; this cares about one field of one.
+    const seen: string[] = [];
+    const push = (t: string) => seen.push(t);
+    forwardTextDelta({ type: 'assistant', message: {} }, push);
+    forwardTextDelta({ type: 'stream_event', event: { type: 'message_start' } }, push);
+    forwardTextDelta(
+      { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'thinking_delta' } } },
+      push,
+    );
+    forwardTextDelta({}, push);
+    forwardTextDelta(null, push);
+    expect(seen).toEqual([]);
+  });
+
+  it('ignores an empty delta rather than firing for nothing', () => {
+    const seen: string[] = [];
+    forwardTextDelta(
+      { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: '' } } },
+      (t) => seen.push(t),
+    );
+    expect(seen).toEqual([]);
   });
 });

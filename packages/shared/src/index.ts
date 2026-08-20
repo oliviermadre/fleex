@@ -473,6 +473,8 @@ export {
 } from './constants.js';
 
 export type { EmbeddingModelSpec } from './types/embedding-model.js';
+export type { MemoryAskStage, MemoryAskDelta, MemoryAskEvent } from './types/memory-ask.js';
+export { MEMORY_ASK_STAGES } from './types/memory-ask.js';
 export {
   EMBEDDING_MODELS,
   DEFAULT_EMBEDDING_MODEL,

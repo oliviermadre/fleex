@@ -1,4 +1,4 @@
-import type { TicketSummaryRef } from '@fleex/shared';
+import type { MemoryAskStage, TicketSummaryRef } from '@fleex/shared';
 import { isMemoryFeatureEnabled, type ConfigPort, type MemoryFeatureFlags } from '../ports/config.port.js';
 import type { EmbeddingProviderPort } from '../ports/embedding-provider.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -174,6 +174,8 @@ export class RetrieveContextUseCase {
      * passages that matched. For answering a question about a document.
      */
     expandSources?: boolean;
+    /** Reports each phase as it starts, for a caller streaming progress. */
+    onStage?: (stage: MemoryAskStage) => void;
   }): Promise<MemorySnippet[]> {
     if (!this.isSemanticEnabled()) return [];
     const query = params.query.trim();
@@ -192,7 +194,11 @@ export class RetrieveContextUseCase {
       embeddingModel: embeddings.id,
     };
 
+    // Reported before the call, not after: encoding is where a cold model spends
+    // its time, and that is exactly the wait that needs explaining.
+    params.onStage?.({ stage: 'encoding' });
     const queryVector = await embeddings.embedQuery(query);
+    params.onStage?.({ stage: 'searching' });
     // The pre-fetch is measured in chunks, and a large document brings dozens of
     // them: on a live instance the top 48 chunks for one query all belonged to five
     // documents, so nothing else — including the ticket those documents hang off —
@@ -228,7 +234,13 @@ export class RetrieveContextUseCase {
       query,
     }, limit, params.oneChunkPerSource ? 1 : undefined);
 
-    const hits = params.expandSources ? await this.expand(ranked) : ranked;
+    params.onStage?.({
+      stage: 'retrieved',
+      passages: ranked.length,
+      documents: new Set(ranked.map((h) => `${h.chunk.sourceKind}:${h.chunk.sourceId}`)).size,
+    });
+
+    const hits = params.expandSources ? await this.expand(ranked, params.onStage) : ranked;
     return this.toSnippets(hits, { includeSummaries: true });
   }
 
@@ -278,7 +290,10 @@ export class RetrieveContextUseCase {
    * support. Detected by asking for one chunk more than the cap, so the decision
    * costs no extra round trip.
    */
-  private async expand(ranked: ScoredHit[]): Promise<ScoredHit[]> {
+  private async expand(
+    ranked: ScoredHit[],
+    onStage?: (stage: MemoryAskStage) => void,
+  ): Promise<ScoredHit[]> {
     const store = this.memoryStore!;
     const order: string[] = [];
     const groups = new Map<string, ScoredHit[]>();
@@ -291,7 +306,15 @@ export class RetrieveContextUseCase {
       groups.get(key)!.push(hit);
     }
 
-    for (const key of order.slice(0, EXPAND_TOP_SOURCES)) {
+    const reading = order.slice(0, EXPAND_TOP_SOURCES);
+    // Named, not counted. Seeing which documents were found is the part of the
+    // wait that tells the reader whether the answer is going to be any good.
+    onStage?.({
+      stage: 'reading',
+      titles: reading.map((key) => groups.get(key)![0]!.chunk.title),
+    });
+
+    for (const key of reading) {
       const group = groups.get(key)!;
       const best = group[0]!;
       let whole: MemoryChunkEntity[];
