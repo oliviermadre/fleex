@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import type { AgentExecution } from '@fleex/shared';
 import {
   mineAutomationCandidates,
+  resolveCandidateTargets,
   suggestCron,
   groupKey,
   MIN_OCCURRENCES,
-} from '../../src/application/memory/automation-mining.js';
+} from '../../src/application/services/automation-mining.js';
 
 const NOW = new Date('2026-08-13T12:00:00Z');
 const HOUR = 3_600_000;
@@ -31,6 +32,14 @@ function series(count: number, gapMs: number, overrides: Partial<AgentExecution>
     execution({ ...overrides, startedAt: new Date(NOW.getTime() - (count - 1 - i) * gapMs).toISOString() }));
 }
 
+/** Three runs in one afternoon a month ago, then one yesterday. */
+const BURST = [
+  execution({ startedAt: new Date(NOW.getTime() - 30 * DAY).toISOString() }),
+  execution({ startedAt: new Date(NOW.getTime() - 30 * DAY + HOUR).toISOString() }),
+  execution({ startedAt: new Date(NOW.getTime() - 30 * DAY + 2 * HOUR).toISOString() }),
+  execution({ startedAt: new Date(NOW.getTime() - 1 * DAY).toISOString() }),
+];
+
 describe('groupKey', () => {
   it('groups skill runs by their skill', () => {
     expect(groupKey(execution({ startedAt: NOW.toISOString(), mentionId: 'skill:recap' }))).toBe('skill:recap');
@@ -45,6 +54,16 @@ describe('groupKey', () => {
       .toBe('agent:p9');
   });
 
+  it('never groups local CLI sessions — "cli" is a sentinel, not an agent', () => {
+    expect(groupKey(execution({ startedAt: NOW.toISOString(), mentionId: 'cli:s-1', personaId: 'cli' })))
+      .toBeNull();
+  });
+
+  it('still groups a skill run that came from the CLI', () => {
+    expect(groupKey(execution({ startedAt: NOW.toISOString(), mentionId: 'skill:recap', personaId: 'cli' })))
+      .toBe('skill:recap');
+  });
+
   it('returns null when there is nothing to group on', () => {
     expect(groupKey(execution({ startedAt: NOW.toISOString(), mentionId: 'm', personaId: '' }))).toBeNull();
   });
@@ -54,7 +73,7 @@ describe('mineAutomationCandidates', () => {
   it('surfaces work repeated often enough to be a habit', () => {
     const candidates = mineAutomationCandidates(series(6, DAY), { now: NOW });
     expect(candidates).toHaveLength(1);
-    expect(candidates[0]).toMatchObject({ kind: 'skill', target: 'daily-recap', occurrences: 6 });
+    expect(candidates[0]).toMatchObject({ kind: 'skill', targetId: 'daily-recap', occurrences: 6 });
   });
 
   it('ignores work repeated too few times to mean anything', () => {
@@ -90,7 +109,7 @@ describe('mineAutomationCandidates', () => {
       [...series(5, DAY, { mentionId: 'skill:a' }), ...series(9, DAY, { mentionId: 'skill:b' })],
       { now: NOW },
     );
-    expect(candidates.map((c) => c.target)).toEqual(['b', 'a']);
+    expect(candidates.map((c) => c.targetId)).toEqual(['b', 'a']);
   });
 
   it('suggests a schedule when the cadence is regular', () => {
@@ -99,22 +118,59 @@ describe('mineAutomationCandidates', () => {
     expect(candidates[0]?.rationale).toContain('regular enough to schedule');
   });
 
-  it('suggests no schedule for a burst', () => {
-    // Three runs within one afternoon a month ago, then one yesterday: automating
-    // that would schedule a burst, which is worse than suggesting nothing.
-    const burst = [
-      execution({ startedAt: new Date(NOW.getTime() - 30 * DAY).toISOString() }),
-      execution({ startedAt: new Date(NOW.getTime() - 30 * DAY + HOUR).toISOString() }),
-      execution({ startedAt: new Date(NOW.getTime() - 30 * DAY + 2 * HOUR).toISOString() }),
-      execution({ startedAt: new Date(NOW.getTime() - 1 * DAY).toISOString() }),
-    ];
-    const candidates = mineAutomationCandidates(burst, { now: NOW });
+  it('drops a burst — the schedule is the only thing a suggestion adds', () => {
+    expect(mineAutomationCandidates(BURST, { now: NOW })).toEqual([]);
+  });
+
+  it('surfaces the burst under includeIrregular, saying it cannot be scheduled', () => {
+    const candidates = mineAutomationCandidates(BURST, { now: NOW, includeIrregular: true });
+    expect(candidates).toHaveLength(1);
     expect(candidates[0]?.suggestedCron).toBeUndefined();
-    expect(candidates[0]?.rationale).toContain('irregularly');
+    expect(candidates[0]?.rationale).toContain('too irregularly to schedule');
   });
 
   it('returns nothing for an empty log', () => {
     expect(mineAutomationCandidates([], { now: NOW })).toEqual([]);
+  });
+});
+
+describe('resolveCandidateTargets', () => {
+  type Stores = Parameters<typeof resolveCandidateTargets>[1];
+  const stores = (skill: unknown, persona: unknown) => ({
+    skillStore: { getById: async () => skill },
+    personaStore: { getById: async () => persona },
+  } as Stores);
+
+  const skillRuns = mineAutomationCandidates(series(6, DAY, { mentionId: 'skill:s-1' }), { now: NOW });
+  const agentRuns = mineAutomationCandidates(series(6, DAY, { mentionId: 'm-1', personaId: 'p-1' }), { now: NOW });
+
+  it('targets a skill by its command name, and shows its display name', async () => {
+    const resolved = await resolveCandidateTargets(
+      skillRuns,
+      stores({ commandName: 'rebase-remote-main', displayName: 'Rebase Remote Main' }, null),
+    );
+    expect(resolved[0]).toMatchObject({
+      targetId: 's-1',
+      target: 'rebase-remote-main',
+      label: 'Rebase Remote Main',
+    });
+  });
+
+  it('targets an agent by its persona name', async () => {
+    const resolved = await resolveCandidateTargets(
+      agentRuns,
+      stores(null, { name: 'builder', displayName: 'The Builder' }),
+    );
+    expect(resolved[0]).toMatchObject({ kind: 'agent', target: 'builder', label: 'The Builder' });
+  });
+
+  it('falls back to the ref when there is no display name to show', async () => {
+    const resolved = await resolveCandidateTargets(skillRuns, stores({ commandName: 'recap', displayName: '' }, null));
+    expect(resolved[0]?.label).toBe('recap');
+  });
+
+  it('drops a candidate whose target is gone — a routine could not target it', async () => {
+    expect(await resolveCandidateTargets(skillRuns, stores(null, null))).toEqual([]);
   });
 });
 

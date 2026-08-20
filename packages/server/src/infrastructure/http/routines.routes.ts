@@ -13,7 +13,16 @@ import {
 } from '../../domain/errors.js';
 import { nextRunTimes } from '../../domain/services/routine-schedule.js';
 import type { SchedulerRole } from '../../domain/services/scheduler-role.js';
+import {
+  mineAutomationCandidates,
+  resolveCandidateTargets,
+  MIN_OCCURRENCES,
+  WINDOW_DAYS,
+} from '../../application/services/automation-mining.js';
 import type { RoutineStorePort } from '../../application/ports/routine-store.port.js';
+import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
+import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
+import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
@@ -91,6 +100,23 @@ interface RoutineRouteDeps {
   schedulerRole: SchedulerRole;
   /** This instance's identity — the value it stamps on the claims it wins. */
   instanceId: string;
+  /** Execution log the suggestions are mined from. */
+  agentEventStore: AgentEventStorePort;
+  personaStore: PersonaStorePort;
+  skillStore: SkillStorePort;
+  /**
+   * Whether to mine suggestions at all. A predicate rather than the config, so
+   * this file does not have to know which switch currently owns the feature —
+   * today a memory-beta flag, which is a wiring detail and not a routines one.
+   */
+  suggestionsEnabled: () => boolean;
+}
+
+/** Parse a query-string limit, falling back and capping rather than erroring. */
+function clampLimit(raw: string | undefined, fallback: number, max: number): number {
+  const parsed = Number.parseInt(raw ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
 }
 
 export function routineRoutes(deps: RoutineRouteDeps) {
@@ -123,6 +149,29 @@ export function routineRoutes(deps: RoutineRouteDeps) {
       detail: deps.schedulerRole.detail,
       instanceId: deps.instanceId,
     }));
+
+    // GET /api/routines/suggestions — work repeated on a cadence a schedule
+    // could have fired on. Purely arithmetic over the execution log, so it needs
+    // no index; the ids it groups on are resolved to persona names and skill
+    // command names, which is what `POST /api/routines` accepts as a target.
+    // Declared before `:idOrSlug` for the same reason as `scheduler` above.
+    app.get<{ Querystring: { minOccurrences?: string; windowDays?: string; includeIrregular?: string } }>(
+      '/api/routines/suggestions',
+      async (request) => {
+        if (!deps.suggestionsEnabled()) return { candidates: [] };
+        const mined = mineAutomationCandidates(await deps.agentEventStore.getAllExecutions(), {
+          minOccurrences: clampLimit(request.query.minOccurrences, MIN_OCCURRENCES, 50),
+          windowDays: clampLimit(request.query.windowDays, WINDOW_DAYS, 365),
+          includeIrregular: request.query.includeIrregular === 'true',
+        });
+        return {
+          candidates: await resolveCandidateTargets(mined, {
+            personaStore: deps.personaStore,
+            skillStore: deps.skillStore,
+          }),
+        };
+      },
+    );
 
     // GET /api/routines/:idOrSlug — detail. Accepts the slug so the URL and the
     // CLI can both address a routine by its permalink.

@@ -79,7 +79,7 @@ const FEATURES: Array<{ key: MemoryFeatureKey; label: string; description: strin
   {
     key: 'automationMining',
     label: 'Suggest routines',
-    description: 'Spots work you keep repeating and proposes a schedule for it. Purely arithmetic over the execution log.',
+    description: 'Spots a skill or agent you rerun on a regular cadence and proposes the schedule for it. Purely arithmetic over the execution log — it does not propose what to turn into a skill.',
   },
   {
     key: 'wikiLinks',

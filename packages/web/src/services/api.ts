@@ -1388,11 +1388,16 @@ export async function forgetCuratedMemory(noteId: string): Promise<void> {
   });
 }
 
-/** Work repeated often enough that a routine could do it. */
+/** Work repeated on a cadence regular enough that a routine could fire on it. */
 export interface AutomationCandidate {
   key: string;
   kind: 'skill' | 'agent';
+  /** Persona or skill id — the grouping handle, not a routine target. */
+  targetId: string;
+  /** What a routine takes as its target: a persona name, or a skill command name. */
   target: string;
+  /** Display name, for the row a human reads. */
+  label: string;
   occurrences: number;
   firstSeen: string;
   lastSeen: string;
@@ -1403,7 +1408,7 @@ export interface AutomationCandidate {
 }
 
 export async function fetchAutomationCandidates(): Promise<AutomationCandidate[]> {
-  const res = await request<{ candidates: AutomationCandidate[] }>('/memory/automation-candidates');
+  const res = await request<{ candidates: AutomationCandidate[] }>('/routines/suggestions');
   return res.candidates;
 }
 

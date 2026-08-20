@@ -1,10 +1,22 @@
 import type { AgentExecution } from '@fleex/shared';
+import type { PersonaStorePort } from '../ports/persona-store.port.js';
+import type { SkillStorePort } from '../ports/skill-store.port.js';
 
 /** Below this many occurrences, a repeat is a coincidence, not a habit. */
 export const MIN_OCCURRENCES = 4;
 
 /** Occurrences older than this say nothing about what you do now. */
 export const WINDOW_DAYS = 60;
+
+/**
+ * The `personaId` the log carries for a run that came from a local `claude`
+ * session rather than from a Fleex persona (see `upsertCliExecution`).
+ *
+ * It is a sentinel, not an agent. Grouping on it would lump every unrelated
+ * manual session into one row, and no persona of that name exists for a routine
+ * to target — so the row could never be acted on either.
+ */
+const CLI_SENTINEL_PERSONA = 'cli';
 
 /**
  * How regular a cadence has to be to be called one.
@@ -15,13 +27,14 @@ export const WINDOW_DAYS = 60;
  */
 const CADENCE_TOLERANCE = 0.6;
 
-export interface AutomationCandidate {
+/** A group of repeated runs, still keyed by the ids the execution log carries. */
+export interface MinedCandidate {
   /** Stable key, so a dismissed candidate can be remembered as dismissed. */
   key: string;
   /** What repeats: the skill or agent doing the work. */
   kind: 'skill' | 'agent';
-  /** Executor name, ready to become a routine target. */
-  target: string;
+  /** Persona or skill id — an internal handle, not something a routine can take. */
+  targetId: string;
   occurrences: number;
   firstSeen: string;
   lastSeen: string;
@@ -31,12 +44,20 @@ export interface AutomationCandidate {
   suggestedCron?: string;
   /** Why this was surfaced, in the user's terms. */
   rationale: string;
-  /** Total cost of the occurrences — what automating would be spending. */
+  /** Total cost of the occurrences so far — what a routine would keep spending. */
   totalCostUsd: number;
 }
 
+/** A mined group with its ids resolved to what a person, and `routine create`, reads. */
+export interface AutomationCandidate extends MinedCandidate {
+  /** What `fleex routine create` takes: a persona name, or a skill command name. */
+  target: string;
+  /** Display name, for the row a human reads. */
+  label: string;
+}
+
 /**
- * Finds work you keep doing by hand that a routine could do.
+ * Finds work you keep doing by hand on a cadence a schedule could have fired on.
  *
  * Purely algorithmic, on purpose: the signal is repetition and cadence, both of
  * which are arithmetic over the execution log. Asking a model to spot habits would
@@ -45,12 +66,26 @@ export interface AutomationCandidate {
  *
  * It groups by executor rather than clustering prompts. Two runs of the same skill
  * *are* the same gesture whatever their arguments, and prompt similarity would
- * instead group unrelated work that happened to be phrased alike.
+ * instead group unrelated work that happened to be phrased alike. The cost of that
+ * choice is that it can only ever surface work already wrapped in a skill or a
+ * persona — proposing the *wrapper* is a different question, over a different
+ * corpus, and not this one.
+ *
+ * Which is why an irregular group is dropped unless `includeIrregular` asks for
+ * it: the schedule is the only thing this adds to what the log already says. Told
+ * that a skill ran 7 times at no particular rhythm, there is nothing to do that
+ * having the skill did not already do.
  */
 export function mineAutomationCandidates(
   executions: AgentExecution[],
-  opts: { now?: Date; minOccurrences?: number; windowDays?: number } = {},
-): AutomationCandidate[] {
+  opts: {
+    now?: Date;
+    minOccurrences?: number;
+    windowDays?: number;
+    /** Keep groups whose cadence is too irregular to schedule. Diagnostic only. */
+    includeIrregular?: boolean;
+  } = {},
+): MinedCandidate[] {
   const now = opts.now ?? new Date();
   const minOccurrences = opts.minOccurrences ?? MIN_OCCURRENCES;
   const windowMs = (opts.windowDays ?? WINDOW_DAYS) * 86_400_000;
@@ -70,7 +105,7 @@ export function mineAutomationCandidates(
     else groups.set(key, [execution]);
   }
 
-  const candidates: AutomationCandidate[] = [];
+  const candidates: MinedCandidate[] = [];
 
   for (const [key, group] of groups) {
     if (group.length < minOccurrences) continue;
@@ -81,14 +116,16 @@ export function mineAutomationCandidates(
     const meanGapMs = gaps.reduce((a, b) => a + b, 0) / gaps.length;
     const meanGapHours = meanGapMs / 3_600_000;
 
-    const [kind, target] = key.split(':') as ['skill' | 'agent', string];
-    const totalCostUsd = sorted.reduce((sum, e) => sum + (e.costUsd ?? 0), 0);
     const suggestedCron = suggestCron(gaps, meanGapMs);
+    if (!suggestedCron && !opts.includeIrregular) continue;
+
+    const [kind, targetId] = key.split(':') as ['skill' | 'agent', string];
+    const totalCostUsd = sorted.reduce((sum, e) => sum + (e.costUsd ?? 0), 0);
 
     candidates.push({
       key,
       kind,
-      target,
+      targetId,
       occurrences: sorted.length,
       firstSeen: new Date(times[0]!).toISOString(),
       lastSeen: new Date(times[times.length - 1]!).toISOString(),
@@ -102,6 +139,36 @@ export function mineAutomationCandidates(
   // Most-repeated first: frequency is the best proxy for how much a routine would
   // actually save.
   return candidates.sort((a, b) => b.occurrences - a.occurrences);
+}
+
+/**
+ * Turn the ids the execution log carries into what a routine actually takes.
+ *
+ * Kept out of the mining pass so that stays pure arithmetic over the log, with no
+ * store to stub. A candidate whose persona or skill no longer exists is dropped
+ * rather than shown with its raw id: the row would name nothing the reader
+ * recognises, and point at a target `routine create` would reject.
+ */
+export async function resolveCandidateTargets(
+  candidates: MinedCandidate[],
+  stores: {
+    personaStore: Pick<PersonaStorePort, 'getById'>;
+    skillStore: Pick<SkillStorePort, 'getById'>;
+  },
+): Promise<AutomationCandidate[]> {
+  const resolved = await Promise.all(candidates.map(async (candidate) => {
+    if (candidate.kind === 'skill') {
+      const skill = await stores.skillStore.getById(candidate.targetId);
+      if (!skill) return null;
+      // `commandName` is what `routine create --skill` resolves against; the
+      // display name is only ever shown.
+      return { ...candidate, target: skill.commandName, label: skill.displayName || skill.commandName };
+    }
+    const persona = await stores.personaStore.getById(candidate.targetId);
+    if (!persona) return null;
+    return { ...candidate, target: persona.name, label: persona.displayName || persona.name };
+  }));
+  return resolved.filter((c): c is AutomationCandidate => c !== null);
 }
 
 /**
@@ -122,6 +189,7 @@ export function groupKey(execution: AgentExecution): string | null {
     : null;
   if (skillId) return `skill:${skillId}`;
   if (execution.mentionId?.startsWith('workflow:')) return null;
+  if (execution.personaId === CLI_SENTINEL_PERSONA) return null;
   if (execution.personaId) return `agent:${execution.personaId}`;
   return null;
 }
@@ -156,5 +224,5 @@ function buildRationale(occurrences: number, meanGapHours: number, hasCadence: b
     : `about every ${Math.round(meanGapHours / 24)} days`;
   return hasCadence
     ? `Run ${occurrences} times, ${cadence} — regular enough to schedule.`
-    : `Run ${occurrences} times, ${cadence} on average, but irregularly — a manual routine would still save the setup.`;
+    : `Run ${occurrences} times, ${cadence} on average, but too irregularly to schedule.`;
 }

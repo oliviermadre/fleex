@@ -49,6 +49,7 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { routineRoutes } from './infrastructure/http/routines.routes.js';
+import { isMemoryFeatureEnabled } from './application/ports/config.port.js';
 import { ROUTINE_TICK_INTERVAL_MS } from './domain/services/routine-scheduler.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
@@ -187,6 +188,12 @@ async function main() {
       authorNameResolver: () => 'routine-trigger',
       schedulerRole: container.schedulerRole,
       instanceId: container.instanceId,
+      agentEventStore: container.agentEventStore,
+      personaStore: container.personaStore,
+      skillStore: container.skillStore,
+      // Suggestions ship with the memory beta, so they answer to its switch —
+      // even though the mining itself reads the execution log, not the index.
+      suggestionsEnabled: () => isMemoryFeatureEnabled(container.config.get(), 'automationMining'),
     }));
   } else {
     container.logger.warn('routineStore or use cases not available — /api/routines routes skipped');

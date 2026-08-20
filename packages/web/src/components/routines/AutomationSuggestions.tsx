@@ -73,7 +73,7 @@ export function AutomationSuggestions({ onCreate }: { onCreate?: (candidate: Aut
             >
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium text-[var(--theme-text-primary)] truncate">
-                  {candidate.target}
+                  {candidate.label}
                 </span>
                 <span className="text-[10px] text-[var(--theme-text-faint)]">{candidate.kind}</span>
                 {candidate.totalCostUsd > 0 && (

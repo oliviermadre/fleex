@@ -18,7 +18,6 @@ const def: CommandDef = {
   ${DIM('$')} fleex memory coach Builder --sources        ${DIM('# what this agent should have learned')}
   ${DIM('$')} fleex memory keep <executionId> -m "why"    ${DIM('# keep a moment of a run')}
   ${DIM('$')} fleex memory forget <noteId>                ${DIM('# and undo it')}
-  ${DIM('$')} fleex memory suggest                        ${DIM('# work you keep repeating by hand')}
   ${DIM('$')} fleex memory similar "login times out"      ${DIM('# is this ticket already filed?')}
   ${DIM('$')} fleex memory links owner/app                ${DIM('# what links to a note, what resembles it')}
   ${DIM('$')} fleex memory engine                         ${DIM('# which engine is active, which features are on')}
@@ -29,9 +28,10 @@ const def: CommandDef = {
   ${DIM('$')} fleex memory bench                          ${DIM('# how well retrieval finds things here')}
 
 ${SECTION('Notes:')}
-  ${DIM('search')}, ${DIM('similar')}, ${DIM('links')}, ${DIM('suggest')} and ${DIM('bench')} are local and free — no network, no model.
+  ${DIM('search')}, ${DIM('similar')}, ${DIM('links')} and ${DIM('bench')} are local and free — no network, no model.
   ${DIM('ask')}, ${DIM('compile')} and ${DIM('coach')} each spend one LLM call.
   All of them need the semantic engine on (Settings › Memory).
+  Looking for what you keep repeating by hand? That is ${DIM('fleex routine suggest')}.
 `,
   action: (...args: unknown[]) => {
     const cmd = args[args.length - 1] as Command;
