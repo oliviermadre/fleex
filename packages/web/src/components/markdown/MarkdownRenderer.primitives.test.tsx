@@ -148,4 +148,52 @@ describe('MarkdownRenderer — primitive references', () => {
     expect(link.textContent).toBe('ping @olivier');
     expect(link.getAttribute('href')).toBe('https://example.com');
   });
+
+  // The link-protection alternative above must be bounded to its own brackets:
+  // an earlier unmatched `[` must not pair with a later, unrelated `](...)` and
+  // swallow everything between — including a real mention — as inert verbatim
+  // text. These three exercise that boundary.
+  it('encodes a mention sitting between a stray bracket and a later real link', () => {
+    const { container, getByRole } = render(
+      <MarkdownRenderer
+        content="weird [ open @olivier text [real link](https://example.com) after"
+        onToggleCheckbox={noop}
+      />,
+    );
+    const link = getByRole('link');
+    expect(link.textContent).toBe('real link');
+    expect(link.getAttribute('href')).toBe('https://example.com');
+    // The mention sits before the real link and is not swallowed by it — it is
+    // still encoded and pilled (matches the configured human), and no second
+    // anchor is created for it.
+    expect(container.textContent).toContain('@olivier');
+    expect(container.querySelectorAll('a').length).toBe(1);
+  });
+
+  it('still encodes a mention that follows a real Markdown link', () => {
+    const { container, getByRole } = render(
+      <MarkdownRenderer content="[a](https://x.com) then @olivier" onToggleCheckbox={noop} />,
+    );
+    const link = getByRole('link');
+    expect(link.textContent).toBe('a');
+    expect(link.getAttribute('href')).toBe('https://x.com');
+    expect(container.textContent).toContain('@olivier');
+    expect(container.querySelectorAll('a').length).toBe(1);
+  });
+
+  it('still encodes a mention that follows an image placeholder produced upstream', () => {
+    const { container, getAllByRole } = render(
+      <MarkdownRenderer
+        content="![pic](https://example.com/x.png) and @olivier"
+        onToggleCheckbox={noop}
+      />,
+    );
+    // `extractMarkdownImages` turns the image into a `[label](#fleex-img:0)`
+    // link before `preprocessMentions` ever runs — that placeholder link must
+    // stay protected the same way a real link does.
+    const buttons = getAllByRole('button');
+    expect(buttons.some((b) => b.textContent?.includes('pic'))).toBe(true);
+    expect(container.textContent).toContain('@olivier');
+    expect(container.querySelector('a')).toBeNull();
+  });
 });

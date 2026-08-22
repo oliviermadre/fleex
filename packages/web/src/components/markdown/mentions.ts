@@ -67,8 +67,11 @@ const TICKET_ID = String.raw`[0-9a-fA-F-]{36}|\d+`;
 const ALL_MENTIONS = new RegExp(
   // 1 verbatim: code spans, fences, and markdown links. A mention inside a link's
   // text cannot be encoded — CommonMark rejects a nested link, and the outer link
-  // is destroyed rather than the inner one ignored.
-  '(```[\\s\\S]*?```|`[^`]*`|\\[[^\\]]*\\]\\([^)]*\\))' +
+  // is destroyed rather than the inner one ignored. Both character classes exclude
+  // `[`/newline (link text) and newline (destination): otherwise an unmatched `[`
+  // earlier in the line pairs with the first `](...)` found anywhere after it and
+  // swallows everything between as inert verbatim text, including real mentions.
+  '(```[\\s\\S]*?```|`[^`]*`|\\[[^[\\]\\n]*\\]\\([^)\\n]*\\))' +
     // struck variants — 2 agent · 3 panel · 4 skill · 5 workflow · 6 routine · 7 ticket · 8 note · 9 human
     '|~~(@agent:[a-zA-Z0-9_-]+)~~' +
     '|~~(@panel:[a-zA-Z0-9_-]+)~~' +
