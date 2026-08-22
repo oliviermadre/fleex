@@ -4,6 +4,8 @@ import type { Ticket } from '@fleex/shared';
 import { ScratchpadMainView } from './ScratchpadMainView';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSkillStore } from '../../stores/skillStore';
 
 function ticket(id: string, displayId: number, title: string): Ticket {
   return { id, displayId, title, boardId: 'b1' } as unknown as Ticket;
@@ -22,11 +24,17 @@ beforeEach(() => {
     ],
     scratchpadListLoaded: true,
   });
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  useAgentPersonaStore.setState({ personas: [{ id: 'p1', name: 'catalyst' }] as any });
+  useSkillStore.setState({ skills: [{ id: 's1', commandName: 'commit' }] as any });
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 });
 
 afterEach(() => {
   cleanup();
   useTicketStore.setState({ tickets: [] });
+  useAgentPersonaStore.setState({ personas: [] });
+  useSkillStore.setState({ skills: [] });
 });
 
 function typeAt(el: HTMLTextAreaElement, value: string) {
@@ -41,27 +49,29 @@ function typeAt(el: HTMLTextAreaElement, value: string) {
   fireEvent.change(el, { target: { value, selectionStart: value.length } });
 }
 
-// The note editor offers only what navigates somewhere: an agent or a skill
-// dispatches nothing from a note and renders no chip there, so offering it would
-// insert dead text.
+// A note can cite any of the eight mention kinds, same as the comment composer:
+// the picker no longer restricts itself to what navigates from a note.
 describe('ScratchpadMainView — mention autocomplete', () => {
-  it('offers the notes on a bare @', () => {
-    // Scoped to the button role: the title bar also reads "Global" (the label
-    // of the note currently open), so a plain text query would be ambiguous
-    // between that header and the dropdown option.
-    const { container, getByRole } = render(<ScratchpadMainView scratchpadKey="__global__" />);
-    typeAt(container.querySelector('textarea')!, '@');
+  it('defers notes behind a query too, now that the list is shared with every other surface', () => {
+    // Notes used to be immediate here — ScratchpadMainView built its own local
+    // list. `useAllMentionOptions` (Task 4) marks every note `deferred`, same
+    // as tickets, so a bare "@" no longer dumps the whole note list; a query
+    // still finds them. Scoped to the button role: the title bar also reads
+    // "Global" (the label of the note currently open), so a plain text query
+    // would be ambiguous between that header and the dropdown option.
+    const { container, queryByRole, getByRole } = render(<ScratchpadMainView scratchpadKey="__global__" />);
+    const ta = container.querySelector('textarea')!;
+    typeAt(ta, '@');
+    expect(queryByRole('button', { name: /Global/ })).toBeNull();
+    typeAt(ta, '@Glob');
     expect(getByRole('button', { name: /Global/ })).toBeTruthy();
-    expect(getByRole('button', { name: /acme\/app/ })).toBeTruthy();
   });
 
-  it('offers no agent, skill, panel or workflow', () => {
-    const { container, queryByText } = render(<ScratchpadMainView scratchpadKey="__global__" />);
+  it('offers the primitives too, now that a note can cite them', () => {
+    const { container, getByText } = render(<ScratchpadMainView scratchpadKey="__global__" />);
     typeAt(container.querySelector('textarea')!, '@');
-    expect(queryByText('agent')).toBeNull();
-    expect(queryByText('skill')).toBeNull();
-    expect(queryByText('panel')).toBeNull();
-    expect(queryByText('workflow')).toBeNull();
+    expect(getByText('catalyst')).toBeTruthy();
+    expect(getByText('commit')).toBeTruthy();
   });
 
   it('offers a ticket once a query narrows it', () => {
