@@ -4,9 +4,10 @@ import { tint, type TintHue } from '../../lib/tints';
 /**
  * Every @mention target type the server understands (ticket-comment.entity.ts):
  * @agent:name, @panel:name, @skill:commandName, @workflow:slug, plus human and
- * ticket references.
+ * ticket references — plus `scratchpad`, a client-only reference to a note
+ * (global or per-ticket) that never reaches the server as an executable mention.
  */
-export type MentionTargetType = 'agent' | 'human' | 'panel' | 'skill' | 'workflow' | 'ticket';
+export type MentionTargetType = 'agent' | 'human' | 'panel' | 'skill' | 'workflow' | 'ticket' | 'scratchpad';
 
 /**
  * The ONE letter + hue per mention target type, shared by every surface that
@@ -20,6 +21,7 @@ export const MENTION_TYPE_META: Record<MentionTargetType, { letter: string; hue:
   workflow: { letter: 'W', hue: 'orange' },
   ticket: { letter: 'T', hue: 'gray' },
   human: { letter: 'H', hue: 'yellow' },
+  scratchpad: { letter: 'N', hue: 'teal' },
 };
 
 const SIZE_CLASSES = {
