@@ -327,6 +327,7 @@ export function MarkdownEditor({
           >
             {textarea}
             {attachButton}
+            {overlay}
           </div>
           {mode !== 'write' && previewPane}
           {/*
