@@ -1843,10 +1843,15 @@ Expected: all succeed.
 
 - [ ] **Step 5: Verify end to end in the app**
 
-1. `bun install && bun run build && fleex restart` — **not** `fleex self-update`, which runs
-   `git pull --rebase origin main` inside this repo (`self-update/index.ts:163`) and would
-   rewrite the history of a branch carrying an open PR. The manual pair is what self-update
-   wraps, minus the pull.
+1. **Nothing to build or restart.** The instance already runs every service in watch mode —
+   `bun --conditions development --watch src/main.ts` for the server, `vite` for the web — and
+   the `development` condition resolves `@fleex/shared` to `./src/index.ts`, so the shared
+   parser is read from source too. Every change on this branch is already live. Confirm the
+   three services are up with `fleex status` and read the web URL from it.
+
+   Do **not** run `fleex self-update`: it executes `git pull --rebase origin main` inside this
+   repo (`self-update/index.ts:163`), which would rewrite the history of a branch carrying an
+   open PR.
 2. Open a note, type `@` — the menu lists Global and each configured repo.
 3. Pick one; the text becomes `@scratchpad:<key> `.
 4. Switch the editor to preview; the reference is a chip; click it and the note opens.
