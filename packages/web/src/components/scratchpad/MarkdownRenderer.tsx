@@ -7,11 +7,27 @@ import type { Components } from 'react-markdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
-import { preprocessReferences, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { NoteRefChip } from '../markdown/NoteRefChip';
 import { CITATION_HREF_PREFIX, decodeCitation } from '../markdown/citations';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
+import { PrimitiveRefChip, type PrimitiveRefKind } from '../markdown/PrimitiveRefChip';
 import { remarkPluginsFor, type MarkdownProfile } from '../markdown/profiles';
+
+/**
+ * Href prefix per primitive kind.
+ *
+ * The encoded value keeps its own kind prefix — `#fleex-agent:agent:catalyst` —
+ * because the encoder strips only the `@`. Two pre-existing tests and the comment
+ * renderer depend on that, so the name is recovered by stripping it here.
+ */
+const PRIMITIVE_HREF: Array<[string, PrimitiveRefKind]> = [
+  ['#fleex-agent:', 'agent'],
+  ['#fleex-panel:', 'panel'],
+  ['#fleex-skill:', 'skill'],
+  ['#fleex-workflow:', 'workflow'],
+  ['#fleex-routine:', 'routine'],
+];
 
 interface MarkdownRendererProps {
   content: string;
@@ -186,10 +202,12 @@ function MarkdownSection({
     [content],
   );
 
-  // Encode @ticket: and @scratchpad: references as #fleex-… links so the `a`
-  // override can render them as chips. Inline-only (no line added or removed), so
-  // the checkbox line indices computed from `contentWithoutImages` stay valid.
-  const processed = useMemo(() => preprocessReferences(contentWithoutImages), [contentWithoutImages]);
+  // Encode every mention type — agent / panel / skill / workflow / routine /
+  // human / ticket / note, plus their struck-through variants — as #fleex-…
+  // links so the `a` override can render them as chips. Inline-only (no line
+  // added or removed), so the checkbox line indices computed from
+  // `contentWithoutImages` stay valid.
+  const processed = useMemo(() => preprocessMentions(contentWithoutImages), [contentWithoutImages]);
 
   // Pre-compute checkbox line indices within this segment (0-indexed, local)
   const lines = useMemo(() => contentWithoutImages.split('\n'), [contentWithoutImages]);
@@ -242,6 +260,28 @@ function MarkdownSection({
       if (href?.startsWith(SCRATCHPAD_REF_HREF_PREFIX)) {
         const noteKey = decodeURIComponent(href.slice(SCRATCHPAD_REF_HREF_PREFIX.length));
         return <NoteRefChip noteKey={noteKey}>{children}</NoteRefChip>;
+      }
+      // Struck mention — the comment surface means "resolved/removed"; here it is
+      // simply what a strikethrough looks like.
+      if (href?.startsWith('#fleex-struck:')) {
+        return (
+          <span className="line-through text-[var(--theme-text-muted)] opacity-60">{children}</span>
+        );
+      }
+      // Human mention — there is no person page to open, so it stays a pill.
+      if (href?.startsWith('#fleex-human:')) {
+        return (
+          <span className="rounded-sm bg-[var(--theme-bg-overlay)] px-1 py-px text-[var(--theme-text-secondary)]">
+            {children}
+          </span>
+        );
+      }
+      // Primitive reference — a pointer to a configuration page, never a trigger.
+      for (const [prefix, kind] of PRIMITIVE_HREF) {
+        if (href?.startsWith(prefix)) {
+          const name = href.slice(prefix.length).replace(/^[a-z]+:/, '');
+          return <PrimitiveRefChip kind={kind} name={name} />;
+        }
       }
       return (
         <a

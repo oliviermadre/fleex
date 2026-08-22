@@ -5,18 +5,18 @@
  * that react-markdown processes the rest of the content normally, and each surface
  * intercepts the mention in its `a` component override to render a chip.
  *
- * Two entry points, because the surfaces differ:
- *  - `preprocessMentions`     → comments. Encodes ALL mention types (agent /
- *    panel / skill / human / ticket / note, plus their struck-through variants)
- *    because the comment renderer knows how to render each as a chip.
- *  - `preprocessReferences`   → the generic renderer (ticket description,
- *    scratchpad, deliverables). Encodes ticket **and note** references, leaving
- *    every other `@thing` as literal text so we don't change how those surfaces
- *    render today.
+ * One entry point — `preprocessMentions` — used by every surface: comments,
+ * the generic renderer (ticket description, scratchpad, deliverables), and
+ * everything else that renders Markdown. It encodes ALL mention types (agent /
+ * panel / skill / workflow / routine / human / ticket / note, plus their
+ * struck-through variants). What differs between surfaces is not the encoding
+ * but the `a` component override: the comment renderer turns an agent/panel/…
+ * mention into an actionable chip tied to a run record, while every other
+ * surface turns it into a referential chip that only navigates.
  *
  * A ticket reference is `@ticket:<displayId>` (e.g. `@ticket:378`) or, for agents
  * that only know the UUID, `@ticket:<uuid>`. This canonical pattern is the single
- * source of truth for both processors.
+ * source of truth for the processor.
  */
 
 /** Href prefix an active ticket mention is encoded to (`#fleex-ticket:<id>`). */
@@ -44,37 +44,6 @@ function encodeNoteRef(active: string): string {
 // first: `\d+` would otherwise match only the leading digits of a uuid. Kept as a
 // single fragment so both regexes stay in sync.
 const TICKET_ID = String.raw`[0-9a-fA-F-]{36}|\d+`;
-
-/**
- * Encode ticket and note references, preserving code spans and leaving struck
- * references verbatim (remark-gfm renders `~~…~~` as strikethrough — no chip).
- * Every other `@mention` is left untouched: the generic surfaces have no chip
- * for an agent or a skill, and encoding one would render a broken link.
- */
-const REFERENCE_MENTION = new RegExp(
-  // 1: code span · 2: struck ticket · 3: struck note · 4: active ticket · 5: active note
-  '(```[\\s\\S]*?```|`[^`]*`)' +
-    `|(~~@ticket:(?:${TICKET_ID})~~)` +
-    `|(~~@scratchpad:(?:${NOTE_REF_VALUE})~~)` +
-    `|(@ticket:(?:${TICKET_ID}))` +
-    `|(@scratchpad:(?:${NOTE_REF_VALUE}))`,
-  'g',
-);
-
-export function preprocessReferences(body: string): string {
-  return body.replace(
-    REFERENCE_MENTION,
-    (match, codeSpan, struckTicket, struckNote, activeTicket, activeNote) => {
-      if (codeSpan !== undefined) return codeSpan;
-      if (struckTicket !== undefined) return struckTicket;
-      if (struckNote !== undefined) return struckNote;
-      if (activeTicket !== undefined)
-        return `[${activeTicket}](${TICKET_MENTION_HREF_PREFIX}${activeTicket.slice('@ticket:'.length)})`;
-      if (activeNote !== undefined) return encodeNoteRef(activeNote);
-      return match;
-    },
-  );
-}
 
 /**
  * Encode every mention type for the comment renderer.
