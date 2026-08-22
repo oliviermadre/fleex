@@ -170,8 +170,14 @@ beforeEach(() => {
   useSkillStore.setState({ skills: [{ id: 's1', commandName: 'commit' }] as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useWorkflowTemplateStore.setState({ templates: [{ id: 'w1', slug: 'deploy', name: 'Deploy' }] as any });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useRoutineStore.setState({ routines: [{ id: 'r1', slug: 'daily', name: 'Daily recap' }] as any });
+  useRoutineStore.setState({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    routines: [{ id: 'r1', slug: 'daily', name: 'Daily recap' }] as any,
+    // Stubbed: the real action is async and fetches run history, which in jsdom
+    // would leave an unhandled rejection and make this flaky for a reason that
+    // has nothing to do with the chip. Which panel opens is what matters here.
+    select: async () => {},
+  });
 });
 
 afterEach(cleanup);
@@ -616,6 +622,7 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useTicketStore } from '../../stores/ticketStore';
 
 beforeEach(() => {
@@ -627,6 +634,11 @@ beforeEach(() => {
   useRoutineStore.setState({ routines: [{ id: 'r1', slug: 'daily', name: 'Daily recap' }] as any });
   useScratchpadStore.setState({ scratchpadList: [{ key: '__global__', label: 'Global', lineCount: 3 }] as any });
   useTicketStore.setState({ tickets: [{ id: 't1', displayId: 42, title: 'Tokens expire' }] as any });
+  // The hook only offers a human option when this setting is present, so the
+  // eighth kind is untestable without it.
+  useSettingsStore.setState({
+    settings: { ...useSettingsStore.getState().settings, humanMentionName: 'olivier' } as any,
+  });
   /* eslint-enable @typescript-eslint/no-explicit-any */
 });
 
