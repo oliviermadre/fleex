@@ -8,7 +8,6 @@ import type { Components } from 'react-markdown';
 import { appWs } from '../../services/websocket';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
@@ -44,8 +43,9 @@ import { NoteRefChip } from '../markdown/NoteRefChip';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
 import { userRemarkPlugins } from '../markdown/profiles';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
-import { MentionMenu, type MentionOption } from '../markdown/MentionMenu';
+import { MentionMenu } from '../markdown/MentionMenu';
 import { useMentionAutocomplete } from '../markdown/useMentionAutocomplete';
+import { useAllMentionOptions } from '../markdown/useAllMentionOptions';
 
 /** Per-mode color for the conversation execution-mode pill. */
 const MODE_PILL_CLASS: Record<ConversationMode, string> = {
@@ -569,21 +569,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     onChange: setBody,
   });
 
-  // Build mention options from personas + panels + skills + workflows + human
+  // `useAllMentionOptions` below reads panels/skills/workflow templates straight
+  // from their stores — this effect is what actually populates them on mount.
   const personas = useAgentPersonaStore((s) => s.personas);
-  const panels = usePanelStore((s) => s.panels);
   const panelsLoaded = usePanelStore((s) => s.loaded);
   const loadPanels = usePanelStore((s) => s.loadPanels);
-  const skills = useSkillStore((s) => s.skills);
   const skillsLoaded = useSkillStore((s) => s.loaded);
   const loadSkills = useSkillStore((s) => s.loadSkills);
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
-  const humanMentionName = useSettingsStore(
-    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
-  );
-  // All loaded tickets — powers the @ticket: autocomplete (filtered client-side).
-  const allTickets = useTicketStore((s) => s.tickets);
 
   useEffect(() => {
     if (!panelsLoaded) loadPanels();
@@ -625,56 +619,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       });
   }, [mentions, personas]);
 
-  const allMentionOptions = useMemo<MentionOption[]>(() => {
-    const opts: MentionOption[] = personas.map((p) => ({
-      insertText: `@agent:${p.name}`,
-      label: p.displayName || p.name,
-      type: 'agent' as const,
-    }));
-    for (const panel of panels) {
-      if (panel.enabled) {
-        opts.push({
-          insertText: `@panel:${panel.name}`,
-          label: panel.displayName || panel.name,
-          type: 'panel' as const,
-        });
-      }
-    }
-    for (const skill of skills) {
-      if (skill.enabled) {
-        opts.push({
-          insertText: `@skill:${skill.commandName}`,
-          label: skill.displayName || skill.commandName,
-          type: 'skill' as const,
-        });
-      }
-    }
-    for (const wf of workflowTemplates) {
-      if (wf.enabled) {
-        opts.push({
-          insertText: `@workflow:${wf.slug}`,
-          label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
-          type: 'workflow' as const,
-        });
-      }
-    }
-    if (humanMentionName) {
-      opts.push({
-        insertText: `@${humanMentionName}`,
-        label: humanMentionName,
-        type: 'human' as const,
-      });
-    }
-    for (const t of allTickets) {
-      opts.push({
-        insertText: `@ticket:${t.displayId}`,
-        label: `#${t.displayId} ${t.title}`,
-        type: 'ticket' as const,
-        deferred: true,
-      });
-    }
-    return opts;
-  }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
+  const allMentionOptions = useAllMentionOptions();
 
   const mentionAc = useMentionAutocomplete({
     options: allMentionOptions,
