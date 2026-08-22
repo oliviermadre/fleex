@@ -4,10 +4,11 @@ import type { MentionOption } from './MentionMenu';
 /**
  * `@mention` autocomplete for any Markdown textarea.
  *
- * Knows nothing about which primitives exist: the option list is a parameter, so
- * the comment composer offers its six kinds and the note editor offers the two
- * that navigate somewhere. A hook that enumerated primitives itself would have to
- * be edited every time a surface wanted a different subset.
+ * Knows nothing about which primitives exist: the option list is a parameter,
+ * so every surface passes the list it wants — today that's the same shared
+ * `useAllMentionOptions()` list everywhere, offering all eight kinds. A hook
+ * that enumerated primitives itself would have to be edited every time a
+ * surface wanted a different subset.
  */
 
 /** Deferred matches shown at once, so a long list stays usable. */

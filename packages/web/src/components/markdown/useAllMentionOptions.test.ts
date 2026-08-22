@@ -45,9 +45,11 @@ describe('useAllMentionOptions', () => {
     expect(result.current.find((o) => o.type === 'ticket')?.deferred).toBe(true);
   });
 
-  it('does not defer the primitives, which are few', () => {
+  it('does not defer the primitives or notes, which are both few', () => {
+    // Notes are bounded by the number of configured repositories plus one —
+    // unlike tickets, a bare `@` dumping them all is exactly the point.
     const { result } = renderHook(() => useAllMentionOptions());
-    for (const kind of ['agent', 'panel', 'skill', 'workflow', 'routine']) {
+    for (const kind of ['agent', 'panel', 'skill', 'workflow', 'routine', 'scratchpad']) {
       expect(result.current.find((o) => o.type === kind)?.deferred).not.toBe(true);
     }
   });

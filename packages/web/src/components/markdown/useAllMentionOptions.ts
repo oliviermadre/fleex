@@ -18,8 +18,11 @@ import type { MentionOption } from './MentionMenu';
  * differs — a comment dispatches, a note points — but that is the renderer's
  * business, not the picker's.
  *
- * Tickets and notes are `deferred`: they can be numerous, so they stay hidden
- * until the user types a query and are capped by the autocomplete.
+ * Tickets are `deferred`: they can run into the thousands, so they stay
+ * hidden until the user types a query and are capped by the autocomplete.
+ * Notes are not — they're bounded by the number of configured repositories
+ * plus one, so a bare `@` listing them is exactly the answer to "what could
+ * this even point at?".
  */
 export function useAllMentionOptions(): MentionOption[] {
   const personas = useAgentPersonaStore((s) => s.personas);
@@ -61,7 +64,6 @@ export function useAllMentionOptions(): MentionOption[] {
         insertText: `@scratchpad:${note.key === GLOBAL_NOTE_KEY ? 'global' : note.key}`,
         label: note.label,
         type: 'scratchpad',
-        deferred: true,
       });
     }
     if (humanMentionName) {

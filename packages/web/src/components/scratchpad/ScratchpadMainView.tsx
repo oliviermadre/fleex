@@ -20,7 +20,6 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
   const toggleCheckbox = useScratchpadStore((s) => s.toggleCheckbox);
   const markdownMode = useScratchpadStore((s) => s.markdownMode);
   const setMarkdownMode = useScratchpadStore((s) => s.setMarkdownMode);
-  const scratchpadList = useScratchpadStore((s) => s.scratchpadList);
   const loadScratchpadList = useScratchpadStore((s) => s.loadScratchpadList);
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
 

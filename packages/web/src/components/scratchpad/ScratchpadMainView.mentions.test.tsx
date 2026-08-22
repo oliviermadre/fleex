@@ -52,19 +52,18 @@ function typeAt(el: HTMLTextAreaElement, value: string) {
 // A note can cite any of the eight mention kinds, same as the comment composer:
 // the picker no longer restricts itself to what navigates from a note.
 describe('ScratchpadMainView — mention autocomplete', () => {
-  it('defers notes behind a query too, now that the list is shared with every other surface', () => {
-    // Notes used to be immediate here — ScratchpadMainView built its own local
-    // list. `useAllMentionOptions` (Task 4) marks every note `deferred`, same
-    // as tickets, so a bare "@" no longer dumps the whole note list; a query
-    // still finds them. Scoped to the button role: the title bar also reads
-    // "Global" (the label of the note currently open), so a plain text query
-    // would be ambiguous between that header and the dropdown option.
-    const { container, queryByRole, getByRole } = render(<ScratchpadMainView scratchpadKey="__global__" />);
-    const ta = container.querySelector('textarea')!;
-    typeAt(ta, '@');
-    expect(queryByRole('button', { name: /Global/ })).toBeNull();
-    typeAt(ta, '@Glob');
+  it('offers the notes on a bare @', () => {
+    // Notes are not deferred: they're bounded by the number of configured
+    // repositories plus one, so listing them all on a bare "@" is exactly
+    // the answer to "what could this even point at?" — unlike tickets, which
+    // can run into the thousands. Scoped to the button role: the title bar
+    // also reads "Global" (the label of the note currently open), so a plain
+    // text query would be ambiguous between that header and the dropdown
+    // option.
+    const { container, getByRole } = render(<ScratchpadMainView scratchpadKey="__global__" />);
+    typeAt(container.querySelector('textarea')!, '@');
     expect(getByRole('button', { name: /Global/ })).toBeTruthy();
+    expect(getByRole('button', { name: /acme\/app/ })).toBeTruthy();
   });
 
   it('offers the primitives too, now that a note can cite them', () => {
