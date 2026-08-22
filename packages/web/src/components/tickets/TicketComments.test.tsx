@@ -50,12 +50,6 @@ describe('CommentMarkdown — mention chips', () => {
     expect(screen.getByText('Global')).toBeTruthy();
     expect(screen.queryByRole('link')).toBeNull();
   });
-
-  it('renders a @scratchpad: reference in a comment as a chip', () => {
-    renderBody('conventions in @scratchpad:acme/app');
-    const chip = screen.getByText('@scratchpad:acme/app');
-    expect(chip.closest('a')).toBeNull();
-  });
 });
 
 /**

@@ -145,10 +145,14 @@ duplicates, the agent editor for coaching, the execution log for curation, the
 routines panel for suggestions, the documents library for compilations, and the
 notes view for links.
 
-Write `@scratchpad:global` or `@scratchpad:owner/name` in any note, ticket
-description or comment to link to a note. The `@` picker for it lives in the
-main note editor.
-Backlinks appear under the note. Both work on either memory engine.
+Typing `@` in a note, a ticket description or a comment opens a picker over
+eight mention forms — agents, panels, skills, workflows, routines, tickets,
+notes and teammates — for example `@agent:reviewer`, `@scratchpad:owner/name`
+or `@ticket:378`. Outside a comment, mentioning an agent, panel, skill,
+workflow or routine renders a reference chip that opens its configuration
+page; the same mention inside a comment renders as an actionable chip that
+triggers a run, with a cross to cancel it. `@scratchpad:` links to a note
+either way, with backlinks appearing under it, on either memory engine.
 
 From the terminal:
 
