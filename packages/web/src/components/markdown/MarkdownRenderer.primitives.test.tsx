@@ -196,4 +196,25 @@ describe('MarkdownRenderer — primitive references', () => {
     expect(container.textContent).toContain('@olivier');
     expect(container.querySelector('a')).toBeNull();
   });
+
+  // CommonMark allows a link's text to span a line break. Round 1's looser
+  // pattern happened to cover this; round 2's bound (excluding newline from the
+  // link-text class too) accidentally dropped it. The link-text class now
+  // excludes only `[`, not newline.
+  it('leaves a mention inside a link whose text spans a line break intact', () => {
+    const { container, getByRole } = render(
+      <MarkdownRenderer
+        content={'[click here\nto see @olivier](https://example.com)'}
+        onToggleCheckbox={noop}
+      />,
+    );
+    const link = getByRole('link');
+    expect(link.getAttribute('href')).toBe('https://example.com');
+    // The `user` profile (the default here) renders a lone `\n` as `<br>`, so
+    // the anchor's text is split across two text nodes rather than one string
+    // — assert on substrings rather than exact equality.
+    expect(link.textContent).toContain('click here');
+    expect(link.textContent).toContain('@olivier');
+    expect(container.querySelectorAll('a').length).toBe(1);
+  });
 });
