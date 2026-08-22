@@ -1714,23 +1714,32 @@ Then pass the wiring to `MarkdownEditor`:
 
 `MarkdownEditor` already calls `textareaProps?.onChange` after its own handler (`MarkdownEditor.tsx:261`), so `onScan` runs in addition to the editor's own change handling, not instead of it. The note editor is the full-height variant, so the menu anchors to the bottom-left of the field rather than above a one-line composer.
 
-- [ ] **Step 4: Load the note list**
+- [ ] **Step 4: Load the note list from this component too**
 
-`scratchpadList` is populated by `loadScratchpadList`, which the sidebar calls. Confirm it runs before the editor mounts:
+`scratchpadList` has exactly one caller today: `ScratchpadsContent.tsx:18`, the sidebar list.
+That component is **not** an ancestor of `ScratchpadMainView` — the main view is rendered by
+`MainPanel.tsx:125`, so the two are siblings. Whenever the sidebar is on another panel or
+unmounted, `scratchpadList` is empty and the autocomplete would offer no notes at all. The
+editor therefore has to load it itself.
 
-```bash
-grep -rn "loadScratchpadList" packages/web/src
-```
-
-If the only caller is the scratchpad sidebar, the list is already loaded whenever a note is open and nothing is needed. If it is not, add to `ScratchpadMainView`:
+Add to `ScratchpadMainView`, mirroring the sidebar's call so the repo list reaches the
+endpoint — `loadScratchpadList()` with no argument omits the `repos` querystring, and the
+endpoint needs it to report configured repos that have no note yet:
 
 ```ts
   const loadScratchpadList = useScratchpadStore((s) => s.loadScratchpadList);
   const scratchpadListLoaded = useScratchpadStore((s) => s.scratchpadListLoaded);
+  const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
+
+  // The sidebar list loads this too, but it is a sibling of this view rather than an
+  // ancestor: with the sidebar on another panel there would be no notes to offer.
   useEffect(() => {
-    if (!scratchpadListLoaded) void loadScratchpadList();
-  }, [scratchpadListLoaded, loadScratchpadList]);
+    if (!scratchpadListLoaded) void loadScratchpadList(resolvedRepositories);
+  }, [scratchpadListLoaded, loadScratchpadList, resolvedRepositories]);
 ```
+
+This needs `import { useSettingsStore } from '../../stores/settingsStore';` alongside the
+imports added in step 3.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
