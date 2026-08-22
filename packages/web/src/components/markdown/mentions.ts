@@ -7,8 +7,8 @@
  *
  * Two entry points, because the surfaces differ:
  *  - `preprocessMentions`     → comments. Encodes ALL mention types (agent /
- *    panel / skill / human / ticket, plus their struck-through variants) because
- *    the comment renderer knows how to render each as a chip.
+ *    panel / skill / human / ticket / note, plus their struck-through variants)
+ *    because the comment renderer knows how to render each as a chip.
  *  - `preprocessReferences`   → the generic renderer (ticket description,
  *    scratchpad, deliverables). Encodes ticket **and note** references, leaving
  *    every other `@thing` as literal text so we don't change how those surfaces
@@ -91,6 +91,7 @@ export function preprocessReferences(body: string): string {
  *   @workflow:slug     →  [@workflow:slug](#fleex-workflow:slug)
  *   @routine:slug      →  [@routine:slug](#fleex-routine:slug)   (reference only — never a trigger)
  *   @ticket:<id>       →  [@ticket:<id>](#fleex-ticket:<id>)
+ *   @scratchpad:value  →  [@scratchpad:value](#fleex-scratchpad:key)
  *   @username          →  [@username](#fleex-human:username)
  *   ~~@…~~ (any type)  →  [@…](#fleex-struck:…)
  *

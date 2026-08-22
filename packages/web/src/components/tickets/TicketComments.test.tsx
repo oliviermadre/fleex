@@ -37,6 +37,19 @@ describe('CommentMarkdown — mention chips', () => {
     const chip = screen.getByText('@skill:review');
     expect(chip.closest('a')).toBeNull();
   });
+
+  it('renders a @scratchpad: reference as a chip, not a link', () => {
+    renderBody('conventions in @scratchpad:acme/app');
+    const chip = screen.getByText('@scratchpad:acme/app');
+    expect(chip.closest('a')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('labels the global note reference Global', () => {
+    renderBody('see @scratchpad:global');
+    expect(screen.getByText('Global')).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
 });
 
 /**

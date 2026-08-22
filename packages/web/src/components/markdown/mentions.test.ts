@@ -3,7 +3,7 @@ import { preprocessMentions, preprocessReferences, SCRATCHPAD_REF_HREF_PREFIX } 
 
 const UUID = '05d50f27-b12e-4338-8c36-e840fd288222';
 
-describe('preprocessReferences (ticket-only — used by the generic Markdown renderer)', () => {
+describe('preprocessReferences (used by the generic Markdown renderer)', () => {
   it('rewrites @ticket:<displayId> to a #fleex-ticket link', () => {
     expect(preprocessReferences('Blocked by @ticket:378')).toBe(
       'Blocked by [@ticket:378](#fleex-ticket:378)',

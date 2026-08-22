@@ -7,13 +7,11 @@ import type { Components } from 'react-markdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
-import { preprocessReferences, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
-import { decodeWikiTarget, preprocessWikiLinks, WIKI_LINK_HREF_PREFIX } from '../markdown/wiki';
+import { preprocessReferences, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { NoteRefChip } from '../markdown/NoteRefChip';
 import { CITATION_HREF_PREFIX, decodeCitation } from '../markdown/citations';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
-import { WikiLinkChip } from '../markdown/WikiLinkChip';
 import { remarkPluginsFor, type MarkdownProfile } from '../markdown/profiles';
-import { useSettingsStore } from '../../stores/settingsStore';
 
 interface MarkdownRendererProps {
   content: string;
@@ -182,28 +180,16 @@ function MarkdownSection({
 }) {
   const colorMode = useColorMode();
 
-  // Wiki-links are part of the semantic memory beta: the same syntax the server
-  // resolves into backlinks. Rendering them while the feature is off would offer
-  // a graph with only half its edges.
-  const wikiEnabled = useSettingsStore((s) => s.settings.memoryEngine === 'semantic'
-    && s.settings.memoryFeatures?.wikiLinks !== false);
-
   // Extract images — gallery strip at top, inline placeholders in text
   const { images, cleaned: contentWithoutImages } = useMemo(
     () => extractMarkdownImages(content),
     [content],
   );
 
-  // Encode @ticket:<id> mentions as #fleex-ticket links so the `a` override can
-  // render them as chips. This is inline-only (no line added/removed), so the
-  // checkbox line indices computed from `contentWithoutImages` stay valid.
-  const processed = useMemo(
-    () => {
-      const withMentions = preprocessReferences(contentWithoutImages);
-      return wikiEnabled ? preprocessWikiLinks(withMentions) : withMentions;
-    },
-    [contentWithoutImages, wikiEnabled],
-  );
+  // Encode @ticket: and @scratchpad: references as #fleex-… links so the `a`
+  // override can render them as chips. Inline-only (no line added or removed), so
+  // the checkbox line indices computed from `contentWithoutImages` stay valid.
+  const processed = useMemo(() => preprocessReferences(contentWithoutImages), [contentWithoutImages]);
 
   // Pre-compute checkbox line indices within this segment (0-indexed, local)
   const lines = useMemo(() => contentWithoutImages.split('\n'), [contentWithoutImages]);
@@ -252,9 +238,10 @@ function MarkdownSection({
           );
         }
       }
-      // Wiki-link — a ticket or a note, by the `[[…]]` syntax
-      if (href?.startsWith(WIKI_LINK_HREF_PREFIX)) {
-        return <WikiLinkChip target={decodeWikiTarget(href)}>{children}</WikiLinkChip>;
+      // Note reference — `@scratchpad:global` or `@scratchpad:owner/name`
+      if (href?.startsWith(SCRATCHPAD_REF_HREF_PREFIX)) {
+        const noteKey = decodeURIComponent(href.slice(SCRATCHPAD_REF_HREF_PREFIX.length));
+        return <NoteRefChip noteKey={noteKey}>{children}</NoteRefChip>;
       }
       return (
         <a

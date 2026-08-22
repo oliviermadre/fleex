@@ -40,7 +40,8 @@ import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
-import { preprocessMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { NoteRefChip } from '../markdown/NoteRefChip';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
 import { userRemarkPlugins } from '../markdown/profiles';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
@@ -234,6 +235,11 @@ export const CommentMarkdown = memo(function CommentMarkdown({
       if (href?.startsWith(TICKET_MENTION_HREF_PREFIX)) {
         // Ticket reference — purely referential chip, navigates to the ticket.
         return <TicketMentionChip idRef={href.slice(TICKET_MENTION_HREF_PREFIX.length)} />;
+      }
+      if (href?.startsWith(SCRATCHPAD_REF_HREF_PREFIX)) {
+        // Note reference — referential like a ticket chip, navigates to the note.
+        const noteKey = decodeURIComponent(href.slice(SCRATCHPAD_REF_HREF_PREFIX.length));
+        return <NoteRefChip noteKey={noteKey}>{children}</NoteRefChip>;
       }
       if (href?.startsWith('#fleex-agent:')) {
         const name = href.slice('#fleex-agent:'.length);
