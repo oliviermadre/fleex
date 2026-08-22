@@ -135,7 +135,7 @@ individually switchable in the same panel:
 | Save moments from runs | Lift a paragraph out of an execution and keep it as a note, ranked above the output it came from | local |
 | Remember conversations | Distils each assistant conversation as it ends, so preferences survive it | one LLM call per conversation |
 | Suggest routines | Spots a skill or agent you rerun on a regular cadence and proposes the schedule — arithmetic over the execution log, no model. Lives under `fleex routine suggest` | local |
-| Link and relate notes | Resolves `[[#42]]` and `[[org/repo]]` links, shows backlinks, and surfaces notes nobody thought to link | local |
+| Relate notes | Surfaces notes the index finds close to the one you are reading | local |
 | Learn from finished runs | Distils what each run discovered about the codebase — what worked, what failed, which files mattered | one LLM call per run |
 | Remember terminal sessions | Distils `claude` sessions run outside a ticket worktree and files them under their repository | one LLM call per session |
 
@@ -144,6 +144,10 @@ UI it belongs to — the palette for search and questions, the ticket form for
 duplicates, the agent editor for coaching, the execution log for curation, the
 routines panel for suggestions, the documents library for compilations, and the
 notes view for links.
+
+Write `@scratchpad:global` or `@scratchpad:owner/name` in any note, ticket
+description or comment to link to a note; type `@` in the editor to pick one.
+Backlinks appear under the note. Both work on either memory engine.
 
 From the terminal:
 
@@ -159,7 +163,7 @@ fleex memory similar "login times out"   # is this ticket already filed?
 fleex memory compile "the auth module"   # a sourced reference document
 fleex memory coach Builder               # what an agent should have learned
 fleex memory keep <executionId>          # keep a moment of a run
-fleex memory links owner/app             # backlinks and related notes
+fleex memory links owner/app             # backlinks, and related notes when relatedNotes is on
 fleex memory status                      # what the index holds
 fleex memory reindex                     # walk the corpus again (safe to re-run)
 fleex memory bench                       # how well retrieval does on this corpus
