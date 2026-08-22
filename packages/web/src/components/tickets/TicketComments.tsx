@@ -243,6 +243,14 @@ export const CommentMarkdown = memo(function CommentMarkdown({
         const noteKey = decodeURIComponent(href.slice(SCRATCHPAD_REF_HREF_PREFIX.length));
         return <NoteRefChip noteKey={noteKey}>{children}</NoteRefChip>;
       }
+      // Do NOT replace the five branches below (agent / panel / skill / workflow /
+      // human) with `PrimitiveRefChip`, even though they look like the same
+      // lookup-and-render-a-chip shape it already does for every other surface.
+      // These are ACTIONABLE: each one is tied to a `mentionId` resolved from
+      // this comment's run record and carries `onRemove`, which cancels that
+      // dispatched run. `PrimitiveRefChip` only ever points at a config screen —
+      // swapping it in here would compile, look identical when no run is active,
+      // and silently delete the cancel affordance the moment one is.
       if (href?.startsWith('#fleex-agent:')) {
         const name = href.slice('#fleex-agent:'.length);
         const mentionText = `@${name}`;

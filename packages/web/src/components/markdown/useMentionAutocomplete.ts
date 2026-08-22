@@ -14,6 +14,13 @@ import type { MentionOption } from './MentionMenu';
 /** Deferred matches shown at once, so a long list stays usable. */
 export const MAX_DEFERRED_SUGGESTIONS = 8;
 
+/**
+ * Rows offered per kind for a bare `@`, so a numerous kind (personas) cannot
+ * crowd the sparser ones (notes, routines, panels…) out of the handful of rows
+ * visible at rest — the exact complaint this mention work started from.
+ */
+export const MAX_EMPTY_QUERY_PER_KIND = 3;
+
 /** Primitive prefixes stripped from the query, so "@agent:cat" matches "Catalyst". */
 const PRIMITIVE_PREFIX = /^(agent|panel|skill|workflow|routine|ticket|scratchpad):/;
 
@@ -44,8 +51,19 @@ export function filterMentionOptions(options: MentionOption[], query: string): M
     o.label.toLowerCase().includes(q) || o.insertText.toLowerCase().includes(q);
 
   const immediate = options.filter((o) => !o.deferred && matches(o));
-  // A bare "@" must not dump a long list into the dropdown.
-  if (q.length === 0) return immediate;
+  // A bare "@" must not dump a long list into the dropdown — and must not let
+  // one numerous kind (personas) fill every visible row on its own. Cap per
+  // kind, preserving the existing order within and across kinds, so a bare
+  // "@" samples every kind at once and typing a query still expands within it.
+  if (q.length === 0) {
+    const seenPerKind = new Map<string, number>();
+    return immediate.filter((o) => {
+      const seen = seenPerKind.get(o.type) ?? 0;
+      if (seen >= MAX_EMPTY_QUERY_PER_KIND) return false;
+      seenPerKind.set(o.type, seen + 1);
+      return true;
+    });
+  }
 
   const deferred = options.filter((o) => o.deferred && matches(o)).slice(0, MAX_DEFERRED_SUGGESTIONS);
   return [...immediate, ...deferred];

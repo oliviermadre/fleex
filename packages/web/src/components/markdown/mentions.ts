@@ -95,7 +95,15 @@ const ALL_MENTIONS = new RegExp(
     '|(@routine:[a-zA-Z0-9_-]+)' +
     `|(@ticket:(?:${TICKET_ID}))` +
     `|(@scratchpad:(?:${NOTE_REF_VALUE}))` +
-    '|(@[a-zA-Z0-9_-]+)',
+    // Human fallback: guarded by a left boundary so it only fires where a
+    // mention could legitimately start — the same rule `detectMentionTrigger`
+    // in useMentionAutocomplete.ts already documents ("the `@` must start the
+    // text or follow whitespace"). Without it this alternative fires mid-token
+    // and mangles an email address (`olivier@evaneos.com` → `olivier` plus an
+    // encoded `@evaneos`, losing the `mailto:` autolink) or a git remote
+    // (`git@github.com:...` → an encoded `@github`). The struck variant above
+    // is preceded by `~~` and needs no such guard.
+    '|(?<![A-Za-z0-9_./+-])(@[a-zA-Z0-9_-]+)',
   'g',
 );
 

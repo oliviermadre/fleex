@@ -15,6 +15,8 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { usePanelStore } from '../../stores/panelStore';
+import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { NavSidebar } from '../sidebar/NavSidebar';
 import { ContentPanel } from '../sidebar/ContentPanel';
 import { MainPanel } from '../main-panel/MainPanel';
@@ -49,12 +51,40 @@ export function AppLayout() {
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const fetchRepositories = useRepositoryStore((s) => s.fetchRepositories);
   const loadDeliverableTypes = useDeliverableTypesStore((s) => s.load);
+  const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
 
   useEffect(() => {
     loadSettings();
     fetchRepositories();
     loadDeliverableTypes();
   }, [loadSettings, fetchRepositories, loadDeliverableTypes]);
+
+  // Prime the stores the mention picker and reference chips read but that
+  // nothing else fetches globally. Without this, a cold reload leaves
+  // `@panel:` and `@workflow:` out of the menu and `@scratchpad:` out of the
+  // ticket/comment pickers, and an existing `@panel:squad` mention degrades to
+  // raw text because PrimitiveRefChip finds no panel to resolve it against.
+  const panelsLoaded = usePanelStore((s) => s.loaded);
+  const loadPanels = usePanelStore((s) => s.loadPanels);
+  const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
+  const loadScratchpadList = useScratchpadStore((s) => s.loadScratchpadList);
+
+  useEffect(() => {
+    if (!panelsLoaded) loadPanels();
+  }, [panelsLoaded, loadPanels]);
+
+  useEffect(() => {
+    refreshWorkflowTemplates();
+  }, [refreshWorkflowTemplates]);
+
+  // Unguarded, like the scratchpad surfaces' own priming effects
+  // (ScratchpadsContent, ScratchpadMainView): `resolvedRepositories` is empty
+  // until `loadSettings` resolves above, so gating this on `scratchpadListLoaded`
+  // would latch the list before the real repo list lands, permanently omitting
+  // configured repos that have no note yet.
+  useEffect(() => {
+    void loadScratchpadList(resolvedRepositories);
+  }, [loadScratchpadList, resolvedRepositories]);
 
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
 

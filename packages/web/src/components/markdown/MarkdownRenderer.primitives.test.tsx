@@ -129,12 +129,18 @@ describe('MarkdownRenderer — primitive references', () => {
     expect(container.querySelector('a')).toBeNull();
   });
 
-  it('leaves an email address intact, unpilled', () => {
+  // The human-mention fallback is boundary-guarded (see mentions.ts): a mid-token
+  // `@`, like the one in an email address, is left alone rather than captured as
+  // `#fleex-human:…`. That leaves the address intact for remark-gfm's own
+  // autolink to turn into a real `mailto:` link.
+  it('lets an email address autolink to mailto instead of being captured as a mention', () => {
     const { container } = render(
       <MarkdownRenderer content="mail olivier@evaneos.com" onToggleCheckbox={noop} />,
     );
     expect(container.textContent).toContain('mail olivier@evaneos.com');
-    expect(container.querySelector('a')).toBeNull();
+    const link = container.querySelector('a');
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute('href')).toBe('mailto:olivier@evaneos.com');
   });
 
   it('leaves a mention inside a Markdown link intact and keeps the link functional', () => {

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { filterMentionOptions, detectMentionTrigger, MAX_DEFERRED_SUGGESTIONS } from './useMentionAutocomplete';
+import {
+  filterMentionOptions,
+  detectMentionTrigger,
+  MAX_DEFERRED_SUGGESTIONS,
+  MAX_EMPTY_QUERY_PER_KIND,
+} from './useMentionAutocomplete';
 import type { MentionOption } from './MentionMenu';
 
 const OPTIONS: MentionOption[] = [
@@ -73,5 +78,32 @@ describe('filterMentionOptions', () => {
 
   it('returns nothing when no option matches', () => {
     expect(filterMentionOptions(OPTIONS, 'zzzz')).toEqual([]);
+  });
+});
+
+describe('filterMentionOptions — per-kind cap at empty query', () => {
+  // One numerous kind (personas, as on the real instance) and two sparse ones,
+  // so a bare "@" dominated by the numerous kind alone would be a regression.
+  const MANY_PERSONAS: MentionOption[] = Array.from({ length: 10 }, (_, i) => ({
+    insertText: `@agent:persona${i + 1}`,
+    label: `Persona ${i + 1}`,
+    type: 'agent' as const,
+  }));
+  const SPARSE_KINDS: MentionOption[] = [
+    { insertText: '@panel:squad', label: 'Squad', type: 'panel' },
+    { insertText: '@routine:daily', label: 'Daily recap', type: 'routine' },
+  ];
+  const MIXED = [...MANY_PERSONAS, ...SPARSE_KINDS];
+
+  it('caps the numerous kind to MAX_EMPTY_QUERY_PER_KIND for a bare @, but still surfaces the sparse kinds', () => {
+    const out = filterMentionOptions(MIXED, '');
+    expect(out.filter((o) => o.type === 'agent')).toHaveLength(MAX_EMPTY_QUERY_PER_KIND);
+    expect(out.some((o) => o.type === 'panel')).toBe(true);
+    expect(out.some((o) => o.type === 'routine')).toBe(true);
+  });
+
+  it('typing a query returns the full filtered set, not the empty-query per-kind cap', () => {
+    const out = filterMentionOptions(MIXED, 'persona');
+    expect(out.filter((o) => o.type === 'agent')).toHaveLength(MANY_PERSONAS.length);
   });
 });

@@ -39,18 +39,34 @@ export function PrimitiveRefChip({ kind, name }: { kind: PrimitiveRefKind; name:
   // deletable, and a chip that leads nowhere is worse than the raw syntax.
   if (!resolved) return <span>@{kind}:{name}</span>;
 
+  // A `switch` with no `default`, matching `resolve()` below, and one case per
+  // kind: a sixth `PrimitiveRefKind` with no case added here falls through and
+  // opens nothing, instead of silently routing to whichever branch happened to
+  // be last (previously the bare `else`, which always meant "workflow").
   const open = () => {
-    if (kind === 'routine') {
-      useUIStore.getState().setActivePanel('routines');
-      // Async because it loads the run history — the only one of the five.
-      void useRoutineStore.getState().select(resolved.id);
-      return;
+    switch (kind) {
+      case 'routine':
+        useUIStore.getState().setActivePanel('routines');
+        // Async because it loads the run history — the only one of the five.
+        void useRoutineStore.getState().select(resolved.id);
+        return;
+      case 'agent':
+        useUIStore.getState().setActivePanel('agents');
+        useAgentPersonaStore.getState().selectPersona(resolved.id);
+        return;
+      case 'panel':
+        useUIStore.getState().setActivePanel('agents');
+        usePanelStore.getState().selectPanel(resolved.id);
+        return;
+      case 'skill':
+        useUIStore.getState().setActivePanel('agents');
+        useSkillStore.getState().selectSkill(resolved.id);
+        return;
+      case 'workflow':
+        useUIStore.getState().setActivePanel('agents');
+        useWorkflowTemplateStore.getState().selectWorkflow(resolved.id);
+        return;
     }
-    useUIStore.getState().setActivePanel('agents');
-    if (kind === 'agent') useAgentPersonaStore.getState().selectPersona(resolved.id);
-    else if (kind === 'panel') usePanelStore.getState().selectPanel(resolved.id);
-    else if (kind === 'skill') useSkillStore.getState().selectSkill(resolved.id);
-    else useWorkflowTemplateStore.getState().selectWorkflow(resolved.id);
   };
 
   return (
