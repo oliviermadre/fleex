@@ -7,10 +7,11 @@ import { fetchNoteLinks, type NoteLinks } from '../../services/api';
  *
  * The two halves answer different questions and are both needed, but only one
  * of them depends on the memory engine. Backlinks are exact — someone wrote
- * `[[org/repo]]` and meant it — and are computed by a plain text scan, so they
- * are always present. Related notes come from the retrieval index, so that half
- * arrives empty when the `relatedNotes` flag is off or the engine is legacy;
- * the panel degrades to a backlink list rather than disappearing.
+ * `@scratchpad:owner/name` and meant it — and are computed by a plain text
+ * scan, so they are always present. Related notes come from the retrieval
+ * index, so that half arrives empty when the `relatedNotes` flag is off or the
+ * engine is legacy; the panel degrades to a backlink list rather than
+ * disappearing.
  *
  * A footer rather than a sidebar: it is context about the note, not the note, and
  * it should not compete with the editor for width.
@@ -21,9 +22,10 @@ export function NoteLinksPanel({ scratchpadKey }: { scratchpadKey: string }) {
 
   const load = useCallback(async () => {
     try {
-      // The note's own key is also the link target: `[[global]]` and `[[org/repo]]`
-      // both normalise to the key the list endpoint reports, so a backlink scan
-      // and a note selection speak the same vocabulary.
+      // The note's own key is also the link target: `@scratchpad:global` and
+      // `@scratchpad:owner/name` both normalise to the key the list endpoint
+      // reports, so a backlink scan and a note selection speak the same
+      // vocabulary.
       setLinks(await fetchNoteLinks(scratchpadKey, scratchpadKey));
     } catch {
       setLinks(null);

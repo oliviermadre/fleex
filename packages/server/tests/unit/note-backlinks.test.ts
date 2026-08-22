@@ -12,7 +12,7 @@ import type { AppConfig } from '../../src/application/ports/config.port.js';
 
 const NOTES: Record<string, string> = {
   'scratchpad:__global__': 'index of everything, conventions in @scratchpad:acme/app',
-  'scratchpad:acme/app': 'repo notes. see @scratchpad:global for the index',
+  'scratchpad:acme/app': 'repo notes. see @scratchpad:global for the index, and @scratchpad:acme/app itself',
   'scratchpad:acme/other': 'unrelated prose about scratchpads in general',
 };
 
