@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ChangeEvent, type KeyboardEvent, type RefObject } from 'react';
 import type { MentionOption } from './MentionMenu';
+import type { MentionTargetType } from '../ui/MentionTypeBadge';
 
 /**
  * `@mention` autocomplete for any Markdown textarea.
@@ -21,7 +22,14 @@ export const MAX_DEFERRED_SUGGESTIONS = 8;
  */
 export const MAX_EMPTY_QUERY_PER_KIND = 3;
 
-/** Primitive prefixes stripped from the query, so "@agent:cat" matches "Catalyst". */
+/**
+ * Primitive prefixes, each naming a mention type 1:1.
+ *
+ * A typed prefix does two things: it leaves the rest as the query, so
+ * `@agent:cat` matches "Catalyst", and it pins the kind, so the match is looked
+ * for among agents only. Stripping it without keeping the kind is what made
+ * `@ticket:` answer with a list of agents.
+ */
 const PRIMITIVE_PREFIX = /^(agent|panel|skill|workflow|routine|ticket|scratchpad):/;
 
 /**
@@ -31,7 +39,10 @@ const PRIMITIVE_PREFIX = /^(agent|panel|skill|workflow|routine|ticket|scratchpad
  * The `@` must start the text or follow whitespace — otherwise the `@` of an
  * email address would open the menu on every address the user writes.
  */
-export function detectMentionTrigger(value: string, cursor: number): { triggerPos: number; query: string } | null {
+export function detectMentionTrigger(
+  value: string,
+  cursor: number,
+): { triggerPos: number; query: string; kind?: MentionTargetType } | null {
   const before = value.slice(0, cursor);
   const atIdx = before.lastIndexOf('@');
   if (atIdx < 0) return null;
@@ -41,14 +52,40 @@ export function detectMentionTrigger(value: string, cursor: number): { triggerPo
   // A space means the mention is finished and the user has moved on.
   if (/\s/.test(fragment)) return null;
 
-  return { triggerPos: atIdx, query: fragment.replace(PRIMITIVE_PREFIX, '') };
+  const prefix = PRIMITIVE_PREFIX.exec(fragment);
+  // No `kind` key at all rather than an explicit undefined, so a caller
+  // comparing the whole result sees the same shape it always did.
+  if (!prefix) return { triggerPos: atIdx, query: fragment };
+
+  return {
+    triggerPos: atIdx,
+    query: fragment.slice(prefix[0].length),
+    kind: prefix[1] as MentionTargetType,
+  };
 }
 
-/** Options matching `query`, non-deferred first, deferred capped. */
-export function filterMentionOptions(options: MentionOption[], query: string): MentionOption[] {
+/**
+ * Options matching `query`, non-deferred first, deferred capped.
+ *
+ * `kind` is the type the user named with a `@kind:` prefix, if any.
+ */
+export function filterMentionOptions(
+  options: MentionOption[],
+  query: string,
+  kind?: MentionTargetType,
+): MentionOption[] {
   const q = query.toLowerCase();
   const matches = (o: MentionOption) =>
     o.label.toLowerCase().includes(q) || o.insertText.toLowerCase().includes(q);
+
+  // A named kind answers both questions the caps exist for. Deferral keeps a
+  // numerous kind out of a bare `@`, and the per-kind cap stops one kind
+  // crowding out the others — neither applies once the user has said which kind
+  // they want. `@ticket:` must list tickets, not hide them behind a query. Only
+  // the long-list cap survives, so a thousand tickets stay usable.
+  if (kind) {
+    return options.filter((o) => o.type === kind && matches(o)).slice(0, MAX_DEFERRED_SUGGESTIONS);
+  }
 
   const immediate = options.filter((o) => !o.deferred && matches(o));
   // A bare "@" must not dump a long list into the dropdown — and must not let
@@ -84,10 +121,11 @@ export function useMentionAutocomplete({
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
   const [triggerPos, setTriggerPos] = useState(-1);
+  const [kind, setKind] = useState<MentionTargetType | undefined>(undefined);
 
   const filtered = useMemo(
-    () => (open ? filterMentionOptions(options, query) : []),
-    [open, options, query],
+    () => (open ? filterMentionOptions(options, query, kind) : []),
+    [open, options, query, kind],
   );
 
   const close = useCallback(() => {
@@ -95,6 +133,7 @@ export function useMentionAutocomplete({
     setQuery('');
     setIndex(0);
     setTriggerPos(-1);
+    setKind(undefined);
   }, []);
 
   const accept = useCallback((opt: MentionOption) => {
@@ -120,6 +159,7 @@ export function useMentionAutocomplete({
     }
     setOpen(true);
     setTriggerPos(hit.triggerPos);
+    setKind(hit.kind);
     setQuery(hit.query);
     setIndex(0);
   }, [close]);

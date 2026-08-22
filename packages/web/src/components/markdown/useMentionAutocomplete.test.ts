@@ -47,6 +47,59 @@ describe('detectMentionTrigger', () => {
   });
 });
 
+describe('detectMentionTrigger — the typed prefix pins the kind', () => {
+  it('reports the kind for a prefix with nothing typed after it', () => {
+    // `@ticket:` names the kind and nothing else. Reporting only the empty query
+    // is what made the menu answer with agents.
+    expect(detectMentionTrigger('@ticket:', 8)).toEqual({ triggerPos: 0, query: '', kind: 'ticket' });
+  });
+
+  it('reports the kind alongside the remaining query', () => {
+    expect(detectMentionTrigger('@agent:cat', 10)).toEqual({ triggerPos: 0, query: 'cat', kind: 'agent' });
+  });
+
+  it('reports no kind for a bare mention', () => {
+    expect(detectMentionTrigger('@cat', 4)).toEqual({ triggerPos: 0, query: 'cat' });
+  });
+
+  it('treats an unknown prefix as part of the query, not a kind', () => {
+    // `@foo:` names no kind, so the colon is just text the user typed.
+    expect(detectMentionTrigger('@foo:bar', 8)).toEqual({ triggerPos: 0, query: 'foo:bar' });
+  });
+});
+
+describe('filterMentionOptions — a named kind', () => {
+  it('lists that kind for an empty query, deferral notwithstanding', () => {
+    // Tickets are deferred so a bare `@` cannot dump them all. But `@ticket:`
+    // asks for them by name, so hiding them behind a further query is the bug.
+    const out = filterMentionOptions(OPTIONS, '', 'ticket');
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((o) => o.type === 'ticket')).toBe(true);
+  });
+
+  it('excludes every other kind', () => {
+    const out = filterMentionOptions(OPTIONS, '', 'agent');
+    expect(out.map((o) => o.insertText)).toEqual(['@agent:catalyst']);
+  });
+
+  it('still filters within the kind', () => {
+    const out = filterMentionOptions(OPTIONS, '3', 'ticket');
+    expect(out.every((o) => o.type === 'ticket')).toBe(true);
+    expect(out.map((o) => o.insertText)).toContain('@ticket:3');
+    expect(out.map((o) => o.insertText)).not.toContain('@ticket:1');
+  });
+
+  it('caps a numerous kind so a thousand tickets stay usable', () => {
+    expect(filterMentionOptions(OPTIONS, '', 'ticket')).toHaveLength(MAX_DEFERRED_SUGGESTIONS);
+  });
+
+  it('does not apply the per-kind cap, which exists only for a bare @', () => {
+    // With the kind named there is nothing to crowd out, so the 3-per-kind
+    // sampling must not also clip the one kind the user asked for.
+    expect(filterMentionOptions(OPTIONS, '', 'ticket').length).toBeGreaterThan(MAX_EMPTY_QUERY_PER_KIND);
+  });
+});
+
 describe('filterMentionOptions', () => {
   it('shows only non-deferred options for a bare @', () => {
     // A bare "@" would otherwise dump every ticket into the dropdown.
