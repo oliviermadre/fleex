@@ -21,7 +21,6 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
   const markdownMode = useScratchpadStore((s) => s.markdownMode);
   const setMarkdownMode = useScratchpadStore((s) => s.setMarkdownMode);
   const scratchpadList = useScratchpadStore((s) => s.scratchpadList);
-  const scratchpadListLoaded = useScratchpadStore((s) => s.scratchpadListLoaded);
   const loadScratchpadList = useScratchpadStore((s) => s.loadScratchpadList);
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
   const tickets = useTicketStore((s) => s.tickets);
@@ -81,9 +80,12 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
 
   // The sidebar list loads this too, but it is a sibling of this view rather than an
   // ancestor: with the sidebar on another panel there would be no notes to offer.
+  // Unguarded, like the sidebar's own effect: on a first-ever load
+  // `resolvedRepositories` is still empty, and a one-shot guard would latch before
+  // the repo list lands — leaving every repo without a note out of the menu.
   useEffect(() => {
-    if (!scratchpadListLoaded) void loadScratchpadList(resolvedRepositories);
-  }, [scratchpadListLoaded, loadScratchpadList, resolvedRepositories]);
+    void loadScratchpadList(resolvedRepositories);
+  }, [loadScratchpadList, resolvedRepositories]);
 
   const label = scratchpadKey === '__global__' ? 'Global' : scratchpadKey;
 
@@ -106,7 +108,7 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
         onToggleCheckbox={handleToggleCheckbox}
         textareaRef={textareaRef}
         className="p-4"
-        placeholder={'# Scratchpad\n\nWrite your notes here...'}
+        placeholder={'# Scratchpad\n\nWrite your notes here... (@ to link a note or ticket)'}
         textareaProps={{
           spellCheck: false,
           onChange: mentionAc.onScan,

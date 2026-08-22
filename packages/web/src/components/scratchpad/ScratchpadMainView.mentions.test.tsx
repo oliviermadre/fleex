@@ -60,6 +60,7 @@ describe('ScratchpadMainView — mention autocomplete', () => {
     typeAt(container.querySelector('textarea')!, '@');
     expect(queryByText('agent')).toBeNull();
     expect(queryByText('skill')).toBeNull();
+    expect(queryByText('panel')).toBeNull();
     expect(queryByText('workflow')).toBeNull();
   });
 

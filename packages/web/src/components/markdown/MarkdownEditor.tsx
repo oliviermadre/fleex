@@ -53,6 +53,14 @@ export interface MarkdownEditorProps {
   textareaProps?: TextareaHTMLAttributes<HTMLTextAreaElement>;
   /** Pass a ref when the caller needs the textarea (caret handling, autocomplete anchoring). */
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
+  /**
+   * Absolutely-positioned overlay inside the field (mention autocomplete…).
+   *
+   * Rendered by both variants. It was composer-only until the note editor needed
+   * it, and the panel variant silently dropped it — so a mention menu in a note
+   * could never appear.
+   */
+  overlay?: ReactNode;
 
   // ── composer variant only ──
   /** Rows before the field starts growing. */
@@ -63,8 +71,6 @@ export interface MarkdownEditorProps {
   trailing?: ReactNode;
   /** Extra controls rendered in the bottom bar, next to the mode toggle. */
   actions?: ReactNode;
-  /** Absolutely-positioned overlay inside the input row (mention autocomplete…). */
-  overlay?: ReactNode;
 }
 
 const EMPTY_PREVIEW = 'Nothing to preview';
