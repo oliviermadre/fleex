@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { linksTo } from '@fleex/shared';
+import { referencesNote } from '@fleex/shared';
 import type { Container } from '../container.js';
 import { isMemoryFeatureEnabled } from '../../application/ports/config.port.js';
 
@@ -64,39 +64,44 @@ export function scratchpadRoutes(container: Container) {
     };
 
     /**
-     * Which notes link to a target, and which notes are semantically close to one.
+     * Which notes reference a target, and which notes are semantically close to one.
      *
      * Backlinks are computed by scanning every note rather than kept in a link
      * table: there are a handful of scratchpads, so a scan is cheaper than keeping
      * an index consistent through every edit — and a stale link table is worse
-     * than none, because it silently hides connections.
+     * than none, because it silently hides connections. This half reads no index,
+     * so it is unconditional: it works on either memory engine and regardless of
+     * the `relatedNotes` flag, exactly as `@ticket:` references always have.
+     *
+     * Related notes, by contrast, come from the retrieval index, so only that
+     * half is gated behind the `relatedNotes` flag and the semantic engine.
      */
     app.get<{ Querystring: { target?: string; key?: string } }>(
       '/api/scratchpads/links',
       async (request) => {
-        if (!isMemoryFeatureEnabled(container.config.get(), 'relatedNotes')) {
-          return { backlinks: [], related: [] };
-        }
-
         const target = request.query.target?.trim();
         const backlinks: Array<{ key: string; label: string }> = [];
 
+        // Exact backlinks are a text scan over a handful of notes — no index, so
+        // no feature flag and no engine requirement. Navigating between notes is
+        // not semantic memory, exactly as @ticket: has never been.
         if (target && kvStore) {
           for (const entry of await kvStore.listByPrefix('scratchpad:')) {
             const key = entry.key.slice('scratchpad:'.length);
             // A note listing itself as its own backlink is noise.
             if (key === request.query.key) continue;
-            if (linksTo(entry.value, target)) {
+            if (referencesNote(entry.value, target)) {
               backlinks.push({ key, label: key === '__global__' ? 'Global' : key });
             }
           }
         }
 
         // Related notes come from the index, so they surface connections nobody
-        // thought to write a link for — which is the half of a knowledge graph
-        // that manual linking never produces.
+        // thought to write a reference for — which is the half of a knowledge
+        // graph manual linking never produces, and the half that needs the flag.
         const sourceKey = request.query.key?.trim();
         const related = sourceKey && kvStore
+          && isMemoryFeatureEnabled(container.config.get(), 'relatedNotes')
           ? await relatedNotes(container, sourceKey)
           : [];
 

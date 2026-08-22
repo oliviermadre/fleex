@@ -1,24 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { fetchNoteLinks, type NoteLinks } from '../../services/api';
 
 /**
  * What points at this note, and what resembles it.
  *
- * The two halves answer different questions and are both needed. Backlinks are
- * exact: someone wrote `[[org/repo]]` and meant it, so the connection is a fact.
- * Related notes come from the index, which surfaces the connections nobody
- * thought to write down — the half of a knowledge graph manual linking never
- * produces, and the reason this panel exists rather than a plain backlink list.
+ * The two halves answer different questions and are both needed, but only one
+ * of them depends on the memory engine. Backlinks are exact — someone wrote
+ * `[[org/repo]]` and meant it — and are computed by a plain text scan, so they
+ * are always present. Related notes come from the retrieval index, so that half
+ * arrives empty when the `relatedNotes` flag is off or the engine is legacy;
+ * the panel degrades to a backlink list rather than disappearing.
  *
  * A footer rather than a sidebar: it is context about the note, not the note, and
  * it should not compete with the editor for width.
  */
 export function NoteLinksPanel({ scratchpadKey }: { scratchpadKey: string }) {
-  const enabled = useSettingsStore((s) => s.settings.memoryEngine === 'semantic'
-    && s.settings.memoryFeatures?.relatedNotes !== false);
-
   const select = useScratchpadStore((s) => s.setSelectedScratchpadKey);
   const [links, setLinks] = useState<NoteLinks | null>(null);
 
@@ -35,10 +32,10 @@ export function NoteLinksPanel({ scratchpadKey }: { scratchpadKey: string }) {
 
   useEffect(() => {
     setLinks(null);
-    if (enabled) void load();
-  }, [enabled, load]);
+    void load();
+  }, [load]);
 
-  if (!enabled || !links) return null;
+  if (!links) return null;
   if (links.backlinks.length === 0 && links.related.length === 0) return null;
 
   return (
