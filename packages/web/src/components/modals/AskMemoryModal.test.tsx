@@ -312,8 +312,8 @@ describe('AskMemoryModal — the wait shows time passing', () => {
  *
  * The panel answers and forgets; the assistant persists its conversations and
  * carries them to the model as real history. Recording as we go means asking
- * something is never a thing you lose, and the "continue" button has nothing to
- * transfer — it only goes where the history already is.
+ * something is never a thing you lose. The button carries the one thing that was
+ * not recorded: a question typed here and not yet answered.
  */
 describe('AskMemoryModal — recorded history', () => {
   const withAnswer = (text = 'Trois objectifs [1].', sources: unknown[] = [
@@ -379,8 +379,55 @@ describe('AskMemoryModal — recorded history', () => {
 
     fireEvent.click(getByText('Continue in Assistant'));
     const [recordedId] = recordExchange.mock.calls[0] as [string];
-    expect(openSession).toHaveBeenCalledWith(recordedId);
+    // Nothing carried: the input still holds the question that was answered.
+    expect(openSession).toHaveBeenCalledWith(recordedId, undefined);
     expect(useUIStore.getState().activePanel).toBe('assistant');
+  });
+
+  it('carries a typed follow-up over, so it does not have to be retyped', async () => {
+    // Typing a question and then leaving for the assistant used to drop it on the
+    // floor — the panel navigated and the question had to be asked again there.
+    withAnswer();
+    const { getByPlaceholderText, getByText } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
+
+    fireEvent.change(getByPlaceholderText(FOLLOW_UP), { target: { value: 'et le KR2.1 ?' } });
+    fireEvent.click(getByText('Ask in Assistant'));
+
+    const [recordedId] = recordExchange.mock.calls[0] as [string];
+    expect(openSession).toHaveBeenCalledWith(recordedId, 'et le KR2.1 ?');
+  });
+
+  it('says which of the two things the button will do', async () => {
+    // Carrying a question and merely going where the history is are different
+    // acts, and one label for both is what made the drop invisible.
+    withAnswer();
+    const { getByPlaceholderText, getByText, queryByText } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
+    expect(queryByText('Continue in Assistant')).toBeTruthy();
+
+    fireEvent.change(getByPlaceholderText(FOLLOW_UP), { target: { value: 'et le KR2.1 ?' } });
+
+    expect(queryByText('Continue in Assistant')).toBeNull();
+    expect(queryByText('Ask in Assistant')).toBeTruthy();
+  });
+
+  it('carries nothing when the follow-up was already answered here', async () => {
+    // Asked in the panel, the draft equals the question on screen: carrying it
+    // over would ask the assistant something it can already read above.
+    withAnswer();
+    const { getByPlaceholderText, getByText } = render(<AskMemoryModal />);
+    await waitFor(() => expect(getByText(/Trois objectifs/)).toBeTruthy());
+
+    const input = getByPlaceholderText(FOLLOW_UP);
+    fireEvent.change(input, { target: { value: 'et le KR2.1 ?' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(recordExchange).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(getByText('Continue in Assistant'));
+
+    const [recordedId] = recordExchange.mock.calls[0] as [string];
+    expect(openSession).toHaveBeenCalledWith(recordedId, undefined);
   });
 
   it('offers nothing to continue before there is an answer', async () => {

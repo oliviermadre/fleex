@@ -98,7 +98,14 @@ interface AssistantState {
    * the palette must not yank the assistant view around.
    */
   recordExchange: (id: string, question: string, answer: string) => void;
-  openSession: (id: string) => void;
+  /**
+   * Show a conversation, optionally asking it something on arrival.
+   *
+   * `prompt` is for a surface that has a question in hand — the Ask Memory panel
+   * hands over what was typed there, which used to be dropped on navigation and
+   * had to be retyped here.
+   */
+  openSession: (id: string, prompt?: string) => void;
   deleteSession: (id: string) => void;
   renameSession: (id: string, title: string) => void;
   setModel: (id: string, model: string | undefined) => void;
@@ -117,8 +124,42 @@ let ws: WebSocket | null = null;
 let started = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-function sendMsg(msg: Record<string, unknown>): void {
-  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+/**
+ * Commands issued while the socket was down, replayed in order once it opens.
+ *
+ * Only the assistant panel opens the socket, and it is mounted only while it is
+ * on screen. Ask Memory lives at the app root: on a page load where that panel
+ * had never been visited, every exchange it recorded was dropped in silence —
+ * and "Continue in Assistant" then opened a conversation the companion had never
+ * been told about, which is an empty panel.
+ *
+ * Bounded: with the companion down the retry loop never drains this, and a queue
+ * that grows all afternoon is a leak rather than a fix. The oldest goes first.
+ */
+const outbox: Array<Record<string, unknown>> = [];
+const OUTBOX_MAX = 100;
+
+/**
+ * A question handed over from another surface, waiting for its history to land.
+ *
+ * Dispatched on `session_history` rather than straight away: that frame replaces
+ * the conversation's items wholesale, so a turn appended before it arrives is
+ * wiped off the screen while the model answers it anyway.
+ */
+let carried: { id: string; text: string } | null = null;
+
+/**
+ * @param queue false for a command that must not outlive the socket it was meant
+ * for — an approval, which the server has already unwound as denied.
+ */
+function sendMsg(msg: Record<string, unknown>, queue = true): void {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg));
+    return;
+  }
+  if (!queue) return;
+  if (outbox.length >= OUTBOX_MAX) outbox.shift();
+  outbox.push(msg);
 }
 
 export const useAssistantStore = create<AssistantState>((set, get) => {
@@ -168,6 +209,15 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
           return { kind: o.role === 'user' ? 'user' : 'assistant', text: (o.text as string) ?? '' };
         });
         set((s) => ({ itemsBySession: { ...s.itemsBySession, [id]: items } }));
+        // The history is on screen, so the question carried in can join it
+        // without being replaced a moment later. Cleared first: a re-sent history
+        // must not ask it twice.
+        if (carried?.id === id) {
+          const { text } = carried;
+          carried = null;
+          appendItem(id, { kind: 'user', text });
+          sendMsg({ type: 'user', sessionId: id, text });
+        }
         break;
       }
       case 'text': {
@@ -248,8 +298,18 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     socket.onopen = () => {
       if (ws !== socket) return;
       set({ connected: true, errorMsg: null });
+      // Queued commands go first and in order: a recorded exchange has to reach
+      // the companion before the open_session that goes looking for it.
+      const queued = outbox.splice(0);
+      for (const msg of queued) socket.send(JSON.stringify(msg));
+      // Re-open the conversation in view after a reconnect — unless the queue
+      // just did, since a second history reply would wipe the turn the first one
+      // let through.
       const activeId = get().activeId;
-      if (activeId) socket.send(JSON.stringify({ type: 'open_session', id: activeId }));
+      const alreadyOpened = queued.some((m) => m.type === 'open_session' && m.id === activeId);
+      if (activeId && !alreadyOpened) {
+        socket.send(JSON.stringify({ type: 'open_session', id: activeId }));
+      }
       fetch(`${ASSISTANT_BASE}/workspaces`)
         .then((r) => (r.ok ? r.json() : []))
         .then((list: AssistantWorkspace[]) => set({ workspaces: Array.isArray(list) ? list : [] }))
@@ -300,14 +360,23 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     },
 
     recordExchange: (id, question, answer) => {
+      // Nothing else here opens the socket: the panels that do are mounted only
+      // while the assistant is on screen, and Ask Memory is reachable from
+      // anywhere. Recording used to depend on having visited that panel first.
+      get().ensureConnected();
       // Same workspace reasoning as newSession: the companion is machine-wide and
       // would otherwise pin the configured default rather than the one in view.
       const active = useSettingsStore.getState().settings.workspace || undefined;
       sendMsg({ type: 'record_exchange', id, question, answer, ...(active ? { workspace: active } : {}) });
     },
 
-    openSession: (id) => {
+    openSession: (id, prompt) => {
+      get().ensureConnected();
       set({ activeId: id, errorMsg: null });
+      // Held until the history lands, and reset either way so a question handed
+      // over and then abandoned is not asked of the next conversation opened.
+      const text = prompt?.trim();
+      carried = text ? { id, text } : null;
       sendMsg({ type: 'open_session', id });
     },
 
@@ -350,7 +419,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       if (!get().confirmReqs.some((r) => r.id === id)) return;
       // The server derives WHICH session/tool `always` applies to from its own
       // pending-confirm entry, so we only send the scope.
-      sendMsg({ type: 'confirm', id, approved, ...(always ? { always } : {}) });
+      sendMsg({ type: 'confirm', id, approved, ...(always ? { always } : {}) }, false);
       set((s) => ({ confirmReqs: s.confirmReqs.filter((r) => r.id !== id) }));
     },
 
@@ -366,6 +435,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
 
 // Test-only escape hatch: reset the module-level socket state.
 export function __resetAssistantSocketForTests(): void {
+  outbox.length = 0;
+  carried = null;
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
   if (ws) {

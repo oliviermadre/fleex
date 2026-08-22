@@ -334,26 +334,28 @@ export function AskMemoryModal() {
   }, [question]);
 
   /**
-   * Ask what is in the box.
+   * The question in the box that nothing has answered yet.
    *
-   * Routed through the store when the text changed, so the header and the panel
-   * agree on what was asked. An unchanged question would not move that state, so it
-   * is re-run directly — which is what the old "Ask again" did, kept for the case
-   * where a retry is genuinely what you want.
+   * The input starts pre-filled with what was asked, so only a *changed* draft is
+   * an open question — and that is the one worth taking along. Leaving with it on
+   * screen used to drop it, and it had to be retyped in the assistant.
    */
+  const typed = draft.trim();
+  const carried = typed && typed !== question ? typed : undefined;
+
   /**
-   * Open the conversation this panel has been writing into.
+   * Go to the conversation this panel has been writing into, question and all.
    *
-   * Nothing is transferred here — every exchange was already recorded as it
-   * happened. This only goes and stands where the history is, which is also where
-   * the whole fleex tool surface lives: a follow-up there can go back to the index
-   * rather than only re-reading what was already retrieved.
+   * The answers need no transferring — every exchange was recorded as it
+   * happened. What this adds is the pending question, asked over there rather
+   * than here, because that is where the whole fleex tool surface lives: it can
+   * go back to the index instead of only re-reading what was already retrieved.
    */
   const continueInAssistant = useCallback(() => {
-    openSession(conversationId.current);
+    openSession(conversationId.current, carried);
     close();
     setActivePanel('assistant');
-  }, [openSession, close, setActivePanel]);
+  }, [openSession, close, setActivePanel, carried]);
 
   /**
    * Ask what is in the box.
@@ -546,9 +548,9 @@ export function AskMemoryModal() {
       })()}
 
       {/* An answer can end on a clarifying question, and a panel with no input made
-          that a dead end: the only button re-ran the identical query. A second
-          question is also the moment a lookup became a conversation, which is why
-          it continues in the assistant rather than replacing the answer here. */}
+          that a dead end: the only button re-ran the identical query. Enter answers
+          it here, from memory; the button next to it takes it to the assistant
+          instead, where the tools are. Either way it is not lost. */}
       <div className="mt-3 flex flex-shrink-0 items-center gap-2">
         <input
           ref={inputRef}
@@ -572,11 +574,11 @@ export function AskMemoryModal() {
         >
           {loading ? 'Asking…' : 'Ask'}
         </Button>
-        {/* Not a hand-off — the exchanges are already there. This goes and stands
-            where the history is, and where the tools are. */}
+        {/* The exchanges are already there; what this hands over is the question
+            still in the box. Goes where the history is, and where the tools are. */}
         {result?.answer && (
           <Button variant="secondary" onClick={continueInAssistant}>
-            Continue in Assistant
+            {carried ? 'Ask in Assistant' : 'Continue in Assistant'}
           </Button>
         )}
         <Button variant="primary" onClick={close}>Close</Button>

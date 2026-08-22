@@ -11,7 +11,9 @@ class FakeWebSocket {
   static CLOSING = 2;
   static CLOSED = 3;
   static last: FakeWebSocket | null = null;
-  readyState = FakeWebSocket.OPEN;
+  /** Overridden by the outbox tests, which need a socket that is not open yet. */
+  static initialState = FakeWebSocket.OPEN;
+  readyState = FakeWebSocket.initialState;
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
@@ -148,5 +150,183 @@ describe('assistantStore — auto-approval', () => {
 
     useAssistantStore.getState().clearAutoApproveNotice();
     expect(useAssistantStore.getState().autoApproveNotice).toBeNull();
+  });
+});
+
+/**
+ * Nothing sent to the companion is lost because the socket was not open yet.
+ *
+ * `sendMsg` used to drop a frame in silence when the socket was down, and the
+ * only thing that opens the socket is the assistant panel itself. Ask Memory
+ * lives at the app root: on a page load where that panel had never been visited,
+ * every exchange it recorded went nowhere, and "Continue in Assistant" landed on
+ * a conversation the server had never heard of.
+ */
+describe('assistantStore — the outbox', () => {
+  beforeEach(() => {
+    FakeWebSocket.last = null;
+    FakeWebSocket.initialState = FakeWebSocket.CONNECTING;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
+    __resetAssistantSocketForTests();
+  });
+
+  afterEach(() => {
+    FakeWebSocket.initialState = FakeWebSocket.OPEN;
+    __resetAssistantSocketForTests();
+    useAssistantStore.setState({ activeId: null, itemsBySession: {}, confirmReqs: [] });
+    vi.unstubAllGlobals();
+  });
+
+  /** Bring the socket the store just opened up, and fire its onopen. */
+  function openSocket(): void {
+    const socket = FakeWebSocket.last!;
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.onopen!();
+  }
+
+  it('opens the socket itself rather than recording into one that does not exist', () => {
+    useAssistantStore.getState().recordExchange('conv-1', 'quelles routines ?', 'trois.');
+
+    expect(FakeWebSocket.last).not.toBeNull();
+  });
+
+  it('delivers an exchange recorded before the socket finished opening', () => {
+    useAssistantStore.getState().recordExchange('conv-1', 'quelles routines ?', 'trois.');
+    expect(sentMessages()).toEqual([]);
+
+    openSocket();
+
+    expect(sentMessages()).toContainEqual({
+      type: 'record_exchange',
+      id: 'conv-1',
+      question: 'quelles routines ?',
+      answer: 'trois.',
+    });
+  });
+
+  it('keeps the order, so the conversation exists before it is opened', () => {
+    // open_session on an id the server has not been told about answers nothing,
+    // which is exactly the empty panel this fixes.
+    useAssistantStore.getState().recordExchange('conv-1', 'q', 'a');
+    useAssistantStore.getState().openSession('conv-1');
+
+    openSocket();
+
+    const types = sentMessages().map((m) => m.type);
+    expect(types.indexOf('record_exchange')).toBeLessThan(types.indexOf('open_session'));
+  });
+
+  it('does not open the same conversation twice on connect', () => {
+    // The reconnect re-send and a queued open_session would both ask for the
+    // history, and the second reply wipes any turn appended after the first.
+    useAssistantStore.getState().openSession('conv-1');
+
+    openSocket();
+
+    expect(sentMessages().filter((m) => m.type === 'open_session')).toHaveLength(1);
+  });
+
+  it('still re-opens the conversation in view after a plain reconnect', () => {
+    useAssistantStore.getState().ensureConnected();
+    useAssistantStore.setState({ activeId: 'conv-9' });
+
+    openSocket();
+
+    expect(sentMessages()).toContainEqual({ type: 'open_session', id: 'conv-9' });
+  });
+
+  it('does not replay an approval answered while the socket was down', () => {
+    // The server unwinds pending confirmations as denied on disconnect, so a
+    // queued approval would authorise a command nobody is waiting on any more.
+    useAssistantStore.getState().ensureConnected();
+    useAssistantStore.setState({
+      confirmReqs: [{ sessionId: 'conv-1', id: 'c1', name: 'fleex_ticket_create', argv: [] }],
+    });
+    useAssistantStore.getState().answerConfirm('c1', true);
+
+    openSocket();
+
+    expect(sentMessages().some((m) => m.type === 'confirm')).toBe(false);
+  });
+});
+
+/**
+ * A question typed in the Ask Memory panel and taken to the assistant.
+ *
+ * "Continue in Assistant" dropped it: the panel navigated, and the question had
+ * to be retyped over there. It is dispatched once the recorded history has
+ * landed, because `session_history` replaces this conversation's items wholesale
+ * and a turn appended before it arrives is wiped.
+ */
+describe('assistantStore.openSession — carrying a question in', () => {
+  beforeEach(() => {
+    FakeWebSocket.last = null;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
+    __resetAssistantSocketForTests();
+    useAssistantStore.getState().ensureConnected();
+  });
+
+  afterEach(() => {
+    __resetAssistantSocketForTests();
+    useAssistantStore.setState({ activeId: null, itemsBySession: {}, confirmReqs: [] });
+    vi.unstubAllGlobals();
+  });
+
+  /** Reply to open_session the way the companion does. */
+  function history(id: string, transcript: unknown[]): void {
+    FakeWebSocket.last!.onmessage!({
+      data: JSON.stringify({ type: 'session_history', id, transcript }),
+    });
+  }
+
+  it('asks the carried question once the history has landed', () => {
+    useAssistantStore.getState().openSession('conv-1', 'et le KR2.1 ?');
+
+    expect(sentMessages().some((m) => m.type === 'user')).toBe(false);
+
+    history('conv-1', [{ role: 'user', text: 'q' }, { role: 'assistant', text: 'a' }]);
+
+    expect(sentMessages()).toContainEqual({
+      type: 'user',
+      sessionId: 'conv-1',
+      text: 'et le KR2.1 ?',
+    });
+  });
+
+  it('shows the carried question in the transcript it landed in', () => {
+    useAssistantStore.getState().openSession('conv-1', 'et le KR2.1 ?');
+    history('conv-1', [{ role: 'user', text: 'q' }, { role: 'assistant', text: 'a' }]);
+
+    expect(useAssistantStore.getState().itemsBySession['conv-1']).toEqual([
+      { kind: 'user', text: 'q' },
+      { kind: 'assistant', text: 'a' },
+      { kind: 'user', text: 'et le KR2.1 ?' },
+    ]);
+  });
+
+  it('carries nothing when no question was handed over', () => {
+    useAssistantStore.getState().openSession('conv-1');
+    history('conv-1', [{ role: 'user', text: 'q' }]);
+
+    expect(sentMessages().some((m) => m.type === 'user')).toBe(false);
+  });
+
+  it('asks it once, however many times the history is re-sent', () => {
+    useAssistantStore.getState().openSession('conv-1', 'et le KR2.1 ?');
+    history('conv-1', [{ role: 'user', text: 'q' }]);
+    history('conv-1', [{ role: 'user', text: 'q' }]);
+
+    expect(sentMessages().filter((m) => m.type === 'user')).toHaveLength(1);
+  });
+
+  it('does not leak a carried question into the next conversation opened', () => {
+    useAssistantStore.getState().openSession('conv-1', 'et le KR2.1 ?');
+    useAssistantStore.getState().openSession('conv-2');
+
+    history('conv-2', [{ role: 'user', text: 'autre' }]);
+
+    expect(sentMessages().some((m) => m.type === 'user')).toBe(false);
   });
 });
