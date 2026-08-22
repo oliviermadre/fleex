@@ -367,9 +367,10 @@ describe('preprocessMentions — note references', () => {
       .toBe('[@scratchpad:global](#fleex-struck:scratchpad:global)');
   });
 
-  it('still encodes an agent mention', () => {
-    expect(preprocessMentions('@agent:catalyst')).toBe('[@agent:catalyst](#fleex-agent:catalyst)');
-  });
+  // No regression check for @agent: here — mentions.test.ts already pins it twice, and the
+  // href keeps the `agent:` prefix (`#fleex-agent:agent:catalyst`) because the branch strips
+  // only the `@`. Re-asserting it from memory is how a wrong expectation gets written.
+
 });
 ```
 
@@ -502,6 +503,10 @@ git commit -m "feat(web): encode @scratchpad: references in both markdown proces
 - Create: `packages/web/src/components/markdown/NoteRefChip.tsx`
 - Create: `packages/web/src/components/markdown/NoteRefChip.test.tsx`
 - Modify: `packages/web/src/components/scratchpad/MarkdownRenderer.tsx:186-205,255-258`
+- Modify: `packages/web/src/components/tickets/TicketComments.tsx:43,234-237`
+- Modify: `packages/web/src/components/tickets/TicketComments.test.tsx`
+- Modify: `packages/web/src/components/markdown/mentions.ts` (docblock only)
+- Modify: `packages/web/src/components/markdown/mentions.test.ts` (describe label only)
 - Delete: `packages/web/src/components/markdown/wiki.ts`, `wiki.test.ts`, `WikiLinkChip.tsx`, `packages/web/src/components/scratchpad/MarkdownRenderer.wiki-link.test.tsx`
 
 **Interfaces:**
@@ -672,7 +677,75 @@ Replace the wiki branch of the `a` override (lines 255-258) with:
       }
 ```
 
-- [ ] **Step 5: Delete the wiki-link layer**
+- [ ] **Step 5: Render the chip on the comment surface too**
+
+Task 2 taught `preprocessMentions` to encode `@scratchpad:` for comments, but
+`TicketComments.tsx` keeps its **own** `a` override — separate from the generic renderer —
+and it has no branch for the new href. Without this step a note reference in a comment
+renders as a dead in-page anchor, which is worse than the literal text it replaced.
+
+In `packages/web/src/components/tickets/TicketComments.tsx`, extend the existing import on
+line 43:
+
+```ts
+import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { NoteRefChip } from '../markdown/NoteRefChip';
+```
+
+Then add a branch immediately after the ticket-reference branch (currently lines 234-237), so
+the two referential chips sit together:
+
+```tsx
+      if (href?.startsWith(SCRATCHPAD_REF_HREF_PREFIX)) {
+        // Note reference — referential like a ticket chip, navigates to the note.
+        const noteKey = decodeURIComponent(href.slice(SCRATCHPAD_REF_HREF_PREFIX.length));
+        return <NoteRefChip noteKey={noteKey}>{children}</NoteRefChip>;
+      }
+```
+
+Add two cases to the existing `CommentMarkdown — mention chips` block in
+`packages/web/src/components/tickets/TicketComments.test.tsx`, in that file's own idiom —
+its header comment already states the rule this enforces, "never as a plain link to a
+`#fleex-…` href":
+
+```tsx
+  it('renders a @scratchpad: reference as a chip, not a link', () => {
+    renderBody('conventions in @scratchpad:acme/app');
+    const chip = screen.getByText('@scratchpad:acme/app');
+    expect(chip.closest('a')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('labels the global note reference Global', () => {
+    renderBody('see @scratchpad:global');
+    expect(screen.getByText('Global')).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+```
+
+Run: `bun run --filter '@fleex/web' test -- --run TicketComments`
+Expected: PASS, including the two pre-existing chip cases.
+
+- [ ] **Step 6: Correct two stale comments left by Task 2**
+
+Both are comment-accuracy defects — a comment describing behaviour the code no longer has.
+
+In `packages/web/src/components/markdown/mentions.test.ts:6`, the describe label still reads
+`preprocessReferences (ticket-only — used by the generic Markdown renderer)`. It is no longer
+ticket-only. Change the parenthetical to `used by the generic Markdown renderer`.
+
+In `packages/web/src/components/markdown/mentions.ts`, the `Mapping:` table above
+`ALL_MENTIONS` lists every encoded type but omits the new one. Add the row, in the table's
+existing alignment:
+
+```
+ *   @scratchpad:value  →  [@scratchpad:value](#fleex-scratchpad:key)
+```
+
+And in the file header, the bullet describing `preprocessMentions` still says it encodes
+"agent / panel / skill / human / ticket" — add note references to that list.
+
+- [ ] **Step 7: Delete the wiki-link layer**
 
 ```bash
 git rm packages/web/src/components/markdown/wiki.ts \
@@ -689,20 +762,28 @@ grep -rn "WikiLinkChip\|preprocessWikiLinks\|WIKI_LINK_HREF_PREFIX\|decodeWikiTa
 
 Expected: no output.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 8: Run tests to verify they pass**
 
 Run: `bun run --filter '@fleex/web' test -- --run NoteRefChip`
 Expected: PASS, 5 tests.
 
 Run: `bun run --filter '@fleex/web' test`
-Expected: PASS — the whole web suite, confirming no other surface regressed.
+Expected: PASS — the whole suite, every file. The measured baseline before this task is
+76 files (2 failed, 74 passed) and 656 tests (18 failed, 638 passed); every one of those 18
+failures lives in the two files this task deletes, or in the renderer call this task removes.
+They must disappear by deletion and rewiring — **never** by skipping or marking a test.
 
-- [ ] **Step 7: Commit**
+Run: `bun run --filter '@fleex/web' build`
+Expected: succeeds. This is the first green web typecheck since Task 1.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add -A packages/web/src/components/markdown packages/web/src/components/scratchpad
+git add -A packages/web/src/components/markdown packages/web/src/components/scratchpad packages/web/src/components/tickets
 git commit -m "feat(web): render @scratchpad: chips on every markdown surface
 
+Both a overrides get the branch — the generic renderer and the comment one —
+so a reference in a comment is a chip rather than a dead in-page anchor.
 Navigation reads no index, so it no longer depends on the memory engine."
 ```
 
@@ -1015,9 +1096,13 @@ Expected: both succeed.
 
 - [ ] **Step 6: Verify by hand against the running server**
 
+The server's port is assigned per instance — do not assume 3000. Read it from
+`fleex status` (the `server` row's URL), or derive it:
+
 ```bash
+API=$(fleex status | awk '/server/ {print $(NF)}')
 fleex memory engine legacy
-curl -s "localhost:3000/api/scratchpads/links?key=__global__&target=__global__" | head -c 300
+curl -s "$API/api/scratchpads/links?key=__global__&target=__global__" | head -c 300
 ```
 
 Expected: a JSON body whose `related` is `[]` and whose `backlinks` reflects the real notes — proving backlinks survive the legacy engine.
@@ -1682,12 +1767,13 @@ existed. Typing @ now lists what a note can point at."
 With the server running:
 
 ```bash
-curl -s localhost:3000/api/scratchpads | python3 -c "
-import json,sys,urllib.request
+API=$(fleex status | awk '/server/ {print $(NF)}')
+curl -s "$API/api/scratchpads" | API="$API" python3 -c "
+import json,os,sys,urllib.request
+api = os.environ['API']
 for it in json.load(sys.stdin)['items']:
     key = it['key']
-    url = 'http://localhost:3000/api/scratchpad' if key == '__global__' \
-          else 'http://localhost:3000/api/scratchpads/' + key
+    url = api + '/api/scratchpad' if key == '__global__' else api + '/api/scratchpads/' + key
     body = json.load(urllib.request.urlopen(url)).get('content','')
     hits = [l for l in body.split('\n') if '[[' in l]
     if hits:
@@ -1735,7 +1821,10 @@ Expected: all succeed.
 
 - [ ] **Step 5: Verify end to end in the app**
 
-1. `fleex self-update && fleex start`
+1. `bun install && bun run build && fleex restart` — **not** `fleex self-update`, which runs
+   `git pull --rebase origin main` inside this repo (`self-update/index.ts:163`) and would
+   rewrite the history of a branch carrying an open PR. The manual pair is what self-update
+   wraps, minus the pull.
 2. Open a note, type `@` — the menu lists Global and each configured repo.
 3. Pick one; the text becomes `@scratchpad:<key> `.
 4. Switch the editor to preview; the reference is a chip; click it and the note opens.
