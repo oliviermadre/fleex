@@ -7,8 +7,8 @@
  * panel with nothing connecting the two.
  *
  * Encoded as ordinary markdown links with a `#fleex-cite:` href, the same trick
- * mentions and wiki-links use, so the renderer keeps handling everything else and
- * only the `a` override knows about citations.
+ * mentions and note references use, so the renderer keeps handling everything else
+ * and only the `a` override knows about citations.
  */
 
 /** Href prefix a citation is encoded to. */

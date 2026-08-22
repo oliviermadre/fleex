@@ -12,7 +12,7 @@ interface NoteLinks {
  * The graph around one note: what links to it, and what resembles it.
  *
  * `global` is accepted as a spelling of the global note's key, because that is
- * what a `[[global]]` link says and nobody types `__global__` by choice.
+ * what a `@scratchpad:global` reference says and nobody types `__global__` by choice.
  */
 const def: CommandDef = {
   workspaceAware: true,
