@@ -7,6 +7,7 @@ import type { Components } from 'react-markdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { NoteRefChip } from '../markdown/NoteRefChip';
 import { CITATION_HREF_PREFIX, decodeCitation } from '../markdown/citations';
@@ -195,6 +196,9 @@ function MarkdownSection({
   onCitation?: (index: number) => void;
 }) {
   const colorMode = useColorMode();
+  const humanMentionName = useSettingsStore(
+    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
+  );
 
   // Extract images — gallery strip at top, inline placeholders in text
   const { images, cleaned: contentWithoutImages } = useMemo(
@@ -269,7 +273,12 @@ function MarkdownSection({
         );
       }
       // Human mention — there is no person page to open, so it stays a pill.
+      // Only the configured human is pilled: the fallback alternative matches any
+      // `@word`, so pilling unconditionally would decorate package names, email
+      // addresses and git URLs.
       if (href?.startsWith('#fleex-human:')) {
+        const name = href.slice('#fleex-human:'.length);
+        if (name !== humanMentionName) return <>{children}</>;
         return (
           <span className="rounded-sm bg-[var(--theme-bg-overlay)] px-1 py-px text-[var(--theme-text-secondary)]">
             {children}

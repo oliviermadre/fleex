@@ -119,9 +119,10 @@ function parseAgentMentions(body: string): string[] {
 }
 
 // ── Mention pre-processing ──
-// `preprocessMentions` lives in ../markdown/mentions (shared with the generic
-// MarkdownRenderer, which uses the ticket-only variant). It now also encodes
-// @ticket:<id> mentions, handled below in the `a` override via #fleex-ticket:.
+// `preprocessMentions` lives in ../markdown/mentions and is the single
+// pre-processor shared with the generic MarkdownRenderer — both encode every
+// mention type the same way. It also encodes @ticket:<id> mentions, handled
+// below in the `a` override via #fleex-ticket:.
 
 function MentionSpan({ text, mentionId, onRemove, className }: {
   text: string;

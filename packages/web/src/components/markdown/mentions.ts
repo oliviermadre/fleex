@@ -42,11 +42,11 @@ function encodeNoteRef(active: string): string {
 
 // A uuid (fixed 36 chars) OR a numeric displayId. The uuid alternative MUST come
 // first: `\d+` would otherwise match only the leading digits of a uuid. Kept as a
-// single fragment so both regexes stay in sync.
+// single fragment so its struck and active alternatives below stay in sync.
 const TICKET_ID = String.raw`[0-9a-fA-F-]{36}|\d+`;
 
 /**
- * Encode every mention type for the comment renderer.
+ * Encode every mention type, for every Markdown surface.
  *
  * Mapping:
  *   @agent:name        →  [@agent:name](#fleex-agent:name)
@@ -61,11 +61,14 @@ const TICKET_ID = String.raw`[0-9a-fA-F-]{36}|\d+`;
  *
  * The `@ticket:` alternatives sit BEFORE the human fallback so `@ticket:378` is
  * never captured as an `@ticket` human mention with a dangling `:378`.
- * Content inside backtick code spans is left untouched.
+ * Content inside backtick code spans, fenced code blocks, and existing Markdown
+ * links is left untouched.
  */
 const ALL_MENTIONS = new RegExp(
-  // 1 codeSpan
-  '(```[\\s\\S]*?```|`[^`]*`)' +
+  // 1 verbatim: code spans, fences, and markdown links. A mention inside a link's
+  // text cannot be encoded — CommonMark rejects a nested link, and the outer link
+  // is destroyed rather than the inner one ignored.
+  '(```[\\s\\S]*?```|`[^`]*`|\\[[^\\]]*\\]\\([^)]*\\))' +
     // struck variants — 2 agent · 3 panel · 4 skill · 5 workflow · 6 routine · 7 ticket · 8 note · 9 human
     '|~~(@agent:[a-zA-Z0-9_-]+)~~' +
     '|~~(@panel:[a-zA-Z0-9_-]+)~~' +
@@ -92,7 +95,7 @@ export function preprocessMentions(body: string): string {
     ALL_MENTIONS,
     (
       match: string,
-      codeSpan: string | undefined,
+      verbatim: string | undefined,
       struckAgent: string | undefined,
       struckPanel: string | undefined,
       struckSkill: string | undefined,
@@ -110,7 +113,7 @@ export function preprocessMentions(body: string): string {
       activeNote: string | undefined,
       activeHuman: string | undefined,
     ) => {
-      if (codeSpan !== undefined) return codeSpan;
+      if (verbatim !== undefined) return verbatim;
       if (struckAgent !== undefined) return `[${struckAgent}](#fleex-struck:${struckAgent.slice(1)})`;
       if (struckPanel !== undefined) return `[${struckPanel}](#fleex-struck:${struckPanel.slice(1)})`;
       if (struckSkill !== undefined) return `[${struckSkill}](#fleex-struck:${struckSkill.slice(1)})`;
