@@ -7,7 +7,7 @@ import type { Components } from 'react-markdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
-import { preprocessTicketMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { preprocessReferences, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { decodeWikiTarget, preprocessWikiLinks, WIKI_LINK_HREF_PREFIX } from '../markdown/wiki';
 import { CITATION_HREF_PREFIX, decodeCitation } from '../markdown/citations';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
@@ -199,7 +199,7 @@ function MarkdownSection({
   // checkbox line indices computed from `contentWithoutImages` stay valid.
   const processed = useMemo(
     () => {
-      const withMentions = preprocessTicketMentions(contentWithoutImages);
+      const withMentions = preprocessReferences(contentWithoutImages);
       return wikiEnabled ? preprocessWikiLinks(withMentions) : withMentions;
     },
     [contentWithoutImages, wikiEnabled],
