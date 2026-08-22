@@ -116,8 +116,16 @@ describe('parseNoteRefs', () => {
     expect(parseNoteRefs('@scratchpad:my-idea')).toEqual([]);
   });
 
-  it('does not match a longer word starting with the primitive', () => {
-    expect(parseNoteRefs('@scratchpadding/thing is not a note')[0]?.key).toBe('scratchpadding/thing');
+  it('requires the colon, so a longer primitive name does not match', () => {
+    expect(parseNoteRefs('@scratchpads:global names nothing')).toEqual([]);
+    expect(parseNoteRefs('@scratchpadding/thing')).toEqual([]);
+  });
+
+  it('matches a reference glued to a preceding word', () => {
+    // The parser is deliberately context-free: whether an `@` opens a mention is
+    // the editor's business, and the backlink scan must see every reference a
+    // document contains however it was punctuated.
+    expect(parseNoteRefs('(see@scratchpad:global)')[0]?.key).toBe(GLOBAL_NOTE_KEY);
   });
 
   it('finds several references in one document', () => {
@@ -158,7 +166,7 @@ describe('normaliseNoteKey', () => {
 });
 ```
 
-Note on the seventh test: `@scratchpadding/thing` matches because the regex has no word boundary after the primitive — `@scratchpad` followed by `ding/thing` reads as a valid `owner/name`. This is the same permissiveness `@ticket:` has today and the test pins it deliberately rather than pretending otherwise. It is harmless: the resulting chip navigates to a note that does not exist, exactly as §2.2 of the spec allows.
+Two of these cases pin deliberate choices rather than incidental behaviour. The colon is load-bearing: `@scratchpads:global` and `@scratchpadding/thing` both fail to match because the pattern requires the literal `@scratchpad:`, so a near-miss stays plain text instead of becoming a chip to nowhere. And the parser is context-free by design — it does not care what precedes the `@`, because deciding whether an `@` opens a mention belongs to the editor, while the backlink scan must see every reference a stored document contains.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -273,7 +281,7 @@ The build will now fail at every remaining consumer. That is expected and tasks 
 - [ ] **Step 6: Run the new test to verify it passes**
 
 Run: `bun run --filter '@fleex/server' test -- --run note-refs`
-Expected: PASS, 13 tests.
+Expected: PASS, 15 tests.
 
 - [ ] **Step 7: Commit**
 
@@ -354,9 +362,9 @@ describe('preprocessMentions — note references', () => {
       .toBe('see [@scratchpad:acme/app](#fleex-scratchpad:acme%2Fapp)');
   });
 
-  it('encodes a struck note reference as struck', () => {
+  it('encodes a struck note reference the way every other struck mention is encoded', () => {
     expect(preprocessMentions('~~@scratchpad:global~~'))
-      .toBe('[~~@scratchpad:global~~](#fleex-struck:scratchpad:global)');
+      .toBe('[@scratchpad:global](#fleex-struck:scratchpad:global)');
   });
 
   it('still encodes an agent mention', () => {
@@ -457,14 +465,14 @@ In `ALL_MENTIONS`, add a struck alternative after the struck ticket one and an a
 Then add the two parameters to `preprocessMentions`'s callback, in the same positions, and handle them:
 
 ```ts
-      if (struckNote !== undefined) return `[~~${struckNote}~~](#fleex-struck:${struckNote.slice(1)})`;
+      if (struckNote !== undefined) return `[${struckNote}](#fleex-struck:${struckNote.slice(1)})`;
 ```
 
 ```ts
       if (activeNote !== undefined) return encodeNoteRef(activeNote);
 ```
 
-The struck branch keeps `~~` inside the label so remark-gfm still renders the strikethrough, matching how the existing struck branches are consumed. Renumber the comment listing the capture groups.
+The struck branch drops the `~~` markers, exactly like the five sibling struck branches above it — each captures without the tildes and emits `[@thing](#fleex-struck:thing)`. Do not invent a different shape for this one. Renumber the comment listing the capture groups.
 
 - [ ] **Step 6: Rename the remaining callers**
 
@@ -787,8 +795,13 @@ Expected: no output.
 Run: `bun run --filter '@fleex/server' test`
 Expected: PASS.
 
-Run: `bun run --filter '@fleex/server' build && bun run --filter '@fleex/web' build`
-Expected: both succeed.
+Run: `bun run --filter '@fleex/web' build`
+Expected: succeeds — the web side went green at Task 3.
+
+Do **not** run the server build here and do not try to make it pass. Task 1 removed
+`linksTo` from `@fleex/shared` and `scratchpad.routes.ts:3` still imports it; that import is
+Task 5's to swap. The server typecheck is red by design from Task 1 until Task 5 step 5, and
+"fixing" it here would pull Task 5's deliverable into this task.
 
 - [ ] **Step 8: Commit**
 
@@ -815,39 +828,108 @@ backlinks read no index and leave the flag family in the next commit."
 
 - [ ] **Step 1: Write the failing test**
 
+This task's deliverable is the *gating*, so the test must drive the route, not the parser.
+The repo's pattern for this is a Fastify instance with a stub container — see
+`packages/server/tests/unit/execution-log-routine-scope.test.ts`, which registers one route
+module against a hand-rolled container cast to `any` and drives it with `app.inject`.
+
 Create `packages/server/tests/unit/note-backlinks.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { referencesNote, GLOBAL_NOTE_KEY } from '@fleex/shared';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { scratchpadRoutes } from '../../src/infrastructure/http/scratchpad.routes.js';
+import type { AppConfig } from '../../src/application/ports/config.port.js';
 
-/**
- * The route's backlink half is a text scan over the note store, so its behaviour
- * is fully determined by `referencesNote`. These cases pin the scan contract the
- * route relies on; the route's own wiring is covered by the manual check in the
- * final step of this task.
- */
-describe('note backlink scan', () => {
-  it('finds a note that references the global note', () => {
-    expect(referencesNote('conventions: see @scratchpad:global', GLOBAL_NOTE_KEY)).toBe(true);
+// ---------------------------------------------------------------------------
+// Navigating between notes reads no index, so backlinks must survive the legacy
+// engine and a disabled flag — exactly as @ticket: always has. Only the
+// `related` half queries the retrieval index, so only it answers to the flag.
+// These tests pin that split at the payload level.
+// ---------------------------------------------------------------------------
+
+const NOTES: Record<string, string> = {
+  'scratchpad:__global__': 'index of everything, conventions in @scratchpad:acme/app',
+  'scratchpad:acme/app': 'repo notes. see @scratchpad:global for the index',
+  'scratchpad:acme/other': 'unrelated prose about scratchpads in general',
+};
+
+function makeContainer(config: Partial<AppConfig>) {
+  return {
+    config: { get: () => config as AppConfig },
+    kvStore: {
+      get: async (key: string) => NOTES[key] ?? null,
+      listByPrefix: async () => Object.entries(NOTES).map(([key, value]) => ({ key, value })),
+      set: async () => {},
+    },
+    // Reached only when the related half is live; returning a hit lets us prove
+    // the flag is what silences it, not an empty index.
+    retrieveContext: {
+      search: async () => [{ sourceId: 'acme/app', score: 0.9 }],
+    },
+    eventBus: { emit: () => {} },
+    hostFs: { exists: async () => false, readFile: async () => '' },
+    hostHomedir: '/tmp/fleex-test-home',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
+
+async function links(config: Partial<AppConfig>, key: string, target: string) {
+  const app: FastifyInstance = Fastify({ logger: false });
+  await app.register(scratchpadRoutes(makeContainer(config)));
+  await app.ready();
+  const res = await app.inject({
+    method: 'GET',
+    url: `/api/scratchpads/links?key=${encodeURIComponent(key)}&target=${encodeURIComponent(target)}`,
+  });
+  expect(res.statusCode).toBe(200);
+  await app.close();
+  return res.json() as { backlinks: Array<{ key: string; label: string }>; related: Array<{ key: string }> };
+}
+
+const SEMANTIC = { memoryEngine: 'semantic' as const };
+const LEGACY = { memoryEngine: 'legacy' as const };
+
+describe('GET /api/scratchpads/links', () => {
+  it('reports who references the global note', async () => {
+    const body = await links(SEMANTIC, '__global__', '__global__');
+    expect(body.backlinks.map((b) => b.key)).toEqual(['acme/app']);
   });
 
-  it('finds a note that references a repo note however it was cased', () => {
-    expect(referencesNote('see @scratchpad:Acme/App', 'acme/app')).toBe(true);
+  it('labels the global note Global rather than its storage key', async () => {
+    const body = await links(SEMANTIC, 'acme/app', 'acme/app');
+    expect(body.backlinks).toEqual([{ key: '__global__', label: 'Global' }]);
   });
 
-  it('does not match a different note', () => {
-    expect(referencesNote('see @scratchpad:acme/app', 'acme/other')).toBe(false);
+  it('does not list a note as its own backlink', async () => {
+    // acme/app references global, and global references acme/app; asking about
+    // acme/app from acme/app must not return acme/app.
+    const body = await links(SEMANTIC, 'acme/app', 'acme/app');
+    expect(body.backlinks.map((b) => b.key)).not.toContain('acme/app');
   });
 
-  it('does not match prose that merely mentions the word', () => {
-    expect(referencesNote('the global scratchpad is long', GLOBAL_NOTE_KEY)).toBe(false);
+  it('ignores prose that merely talks about scratchpads', async () => {
+    const body = await links(SEMANTIC, '__global__', '__global__');
+    expect(body.backlinks.map((b) => b.key)).not.toContain('acme/other');
   });
 
-  it('finds a reference among several', () => {
-    const body = 'see @scratchpad:acme/app and @scratchpad:global and @ticket:42';
-    expect(referencesNote(body, GLOBAL_NOTE_KEY)).toBe(true);
-    expect(referencesNote(body, 'acme/app')).toBe(true);
+  it('returns backlinks under the legacy engine', async () => {
+    // The whole point of this task: a text scan over a handful of notes needs no
+    // index, so it must not answer to the memory engine.
+    const body = await links(LEGACY, '__global__', '__global__');
+    expect(body.backlinks.map((b) => b.key)).toEqual(['acme/app']);
+    expect(body.related).toEqual([]);
+  });
+
+  it('returns backlinks when relatedNotes is off, and no related', async () => {
+    const body = await links({ ...SEMANTIC, memoryFeatures: { relatedNotes: false } }, '__global__', '__global__');
+    expect(body.backlinks.map((b) => b.key)).toEqual(['acme/app']);
+    expect(body.related).toEqual([]);
+  });
+
+  it('returns related notes when the flag and the engine are both on', async () => {
+    const body = await links(SEMANTIC, '__global__', '__global__');
+    expect(body.related.map((r) => r.key)).toEqual(['acme/app']);
   });
 });
 ```
@@ -855,7 +937,10 @@ describe('note backlink scan', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `bun run --filter '@fleex/server' test -- --run note-backlinks`
-Expected: FAIL — `No test files found` before the file exists; after creating it, it should PASS immediately, since Task 1 already shipped `referencesNote`. That is correct: this file documents the contract the route consumes. If it fails, Task 1 is broken and must be fixed first.
+Expected: FAIL. Two distinct failures are expected before step 3: the module does not
+compile, because `scratchpad.routes.ts` still imports the `linksTo` that Task 1 deleted; and
+once that is fixed, the legacy-engine and flag-off cases return empty backlinks, because the
+early return is still in place. Both are the point of this task.
 
 - [ ] **Step 3: Move the gate in the route**
 
@@ -922,7 +1007,8 @@ Update the component's doc comment: backlinks are always computed; `related` arr
 - [ ] **Step 5: Run tests and typecheck**
 
 Run: `bun run --filter '@fleex/server' test -- --run note-backlinks`
-Expected: PASS, 5 tests.
+Expected: PASS, 7 tests. This is also the first green `@fleex/server` typecheck since
+Task 1 — the `linksTo` import is gone.
 
 Run: `bun run --filter '@fleex/server' build && bun run --filter '@fleex/web' build`
 Expected: both succeed.
@@ -1043,8 +1129,11 @@ describe('filterMentionOptions', () => {
   });
 
   it('puts non-deferred options before deferred ones', () => {
-    const out = filterMentionOptions(OPTIONS, '1');
+    // 'c' matches all three immediate options and every ticket, so the ordering
+    // is what the assertion actually measures.
+    const out = filterMentionOptions(OPTIONS, 'c');
     expect(out[0]?.deferred).not.toBe(true);
+    expect(out.some((o) => o.deferred)).toBe(true);
   });
 
   it('returns nothing when no option matches', () => {
