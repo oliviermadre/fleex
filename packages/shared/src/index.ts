@@ -241,8 +241,8 @@ export { computeInitials } from './types/agent-event.js';
 
 export type { DomainEventLog } from './types/domain-event-log.js';
 
-export type { WikiLink, WikiLinkKind } from './wiki-links.js';
-export { parseWikiLinks, collectWikiLinkTargets, linksTo } from './wiki-links.js';
+export type { NoteRef } from './note-refs.js';
+export { GLOBAL_NOTE_KEY, parseNoteRefs, normaliseNoteKey, collectNoteRefs, referencesNote } from './note-refs.js';
 
 export type {
   HubHelloMessage,
