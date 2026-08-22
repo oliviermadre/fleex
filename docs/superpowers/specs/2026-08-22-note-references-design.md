@@ -27,16 +27,29 @@ Corpus indexé de l'instance de développement, `fleex memory status` au 2026-08
 | skill · persona · epic | 168 | 1 % |
 | **scratchpad** | **7** | **0,04 %** |
 
-`memory search -k scratchpad` ne remonte qu'une note : `__global__`. Aucune note de repo n'existe. Les deliverables, qui pèsent 76 % du corpus, n'ont aucune syntaxe de référence textuelle — ils ne sont reliés qu'implicitement par `execution.deliverableId`.
+Les deliverables, qui pèsent 76 % du corpus, n'ont aucune syntaxe de référence textuelle — ils ne sont reliés qu'implicitement par `execution.deliverableId`.
 
-Ce chiffre commande deux arbitrages : pas d'ancres de section (on ne construit pas un adressage fin pour 7 chunks), et pas d'élargissement aux deliverables dans ce chantier.
+> **Correction apportée en cours d'implémentation.** J'avais d'abord écrit ici qu'« aucune note de repo n'existe », en me fiant à `memory search -k scratchpad`, qui ne remontait que `__global__`. C'était la vue *indexée* et dédoublonnée, pas le magasin. Le magasin en contient six, mesurées via `GET /api/scratchpads` :
+>
+> | Note | Taille |
+> |---|---:|
+> | `odys-travel/odys-proxy` | 6 074 car. |
+> | `oliviermadre/fleex` | 428 car. |
+> | `farfadium/tada-platform` | 298 car. |
+> | `odys-travel/workspace-mexikoo` | 203 car. |
+> | `__global__` | 3 lignes |
+> | `oliviermadre/cto-naseye` | vide |
+>
+> Soit ~7 Ko, ce qui réconcilie exactement les 7 chunks indexés. La part de 0,04 % du corpus reste juste ; c'est l'affirmation « aucune note de repo » qui était fausse.
+
+Ces chiffres commandent deux arbitrages : pas d'ancres de section, et pas d'élargissement aux deliverables dans ce chantier. L'argument des ancres tient toujours, mais sur une base plus étroite qu'annoncée : la seule note assez grosse pour en vouloir, `odys-travel/odys-proxy`, ne porte **qu'un seul vrai titre markdown** — les autres lignes en `#` sont des commentaires shell dans un bloc de code. Il n'y a donc presque rien à ancrer, même là où la taille le justifierait.
 
 ## Décisions actées
 
 | Décision | Choix |
 |---|---|
 | Grammaire | **Une seule** : `@scratchpad:global` et `@scratchpad:<org>/<name>`. La syntaxe `[[…]]` disparaît entièrement. Motif : `@ticket:123` produit déjà une puce dans une note, donc `[[@ticket:123]]` aurait été une troisième orthographe pour la même destination. |
-| Ancres de section | **Non.** Une note fait 7 chunks ; la référencer entièrement ne perd aucune précision réelle. Écarté, pas abandonné. |
+| Ancres de section | **Non.** Le corpus de notes fait ~7 Ko en tout, et la seule note qui dépasse un écran n'a qu'un titre markdown à quoi s'accrocher. Écarté, pas abandonné. |
 | Primitives dans l'éditeur de notes | **`@ticket:` et `@scratchpad:` seulement** — les deux qui naviguent et rendent une puce. `@agent:` / `@panel:` / `@skill:` / `@workflow:` ne déclenchent rien depuis une note et n'y rendent aucune puce ; les proposer insérerait du texte mort. Les commentaires conservent leurs six primitives. |
 | Gating | **La navigation est indépendante du mode mémoire**, comme `@ticket:` l'est déjà. Puce et backlinks exacts : toujours actifs, y compris en moteur `legacy`. Seul « Related », qui interroge l'index vectoriel, reste derrière un drapeau. |
 | Drapeau | **`wikiLinks` → `relatedNotes`.** `MemoryFeatureFlags` se déclare « Features that consume the retrieval index » et `isMemoryFeatureEnabled` refuse tout hors moteur sémantique : la puce et le scan de texte quittent cette famille. PR #274 étant ouverte, le renommage ne coûte ni shim ni migration de config. |
