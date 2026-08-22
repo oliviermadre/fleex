@@ -17,7 +17,7 @@ import { fetchNoteLinks, type NoteLinks } from '../../services/api';
  */
 export function NoteLinksPanel({ scratchpadKey }: { scratchpadKey: string }) {
   const enabled = useSettingsStore((s) => s.settings.memoryEngine === 'semantic'
-    && s.settings.memoryFeatures?.wikiLinks !== false);
+    && s.settings.memoryFeatures?.relatedNotes !== false);
 
   const select = useScratchpadStore((s) => s.setSelectedScratchpadKey);
   const [links, setLinks] = useState<NoteLinks | null>(null);

@@ -57,6 +57,10 @@ export const CLI_DEFAULT_EMBEDDING_MODEL = CLI_EMBEDDING_MODELS[0];
 /**
  * The switchable features that consume the index — the same set the Settings
  * panel lists, in the same order.
+ *
+ * Duplicated from the server's `MEMORY_FEATURE_KEYS` rather than imported: a key
+ * added here and not there is silently accepted by `--enable` and ignored by the
+ * server. Keep the two in step.
  */
 export const MEMORY_FEATURE_KEYS = [
   'paletteSearch',
@@ -69,7 +73,7 @@ export const MEMORY_FEATURE_KEYS = [
   'curation',
   'assistantMemory',
   'automationMining',
-  'wikiLinks',
+  'relatedNotes',
   'executionTraces',
   'cliSessions',
 ] as const;

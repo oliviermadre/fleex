@@ -53,7 +53,7 @@ describe('isMemoryFeatureEnabled', () => {
   it('enumerates every flag in the shape, so a new one cannot go unlisted', () => {
     const keys: Array<keyof MemoryFeatureFlags> = [
       'paletteSearch', 'ask', 'repoScope', 'duplicateDetection', 'humanFeedbackBoost',
-      'personaCoach', 'synthesis', 'curation', 'assistantMemory', 'automationMining', 'wikiLinks',
+      'personaCoach', 'synthesis', 'curation', 'assistantMemory', 'automationMining', 'relatedNotes',
       'executionTraces', 'cliSessions',
     ];
     expect([...MEMORY_FEATURE_KEYS].sort()).toEqual(keys.sort());

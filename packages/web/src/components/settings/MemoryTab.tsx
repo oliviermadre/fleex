@@ -16,7 +16,7 @@ type MemoryEngine = 'legacy' | 'semantic';
 
 type MemoryFeatureKey =
   | 'paletteSearch' | 'ask' | 'repoScope' | 'duplicateDetection' | 'humanFeedbackBoost'
-  | 'personaCoach' | 'synthesis' | 'curation' | 'assistantMemory' | 'automationMining' | 'wikiLinks'
+  | 'personaCoach' | 'synthesis' | 'curation' | 'assistantMemory' | 'automationMining' | 'relatedNotes'
   | 'executionTraces' | 'cliSessions';
 
 /**
@@ -82,9 +82,9 @@ const FEATURES: Array<{ key: MemoryFeatureKey; label: string; description: strin
     description: 'Spots a skill or agent you rerun on a regular cadence and proposes the schedule for it. Purely arithmetic over the execution log — it does not propose what to turn into a skill.',
   },
   {
-    key: 'wikiLinks',
-    label: 'Link and relate notes',
-    description: 'Resolves [[#42]] and [[org/repo]] links in notes, shows what links back, and surfaces notes nobody thought to link.',
+    key: 'relatedNotes',
+    label: 'Relate notes',
+    description: 'Surfaces notes the index finds close to the one you are reading — the connections nobody thought to write a link for. Explicit @scratchpad: references and their backlinks work without this, and without the semantic engine.',
   },
   {
     key: 'cliSessions',

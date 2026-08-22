@@ -74,7 +74,7 @@ export function scratchpadRoutes(container: Container) {
     app.get<{ Querystring: { target?: string; key?: string } }>(
       '/api/scratchpads/links',
       async (request) => {
-        if (!isMemoryFeatureEnabled(container.config.get(), 'wikiLinks')) {
+        if (!isMemoryFeatureEnabled(container.config.get(), 'relatedNotes')) {
           return { backlinks: [], related: [] };
         }
 

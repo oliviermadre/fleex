@@ -87,7 +87,7 @@ export interface AppSettings {
     curation?: boolean;
     assistantMemory?: boolean;
     automationMining?: boolean;
-    wikiLinks?: boolean;
+    relatedNotes?: boolean;
     executionTraces?: boolean;
     cliSessions?: boolean;
   };

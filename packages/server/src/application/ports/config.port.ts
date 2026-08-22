@@ -106,8 +106,8 @@ export interface MemoryFeatureFlags {
   assistantMemory?: boolean;
   /** Detect repeated work and propose turning it into a routine. */
   automationMining?: boolean;
-  /** Resolve `[[...]]` links in notes and surface backlinks and related notes. */
-  wikiLinks?: boolean;
+  /** Surface notes the index finds semantically close to the one being read. */
+  relatedNotes?: boolean;
   /** Distil each finished run's transferable findings into memory. */
   executionTraces?: boolean;
   /**
@@ -130,7 +130,7 @@ export const MEMORY_FEATURE_KEYS = [
   'curation',
   'assistantMemory',
   'automationMining',
-  'wikiLinks',
+  'relatedNotes',
   'executionTraces',
   'cliSessions',
 ] as const satisfies ReadonlyArray<keyof MemoryFeatureFlags>;
