@@ -51,6 +51,29 @@ describe('parseNoteRefs', () => {
   it('finds several references in one document', () => {
     expect(collectNoteRefs('@scratchpad:global and @scratchpad:acme/app')).toEqual([GLOBAL_NOTE_KEY, 'acme/app']);
   });
+
+  it('is stateless across calls', () => {
+    // A module-level global regex would carry `lastIndex` between calls and skip
+    // matches on the second document it saw.
+    const text = 'see @scratchpad:acme/app';
+    expect(collectNoteRefs(text)).toEqual(['acme/app']);
+    expect(collectNoteRefs(text)).toEqual(['acme/app']);
+  });
+
+  it('ignores a reference inside an inline code span', () => {
+    expect(collectNoteRefs('write `@scratchpad:acme/app` verbatim')).toEqual([]);
+  });
+
+  it('ignores a reference inside a fenced code block', () => {
+    expect(collectNoteRefs('```\n@scratchpad:acme/app\n```')).toEqual([]);
+  });
+
+  it('still finds a reference outside a fence in a document that also has one', () => {
+    // Guards against an over-broad exclusion that treats everything after the
+    // opening fence as code, swallowing references that come later in prose.
+    const text = '```\n@scratchpad:acme/app\n```\n\nsee also @scratchpad:acme/other';
+    expect(collectNoteRefs(text)).toEqual(['acme/other']);
+  });
 });
 
 describe('collectNoteRefs', () => {

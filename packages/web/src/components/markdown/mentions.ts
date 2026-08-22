@@ -22,15 +22,10 @@
 /** Href prefix an active ticket mention is encoded to (`#fleex-ticket:<id>`). */
 export const TICKET_MENTION_HREF_PREFIX = '#fleex-ticket:';
 
-import { normaliseNoteKey } from '@fleex/shared';
+import { normaliseNoteKey, NOTE_REF_VALUE } from '@fleex/shared';
 
 /** Href prefix a note reference is encoded to (`#fleex-scratchpad:<key>`). */
 export const SCRATCHPAD_REF_HREF_PREFIX = '#fleex-scratchpad:';
-
-// One or two `/`-joined segments, each ending on a word character so a reference
-// closing a sentence does not swallow the period. Kept as a single fragment so
-// both regexes below stay in sync, exactly like TICKET_ID.
-const NOTE_REF = String.raw`[\w.-]*\w(?:\/[\w.-]*\w)?`;
 
 /**
  * Encode a captured `@scratchpad:<value>` as a Markdown link, or return it
@@ -60,9 +55,9 @@ const REFERENCE_MENTION = new RegExp(
   // 1: code span · 2: struck ticket · 3: struck note · 4: active ticket · 5: active note
   '(```[\\s\\S]*?```|`[^`]*`)' +
     `|(~~@ticket:(?:${TICKET_ID})~~)` +
-    `|(~~@scratchpad:(?:${NOTE_REF})~~)` +
+    `|(~~@scratchpad:(?:${NOTE_REF_VALUE})~~)` +
     `|(@ticket:(?:${TICKET_ID}))` +
-    `|(@scratchpad:(?:${NOTE_REF}))`,
+    `|(@scratchpad:(?:${NOTE_REF_VALUE}))`,
   'g',
 );
 
@@ -109,7 +104,7 @@ const ALL_MENTIONS = new RegExp(
     '|~~(@workflow:[a-zA-Z0-9_-]+)~~' +
     '|~~(@routine:[a-zA-Z0-9_-]+)~~' +
     `|~~(@ticket:(?:${TICKET_ID}))~~` +
-    `|~~(@scratchpad:(?:${NOTE_REF}))~~` +
+    `|~~(@scratchpad:(?:${NOTE_REF_VALUE}))~~` +
     '|~~(@[a-zA-Z0-9_-]+)~~' +
     // active variants — 10 agent · 11 panel · 12 skill · 13 workflow · 14 routine · 15 ticket · 16 note · 17 human
     '|(@agent:[a-zA-Z0-9_-]+)' +
@@ -118,7 +113,7 @@ const ALL_MENTIONS = new RegExp(
     '|(@workflow:[a-zA-Z0-9_-]+)' +
     '|(@routine:[a-zA-Z0-9_-]+)' +
     `|(@ticket:(?:${TICKET_ID}))` +
-    `|(@scratchpad:(?:${NOTE_REF}))` +
+    `|(@scratchpad:(?:${NOTE_REF_VALUE}))` +
     '|(@[a-zA-Z0-9_-]+)',
   'g',
 );

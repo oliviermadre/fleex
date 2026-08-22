@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
@@ -66,5 +66,19 @@ describe('MarkdownRenderer — note references', () => {
     );
     expect(container.textContent).toContain('@scratchpad:my-idea');
     expect(queryByRole('button')).toBeNull();
+  });
+
+  it('does not shift checkbox line indices when a reference precedes them', () => {
+    // Encoding a reference as a Markdown link is inline-only (no line added or
+    // removed) — this pins that invariant against the raw content's line count.
+    const onToggle = vi.fn();
+    const { getByText } = render(
+      <MarkdownRenderer
+        content={'see @scratchpad:acme/app\n- [ ] task'}
+        onToggleCheckbox={onToggle}
+      />,
+    );
+    fireEvent.click(getByText('task'));
+    expect(onToggle).toHaveBeenCalledWith(1);
   });
 });

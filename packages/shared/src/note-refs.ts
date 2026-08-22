@@ -25,17 +25,39 @@ export interface NoteRef {
 }
 
 /**
- * Matches `@scratchpad:<value>` where value is one or two `/`-joined segments.
+ * The value part of a reference: one or two `/`-joined segments, each ending on a
+ * word character. Exported because the web pre-processor embeds it in a larger
+ * regex — two copies of this pattern is exactly the drift `shared` exists to stop.
  *
  * Each segment must END on a word character: without that, the greedy `[\w.-]+`
  * eats the period closing a sentence, producing a key no note ever matches.
  * Classification of the captured value happens in `normaliseNoteKey`, not here —
  * a regex that also decided what is a valid note would be unreadable.
  */
-const NOTE_REF_RE = /@scratchpad:([\w.-]*\w(?:\/[\w.-]*\w)?)/g;
+export const NOTE_REF_VALUE = String.raw`[\w.-]*\w(?:\/[\w.-]*\w)?`;
+
+/** Matches `@scratchpad:<value>`, see `NOTE_REF_VALUE`. */
+const NOTE_REF_RE = new RegExp(`@scratchpad:(${NOTE_REF_VALUE})`, 'g');
 
 /** Valid repo key shape, once lowercased. */
 const REPO_KEY_RE = /^[\w.-]+\/[\w.-]+$/;
+
+/** Code spans and fences, so a reference inside a snippet stays a snippet. */
+const CODE_SPAN_RE = /```[\s\S]*?```|`[^`\n]*`/g;
+
+function codeRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const re = new RegExp(CODE_SPAN_RE.source, 'g');
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    ranges.push([match.index, match.index + match[0].length]);
+  }
+  return ranges;
+}
+
+function isInsideAnyRange(index: number, ranges: Array<[number, number]>): boolean {
+  return ranges.some(([start, end]) => index >= start && index < end);
+}
 
 /**
  * Resolve a captured reference value to a storage key, or `null` if it names no
@@ -54,9 +76,11 @@ export function parseNoteRefs(text: string): NoteRef[] {
   // A fresh regex per call: a shared global regex carries `lastIndex` between
   // calls and would skip matches on the second document it saw.
   const re = new RegExp(NOTE_REF_RE.source, 'g');
+  const codeSpans = codeRanges(text);
 
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
+    if (isInsideAnyRange(match.index, codeSpans)) continue;
     const key = normaliseNoteKey(match[1]!);
     if (key === null) continue;
     refs.push({ raw: match[0], key, start: match.index, end: match.index + match[0].length });

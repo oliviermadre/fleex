@@ -87,7 +87,7 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
     void loadScratchpadList(resolvedRepositories);
   }, [loadScratchpadList, resolvedRepositories]);
 
-  const label = scratchpadKey === '__global__' ? 'Global' : scratchpadKey;
+  const label = scratchpadKey === GLOBAL_NOTE_KEY ? 'Global' : scratchpadKey;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-[var(--theme-bg-primary)]">

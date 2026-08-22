@@ -146,7 +146,8 @@ routines panel for suggestions, the documents library for compilations, and the
 notes view for links.
 
 Write `@scratchpad:global` or `@scratchpad:owner/name` in any note, ticket
-description or comment to link to a note; type `@` in the editor to pick one.
+description or comment to link to a note. The `@` picker for it lives in the
+main note editor.
 Backlinks appear under the note. Both work on either memory engine.
 
 From the terminal:
