@@ -1790,7 +1790,20 @@ for it in json.load(sys.stdin)['items']:
 "
 ```
 
-Expected: no output. If a line appears, rewrite it in the note's editor: `[[#42]]` → `@ticket:42`, `[[global]]` → `@scratchpad:global`, `[[org/repo]]` → `@scratchpad:org/repo`. An unresolvable one like `[[some idea]]` was never a link and needs nothing.
+Expected: at least one hit — this instance's Global note holds
+`[[odys-travel/odys-proxy|coucou]]`, written by the user while testing the old syntax.
+
+Rewrite each hit in the note's editor: `[[#42]]` → `@ticket:42`, `[[global]]` →
+`@scratchpad:global`, `[[org/repo]]` → `@scratchpad:org/repo`. An unresolvable one like
+`[[some idea]]` was never a link and needs nothing.
+
+**The aliased form loses its label.** `[[target|label]]` had no equivalent in the new grammar —
+no `@primitive:value` in Fleex takes an alias — so `[[odys-travel/odys-proxy|coucou]]` becomes
+plain `@scratchpad:odys-travel/odys-proxy` and the word `coucou` is dropped. Here that word is
+a throwaway test string, so nothing of value is lost. Where an alias carries real meaning, the
+migration puts it in the surrounding prose rather than inventing alias syntax for one
+primitive. Record every alias you drop in your report — this is a deliberate trade-off, and
+the person reading the report is the one who chose the grammar.
 
 - [ ] **Step 2: Confirm no code references the old syntax**
 
