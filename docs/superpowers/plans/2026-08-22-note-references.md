@@ -1805,6 +1805,70 @@ migration puts it in the surrounding prose rather than inventing alias syntax fo
 primitive. Record every alias you drop in your report — this is a deliberate trade-off, and
 the person reading the report is the one who chose the grammar.
 
+- [ ] **Step 1b: Close four follow-ups the Task 7 review raised**
+
+All four are small, all four are in code this plan wrote, and all four are the kind of thing
+that never gets done later.
+
+**(a) A test whose name promises more than it checks.** In
+`packages/web/src/components/scratchpad/ScratchpadMainView.mentions.test.tsx`, the case named
+`offers no agent, skill, panel or workflow` asserts only three of the four — the reviewer
+injected a `type: 'panel'` option and all five tests still passed. Add the missing assertion
+beside its siblings:
+
+```tsx
+    expect(queryByText('panel')).toBeNull();
+```
+
+**(b) A prop that outgrew its section header.** `packages/web/src/components/markdown/MarkdownEditor.tsx`
+documents `overlay` under `// ── composer variant only ──`. Task 7 made it a both-variants
+prop. Move the `overlay` declaration and its doc comment out of that section, above the
+`// ── composer variant only ──` header, and reword it:
+
+```ts
+  /**
+   * Absolutely-positioned overlay inside the field (mention autocomplete…).
+   *
+   * Rendered by both variants. It was composer-only until the note editor needed
+   * it, and the panel variant silently dropped it — so a mention menu in a note
+   * could never appear.
+   */
+  overlay?: ReactNode;
+```
+
+**(c) A one-shot guard that can latch too early.** `ScratchpadMainView`'s effect reads
+`if (!scratchpadListLoaded) void loadScratchpadList(resolvedRepositories)`. On a first-ever
+load `resolvedRepositories` is still `[]` — the settings fetch has not landed — so the request
+goes out without the `repos` querystring, the flag latches, and every configured repo without
+a note stays missing from the menu until a reload. Mirror the sidebar, whose effect at
+`ScratchpadsContent.tsx:17-19` is unguarded and therefore self-heals when the repo list
+arrives:
+
+```ts
+  // Unguarded, like the sidebar's own effect: on a first-ever load
+  // `resolvedRepositories` is still empty, and a one-shot guard would latch before
+  // the repo list lands — leaving every repo without a note out of the menu.
+  useEffect(() => {
+    void loadScratchpadList(resolvedRepositories);
+  }, [loadScratchpadList, resolvedRepositories]);
+```
+
+Drop the now-unused `scratchpadListLoaded` store read. Re-run the file's tests: the fixtures
+set `scratchpadListLoaded: true` but also set `scratchpadList`, and the store's
+`loadScratchpadList` will simply refresh it, so they must stay green.
+
+**(d) The cheapest discoverability win left.** The comment composer's placeholder reads
+`Write a comment... (@ to mention)`. The note editor's says nothing, even though this whole
+plan exists because a user could not discover the syntax. In `ScratchpadMainView`, change the
+placeholder to:
+
+```ts
+        placeholder={'# Scratchpad\n\nWrite your notes here... (@ to link a note or ticket)'}
+```
+
+Then run `bun run --filter '@fleex/web' test` and `bun run --filter '@fleex/web' build`; both
+must be green before you continue.
+
 - [ ] **Step 2: Confirm no code references the old syntax**
 
 ```bash
