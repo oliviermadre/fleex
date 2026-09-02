@@ -127,6 +127,11 @@ export class RunWorkflowStepUseCase {
 
       // 5. Handle result
       if (result.output.result === 'needs_review') {
+        // Assigned before persisting artifacts: if a store rejects the content,
+        // `fail()` merges the error into a real output instead of replacing it
+        // with `{ error }`, so the agent's work stays readable in the run graph
+        // rather than being lost on every attempt.
+        stepRun.output = result.output;
         await this.persistStepArtifacts(run, step, stepRun.id, result.output, executionId);
         stepRun.markNeedsReview({ output: result.output, executionId });
         run.block();
@@ -146,6 +151,9 @@ export class RunWorkflowStepUseCase {
       // Artifacts are persisted before any branching: whatever the routing turns
       // out to be, the step *did* produce that deliverable/comment and the human
       // arbitrating an ambiguity needs to read it.
+      // The output is stamped first, for the same reason as above: a rejected
+      // artifact must not cost us the agent's work.
+      stepRun.output = result.output;
       await this.persistStepArtifacts(run, step, stepRun.id, result.output, executionId);
 
       // 6b. Several edges matched — the engine can't arbitrate a config problem.

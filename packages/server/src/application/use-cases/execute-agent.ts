@@ -38,6 +38,7 @@ import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, promptHasImageAttachment, type PromptContentBlock } from '../utils/resolve-file-references.js';
 import { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA, buildStandardOutputSchema } from '../utils/merge-output-schemas.js';
+import { reportDeliverableFailure } from '../utils/report-deliverable-failure.js';
 import { normalizeDeliverableTypes } from '@fleex/shared';
 import type { DeliverableTypeDef } from '@fleex/shared';
 
@@ -1291,9 +1292,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
               occurredAt: new Date(),
             });
           } catch (delivErr) {
-            this.logger.warn('Failed to create deliverable', {
+            await reportDeliverableFailure({
+              logger: this.logger,
+              postComment: this.postComment,
               executionId,
-              error: delivErr instanceof Error ? delivErr.message : String(delivErr),
+              ticketId: mention.ticketId,
+              authorName: persona.displayName || persona.name,
+              title: structured.deliverable.title,
+              contentLength: structured.deliverable.markdown.length,
+              error: delivErr,
+              parentId: mention.commentId,
             });
           }
         }
@@ -1875,9 +1883,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
               occurredAt: new Date(),
             });
           } catch (delivErr) {
-            this.logger.warn('Failed to create deliverable from skill', {
+            await reportDeliverableFailure({
+              logger: this.logger,
+              postComment: this.postComment,
               executionId,
-              error: delivErr instanceof Error ? delivErr.message : String(delivErr),
+              ticketId,
+              authorName: persona.displayName || persona.name,
+              title: structured.deliverable.title,
+              contentLength: structured.deliverable.markdown.length,
+              error: delivErr,
+              parentId: announceComment.id,
             });
           }
         }

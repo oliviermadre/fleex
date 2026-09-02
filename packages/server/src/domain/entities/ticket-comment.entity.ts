@@ -1,4 +1,5 @@
 import type { TicketComment, CommentVisibility } from '@fleex/shared';
+import { sanitizeForStorage } from '@fleex/shared';
 
 const AGENT_MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
 const PANEL_MENTION_PATTERN = /@panel:([a-zA-Z0-9_-]+)/g;
@@ -36,13 +37,14 @@ export class TicketCommentEntity {
     parentId?: string | null;
   }): TicketCommentEntity {
     const now = new Date();
-    const mentions = TicketCommentEntity.extractMentions(params.body);
+    const body = sanitizeForStorage(params.body);
+    const mentions = TicketCommentEntity.extractMentions(body);
     return new TicketCommentEntity(
       params.id,
       params.ticketId,
       params.authorType,
       params.authorName,
-      params.body,
+      body,
       params.visibility ?? 'public',
       params.privateRecipients ?? [],
       mentions,
@@ -119,8 +121,9 @@ export class TicketCommentEntity {
   }
 
   updateBody(body: string): void {
-    this.body = body;
-    this.mentions = TicketCommentEntity.extractMentions(body);
+    const next = sanitizeForStorage(body);
+    this.body = next;
+    this.mentions = TicketCommentEntity.extractMentions(next);
     this.updatedAt = new Date();
   }
 

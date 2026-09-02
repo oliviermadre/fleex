@@ -1,5 +1,5 @@
 import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
-import { DEFAULT_CONVERSATION_MODE, isEffortLevel } from '@fleex/shared';
+import { DEFAULT_CONVERSATION_MODE, isEffortLevel, sanitizeForStorage } from '@fleex/shared';
 
 export class TicketEntity {
   constructor(
@@ -52,8 +52,8 @@ export class TicketEntity {
       params.id,
       params.boardId,
       params.displayId,
-      params.title,
-      params.description ?? '',
+      sanitizeForStorage(params.title),
+      sanitizeForStorage(params.description ?? ''),
       params.status ?? 'backlog',
       params.priority ?? 'none',
       params.type ?? null,
@@ -94,13 +94,21 @@ export class TicketEntity {
       diff['boardId'] = { from: this.boardId, to: changes.boardId };
       this.boardId = changes.boardId;
     }
-    if (changes.title !== undefined && changes.title !== this.title) {
-      diff['title'] = { from: this.title, to: changes.title };
-      this.title = changes.title;
+    // Sanitized before comparison, so an unchanged resubmission produces no
+    // diff — and so the diff itself (which feeds `ticket_activities.changes`,
+    // another jsonb column) can never carry an unstorable character.
+    const nextTitle =
+      changes.title === undefined ? undefined : sanitizeForStorage(changes.title);
+    const nextDescription =
+      changes.description === undefined ? undefined : sanitizeForStorage(changes.description);
+
+    if (nextTitle !== undefined && nextTitle !== this.title) {
+      diff['title'] = { from: this.title, to: nextTitle };
+      this.title = nextTitle;
     }
-    if (changes.description !== undefined && changes.description !== this.description) {
-      diff['description'] = { from: this.description, to: changes.description };
-      this.description = changes.description;
+    if (nextDescription !== undefined && nextDescription !== this.description) {
+      diff['description'] = { from: this.description, to: nextDescription };
+      this.description = nextDescription;
     }
     if (changes.status !== undefined && changes.status !== this.status) {
       diff['status'] = { from: this.status, to: changes.status };
