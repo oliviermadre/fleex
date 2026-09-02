@@ -17,6 +17,12 @@ export { slugify } from './slugify.js';
 export { buildTicketWorkspaceId } from './utils/workspace.js';
 
 export {
+  sanitizeForStorage,
+  sanitizeForStorageDeep,
+  hasUnstorableChars,
+} from './utils/storage-safe-text.js';
+
+export {
   SLACK_MESSAGE_URL_RE,
   parseSlackMessageUrl,
   isSlackMessageUrl,

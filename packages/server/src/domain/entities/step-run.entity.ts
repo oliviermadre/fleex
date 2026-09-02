@@ -1,6 +1,14 @@
 import type { StepRun, StepRunStatus, StepRunResult, StepOutput } from '@fleex/shared';
+import { sanitizeForStorageDeep } from '@fleex/shared';
 
 export class StepRunEntity {
+  /**
+   * Backing field for `output`. Seven mutators write it, plus direct assignment
+   * from the workflow step; routing every one of them through the setter below
+   * is what keeps the storage guarantee in a single place.
+   */
+  #output: StepOutput | null;
+
   constructor(
     public readonly id: string,
     public readonly workflowRunId: string,
@@ -8,13 +16,32 @@ export class StepRunEntity {
     public attempt: number,
     public status: StepRunStatus,
     public result: StepRunResult | null,
-    public output: StepOutput | null,
+    output: StepOutput | null,
     public nextEdgeId: string | null,
     public executionId: string | null,
     public startedAt: Date | null,
     public completedAt: Date | null,
     public readonly createdAt: Date,
-  ) {}
+  ) {
+    // Assigned raw, bypassing the setter: the constructor serves hydration
+    // (`rowToEntity`), where the data came back from a column that could never
+    // have held an unstorable character. Walking the JSON tree on every read
+    // would be pure cost (D3).
+    this.#output = output;
+  }
+
+  get output(): StepOutput | null {
+    return this.#output;
+  }
+
+  /**
+   * Every write to a step's output passes here, so no mutator can leak a
+   * character the `step_runs.output` jsonb column would reject — including
+   * `fail()`, whose payload is an error message that may itself carry one.
+   */
+  set output(value: StepOutput | null) {
+    this.#output = value === null ? null : sanitizeForStorageDeep(value);
+  }
 
   static create(params: {
     id: string;

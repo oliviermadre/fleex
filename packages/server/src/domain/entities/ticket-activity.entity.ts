@@ -1,4 +1,5 @@
 import type { TicketActivity } from '@fleex/shared';
+import { sanitizeForStorageDeep } from '@fleex/shared';
 
 export class TicketActivityEntity {
   constructor(
@@ -25,7 +26,7 @@ export class TicketActivityEntity {
       params.id,
       params.ticketId,
       params.action,
-      params.changes ?? {},
+      sanitizeForStorageDeep(params.changes ?? {}),
       params.actorType ?? 'user',
       params.actorName ?? null,
       params.source ?? 'web',
