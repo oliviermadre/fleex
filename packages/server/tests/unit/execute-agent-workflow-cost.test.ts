@@ -72,7 +72,10 @@ function makeUseCase() {
   const u = useCase as unknown as Record<string, unknown>;
   u['resolveHumanMentionName'] = () => null;
   u['composeSystemPrompt'] = () => 'system prompt';
-  u['composeWorkflowUserPrompt'] = async () => [{ type: 'text', text: 'do the step' }];
+  u['composeWorkflowUserPrompt'] = async () => ({
+    blocks: [{ type: 'text', text: 'do the step' }],
+    manifest: [],
+  });
 
   return { useCase, completeExecution, updateSessionId };
 }

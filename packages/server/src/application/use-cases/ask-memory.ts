@@ -1,0 +1,168 @@
+import type { MemoryAskStage } from '@fleex/shared';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
+import type { MemorySnippet, RetrieveContextUseCase } from './retrieve-context.js';
+
+/** Cheap and fast: this is summarisation over retrieved text, not reasoning. */
+const MODEL = 'claude-haiku-4-5-20251001';
+
+/** How many chunks are handed to the synthesiser. */
+const DEFAULT_LIMIT = 12;
+
+const SYSTEM_PROMPT = `
+You answer questions about a developer's own work, using only the excerpts provided.
+
+Rules:
+- Ground every claim in the excerpts. Never add knowledge from outside them.
+- Cite the sources you used by their bracketed number, e.g. [2].
+- When the excerpts do not answer the question, say so plainly and state what they
+  do cover. Do not speculate to fill the gap.
+- Be concise: a short answer with citations beats a thorough guess.
+- Answer in the language of the question. A workspace is not monolingual, and an
+  answer in the wrong language is one the reader has to translate before using.
+- Never ask the reader a question back. A broad question deserves a broad answer:
+  summarise what the excerpts establish, organised by theme. Asking what they meant
+  spends the call and returns nothing they can act on.
+`.trim();
+
+export interface AskMemoryResult {
+  /** Prose answer with bracketed citations, or null when nothing was retrieved. */
+  answer: string | null;
+  /** The excerpts handed to the model, in citation order. */
+  sources: MemorySnippet[];
+  /** Set when no answer could be produced, so a caller can explain why. */
+  reason?: 'no_results' | 'synthesis_failed' | 'unavailable';
+}
+
+/**
+ * Answers a question from the instance's own memory, with citations.
+ *
+ * Retrieval and synthesis are kept in one use case because the citations only
+ * mean anything if the numbering the model was given is the numbering the caller
+ * reports — splitting them would let the two drift.
+ *
+ * The retrieved excerpts are the *only* permitted evidence. That is what makes
+ * the answer auditable: every claim can be traced to a source the user can open,
+ * and "the memory does not contain this" is a valid, useful answer rather than a
+ * failure to hide behind invention.
+ */
+export class AskMemoryUseCase {
+  constructor(
+    private readonly retrieveContext: RetrieveContextUseCase,
+    private readonly sdkLimiter: SdkConcurrencyLimiter,
+    private readonly logger: LoggerPort,
+  ) {}
+
+  async execute(params: {
+    question: string;
+    limit?: number;
+    repo?: string | null;
+    /** Reports each phase as it starts, for a caller streaming progress. */
+    onStage?: (stage: MemoryAskStage) => void;
+    /** Receives the answer in slices as the model writes it. */
+    onDelta?: (text: string) => void;
+  }): Promise<AskMemoryResult> {
+    const question = params.question.trim();
+    if (!question) return { answer: null, sources: [], reason: 'no_results' };
+
+    // Gated on its own flag, not just the engine: `ask` is the one memory feature
+    // with a per-call LLM cost, so it must be switchable off while retrieval and
+    // search stay on.
+    if (!this.retrieveContext.isFeatureEnabled('ask')) {
+      return { answer: null, sources: [], reason: 'unavailable' };
+    }
+
+    const retrieved = await this.retrieveContext.search({
+      query: question,
+      limit: params.limit ?? DEFAULT_LIMIT,
+      repo: params.repo ?? null,
+      // A question is about a document, not about the two passages of it that
+      // happened to match. Without this, "the quarter's OKRs" got two of the OKR
+      // document's four chunks and the answer covered one of three objectives.
+      expandSources: true,
+      onStage: params.onStage,
+    });
+    if (retrieved.length === 0) return { answer: null, sources: [], reason: 'no_results' };
+
+    params.onStage?.({ stage: 'drafting' });
+    const answer = await this.synthesise(question, retrieved, params.onDelta);
+    if (!answer) return { answer: null, sources: retrieved, reason: 'synthesis_failed' };
+
+    return { answer, sources: retrieved };
+  }
+
+  /**
+   * One non-agentic SDK call: no tools, no turns. The model's whole job is to
+   * read the excerpts and answer, so giving it tools would only let it wander off
+   * the evidence the citations promise.
+   */
+  private async synthesise(
+    question: string,
+    sources: MemorySnippet[],
+    onDelta?: (text: string) => void,
+  ): Promise<string | null> {
+    const release = await this.sdkLimiter.acquire();
+    try {
+      const { query } = await import('@anthropic-ai/claude-agent-sdk');
+      let resultText = '';
+      for await (const message of query({
+        prompt: buildPrompt(question, sources),
+        options: {
+          model: MODEL,
+          systemPrompt: SYSTEM_PROMPT,
+          allowedTools: [],
+          permissionMode: 'dontAsk' as const,
+          maxTurns: 0,
+          // Only requested when someone is listening: the partial messages are
+          // pure overhead for the CLI and MCP callers, which want one string.
+          ...(onDelta ? { includePartialMessages: true } : {}),
+        },
+      })) {
+        if ('result' in message) resultText = (message as { result: string }).result;
+        else if (onDelta) forwardTextDelta(message, onDelta);
+      }
+      return resultText.trim() || null;
+    } catch (error) {
+      this.logger.error('Memory synthesis failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    } finally {
+      release();
+    }
+  }
+}
+
+/**
+ * Pull the text out of an SDK partial message, if that is what it is.
+ *
+ * Narrowed by shape rather than by imported type: the SDK's message union is
+ * thirty-odd members wide and this cares about exactly one field of one of them.
+ * Anything else — tool events, status, retries — is silently not a text delta.
+ */
+export function forwardTextDelta(message: unknown, onDelta: (text: string) => void): void {
+  if (!message || typeof message !== 'object') return;
+  const msg = message as { type?: string; event?: { type?: string; delta?: { type?: string; text?: string } } };
+  if (msg.type !== 'stream_event') return;
+  if (msg.event?.type !== 'content_block_delta') return;
+  if (msg.event.delta?.type !== 'text_delta') return;
+  const text = msg.event.delta.text;
+  if (text) onDelta(text);
+}
+
+/**
+ * Number the excerpts so the model can cite them, and label each with its origin
+ * so a citation resolves to something the user can actually open.
+ */
+export function buildPrompt(question: string, sources: MemorySnippet[]): string {
+  const excerpts = sources
+    .map((s, i) => {
+      const origin = [s.sourceKind.replace(/_/g, ' '), s.repo, s.updatedAt?.slice(0, 10)]
+        .filter(Boolean)
+        .join(' — ');
+      return `[${i + 1}] ${s.title}\n(${origin})\n${s.content}`;
+    })
+    .join('\n\n---\n\n');
+
+  return `Question: ${question}\n\nExcerpts from this workspace:\n\n${excerpts}\n\n---\nAnswer the question using only the excerpts above, citing them by number.`;
+}

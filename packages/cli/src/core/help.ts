@@ -157,18 +157,57 @@ function colourSubcommandTerm(sub: Command): string {
   return usage ? `${name} ${DIM(usage)}` : name;
 }
 
+/**
+ * An SGR escape sequence, matched first and handed back untouched.
+ *
+ * This alternative is the fix, not an optimisation: without it a scan for `[…]`
+ * treats the `[` of `\x1b[2m` as a bracket opener and matches from inside the
+ * escape. Consuming escapes as tokens of their own makes every scan below safe
+ * on text that has already been styled.
+ */
+const ANSI = String.raw`\x1b\[\d+m`;
+
+/** An escape, or `<arg>` / `[arg]` in a usage line. */
+const USAGE_TOKEN = new RegExp(`${ANSI}|<[^>]+>|\\[[^\\]]+\\]`, 'g');
+
+/** The same, plus the flags of an option term. */
+const OPTION_TOKEN = new RegExp(`${ANSI}|--?[\\w-]+|<[^>]+>|\\[[^\\]]+\\]`, 'g');
+
+/** Left exactly as found: already-styled text must survive another pass. */
+const isEscape = (token: string): boolean => token.charCodeAt(0) === 0x1b;
+
+/** Structural placeholders, which say nothing and are kept out of the way. */
+const QUIET_TOKENS = new Set(['[options]', '[command]']);
+
+/**
+ * Colour an option term: "-h, --help <foo>" → cyan flags, magenta placeholder.
+ *
+ * One pass, for the reason given on `colourUsage`. No option declares a
+ * `[optional]` argument today, which is the only thing that kept the old two-pass
+ * version from showing the same corruption.
+ */
 function colourOptionTerm(opt: Option, helper: Help): string {
-  const term = helper.optionTerm(opt);
-  // Split "-h, --help <foo>" → colour flags cyan, argument placeholder magenta.
-  return term.replace(/(--?[\w-]+)/g, (m) => FLAG(m))
-             .replace(/(<[^>]+>|\[[^\]]+\])/g, (m) => ARG(m));
+  return helper.optionTerm(opt).replace(OPTION_TOKEN, (token) => {
+    if (isEscape(token)) return token;
+    return token.startsWith('-') ? FLAG(token) : ARG(token);
+  });
 }
 
-function colourUsage(usage: string): string {
-  return usage
-    .replace(/\[command\]/g, DIM('[command]'))
-    .replace(/\[options\]/g, DIM('[options]'))
-    .replace(/(<[^>]+>|\[[^\]]+\])/g, (m) => ARG(m));
+/**
+ * Colour a usage line: structural placeholders dimmed, real arguments magenta.
+ *
+ * One pass over the raw text, never three over a partly styled one. The previous
+ * version dimmed `[command]` and `[options]` first, then re-scanned the result
+ * for brackets — and in `\x1b[2m[options]` the `[` of the escape sequence is a
+ * perfectly good bracket opener. The match ran from inside the escape, so `[2m`
+ * was coloured as though it were text and the ESC was left stranded ahead of it,
+ * printing a literal `[2m[options][22m` in every help screen.
+ */
+export function colourUsage(usage: string): string {
+  return usage.replace(USAGE_TOKEN, (token) => {
+    if (isEscape(token)) return token;
+    return QUIET_TOKENS.has(token) ? DIM(token) : ARG(token);
+  });
 }
 
 /**

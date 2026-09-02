@@ -6,6 +6,7 @@ import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
 import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
+import type { MemorySnippet, RetrieveContextUseCase } from './retrieve-context.js';
 
 export class GetTicketContextUseCase {
   constructor(
@@ -15,6 +16,12 @@ export class GetTicketContextUseCase {
     private readonly deliverableStore: DeliverableStorePort,
     private readonly getRelevantSummaries?: GetRelevantSummariesUseCase,
     private readonly ticketGroupStore?: TicketGroupStorePort,
+    /**
+     * When wired, retrieval goes through the engine selector instead of calling
+     * `getRelevantSummaries` directly. Optional so the many call sites that build
+     * this use case for non-agentic reads stay unchanged.
+     */
+    private readonly retrieveContext?: RetrieveContextUseCase,
   ) {}
 
   async execute(params: {
@@ -47,9 +54,23 @@ export class GetTicketContextUseCase {
     // Get activity
     const activity = await this.ticketStore.getActivitiesByTicket(params.ticketId, activityLimit);
 
-    // Get relevant summaries from past tickets
+    // Retrieve context from past work: through the engine selector when wired,
+    // otherwise the tag-and-recency ranking directly.
     let relevantSummaries: Awaited<ReturnType<GetRelevantSummariesUseCase['execute']>> = [];
-    if (this.getRelevantSummaries) {
+    let memorySnippets: MemorySnippet[] = [];
+    let memoryEngine: 'legacy' | 'semantic' | undefined;
+    let shadowSnippets: MemorySnippet[] | undefined;
+    if (this.retrieveContext) {
+      try {
+        const retrieved = await this.retrieveContext.execute({ ticketId: params.ticketId });
+        relevantSummaries = retrieved.summaries;
+        memorySnippets = retrieved.snippets;
+        memoryEngine = retrieved.engine;
+        shadowSnippets = retrieved.shadowSnippets;
+      } catch {
+        // Non-critical — proceed without retrieved context
+      }
+    } else if (this.getRelevantSummaries) {
       try {
         relevantSummaries = await this.getRelevantSummaries.execute({ ticketId: params.ticketId });
       } catch {
@@ -90,6 +111,9 @@ export class GetTicketContextUseCase {
       activity: activity.map((a) => a.toDTO()),
       relevantSummaries,
       epics,
+      memorySnippets,
+      memoryEngine,
+      shadowSnippets,
     };
   }
 }

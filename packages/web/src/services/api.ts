@@ -42,6 +42,8 @@ import type {
   UpdateRoutineInput,
   RoutineTrigger,
   TicketDeliverable,
+  MemoryAskStage,
+  MemoryAskEvent,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -501,6 +503,17 @@ export async function deleteDeliverable(ticketId: string, deliverableId: string)
 export interface DeliverableTypesView {
   types: import('@fleex/shared').DeliverableTypeDef[];
   usage: Record<string, number>;
+}
+
+/**
+ * One document by id.
+ *
+ * For surfaces that hold a reference rather than a list — a memory source, say,
+ * where the document may have been produced outside any ticket and so has no
+ * ticket to open instead.
+ */
+export async function fetchDeliverable(id: string): Promise<TicketDeliverable> {
+  return request<TicketDeliverable>(`/deliverables/${encodeURIComponent(id)}`);
 }
 
 export async function fetchDeliverableTypes(): Promise<DeliverableTypesView> {
@@ -1127,4 +1140,298 @@ export async function previewRoutineTrigger(trigger: RoutineTrigger, count = 5):
     method: 'POST', body: JSON.stringify({ trigger, count }),
   });
   return res.nextRuns;
+}
+
+// ── Memory kernel ──
+
+export interface MemoryStatus {
+  engine: 'legacy' | 'semantic';
+  /** False when this storage driver has no memory index implementation. */
+  available: boolean;
+  reason?: string;
+  provider: {
+    id: string;
+    dimensions: number;
+    /** Model loaded and usable now. */
+    ready: boolean;
+    /** Optional embedding package present. False means an install is needed. */
+    installed: boolean;
+    packageName: string;
+    /** Where the arithmetic runs. */
+    runtime: 'transformers' | 'ollama';
+    /** Configured catalogue model id. */
+    model: string;
+  } | null;
+  index: {
+    totalChunks: number;
+    pendingEmbeddings: number;
+    /** Vectors from a superseded encoder, waiting for the sweep to redo them. */
+    staleModelChunks: number;
+    chunksByKind: Record<string, number>;
+    embeddingModels: string[];
+    lastIndexedAt: string | null;
+  } | null;
+  /** Configured injection budget, or null for the engine default. */
+  injectionCharBudget: number | null;
+  /** True while a backfill is walking the corpus. */
+  reindexing: boolean;
+}
+
+/** One retrieved excerpt, as /api/memory/search returns it. */
+export interface MemorySnippetResult {
+  sourceKind: string;
+  sourceId: string;
+  title: string;
+  content: string;
+  score: number;
+  ticketId?: string | null;
+  repo?: string | null;
+  updatedAt?: string | null;
+}
+
+export async function fetchMemorySearch(query: string, limit = 10): Promise<MemorySnippetResult[]> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const res = await request<{ query: string; results: MemorySnippetResult[] }>(`/memory/search?${params.toString()}`);
+  return res.results;
+}
+
+/** How well retrieval finds things on this corpus. */
+export interface MemoryBenchResult {
+  model: string;
+  dimensions: number;
+  report: { cases: number; recallAtK: number; k: number; mrr: number; misses: Array<{ query: string }> };
+  meanQueryMs: number;
+  indexedChunks: number;
+  reason?: 'unavailable' | 'empty_index' | 'no_cases';
+}
+
+export async function benchMemory(cases?: number): Promise<MemoryBenchResult> {
+  const params = cases ? `?cases=${cases}` : '';
+  return request<MemoryBenchResult>(`/memory/bench${params}`);
+}
+
+/** A cited answer drawn from the index. */
+export interface MemoryAnswer {
+  answer: string | null;
+  sources: MemorySnippetResult[];
+  reason?: 'no_results' | 'synthesis_failed' | 'unavailable';
+}
+
+/**
+ * How long to wait for a cited answer.
+ *
+ * Answering means one embedding, one search and one model call, which measures
+ * around fifteen seconds warm. Cold — with the encoder still loading — it is far
+ * longer, and with no ceiling at all the browser eventually gave up on its own
+ * and reported a bare network failure for what was really a slow success. Three
+ * minutes is well past the worst observed, and the abort is reported as what it
+ * is.
+ */
+const ASK_TIMEOUT_MS = 180_000;
+
+function askTimeoutError(): Error {
+  return new Error(
+    `Answering took longer than ${ASK_TIMEOUT_MS / 1000}s. The encoder may still be loading — try again in a moment.`,
+  );
+}
+
+export async function askMemory(question: string, limit?: number): Promise<MemoryAnswer> {
+  try {
+    return await request<MemoryAnswer>('/memory/ask', {
+      method: 'POST',
+      body: JSON.stringify(limit ? { question, limit } : { question }),
+      signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') throw askTimeoutError();
+    throw error;
+  }
+}
+
+/**
+ * Ask, reporting each stage as the server reaches it.
+ *
+ * Answering is several seconds of real work and the panel used to show one frozen
+ * line for all of it. The stream carries one JSON object per stage, then the
+ * result — so `onStage` fires as the work happens and the return value is still
+ * just the answer.
+ *
+ * Falls back to nothing clever if the stream breaks mid-way: an incomplete answer
+ * is not an answer, so a truncated stream is an error like any other.
+ */
+export async function askMemoryStream(
+  question: string,
+  onStage: (stage: MemoryAskStage) => void,
+  onDelta?: (text: string) => void,
+  limit?: number,
+): Promise<MemoryAnswer> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/memory/ask/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(limit ? { question, limit } : { question }),
+      signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') throw askTimeoutError();
+    throw error;
+  }
+
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(body, res.statusText));
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let answer: MemoryAnswer | null = null;
+
+  const handle = (line: string): void => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const payload = JSON.parse(trimmed) as MemoryAskEvent | MemoryAnswer | { error: string };
+    // The status line was sent before the work began, so a failure arrives here
+    // rather than as an HTTP code.
+    if ('error' in payload) throw new Error(payload.error);
+    if ('stage' in payload) onStage(payload);
+    else if ('delta' in payload) onDelta?.(payload.delta);
+    else answer = payload;
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // A chunk boundary can land mid-line; the tail waits for the next read.
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) handle(line);
+  }
+  handle(buffer);
+
+  if (!answer) throw new Error('The answer stream ended before an answer arrived.');
+  return answer;
+}
+
+/** An existing ticket that looks like the one being typed. */
+export interface SimilarTicketCandidate {
+  ticketId: string;
+  title: string;
+  score: number;
+  excerpt: string;
+}
+
+export async function fetchSimilarTickets(title: string, limit = 3): Promise<SimilarTicketCandidate[]> {
+  const params = new URLSearchParams({ title, limit: String(limit) });
+  const res = await request<{ candidates: SimilarTicketCandidate[] }>(`/memory/similar-tickets?${params.toString()}`);
+  return res.candidates;
+}
+
+/** A drafted amendment to an agent's memory, awaiting review. */
+export interface PersonaCoachProposal {
+  personaId: string;
+  personaName: string;
+  currentMemoryMd: string;
+  proposedMemoryMd: string | null;
+  evidence: MemorySnippetResult[];
+  reason?: string;
+}
+
+export async function fetchPersonaCoachProposal(personaId: string): Promise<PersonaCoachProposal> {
+  return request<PersonaCoachProposal>(`/memory/personas/${encodeURIComponent(personaId)}/coach`);
+}
+
+export async function applyPersonaCoachProposal(personaId: string, memoryMd: string): Promise<void> {
+  await request<{ ok: boolean }>(`/memory/personas/${encodeURIComponent(personaId)}/coach/apply`, {
+    method: 'POST', body: JSON.stringify({ memoryMd }),
+  });
+}
+
+/** A compiled reference document about a subject. */
+export interface SynthesisResult {
+  subject: string;
+  document: string | null;
+  sources: MemorySnippetResult[];
+  deliverableId?: string;
+  reason?: string;
+}
+
+export async function synthesiseMemory(
+  subject: string,
+  opts: { limit?: number; repo?: string | null; saveToTicketId?: string | null } = {},
+): Promise<SynthesisResult> {
+  return request<SynthesisResult>('/memory/synthesise', {
+    method: 'POST',
+    body: JSON.stringify({ subject, ...opts }),
+  });
+}
+
+export async function curateMemory(input: {
+  executionId: string;
+  title?: string;
+  content?: string;
+  comment?: string | null;
+  ticketId?: string | null;
+  repo?: string | null;
+}): Promise<{ ok: boolean; noteId?: string; reason?: string }> {
+  return request<{ ok: boolean; noteId?: string; reason?: string }>('/memory/curate', {
+    method: 'POST', body: JSON.stringify(input),
+  });
+}
+
+/** Drop a kept note again. A wrong note outranks ordinary output, so it has to be undoable. */
+export async function forgetCuratedMemory(noteId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/memory/curated/${encodeURIComponent(noteId)}`, {
+    method: 'DELETE',
+  });
+}
+
+/** Work repeated on a cadence regular enough that a routine could fire on it. */
+export interface AutomationCandidate {
+  key: string;
+  kind: 'skill' | 'agent';
+  /** Persona or skill id — the grouping handle, not a routine target. */
+  targetId: string;
+  /** What a routine takes as its target: a persona name, or a skill command name. */
+  target: string;
+  /** Display name, for the row a human reads. */
+  label: string;
+  occurrences: number;
+  firstSeen: string;
+  lastSeen: string;
+  meanGapHours: number;
+  suggestedCron?: string;
+  rationale: string;
+  totalCostUsd: number;
+}
+
+export async function fetchAutomationCandidates(): Promise<AutomationCandidate[]> {
+  const res = await request<{ candidates: AutomationCandidate[] }>('/routines/suggestions');
+  return res.candidates;
+}
+
+/** Notes linking to a target, and notes semantically close to one. */
+export interface NoteLinks {
+  backlinks: Array<{ key: string; label: string }>;
+  related: Array<{ key: string; label: string; score: number }>;
+}
+
+export async function fetchNoteLinks(key: string, target?: string): Promise<NoteLinks> {
+  const params = new URLSearchParams({ key });
+  if (target) params.set('target', target);
+  return request<NoteLinks>(`/scratchpads/links?${params.toString()}`);
+}
+
+export async function fetchMemoryStatus(): Promise<MemoryStatus> {
+  return request<MemoryStatus>('/memory/status');
+}
+
+/**
+ * Kick off a full reindex. Returns as soon as the walk has started — it outlives
+ * any request timeout, so progress is read from `fetchMemoryStatus` instead.
+ */
+export async function reindexMemory(): Promise<void> {
+  await request<{ started: boolean }>('/memory/reindex', { method: 'POST' });
 }

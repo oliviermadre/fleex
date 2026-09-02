@@ -27,6 +27,9 @@
     "pino-pretty": "^13.0.0",
     "ws": "^8.18.0"
   },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^4.2.0"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",

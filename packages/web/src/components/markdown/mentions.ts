@@ -5,52 +5,48 @@
  * that react-markdown processes the rest of the content normally, and each surface
  * intercepts the mention in its `a` component override to render a chip.
  *
- * Two entry points, because the surfaces differ:
- *  - `preprocessMentions`        → comments. Encodes ALL mention types (agent /
- *    panel / skill / human / ticket, plus their struck-through variants) because
- *    the comment renderer knows how to render each as a chip.
- *  - `preprocessTicketMentions`  → the generic renderer (ticket description,
- *    scratchpad, deliverables). Encodes ONLY ticket mentions, leaving every other
- *    `@thing` as literal text so we don't change how those surfaces render today.
+ * One entry point — `preprocessMentions` — used by every surface: comments,
+ * the generic renderer (ticket description, scratchpad, deliverables), and
+ * everything else that renders Markdown. It encodes ALL mention types (agent /
+ * panel / skill / workflow / routine / human / ticket / note, plus their
+ * struck-through variants). What differs between surfaces is not the encoding
+ * but the `a` component override: the comment renderer turns an agent/panel/…
+ * mention into an actionable chip tied to a run record, while every other
+ * surface turns it into a referential chip that only navigates.
  *
  * A ticket reference is `@ticket:<displayId>` (e.g. `@ticket:378`) or, for agents
  * that only know the UUID, `@ticket:<uuid>`. This canonical pattern is the single
- * source of truth for both processors.
+ * source of truth for the processor.
  */
 
 /** Href prefix an active ticket mention is encoded to (`#fleex-ticket:<id>`). */
 export const TICKET_MENTION_HREF_PREFIX = '#fleex-ticket:';
 
+import { normaliseNoteKey, NOTE_REF_VALUE } from '@fleex/shared';
+
+/** Href prefix a note reference is encoded to (`#fleex-scratchpad:<key>`). */
+export const SCRATCHPAD_REF_HREF_PREFIX = '#fleex-scratchpad:';
+
+/**
+ * Encode a captured `@scratchpad:<value>` as a Markdown link, or return it
+ * verbatim when the value names no note.
+ *
+ * The key is URI-encoded: a repo key contains a slash, which would end the link
+ * destination early and produce a broken link.
+ */
+function encodeNoteRef(active: string): string {
+  const key = normaliseNoteKey(active.slice('@scratchpad:'.length));
+  if (key === null) return active;
+  return `[${active}](${SCRATCHPAD_REF_HREF_PREFIX}${encodeURIComponent(key)})`;
+}
+
 // A uuid (fixed 36 chars) OR a numeric displayId. The uuid alternative MUST come
 // first: `\d+` would otherwise match only the leading digits of a uuid. Kept as a
-// single fragment so both regexes stay in sync.
+// single fragment so its struck and active alternatives below stay in sync.
 const TICKET_ID = String.raw`[0-9a-fA-F-]{36}|\d+`;
 
 /**
- * Encode ONLY ticket mentions, preserving code spans and leaving struck ticket
- * mentions verbatim (remark-gfm renders `~~…~~` as strikethrough text — no chip).
- * Every other `@mention` is left untouched.
- */
-const TICKET_ONLY_MENTION = new RegExp(
-  // 1: code span (verbatim) · 2: struck ticket (verbatim) · 3: active ticket
-  '(```[\\s\\S]*?```|`[^`]*`)' +
-    `|(~~@ticket:(?:${TICKET_ID})~~)` +
-    `|(@ticket:(?:${TICKET_ID}))`,
-  'g',
-);
-
-export function preprocessTicketMentions(body: string): string {
-  return body.replace(TICKET_ONLY_MENTION, (match, codeSpan, struck, active) => {
-    if (codeSpan !== undefined) return codeSpan;
-    if (struck !== undefined) return struck;
-    if (active !== undefined)
-      return `[${active}](${TICKET_MENTION_HREF_PREFIX}${active.slice('@ticket:'.length)})`;
-    return match;
-  });
-}
-
-/**
- * Encode every mention type for the comment renderer.
+ * Encode every mention type, for every Markdown surface.
  *
  * Mapping:
  *   @agent:name        →  [@agent:name](#fleex-agent:name)
@@ -59,32 +55,55 @@ export function preprocessTicketMentions(body: string): string {
  *   @workflow:slug     →  [@workflow:slug](#fleex-workflow:slug)
  *   @routine:slug      →  [@routine:slug](#fleex-routine:slug)   (reference only — never a trigger)
  *   @ticket:<id>       →  [@ticket:<id>](#fleex-ticket:<id>)
+ *   @scratchpad:value  →  [@scratchpad:value](#fleex-scratchpad:key)
  *   @username          →  [@username](#fleex-human:username)
  *   ~~@…~~ (any type)  →  [@…](#fleex-struck:…)
  *
  * The `@ticket:` alternatives sit BEFORE the human fallback so `@ticket:378` is
  * never captured as an `@ticket` human mention with a dangling `:378`.
- * Content inside backtick code spans is left untouched.
+ * Content inside backtick code spans, fenced code blocks, and existing Markdown
+ * links is left untouched.
  */
 const ALL_MENTIONS = new RegExp(
-  // 1 codeSpan
-  '(```[\\s\\S]*?```|`[^`]*`)' +
-    // struck variants — 2 agent · 3 panel · 4 skill · 5 workflow · 6 routine · 7 ticket · 8 human
+  // 1 verbatim: code spans, fences, and markdown links. A mention inside a link's
+  // text cannot be encoded — CommonMark rejects a nested link, and the outer link
+  // is destroyed rather than the inner one ignored. The link-text class excludes
+  // `[` only (not newline — CommonMark link text may span a line break):
+  // otherwise an unmatched `[` earlier in the line would pair with the first
+  // `](...)` found anywhere after it and swallow everything between as inert
+  // verbatim text, including a real mention. The destination class excludes
+  // newline too — a URL never contains one, and it bounds a runaway match there.
+  // Known accepted gap: link text containing a nested `[...]`, e.g.
+  // `[see [1] @olivier](url)`, stops being protected and the mention inside it
+  // is encoded again — rare, and CommonMark's own nested-bracket grammar is
+  // itself ambiguous there.
+  '(```[\\s\\S]*?```|`[^`]*`|\\[[^[\\]]*\\]\\([^)\\n]*\\))' +
+    // struck variants — 2 agent · 3 panel · 4 skill · 5 workflow · 6 routine · 7 ticket · 8 note · 9 human
     '|~~(@agent:[a-zA-Z0-9_-]+)~~' +
     '|~~(@panel:[a-zA-Z0-9_-]+)~~' +
     '|~~(@skill:[a-zA-Z0-9_-]+)~~' +
     '|~~(@workflow:[a-zA-Z0-9_-]+)~~' +
     '|~~(@routine:[a-zA-Z0-9_-]+)~~' +
     `|~~(@ticket:(?:${TICKET_ID}))~~` +
+    `|~~(@scratchpad:(?:${NOTE_REF_VALUE}))~~` +
     '|~~(@[a-zA-Z0-9_-]+)~~' +
-    // active variants — 9 agent · 10 panel · 11 skill · 12 workflow · 13 routine · 14 ticket · 15 human
+    // active variants — 10 agent · 11 panel · 12 skill · 13 workflow · 14 routine · 15 ticket · 16 note · 17 human
     '|(@agent:[a-zA-Z0-9_-]+)' +
     '|(@panel:[a-zA-Z0-9_-]+)' +
     '|(@skill:[a-zA-Z0-9_-]+)' +
     '|(@workflow:[a-zA-Z0-9_-]+)' +
     '|(@routine:[a-zA-Z0-9_-]+)' +
     `|(@ticket:(?:${TICKET_ID}))` +
-    '|(@[a-zA-Z0-9_-]+)',
+    `|(@scratchpad:(?:${NOTE_REF_VALUE}))` +
+    // Human fallback: guarded by a left boundary so it only fires where a
+    // mention could legitimately start — the same rule `detectMentionTrigger`
+    // in useMentionAutocomplete.ts already documents ("the `@` must start the
+    // text or follow whitespace"). Without it this alternative fires mid-token
+    // and mangles an email address (`olivier@evaneos.com` → `olivier` plus an
+    // encoded `@evaneos`, losing the `mailto:` autolink) or a git remote
+    // (`git@github.com:...` → an encoded `@github`). The struck variant above
+    // is preceded by `~~` and needs no such guard.
+    '|(?<![A-Za-z0-9_./+-])(@[a-zA-Z0-9_-]+)',
   'g',
 );
 
@@ -93,13 +112,14 @@ export function preprocessMentions(body: string): string {
     ALL_MENTIONS,
     (
       match: string,
-      codeSpan: string | undefined,
+      verbatim: string | undefined,
       struckAgent: string | undefined,
       struckPanel: string | undefined,
       struckSkill: string | undefined,
       struckWorkflow: string | undefined,
       struckRoutine: string | undefined,
       struckTicket: string | undefined,
+      struckNote: string | undefined,
       struckHuman: string | undefined,
       activeAgent: string | undefined,
       activePanel: string | undefined,
@@ -107,15 +127,17 @@ export function preprocessMentions(body: string): string {
       activeWorkflow: string | undefined,
       activeRoutine: string | undefined,
       activeTicket: string | undefined,
+      activeNote: string | undefined,
       activeHuman: string | undefined,
     ) => {
-      if (codeSpan !== undefined) return codeSpan;
+      if (verbatim !== undefined) return verbatim;
       if (struckAgent !== undefined) return `[${struckAgent}](#fleex-struck:${struckAgent.slice(1)})`;
       if (struckPanel !== undefined) return `[${struckPanel}](#fleex-struck:${struckPanel.slice(1)})`;
       if (struckSkill !== undefined) return `[${struckSkill}](#fleex-struck:${struckSkill.slice(1)})`;
       if (struckWorkflow !== undefined) return `[${struckWorkflow}](#fleex-struck:${struckWorkflow.slice(1)})`;
       if (struckRoutine !== undefined) return `[${struckRoutine}](#fleex-struck:${struckRoutine.slice(1)})`;
       if (struckTicket !== undefined) return `[${struckTicket}](#fleex-struck:${struckTicket.slice(1)})`;
+      if (struckNote !== undefined) return `[${struckNote}](#fleex-struck:${struckNote.slice(1)})`;
       if (struckHuman !== undefined) return `[${struckHuman}](#fleex-struck:${struckHuman.slice(1)})`;
       if (activeAgent !== undefined) return `[${activeAgent}](#fleex-agent:${activeAgent.slice(1)})`;
       if (activePanel !== undefined) return `[${activePanel}](#fleex-panel:${activePanel.slice(1)})`;
@@ -124,6 +146,7 @@ export function preprocessMentions(body: string): string {
       if (activeRoutine !== undefined) return `[${activeRoutine}](#fleex-routine:${activeRoutine.slice(1)})`;
       if (activeTicket !== undefined)
         return `[${activeTicket}](${TICKET_MENTION_HREF_PREFIX}${activeTicket.slice('@ticket:'.length)})`;
+      if (activeNote !== undefined) return encodeNoteRef(activeNote);
       if (activeHuman !== undefined) return `[${activeHuman}](#fleex-human:${activeHuman.slice(1)})`;
       return match;
     },

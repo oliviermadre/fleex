@@ -83,6 +83,103 @@ fleex start
 Or set it once per workspace in the `env` block of `~/.fleex/workspaces.json` (see
 [Workspaces](#workspaces) below), which keeps secrets in a single `0600` file.
 
+## Semantic memory (beta)
+
+By default, the context injected into agent prompts is chosen by ranking past
+ticket summaries on shared tags, board and recency. The semantic engine instead
+retrieves by meaning across everything indexed — summaries, comment threads,
+routine outputs, notes, epics, skills and agent memory.
+
+It is opt-in, under **Settings › Memory**, which also shows what the index holds
+and offers a reindex. Switching is reversible and leaves the index in place.
+
+Before switching, **shadow mode** answers what switching would change: runs keep
+using the current ranking, and the semantic engine's choice is recorded alongside
+it — visible in the **Context** tab of any execution, marked as not injected, with
+the items only it found highlighted. That tab also shows the prompt exactly as it
+was sent, in both a browsable outline and raw form.
+
+Embeddings run **locally** — no API, and no network once the model is cached in
+`~/.fleex/models/`. The encoder (`@huggingface/transformers`) is an optional
+dependency, so a normal install provides it and there is nothing to add by hand;
+an install that skipped it — an unsupported platform for the ONNX runtime, or
+`--omit=optional` — still indexes everything and keeps it findable by keyword,
+with retrieval falling back to the default ranking rather than degrading a run's
+context. It is picked up as soon as it appears, without restarting Fleex.
+
+Anything indexed while the model was still downloading is embedded by a background
+sweep once it is ready — nothing has to be re-saved to become searchable.
+
+Three multilingual encoders are selectable in the same panel, from 112 MB at 384
+dimensions to 300 MB at 768, and switching between them is a setting rather than a
+migration: every chunk records the model that embedded it, retrieval only considers
+vectors from the configured one, and the same sweep re-embeds the rest in the
+background. **Measure** reports recall and MRR on your own corpus — the only
+benchmark that answers which encoder to keep. Embeddings can also be delegated to a
+local **Ollama** daemon when one is already running, which is much faster with a GPU
+behind it; never the default, since it is another process to keep up.
+
+Once the engine is on, the index stays current by itself — a listener re-indexes
+whatever a domain event touched — and everything built on top of it is
+individually switchable in the same panel:
+
+| Feature | What it does | Cost |
+|---|---|---|
+| Search in the command palette | `⌘K` text matching no command searches memory instead | local |
+| Answer questions from memory | `fleex memory ask` and the matching assistant tool: a cited answer drawn from past work | one LLM call per question |
+| Prefer the current repository | Ranks notes and decisions from a ticket's repo above equally similar material elsewhere | local |
+| Warn about similar tickets | Surfaces existing tickets while a new title is typed | local |
+| Prioritise your corrections | Discussions where you corrected an agent rank above ordinary ones | local |
+| Coach your agents | Proposes amendments to an agent's memory from the times you corrected it — always for review, never applied on its own | one LLM call per proposal |
+| Compile what you know | Builds a sourced reference document about a subject, with contradictions and open questions called out | one LLM call per document |
+| Save moments from runs | Lift a paragraph out of an execution and keep it as a note, ranked above the output it came from | local |
+| Remember conversations | Distils each assistant conversation as it ends, so preferences survive it | one LLM call per conversation |
+| Suggest routines | Spots a skill or agent you rerun on a regular cadence and proposes the schedule — arithmetic over the execution log, no model. Lives under `fleex routine suggest` | local |
+| Relate notes | Surfaces notes the index finds close to the one you are reading | local |
+| Learn from finished runs | Distils what each run discovered about the codebase — what worked, what failed, which files mattered | one LLM call per run |
+| Remember terminal sessions | Distils `claude` sessions run outside a ticket worktree and files them under their repository | one LLM call per session |
+
+Every one of them is reachable from all three surfaces: the API, the CLI, and the
+UI it belongs to — the palette for search and questions, the ticket form for
+duplicates, the agent editor for coaching, the execution log for curation, the
+routines panel for suggestions, the documents library for compilations, and the
+notes view for links.
+
+Typing `@` in a note, a ticket description or a comment opens a picker over
+eight mention forms — agents, panels, skills, workflows, routines, tickets,
+notes and teammates — for example `@agent:reviewer`, `@scratchpad:owner/name`
+or `@ticket:378`. Outside a comment, mentioning an agent, panel, skill,
+workflow or routine renders a reference chip that opens its configuration
+page; the same mention inside a comment renders as an actionable chip that
+triggers a run, with a cross to cancel it. `@scratchpad:` links to a note
+either way, with backlinks appearing under it, on either memory engine.
+
+From the terminal:
+
+```bash
+fleex memory engine                      # engine, encoder, budget, feature switches
+fleex memory engine semantic             # opt into the beta
+fleex memory engine --shadow             # record what the beta would inject
+fleex memory engine --model EmbeddingGemma-300M
+fleex memory engine --disable ask        # same switches as the Settings panel
+fleex memory search "session expiry"     # ranked excerpts, offline, no LLM
+fleex memory ask "why sessions not JWT?" # cited answer
+fleex memory similar "login times out"   # is this ticket already filed?
+fleex memory compile "the auth module"   # a sourced reference document
+fleex memory coach Builder               # what an agent should have learned
+fleex memory keep <executionId>          # keep a moment of a run
+fleex memory links owner/app             # backlinks, and related notes when relatedNotes is on
+fleex memory status                      # what the index holds
+fleex memory reindex                     # walk the corpus again (safe to re-run)
+fleex memory bench                       # how well retrieval does on this corpus
+```
+
+| Storage driver | Semantic engine |
+|---|---|
+| `sqlite` (default) | Supported. Vectors are stored as float32 blobs and scored in process — at single-user scale a full scan is a few milliseconds. |
+| `supabase` | Supported. Vectors live in a `pgvector` column with an HNSW index and are scored by a `match_memory_chunks` function, so a query never ships the corpus over the network. |
+| `pgsql` | Not yet — no index implementation, so the engine reports itself unavailable. |
+
 ## CLI Reference
 
 | Command | Description |

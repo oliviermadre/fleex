@@ -156,6 +156,7 @@ export type {
   TicketSummaryRef,
   TicketContext,
   TicketContextEpic,
+  MemorySnippetRef,
   TicketReadCursors,
   TicketUnreadCounts,
   AgentActivityState,
@@ -231,11 +232,24 @@ export type {
   ExecutionKind,
   ExecutionStartContext,
   ExecutionStartData,
+  ContextInjectionKind,
+  ContextInjectionItem,
+  ExecutionContextData,
 } from './types/agent-event.js';
 
 export { computeInitials } from './types/agent-event.js';
 
 export type { DomainEventLog } from './types/domain-event-log.js';
+
+export type { NoteRef } from './note-refs.js';
+export {
+  GLOBAL_NOTE_KEY,
+  NOTE_REF_VALUE,
+  parseNoteRefs,
+  normaliseNoteKey,
+  collectNoteRefs,
+  referencesNote,
+} from './note-refs.js';
 
 export type {
   HubHelloMessage,
@@ -464,3 +478,12 @@ export {
   MINUTES_IN_HOUR,
   HOURS_IN_DAY,
 } from './constants.js';
+
+export type { EmbeddingModelSpec } from './types/embedding-model.js';
+export type { MemoryAskStage, MemoryAskDelta, MemoryAskEvent } from './types/memory-ask.js';
+export { MEMORY_ASK_STAGES } from './types/memory-ask.js';
+export {
+  EMBEDDING_MODELS,
+  DEFAULT_EMBEDDING_MODEL,
+  resolveEmbeddingModel,
+} from './types/embedding-model.js';

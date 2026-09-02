@@ -591,6 +591,23 @@ export interface TicketContextEpic {
   readonly groupStatus: string;
 }
 
+/**
+ * A piece of retrieved memory beyond the ticket summaries: a comment thread from
+ * another ticket, a routine's deliverable, a scratchpad. Carries the score that
+ * selected it, so the execution's Context tab can show why it was injected.
+ */
+export interface MemorySnippetRef {
+  readonly sourceKind: string;
+  readonly sourceId: string;
+  /** Breadcrumb, e.g. `Ticket #42: Fix login > Solution`. */
+  readonly title: string;
+  readonly content: string;
+  readonly score: number;
+  readonly ticketId?: string | null;
+  readonly repo?: string | null;
+  readonly updatedAt?: string | null;
+}
+
 export interface TicketContext {
   readonly ticket: Ticket;
   readonly comments: TicketComment[];
@@ -602,6 +619,22 @@ export interface TicketContext {
   readonly activity: TicketActivity[];
   readonly relevantSummaries: TicketSummaryRef[];
   readonly epics: TicketContextEpic[];
+  /**
+   * Retrieved context beyond summaries. Always empty under the legacy engine,
+   * which only ever ranked ticket summaries.
+   */
+  readonly memorySnippets?: MemorySnippetRef[];
+  /** Which engine selected the retrieved context, recorded on the execution. */
+  readonly memoryEngine?: 'legacy' | 'semantic';
+  /**
+   * What the semantic engine *would* have retrieved, computed but not injected.
+   *
+   * Populated only in shadow mode, while the legacy engine is the one feeding the
+   * prompt. It exists so the two can be compared on the same run rather than on
+   * two different ones — the only comparison that actually answers "would the beta
+   * have done better here".
+   */
+  readonly shadowSnippets?: MemorySnippetRef[];
 }
 
 // ── WebSocket ──

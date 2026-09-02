@@ -179,9 +179,11 @@ export class SessionStore {
       .map(toSummary);
   }
 
-  create(opts: { workspace?: string; title?: string; model?: string } = {}): SessionData {
+  create(opts: { workspace?: string; title?: string; model?: string; id?: string } = {}): SessionData {
     const s: SessionData = {
-      id: randomUUID(),
+      // Caller-supplied only where a conversation has to be addressable before it
+      // exists; everything else lets the store mint one.
+      id: opts.id ?? randomUUID(),
       title: opts.title?.trim() || DEFAULT_TITLE,
       ...(opts.workspace ? { workspace: opts.workspace } : {}),
       ...(opts.model ? { model: opts.model } : {}),
@@ -258,6 +260,46 @@ export class SessionStore {
     if (!s) return;
     s.lastMessageAt = new Date().toISOString();
     this.save(id);
+  }
+
+  /**
+   * A conversation that starts with an exchange that already happened.
+   *
+   * Asking memory a question in the command palette is a complete exchange, and
+   * continuing it used to mean retyping the question here and paying for the
+   * retrieval twice. Seeded into `messages` as well as `transcript`, so the model
+   * carries the exchange as real history rather than the reader merely seeing it.
+   */
+  recordExchange(opts: {
+    /**
+     * Conversation to append to, created under this id if it does not exist yet.
+     *
+     * Minted by the caller so a run of questions lands in one thread with no
+     * round-trip and no state held here between them — the same reason the
+     * command palette can record its second question before hearing back about
+     * its first.
+     */
+    id: string;
+    question: string;
+    answer: string;
+    workspace?: string;
+    model?: string;
+  }): SessionData {
+    const existing = this.sessions.get(opts.id);
+    const s = existing ?? this.create({
+      id: opts.id,
+      ...(opts.workspace ? { workspace: opts.workspace } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
+    });
+    s.messages.push({ role: 'user', content: opts.question });
+    s.messages.push({ role: 'assistant', content: opts.answer });
+    s.transcript.push({ role: 'user', text: opts.question });
+    s.transcript.push({ role: 'assistant', text: opts.answer });
+    s.lastMessageAt = new Date().toISOString();
+    this.save(s.id);
+    // Only the first question names the thread; a follow-up joins it.
+    this.maybeTitleFrom(s.id, opts.question);
+    return s;
   }
 
   /** Set the title from the first user message if it's still the default. */

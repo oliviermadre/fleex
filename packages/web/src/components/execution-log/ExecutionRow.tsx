@@ -1,11 +1,12 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ExecutionLogEntry, TicketType, PanelMemberSummary, WorkflowStepSummary } from '@fleex/shared';
-import { cancelExecution } from '../../services/api';
+import { cancelExecution, curateMemory, forgetCuratedMemory } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { cn } from '../../lib/cn';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
 import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
@@ -283,6 +284,24 @@ function formatTokens(n: number): string {
 
 // ── CTA icons ──
 
+/** Bookmark outline — "keep this". */
+function KeepIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+    </svg>
+  );
+}
+
+/** Bookmark filled — already kept. */
+function KeptIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+    </svg>
+  );
+}
+
 function CommentIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
@@ -399,6 +418,46 @@ export const ExecutionRow = memo(function ExecutionRow({
   live: boolean;
 }) {
   const [openExecutionId, setOpenExecutionId] = useState<string | null>(null);
+
+  // Keep-in-memory state. `empty` is its own outcome, not a failure: a run that
+  // produced no text has nothing to lift out, and saying so beats a silent no-op.
+  const curationEnabled = useSettingsStore((s) => s.settings.memoryEngine === 'semantic'
+    && s.settings.memoryFeatures?.curation !== false);
+  const [keepState, setKeepState] = useState<'idle' | 'saving' | 'kept' | 'empty'>('idle');
+  // Held so the same button can undo: a kept note is ranked above ordinary run
+  // output, so keeping the wrong one degrades every later retrieval until it goes.
+  const [keptNoteId, setKeptNoteId] = useState<string | null>(null);
+
+  const handleKeep = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (keepState === 'saving') return;
+
+    if (keepState === 'kept') {
+      if (!keptNoteId) return;
+      setKeepState('saving');
+      try {
+        await forgetCuratedMemory(keptNoteId);
+        setKeptNoteId(null);
+        setKeepState('idle');
+      } catch {
+        setKeepState('kept');
+      }
+      return;
+    }
+
+    setKeepState('saving');
+    try {
+      const result = await curateMemory({
+        executionId: entry.id,
+        title: `${entry.executorName} on ${entry.ticketTitle ?? entry.routineName ?? 'a run'}`,
+        ticketId: entry.ticketId ?? null,
+      });
+      setKeptNoteId(result.noteId ?? null);
+      setKeepState(result.ok ? 'kept' : 'empty');
+    } catch {
+      setKeepState('idle');
+    }
+  }, [entry, keepState, keptNoteId]);
   const [cancelState, setCancelState] = useState<'idle' | 'confirming' | 'cancelling'>('idle');
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectTicket = useTicketStore((s) => s.selectTicket);
@@ -683,6 +742,24 @@ export const ExecutionRow = memo(function ExecutionRow({
               title="View execution log"
             >
               <ExecutionLogIcon />
+            </button>
+          )}
+
+          {/* Keep in memory. Only for atomic runs: a workflow aggregate has no
+              single set of words to lift out. */}
+          {!isWorkflow && curationEnabled && (
+            <button
+              onClick={handleKeep}
+              disabled={keepState === 'saving'}
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px disabled:cursor-wait"
+              title={
+                keepState === 'kept'
+                  ? (keptNoteId ? 'Kept in memory \u2014 click to remove' : 'Kept in memory')
+                  : keepState === 'empty' ? 'This run produced no text to keep'
+                  : 'Keep this run\u2019s findings in memory'
+              }
+            >
+              {keepState === 'kept' ? <KeptIcon /> : <KeepIcon />}
             </button>
           )}
         </div>

@@ -33,6 +33,7 @@ import {
   findWorkspaceServerPort,
   instanceBranch,
 } from './instance-discovery.ts';
+import { scheduleRemember, cancelRemember } from './remember.ts';
 
 interface PageRef { url?: string; title?: string; content: string }
 interface WsData { id: string }
@@ -252,6 +253,10 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
     store.setStatus(sessionId, 'idle');
     store.save(sessionId);
     broadcastSessions();
+    // Arm the idle timer: when this conversation goes quiet, offer it to the
+    // workspace's memory. Resets on each turn, so an active conversation is
+    // distilled once at the end rather than after every exchange.
+    scheduleRemember(session, (msg, meta) => console.log(msg, meta ?? ''));
   }
 }
 
@@ -316,6 +321,33 @@ Bun.serve<WsData>({
           send(ws, { type: 'session_created', id: s.id });
           break;
         }
+        /**
+         * File an exchange that happened somewhere else into a conversation.
+         *
+         * Every question the command palette answers from memory is kept here, so
+         * asking something is never a thing you lose. Repeated calls with the same
+         * id append, which is what keeps a run of follow-ups as one thread rather
+         * than a list of one-turn conversations.
+         *
+         * Deliberately does not reply `session_created`: that activates and opens
+         * the conversation, and recording must not yank the assistant view around
+         * every time someone uses the palette.
+         */
+        case 'record_exchange': {
+          const id = asString(msg.id);
+          const question = asString(msg.question);
+          const answer = asString(msg.answer);
+          if (!id || !question || !answer) break;
+          store.recordExchange({
+            id,
+            question,
+            answer,
+            ...(asString(msg.workspace) ? { workspace: asString(msg.workspace)! } : {}),
+            ...(asString(msg.model) ? { model: asString(msg.model)! } : {}),
+          });
+          broadcastSessions();
+          break;
+        }
         case 'open_session': {
           const id = asString(msg.id);
           const s = id ? store.get(id) : undefined;
@@ -334,6 +366,7 @@ Bun.serve<WsData>({
         case 'delete_session': {
           const id = asString(msg.id);
           if (id) {
+            cancelRemember(id);
             store.delete(id);
             pendingPages.delete(id);
             broadcastSessions();

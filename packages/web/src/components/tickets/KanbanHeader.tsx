@@ -6,6 +6,7 @@ import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { BoardSelectorDropdown } from './BoardSelectorDropdown';
 import { SearchToggle } from './SearchToggle';
 import { FilterDropdown } from './FilterDropdown';
+import { SimilarTicketsHint } from './SimilarTicketsHint';
 import { cn } from '../../lib/cn';
 
 interface KanbanHeaderProps {
@@ -167,6 +168,11 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }
               )}
               {quickError && (
                 <span className="text-[10px] text-[var(--theme-danger)]">{quickError}</span>
+              )}
+              {/* A URL is an import, not a new subject — no point looking for
+                  something similar to it. */}
+              {!GITHUB_ISSUE_RE.test(quickTitle) && !isSlackMessageUrl(quickTitle) && (
+                <SimilarTicketsHint title={quickTitle} />
               )}
             </div>
           ) : (

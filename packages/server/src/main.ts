@@ -13,6 +13,7 @@ import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
 import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { versionRoutes } from './infrastructure/http/version.routes.js';
+import { memoryRoutes } from './infrastructure/http/memory.routes.js';
 import { configRoutes } from './infrastructure/http/config.routes.js';
 import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
@@ -48,11 +49,20 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { routineRoutes } from './infrastructure/http/routines.routes.js';
+import { isMemoryFeatureEnabled } from './application/ports/config.port.js';
 import { ROUTINE_TICK_INTERVAL_MS } from './domain/services/routine-scheduler.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
 import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
 import { ModelService } from './application/services/model.service.js';
+
+/**
+ * How often to look for chunks left unembedded.
+ *
+ * A minute: the wait it covers is a model download or a package install, so
+ * checking more often would only spend CPU discovering the same "not yet".
+ */
+const MEMORY_SWEEP_INTERVAL_MS = 60_000;
 
 async function main() {
   const container = await createContainer();
@@ -97,6 +107,7 @@ async function main() {
   await app.register(repositoryRoutes(container));
   await app.register(healthRoutes(container));
   await app.register(versionRoutes());
+  await app.register(memoryRoutes(container));
   await app.register(configRoutes(container));
   await app.register(deliverableTypesRoutes(container));
   await app.register(execRoutes(container));
@@ -177,6 +188,12 @@ async function main() {
       authorNameResolver: () => 'routine-trigger',
       schedulerRole: container.schedulerRole,
       instanceId: container.instanceId,
+      agentEventStore: container.agentEventStore,
+      personaStore: container.personaStore,
+      skillStore: container.skillStore,
+      // Suggestions ship with the memory beta, so they answer to its switch —
+      // even though the mining itself reads the execution log, not the index.
+      suggestionsEnabled: () => isMemoryFeatureEnabled(container.config.get(), 'automationMining'),
     }));
   } else {
     container.logger.warn('routineStore or use cases not available — /api/routines routes skipped');
@@ -262,6 +279,28 @@ async function main() {
         { reason: container.schedulerRole.reason, detail: container.schedulerRole.detail },
       );
     }
+  }
+
+  // Catch up on chunks that were indexed while the embedding model was still
+  // downloading. The sweeper reads the engine setting per pass, so starting it
+  // unconditionally costs nothing on the default engine.
+  container.memorySweeper?.start(MEMORY_SWEEP_INTERVAL_MS);
+
+  // Load the encoder in the background rather than on the first question.
+  //
+  // `init()` is deliberately lazy so boot never waits on a model download, but
+  // lazy meant the first person to ask something paid the load on top of their own
+  // latency. A warm answer takes about fifteen seconds; a cold one took long
+  // enough that the browser gave up, and nothing logged a thing because the
+  // server was still working. Fired and forgotten, so boot is as fast as before
+  // and a failure here changes nothing — the model still loads on first use.
+  if (container.config.get().memoryEngine === 'semantic' && container.embeddingProvider) {
+    void container.embeddingProvider.init().then(
+      () => container.logger.info('Encoder ready'),
+      (error: unknown) => container.logger.warn('Encoder warm-up failed; it will load on first use', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 
   // Wire repo-exists check so refresh summaries include isClonedLocally

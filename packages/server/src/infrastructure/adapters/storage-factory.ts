@@ -18,6 +18,7 @@ import type { WorkflowTemplateStorePort } from '../../application/ports/workflow
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
 import type { RoutineStorePort } from '../../application/ports/routine-store.port.js';
+import type { MemoryStorePort } from '../../application/ports/memory-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
@@ -44,6 +45,12 @@ export interface StorageStores {
   workflowRunStore: WorkflowRunStorePort | null;
   stepRunStore: StepRunStorePort | null;
   routineStore: RoutineStorePort | null;
+  /**
+   * Retrieval index for the semantic memory engine. Null on drivers with no
+   * implementation yet — the engine reports itself unavailable and retrieval
+   * stays on the legacy ranking rather than failing.
+   */
+  memoryStore: MemoryStorePort | null;
 }
 
 export function resolveStorageDriver(): StorageDriver {
@@ -117,6 +124,7 @@ async function createSqliteStores(deps: {
   const { SqliteWorkflowRunStoreAdapter } = await import('./sqlite/sqlite-workflow-run-store.adapter.js');
   const { SqliteStepRunStoreAdapter } = await import('./sqlite/sqlite-step-run-store.adapter.js');
   const { SqliteRoutineStoreAdapter } = await import('./sqlite/sqlite-routine-store.adapter.js');
+  const { SqliteMemoryStoreAdapter } = await import('./sqlite/sqlite-memory-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const connection = new SqliteConnection(dbPath);
@@ -154,6 +162,7 @@ async function createSqliteStores(deps: {
     workflowRunStore: new SqliteWorkflowRunStoreAdapter(connection),
     stepRunStore: new SqliteStepRunStoreAdapter(connection),
     routineStore: new SqliteRoutineStoreAdapter(connection),
+    memoryStore: new SqliteMemoryStoreAdapter(connection),
   };
 }
 
@@ -223,6 +232,8 @@ async function createPgsqlStores(deps: {
     workflowRunStore: null,
     stepRunStore: null,
     routineStore: null,
+    // pgsql has no memory store yet; the semantic engine stays unavailable.
+    memoryStore: null,
   };
 }
 
@@ -260,6 +271,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseWorkflowRunStore } = await import('./supabase/supabase-workflow-run-store.adapter.js');
   const { SupabaseStepRunStore } = await import('./supabase/supabase-step-run-store.adapter.js');
   const { SupabaseRoutineStore } = await import('./supabase/supabase-routine-store.adapter.js');
+  const { SupabaseMemoryStoreAdapter } = await import('./supabase/supabase-memory-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const connection = new SupabaseConnection(url, key, dbUrl, deps.logger);
@@ -274,6 +286,10 @@ async function createSupabaseStores(deps: {
 
   const agentEventStore = new SupabaseAgentEventStore(connection);
   await agentEventStore.init();
+
+  // The schema's vector width depends on the configured encoder, which is not
+  // known here — the container calls `prepare()` once it has resolved it.
+  const memoryStore = new SupabaseMemoryStoreAdapter(connection, deps.logger);
 
   deps.logger.info('Supabase storage initialized', { url });
 
@@ -297,5 +313,6 @@ async function createSupabaseStores(deps: {
     workflowRunStore: new SupabaseWorkflowRunStore(connection),
     stepRunStore: new SupabaseStepRunStore(connection),
     routineStore: new SupabaseRoutineStore(connection),
+    memoryStore,
   };
 }

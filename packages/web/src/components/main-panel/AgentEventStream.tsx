@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import type { AgentEvent } from '@fleex/shared';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
+import { ExecutionContextView } from './ExecutionContextView';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses } from '../../lib/tints';
 
@@ -18,6 +19,7 @@ export function AgentEventStream({ executionId }: Props) {
   const unsubscribeExecution = useAgentEventStore((s) => s.unsubscribeExecution);
   const loadStatus = useAgentEventStore((s) => s.eventsLoadStatus[executionId]);
   const { containerRef, maybeStick } = useStickToBottom<HTMLDivElement>();
+  const [tab, setTab] = useState<'stream' | 'context'>('stream');
 
   useEffect(() => {
     loadEvents(executionId);
@@ -33,24 +35,53 @@ export function AgentEventStream({ executionId }: Props) {
     maybeStick();
   }, [events.length, maybeStick]);
 
+  const hasContext = events.some((e) => e.eventType === 'execution_context');
+
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 font-mono text-sm bg-[var(--theme-bg-primary)]"
-    >
-      {events.length === 0 ? (
-        <div className="flex items-center justify-center h-full text-[var(--theme-text-faint)]">
-          {loadStatus === 'loading' || !loadStatus
-            ? 'Loading events...'
-            : loadStatus === 'error'
-              ? 'Failed to load event history — execution may have run on another gateway'
-              : 'Event history unavailable — may have been pruned or executed on another gateway'}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {events.map((event, i) => (
-            <EventBlock key={event.id ?? i} event={event} />
+    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      {/* Only offer the tabs once there is a context to switch to, so runs that
+          predate context capture keep their single-pane layout. */}
+      {hasContext && (
+        <div className="flex items-center gap-1 px-3 pt-2 flex-shrink-0 bg-[var(--theme-bg-primary)]">
+          {([['stream', 'Stream'], ['context', 'Context']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={cn(
+                'px-2.5 py-1 text-[11px] font-semibold rounded-t cursor-pointer border-none transition-colors',
+                tab === key
+                  ? 'bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
+                  : 'bg-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]',
+              )}
+            >
+              {label}
+            </button>
           ))}
+        </div>
+      )}
+
+      {tab === 'context' && hasContext ? (
+        <ExecutionContextView events={events} />
+      ) : (
+        <div
+          ref={containerRef}
+          className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 font-mono text-sm bg-[var(--theme-bg-primary)]"
+        >
+          {events.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-[var(--theme-text-faint)]">
+              {loadStatus === 'loading' || !loadStatus
+                ? 'Loading events...'
+                : loadStatus === 'error'
+                  ? 'Failed to load event history — execution may have run on another gateway'
+                  : 'Event history unavailable — may have been pruned or executed on another gateway'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {events.map((event, i) => (
+                <EventBlock key={event.id ?? i} event={event} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -251,6 +282,10 @@ function EventBlock({ event }: { event: AgentEvent }) {
   const data = event.data as Record<string, unknown> | null;
 
   switch (event.eventType) {
+    // Rendered by the Context tab, which is the whole point of the event; in the
+    // turn-by-turn stream it would be a wall of prompt text before turn one.
+    case 'execution_context':
+      return null;
     case 'execution_start': {
       const personaName = data?.['personaName'] as string ?? 'Agent';
       const model = data?.['model'] as string ?? '';

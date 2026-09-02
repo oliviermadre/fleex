@@ -32,6 +32,8 @@ import migration030 from './migrations/029_deliverable_search_view.js';
 import migration031 from './migrations/030_deliverable_emitter.js';
 import migration032 from './migrations/031_deliverable_origin_kind.js';
 import migration033 from './migrations/032_routine_scheduler_claims.js';
+import migration034 from './migrations/033_memory_chunks.js';
+import migration035 from './migrations/034_memory_pgvector_search.js';
 
 /**
  * Ordered array of all migrations.
@@ -71,4 +73,6 @@ export const allMigrations: Migration[] = [
   migration031,
   migration032,
   migration033,
+  migration034,
+  migration035,
 ];

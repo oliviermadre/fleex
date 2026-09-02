@@ -6,6 +6,7 @@ import type { LoggerPort } from '../ports/logger.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { IngestCliSessionUseCase } from './ingest-cli-session.js';
 import type { GenerateCliSessionSummaryUseCase } from './generate-cli-session-summary.js';
+import type { RememberCliSessionUseCase } from './remember-cli-session.js';
 
 /** Result returned to `POST /api/hook`. Always 200, never bubbles errors back to Claude. */
 export interface ProcessHookEventResult {
@@ -37,6 +38,8 @@ export class ProcessHookEventUseCase {
     private readonly ingestCliSession?: IngestCliSessionUseCase,
     /** Optional — when present, ingested CLI sessions also get a decision-trail summary deliverable. */
     private readonly generateCliSessionSummary?: GenerateCliSessionSummaryUseCase,
+    /** Distils sessions that belonged to no ticket. Absent when memory is unavailable. */
+    private readonly rememberCliSession?: RememberCliSessionUseCase,
   ) {}
 
   async execute(event: HookEventPayload): Promise<ProcessHookEventResult> {
@@ -62,6 +65,18 @@ export class ProcessHookEventUseCase {
       const transcriptPath = typeof p['transcript_path'] === 'string' ? (p['transcript_path'] as string) : '';
       try {
         const res = await this.ingestCliSession.execute({ sessionId, transcriptPath, cwd: event.cwd });
+        // No ticket to attach it to — but the session still happened, in a
+        // repository, and what it established is worth keeping. Gated on its own
+        // switch and isolated: this is the one branch that spends a model call.
+        if (!res.ingested && res.reason === 'not-fleex' && this.rememberCliSession) {
+          try {
+            await this.rememberCliSession.execute({ sessionId, transcriptPath, cwd: event.cwd });
+          } catch (err) {
+            this.logger.warn('Terminal session distillation failed (ignored)', {
+              error: err instanceof Error ? err.message : String(err), sessionId,
+            });
+          }
+        }
         if (res.ingested) {
           this.logger.info('CLI session cost ingested', { sessionId, ticketId: res.ticketId, costUsd: res.costUsd });
           // The session is a confirmed CLI session owned by this workspace's

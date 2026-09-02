@@ -16,7 +16,10 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * routines, workflow runs) through the API and has no effect on the local
  * environment.** `routine` and `workflow` are in for headless parity: a run
  * paused on a human gate or a question must be resolvable from an MCP host,
- * and routine runs have no ticket to reach it through. Infra commands
+ * and routine runs have no ticket to reach it through. `memory` is in because
+ * "what do we already know about this?" is the question an assistant most needs
+ * answered before acting, and the answer lives in this workspace's own history.
+ * Infra commands
  * (`start`, `stop`, `logs`, `doctor`, `self-update`, `token`, shell helpers)
  * drive processes on the host machine and stay off the surface on purpose.
  *
@@ -25,7 +28,7 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * `tests/parity.bun.test.ts`). Narrowing the perimeter is a deliberate product
  * decision; silently dropping an option is a bug.
  */
-export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow'] as const;
+export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow', 'memory'] as const;
 
 /**
  * Leaf command names that mutate state. The host gates these (e.g. asks the
@@ -36,13 +39,44 @@ const MUTATING_LEAVES = new Set([
   'add', 'link', 'unlink', 'import', 'comment', 'edit', 'archive', 'unarchive',
   // routine / workflow-run verbs — they all write through the API
   'run', 'enable', 'disable', 'resolve', 'retry', 'route', 'cancel',
+  // rebuilds the memory index: heavy, and worth confirming before it starts
+  'reindex',
+  // memory writes: `keep` indexes a note, `coach --apply` rewrites an agent's
+  // memory document — which is prepended to every future run of that agent
+  'keep', 'coach', 'forget',
+  // changes which engine feeds every future prompt, and which features are on
+  'engine',
 ]);
 
 /** Options we never expose as tool params (handled specially or noise). */
 const HIDDEN_OPTION_LONGS = new Set(['--help', '--workspace', '--json']);
 
-function camelCase(name: string): string {
-  return name.replace(/[-_\s]+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase());
+/**
+ * Characters the API accepts in a tool's input-schema property key.
+ *
+ * Exported so a test can assert the whole generated surface against it: one
+ * invalid key makes the API reject the *entire* request, so a single odd argument
+ * name takes down every tool at once — which is exactly what `<id|slug>` did to
+ * the assistant.
+ */
+export const PROPERTY_KEY_PATTERN = /^[a-zA-Z0-9_.-]{1,64}$/;
+
+/**
+ * Turn a Commander argument or option name into a valid property key.
+ *
+ * A CLI name is help text first: `<id|slug>` reads well in `--help` and says more
+ * than `<idOrSlug>` would. So the pipe is folded into a camel hump here rather
+ * than being banned there — the same treatment `-` and `_` already get.
+ */
+function toPropertyKey(name: string): string {
+  return name
+    // Long-standing behaviour: separators introduce a hump.
+    .replace(/[-_\s]+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase())
+    // And so does anything the API forbids, so `id|slug` becomes `idSlug`.
+    .replace(/[^a-zA-Z0-9_.-]+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase())
+    // A forbidden character with nothing after it has no hump to fold into.
+    .replace(/[^a-zA-Z0-9_.-]/g, '')
+    .slice(0, 64);
 }
 
 /** Minimal walk of the Commander tree (root included), self-contained. */
@@ -67,7 +101,7 @@ function readArguments(cmd: Command): ArgSpec[] {
   const raw = cmd as unknown as { registeredArguments?: Argument[]; _args?: Argument[] };
   const list: Argument[] = (raw.registeredArguments ?? raw._args ?? []) as Argument[];
   return list.map((a) => ({
-    key: camelCase(a.name()),
+    key: toPropertyKey(a.name()),
     required: (a as unknown as { required?: boolean }).required ?? false,
     variadic: (a as unknown as { variadic?: boolean }).variadic ?? false,
   }));
@@ -107,7 +141,7 @@ function readOptions(cmd: Command): OptInfo[] {
     // `.option('--tag <t>', desc, collectFn, [])` is not — its only signal is an
     // array default. Treat either as array-valued.
     const variadic = Boolean(o.variadic) || Array.isArray((o as unknown as { defaultValue?: unknown }).defaultValue);
-    const key = o.attributeName();
+    const key = toPropertyKey(o.attributeName());
     positives.set(key, {
       key,
       flag,
@@ -120,7 +154,7 @@ function readOptions(cmd: Command): OptInfo[] {
   }
 
   for (const o of negatives) {
-    const key = o.attributeName();
+    const key = toPropertyKey(o.attributeName());
     const flag = o.long ?? o.short;
     if (!flag) continue;
     const positive = positives.get(key);

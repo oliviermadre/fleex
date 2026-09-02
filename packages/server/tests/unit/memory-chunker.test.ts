@@ -1,0 +1,400 @@
+import { describe, it, expect } from 'vitest';
+import {
+  splitMarkdown,
+  embeddableText,
+  chunkTicket,
+  chunkCommentThread,
+  chunkDeliverable,
+  chunkPersona,
+  chunkScratchpad,
+  TARGET_CHUNK_CHARS,
+  MAX_CHUNK_CHARS,
+  looksLikeMarkup,
+  hasBodyText,
+  splitRetrievable,
+} from '../../src/application/memory/chunker.js';
+import {
+  MemoryChunkEntity,
+  dropLoneSurrogates,
+} from '../../src/domain/entities/memory-chunk.entity.js';
+
+const para = (n: number, char = 'a') => char.repeat(n);
+
+describe('splitMarkdown', () => {
+  it('keeps short text whole', () => {
+    expect(splitMarkdown('a short note')).toEqual(['a short note']);
+  });
+
+  it('returns nothing for blank input', () => {
+    expect(splitMarkdown('   \n\n  ')).toEqual([]);
+  });
+
+  it('splits on h2+ headings rather than mid-section', () => {
+    const text = [
+      '# Title',
+      para(900),
+      '## Second',
+      para(900),
+      '## Third',
+      para(900),
+    ].join('\n\n');
+
+    const parts = splitMarkdown(text);
+    expect(parts.length).toBeGreaterThan(1);
+    // The h1 stays with the intro; each h2 opens its own chunk.
+    expect(parts[0]).toContain('# Title');
+    expect(parts.some((p) => p.startsWith('## Second'))).toBe(true);
+    expect(parts.some((p) => p.startsWith('## Third'))).toBe(true);
+  });
+
+  it('hard-splits a single paragraph that overflows on its own', () => {
+    const parts = splitMarkdown(para(TARGET_CHUNK_CHARS * 2 + 100));
+    expect(parts.length).toBeGreaterThanOrEqual(2);
+    // The tail merge may exceed the target, but never the encoder's window.
+    for (const part of parts) {
+      expect(part.length).toBeLessThanOrEqual(MAX_CHUNK_CHARS);
+    }
+  });
+
+  it('never merges a runt tail past the encoder window', () => {
+    // 1500 + 1500 + 100: the 100-char tail is a runt, and folding it back keeps
+    // the chunk under the ceiling.
+    const parts = splitMarkdown(para(TARGET_CHUNK_CHARS * 2 + 100));
+    expect(parts).toHaveLength(2);
+    expect(parts[1]!.length).toBeGreaterThan(TARGET_CHUNK_CHARS);
+    expect(parts[1]!.length).toBeLessThanOrEqual(MAX_CHUNK_CHARS);
+  });
+
+  it('never emits an empty chunk', () => {
+    const text = ['## A', para(2000), '## B', '', '## C', para(2000)].join('\n\n');
+    for (const part of splitMarkdown(text)) {
+      expect(part.trim().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('embeddableText', () => {
+  it('prefixes the breadcrumb so short chunks carry their topic', () => {
+    expect(embeddableText({ title: 'Ticket #42: Fix login', content: 'yes do that' }))
+      .toBe('Ticket #42: Fix login\nyes do that');
+  });
+
+  it('omits the separator when there is no breadcrumb', () => {
+    expect(embeddableText({ title: '', content: 'body' })).toBe('body');
+  });
+});
+
+describe('chunkTicket', () => {
+  const ticket = {
+    id: 't1',
+    displayId: 42,
+    title: 'Fix login',
+    status: 'done',
+    boardId: 'b1',
+    tags: ['auth', 'bug'],
+    repo: 'org/app',
+    updatedAt: new Date('2026-05-01T00:00:00Z'),
+  };
+
+  it('indexes a ticket with no description using its title as content', () => {
+    const chunks = chunkTicket({ ...ticket, description: null });
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.content).toBe('Fix login');
+    expect(chunks[0]?.title).toBe('Ticket #42: Fix login');
+  });
+
+  it('carries the scoring metadata onto every chunk', () => {
+    const chunks = chunkTicket({ ...ticket, description: [para(1200), '## More', para(1200)].join('\n\n') });
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.metadata).toMatchObject({ ticketId: 't1', boardId: 'b1', repo: 'org/app', tags: ['auth', 'bug'] });
+      expect(chunk.sourceKind).toBe('ticket');
+    }
+  });
+
+  it('numbers multi-part breadcrumbs so a reader can tell them apart', () => {
+    const chunks = chunkTicket({ ...ticket, description: [para(1200), '## More', para(1200)].join('\n\n') });
+    expect(chunks[0]?.title).toMatch(/\(1\/\d\)$/);
+  });
+
+  it('assigns contiguous chunk indexes from zero', () => {
+    const chunks = chunkTicket({ ...ticket, description: [para(1200), '## B', para(1200), '## C', para(1200)].join('\n\n') });
+    expect(chunks.map((c) => c.chunkIndex)).toEqual(chunks.map((_, i) => i));
+  });
+});
+
+describe('chunkCommentThread', () => {
+  const ticket = { id: 't1', displayId: 7, title: 'Fix login', boardId: 'b1', tags: ['auth'] };
+
+  it('returns nothing for an empty thread', () => {
+    expect(chunkCommentThread(ticket, [])).toEqual([]);
+  });
+
+  it('packs a short thread into a single window', () => {
+    const chunks = chunkCommentThread(ticket, [
+      { id: 'c1', authorName: 'Olivier', authorType: 'user', body: 'what about option 2?' },
+      { id: 'c2', authorName: 'Builder', authorType: 'agent', body: 'agreed, doing that' },
+    ]);
+    expect(chunks).toHaveLength(1);
+    // The deictic reply keeps its question in the same window.
+    expect(chunks[0]?.content).toContain('option 2');
+    expect(chunks[0]?.content).toContain('agreed');
+  });
+
+  it('overlaps one comment between windows so an exchange stays readable', () => {
+    const comments = Array.from({ length: 6 }, (_, i) => ({
+      id: `c${i}`,
+      authorName: 'A',
+      authorType: 'user',
+      body: para(600, String.fromCharCode(97 + i)),
+    }));
+    const chunks = chunkCommentThread(ticket, comments);
+    expect(chunks.length).toBeGreaterThan(1);
+
+    // The last comment of window N reappears as the first of window N+1.
+    const firstWindowLast = chunks[0]!.content.split('\n\n').slice(-1)[0]!;
+    expect(chunks[1]!.content.startsWith(firstWindowLast)).toBe(true);
+  });
+
+  it('cuts only at comment boundaries', () => {
+    const comments = Array.from({ length: 5 }, (_, i) => ({
+      id: `c${i}`, authorName: 'A', authorType: 'user', body: para(700),
+    }));
+    for (const chunk of chunkCommentThread(ticket, comments)) {
+      // Every window starts with a rendered comment header, never mid-body.
+      expect(chunk.content.startsWith('**A** (user):')).toBe(true);
+    }
+  });
+
+  it('anchors the thread to its ticket, not to individual comments', () => {
+    const chunks = chunkCommentThread(ticket, [
+      { id: 'c1', authorName: 'A', authorType: 'user', body: 'hello' },
+    ]);
+    expect(chunks[0]?.sourceKind).toBe('comment_thread');
+    expect(chunks[0]?.sourceId).toBe('t1');
+  });
+});
+
+describe('chunkDeliverable', () => {
+  const base = {
+    id: 'd1',
+    title: 'Auth rework',
+    content: [para(1200), '## Decisions', para(1200)].join('\n\n'),
+    agentName: 'Builder',
+    ticketId: 't1',
+    updatedAt: new Date('2026-06-01T00:00:00Z'),
+  };
+
+  it('never splits a ticket summary, which is written to be injected whole', () => {
+    const chunks = chunkDeliverable({ ...base, type: 'ticket-summary' });
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.sourceKind).toBe('ticket_summary');
+  });
+
+  it('maps a CLI session summary onto its own kind', () => {
+    const chunks = chunkDeliverable({ ...base, type: 'cli-session-summary' });
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.sourceKind).toBe('cli_session_summary');
+  });
+
+  it('splits an ordinary deliverable on its headings', () => {
+    const chunks = chunkDeliverable({ ...base, type: 'report' });
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((c) => c.sourceKind === 'deliverable')).toBe(true);
+  });
+
+  it('skips an empty deliverable rather than indexing a blank row', () => {
+    expect(chunkDeliverable({ ...base, type: 'report', content: '   ' })).toEqual([]);
+  });
+
+  it('names the origin in the breadcrumb so a routine output is attributable', () => {
+    const chunks = chunkDeliverable({
+      ...base, type: 'ticket-summary', ticketId: null, originLabel: 'Nightly dependency watch',
+    });
+    expect(chunks[0]?.title).toContain('Nightly dependency watch');
+  });
+});
+
+describe('chunkPersona', () => {
+  it('indexes memory and identity but never soul', () => {
+    const chunks = chunkPersona({
+      id: 'p1', name: 'Builder', memoryMd: 'learned: the CI is flaky on arm', identityMd: 'I am terse',
+    });
+    const joined = chunks.map((c) => c.content).join(' ');
+    expect(joined).toContain('CI is flaky');
+    expect(joined).toContain('terse');
+    expect(chunks.map((c) => c.title)).toEqual([
+      'Agent Builder > memory',
+      'Agent Builder > identity',
+    ]);
+  });
+
+  it('produces nothing for a persona with no learned content', () => {
+    expect(chunkPersona({ id: 'p1', name: 'Builder', memoryMd: '', identityMd: null })).toEqual([]);
+  });
+
+  it('keeps chunk indexes contiguous across both documents', () => {
+    const chunks = chunkPersona({
+      id: 'p1', name: 'B',
+      memoryMd: [para(1200), '## More', para(1200)].join('\n\n'),
+      identityMd: 'terse',
+    });
+    expect(chunks.map((c) => c.chunkIndex)).toEqual(chunks.map((_, i) => i));
+  });
+});
+
+describe('chunkScratchpad', () => {
+  it('carries the repo so retrieval can be scoped to the checkout', () => {
+    const chunks = chunkScratchpad({ key: 'repo:org/app', label: 'org/app', content: 'remember the migration order', repo: 'org/app' });
+    expect(chunks[0]?.metadata.repo).toBe('org/app');
+    expect(chunks[0]?.title).toBe('Scratchpad: org/app');
+  });
+});
+
+describe('keeping markup out of the index', () => {
+  // Thresholds calibrated on a live instance: prose chunks measured a structural
+  // symbol density of 0.000–0.020, deck and prototype chunks 0.039–0.073.
+  const css = `/* lineage strip */ .lin{display:inline-flex;align-items:center;gap:0;margin-right:9px}
+    .lin i{width:7px;height:7px;border-radius:50%;display:block}
+    .switcher{position:sticky;top:0;z-index:20;margin:0 -28px 26px;padding:14px 28px}`;
+
+  const html = '<section class="slide"><div class="container"><h2>Vision</h2>'
+    + '<p>Ce que nous faisons</p></div></section><div class="divider"></div>';
+
+  const prose = `## Décision
+
+Nous gardons les sessions plutôt que des JWT, parce que la révocation immédiate
+est une exigence produit et qu'un token signé ne se révoque pas.`;
+
+  it('recognises a stylesheet as markup', () => {
+    expect(looksLikeMarkup(css)).toBe(true);
+  });
+
+  it('recognises tag soup as markup', () => {
+    expect(looksLikeMarkup(html)).toBe(true);
+  });
+
+  it('leaves prose alone', () => {
+    expect(looksLikeMarkup(prose)).toBe(false);
+  });
+
+  it('leaves prose containing a little inline code alone', () => {
+    // The point is to drop documents that are markup, not technical writing.
+    const technical = `## Migration
+
+Ajouter \`ALTER TABLE memory_chunks\` dans un nouveau fichier de migration; ne
+jamais modifier une migration déjà commitée, même pour une faute de frappe.`;
+    expect(looksLikeMarkup(technical)).toBe(false);
+  });
+
+  it('treats a chunk with no letters as markup', () => {
+    expect(looksLikeMarkup('{{{;;;}}}<><>')).toBe(true);
+  });
+
+  it('says nothing about an empty chunk', () => {
+    expect(looksLikeMarkup('')).toBe(false);
+  });
+
+  it('drops a heading with no body', () => {
+    expect(hasBodyText('## Expert Opinions')).toBe(false);
+    expect(hasBodyText('### 🏗️ Découpage Technique')).toBe(false);
+  });
+
+  it('keeps a heading that has a body', () => {
+    expect(hasBodyText('## Titre\n\nUn paragraphe qui dit quelque chose.')).toBe(true);
+  });
+
+  it('keeps terse content, because agent memory legitimately is', () => {
+    // "Be terse." is a real persona identity; a word-count policy would delete it.
+    expect(hasBodyText('I am terse')).toBe(true);
+  });
+
+  it('drops a body that is punctuation', () => {
+    expect(hasBodyText('## Notes\n\n---')).toBe(false);
+  });
+
+  it('keeps only the prose sections of a deliverable that embeds a mock', () => {
+    // Sized like a real deliverable, where each section is its own chunk. That is
+    // the shape this filter is for: the decks on a live instance split into 27 to
+    // 86 parts, and the prose ones are exactly the parts worth keeping.
+    const section = 'Le sélecteur de session doit distinguer la reprise et le démarrage à neuf. '.repeat(12);
+    const parts = splitRetrievable(`## Contexte\n\n${section}\n\n## Maquette\n\n${css.repeat(12)}`);
+
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toContain('sélecteur de session');
+  });
+
+  it('drops a short document whose prose and markup share one chunk', () => {
+    // A known limit, stated rather than hidden: the filter judges chunks, and
+    // chunk boundaries are size-driven, so a document too small to split is kept
+    // or dropped whole. It costs a sentence on a tiny mixed document and saves
+    // the index from thousands of stylesheet chunks, which is the trade taken.
+    const parts = splitRetrievable(`## Contexte\n\nUne phrase.\n\n## Maquette\n\n${css}`);
+    expect(parts).toEqual([]);
+  });
+
+  it('indexes nothing for a deliverable that is entirely markup', () => {
+    // Returning no chunks is what makes the kernel forget the source, so a
+    // reindex clears what an earlier version had let in.
+    expect(chunkDeliverable({
+      id: 'd1', title: 'Deck', type: 'report', content: `${css}\n\n${html}`,
+      agentName: 'Builder', ticketId: 't1',
+    })).toEqual([]);
+  });
+});
+
+describe('not cutting characters in half', () => {
+  // Reproduced from a live instance: ticket #187 held one 🟡 that fell on a
+  // 1500-character boundary, so a chunk ended in a high surrogate, JSON.stringify
+  // emitted an unpaired escape, and Postgres refused the batch with "invalid input
+  // syntax for type json" — the whole ticket never reached the index.
+  const yellow = '\u{1F7E1}';
+
+  function emojiAtBoundary(): string {
+    // One paragraph, with the emoji sitting exactly on the split.
+    const head = 'a'.repeat(TARGET_CHUNK_CHARS - 1);
+    return `${head}${yellow}${'b'.repeat(400)}`;
+  }
+
+  function loneSurrogates(text: string): number {
+    return (text.match(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g) ?? []).length;
+  }
+
+  it('never splits a surrogate pair across chunks', () => {
+    const parts = splitMarkdown(emojiAtBoundary());
+    expect(parts.length).toBeGreaterThan(1);
+    for (const part of parts) expect(loneSurrogates(part)).toBe(0);
+  });
+
+  it('keeps the character whole rather than dropping it', () => {
+    const parts = splitMarkdown(emojiAtBoundary());
+    expect(parts.join('')).toContain(yellow);
+  });
+
+  it('produces chunks a JSON parser accepts', () => {
+    // What PostgREST does with the payload, and what used to fail.
+    for (const part of splitMarkdown(emojiAtBoundary())) {
+      expect(() => JSON.parse(JSON.stringify({ content: part }))).not.toThrow();
+    }
+  });
+
+  it('drops an orphan that was already in the source', () => {
+    // Half a character cannot be repaired, and it is what makes a row unwritable.
+    const broken = `texte avec un surrogate cassé \uD83D et la suite du paragraphe`;
+    expect(dropLoneSurrogates(broken)).not.toContain('\uD83D');
+    expect(dropLoneSurrogates(broken)).toContain('et la suite');
+  });
+
+  it('leaves a well-formed pair alone', () => {
+    expect(dropLoneSurrogates(`ok ${yellow} ok`)).toBe(`ok ${yellow} ok`);
+  });
+
+  it('sanitises at entity creation, whatever produced the chunk', () => {
+    const entity = MemoryChunkEntity.create({
+      sourceKind: 'deliverable', sourceId: 'd1', chunkIndex: 0,
+      title: `titre \uD83D`, content: `corps \uDC4D avec du texte`,
+    });
+    expect(loneSurrogates(entity.title)).toBe(0);
+    expect(loneSurrogates(entity.content)).toBe(0);
+  });
+});

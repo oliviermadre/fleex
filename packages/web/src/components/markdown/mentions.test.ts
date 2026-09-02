@@ -1,38 +1,40 @@
 import { describe, it, expect } from 'vitest';
-import { preprocessMentions, preprocessTicketMentions } from './mentions';
+import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX } from './mentions';
 
 const UUID = '05d50f27-b12e-4338-8c36-e840fd288222';
 
-describe('preprocessTicketMentions (ticket-only — used by the generic Markdown renderer)', () => {
+describe('preprocessMentions — tickets and notes', () => {
   it('rewrites @ticket:<displayId> to a #fleex-ticket link', () => {
-    expect(preprocessTicketMentions('Blocked by @ticket:378')).toBe(
+    expect(preprocessMentions('Blocked by @ticket:378')).toBe(
       'Blocked by [@ticket:378](#fleex-ticket:378)',
     );
   });
 
   it('rewrites @ticket:<uuid> to a #fleex-ticket link', () => {
-    expect(preprocessTicketMentions(`See @ticket:${UUID}`)).toBe(
+    expect(preprocessMentions(`See @ticket:${UUID}`)).toBe(
       `See [@ticket:${UUID}](#fleex-ticket:${UUID})`,
     );
   });
 
   it('leaves a ticket mention inside an inline code span untouched', () => {
-    expect(preprocessTicketMentions('use `@ticket:378` verbatim')).toBe(
+    expect(preprocessMentions('use `@ticket:378` verbatim')).toBe(
       'use `@ticket:378` verbatim',
     );
   });
 
   it('leaves a ticket mention inside a fenced code block untouched', () => {
-    expect(preprocessTicketMentions('```\n@ticket:378\n```')).toBe('```\n@ticket:378\n```');
+    expect(preprocessMentions('```\n@ticket:378\n```')).toBe('```\n@ticket:378\n```');
   });
 
-  it('leaves a struck ticket mention verbatim (GFM renders it as strikethrough text)', () => {
-    expect(preprocessTicketMentions('~~@ticket:378~~ done')).toBe('~~@ticket:378~~ done');
+  it('encodes a struck ticket mention as a struck span (single processor now covers every surface)', () => {
+    expect(preprocessMentions('~~@ticket:378~~ done')).toBe(
+      '[@ticket:378](#fleex-struck:ticket:378) done',
+    );
   });
 
-  it('does not touch other mention types (they stay literal in non-comment surfaces)', () => {
-    expect(preprocessTicketMentions('hello @agent:catalyst and @olivier')).toBe(
-      'hello @agent:catalyst and @olivier',
+  it('encodes other mention types too (single processor now covers every surface)', () => {
+    expect(preprocessMentions('hello @agent:catalyst and @olivier')).toBe(
+      'hello [@agent:catalyst](#fleex-agent:agent:catalyst) and [@olivier](#fleex-human:olivier)',
     );
   });
 });
@@ -111,5 +113,69 @@ describe('preprocessMentions (comments — every mention type incl. tickets)', (
 
   it('preserves code spans', () => {
     expect(preprocessMentions('`@ticket:1`')).toBe('`@ticket:1`');
+  });
+});
+
+describe('preprocessMentions — note references on a generic surface', () => {
+  it('encodes a repo note', () => {
+    expect(preprocessMentions('see @scratchpad:acme/app'))
+      .toBe('see [@scratchpad:acme/app](#fleex-scratchpad:acme%2Fapp)');
+  });
+
+  it('encodes the global note to its storage key', () => {
+    expect(preprocessMentions('see @scratchpad:global'))
+      .toBe('see [@scratchpad:global](#fleex-scratchpad:__global__)');
+  });
+
+  it('lowercases the key in the href but keeps the typed label', () => {
+    expect(preprocessMentions('@scratchpad:Acme/App'))
+      .toBe('[@scratchpad:Acme/App](#fleex-scratchpad:acme%2Fapp)');
+  });
+
+  it('leaves a value that names no note verbatim', () => {
+    expect(preprocessMentions('@scratchpad:my-idea')).toBe('@scratchpad:my-idea');
+  });
+
+  it('leaves a reference inside an inline code span alone', () => {
+    expect(preprocessMentions('write `@scratchpad:acme/app`')).toBe('write `@scratchpad:acme/app`');
+  });
+
+  it('encodes a struck reference as a struck span (single processor now covers every surface)', () => {
+    expect(preprocessMentions('~~@scratchpad:acme/app~~')).toBe(
+      '[@scratchpad:acme/app](#fleex-struck:scratchpad:acme/app)',
+    );
+  });
+
+  it('still encodes ticket mentions', () => {
+    expect(preprocessMentions('@ticket:378')).toBe('[@ticket:378](#fleex-ticket:378)');
+  });
+
+  it('encodes both kinds in one document', () => {
+    expect(preprocessMentions('@ticket:7 and @scratchpad:global'))
+      .toBe('[@ticket:7](#fleex-ticket:7) and [@scratchpad:global](#fleex-scratchpad:__global__)');
+  });
+
+  it('exposes the href prefix it encodes to', () => {
+    expect(SCRATCHPAD_REF_HREF_PREFIX).toBe('#fleex-scratchpad:');
+  });
+});
+
+describe('preprocessMentions — note references', () => {
+  it('encodes a note reference without being eaten by the human fallback', () => {
+    // `@[a-zA-Z0-9_-]+` would otherwise capture `@scratchpad` and leave
+    // `:acme/app` dangling — the same trap the @ticket: ordering guards against.
+    expect(preprocessMentions('see @scratchpad:acme/app'))
+      .toBe('see [@scratchpad:acme/app](#fleex-scratchpad:acme%2Fapp)');
+  });
+
+  it('encodes a struck note reference the way every other struck mention is encoded', () => {
+    expect(preprocessMentions('~~@scratchpad:global~~'))
+      .toBe('[@scratchpad:global](#fleex-struck:scratchpad:global)');
+  });
+
+  it('still encodes an agent mention', () => {
+    expect(preprocessMentions('@agent:catalyst')).toBe(
+      '[@agent:catalyst](#fleex-agent:agent:catalyst)',
+    );
   });
 });

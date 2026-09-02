@@ -1,7 +1,13 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { GLOBAL_NOTE_KEY } from '@fleex/shared';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { SaveStatus } from './SaveStatus';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
+import { MentionMenu } from '../markdown/MentionMenu';
+import { useAllMentionOptions } from '../markdown/useAllMentionOptions';
+import { useMentionAutocomplete } from '../markdown/useMentionAutocomplete';
+import { NoteLinksPanel } from './NoteLinksPanel';
 
 interface Props {
   scratchpadKey: string;
@@ -14,15 +20,31 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
   const toggleCheckbox = useScratchpadStore((s) => s.toggleCheckbox);
   const markdownMode = useScratchpadStore((s) => s.markdownMode);
   const setMarkdownMode = useScratchpadStore((s) => s.setMarkdownMode);
+  const loadScratchpadList = useScratchpadStore((s) => s.loadScratchpadList);
+  const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
 
   const entry = entries[scratchpadKey] ?? { content: '', loaded: false, saving: false, savedAt: null, dirty: false };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const handleChange = useCallback(
+    (value: string) => setContent(scratchpadKey, value),
+    [scratchpadKey, setContent],
+  );
+
   const handleToggleCheckbox = useCallback(
     (lineIndex: number) => toggleCheckbox(scratchpadKey, lineIndex),
     [scratchpadKey, toggleCheckbox],
   );
+
+  const mentionOptions = useAllMentionOptions();
+
+  const mentionAc = useMentionAutocomplete({
+    options: mentionOptions,
+    value: entry.content,
+    onChange: handleChange,
+    textareaRef,
+  });
 
   // Load on key change
   useEffect(() => {
@@ -36,12 +58,16 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
     textareaRef.current?.focus();
   }, [scratchpadKey]);
 
-  const handleChange = useCallback(
-    (value: string) => setContent(scratchpadKey, value),
-    [scratchpadKey, setContent],
-  );
+  // The sidebar list loads this too, but it is a sibling of this view rather than an
+  // ancestor: with the sidebar on another panel there would be no notes to offer.
+  // Unguarded, like the sidebar's own effect: on a first-ever load
+  // `resolvedRepositories` is still empty, and a one-shot guard would latch before
+  // the repo list lands — leaving every repo without a note out of the menu.
+  useEffect(() => {
+    void loadScratchpadList(resolvedRepositories);
+  }, [loadScratchpadList, resolvedRepositories]);
 
-  const label = scratchpadKey === '__global__' ? 'Global' : scratchpadKey;
+  const label = scratchpadKey === GLOBAL_NOTE_KEY ? 'Global' : scratchpadKey;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
@@ -62,9 +88,26 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
         onToggleCheckbox={handleToggleCheckbox}
         textareaRef={textareaRef}
         className="p-4"
-        placeholder={'# Scratchpad\n\nWrite your notes here...'}
-        textareaProps={{ spellCheck: false }}
+        placeholder={'# Scratchpad\n\nWrite your notes here... (@ to link a note or ticket)'}
+        textareaProps={{
+          spellCheck: false,
+          onChange: mentionAc.onScan,
+          onKeyDown: (e) => { mentionAc.onKeyDown(e); },
+          onBlur: () => { setTimeout(mentionAc.close, 150); },
+        }}
+        overlay={
+          mentionAc.open && mentionAc.filtered.length > 0 ? (
+            <MentionMenu
+              options={mentionAc.filtered}
+              selectedIndex={mentionAc.index}
+              onSelect={mentionAc.accept}
+              position={{ bottom: 8, left: 8 }}
+            />
+          ) : null
+        }
       />
+
+      <NoteLinksPanel scratchpadKey={scratchpadKey} />
     </div>
   );
 }

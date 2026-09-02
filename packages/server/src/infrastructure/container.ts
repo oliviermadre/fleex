@@ -34,6 +34,7 @@ import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-cla
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
 import { ProcessHookEventUseCase } from '../application/use-cases/process-hook-event.js';
 import { IngestCliSessionUseCase } from '../application/use-cases/ingest-cli-session.js';
+import { RememberCliSessionUseCase } from '../application/use-cases/remember-cli-session.js';
 import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
 import type { SessionManager } from './auth/session-manager.js';
 import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
@@ -88,6 +89,21 @@ import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
 import { CancelWorkflowRunUseCase } from '../application/use-cases/cancel-workflow-run.js';
 import { RecoverOrphanedWorkflowStepsUseCase } from '../application/use-cases/recover-orphaned-workflow-steps.js';
 import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
+import { RetrieveContextUseCase } from '../application/use-cases/retrieve-context.js';
+import { MemoryKernel } from '../application/memory/memory-kernel.js';
+import { MemoryEventListener } from '../application/memory/memory-event-listener.js';
+import { MemorySweeper } from '../application/memory/memory-sweeper.js';
+import { buildEmbeddingProvider } from './adapters/embeddings/build-embedding-provider.js';
+import { BackfillMemoryUseCase } from '../application/use-cases/backfill-memory.js';
+import { AskMemoryUseCase } from '../application/use-cases/ask-memory.js';
+import { MemorySynthesiser } from '../application/memory/memory-synthesiser.js';
+import { CoachPersonaUseCase } from '../application/use-cases/coach-persona.js';
+import { SynthesiseMemoryUseCase } from '../application/use-cases/synthesise-memory.js';
+import { CurateMemoryUseCase } from '../application/use-cases/curate-memory.js';
+import { RememberConversationUseCase } from '../application/use-cases/remember-conversation.js';
+import { DistilExecutionTraceUseCase } from '../application/use-cases/distil-execution-trace.js';
+import { BenchMemoryUseCase } from '../application/use-cases/bench-memory.js';
+import { TransformersEmbeddingAdapter } from './adapters/embeddings/transformers-embedding.adapter.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -147,6 +163,7 @@ export async function createContainer() {
     workflowRunStore,
     stepRunStore,
     routineStore,
+    memoryStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
@@ -242,7 +259,39 @@ export async function createContainer() {
   const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore_, logger);
   const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore_, config, logger);
   const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
-  const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore);
+  // The embedding provider is constructed unconditionally but loads its model
+  // lazily, so an instance that never opts into the semantic engine pays nothing.
+  // Which encoder, and where it runs, are both settings. The provider is built
+  // eagerly but loads nothing until asked, so an instance on the default engine
+  // pays for neither.
+  const embeddingProvider = memoryStore ? buildEmbeddingProvider(config, logger) : undefined;
+  const retrieveContext = new RetrieveContextUseCase(
+    config, getRelevantSummaries, ticketStore_, logger, memoryStore ?? undefined, embeddingProvider,
+  );
+  const getTicketContext = new GetTicketContextUseCase(
+    ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore, retrieveContext,
+  );
+  // Let a width-declaring store (Supabase's `vector(N)` column, its index and its
+  // search function) match the configured encoder. Idempotent, and the only thing
+  // that can repair a project whose pgvector extension was enabled — or whose
+  // encoder was changed — after the migrations had already recorded themselves.
+  if (memoryStore?.prepare && embeddingProvider) {
+    await memoryStore.prepare(embeddingProvider.dimensions).catch((error: unknown) => {
+      logger.warn('Memory store could not be prepared for the configured encoder', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  const memoryKernel = memoryStore && embeddingProvider
+    ? new MemoryKernel(memoryStore, embeddingProvider, logger)
+    : null;
+  const backfillMemory = memoryKernel
+    ? new BackfillMemoryUseCase(
+        memoryKernel, ticketStore_, commentStore, deliverableStore, personaStore_, skillStore, logger,
+        ticketGroupStore, kvStore,
+      )
+    : null;
 
   // Agent personas use cases
   const createPersona = new CreatePersonaUseCase(personaStore_, logger);
@@ -261,6 +310,21 @@ export async function createContainer() {
   // The ONE global limit on concurrent Claude Agent SDK executions, shared by
   // every source (mentions, skills, panels, workflow steps, summaries).
   const sdkLimiter = new SdkConcurrencyLimiter(() => config.get().agentMaxConcurrency ?? DEFAULT_AGENT_MAX_CONCURRENCY);
+
+  // Depends on the SDK limiter, so it is built here rather than beside the rest
+  // of the memory wiring above.
+  const askMemory = memoryStore ? new AskMemoryUseCase(retrieveContext, sdkLimiter, logger) : null;
+
+  // Everything that reads the index and writes prose shares one synthesiser, so
+  // they all get the same guarantees: no tools, no agentic turns, one slot.
+  const memorySynthesiser = new MemorySynthesiser(sdkLimiter, logger);
+  const coachPersona = memoryStore
+    ? new CoachPersonaUseCase(personaStore_, retrieveContext, memorySynthesiser, logger)
+    : null;
+  const benchMemory = new BenchMemoryUseCase(logger, memoryStore ?? undefined, embeddingProvider);
+  const synthesiseMemory = memoryStore
+    ? new SynthesiseMemoryUseCase(retrieveContext, memorySynthesiser, logger, submitDeliverable)
+    : null;
 
   const runPanel = new RunPanelUseCase(panelStore, personaStore_, mentionStore, ticketStore_, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore_, config, logger, sdkLimiter);
 
@@ -342,6 +406,53 @@ export async function createContainer() {
     logger,
   });
   domainEventListener.register();
+
+  // Keeps the retrieval index current. A sibling of the listener above, on the
+  // same local bus: ingestion is a side-effect, so hub-relayed events must not
+  // reach it or every instance would re-embed every other instance's writes. It
+  // checks the engine setting per event, so an instance on the default engine
+  // queues nothing.
+  const memoryEventListener = memoryKernel
+    ? new MemoryEventListener({
+        bus: eventBus,
+        kernel: memoryKernel,
+        config,
+        ticketStore: ticketStore_,
+        commentStore,
+        deliverableStore,
+        personaStore: personaStore_,
+        skillStore,
+        ticketGroupStore,
+        kvStore,
+        mentionStore,
+        logger,
+      })
+    : null;
+  memoryEventListener?.register();
+
+  // Comes back for the rows ingestion had to store without a vector — the model
+  // is fetched once, and everything written while that is in flight would
+  // otherwise stay in the table and out of every query. Started in main.ts.
+  const memorySweeper = memoryKernel ? new MemorySweeper(memoryKernel, config, logger) : null;
+
+  const curateMemory = new CurateMemoryUseCase(
+    agentEventStore_, retrieveContext, logger, memoryKernel ?? undefined,
+  );
+  const rememberConversation = new RememberConversationUseCase(
+    retrieveContext, memorySynthesiser, logger, memoryKernel ?? undefined,
+  );
+  const distilExecutionTrace = new DistilExecutionTraceUseCase(
+    ticketStore_, retrieveContext, memorySynthesiser, git, logger, memoryKernel ?? undefined,
+  );
+  // Fire-and-forget, so a trace that cannot be distilled never affects the run.
+  executeAgent.onExecutionTrace = (trace) => {
+    distilExecutionTrace.execute(trace).catch((error: unknown) => {
+      logger.warn('Execution trace distillation failed', {
+        executionId: trace.executionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  };
 
   // Remote listener — only broadcasts UI updates from events received via the hub.
   // It SHARES the BroadcastRegistrar instance with the local listener so that
@@ -559,9 +670,16 @@ export async function createContainer() {
   // ingests finished manual CLI sessions (source='cli') for cost tracking, then
   // persists their decision trail as a `cli-session-summary` deliverable.
   const ingestCliSession = new IngestCliSessionUseCase(ticketStore_, agentEventStore_, logger);
+  // Terminal sessions with no ticket to attach to: the cost hook discards them, so
+  // this is the only thing that keeps what they discovered.
+  const rememberCliSession = new RememberCliSessionUseCase(
+    retrieveContext, memorySynthesiser, execFn, logger, memoryKernel ?? undefined,
+  );
   const generateCliSessionSummary = new GenerateCliSessionSummaryUseCase(deliverableStore, logger, sdkLimiter);
   generateCliSessionSummary.eventBus = eventBus;
-  const processHookEvent = new ProcessHookEventUseCase(sessionStore_, eventBus, logger, ingestCliSession, generateCliSessionSummary);
+  const processHookEvent = new ProcessHookEventUseCase(
+    sessionStore_, eventBus, logger, ingestCliSession, generateCliSessionSummary, rememberCliSession,
+  );
 
   return {
     logger,
@@ -628,6 +746,21 @@ export async function createContainer() {
     wakeWaitingAgents,
     generateTicketSummary,
     getRelevantSummaries,
+    retrieveContext,
+    memoryStore,
+    embeddingProvider,
+    memoryKernel,
+    backfillMemory,
+    askMemory,
+    memoryEventListener,
+    memorySweeper,
+    rememberCliSession,
+    coachPersona,
+    synthesiseMemory,
+    curateMemory,
+    rememberConversation,
+    distilExecutionTrace,
+    benchMemory,
     autoReviewWorkflow,
     panelStore,
     createPanel,

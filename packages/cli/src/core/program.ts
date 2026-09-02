@@ -20,6 +20,11 @@ import { isJsonMode, setJsonMode } from './colors.ts';
 const moduleDir = import.meta.dir ?? path.dirname(fileURLToPath(import.meta.url));
 const commandsDir = path.join(moduleDir, '..', 'commands');
 
+// Derived from this file's own location rather than from the instance config,
+// because the one caller needs it precisely when dependencies are missing — and
+// reading the config would mean importing the modules that cannot load.
+const repoDir = path.resolve(moduleDir, '..', '..', '..', '..');
+
 /**
  * Returns the relative path of every `index.ts` file under `src/commands/`,
  * shallowest first so parent groups exist before their subcommands attach.
@@ -98,12 +103,96 @@ function attachCommand(parent: Command, def: CommandDef): void {
   });
 }
 
-async function loadAndRegister(program: Command, file: string): Promise<void> {
+/** A command module that could not be imported, and why. */
+export interface LoadFailure {
+  /** Path relative to `src/commands`, e.g. `ticket/deliverable/add/index.ts`. */
+  file: string;
+  message: string;
+  /** Bare specifier that could not be resolved, when that is the cause. */
+  missingPackage: string | null;
+}
+
+/** `Cannot find module '<spec>' from '<importer>'` — Bun's resolution failure. */
+const CANNOT_FIND_MODULE = /Cannot find module '([^']+)'/;
+
+/**
+ * The unresolved package behind a failure, or `null` for any other cause.
+ *
+ * A bare specifier means a dependency is not installed, which is one condition
+ * affecting the whole tree at once. A relative specifier means that one module is
+ * genuinely broken, and is reported on its own — collapsing the two would hide a
+ * real bug inside a generic "run bun install".
+ */
+export function missingPackageFrom(message: string): string | null {
+  const spec = CANNOT_FIND_MODULE.exec(message)?.[1];
+  if (!spec) return null;
+  return spec.startsWith('.') || spec.startsWith('/') ? null : spec;
+}
+
+/**
+ * What to print after the scan, or `null` when everything loaded.
+ *
+ * Failures caused by uninstalled dependencies are stated once. There were
+ * fifteen of them on a fresh checkout — one line per module, each naming the same
+ * missing package, none of them saying what to do about it.
+ */
+export function describeLoadFailures(failures: LoadFailure[], repoDir: string): string | null {
+  if (failures.length === 0) return null;
+
+  const lines: string[] = [];
+
+  // A module broken on its own terms keeps its own line: the file is the useful
+  // part of that report, and there is nothing generic to advise.
+  for (const f of failures.filter((f) => f.missingPackage === null)) {
+    lines.push(`fleex: command ${f.file} failed to load, skipping — ${f.message}`);
+  }
+
+  const missing = failures.filter((f) => f.missingPackage !== null);
+  if (missing.length > 0) {
+    const packages = [...new Set(missing.map((f) => f.missingPackage!))].sort();
+    // Top-level group names, which is how the reader thinks about what vanished
+    // from `--help` — not the module paths that produced the error.
+    const groups = [...new Set(missing.map((f) => f.file.split('/')[0]!))].sort();
+    lines.push(
+      `fleex: ${missing.length} command${missing.length > 1 ? 's' : ''} unavailable — `
+      + `dependencies are not installed (${packages.join(', ')}).`,
+    );
+    lines.push(`       Missing: ${groups.join(', ')}`);
+    lines.push(`       Fix: cd ${repoDir} && bun install`);
+  }
+
+  return lines.join('\n');
+}
+
+async function loadAndRegister(
+  program: Command,
+  file: string,
+  failures: LoadFailure[],
+): Promise<void> {
   const segments = file.replace(/\\/g, '/').replace(/\/index\.ts$/, '').split('/');
-  const mod = await import(path.join(commandsDir, file));
+
+  // One unloadable command must not take the CLI with it.
+  //
+  // Every command module is imported at startup, so a single import failure used
+  // to kill every command at once — including `self-update`, the command that
+  // repairs the usual causes. That made the one thing able to fix the problem
+  // unreachable. Now the group disappears and the rest of the CLI still works.
+  //
+  // Collected rather than printed here: on a fresh checkout every module fails
+  // for the same reason, and fifteen identical lines describe the symptom without
+  // naming the cure. `describeLoadFailures` states it once, with the fix.
+  let mod: { default?: CommandDef };
+  try {
+    mod = await import(path.join(commandsDir, file));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    failures.push({ file, message, missingPackage: missingPackageFrom(message) });
+    return;
+  }
+
   const def = mod.default as CommandDef | undefined;
   if (!def) {
-    process.stderr.write(`fleex: command ${file} has no default export, skipping\n`);
+    failures.push({ file, message: 'no default export', missingPackage: null });
     return;
   }
 
@@ -128,9 +217,13 @@ export async function buildProgram(): Promise<Command> {
     .enablePositionalOptions();
 
   const files = await discoverCommands();
+  const failures: LoadFailure[] = [];
   for (const f of files) {
-    await loadAndRegister(program, f);
+    await loadAndRegister(program, f, failures);
   }
+
+  const report = describeLoadFailures(failures, repoDir);
+  if (report) process.stderr.write(`${report}\n`);
 
   // Install the pretty help formatter across the whole tree after every command
   // has been registered (so subcommand options are visible to the formatter).

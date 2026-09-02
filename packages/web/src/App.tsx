@@ -2,6 +2,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { CreateTaskModal } from './components/modals/CreateTaskModal';
 import { CommandPalette } from './components/command-palette/CommandPalette';
+import { AskMemoryModal } from './components/modals/AskMemoryModal';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { NotificationToasts } from './components/notifications/NotificationToasts';
 import { VersionBanner } from './components/ui/VersionBanner';
@@ -31,6 +32,7 @@ export function App() {
       <AppLayout />
       <CreateTaskModal />
       <CommandPalette />
+      <AskMemoryModal />
       <ToastContainer />
       <NotificationToasts />
       <VersionBanner />

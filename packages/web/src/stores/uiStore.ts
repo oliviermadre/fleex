@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { TicketDeliverable } from '@fleex/shared';
 
 type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines';
-export type SettingsTab = 'general' | 'appearance' | 'pinned-icons' | 'workspace-actions' | 'agent-tokens' | 'deliverable-types';
+export type SettingsTab = 'general' | 'appearance' | 'pinned-icons' | 'workspace-actions' | 'agent-tokens' | 'deliverable-types' | 'memory';
 export type AnalyticsTab = 'audit-trail' | 'statistics';
 
 interface UIState {
@@ -39,6 +39,15 @@ interface UIState {
   commandPaletteOpen: boolean;
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
+
+  /**
+   * The question being asked of memory, or null when the answer modal is closed.
+   * The question is the state: it is what the modal is opened *with*, and reopening
+   * with a different one has to re-run rather than show the previous answer.
+   */
+  askMemoryQuestion: string | null;
+  openAskMemory: (question: string) => void;
+  closeAskMemory: () => void;
 
   // Group collapse state
   collapsedGroups: Set<string>;
@@ -175,6 +184,7 @@ export const useUIStore = create<UIState>((set) => ({
   altHeld: false,
   createModalOpen: false,
   commandPaletteOpen: false,
+  askMemoryQuestion: null,
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
   scratchpadRepoKey: null,
@@ -272,6 +282,10 @@ export const useUIStore = create<UIState>((set) => ({
   openCommandPalette: () => set({ commandPaletteOpen: true }),
 
   closeCommandPalette: () => set({ commandPaletteOpen: false }),
+
+  openAskMemory: (question) => set({ askMemoryQuestion: question, commandPaletteOpen: false }),
+
+  closeAskMemory: () => set({ askMemoryQuestion: null }),
 
   toggleGroup: (groupId) =>
     set((state) => {

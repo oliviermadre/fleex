@@ -12,6 +12,9 @@ import { TicketDeliverables } from './TicketDeliverables';
 import { TicketMentions } from './TicketMentions';
 import { MissingRepoBanner } from './MissingRepoBanner';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
+import { MentionMenu } from '../markdown/MentionMenu';
+import { useAllMentionOptions } from '../markdown/useAllMentionOptions';
+import { useMentionAutocomplete } from '../markdown/useMentionAutocomplete';
 import * as api from '../../services/api';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
@@ -168,6 +171,14 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
     [debouncedSilentDescription],
   );
 
+  const descMentionOptions = useAllMentionOptions();
+  const descMentionAc = useMentionAutocomplete({
+    options: descMentionOptions,
+    value: description,
+    onChange: handleDescriptionChange,
+    textareaRef: descTextareaRef,
+  });
+
   const handleDescToggleCheckbox = useCallback(
     (lineIndex: number) => {
       const lines = descriptionRef.current.split('\n');
@@ -288,6 +299,21 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
                 textareaRef={descTextareaRef}
                 enableFileUpload
                 placeholder="Add a description (markdown supported)..."
+                textareaProps={{
+                  onChange: descMentionAc.onScan,
+                  onKeyDown: (e) => { descMentionAc.onKeyDown(e); },
+                  onBlur: () => { setTimeout(descMentionAc.close, 150); },
+                }}
+                overlay={
+                  descMentionAc.open && descMentionAc.filtered.length > 0 ? (
+                    <MentionMenu
+                      options={descMentionAc.filtered}
+                      selectedIndex={descMentionAc.index}
+                      onSelect={descMentionAc.accept}
+                      position={{ bottom: 8, left: 8 }}
+                    />
+                  ) : null
+                }
               />
             )}
 

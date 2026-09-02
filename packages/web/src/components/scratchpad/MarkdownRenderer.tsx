@@ -7,13 +7,39 @@ import type { Components } from 'react-markdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
-import { preprocessTicketMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { NoteRefChip } from '../markdown/NoteRefChip';
+import { CITATION_HREF_PREFIX, decodeCitation } from '../markdown/citations';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
+import { PrimitiveRefChip, type PrimitiveRefKind } from '../markdown/PrimitiveRefChip';
 import { remarkPluginsFor, type MarkdownProfile } from '../markdown/profiles';
+
+/**
+ * Href prefix per primitive kind.
+ *
+ * The encoded value keeps its own kind prefix — `#fleex-agent:agent:catalyst` —
+ * because the encoder strips only the `@`. Two pre-existing tests and the comment
+ * renderer depend on that, so the name is recovered by stripping it here.
+ */
+const PRIMITIVE_HREF: Array<[string, PrimitiveRefKind]> = [
+  ['#fleex-agent:', 'agent'],
+  ['#fleex-panel:', 'panel'],
+  ['#fleex-skill:', 'skill'],
+  ['#fleex-workflow:', 'workflow'],
+  ['#fleex-routine:', 'routine'],
+];
 
 interface MarkdownRendererProps {
   content: string;
   onToggleCheckbox: (lineIndex: number) => void;
+  /**
+   * Handle a `[3]` citation the caller encoded with `linkifyCitations`.
+   *
+   * Passed in rather than resolved here because only the caller knows what the
+   * numbers point at — a cited answer owns its own source list.
+   */
+  onCitation?: (index: number) => void;
   /**
    * `user` (default) renders a lone `\n` as a <br> — the right behaviour for
    * everything Fleex displays today. Use `doc` for hand-wrapped authored
@@ -117,6 +143,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   content,
   onToggleCheckbox,
   profile = 'user',
+  onCitation,
 }: MarkdownRendererProps) {
   const segments = useMemo(() => parseSegments(content), [content]);
 
@@ -129,6 +156,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
               <MarkdownRenderer
                 content={segment.content}
                 profile={profile}
+                onCitation={onCitation}
                 onToggleCheckbox={(localLine) =>
                   onToggleCheckbox(segment.contentStartLine + localLine)
                 }
@@ -144,6 +172,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             startLine={segment.startLine}
             profile={profile}
             onToggleCheckbox={onToggleCheckbox}
+            onCitation={onCitation}
           />
         );
       })}
@@ -158,13 +187,18 @@ function MarkdownSection({
   startLine,
   profile,
   onToggleCheckbox,
+  onCitation,
 }: {
   content: string;
   startLine: number;
   profile: MarkdownProfile;
   onToggleCheckbox: (lineIndex: number) => void;
+  onCitation?: (index: number) => void;
 }) {
   const colorMode = useColorMode();
+  const humanMentionName = useSettingsStore(
+    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
+  );
 
   // Extract images — gallery strip at top, inline placeholders in text
   const { images, cleaned: contentWithoutImages } = useMemo(
@@ -172,13 +206,12 @@ function MarkdownSection({
     [content],
   );
 
-  // Encode @ticket:<id> mentions as #fleex-ticket links so the `a` override can
-  // render them as chips. This is inline-only (no line added/removed), so the
-  // checkbox line indices computed from `contentWithoutImages` stay valid.
-  const processed = useMemo(
-    () => preprocessTicketMentions(contentWithoutImages),
-    [contentWithoutImages],
-  );
+  // Encode every mention type — agent / panel / skill / workflow / routine /
+  // human / ticket / note, plus their struck-through variants — as #fleex-…
+  // links so the `a` override can render them as chips. Inline-only (no line
+  // added or removed), so the checkbox line indices computed from
+  // `contentWithoutImages` stay valid.
+  const processed = useMemo(() => preprocessMentions(contentWithoutImages), [contentWithoutImages]);
 
   // Pre-compute checkbox line indices within this segment (0-indexed, local)
   const lines = useMemo(() => contentWithoutImages.split('\n'), [contentWithoutImages]);
@@ -210,6 +243,54 @@ function MarkdownSection({
       // Ticket mention — clickable chip that navigates to the referenced ticket
       if (href?.startsWith(TICKET_MENTION_HREF_PREFIX)) {
         return <TicketMentionChip idRef={href.slice(TICKET_MENTION_HREF_PREFIX.length)} />;
+      }
+      // Citation — `[3]` in a cited answer, pointing at its source list
+      if (onCitation && href?.startsWith(CITATION_HREF_PREFIX)) {
+        const index = decodeCitation(href);
+        if (index !== null) {
+          return (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onCitation(index); }}
+              title={`Source ${index}`}
+              className="mx-px cursor-pointer rounded-sm border-none bg-[var(--theme-accent)]/12 px-1 align-baseline text-[0.85em] font-medium text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-accent)]/25"
+            >
+              {children}
+            </button>
+          );
+        }
+      }
+      // Note reference — `@scratchpad:global` or `@scratchpad:owner/name`
+      if (href?.startsWith(SCRATCHPAD_REF_HREF_PREFIX)) {
+        const noteKey = decodeURIComponent(href.slice(SCRATCHPAD_REF_HREF_PREFIX.length));
+        return <NoteRefChip noteKey={noteKey}>{children}</NoteRefChip>;
+      }
+      // Struck mention — the comment surface means "resolved/removed"; here it is
+      // simply what a strikethrough looks like.
+      if (href?.startsWith('#fleex-struck:')) {
+        return (
+          <span className="line-through text-[var(--theme-text-muted)] opacity-60">{children}</span>
+        );
+      }
+      // Human mention — there is no person page to open, so it stays a pill.
+      // Only the configured human is pilled: the fallback alternative matches any
+      // `@word`, so pilling unconditionally would decorate package names, email
+      // addresses and git URLs.
+      if (href?.startsWith('#fleex-human:')) {
+        const name = href.slice('#fleex-human:'.length);
+        if (name !== humanMentionName) return <>{children}</>;
+        return (
+          <span className="rounded-sm bg-[var(--theme-bg-overlay)] px-1 py-px text-[var(--theme-text-secondary)]">
+            {children}
+          </span>
+        );
+      }
+      // Primitive reference — a pointer to a configuration page, never a trigger.
+      for (const [prefix, kind] of PRIMITIVE_HREF) {
+        if (href?.startsWith(prefix)) {
+          const name = href.slice(prefix.length).replace(/^[a-z]+:/, '');
+          return <PrimitiveRefChip kind={kind} name={name} />;
+        }
       }
       return (
         <a

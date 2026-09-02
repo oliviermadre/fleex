@@ -313,6 +313,23 @@ export interface SkillExecutedEvent extends DomainEvent {
   ticketId: string;
 }
 
+// ── Scratchpad events ──
+
+/**
+ * A scratchpad was written.
+ *
+ * Scratchpad writes went straight to the KV store with no event, which left the
+ * developer's own notes — often the only record of a convention or a pitfall —
+ * invisible to anything event-driven. `key` is the KV key (`__global__` or
+ * `<org>/<name>`), which is what identifies the note everywhere else.
+ */
+export interface ScratchpadUpdatedEvent extends DomainEvent {
+  type: 'scratchpad.updated';
+  key: string;
+  /** Repository slug for a per-repo scratchpad; null for the global one. */
+  repo: string | null;
+}
+
 // ── Panel events ──
 
 export interface PanelCreatedEvent extends DomainEvent {
@@ -608,6 +625,7 @@ export type AnyDomainEvent =
   | SkillUpdatedEvent
   | SkillDeletedEvent
   | SkillExecutedEvent
+  | ScratchpadUpdatedEvent
   | PanelCreatedEvent
   | PanelUpdatedEvent
   | PanelDeletedEvent

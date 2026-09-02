@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject, ContextInjectionItem, MemorySnippetRef } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel, parseRepoRef } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
@@ -19,6 +19,7 @@ import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
+import { PromptComposer, buildExecutionContextData, promptTextLength } from '../utils/prompt-composer.js';
 import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
@@ -39,6 +40,89 @@ import { resolveFileReferences, promptHasImageAttachment, type PromptContentBloc
 import { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA, buildStandardOutputSchema } from '../utils/merge-output-schemas.js';
 import { normalizeDeliverableTypes } from '@fleex/shared';
 import type { DeliverableTypeDef } from '@fleex/shared';
+
+/**
+ * A composed user prompt together with the manifest of what went into it. The
+ * two travel as one value so an emit site cannot report a prompt without also
+ * being able to report its provenance.
+ */
+interface ComposedPrompt {
+  blocks: PromptContentBlock[];
+  manifest: ContextInjectionItem[];
+}
+
+/**
+ * What a finished run offers the memory kernel.
+ *
+ * The agent's own final text plus the diff it left behind: together they say what
+ * was attempted and what actually changed, which is the pair a later run needs and
+ * neither half provides alone.
+ */
+export interface ExecutionTraceInput {
+  executionId: string;
+  ticketId: string;
+  personaName: string;
+  /** The run's final text. */
+  resultText: string;
+  /** Where the work happened, for the diff. */
+  worktreePath?: string | null;
+}
+
+/** Human-readable origin of a retrieved memory snippet, for the Context tab. */
+/**
+ * The shadow retrieval as manifest items.
+ *
+ * Marked with their own section so the Context tab can show them as "would have
+ * been injected" rather than mixing them into what actually was — the whole value
+ * of a shadow is that the distinction is unambiguous.
+ */
+function shadowManifest(snippets: MemorySnippetRef[] | undefined): ContextInjectionItem[] {
+  return (snippets ?? []).map((snippet) => ({
+    kind: 'memory_snippet' as const,
+    section: 'Semantic engine (not injected)',
+    label: snippet.title,
+    provenance: memorySnippetProvenance(snippet),
+    sourceKind: memorySnippetSourceKind(snippet.sourceKind),
+    sourceId: snippet.sourceId,
+    ticketId: snippet.ticketId ?? null,
+    score: snippet.score,
+    charCount: snippet.content.length,
+  }));
+}
+
+function memorySnippetProvenance(snippet: MemorySnippetRef): string {
+  const parts: string[] = [snippet.sourceKind.replace(/_/g, ' ')];
+  if (snippet.repo) parts.push(snippet.repo);
+  if (snippet.updatedAt) parts.push(snippet.updatedAt.slice(0, 10));
+  return parts.join(' — ');
+}
+
+/**
+ * Map a memory source kind onto the entity the UI can open. Kinds with no
+ * openable counterpart (an execution trace, a Q&A pair) return undefined, which
+ * renders the card inert rather than as a dead link.
+ */
+function memorySnippetSourceKind(sourceKind: string): ContextInjectionItem['sourceKind'] {
+  switch (sourceKind) {
+    case 'ticket':
+    case 'ticket_summary':
+    case 'comment_thread':
+      return 'ticket';
+    case 'deliverable':
+    case 'cli_session_summary':
+      return 'deliverable';
+    case 'scratchpad':
+      return 'scratchpad';
+    case 'persona':
+      return 'persona';
+    case 'skill':
+      return 'skill';
+    case 'epic':
+      return 'epic';
+    default:
+      return undefined;
+  }
+}
 
 interface ActiveExecution {
   mentionId: string;
@@ -144,6 +228,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
   /** Set by WS plugin to broadcast execution completion */
   public onExecutionComplete: ((personaId: string, status: 'completed' | 'failed', mentionId: string) => void) | null = null;
+
+  /**
+   * Called after a run finishes successfully, with what it produced.
+   *
+   * A callback rather than inline work: distilling a trace is a memory concern,
+   * and this file is already the agent execution engine. Fire-and-forget — a run
+   * must never fail, or be delayed, because its trace could not be summarised.
+   */
+  public onExecutionTrace: ((trace: ExecutionTraceInput) => void) | null = null;
 
   /** Set by container after construction (avoids circular dep) */
   public eventBus: EventBus | null = null;
@@ -774,8 +867,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // `isWakeUp` is decided up front from `wokenMentionIds` (a genuine resume
       // from waiting_for_info), NOT from "a session exists" — a fresh queued
       // mention reuses the session but is not a wake-up.
-      const userPromptBlocks = await this.composeUserPrompt(context, mention, isWakeUp);
-      const userPromptTextLength = userPromptBlocks.reduce((n, b) => n + (b.type === 'text' ? b.text.length : 0), 0);
+      const { blocks: userPromptBlocks, manifest: userPromptManifest } = await this.composeUserPrompt(context, mention, isWakeUp);
+      const userPromptTextLength = promptTextLength(userPromptBlocks);
 
       this.logger.info('Agent execution started', {
         executionId,
@@ -836,6 +929,18 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         ticketStatus: context.ticket.status,
         commentsCount: context.comments.length,
         deliverablesCount: context.deliverables.length,
+      }));
+
+      await emitEvent('execution_context', buildExecutionContextData({
+        executionId,
+        systemPrompt,
+        promptBlocks: userPromptBlocks,
+        manifest: userPromptManifest,
+        model: resolved.model,
+        effectiveMode,
+        maxTurns: runMaxTurns,
+        memoryEngine: context.memoryEngine,
+        shadowManifest: shadowManifest(context.shadowSnippets),
       }));
 
       // 9. Setup execution timeout
@@ -1290,6 +1395,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         deliverableId: resultDeliverableId,
       });
       this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'completed', abortController });
+
+      // Offer the run to the memory kernel. Fire-and-forget: a trace that cannot
+      // be distilled must not affect the run that produced it.
+      this.onExecutionTrace?.({
+        executionId,
+        ticketId: mention.ticketId,
+        personaName: persona.name,
+        resultText,
+        worktreePath,
+      });
       this.onExecutionComplete?.(persona.id, 'completed', mention.id);
 
       this.logger.info('Agent execution completed', {
@@ -1486,10 +1601,19 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       agentName: persona.name,
     });
 
-    const skillPromptBlocks = await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody);
+    const { blocks: skillPromptBlocks, manifest: skillPromptManifest } =
+      await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody);
 
     if (opts?.workflowContextPrompt) {
-      skillPromptBlocks.push({ type: 'text', text: `\n---\n\n${opts.workflowContextPrompt}` });
+      const workflowStepText = `\n---\n\n${opts.workflowContextPrompt}`;
+      skillPromptBlocks.push({ type: 'text', text: workflowStepText });
+      skillPromptManifest.push({
+        kind: 'workflow_instructions',
+        section: 'Workflow step',
+        label: 'Step instructions',
+        ticketId,
+        charCount: workflowStepText.length,
+      });
     }
 
     this.logger.info('Skill execution started', {
@@ -1523,10 +1647,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     if (humanName) skillContextSections.push(`Human operator (@${humanName})`);
     if (worktreePath) skillContextSections.push(`Working directory (${worktreePath})`);
     skillContextSections.push(`Skill: ${skill.displayName}`);
-    const skillUserPromptLength = skillPromptBlocks.reduce(
-      (n, b) => n + (b.type === 'text' ? (b as { text: string }).text.length : 0),
-      0,
-    );
+    const skillUserPromptLength = promptTextLength(skillPromptBlocks);
 
     const skillMaxTurns = effectiveMaxTurns('edit', this.config.get().agentMaxTurns);
 
@@ -1554,6 +1675,18 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       ticketStatus: context.ticket.status,
       commentsCount: context.comments.length,
       deliverablesCount: context.deliverables.length,
+    }));
+
+    await emitEvent('execution_context', buildExecutionContextData({
+      executionId,
+      systemPrompt,
+      promptBlocks: skillPromptBlocks,
+      manifest: skillPromptManifest,
+      model: persona.model,
+      effectiveMode: 'edit',
+      maxTurns: skillMaxTurns,
+      memoryEngine: context?.memoryEngine,
+      shadowManifest: shadowManifest(context?.shadowSnippets),
     }));
 
     // 6. Acquire a global SDK slot before arming the timeout, so time spent
@@ -1971,7 +2104,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         ? context.ticket.links.filter((l) => l.type === 'repository').length
         : (params.subject?.repos?.length ?? 0);
       const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount);
-      const userPromptBlocks = context
+      const { blocks: userPromptBlocks, manifest: userPromptManifest } = context
         ? await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt)
         : await this.composeRoutineUserPrompt(params.subject ?? null, params.workflowContextPrompt);
       const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
@@ -2016,6 +2149,18 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         ticketStatus: context?.ticket.status,
         commentsCount: context?.comments.length ?? 0,
         deliverablesCount: context?.deliverables.length ?? 0,
+      }));
+
+      await emitEvent('execution_context', buildExecutionContextData({
+        executionId,
+        systemPrompt,
+        promptBlocks: userPromptBlocks,
+        manifest: userPromptManifest,
+        model: persona.model,
+        effectiveMode,
+        maxTurns: wfMaxTurns,
+        memoryEngine: context?.memoryEngine,
+        shadowManifest: shadowManifest(context?.shadowSnippets),
       }));
 
       // SDK query
@@ -2133,28 +2278,42 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   private async composeWorkflowUserPrompt(
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     workflowContextPrompt: string,
-  ): Promise<PromptContentBlock[]> {
-    const blocks: PromptContentBlock[] = [];
-    const pushText = (text: string) => blocks.push({ type: 'text', text });
+  ): Promise<ComposedPrompt> {
+    const composer = new PromptComposer((text) => this.resolveText(text));
 
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+    composer.track(
+      { kind: 'ticket_header', section: 'Ticket', label: context.ticket.title, sourceKind: 'ticket', sourceId: context.ticket.id, ticketId: context.ticket.id },
+      `# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`,
+    );
     if (context.ticket.description) {
-      blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
+      await composer.trackResolved(
+        { kind: 'description', section: 'Description', label: 'Ticket description', sourceKind: 'ticket', sourceId: context.ticket.id, ticketId: context.ticket.id },
+        `\n## Description\n\n${context.ticket.description}`,
+      );
     }
     if (context.comments.length > 0) {
-      pushText('\n## Comments\n');
+      composer.scaffold('\n## Comments\n');
       for (const c of context.comments) {
-        blocks.push(...await this.resolveText(`**${c.authorName}** (${c.authorType}):\n${c.body}\n`));
+        await composer.trackResolved(
+          { kind: 'comment', section: 'Comments', label: `${c.authorName} (${c.authorType})`, sourceKind: 'comment', sourceId: c.id, ticketId: context.ticket.id },
+          `**${c.authorName}** (${c.authorType}):\n${c.body}\n`,
+        );
       }
     }
     if (context.deliverables.length > 0) {
-      pushText('\n## Deliverables\n');
+      composer.scaffold('\n## Deliverables\n');
       for (const d of context.deliverables) {
-        pushText(`### [${d.status}] ${d.title} (${d.type})\n${d.content ?? ''}\n`);
+        composer.track(
+          { kind: 'deliverable', section: 'Deliverables', label: d.title, provenance: `${d.type} — ${d.status}`, sourceKind: 'deliverable', sourceId: d.id, ticketId: context.ticket.id },
+          `### [${d.status}] ${d.title} (${d.type})\n${d.content ?? ''}\n`,
+        );
       }
     }
-    pushText('\n---\n\n' + workflowContextPrompt);
-    return blocks;
+    composer.track(
+      { kind: 'workflow_instructions', section: 'Workflow step', label: 'Step instructions', ticketId: context.ticket.id },
+      '\n---\n\n' + workflowContextPrompt,
+    );
+    return { blocks: composer.getBlocks(), manifest: composer.getManifest() };
   }
 
   /**
@@ -2165,19 +2324,27 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   private async composeRoutineUserPrompt(
     subject: RunSubject | null,
     workflowContextPrompt: string,
-  ): Promise<PromptContentBlock[]> {
-    const blocks: PromptContentBlock[] = [];
-    const pushText = (text: string) => blocks.push({ type: 'text', text });
+  ): Promise<ComposedPrompt> {
+    const composer = new PromptComposer((text) => this.resolveText(text));
 
-    pushText('# Routine run\n\nThis run is not attached to a ticket. Your objective is the brief below.');
+    composer.scaffold('# Routine run\n\nThis run is not attached to a ticket. Your objective is the brief below.');
     if (subject?.brief) {
-      blocks.push(...await this.resolveText(`\n## Brief\n\n${subject.brief}`));
+      await composer.trackResolved(
+        { kind: 'routine_brief', section: 'Brief', label: 'Routine brief' },
+        `\n## Brief\n\n${subject.brief}`,
+      );
     }
     if (subject?.repos?.length) {
-      pushText(`\n## Repositories\n\n${subject.repos.map((r) => `- ${r}`).join('\n')}\n`);
+      composer.track(
+        { kind: 'routine_repositories', section: 'Repositories', label: subject.repos.join(', ') },
+        `\n## Repositories\n\n${subject.repos.map((r) => `- ${r}`).join('\n')}\n`,
+      );
     }
-    pushText('\n---\n\n' + workflowContextPrompt);
-    return blocks;
+    composer.track(
+      { kind: 'workflow_instructions', section: 'Workflow step', label: 'Step instructions' },
+      '\n---\n\n' + workflowContextPrompt,
+    );
+    return { blocks: composer.getBlocks(), manifest: composer.getManifest() };
   }
 
   private async composeSkillUserPrompt(
@@ -2185,40 +2352,69 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     skillDisplayName: string,
     skillMarkdown: string,
     commentBody?: string,
-  ): Promise<PromptContentBlock[]> {
-    const blocks: PromptContentBlock[] = [];
-    const pushText = (text: string) => blocks.push({ type: 'text', text });
+  ): Promise<ComposedPrompt> {
+    const composer = new PromptComposer((text) => this.resolveText(text));
 
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}${context.ticket.type ? ` | Type: ${context.ticket.type}` : ''}`);
+    await this.composeTicketBackground(composer, context);
+
+    if (commentBody) {
+      composer.track(
+        { kind: 'skill_arguments', section: 'Skill Arguments', label: 'Arguments from comment', ticketId: context.ticket.id },
+        `\n## Skill Arguments (from comment)\n${commentBody}`,
+      );
+    }
+
+    composer.track(
+      { kind: 'skill_instructions', section: 'Skill Instructions', label: skillDisplayName, sourceKind: 'skill' },
+      `\n---\n\n# Skill Instructions: ${skillDisplayName}\n\n${skillMarkdown}`,
+    );
+
+    return { blocks: composer.getBlocks(), manifest: composer.getManifest() };
+  }
+
+  /**
+   * The ticket background every non-mention run shares: header, description,
+   * comments, deliverables. Factored out so skill and workflow-step prompts
+   * cannot drift apart from each other in either the text they send or the
+   * manifest they declare.
+   */
+  private async composeTicketBackground(
+    composer: PromptComposer,
+    context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
+    includeTicketType = true,
+  ): Promise<void> {
+    composer.track(
+      { kind: 'ticket_header', section: 'Ticket', label: context.ticket.title, sourceKind: 'ticket', sourceId: context.ticket.id, ticketId: context.ticket.id },
+      `# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`
+      + (includeTicketType && context.ticket.type ? ` | Type: ${context.ticket.type}` : ''),
+    );
 
     if (context.ticket.description) {
-      blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
+      await composer.trackResolved(
+        { kind: 'description', section: 'Description', label: 'Ticket description', sourceKind: 'ticket', sourceId: context.ticket.id, ticketId: context.ticket.id },
+        `\n## Description\n\n${context.ticket.description}`,
+      );
     }
 
     if (context.comments.length > 0) {
-      pushText('\n## Comments\n');
+      composer.scaffold('\n## Comments\n');
       for (const comment of context.comments) {
-        blocks.push(...await this.resolveText(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`));
+        await composer.trackResolved(
+          { kind: 'comment', section: 'Comments', label: `${comment.authorName} (${comment.authorType})`, sourceKind: 'comment', sourceId: comment.id, ticketId: context.ticket.id },
+          `**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`,
+        );
       }
     }
 
     if (context.deliverables.length > 0) {
-      pushText('\n## Deliverables\n');
+      composer.scaffold('\n## Deliverables\n');
       for (const d of context.deliverables) {
-        pushText(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n`);
-        if (d.content) {
-          pushText(d.content);
-        }
+        composer.track(
+          { kind: 'deliverable', section: 'Deliverables', label: d.title, provenance: `${d.type} by ${d.agentName} — ${d.status}`, sourceKind: 'deliverable', sourceId: d.id, ticketId: context.ticket.id },
+          `### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n${d.content ?? ''}`,
+        );
       }
     }
-
-    if (commentBody) {
-      pushText(`\n## Skill Arguments (from comment)\n${commentBody}`);
-    }
-
-    pushText(`\n---\n\n# Skill Instructions: ${skillDisplayName}\n\n${skillMarkdown}`);
-
-    return blocks;
   }
 
   /**
@@ -2474,51 +2670,59 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     mention: TicketMentionEntity,
     isWakeUp = false,
-  ): Promise<PromptContentBlock[]> {
-    const blocks: PromptContentBlock[] = [];
+  ): Promise<ComposedPrompt> {
+    const composer = new PromptComposer((text) => this.resolveText(text));
 
-    const pushText = (text: string) => blocks.push({ type: 'text', text });
-
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}${context.ticket.type ? ` | Type: ${context.ticket.type}` : ''}`);
-
-    if (context.ticket.description) {
-      const descBlocks = await this.resolveText(`\n## Description\n\n${context.ticket.description}`);
-      blocks.push(...descBlocks);
-    }
-
-    if (context.comments.length > 0) {
-      pushText('\n## Comments\n');
-      for (const comment of context.comments) {
-        const commentBlocks = await this.resolveText(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`);
-        blocks.push(...commentBlocks);
-      }
-    }
-
-    if (context.deliverables.length > 0) {
-      pushText('\n## Deliverables\n');
-      for (const d of context.deliverables) {
-        pushText(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n`);
-        if (d.content) {
-          pushText(d.content);
-        }
-      }
-    }
+    await this.composeTicketBackground(composer, context);
 
     if (context.epics && context.epics.length > 0) {
-      pushText('\n## Epics\n');
+      composer.scaffold('\n## Epics\n');
       for (const epic of context.epics) {
-        pushText(`### ${epic.emoji} ${epic.name} (${epic.timeframe}, ${epic.groupStatus})\n`);
-        if (epic.description) {
-          blocks.push(...await this.resolveText(epic.description + '\n'));
-        }
+        await composer.trackResolved(
+          { kind: 'epic', section: 'Epics', label: epic.name, provenance: `${epic.timeframe}, ${epic.groupStatus}` },
+          `### ${epic.emoji} ${epic.name} (${epic.timeframe}, ${epic.groupStatus})\n${epic.description ? epic.description + '\n' : ''}`,
+        );
       }
     }
 
     if (context.relevantSummaries && context.relevantSummaries.length > 0) {
-      pushText('\n## Related Ticket Summaries\n');
-      pushText('Context from previously completed tickets — use to avoid reinventing solutions.\n');
+      composer.scaffold('\n## Related Ticket Summaries\n');
+      composer.scaffold('Context from previously completed tickets — use to avoid reinventing solutions.\n');
       for (const s of context.relevantSummaries) {
-        pushText(`---\n${s.content}\n`);
+        composer.track(
+          {
+            kind: 'ticket_summary',
+            section: 'Related Ticket Summaries',
+            label: s.ticketTitle,
+            provenance: `Ticket ${s.ticketStatus} — updated ${s.updatedAt.slice(0, 10)}`,
+            sourceKind: 'ticket',
+            sourceId: s.ticketId,
+            ticketId: s.ticketId,
+          },
+          `---\n${s.content}\n`,
+        );
+      }
+    }
+
+    // Retrieved memory beyond summaries. Only the semantic engine produces this,
+    // so the section is absent by default and appears the moment it is opted into.
+    if (context.memorySnippets && context.memorySnippets.length > 0) {
+      composer.scaffold('\n## Relevant Memory\n');
+      composer.scaffold('Retrieved from past work across this instance. Each item states its source.\n');
+      for (const snippet of context.memorySnippets) {
+        composer.track(
+          {
+            kind: 'memory_snippet',
+            section: 'Relevant Memory',
+            label: snippet.title,
+            provenance: memorySnippetProvenance(snippet),
+            sourceKind: memorySnippetSourceKind(snippet.sourceKind),
+            sourceId: snippet.sourceId,
+            ticketId: snippet.ticketId ?? null,
+            score: snippet.score,
+          },
+          `---\n### ${snippet.title}\n${snippet.content}\n`,
+        );
       }
     }
 
@@ -2528,8 +2732,17 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // keeps later clarifications visible without letting one mention swallow the
     // others' requests into a single batched output.
     const ownComment = context.comments.find((c) => c.id === mention.commentId)?.body;
+    const taskDescriptor = {
+      kind: 'task_instruction' as const,
+      section: 'Your task',
+      label: isWakeUp ? 'Resuming after waiting for input' : `Request from ${mention.sourceAgent}`,
+      sourceKind: 'comment' as const,
+      sourceId: mention.commentId,
+      ticketId: context.ticket.id,
+    };
     if (isWakeUp) {
-      pushText(
+      composer.track(
+        taskDescriptor,
         `\n---\n\n**Resuming your task.** You paused waiting for input. Review the latest activity on the ticket: `
         + `if it answers what you were waiting for, finish your task and resolve; if it redirects you, follow the new direction. `
         + `Stay focused on YOUR task${ownComment ? ' (your original request below)' : ''} — other comments that @mention you with different requests are separate queued tasks, not for now. `
@@ -2537,14 +2750,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         + (ownComment ? `\n\n**Your original request** (from ${mention.sourceAgent}):\n> ${ownComment.replace(/\n/g, '\n> ')}` : ''),
       );
     } else {
-      pushText(
+      composer.track(
+        taskDescriptor,
         `\n---\n\n**Your task** — respond to this request from ${mention.sourceAgent}:\n`
         + (ownComment ? `> ${ownComment.replace(/\n/g, '\n> ')}\n\n` : `(comment ${mention.commentId})\n\n`)
         + `Everything above is context. Other comments that @mention you with different requests are separate tasks, already queued and handled one at a time — do NOT answer them here. Focus only on the request above.`,
       );
     }
 
-    return blocks;
+    return { blocks: composer.getBlocks(), manifest: composer.getManifest() };
   }
 
   /**

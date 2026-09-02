@@ -121,6 +121,30 @@ describe('parseUrl', () => {
     expect(result.settingsTab).toBe('appearance');
   });
 
+  it('parses every tab the settings nav can navigate to', () => {
+    // The nav is route-driven: it calls navigate(`/settings/<tab>`), so a tab the
+    // parser does not know is a menu entry that does nothing when clicked, with no
+    // error to notice. That shipped once, for `memory`.
+    const navigable = [
+      'general', 'appearance', 'pinned-icons', 'workspace-actions',
+      'agent-tokens', 'deliverable-types', 'memory',
+    ];
+    for (const tab of navigable) {
+      const result = parseUrl(`/settings/${tab}`, '');
+      expect(result.settingsTab, `/settings/${tab} should be routable`).toBe(tab);
+      expect(result.redirect, `/settings/${tab} should not redirect`).toBeUndefined();
+    }
+  });
+
+  it('round-trips every settings tab through a url', () => {
+    // What the store holds has to survive being turned into a url and read back,
+    // or the nav highlight and the panel disagree about which tab is open.
+    for (const tab of ['general', 'memory', 'deliverable-types'] as const) {
+      const url = storeToUrl('settings', null, null, null, null, null, null, null, null, 'config', tab);
+      expect(parseUrl(url.pathname, url.search).settingsTab).toBe(tab);
+    }
+  });
+
   it('redirects unknown /settings/:tab to /settings', () => {
     const result = parseUrl('/settings/invalid-tab', '');
     expect(result.redirect).toBe('/settings');

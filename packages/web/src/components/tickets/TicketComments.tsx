@@ -8,7 +8,6 @@ import type { Components } from 'react-markdown';
 import { appWs } from '../../services/websocket';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
@@ -33,17 +32,20 @@ import { useUIStore } from '../../stores/uiStore';
 import { useToastStore } from '../../stores/toastStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { MentionTypeIcon } from '../../lib/primitives';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
-import { preprocessMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { NoteRefChip } from '../markdown/NoteRefChip';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
 import { userRemarkPlugins } from '../markdown/profiles';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
+import { MentionMenu } from '../markdown/MentionMenu';
+import { useMentionAutocomplete } from '../markdown/useMentionAutocomplete';
+import { useAllMentionOptions } from '../markdown/useAllMentionOptions';
 
 /** Per-mode color for the conversation execution-mode pill. */
 const MODE_PILL_CLASS: Record<ConversationMode, string> = {
@@ -117,9 +119,10 @@ function parseAgentMentions(body: string): string[] {
 }
 
 // ── Mention pre-processing ──
-// `preprocessMentions` lives in ../markdown/mentions (shared with the generic
-// MarkdownRenderer, which uses the ticket-only variant). It now also encodes
-// @ticket:<id> mentions, handled below in the `a` override via #fleex-ticket:.
+// `preprocessMentions` lives in ../markdown/mentions and is the single
+// pre-processor shared with the generic MarkdownRenderer — both encode every
+// mention type the same way. It also encodes @ticket:<id> mentions, handled
+// below in the `a` override via #fleex-ticket:.
 
 function MentionSpan({ text, mentionId, onRemove, className }: {
   text: string;
@@ -235,6 +238,19 @@ export const CommentMarkdown = memo(function CommentMarkdown({
         // Ticket reference — purely referential chip, navigates to the ticket.
         return <TicketMentionChip idRef={href.slice(TICKET_MENTION_HREF_PREFIX.length)} />;
       }
+      if (href?.startsWith(SCRATCHPAD_REF_HREF_PREFIX)) {
+        // Note reference — referential like a ticket chip, navigates to the note.
+        const noteKey = decodeURIComponent(href.slice(SCRATCHPAD_REF_HREF_PREFIX.length));
+        return <NoteRefChip noteKey={noteKey}>{children}</NoteRefChip>;
+      }
+      // Do NOT replace the five branches below (agent / panel / skill / workflow /
+      // human) with `PrimitiveRefChip`, even though they look like the same
+      // lookup-and-render-a-chip shape it already does for every other surface.
+      // These are ACTIONABLE: each one is tied to a `mentionId` resolved from
+      // this comment's run record and carries `onRemove`, which cancels that
+      // dispatched run. `PrimitiveRefChip` only ever points at a config screen —
+      // swapping it in here would compile, look identical when no run is active,
+      // and silently delete the cancel affordance the moment one is.
       if (href?.startsWith('#fleex-agent:')) {
         const name = href.slice('#fleex-agent:'.length);
         const mentionText = `@${name}`;
@@ -469,62 +485,6 @@ function relativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-// ── Mention Autocomplete ──
-
-interface MentionOption {
-  /** The text inserted into the textarea (e.g. "@agent:catalyst" or "@olivier") */
-  insertText: string;
-  /** Display label shown in the dropdown */
-  label: string;
-  /** Secondary text (e.g. "agent" or "human") */
-  type: 'agent' | 'human' | 'panel' | 'skill' | 'workflow' | 'ticket';
-}
-
-function MentionAutocomplete({
-  options,
-  selectedIndex,
-  onSelect,
-  position,
-}: {
-  options: MentionOption[];
-  selectedIndex: number;
-  onSelect: (opt: MentionOption) => void;
-  position: { bottom: number; left: number };
-}) {
-  const listRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = listRef.current?.children[selectedIndex] as HTMLElement | undefined;
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [selectedIndex]);
-
-  if (options.length === 0) return null;
-
-  return (
-    <div
-      ref={listRef}
-      className="absolute z-30 max-h-48 min-w-[200px] overflow-y-auto rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
-      style={{ bottom: position.bottom, left: position.left }}
-    >
-      {options.map((opt, i) => (
-        <button
-          key={opt.insertText}
-          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${
-            i === selectedIndex
-              ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-text-primary)]'
-              : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
-          }`}
-          onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
-        >
-          <MentionTypeIcon type={opt.type} />
-          <span className="flex-1 truncate font-medium">{opt.label}</span>
-          <span className="text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ── Main Component ──
 
 export function TicketComments({ ticketId }: { ticketId: string }) {
@@ -559,11 +519,6 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Autocomplete state
-  const [acOpen, setAcOpen] = useState(false);
-  const [acQuery, setAcQuery] = useState('');
-  const [acIndex, setAcIndex] = useState(0);
-  const [acTriggerPos, setAcTriggerPos] = useState(-1); // cursor position of the '@'
   const inputWrapperRef = useRef<HTMLDivElement>(null);
 
   // Conversation-scoped execution config lives on the ticket (persisted server
@@ -623,21 +578,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     onChange: setBody,
   });
 
-  // Build mention options from personas + panels + skills + workflows + human
+  // `useAllMentionOptions` below reads panels/skills/workflow templates straight
+  // from their stores — this effect is what actually populates them on mount.
   const personas = useAgentPersonaStore((s) => s.personas);
-  const panels = usePanelStore((s) => s.panels);
   const panelsLoaded = usePanelStore((s) => s.loaded);
   const loadPanels = usePanelStore((s) => s.loadPanels);
-  const skills = useSkillStore((s) => s.skills);
   const skillsLoaded = useSkillStore((s) => s.loaded);
   const loadSkills = useSkillStore((s) => s.loadSkills);
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
-  const humanMentionName = useSettingsStore(
-    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
-  );
-  // All loaded tickets — powers the @ticket: autocomplete (filtered client-side).
-  const allTickets = useTicketStore((s) => s.tickets);
 
   useEffect(() => {
     if (!panelsLoaded) loadPanels();
@@ -679,73 +628,14 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       });
   }, [mentions, personas]);
 
-  const allMentionOptions = useMemo<MentionOption[]>(() => {
-    const opts: MentionOption[] = personas.map((p) => ({
-      insertText: `@agent:${p.name}`,
-      label: p.displayName || p.name,
-      type: 'agent' as const,
-    }));
-    for (const panel of panels) {
-      if (panel.enabled) {
-        opts.push({
-          insertText: `@panel:${panel.name}`,
-          label: panel.displayName || panel.name,
-          type: 'panel' as const,
-        });
-      }
-    }
-    for (const skill of skills) {
-      if (skill.enabled) {
-        opts.push({
-          insertText: `@skill:${skill.commandName}`,
-          label: skill.displayName || skill.commandName,
-          type: 'skill' as const,
-        });
-      }
-    }
-    for (const wf of workflowTemplates) {
-      if (wf.enabled) {
-        opts.push({
-          insertText: `@workflow:${wf.slug}`,
-          label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
-          type: 'workflow' as const,
-        });
-      }
-    }
-    if (humanMentionName) {
-      opts.push({
-        insertText: `@${humanMentionName}`,
-        label: humanMentionName,
-        type: 'human' as const,
-      });
-    }
-    for (const t of allTickets) {
-      opts.push({
-        insertText: `@ticket:${t.displayId}`,
-        label: `#${t.displayId} ${t.title}`,
-        type: 'ticket' as const,
-      });
-    }
-    return opts;
-  }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
+  const allMentionOptions = useAllMentionOptions();
 
-  // Max ticket suggestions shown at once — tickets can be numerous, so we surface
-  // them only once the user has typed a query and cap the list to stay usable.
-  const MAX_TICKET_SUGGESTIONS = 8;
-
-  const filteredOptions = useMemo(() => {
-    if (!acOpen) return [];
-    const q = acQuery.toLowerCase();
-    const matches = (o: MentionOption) =>
-      o.label.toLowerCase().includes(q) || o.insertText.toLowerCase().includes(q);
-    const nonTicket = allMentionOptions.filter((o) => o.type !== 'ticket' && matches(o));
-    // Bare "@" (empty query) would otherwise dump every ticket into the dropdown.
-    if (q.length === 0) return nonTicket;
-    const tickets = allMentionOptions
-      .filter((o) => o.type === 'ticket' && matches(o))
-      .slice(0, MAX_TICKET_SUGGESTIONS);
-    return [...nonTicket, ...tickets];
-  }, [acOpen, acQuery, allMentionOptions]);
+  const mentionAc = useMentionAutocomplete({
+    options: allMentionOptions,
+    value: body,
+    onChange: setBody,
+    textareaRef,
+  });
 
   // Deliverable overlay opening (chips linked to comments via mentions)
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
@@ -1242,80 +1132,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     await doPost(conflicts);
   }, [conflictModal, doPost]);
 
-  const closeMentionAc = useCallback(() => {
-    setAcOpen(false);
-    setAcQuery('');
-    setAcIndex(0);
-    setAcTriggerPos(-1);
-  }, []);
-
-  const acceptMention = useCallback((opt: MentionOption) => {
-    const ta = textareaRef.current;
-    if (!ta || acTriggerPos < 0) return;
-    // Replace from '@' trigger to current cursor with the insert text + trailing space
-    const before = body.slice(0, acTriggerPos);
-    const after = body.slice(ta.selectionStart);
-    const newBody = before + opt.insertText + ' ' + after;
-    setBody(newBody);
-    closeMentionAc();
-    // Restore cursor position after React re-render
-    const newCursor = acTriggerPos + opt.insertText.length + 1;
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(newCursor, newCursor);
-    });
-  }, [body, setBody, acTriggerPos, closeMentionAc]);
-
-  const handleMentionScan = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    const cursor = e.target.selectionStart;
-
-    // Detect mention trigger: scan backwards from cursor for '@'
-    const textBeforeCursor = val.slice(0, cursor);
-    // Find the last '@' that's either at the start or preceded by whitespace
-    const atIdx = textBeforeCursor.lastIndexOf('@');
-    if (atIdx >= 0 && (atIdx === 0 || /\s/.test(textBeforeCursor[atIdx - 1]!))) {
-      const fragment = textBeforeCursor.slice(atIdx + 1);
-      // Only trigger if there's no space after the @ (user is still typing the name)
-      if (!/\s/.test(fragment)) {
-        setAcOpen(true);
-        setAcTriggerPos(atIdx);
-        // Strip the type prefix for filtering so typing "@agent:cat" matches
-        // "catalyst" and "@ticket:37" matches ticket #37 by displayId/title.
-        const q = fragment.replace(/^(agent|panel|skill|workflow|ticket):/, '');
-        setAcQuery(q);
-        setAcIndex(0);
-        return;
-      }
-    }
-    closeMentionAc();
-  }, [closeMentionAc]);
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Autocomplete navigation
-      if (acOpen && filteredOptions.length > 0) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setAcIndex((i) => (i + 1) % filteredOptions.length);
-          return;
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setAcIndex((i) => (i - 1 + filteredOptions.length) % filteredOptions.length);
-          return;
-        }
-        if (e.key === 'Tab' || e.key === 'Enter') {
-          e.preventDefault();
-          acceptMention(filteredOptions[acIndex]!);
-          return;
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          closeMentionAc();
-          return;
-        }
-      }
+      if (mentionAc.onKeyDown(e)) return;
       // Execution mode cycle: Shift+Tab (Talk→Plan→Edit→Talk), à la Claude Code.
       if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault();
@@ -1334,7 +1153,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         handleSubmit();
       }
     },
-    [acOpen, filteredOptions, acIndex, acceptMention, closeMentionAc, handleSubmit, cycleMode, setExecutionMode],
+    [mentionAc, handleSubmit, cycleMode, setExecutionMode],
   );
 
   return (
@@ -1643,17 +1462,17 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           textareaRef={textareaRef}
           maxRows={10}
           textareaProps={{
-            onChange: handleMentionScan,
+            onChange: mentionAc.onScan,
             onKeyDown: handleKeyDown,
             onPaste: commentFileUpload.pasteHandler,
-            onBlur: () => { setTimeout(closeMentionAc, 150); },
+            onBlur: () => { setTimeout(mentionAc.close, 150); },
           }}
           overlay={
-            acOpen && filteredOptions.length > 0 ? (
-              <MentionAutocomplete
-                options={filteredOptions}
-                selectedIndex={acIndex}
-                onSelect={acceptMention}
+            mentionAc.open && mentionAc.filtered.length > 0 ? (
+              <MentionMenu
+                options={mentionAc.filtered}
+                selectedIndex={mentionAc.index}
+                onSelect={mentionAc.accept}
                 position={{ bottom: (textareaRef.current?.offsetHeight ?? 36) + 8, left: 0 }}
               />
             ) : null

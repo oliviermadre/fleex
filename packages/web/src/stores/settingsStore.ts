@@ -66,6 +66,42 @@ export interface AppSettings {
    * to the workspace the user is actually viewing — see assistantStore.
    */
   workspace: string;
+  /**
+   * Which strategy selects the context injected into agent prompts. Absent means
+   * `legacy`, the ranking that shipped before the semantic engine existed.
+   */
+  memoryEngine?: 'legacy' | 'semantic';
+  /**
+   * Per-feature switches for everything built on retrieval. Each requires the
+   * semantic engine; absent means enabled, so opting into the engine turns them
+   * all on and a user disables individually.
+   */
+  memoryFeatures?: {
+    paletteSearch?: boolean;
+    ask?: boolean;
+    repoScope?: boolean;
+    duplicateDetection?: boolean;
+    humanFeedbackBoost?: boolean;
+    personaCoach?: boolean;
+    synthesis?: boolean;
+    curation?: boolean;
+    assistantMemory?: boolean;
+    automationMining?: boolean;
+    relatedNotes?: boolean;
+    executionTraces?: boolean;
+    cliSessions?: boolean;
+  };
+  /** Catalogue id of the encoder that produces vectors. */
+  memoryEmbeddingModel?: string;
+  /** Where embeddings are computed: in-process, or a local Ollama daemon. */
+  memoryEmbeddingProvider?: 'transformers' | 'ollama';
+  /** Character ceiling on injected memory snippets. Unset → engine default. */
+  memoryInjectionCharBudget?: number;
+  /**
+   * Under the current engine, also compute what the semantic engine would have
+   * retrieved and record it on the run without injecting it.
+   */
+  memoryShadowMode?: boolean;
 }
 
 interface SettingsState {

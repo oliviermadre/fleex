@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, cleanup, screen } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent } from '@testing-library/react';
 import { CommentMarkdown } from './TicketComments';
 
 /**
@@ -12,13 +12,19 @@ import { CommentMarkdown } from './TicketComments';
 
 afterEach(cleanup);
 
-function renderBody(body: string) {
+function renderBody(
+  body: string,
+  opts: {
+    mentionLookup?: Map<string, Map<string, string>>;
+    onRemoveMention?: (id: string) => void;
+  } = {},
+) {
   return render(
     <CommentMarkdown
       body={body}
       commentId="c1"
-      mentionLookup={new Map()}
-      onRemoveMention={vi.fn()}
+      mentionLookup={opts.mentionLookup ?? new Map()}
+      onRemoveMention={opts.onRemoveMention ?? vi.fn()}
     />,
   );
 }
@@ -36,6 +42,39 @@ describe('CommentMarkdown — mention chips', () => {
     renderBody('run @skill:review please');
     const chip = screen.getByText('@skill:review');
     expect(chip.closest('a')).toBeNull();
+  });
+
+  it('renders a @scratchpad: reference as a chip, not a link', () => {
+    renderBody('conventions in @scratchpad:acme/app');
+    const chip = screen.getByText('@scratchpad:acme/app');
+    expect(chip.closest('a')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('labels the global note reference Global', () => {
+    renderBody('see @scratchpad:global');
+    expect(screen.getByText('Global')).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
+/**
+ * The agent/panel/skill/workflow/human chips are ACTIONABLE: unlike
+ * `PrimitiveRefChip` (a pure pointer used everywhere else), each one carries a
+ * `mentionId` and a remove control that cancels the dispatched run behind it.
+ * This is the affordance that makes the two components not interchangeable —
+ * pin it here so a well-meaning cleanup that swaps one in for the other fails
+ * a test instead of silently deleting run cancellation.
+ */
+describe('CommentMarkdown — cancel affordance', () => {
+  it('clicking the remove control on an actionable mention calls onRemoveMention', () => {
+    const onRemoveMention = vi.fn();
+    const mentionLookup = new Map([['c1', new Map([['@agent:catalyst', 'm1']])]]);
+    renderBody('run @agent:catalyst please', { mentionLookup, onRemoveMention });
+
+    fireEvent.click(screen.getByTitle('Remove mention'));
+
+    expect(onRemoveMention).toHaveBeenCalledWith('m1');
   });
 });
 
