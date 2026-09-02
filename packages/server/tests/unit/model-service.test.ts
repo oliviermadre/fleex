@@ -57,6 +57,29 @@ describe('ModelService', () => {
     });
   });
 
+  it('ranks a Fable minor above its own major and derives its label', async () => {
+    // No display_name anywhere: exercises deriveLabel on a 'major-minor' id, and
+    // proves the dynamic order matches the static FALLBACK_MODELS order.
+    const fake = makeFakeClient([
+      { id: 'claude-opus-5' },
+      { id: 'claude-fable-5' },
+      { id: 'claude-fable-5-1' },
+    ]);
+    const svc = new ModelService(new FakeLoggerPort(), 60_000, () => fake as never);
+
+    const { models } = await svc.getAvailableModels();
+
+    expect(models.map((m) => m.id)).toEqual(['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5']);
+    expect(models[0]).toEqual({
+      id: 'claude-fable-5-1',
+      label: 'Claude Fable 5.1',
+      family: 'fable',
+      supportsEffort: true,
+      supportsFastMode: true,
+      effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    });
+  });
+
   it('excludes legacy Claude 1/2/instant models so dropdowns stay clean', async () => {
     const fake = makeFakeClient([
       { id: 'claude-1-2' },
@@ -81,6 +104,10 @@ describe('ModelService', () => {
     // if Anthropic is unreachable on first boot.
     expect(models.some((m) => m.id === 'claude-opus-5')).toBe(true);
     expect(models.some((m) => m.id === 'claude-opus-4-8')).toBe(true);
+    // The newest model must head the static list: it is the only list the Chrome
+    // side-panel ever serves, so anything missing here is unselectable there.
+    expect(models[0]?.id).toBe('claude-fable-5-1');
+    expect(models[0]?.label).toBe('Claude Fable 5.1');
   });
 
   it('caches results across calls within the TTL window', async () => {
