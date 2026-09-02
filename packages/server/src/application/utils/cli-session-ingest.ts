@@ -24,6 +24,7 @@ export const MODEL_PRICING: Record<string, Price> = {
   'claude-sonnet-4-5': price(3e-6, 15e-6),
   'claude-haiku-4-5': price(1e-6, 5e-6),
   'claude-haiku-4-5-20251001': price(1e-6, 5e-6),
+  'claude-fable-5-1': price(10e-6, 50e-6),
   'claude-fable-5': price(10e-6, 50e-6),
   '<synthetic>': price(0, 0), // Claude Code's non-API messages — no billable cost
 };

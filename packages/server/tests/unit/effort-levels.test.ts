@@ -15,6 +15,9 @@ describe('inferModelCapabilities — effort ladder per model', () => {
     ['claude-opus-4-7', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-sonnet-5', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-fable-5', ['low', 'medium', 'high', 'xhigh', 'max']],
+    // Gated on `isFable`, not on version weight — every Fable minor inherits the
+    // full ladder, so a new one must never silently lose `xhigh`/`max`.
+    ['claude-fable-5-1', ['low', 'medium', 'high', 'xhigh', 'max']],
     // 4.6 generation: `max` yes, `xhigh` no — it shipped with Opus 4.7.
     ['claude-opus-4-6', ['low', 'medium', 'high', 'max']],
     ['claude-sonnet-4-6', ['low', 'medium', 'high', 'max']],
