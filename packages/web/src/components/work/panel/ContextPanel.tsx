@@ -113,7 +113,7 @@ export function ContextPanel({ task }: { task: WorkTask }) {
         </Field>
         <Field label="Type">
           <div className="flex min-h-[28px] items-center px-1 py-1">
-            <TypePickerPopover ticket={ticket} />
+            <TypePickerPopover ticket={ticket} display="icon-label" />
           </div>
         </Field>
         <Field label="Priority">

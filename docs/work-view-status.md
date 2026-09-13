@@ -83,6 +83,19 @@ Dropped by design: eager worktree creation (lazy pattern), NEXT strip (duplicate
 - Context sidebar ticket **cost footer removed** — cost lives only in the status bar now.
 - **Suggestion chips removed from the chat** (`TaskPane` no longer renders `Suggestions`). The
   `Suggestions.tsx` component + `suggestionsFor` selector + tests are KEPT for a future dedicated task.
+- **Queue row redesign (variant A)** — one line, more room for the title:
+  - **Type → SVG line icon** `TicketTypeIconSvg` (hammer/bug/eye/gear/briefcase/bulb per type, tinted via
+    `TYPE_COLORS`; neutral grey square for null "Task"). Still inline-editable: `TypePickerPopover` gained a
+    non-breaking `display: 'label' | 'icon' | 'icon-label'` prop (default `label`). Queue uses `icon`, the
+    Context sidebar `icon-label`; the picker **dropdown always shows icon + label + description** to anchor
+    the type↔icon mapping.
+  - **Activity timer** `QueueActivityTimer` — compact coloured age by SDK state (gray idle / blue running /
+    yellow waiting), live off `useNow`+`formatAge`; on row hover it expands leftward (animated, respects
+    reduced-motion) to `idle for {age}` / `Running for {age}` + a status dot. Running/waiting with an
+    execution is clickable → execution log (shared `FloatingExecutionPanel` lifted to `WorkView`, also used
+    by timeline run cards). State is SDK-only, never inferred from cli/tmux or ticket status.
+  - **Blocked/favorite pictos** collapse to zero width (display:none) until row hover unless the flag is set.
+  - Running progress bar + detail line kept (so a running row stays compact, not 3 lines).
 
 **Session-2 Timeline (conversation stream enriched, uncommitted):**
 - `buildStream` (selectors.ts, pure + tested) now weaves **agent runs** and **deliverables** into the

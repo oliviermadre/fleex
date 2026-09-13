@@ -16,6 +16,8 @@ import { QueueRow } from './QueueRow';
 
 interface Props {
   queue: WorkQueueModel;
+  /** Open the execution log for a running task's SDK run (from its activity badge). */
+  onOpenExecution: (executionId: string, title: string) => void;
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -28,7 +30,7 @@ const GROUP_BY_OPTIONS: { value: QueueGroupBy; label: string }[] = [
   { value: 'priority', label: 'Priority' },
 ];
 
-export function WorkQueue({ queue }: Props) {
+export function WorkQueue({ queue, onOpenExecution }: Props) {
   const selectTicket = useWorkStore((s) => s.selectTicket);
   const setView = useWorkStore((s) => s.setView);
   const boardFilters = useWorkStore((s) => s.boardFilters);
@@ -212,6 +214,7 @@ export function WorkQueue({ queue }: Props) {
                 task={task}
                 selected={task.id === selectedId}
                 onSelect={() => selectTicket(task.id)}
+                onOpenExecution={onOpenExecution}
               />
             ))}
           </div>

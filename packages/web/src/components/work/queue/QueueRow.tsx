@@ -1,9 +1,10 @@
 /**
  * One task row in the queue. Carries the Cockpit's inline-editable pictos —
- * priority and type pickers, favorite star, blocked padlock — plus the section's
- * activity treatment (NEEDS YOU / RUNNING detail line, RUNNING progress bar;
- * IDLE a compact right-aligned status). The row is a div (not a button) so the
- * picker buttons can nest legally; clicking the row body selects the task.
+ * priority and type pickers, favorite star, blocked padlock — plus a live
+ * right-aligned SDK-activity badge (idle for {age} / Running for {age} /
+ * Waiting for {age}) and, for running tasks, the detail line + progress bar. The
+ * row is a div (not a button) so the picker buttons can nest legally; clicking
+ * the row body selects the task.
  */
 import type { KeyboardEvent } from 'react';
 import { cn } from '../../../lib/cn';
@@ -11,15 +12,23 @@ import { tintClasses } from '../../../lib/tints';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { TypePickerPopover } from '../../tickets/TypePickerPopover';
 import { PriorityPickerPopover } from '../../tickets/PriorityPickerPopover';
+import { QueueActivityTimer } from './QueueActivityTimer';
 import type { WorkTask } from '../types';
+
+/** ms epoch → ISO string for ActivityBadge / formatAge, or null. */
+function msToIso(ms: number | null): string | null {
+  return ms != null ? new Date(ms).toISOString() : null;
+}
 
 interface Props {
   task: WorkTask;
   selected: boolean;
   onSelect: () => void;
+  /** Open the execution log for this task's running SDK run (from the activity badge). */
+  onOpenExecution: (executionId: string, title: string) => void;
 }
 
-export function QueueRow({ task, selected, onSelect }: Props) {
+export function QueueRow({ task, selected, onSelect, onOpenExecution }: Props) {
   const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === task.id) ?? null);
   const updateTicket = useTicketStore((s) => s.updateTicket);
 
@@ -47,7 +56,7 @@ export function QueueRow({ task, selected, onSelect }: Props) {
         {ticket && (
           <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
             <PriorityPickerPopover ticket={ticket} />
-            <TypePickerPopover ticket={ticket} />
+            <TypePickerPopover ticket={ticket} display="icon" />
           </div>
         )}
 
@@ -64,10 +73,12 @@ export function QueueRow({ task, selected, onSelect }: Props) {
             }}
             title={ticket.blocked ? 'Unblock' : 'Mark as blocked'}
             className={cn(
-              'shrink-0 rounded p-0.5 transition-all',
+              'shrink-0 rounded p-0.5 transition-colors',
+              // Blocked: always shown. Not blocked: takes no space until the row
+              // is hovered (hidden → inline-flex), so it never crowds the title.
               ticket.blocked
-                ? cn('opacity-100', tintClasses('red').solidText)
-                : 'text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-60 hover:!opacity-100',
+                ? tintClasses('red').solidText
+                : 'hidden group-hover:inline-flex text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]',
             )}
           >
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
@@ -85,10 +96,12 @@ export function QueueRow({ task, selected, onSelect }: Props) {
             }}
             title={ticket.favorite ? 'Remove from favorites' : 'Add to favorites'}
             className={cn(
-              'shrink-0 rounded p-0.5 transition-all',
+              'shrink-0 rounded p-0.5 transition-colors',
+              // Favorited: always shown. Not favorited: takes no space until the
+              // row is hovered, so an empty star never eats into the title width.
               ticket.favorite
-                ? cn('opacity-100', tintClasses('yellow').solidText)
-                : cn('text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-60 hover:!opacity-100', tintClasses('yellow').hoverText),
+                ? tintClasses('yellow').solidText
+                : cn('hidden group-hover:inline-flex text-[var(--theme-text-faint)]', tintClasses('yellow').hoverText),
             )}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill={ticket.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
@@ -97,11 +110,18 @@ export function QueueRow({ task, selected, onSelect }: Props) {
           </button>
         )}
 
-        {task.activity === 'idle' && (
-          <span className="shrink-0 text-[11px] text-[var(--theme-text-muted)]">
-            {task.status === 'reviewing' ? 'review' : 'idle'}
-          </span>
-        )}
+        <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+          <QueueActivityTimer
+            activity={task.activity}
+            lastActivityAt={msToIso(task.lastActivityAt)}
+            since={msToIso(task.since)}
+            onOpen={
+              task.runningExecutionId
+                ? () => onOpenExecution(task.runningExecutionId!, `${task.title} · execution log`)
+                : undefined
+            }
+          />
+        </span>
       </div>
 
       {task.activity !== 'idle' && (task.boardName || task.activityDetail) && (

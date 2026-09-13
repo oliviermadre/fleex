@@ -8,6 +8,7 @@
  *   QUEUE 300px · CENTER minmax(0,1fr) · RIGHT PANEL (toggle) · TOOL STRIP 60px.
  * The shell drawer (⌘J) and shell mode land in Phase 2.
  */
+import { useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
 import { useWorkKeyboard } from './keyboard';
 import { useWorkStore } from '../../stores/workStore';
@@ -20,6 +21,7 @@ import { NewTask } from './new/NewTask';
 import { ToolStrip } from './panel/ToolStrip';
 import { RightPanel } from './panel/RightPanel';
 import { useTicketDeliverables } from './panel/useTicketDeliverables';
+import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 
 export function WorkView() {
   const queue = useWorkQueue();
@@ -35,6 +37,11 @@ export function WorkView() {
   // count and the Delivs panel, both live via WS.
   const { deliverables } = useTicketDeliverables(selectedTask?.id ?? null);
 
+  // A single execution-log panel for the whole view — opened from a queue row's
+  // running badge or a timeline run card.
+  const [execLog, setExecLog] = useState<{ id: string; title: string } | null>(null);
+  const openExecution = (id: string, title: string) => setExecLog({ id, title });
+
   return (
     <div
       className="flex h-full min-h-0 w-full flex-col overflow-auto bg-[var(--theme-bg-base)] text-[var(--theme-text-primary)]"
@@ -43,10 +50,18 @@ export function WorkView() {
       <WorkTopBar queue={queue} />
 
       <div className="flex min-h-0 flex-1">
-        {queueCollapsed ? <CollapsedQueueRail counts={queue.counts} /> : <WorkQueue queue={queue} />}
+        {queueCollapsed ? (
+          <CollapsedQueueRail counts={queue.counts} />
+        ) : (
+          <WorkQueue queue={queue} onOpenExecution={openExecution} />
+        )}
 
         <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
-          {view === 'new' ? <NewTask /> : <TaskPane task={selectedTask} deliverables={deliverables} />}
+          {view === 'new' ? (
+            <NewTask />
+          ) : (
+            <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+          )}
         </main>
 
         {view === 'task' && rightPanel && selectedTask && (
@@ -57,6 +72,10 @@ export function WorkView() {
       </div>
 
       {view === 'task' && <WorkStatusBar task={selectedTask} />}
+
+      {execLog && (
+        <FloatingExecutionPanel executionId={execLog.id} title={execLog.title} onClose={() => setExecLog(null)} />
+      )}
     </div>
   );
 }

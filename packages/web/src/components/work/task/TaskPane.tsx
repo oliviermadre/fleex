@@ -13,20 +13,26 @@ import type { TicketDeliverable } from '@fleex/shared';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useAgentEventStore } from '../../../stores/agentEventStore';
 import { useAgentPersonas } from '../../../hooks/useAgentPersonas';
-import { FloatingExecutionPanel } from '../../tickets/ExecutionModal';
 import type { WorkTask } from '../types';
 import { TaskHeader } from './TaskHeader';
 import { TaskStream } from './TaskStream';
 import { Composer } from './Composer';
 import { useTaskConversation } from './useTaskConversation';
 
-export function TaskPane({ task, deliverables }: { task: WorkTask | null; deliverables: TicketDeliverable[] }) {
+export function TaskPane({
+  task,
+  deliverables,
+  onOpenExecution,
+}: {
+  task: WorkTask | null;
+  deliverables: TicketDeliverable[];
+  onOpenExecution: (executionId: string, title: string) => void;
+}) {
   const description = useTicketStore((s) =>
     task ? s.tickets.find((t) => t.id === task.id)?.description ?? null : null,
   );
   const convo = useTaskConversation(task?.id ?? null);
   const [composer, setComposer] = useState('');
-  const [execLog, setExecLog] = useState<{ id: string; title: string } | null>(null);
 
   // Agent runs for this ticket → the run cards. Persona names come from the
   // persona store (kept fresh here); the executions say who ran and their state.
@@ -45,7 +51,6 @@ export function TaskPane({ task, deliverables }: { task: WorkTask | null; delive
   // Clear the draft when switching tasks so a seeded mention doesn't leak across.
   useEffect(() => {
     setComposer('');
-    setExecLog(null);
   }, [task?.id]);
 
   if (!task) {
@@ -69,12 +74,9 @@ export function TaskPane({ task, deliverables }: { task: WorkTask | null; delive
         loading={convo.loading}
         error={convo.error}
         onAnswer={convo.post}
-        onOpenExecution={(id, title) => setExecLog({ id, title })}
+        onOpenExecution={onOpenExecution}
       />
       <Composer value={composer} onChange={setComposer} posting={convo.posting} onSend={convo.post} />
-      {execLog && (
-        <FloatingExecutionPanel executionId={execLog.id} title={execLog.title} onClose={() => setExecLog(null)} />
-      )}
     </div>
   );
 }
