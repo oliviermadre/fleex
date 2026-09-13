@@ -57,6 +57,12 @@ export interface AppSettings {
   agentMaxConcurrency: number;
   /** Agentic loop cap for plan/edit executions (talk mode has no loop). */
   agentMaxTurns: number;
+  /**
+   * Feature flag for the single-screen « Work » view (queue · conversation ·
+   * context). Absent means enabled — the view ships on by default and a user
+   * hides the nav entry by setting this to false, no code change needed.
+   */
+  workViewEnabled?: boolean;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**

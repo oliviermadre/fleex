@@ -306,8 +306,9 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+Shift+Up/Down: navigate between worktrees (sidebar order, including system "Shells")
-      if (meta && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      // Cmd+Shift+Up/Down: navigate between worktrees (sidebar order, including system "Shells").
+      // The Work view owns this shortcut for its own queue, so defer to it there.
+      if (meta && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && activePanel !== 'work') {
         e.preventDefault();
         if (orderedWorktrees.length === 0) return;
 
