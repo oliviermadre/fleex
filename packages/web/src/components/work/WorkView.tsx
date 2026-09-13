@@ -46,7 +46,7 @@ export function WorkView() {
         {queueCollapsed ? <CollapsedQueueRail counts={queue.counts} /> : <WorkQueue queue={queue} />}
 
         <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
-          {view === 'new' ? <NewTask /> : <TaskPane task={selectedTask} />}
+          {view === 'new' ? <NewTask /> : <TaskPane task={selectedTask} deliverables={deliverables} />}
         </main>
 
         {view === 'task' && rightPanel && selectedTask && (

@@ -43,14 +43,62 @@ Run checks from `packages/web`: `../../node_modules/.bin/vitest run` (deps insta
 ## What's next (not yet built)
 
 ### Phase 1 polish (optional, small)
-- NEXT strip (assistant proposal / client rule) — component referenced in SPEC §5, not built.
-- Agent-personas section in Context (SPEC §6.1 AGENTS).
-- Event lines in the stream from the domain event log (SPEC §5) — currently only comments + description.
-- Top bar: pinned actions + `OverlaySyncButton` (SPEC §2) — top bar is minimal (brand + ⌘K + summary).
-- New task: create actual git worktrees (`ticketStore.openSessionFromTicket`) + seed first message
-  — currently only attaches `repository` links.
-- PR state colour via `api.fetchPRStates` (PrBadge currently hardcodes `state:'open'`).
-- Comment stream live-updates via WS (currently refetch on select + after post).
+**Session 2 (this branch, not yet committed):**
+- ✅ **PR state colour** — `ContextPanel.tsx` now fetches `api.fetchPRStates(ticket.id)` on ticket
+  change and maps GitHub's `OPEN|MERGED|CLOSED` → `PrBadge` state (was hardcoded `state:'open'`).
+- ✅ **Comment stream live-updates via WS** — `useTaskConversation.ts` subscribes to `appWs.onChannel('tickets')`
+  and applies `comment:created|updated|deleted` in place for the current ticket (was refetch-only).
+- ✅ **Event lines in the stream** — `selectors.ts` `formatActivity` + `buildStream` (pure, tested: 31 cases)
+  merge `api.fetchTicketActivity` rows into the comment stream chronologically; rendered by
+  `task/EventLine.tsx` (grey ✓ line). `useTaskConversation` fetches activity alongside comments and
+  refetches it on `ticket:updated|moved` (no dedicated activity WS event). `commented`/`updated`/internal
+  rows are dropped so the stream is history, not an audit dump.
+- ~~New task: create actual git worktrees~~ — **WON'T DO**: worktrees are created lazily
+  (on tmux session open / agent trigger, via `createSessionFromTicket`). Eager creation at ticket
+  creation would materialise worktrees for repos that may never be touched. Attaching `repository`
+  links is enough; the SPEC §8 "one worktree per repo on Start" is superseded by the lazy pattern.
+
+- ✅ **Top bar actions** — `WorkTopBarActions.tsx` (new) adds `OverlaySyncButton` (scoped to the selected
+  ticket's workspace) + `PINNED` label + pinned icons (`executePinnedAction`) + ticket-scoped workspace
+  actions (`executeWorkspaceAction` w/ `buildWorkspaceContext`), reusing the WorktreeHeader primitives.
+  Wired into `WorkTopBar` (`selectedTaskId`).
+- ⏸️ **AGENTS section (Context)** — built then **removed from the sidebar** (deferred like Suggestions):
+  static, non-clickable, thin value without click-through. The pure `personasForTicket` selector + its
+  tests are KEPT for the future AGENTS/threads task. The persona/execution data now feeds the stream
+  run cards instead (see Timeline below).
+
+**Still open:**
+- NEXT strip (SPEC §5) — **DROPPED**: no backend "next step" source; would duplicate the
+  already-built `Suggestions` (client-derived `suggestionsFor`). Low value.
+
+### Phase 1 polish — COMPLETE (session 2)
+All actionable polish items are done + verified (tsc clean · 760 tests · palette clean). Not yet committed.
+Dropped by design: eager worktree creation (lazy pattern), NEXT strip (duplicates Suggestions).
+
+**Session-2 UX adjustments (also uncommitted):**
+- Status bar breadcrumb 3rd segment is now the **full workspace path + a copy-to-clipboard button**
+  (`WorkStatusBar.tsx` `CopyButton`; path via `buildWorkspaceContext`), replacing `⎇ repo · branch`.
+- Status bar right side trimmed to **agent activity + cost** (bottom-right); PR / repo-count / status
+  removed as redundant with the Context sidebar.
+- Context sidebar ticket **cost footer removed** — cost lives only in the status bar now.
+- **Suggestion chips removed from the chat** (`TaskPane` no longer renders `Suggestions`). The
+  `Suggestions.tsx` component + `suggestionsFor` selector + tests are KEPT for a future dedicated task.
+
+**Session-2 Timeline (conversation stream enriched, uncommitted):**
+- `buildStream` (selectors.ts, pure + tested) now weaves **agent runs** and **deliverables** into the
+  comment/event timeline: a `run` entry at `execution.startedAt` (lands just before the comment it
+  produced), a `deliverable` entry at `createdAt` (just after). Tie-break: run → comment → deliverable → event.
+- `task/RunCard.tsx` (new) — persona + state (running/ran/failed/interrupted) + duration·cost, **clickable →
+  execution log** via the reused `FloatingExecutionPanel` (owned by `TaskPane`). All runs show, even failed/empty.
+- `task/DeliverableCard.tsx` (new) — `DeliverableTypeBadge` + title + author/draft/version, **clickable →
+  `openDeliverableOverlay`** (globally-mounted overlay), marks seen like the Delivs panel.
+- `formatActivity` now drops `deliverable_submitted` (the rich card replaces the grey line — approved).
+- `TaskPane` loads/subscribes `executionsByTicket`, primes personas (`useAgentPersonas`), owns the exec-log
+  panel; `WorkView` passes `deliverables` down. Reuses existing exported components — no new server endpoints.
+- **CLI sessions excluded from run cards** — `buildStream` skips `source: 'cli'` executions. They're manual
+  `claude` CLI sessions ingested at `sessionEnd` (`personaId:'cli'`, no stored events → log unavailable, garbage
+  duration); already represented by their "CLI session summary" deliverable. Only Fleex SDK runs get a run card.
+- Timeline visually confirmed by the user (run cards, deliverable cards, exec-log open); CLI-run fix applied after.
 
 ### Phase 2 (~3 days) — shell + diff/code
 - Shell drawer (⌘J) + shell mode (⌘⇧J) with split layouts, binding ticket sessions to `TerminalView`

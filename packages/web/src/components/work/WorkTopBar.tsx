@@ -1,11 +1,11 @@
 /**
  * Work top bar (36px, full width): brand, a ⌘K search field that opens the
- * existing command palette, and a live summary of the queue. Pinned workspace
- * actions and the overlay-sync button are wired in a later pass (they scope to
- * the selected task's first worktree).
+ * existing command palette, a live summary of the queue, then the overlay-sync
+ * button and pinned / workspace actions scoped to the selected task (SPEC §2).
  */
 import { useUIStore } from '../../stores/uiStore';
 import type { WorkQueueModel } from './useWorkQueue';
+import { WorkTopBarActions } from './WorkTopBarActions';
 
 interface Props {
   queue: WorkQueueModel;
@@ -14,6 +14,7 @@ interface Props {
 export function WorkTopBar({ queue }: Props) {
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
   const { total, running, needs } = queue.counts;
+  const selectedTaskId = queue.selectedTask?.id ?? null;
 
   return (
     <header className="flex h-9 shrink-0 items-center gap-3 border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3">
@@ -44,6 +45,8 @@ export function WorkTopBar({ queue }: Props) {
         <span className="text-[var(--theme-text-faint)]">·</span>
         <span className="text-[var(--tint-yellow-text)]">{needs} need you</span>
       </div>
+
+      <WorkTopBarActions ticketId={selectedTaskId} />
     </header>
   );
 }

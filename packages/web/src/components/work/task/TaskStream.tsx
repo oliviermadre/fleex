@@ -1,32 +1,56 @@
 /**
- * The conversation stream: the ticket's description as the opening user message,
- * then its comments in order. When the task is waiting on the user, the agent's
- * last comment — if it parses into options — renders as an answerable inline
- * question card instead of a plain bubble. Event lines from the domain event log
- * layer on in a later pass.
+ * The conversation stream: the ticket's description as the opening block, then a
+ * chronological timeline mixing agent runs, comments, deliverables and grey
+ * activity event lines. A run card sits before the comment it produced and links
+ * to the execution log; a deliverable card sits after and opens the deliverable
+ * overlay. When the task is waiting on the user, the agent's last comment — if it
+ * parses into options — renders as an answerable inline question card.
  */
 import { useEffect, useMemo, useRef } from 'react';
-import type { TicketComment } from '@fleex/shared';
+import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import { StreamItem } from './StreamItem';
+import { EventLine } from './EventLine';
+import { RunCard } from './RunCard';
+import { DeliverableCard } from './DeliverableCard';
 import { InlineQuestion } from './InlineQuestion';
 import { MessageMarkdown } from './MessageMarkdown';
-import { parseInlineOptions, type QueueActivity } from '../selectors';
+import { buildStream, parseInlineOptions, type QueueActivity } from '../selectors';
 
 interface Props {
   description: string | null;
   comments: TicketComment[];
+  events: TicketActivity[];
+  executions: AgentExecution[];
+  deliverables: TicketDeliverable[];
   activity: QueueActivity;
   loading: boolean;
   error: string | null;
   onAnswer: (optionText: string) => void | Promise<void>;
+  onOpenExecution: (executionId: string, title: string) => void;
 }
 
-export function TaskStream({ description, comments, activity, loading, error, onAnswer }: Props) {
+export function TaskStream({
+  description,
+  comments,
+  events,
+  executions,
+  deliverables,
+  activity,
+  loading,
+  error,
+  onAnswer,
+  onOpenExecution,
+}: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const stream = useMemo(
+    () => buildStream(comments, events, executions, deliverables),
+    [comments, events, executions, deliverables],
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [comments.length]);
+  }, [stream.length]);
 
   // The pending question is the last agent comment when the task is waiting and
   // that comment offers a parseable choice.
@@ -41,7 +65,7 @@ export function TaskStream({ description, comments, activity, loading, error, on
     return null;
   }, [comments, activity]);
 
-  const hasContent = comments.length > 0 || (description && description.trim().length > 0);
+  const hasContent = stream.length > 0 || (description && description.trim().length > 0);
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -63,19 +87,28 @@ export function TaskStream({ description, comments, activity, loading, error, on
           </div>
         )}
 
-        {comments.map((c) =>
-          c.id === questionCommentId ? (
-            <InlineQuestion
-              key={c.id}
-              authorName={c.authorName}
-              body={c.body}
-              options={parseInlineOptions(c.body)}
-              onAnswer={onAnswer}
-            />
-          ) : (
-            <StreamItem key={c.id} comment={c} />
-          ),
-        )}
+        {stream.map((entry) => {
+          switch (entry.kind) {
+            case 'event':
+              return <EventLine key={`e-${entry.id}`} text={entry.text} />;
+            case 'run':
+              return <RunCard key={`r-${entry.execution.id}`} execution={entry.execution} onOpen={onOpenExecution} />;
+            case 'deliverable':
+              return <DeliverableCard key={`d-${entry.deliverable.id}`} deliverable={entry.deliverable} />;
+            case 'comment':
+              return entry.comment.id === questionCommentId ? (
+                <InlineQuestion
+                  key={entry.comment.id}
+                  authorName={entry.comment.authorName}
+                  body={entry.comment.body}
+                  options={parseInlineOptions(entry.comment.body)}
+                  onAnswer={onAnswer}
+                />
+              ) : (
+                <StreamItem key={entry.comment.id} comment={entry.comment} />
+              );
+          }
+        })}
 
         {loading && !hasContent && (
           <div className="py-8 text-center text-[12px] text-[var(--theme-text-faint)]">Loading conversation…</div>

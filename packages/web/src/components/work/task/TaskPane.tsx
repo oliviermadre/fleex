@@ -1,28 +1,51 @@
 /**
- * The center column when a task is selected: header, conversation stream,
- * suggestion chips and composer. Reads the ticket's description from ticketStore
- * for the opening message and drives comments through useTaskConversation. The
- * composer text is owned here so suggestion chips can seed an @mention into it.
+ * The center column when a task is selected: header, conversation stream and
+ * composer. Reads the ticket's description from ticketStore for the opening
+ * message and drives comments through useTaskConversation. It also loads the
+ * ticket's agent executions (for the run cards) and owns the floating execution
+ * log a run card opens. Deliverables come down from WorkView (one shared WS-live
+ * subscription). The composer text is owned here (cleared on task switch). The
+ * suggestion chips are deferred to a dedicated task — the `Suggestions` component
+ * and its `suggestionsFor` rules are kept for that.
  */
 import { useEffect, useState } from 'react';
+import type { TicketDeliverable } from '@fleex/shared';
 import { useTicketStore } from '../../../stores/ticketStore';
+import { useAgentEventStore } from '../../../stores/agentEventStore';
+import { useAgentPersonas } from '../../../hooks/useAgentPersonas';
+import { FloatingExecutionPanel } from '../../tickets/ExecutionModal';
 import type { WorkTask } from '../types';
 import { TaskHeader } from './TaskHeader';
 import { TaskStream } from './TaskStream';
 import { Composer } from './Composer';
-import { Suggestions } from './Suggestions';
 import { useTaskConversation } from './useTaskConversation';
 
-export function TaskPane({ task }: { task: WorkTask | null }) {
+export function TaskPane({ task, deliverables }: { task: WorkTask | null; deliverables: TicketDeliverable[] }) {
   const description = useTicketStore((s) =>
     task ? s.tickets.find((t) => t.id === task.id)?.description ?? null : null,
   );
   const convo = useTaskConversation(task?.id ?? null);
   const [composer, setComposer] = useState('');
+  const [execLog, setExecLog] = useState<{ id: string; title: string } | null>(null);
+
+  // Agent runs for this ticket → the run cards. Persona names come from the
+  // persona store (kept fresh here); the executions say who ran and their state.
+  useAgentPersonas();
+  const executions = useAgentEventStore((s) => (task ? s.executionsByTicket[task.id] : undefined));
+  const loadExecutionsForTicket = useAgentEventStore((s) => s.loadExecutionsForTicket);
+  const subscribeTicket = useAgentEventStore((s) => s.subscribeTicket);
+  const unsubscribeTicket = useAgentEventStore((s) => s.unsubscribeTicket);
+  useEffect(() => {
+    if (!task) return;
+    loadExecutionsForTicket(task.id);
+    subscribeTicket(task.id);
+    return () => unsubscribeTicket(task.id);
+  }, [task?.id, loadExecutionsForTicket, subscribeTicket, unsubscribeTicket]);
 
   // Clear the draft when switching tasks so a seeded mention doesn't leak across.
   useEffect(() => {
     setComposer('');
+    setExecLog(null);
   }, [task?.id]);
 
   if (!task) {
@@ -39,13 +62,19 @@ export function TaskPane({ task }: { task: WorkTask | null }) {
       <TaskStream
         description={description}
         comments={convo.comments}
+        events={convo.events}
+        executions={executions ?? []}
+        deliverables={deliverables}
         activity={task.activity}
         loading={convo.loading}
         error={convo.error}
         onAnswer={convo.post}
+        onOpenExecution={(id, title) => setExecLog({ id, title })}
       />
-      <Suggestions task={task} onSeedComposer={(text) => setComposer((prev) => (prev ? `${prev} ${text}` : text))} />
       <Composer value={composer} onChange={setComposer} posting={convo.posting} onSend={convo.post} />
+      {execLog && (
+        <FloatingExecutionPanel executionId={execLog.id} title={execLog.title} onClose={() => setExecLog(null)} />
+      )}
     </div>
   );
 }

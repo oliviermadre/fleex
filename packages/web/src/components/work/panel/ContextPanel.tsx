@@ -5,8 +5,9 @@
  * (github_pr links) can be attached and detached; deliverables open the existing
  * overlay. Reads the live Ticket from ticketStore so every edit round-trips.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { TicketLink } from '@fleex/shared';
+import * as api from '../../../services/api';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { cn } from '../../../lib/cn';
@@ -28,6 +29,13 @@ function parsePrLink(link: TicketLink): { org: string; name: string; number: num
   const slash = repo.indexOf('/');
   if (slash < 0 || Number.isNaN(num)) return null;
   return { org: repo.slice(0, slash), name: repo.slice(slash + 1), number: num };
+}
+
+/** Normalize GitHub's uppercase PR state ("OPEN"|"MERGED"|"CLOSED") to the PrBadge palette. */
+function prState(raw: string | undefined): 'open' | 'merged' | 'closed' {
+  if (raw === 'MERGED') return 'merged';
+  if (raw === 'CLOSED') return 'closed';
+  return 'open';
 }
 
 /** Parse a pasted GitHub PR URL into an addLink payload. */
@@ -72,9 +80,18 @@ export function ContextPanel({ task }: { task: WorkTask }) {
   const repositories = useRepositoryStore((s) => s.repositories);
   const [prUrl, setPrUrl] = useState('');
   const [addingPr, setAddingPr] = useState(false);
+  const [prStates, setPrStates] = useState<Record<string, string>>({});
 
   const repoLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'repository'), [ticket]);
   const prLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'github_pr'), [ticket]);
+
+  // Fetch live PR states from GitHub on mount / ticket change, so the badge
+  // reflects merged/closed instead of always claiming "open".
+  useEffect(() => {
+    if (!ticket || prLinks.length === 0) return;
+    api.fetchPRStates(ticket.id).then(setPrStates).catch(() => {});
+  }, [ticket?.id, prLinks.length]);
+
   const attachableRepos = useMemo(() => {
     const attached = new Set(repoLinks.map((l) => l.ref));
     return repositories.map((r) => `${r.org}/${r.name}`).filter((key) => !attached.has(key));
@@ -186,7 +203,7 @@ export function ContextPanel({ task }: { task: WorkTask }) {
                   <PrBadge
                     org={parsed.org}
                     name={parsed.name}
-                    pr={{ number: parsed.number, state: 'open', title: l.label }}
+                    pr={{ number: parsed.number, state: prState(prStates[l.ref]), title: l.label }}
                     href={l.url ?? undefined}
                   />
                 ) : (
@@ -238,10 +255,6 @@ export function ContextPanel({ task }: { task: WorkTask }) {
           </button>
         </form>
       </Section>
-
-      <div className="px-3 py-2 text-[10.5px] text-[var(--theme-text-faint)]">
-        {task.cost != null && task.cost > 0 ? `$${task.cost.toFixed(2)}` : '$0.00'}
-      </div>
     </div>
   );
 }

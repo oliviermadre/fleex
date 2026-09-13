@@ -1,9 +1,11 @@
 /**
  * Pure view-model logic for the Work view: how the flat task list partitions
- * into the three queue sections, and how an agent's pending question is parsed
- * into inline answer options. Kept free of store/React imports so it is unit
- * tested in isolation (selectors.test.ts).
+ * into the three queue sections, how an agent's pending question is parsed into
+ * inline answer options, and how ticket activity turns into stream event lines.
+ * Kept free of store/React imports so it is unit tested in isolation
+ * (selectors.test.ts).
  */
+import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 
 /** The activity bucket a task falls in, mirrored from ticketActivityStore. */
 export type QueueActivity = 'waiting' | 'running' | 'idle';
@@ -117,6 +119,183 @@ export function parseInlineOptions(text: string): string[] {
   if (numbered.length >= 2) return numbered;
 
   return [];
+}
+
+// ── Agent personas (SPEC §6.1 AGENTS) ─────────────────────────────────────
+
+export type PersonaState = 'running' | 'waiting' | 'idle';
+
+/** A persona row in the Context panel: who has worked the ticket, and its state. */
+export interface TicketPersona {
+  id: string;
+  name: string;
+  state: PersonaState;
+}
+
+/** Minimal execution shape the derivation needs (subset of AgentExecution). */
+export interface PersonaExecutionInput {
+  personaId: string;
+  status: 'running' | 'completed' | 'failed' | 'interrupted';
+}
+
+const STATE_RANK: Record<PersonaState, number> = { running: 0, waiting: 1, idle: 2 };
+
+/**
+ * The personas that have worked a ticket, with a state, for the AGENTS section
+ * (SPEC §6.1). Built from the ticket's executions (which personas ran) crossed
+ * with persona display metadata and each persona's live status. State is
+ * best-effort: `running` when this ticket has a running execution or the persona
+ * is live-running; `waiting` when it has pending mentions (persona-global —
+ * refined to per-ticket when agent threads land in Phase 3); else `idle`.
+ * Rows are de-duplicated per persona and ordered running → waiting → idle, then
+ * by name, so the ones needing attention sit on top.
+ */
+export function personasForTicket(
+  executions: readonly PersonaExecutionInput[],
+  personas: readonly { id: string; displayName: string }[],
+  statuses: Record<string, { running: boolean; pendingMentions: number }>,
+): TicketPersona[] {
+  const nameById = new Map(personas.map((p) => [p.id, p.displayName]));
+  const ticketRunning = new Set<string>();
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const e of executions) {
+    if (!seen.has(e.personaId)) {
+      seen.add(e.personaId);
+      ids.push(e.personaId);
+    }
+    if (e.status === 'running') ticketRunning.add(e.personaId);
+  }
+
+  const rows = ids.map((id): TicketPersona => {
+    const live = statuses[id];
+    const state: PersonaState =
+      ticketRunning.has(id) || live?.running
+        ? 'running'
+        : (live?.pendingMentions ?? 0) > 0
+          ? 'waiting'
+          : 'idle';
+    return { id, name: nameById.get(id) ?? id, state };
+  });
+
+  rows.sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.name.localeCompare(b.name));
+  return rows;
+}
+
+// ── Event lines (SPEC §5) ─────────────────────────────────────────────────
+
+function cap(s: string): string {
+  return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
+}
+
+/** Human label for a link type in an event line, or null for internal links. */
+function linkLabel(type: string, attached: boolean): string | null {
+  switch (type) {
+    case 'repository':
+      return `Repo ${attached ? 'attached' : 'detached'}`;
+    case 'github_pr':
+      return `PR ${attached ? 'linked' : 'unlinked'}`;
+    case 'github_issue':
+      return `Issue ${attached ? 'linked' : 'unlinked'}`;
+    case 'worktree':
+      return `Worktree ${attached ? 'created' : 'removed'}`;
+    default:
+      // session and other internal links produce no event line.
+      return null;
+  }
+}
+
+/**
+ * Turn one ticket activity row into the short grey event line shown in the
+ * stream (SPEC §5), or null when it shouldn't surface. `commented` is dropped —
+ * comments already render as messages — as are edits and internal book-keeping,
+ * so the stream stays a meaningful history rather than an audit dump.
+ */
+export function formatActivity(a: TicketActivity): string | null {
+  switch (a.action) {
+    case 'created':
+      return 'Ticket created';
+    case 'moved': {
+      const to = a.changes.status?.to;
+      return typeof to === 'string' ? `Moved to ${cap(to)}` : null;
+    }
+    case 'linked':
+    case 'unlinked': {
+      const attached = a.action === 'linked';
+      const change = a.changes.link;
+      const link = (attached ? change?.to : change?.from) as { type?: string; ref?: string } | undefined;
+      if (link?.type) {
+        const label = linkLabel(link.type, attached);
+        return label && link.ref ? `${label} · ${link.ref}` : label;
+      }
+      if (a.changes.worktree) return `Worktree ${attached ? 'created' : 'removed'}`;
+      return null; // session link etc. — internal
+    }
+    case 'archived':
+      return 'Archived';
+    case 'unarchived':
+      return 'Unarchived';
+    case 'panel_executed':
+      return 'Panel concluded';
+    default:
+      // commented (already a message), updated, answer, assigned, mention_*, and
+      // deliverable_submitted (rendered as a rich deliverable card) — skip.
+      return null;
+  }
+}
+
+/**
+ * One entry in the merged conversation stream. `run` is an agent execution (its
+ * card links to the execution log); `deliverable` is an artifact card; `comment`
+ * and `event` are the message bubbles and grey history lines.
+ */
+export type StreamEntry =
+  | { kind: 'run'; at: number; execution: AgentExecution }
+  | { kind: 'comment'; at: number; comment: TicketComment }
+  | { kind: 'deliverable'; at: number; deliverable: TicketDeliverable }
+  | { kind: 'event'; at: number; id: string; text: string };
+
+// Tie-break order for entries sharing a timestamp: a run precedes the comment it
+// produced, which precedes that run's deliverable, and grey event lines come last.
+const STREAM_RANK: Record<StreamEntry['kind'], number> = { run: 0, comment: 1, deliverable: 2, event: 3 };
+
+/**
+ * Merge agent runs, comments, deliverables and activity event lines into one
+ * chronological stream, oldest first. A run sits at its `startedAt` (so it lands
+ * just before the comment it produced); a deliverable at its `createdAt` (just
+ * after). Activities that {@link formatActivity} drops are excluded. Ordering is
+ * stable and, for equal timestamps, follows STREAM_RANK.
+ *
+ * `source: 'cli'` executions are skipped: they are manual `claude` CLI sessions
+ * ingested at session end (no Fleex persona, no replayable event log), already
+ * represented in the stream by their "CLI session summary" deliverable — a run
+ * card for them would be redundant and broken.
+ */
+export function buildStream(
+  comments: readonly TicketComment[],
+  activity: readonly TicketActivity[],
+  executions: readonly AgentExecution[] = [],
+  deliverables: readonly TicketDeliverable[] = [],
+): StreamEntry[] {
+  const entries: StreamEntry[] = [];
+  for (const execution of executions) {
+    if (execution.source === 'cli') continue;
+    entries.push({ kind: 'run', at: Date.parse(execution.startedAt), execution });
+  }
+  for (const comment of comments) {
+    entries.push({ kind: 'comment', at: Date.parse(comment.createdAt), comment });
+  }
+  for (const deliverable of deliverables) {
+    entries.push({ kind: 'deliverable', at: Date.parse(deliverable.createdAt), deliverable });
+  }
+  for (const a of activity) {
+    const text = formatActivity(a);
+    if (text) entries.push({ kind: 'event', at: Date.parse(a.createdAt), id: a.id, text });
+  }
+  // Stable sort (V8): equal timestamps keep insertion order; STREAM_RANK breaks
+  // a same-millisecond tie into run → comment → deliverable → event.
+  entries.sort((x, y) => x.at - y.at || STREAM_RANK[x.kind] - STREAM_RANK[y.kind]);
+  return entries;
 }
 
 /**
