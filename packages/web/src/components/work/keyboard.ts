@@ -1,8 +1,10 @@
 /**
  * Work view keyboard map. Phase 1 handles ⌥N (new task), Esc (cancel new task),
  * and ⌘⇧↑/↓ to move between tasks in the queue's displayed order (wrapping, like
- * the Sessions view). Shell shortcuts (⌘J drawer, ⌘⇧J mode, ⌘1-4) join in Phase 2.
- * Shortcuts are ignored while typing in a field, except Esc.
+ * the Sessions view). Phase 2 adds ⌘J (toggle shell drawer) and ⌘⇧J (toggle shell
+ * mode); ⌘1-4 (focus a pane) is owned by the mounted shell grid, not here.
+ * Text-target shortcuts are ignored while typing in a field, except Esc; the meta
+ * combos (⌘J/⌘⇧J and queue nav) fire regardless, like the app's other ⌘ shortcuts.
  */
 import { useEffect } from 'react';
 import { useWorkStore } from '../../stores/workStore';
@@ -36,6 +38,20 @@ export function useWorkKeyboard(orderedIds: readonly string[]): void {
               ? 0
               : idx + 1;
         useWorkStore.getState().selectTicket(orderedIds[next]!);
+        return;
+      }
+
+      // ⌘⇧J — toggle shell mode (center takeover). Checked before ⌘J so the shift
+      // combo isn't swallowed by the plain-J branch.
+      if (meta && e.shiftKey && (e.key.toLowerCase() === 'j' || e.code === 'KeyJ')) {
+        e.preventDefault();
+        useWorkStore.getState().setShellMode(!useWorkStore.getState().shellMode);
+        return;
+      }
+      // ⌘J — toggle the shell drawer.
+      if (meta && !e.shiftKey && (e.key.toLowerCase() === 'j' || e.code === 'KeyJ')) {
+        e.preventDefault();
+        useWorkStore.getState().setShellOpen(!useWorkStore.getState().shellOpen);
         return;
       }
 

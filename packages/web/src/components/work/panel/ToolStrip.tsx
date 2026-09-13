@@ -1,8 +1,9 @@
 /**
  * The right tool strip (60px): icon + label buttons that toggle the one-at-a-time
  * right tool window (JetBrains model — clicking the active tool closes it). Phase
- * 1 ships Context and Deliverables; Threads (Phase 3) and Diff / Code / Shell
- * (Phase 2) are intentionally absent until their panels land.
+ * 1 ships Context and Deliverables; Threads (Phase 3) and Diff / Code (Phase 2b)
+ * are still absent. The bottom Shell button toggles the drawer rather than a right
+ * panel, so it lives outside the panel-toggling group.
  */
 import { cn } from '../../../lib/cn';
 import { useWorkStore, type RightPanel } from '../../../stores/workStore';
@@ -42,6 +43,10 @@ const TOOLS: Tool[] = [
 export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; delivCount?: number }) {
   const rightPanel = useWorkStore((s) => s.rightPanel);
   const toggleRightPanel = useWorkStore((s) => s.toggleRightPanel);
+  const shellOpen = useWorkStore((s) => s.shellOpen);
+  const shellMode = useWorkStore((s) => s.shellMode);
+  const setShellOpen = useWorkStore((s) => s.setShellOpen);
+  const shellActive = shellOpen || shellMode;
 
   return (
     <nav className="flex w-[60px] shrink-0 flex-col items-center gap-1 border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-2">
@@ -71,6 +76,27 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
           </button>
         );
       })}
+
+      {/* Shell toggles the bottom drawer (⌘J), not a right panel — pinned bottom. */}
+      <button
+        type="button"
+        disabled={!task}
+        onClick={() => setShellOpen(!shellOpen)}
+        title="Toggle shell drawer (⌘J)"
+        className={cn(
+          'mt-auto flex w-[52px] flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] transition-colors disabled:opacity-40',
+          shellActive
+            ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+            : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
+        )}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="m7 9 3 3-3 3" />
+          <line x1="13" y1="15" x2="17" y2="15" />
+        </svg>
+        Shell
+      </button>
     </nav>
   );
 }

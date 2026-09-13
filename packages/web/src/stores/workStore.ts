@@ -48,7 +48,10 @@ export interface WorkState {
   shellOpen: boolean;
   shellMode: boolean;
   shellLayout: ShellLayout;
-  activeShellIndex: number;
+  /** Explicit session id shown in each pane slot; null = auto-fill (see panesModel). */
+  shellPaneIds: (string | null)[];
+  /** Height in px of the bottom shell drawer, user-resizable. */
+  shellHeight: number;
   /** Width in px of the right tool window (Context / Delivs), user-resizable. */
   rightPanelWidth: number;
   /** Width in px of the left queue, user-resizable. */
@@ -77,7 +80,9 @@ export interface WorkState {
   setShellOpen: (open: boolean) => void;
   setShellMode: (mode: boolean) => void;
   setShellLayout: (layout: ShellLayout) => void;
-  setActiveShellIndex: (i: number) => void;
+  /** Pin a session to a pane slot (removing it from any other slot); null clears. */
+  bindShellPane: (index: number, id: string | null) => void;
+  setShellHeight: (height: number) => void;
   updateDraft: (patch: Partial<WorkDraft>) => void;
   resetDraft: () => void;
 }
@@ -103,7 +108,8 @@ type PersistedWork = Pick<
   | 'shellOpen'
   | 'shellMode'
   | 'shellLayout'
-  | 'activeShellIndex'
+  | 'shellPaneIds'
+  | 'shellHeight'
   | 'rightPanelWidth'
   | 'queueWidth'
   | 'queueCollapsed'
@@ -120,6 +126,12 @@ export const QUEUE_MIN = 240;
 export const QUEUE_MAX = 480;
 const clampQueue = (w: number) => Math.min(QUEUE_MAX, Math.max(QUEUE_MIN, Math.round(w)));
 
+/** Clamp the bottom shell drawer height. */
+export const SHELL_MIN_HEIGHT = 120;
+export const SHELL_MAX_HEIGHT = 720;
+const clampShellHeight = (h: number) =>
+  Math.min(SHELL_MAX_HEIGHT, Math.max(SHELL_MIN_HEIGHT, Math.round(h)));
+
 const DEFAULTS: PersistedWork = {
   selectedTicketId: null,
   view: 'task',
@@ -135,7 +147,8 @@ const DEFAULTS: PersistedWork = {
   shellOpen: false,
   shellMode: false,
   shellLayout: '1',
-  activeShellIndex: 0,
+  shellPaneIds: [],
+  shellHeight: 240,
   rightPanelWidth: 296,
   queueWidth: 300,
   queueCollapsed: false,
@@ -174,7 +187,8 @@ export const useWorkStore = create<WorkState>((set, get) => {
       shellOpen: s.shellOpen,
       shellMode: s.shellMode,
       shellLayout: s.shellLayout,
-      activeShellIndex: s.activeShellIndex,
+      shellPaneIds: s.shellPaneIds,
+      shellHeight: s.shellHeight,
       rightPanelWidth: s.rightPanelWidth,
       queueWidth: s.queueWidth,
       queueCollapsed: s.queueCollapsed,
@@ -215,7 +229,15 @@ export const useWorkStore = create<WorkState>((set, get) => {
     setShellOpen: (shellOpen) => commit({ shellOpen }),
     setShellMode: (shellMode) => commit({ shellMode }),
     setShellLayout: (shellLayout) => commit({ shellLayout }),
-    setActiveShellIndex: (activeShellIndex) => commit({ activeShellIndex }),
+    setShellHeight: (height) => commit({ shellHeight: clampShellHeight(height) }),
+    bindShellPane: (index, id) => {
+      const ids = [...get().shellPaneIds];
+      while (ids.length <= index) ids.push(null);
+      // A session lives in one pane only — clear it from any other slot first.
+      if (id) for (let i = 0; i < ids.length; i++) if (ids[i] === id && i !== index) ids[i] = null;
+      ids[index] = id;
+      commit({ shellPaneIds: ids });
+    },
     updateDraft: (patch) => commit({ draft: { ...get().draft, ...patch } }),
     resetDraft: () => commit({ draft: EMPTY_DRAFT }),
   };

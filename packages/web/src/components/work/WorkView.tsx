@@ -20,6 +20,8 @@ import { TaskPane } from './task/TaskPane';
 import { NewTask } from './new/NewTask';
 import { ToolStrip } from './panel/ToolStrip';
 import { RightPanel } from './panel/RightPanel';
+import { ShellSurface } from './shell/ShellSurface';
+import { ShellDrawer } from './shell/ShellDrawer';
 import { useTicketDeliverables } from './panel/useTicketDeliverables';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 
@@ -28,6 +30,8 @@ export function WorkView() {
   const view = useWorkStore((s) => s.view);
   const rightPanel = useWorkStore((s) => s.rightPanel);
   const queueCollapsed = useWorkStore((s) => s.queueCollapsed);
+  const shellOpen = useWorkStore((s) => s.shellOpen);
+  const shellMode = useWorkStore((s) => s.shellMode);
 
   // The queue's displayed order drives ⌘⇧↑/↓ navigation.
   useWorkKeyboard(queue.orderedIds);
@@ -59,6 +63,8 @@ export function WorkView() {
         <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
           {view === 'new' ? (
             <NewTask />
+          ) : shellMode && selectedTask ? (
+            <ShellSurface ticketId={selectedTask.id} />
           ) : (
             <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
           )}
@@ -70,6 +76,11 @@ export function WorkView() {
 
         {view === 'task' && <ToolStrip task={selectedTask} delivCount={deliverables.length} />}
       </div>
+
+      {/* Bottom shell drawer (⌘J) — full width, below the middle row (SPEC §7). */}
+      {view === 'task' && selectedTask && shellOpen && !shellMode && (
+        <ShellDrawer ticketId={selectedTask.id} />
+      )}
 
       {view === 'task' && <WorkStatusBar task={selectedTask} />}
 

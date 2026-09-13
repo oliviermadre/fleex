@@ -268,7 +268,8 @@ export function useKeyboardShortcuts() {
       }
 
       // Cmd+Shift+Left/Right: cycle focus in grouped panes
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedGroupId) {
+      // (the Work view owns ⌘⇧←/→ to cycle its shell panes' sessions, so defer there)
+      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedGroupId && activePanel !== 'work') {
         e.preventDefault();
         const group = layoutGroups.find((g) => g.id === selectedGroupId);
         if (group) {
@@ -285,14 +286,14 @@ export function useKeyboardShortcuts() {
       }
 
       // Cmd+Shift+Left/Right: toggle focus between split panes
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && splitSessionId) {
+      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && splitSessionId && activePanel !== 'work') {
         e.preventDefault();
         setFocusedPane(focusedPane === 'primary' ? 'split' : 'primary');
         return;
       }
 
       // Cmd+Shift+Left/Right: navigate sessions within the current worktree (tab bar order, loops)
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedSessionId) {
+      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedSessionId && activePanel !== 'work') {
         e.preventDefault();
         const currentWorktree = orderedWorktrees.find((wt) => wt.sessions.includes(selectedSessionId));
         if (currentWorktree && currentWorktree.sessions.length > 1) {
