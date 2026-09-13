@@ -6,12 +6,19 @@ point across context resets — update it as work progresses.
 
 ## Where we are
 
-**Phase 0 (wiring) + Phase 1 (core screen) are DONE and committed** (first commit `308d11ac`),
-plus 9 rounds of user feedback ("salves"). Verified green throughout:
-`bun run test` (packages/web) → 742 passing; `tsc --noEmit -p packages/web` clean;
-`node scripts/check-raw-palette.mjs` clean (theme tokens only).
+**Phases 0, 1 and 2a are DONE and committed.** → **NEXT: Phase 2b (Diff & Code panels + 2 server
+endpoints).** See the "Phase 2b" section below for the full spec.
 
-Run checks from `packages/web`: `../../node_modules/.bin/vitest run` (deps installed via `bun install` at repo root).
+- Phase 0 (wiring) + Phase 1 (core screen): commit `308d11ac` + 9 feedback rounds.
+- **Phase 2a (shell drawer + shell mode + split panes): commits `13e899d2` and `db27fa1c`.** Full detail in
+  the "Phase 2 → Phase 2a" section below. The `>_ Shell` top-bar button opens shell mode; the bottom
+  tool-strip Shell button + ⌘J open the drawer.
+
+Working tree clean at last checkpoint. Verified green: `packages/web` → **778 tests**;
+`tsc --noEmit -p packages/web` clean; `node scripts/check-raw-palette.mjs` clean (theme tokens only).
+
+Run checks from `packages/web`: `../../node_modules/.bin/vitest run`; `../../node_modules/.bin/tsc --noEmit -p .`;
+`node ../../scripts/check-raw-palette.mjs` (deps installed via `bun install` at repo root).
 
 ### Done
 
@@ -189,13 +196,46 @@ user testing behaviour first.** No new server endpoints in 2a.
 Open design choices (revisit after test): close on a single pane is a no-op (use ▾/⌘J to hide);
 `activeShellIndex` is not clamped if sessions are killed below it (stale index → empty panes, not broken).
 
-#### Phase 2b — Diff & Code panels (NOT started)
-- Need **2 new server read endpoints**: `GET /api/worktrees/:id/diff` and `GET /api/worktrees/:id/tree`
-  (see `handoff/DATA_MODEL.md` § Phase 2). Add `git diff` patch-text + `git status --porcelain` +
-  `git ls-tree` to `GitPort` + `git-cli.adapter.ts` (none exist yet), route modelled on
-  `repositories.routes.ts` (resolve `barePath`, `hostFs.exists`, `container.git.*`), register in `main.ts`.
-- `RightPanel.tsx` already has `diff`/`code` TITLES; add the two bodies + their `ToolStrip` entries
-  (still hidden). Poll every 5s while open or on `agent_event` Edit/Write tool_result.
+#### Phase 2b — Diff & Code panels — **NEXT / NOT started**
+Goal (SPEC §6.3/6.4): a **Diff** panel (unified working-branch diff vs base, add/del tinted, footer "Open
+in editor", empty = "No changes yet on this task.") and a **Code** panel (repo chips · file tree, changed
+files bold + dot · "Open in VS Code" / code-server). Both are ticket-scoped, read-only, poll every ~5s
+while open (or refresh on an `agent_event` Edit/Write tool_result).
+
+**Server (2 new read endpoints — DATA_MODEL.md § Phase 2):**
+- `GET /api/worktrees/:id/diff` → `{ base, head, files: [{ path, additions, deletions, hunks:[{ header,
+  lines:[{ kind:'ctx'|'add'|'del', text }] }] }], truncated? }`. `git diff <base>...HEAD` + unstaged
+  `git diff`, merged; base = default branch; cap ~400 KB → `truncated:true`.
+- `GET /api/worktrees/:id/tree?depth=3` → nested `{ name, path, kind:'dir'|'file', changed? }[]`;
+  `changed` from `git status --porcelain`.
+- **How to build it (verified in the tree during 2a):**
+  - Add methods to `GitPort` (`packages/server/src/application/ports/git.port.ts`) + implement in
+    `git-cli.adapter.ts` (`infrastructure/adapters/`). NONE of `git diff` patch-text / `git status
+    --porcelain` / `git ls-tree` exist yet — only `getDiffStats`/`getDiffSummary`/`listWorktrees`. Copy
+    their shape: everything goes through the injected `ExecFn` (`this.execFn('git',[...],{cwd,timeout})`),
+    base default `origin/${getDefaultBranch}`.
+  - Route module modelled on `repositories.routes.ts` (see its `GET …/diff-stats` at ~L307: resolve path
+    via `container.resolver`, `container.hostFs.exists`, `container.bareCloneManager.fetch`, then
+    `container.git.*`). A ticket's worktree path/branch come from its `worktree` link (`agent-worktrees.routes.ts`
+    `GET /tickets/:id/worktree` → `{ path, branch }`); bare path via `RepoPathResolver.barePath(org,name)`,
+    checkout via `workspaceRepoPath(workspaceId, repoName)`. Register the module in `packages/server/src/main.ts`.
+  - **Fleex migration/RLS rules apply** (see `fleex/CLAUDE.md`) — but these are read-only, no new tables.
+- **Optional defense-in-depth (flagged, not done):** clamp attach/resize cols·rows to a floor (≥2) in
+  `unified-ws.ts` `CLIENT_ATTACH`/`CLIENT_RESIZE` so no buggy client can collapse a shared tmux session
+  (root cause of the 2a "1-row attach" saga).
+
+**Client:**
+- `api.ts`: add `fetchWorktreeDiff` / `fetchWorktreeTree` (bare `async function` calling `request<T>`,
+  templates: `fetchDiffStats`/`fetchDefaultBranch` ~L134-152). Types in `@fleex/shared`.
+- `RightPanel.tsx` already has `diff`/`code` in `TITLES` — add the two panel bodies there
+  (`components/work/panel/`, e.g. `DiffPanel.tsx` / `CodePanel.tsx`). Add their **`ToolStrip` entries**
+  (`± Diff` with a dot when the branch has changes, `‹› Code`) — `ToolStrip.tsx` currently ships only
+  Context/Delivs + the bottom Shell button.
+- Reuse `lib/tints.ts` for add/del tinting (green/red `--tint-*`), never raw palette classes
+  (`check-raw-palette.mjs` ratchet at 0). TDD the pure diff-parse/tree-shape helpers like 2a did
+  (`shellLayout`/`panesModel` pattern).
+- Diff stats (+add/−del) for the header already exist per ticket via `WorktreeSessionGroup.diffStats`
+  (`useWorkQueue.diffStatsByTicket`).
 
 ### Phase 3 (~1-2 weeks, server) — assistant ⇄ agent threads
 - `agent_thread` entity, ticket-scoped assistant runs, `delegate_to_persona` tool, WS thread events,
