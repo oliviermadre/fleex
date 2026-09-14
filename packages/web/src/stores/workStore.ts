@@ -47,6 +47,8 @@ export interface WorkState {
   threadTab: ThreadTab;
   shellOpen: boolean;
   shellMode: boolean;
+  /** When true, the center is the full Code editor (tree + tabs + Monaco). */
+  codeMode: boolean;
   shellLayout: ShellLayout;
   /** Explicit session id shown in each pane slot; null = auto-fill (see panesModel). */
   shellPaneIds: (string | null)[];
@@ -79,6 +81,7 @@ export interface WorkState {
   setThreadTab: (tab: ThreadTab) => void;
   setShellOpen: (open: boolean) => void;
   setShellMode: (mode: boolean) => void;
+  setCodeMode: (mode: boolean) => void;
   setShellLayout: (layout: ShellLayout) => void;
   /** Pin a session to a pane slot (removing it from any other slot); null clears. */
   bindShellPane: (index: number, id: string | null) => void;
@@ -107,6 +110,7 @@ type PersistedWork = Pick<
   | 'threadTab'
   | 'shellOpen'
   | 'shellMode'
+  | 'codeMode'
   | 'shellLayout'
   | 'shellPaneIds'
   | 'shellHeight'
@@ -116,9 +120,13 @@ type PersistedWork = Pick<
   | 'draft'
 >;
 
-/** Clamp the right panel to a sane range so a drag can't hide or engulf it. */
+/**
+ * Clamp the right panel to a sane range so a drag can't hide or engulf it. The
+ * max is generous because the Diff / Code panels want real width for big PRs;
+ * the drag is also runtime-capped to the viewport so it can't exceed the window.
+ */
 export const RIGHT_PANEL_MIN = 260;
-export const RIGHT_PANEL_MAX = 560;
+export const RIGHT_PANEL_MAX = 1200;
 const clampRightPanel = (w: number) => Math.min(RIGHT_PANEL_MAX, Math.max(RIGHT_PANEL_MIN, Math.round(w)));
 
 /** Clamp the left queue width. */
@@ -146,6 +154,7 @@ const DEFAULTS: PersistedWork = {
   threadTab: 'conv',
   shellOpen: false,
   shellMode: false,
+  codeMode: false,
   shellLayout: '1',
   shellPaneIds: [],
   shellHeight: 240,
@@ -186,6 +195,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
       threadTab: s.threadTab,
       shellOpen: s.shellOpen,
       shellMode: s.shellMode,
+      codeMode: s.codeMode,
       shellLayout: s.shellLayout,
       shellPaneIds: s.shellPaneIds,
       shellHeight: s.shellHeight,
@@ -227,7 +237,9 @@ export const useWorkStore = create<WorkState>((set, get) => {
     setSelectedThread: (selectedThreadId) => commit({ selectedThreadId }),
     setThreadTab: (threadTab) => commit({ threadTab }),
     setShellOpen: (shellOpen) => commit({ shellOpen }),
-    setShellMode: (shellMode) => commit({ shellMode }),
+    // Shell mode and Code mode both take over the center — entering one exits the other.
+    setShellMode: (shellMode) => commit({ shellMode, ...(shellMode ? { codeMode: false } : {}) }),
+    setCodeMode: (codeMode) => commit({ codeMode, ...(codeMode ? { shellMode: false } : {}) }),
     setShellLayout: (shellLayout) => commit({ shellLayout }),
     setShellHeight: (height) => commit({ shellHeight: clampShellHeight(height) }),
     bindShellPane: (index, id) => {

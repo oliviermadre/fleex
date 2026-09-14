@@ -10,6 +10,7 @@ import { useWorkStore, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from '../../../stores/
 import type { WorkTask } from '../types';
 import { ContextPanel } from './ContextPanel';
 import { DelivsPanel } from './DelivsPanel';
+import { DiffPanel } from './DiffPanel';
 
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
@@ -57,7 +58,10 @@ export function RightPanel({ task, deliverables }: { task: WorkTask; deliverable
 
   if (!rightPanel) return null;
 
-  const effectiveWidth = Math.min(RIGHT_PANEL_MAX, Math.max(RIGHT_PANEL_MIN, width));
+  // Keep at least ~360px for the queue + center even at the widest drag.
+  const viewportCap =
+    typeof window !== 'undefined' ? Math.max(RIGHT_PANEL_MIN, window.innerWidth - 360) : RIGHT_PANEL_MAX;
+  const effectiveWidth = Math.min(RIGHT_PANEL_MAX, viewportCap, Math.max(RIGHT_PANEL_MIN, width));
 
   return (
     <section
@@ -74,6 +78,7 @@ export function RightPanel({ task, deliverables }: { task: WorkTask; deliverable
         {TITLES[rightPanel] ?? ''}
       </div>
       {rightPanel === 'context' && <ContextPanel task={task} />}
+      {rightPanel === 'diff' && <DiffPanel ticketId={task.id} />}
       {rightPanel === 'deliv' && <DelivsPanel ticketId={task.id} deliverables={deliverables} />}
     </section>
   );

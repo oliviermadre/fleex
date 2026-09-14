@@ -4,8 +4,10 @@
  * button and pinned / workspace actions scoped to the selected task (SPEC §2).
  */
 import { useUIStore } from '../../stores/uiStore';
+import { useWorkStore } from '../../stores/workStore';
 import type { WorkQueueModel } from './useWorkQueue';
 import { WorkTopBarActions } from './WorkTopBarActions';
+import { ModeSwitcher } from './ModeSwitcher';
 
 interface Props {
   queue: WorkQueueModel;
@@ -13,6 +15,7 @@ interface Props {
 
 export function WorkTopBar({ queue }: Props) {
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
+  const view = useWorkStore((s) => s.view);
   const { total, running, needs } = queue.counts;
   const selectedTaskId = queue.selectedTask?.id ?? null;
 
@@ -45,6 +48,8 @@ export function WorkTopBar({ queue }: Props) {
         <span className="text-[var(--theme-text-faint)]">·</span>
         <span className="text-[var(--tint-yellow-text)]">{needs} need you</span>
       </div>
+
+      {view === 'task' && selectedTaskId && <ModeSwitcher />}
 
       <WorkTopBarActions ticketId={selectedTaskId} />
     </header>

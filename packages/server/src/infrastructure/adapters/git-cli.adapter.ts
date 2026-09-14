@@ -252,6 +252,89 @@ export class GitCliAdapter implements GitPort {
     }
   }
 
+  async getDiffPatch(worktreePath: string, baseBranch?: string): Promise<string> {
+    const target = await this.resolveDiffTarget(worktreePath, baseBranch);
+    const { stdout } = await this.execFn('git', ['diff', '--no-color', target], {
+      cwd: worktreePath,
+      timeout: 15_000,
+      maxBuffer: 8 * 1024 * 1024, // headroom above the route's 400 KB cap
+    });
+    return stdout;
+  }
+
+  async getChangedFiles(worktreePath: string, baseBranch?: string): Promise<string[]> {
+    const target = await this.resolveDiffTarget(worktreePath, baseBranch);
+    const { stdout } = await this.execFn('git', ['diff', '--name-only', target], {
+      cwd: worktreePath,
+      timeout: 10_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return stdout.split('\n').map((s) => s.trim()).filter((s) => s.length > 0);
+  }
+
+  /**
+   * The commit to diff the working tree against: the merge-base of the base ref
+   * and HEAD, so base's own divergent commits don't appear as noise. Falls back
+   * to the base ref itself (two-dot) if merge-base can't be resolved (e.g. base
+   * not fetched).
+   */
+  private async resolveDiffTarget(worktreePath: string, baseBranch?: string): Promise<string> {
+    const base = baseBranch ?? `origin/${await this.getDefaultBranch(worktreePath)}`;
+    try {
+      const { stdout } = await this.execFn('git', ['merge-base', base, 'HEAD'], {
+        cwd: worktreePath,
+        timeout: 15_000,
+      });
+      const mergeBase = stdout.trim();
+      if (mergeBase) return mergeBase;
+    } catch {
+      this.logger.debug('merge-base failed, diffing against base directly', { worktreePath, base });
+    }
+    return base;
+  }
+
+  async getFileDiffPatch(worktreePath: string, path: string, baseBranch?: string): Promise<string> {
+    const target = await this.resolveDiffTarget(worktreePath, baseBranch);
+    const { stdout } = await this.execFn('git', ['diff', '--no-color', target, '--', path], {
+      cwd: worktreePath,
+      timeout: 10_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return stdout;
+  }
+
+  async getFileBaseContent(worktreePath: string, path: string, baseBranch?: string): Promise<string> {
+    const target = await this.resolveDiffTarget(worktreePath, baseBranch);
+    try {
+      const { stdout } = await this.execFn('git', ['show', `${target}:${path}`], {
+        cwd: worktreePath,
+        timeout: 10_000,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      return stdout;
+    } catch {
+      // File didn't exist at base (newly added) — no base content.
+      return '';
+    }
+  }
+
+  async listTrackedFiles(worktreePath: string): Promise<string> {
+    const { stdout } = await this.execFn('git', ['ls-tree', '-r', '--name-only', 'HEAD'], {
+      cwd: worktreePath,
+      timeout: 10_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return stdout;
+  }
+
+  async getStatusPorcelain(worktreePath: string): Promise<string> {
+    const { stdout } = await this.execFn('git', ['status', '--porcelain'], {
+      cwd: worktreePath,
+      timeout: 10_000,
+    });
+    return stdout;
+  }
+
   async repairWorktrees(repoPath: string): Promise<void> {
     await this.execFn('git', ['worktree', 'repair'], { cwd: repoPath });
     this.logger.debug('Worktree repair completed', { repoPath });

@@ -6,8 +6,9 @@ point across context resets — update it as work progresses.
 
 ## Where we are
 
-**Phases 0, 1 and 2a are DONE and committed.** → **NEXT: Phase 2b (Diff & Code panels + 2 server
-endpoints).** See the "Phase 2b" section below for the full spec.
+**Phases 0, 1 and 2a are DONE and committed. Phase 2b is IMPLEMENTED + verified green, uncommitted,
+pending manual UI test.** → **NEXT: manual test of Diff/Code panels, then commit; then Phase 3.**
+See the "Phase 2b" section below for what was built.
 
 - Phase 0 (wiring) + Phase 1 (core screen): commit `308d11ac` + 9 feedback rounds.
 - **Phase 2a (shell drawer + shell mode + split panes): commits `13e899d2` and `db27fa1c`.** Full detail in
@@ -196,7 +197,117 @@ user testing behaviour first.** No new server endpoints in 2a.
 Open design choices (revisit after test): close on a single pane is a no-op (use ▾/⌘J to hide);
 `activeShellIndex` is not clamped if sessions are killed below it (stale index → empty panes, not broken).
 
-#### Phase 2b — Diff & Code panels — **NEXT / NOT started**
+#### Phase 2b — Diff & Code panels — **IMPLEMENTED, uncommitted, pending manual UI test**
+
+**What was built (session 4):**
+- **Shared types** (`packages/shared/src/types/worktree-diff.ts`, exported from `index.ts`): `DiffLine`/
+  `DiffHunk`/`DiffFile`/`WorktreeDiff` (+ `path`, `truncated?`) and `FileTreeNode`/`WorktreeTree` (+ `path`).
+- **Server pure helpers (TDD)** in `packages/server/src/domain/services/`:
+  - `diff-parser.ts` `parseUnifiedDiff(patch)` → `DiffFile[]`; tolerant line-by-line parse (added `--- /dev/null`,
+    deleted `+++ /dev/null`, binary, `\ No newline`, spaced paths, truncated tail). 8 tests.
+  - `file-tree.ts` `parseStatusPorcelain(out)` (+ rename dest) & `buildFileTree(tracked, changed, untracked, depth)`
+    (nests, dirs-first, propagates `changed` to ancestors, prunes to depth, de-dups). 8 tests.
+- **GitPort + adapter** (`git.port.ts` / `git-cli.adapter.ts`): `getDiffPatch(worktreePath, base?)` = `git diff`
+  against `merge-base(base, HEAD)` (captures committed+staged+unstaged in ONE command; two-dot fallback if
+  merge-base fails — strictly a superset of the SPEC's "base...HEAD + unstaged, merged", no patch-merging needed);
+  `listTrackedFiles` (`ls-tree -r --name-only HEAD`); `getStatusPorcelain`. Fake-exec adapter tests assert the git
+  args (5 tests). `FakeGitPort` (tests/helpers/fakes.ts) got the 3 stubs.
+- **Routes** `worktree-diff.routes.ts` (registered app-level in `main.ts`, full `/api/...` paths like
+  `repositories.routes.ts`): `GET /api/worktrees/:id/diff` and `/tree?depth=` — **`:id` is the TICKET id**;
+  worktree resolved from the ticket's `worktree` link (`ref`=checkout path, `label`=branch), repo from the
+  `repository` link. No worktree / gone checkout → empty result. Diff caps raw patch at 400 KB → `truncated`.
+  `bareCloneManager.fetch` refreshes origin refs (shared object store) before resolving `base = origin/<default>`.
+- **Client**: `api.ts` `fetchWorktreeDiff(ticketId)` / `fetchWorktreeTree(ticketId, depth=3)` (paths `/worktrees/:id/…`,
+  `API_URL=/api`). `panel/DiffPanel.tsx` (summary header ⎇branch +a −d · N files, per-file headers, blue hunk
+  headers, green/red tinted lines via `--tint-*`, "Open in editor" `vscode://file/<path>`, 5s poll, "No changes
+  yet on this task." empty). `panel/CodePanel.tsx` (repo chip, recursive collapsible tree, changed files bold +
+  yellow dot with dot propagated to dirs, "Open in VS Code", 5s poll). Wired into `RightPanel.tsx`; `ToolStrip.tsx`
+  got `± Diff` (yellow dot when `task.changedLines > 0`) + `‹› Code` entries. `WorkTask.changedLines` added
+  (`types.ts` + `useWorkQueue.ts`, from `diffStatsByTicket`, PR-independent).
+- Verified green: server tsc clean · **1298 server tests** (21 new) · web tsc clean · **778 web tests** · palette
+  ratchet 0. Real-git smoke test on this worktree confirmed the adapter's `git` commands emit exactly the formats
+  the parser tests cover. **Not committed — user testing UI behaviour first** (like 2a).
+- **Deferred (not blocking):** poll-only refresh (no `agent_event` Edit/Write hook yet); code-server "Open in
+  browser" button (no code-server URL config); the `unified-ws.ts` attach/resize floor-clamp defense-in-depth.
+
+**Session 5 — feedback round after manual test (uncommitted):** real use on this PR (68 files / 6k LoC) exposed
+several issues, all fixed:
+- **Panel too narrow** — `RIGHT_PANEL_MAX` 560→1200 (drag also runtime-capped to `innerWidth − 360` in
+  `RightPanel.tsx` so it can't engulf the center). Diff/Code now get real width.
+- **Big-diff UX (chosen: collapsible + filter)** — `DiffPanel` rewritten: files **collapsed by default**
+  (path · +N/−N header, click to expand hunks), a **path filter** box + **expand/collapse-all**. Navigable at 68 files.
+- **Code folder-expand was a no-op (BUG)** — root cause: tree was fetched at `depth=3`, so dirs at the boundary
+  came back with `children` pruned → nothing to render on expand. Fix: server sends the **full tree**
+  (`TREE_DEPTH=100`, effectively unlimited for git-tracked files); `buildFileTree`/depth param unchanged. Dirs with
+  changes **auto-expand** (children now present) so changed files are visible; others collapse.
+- **Click a file to open it (chosen: in-app viewer)** — new `GET /api/worktrees/:id/file?repo=&path=` (reads via
+  `hostFs`, path-contained to the worktree — rejects `..`/absolute, verified; 500 KB cap; NUL-byte → `binary`).
+  New `panel/FileViewer.tsx` floating overlay (line numbers, Esc/backdrop close, "Open in VS Code"). `CodePanel`
+  file rows open it.
+- **Multi-repo (chosen: combined / all repos stacked)** — API reshaped to per-repo lists: `WorktreeDiff.repos:
+  RepoDiff[]`, `WorktreeTree.repos: RepoTree[]` (+ `WorktreeFile`). Route `resolveWorktrees` now returns **every**
+  attached repo whose checkout exists (repository links → worktree-link path matched by repo name, else
+  `workspaceRepoPath(buildTicketWorkspaceId(...), name)`). Diff prefixes each file with its repo when >1; Code shows
+  a collapsible group per repo. Single-repo renders flat as before.
+- Dropped the Diff "Open in editor" footer (ambiguous under combined multi-repo; editor-open lives on each Code repo
+  group + the FileViewer). Verified green: server tsc · 1298 server tests · web tsc · 778 web tests · palette 0.
+
+**Session 6 — feedback round 2 + full Code editor (uncommitted):**
+- **Dots missing though a diff exists (BUG)** — tree "changed" came from `git status --porcelain` (uncommitted only);
+  the diff is vs merge-base (committed too). Fix: new `git.getChangedFiles(wt, base)` (`git diff --name-only
+  <merge-base>`, two-dot fallback, TDD'd); tree route uses it for `changed`, porcelain now only supplies untracked.
+  Dots now match the Diff.
+- **"Open in VS Code" wrong colour** — was `--theme-accent-fg` (the on-accent foreground = white/black). Now
+  `--theme-accent` (correct for an accent text link on a surface).
+- **Floating viewer overflowed** — capped at `max-h-[85vh]`.
+- **Full Code editor (chosen: full in-app editor)** — replaced the read-only modal with a center-takeover **Code
+  mode** (mirrors Shell mode; `workStore.codeMode`, mutually exclusive with `shellMode`; toolstrip Code button
+  toggles it). `components/work/panel/`:
+  - `CodeEditor.tsx` — left file-tree rail (`FileTree.tsx`, extracted; per-repo groups, changed dots, active
+    highlight) + editor tabs (open/close, dirty dot) + Monaco. Tree polls 5s; files load on demand; "Back to chat" exits.
+  - `WorktreeMonaco.tsx` — lazy `@monaco-editor/react` (types derived from `OnMount`, no direct `monaco-editor`
+    import). **Syntax highlighting** (language by extension), theme inferred from `--theme-bg-base` luminance (vs/vs-dark),
+    **diff gutter** via a decorations collection on `changedLines` (`.wt-diff-gutter` in index.css → `--tint-green-solid`),
+    ⌘S save.
+  - **Editing + save** — new `PUT /api/worktrees/:id/file {repo,path,content}` (path-contained, existing files only)
+    + `api.saveWorktreeFile`. File read now returns `changedLines` (new `git.getFileDiffPatch` + pure
+    `changedLineNumbers`, TDD'd) for the gutter. Fixed a NUL-byte literal that JSON transport had baked into the
+    route source (now `String.fromCharCode(0)`).
+  - Deleted the old `CodePanel.tsx` + `FileViewer.tsx`; removed the `code` right-panel branch (Code is a mode now).
+- Verified green: server tsc · **1305 server tests** · web tsc · **778 web tests** · palette 0. Still uncommitted.
+- **Deferred:** per-tab Monaco undo history (tabs remount on switch); gutter reflects diff-at-open (not live after edits);
+  new-file creation from the tree (save overwrites existing files only).
+
+**Session 7 — feedback round 3 (uncommitted):**
+- **Unified mode switcher** — the scattered per-surface toggles (TaskHeader `>_ Shell` top-right, CodeEditor "Back to
+  chat" top-left, ShellTabBar "Back to chat" top-right) were inconsistent. New `ModeSwitcher.tsx` (Chat / Code / Shell
+  segmented) in the always-visible `WorkTopBar` (shown in task view). Removed the Shell button from `TaskHeader` and the
+  "Back to chat" from `CodeEditor`; `ShellTabBar`'s toggle now only shows in the drawer as "Shell mode" (expand), not a
+  back button in shell mode. Chat = both modes off; Code/Shell mutually exclusive (store setters already enforce it).
+- **Open tabs persist** — moved the editor's tabs/active/content out of component state into `stores/codeEditorStore.ts`
+  (per ticket). Tabs + active are persisted to `localStorage['fleex_code_editor']`; content is kept in memory (refetched
+  after a reload). Leaving Code mode for chat/shell and returning keeps the open tabs (and unsaved edits within a session).
+- **Create / delete files** — new `POST /api/worktrees/:id/file/create {repo,path,type}` (mkdir parents for files,
+  path-contained, 409 if exists) and `DELETE /api/worktrees/:id/file {repo,path}` (path-contained, refuses the worktree
+  root) + `api.createWorktreeFile` / `api.deleteWorktreeFile`. `FileTree` got a per-repo **＋ new-file** action (inline
+  path input → create + open) and a per-file **hover trash → inline delete/cancel** confirm.
+- **Removed the "VS Code" button** next to the repo name in the tree (kept the per-file "Open in VS Code" in the editor footer).
+- Verified green: server tsc · 1305 server tests · web tsc · 778 web tests · palette 0. Still uncommitted.
+- **Deferred:** folder create/delete (files only for now); a mode keyboard shortcut for Code (Shell keeps ⌘⇧J).
+
+**Sessions 8–9 — Code editor chrome (uncommitted; all code in place & green):**
+- **Inline diff view** — Edit/Diff toggle swaps Monaco for a read-only side-by-side `DiffEditor`
+  (`WorktreeDiffEditor.tsx`, lazy). Base content via `GET /api/worktrees/:id/file/base` + adapter
+  `git.getFileBaseContent` (`git show <merge-base>:<path>`, '' for new files; TDD'd) + `api.fetchWorktreeFileBase`.
+  Shared Monaco helpers in `monacoUtils.ts`.
+- **Code layout** — tree spans full height on the left; tabs bar only above the editor (was full-width). Structure:
+  outer col → top action bar → row(tree · [tabs + editor]).
+- **Top action bar**: `⎇ branch` (left) · Edit/Diff toggle · **Save** · refresh tree (right). **Footer**: active-file
+  **breadcrumb** (left) · read-only/truncated notes (right). Removed footer Save / "Open in VS Code" / bottom-right path.
+- Verified green: server tsc · **1307 server tests** · web tsc · **778 web tests** · palette 0. Phase 2b
+  feature-complete pending final sign-off + commit.
+
+<details><summary>Original Phase 2b spec (kept for reference)</summary>
 Goal (SPEC §6.3/6.4): a **Diff** panel (unified working-branch diff vs base, add/del tinted, footer "Open
 in editor", empty = "No changes yet on this task.") and a **Code** panel (repo chips · file tree, changed
 files bold + dot · "Open in VS Code" / code-server). Both are ticket-scoped, read-only, poll every ~5s
@@ -236,6 +347,8 @@ while open (or refresh on an `agent_event` Edit/Write tool_result).
   (`shellLayout`/`panesModel` pattern).
 - Diff stats (+add/−del) for the header already exist per ticket via `WorktreeSessionGroup.diffStats`
   (`useWorkQueue.diffStatsByTicket`).
+
+</details>
 
 ### Phase 3 (~1-2 weeks, server) — assistant ⇄ agent threads
 - `agent_thread` entity, ticket-scoped assistant runs, `delegate_to_persona` tool, WS thread events,

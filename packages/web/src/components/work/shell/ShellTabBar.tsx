@@ -181,28 +181,21 @@ export function ShellTabBar({
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={() => setShellMode(!shellMode)}
-        title={shellMode ? 'Back to chat' : 'Shell mode'}
-        className="flex shrink-0 items-center gap-1.5 rounded px-2 py-1 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
-      >
-        {shellMode ? (
-          <>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2.5 3.5h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5V11.5H2.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1Z" />
-            </svg>
-            Back to chat
-          </>
-        ) : (
-          <>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" />
-            </svg>
-            Shell mode
-          </>
-        )}
-      </button>
+      {/* In the drawer, this expands to full Shell mode. In Shell mode itself the
+          top-bar ModeSwitcher owns switching, so we don't duplicate a back button. */}
+      {!shellMode && (
+        <button
+          type="button"
+          onClick={() => setShellMode(true)}
+          title="Shell mode"
+          className="flex shrink-0 items-center gap-1.5 rounded px-2 py-1 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" />
+          </svg>
+          Shell mode
+        </button>
+      )}
     </div>
   );
 }

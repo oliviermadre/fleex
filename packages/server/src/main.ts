@@ -11,6 +11,7 @@ import { fleexServerFactory } from './infrastructure/http/server-factory.js';
 import { migrateRepositoryPatterns } from './domain/services/repository-pattern-migration.js';
 import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
 import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
+import { worktreeDiffRoutes } from './infrastructure/http/worktree-diff.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { versionRoutes } from './infrastructure/http/version.routes.js';
 import { memoryRoutes } from './infrastructure/http/memory.routes.js';
@@ -105,6 +106,7 @@ async function main() {
   // Register HTTP routes
   await app.register(sessionRoutes(container));
   await app.register(repositoryRoutes(container));
+  await app.register(worktreeDiffRoutes(container));
   await app.register(healthRoutes(container));
   await app.register(versionRoutes());
   await app.register(memoryRoutes(container));

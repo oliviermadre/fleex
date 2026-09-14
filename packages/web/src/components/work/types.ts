@@ -53,6 +53,8 @@ export interface WorkTask {
 
   worktrees: WorkWorktree[];
   suggestedRepos: string[];
+  /** Total changed lines (additions + deletions) on the worktree, 0 when none. */
+  changedLines: number;
   pr: WorkPullRequest | null;
   deliverableCount: number;
   sessionCount: number;

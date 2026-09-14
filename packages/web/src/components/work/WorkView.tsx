@@ -22,6 +22,7 @@ import { ToolStrip } from './panel/ToolStrip';
 import { RightPanel } from './panel/RightPanel';
 import { ShellSurface } from './shell/ShellSurface';
 import { ShellDrawer } from './shell/ShellDrawer';
+import { CodeEditor } from './panel/CodeEditor';
 import { useTicketDeliverables } from './panel/useTicketDeliverables';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 
@@ -32,6 +33,7 @@ export function WorkView() {
   const queueCollapsed = useWorkStore((s) => s.queueCollapsed);
   const shellOpen = useWorkStore((s) => s.shellOpen);
   const shellMode = useWorkStore((s) => s.shellMode);
+  const codeMode = useWorkStore((s) => s.codeMode);
 
   // The queue's displayed order drives ⌘⇧↑/↓ navigation.
   useWorkKeyboard(queue.orderedIds);
@@ -63,6 +65,8 @@ export function WorkView() {
         <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
           {view === 'new' ? (
             <NewTask />
+          ) : codeMode && selectedTask ? (
+            <CodeEditor ticketId={selectedTask.id} />
           ) : shellMode && selectedTask ? (
             <ShellSurface ticketId={selectedTask.id} />
           ) : (

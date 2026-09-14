@@ -183,14 +183,14 @@ export function useWorkQueue(): WorkQueueModel {
       // PR from the ticket's github_pr link; diff stats from the PR polling
       // store, matched on the PR's worktree repo + branch when we have one.
       const prBase = prFromLinks(t.links);
+      const wtStats = diffStatsByTicket.get(t.id);
       let pr: WorkTask['pr'] = null;
       if (prBase) {
-        const stats = diffStatsByTicket.get(t.id);
         pr = {
           ref: prBase.ref,
           checksLabel: null,
-          additions: stats?.additions ?? null,
-          deletions: stats?.deletions ?? null,
+          additions: wtStats?.additions ?? null,
+          deletions: wtStats?.deletions ?? null,
           url: prBase.url ?? undefined,
         };
       }
@@ -216,6 +216,7 @@ export function useWorkQueue(): WorkQueueModel {
         progress,
         worktrees,
         suggestedRepos: [],
+        changedLines: wtStats ? wtStats.additions + wtStats.deletions : 0,
         pr,
         deliverableCount: 0,
         sessionCount: sessionCountByTicket.get(t.id) ?? 0,

@@ -44,6 +44,9 @@ import type {
   TicketDeliverable,
   MemoryAskStage,
   MemoryAskEvent,
+  WorktreeDiff,
+  WorktreeTree,
+  WorktreeFile,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -149,6 +152,61 @@ export async function fetchDefaultBranch(
   return request<{ defaultBranch: string; currentBranch: string; isOnDefault: boolean }>(
     `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/default-branch`
   );
+}
+
+/**
+ * Ticket-scoped working-branch diff vs base (Work view Diff panel). `ticketId`
+ * resolves to the ticket's worktree server-side; a ticket with no worktree
+ * returns an empty diff (`base`/`head` = '').
+ */
+export async function fetchWorktreeDiff(ticketId: string): Promise<WorktreeDiff> {
+  return request<WorktreeDiff>(`/worktrees/${encodeURIComponent(ticketId)}/diff`);
+}
+
+/** Ticket-scoped file tree (per repo) with changed markers (Work view Code panel). */
+export async function fetchWorktreeTree(ticketId: string): Promise<WorktreeTree> {
+  return request<WorktreeTree>(`/worktrees/${encodeURIComponent(ticketId)}/tree`);
+}
+
+/** A single file's contents from a ticket's worktree (Code editor). */
+export async function fetchWorktreeFile(ticketId: string, repo: string, path: string): Promise<WorktreeFile> {
+  const qs = `repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`;
+  return request<WorktreeFile>(`/worktrees/${encodeURIComponent(ticketId)}/file?${qs}`);
+}
+
+/** A file's base (merge-base) contents, for the Code editor's side-by-side diff. */
+export async function fetchWorktreeFileBase(ticketId: string, repo: string, path: string): Promise<{ content: string }> {
+  const qs = `repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`;
+  return request<{ content: string }>(`/worktrees/${encodeURIComponent(ticketId)}/file/base?${qs}`);
+}
+
+/** Save a file in place in a ticket's worktree (Code editor). */
+export async function saveWorktreeFile(ticketId: string, repo: string, path: string, content: string): Promise<void> {
+  await request<void>(`/worktrees/${encodeURIComponent(ticketId)}/file`, {
+    method: 'PUT',
+    body: JSON.stringify({ repo, path, content }),
+  });
+}
+
+/** Create an empty file (or directory) in a ticket's worktree (Code editor). */
+export async function createWorktreeFile(
+  ticketId: string,
+  repo: string,
+  path: string,
+  type: 'file' | 'directory' = 'file',
+): Promise<void> {
+  await request<{ ok: boolean }>(`/worktrees/${encodeURIComponent(ticketId)}/file/create`, {
+    method: 'POST',
+    body: JSON.stringify({ repo, path, type }),
+  });
+}
+
+/** Delete a file or directory in a ticket's worktree (Code editor). */
+export async function deleteWorktreeFile(ticketId: string, repo: string, path: string): Promise<void> {
+  await request<void>(`/worktrees/${encodeURIComponent(ticketId)}/file`, {
+    method: 'DELETE',
+    body: JSON.stringify({ repo, path }),
+  });
 }
 
 export type CheckCwdResult =
