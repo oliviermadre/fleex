@@ -54,7 +54,7 @@ web palette `node ../../scripts/check-raw-palette.mjs`. Rebuild shared after a s
 
 ## What's next (not yet built)
 
-### Notes panel (scratchpads in the right sidebar) — IMPLEMENTED, user-confirmed, uncommitted
+### Notes panel (scratchpads in the right sidebar) — DONE, committed `aeee69d2`, pushed
 Adds a **Notes** tool to the right sidebar (alongside Context/Diff/Code/Delivs): a Global scratchpad
 tab + one tab per repo attached to the ticket — the session-view ergonomics the user liked
 (`SidebarTopPanel`). No backend or scratchpad-store change: reuses `scratchpadStore` (keys
@@ -67,7 +67,7 @@ tab + one tab per repo attached to the ticket — the session-view ergonomics th
 - `workStore.ts` — `'scratch'` added to `RightPanel`; new persisted `activeScratchTabByTicket` map +
   `setActiveScratchTab`.
 - `ToolStrip.tsx` — "Notes" button (notebook icon). `RightPanel.tsx` — `NOTES` title + render.
-- Verified: web tsc clean · 786 tests (8 new) · palette clean. User-confirmed. **Not committed yet.**
+- Verified: web tsc clean · 786 tests (8 new) · palette clean. User-confirmed, committed + pushed.
 
 ### Phase 1 polish (optional, small)
 **Session 2 (this branch, not yet committed):**
