@@ -55,6 +55,8 @@ export interface WorkState {
   shellMode: boolean;
   /** When true, the center is the full Code editor (tree + tabs + Monaco). */
   codeMode: boolean;
+  /** When true, the center is the ticket's Workflow DAG / run view. */
+  workflowMode: boolean;
   shellLayout: ShellLayout;
   /** Explicit session id shown in each pane slot; null = auto-fill (see panesModel). */
   shellPaneIds: (string | null)[];
@@ -90,6 +92,7 @@ export interface WorkState {
   setShellOpen: (open: boolean) => void;
   setShellMode: (mode: boolean) => void;
   setCodeMode: (mode: boolean) => void;
+  setWorkflowMode: (mode: boolean) => void;
   setShellLayout: (layout: ShellLayout) => void;
   /** Pin a session to a pane slot (removing it from any other slot); null clears. */
   bindShellPane: (index: number, id: string | null) => void;
@@ -120,6 +123,7 @@ type PersistedWork = Pick<
   | 'shellOpen'
   | 'shellMode'
   | 'codeMode'
+  | 'workflowMode'
   | 'shellLayout'
   | 'shellPaneIds'
   | 'shellHeight'
@@ -165,6 +169,7 @@ const DEFAULTS: PersistedWork = {
   shellOpen: false,
   shellMode: false,
   codeMode: false,
+  workflowMode: false,
   shellLayout: '1',
   shellPaneIds: [],
   shellHeight: 240,
@@ -207,6 +212,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
       shellOpen: s.shellOpen,
       shellMode: s.shellMode,
       codeMode: s.codeMode,
+      workflowMode: s.workflowMode,
       shellLayout: s.shellLayout,
       shellPaneIds: s.shellPaneIds,
       shellHeight: s.shellHeight,
@@ -251,8 +257,9 @@ export const useWorkStore = create<WorkState>((set, get) => {
     setThreadTab: (threadTab) => commit({ threadTab }),
     setShellOpen: (shellOpen) => commit({ shellOpen }),
     // Shell mode and Code mode both take over the center — entering one exits the other.
-    setShellMode: (shellMode) => commit({ shellMode, ...(shellMode ? { codeMode: false } : {}) }),
-    setCodeMode: (codeMode) => commit({ codeMode, ...(codeMode ? { shellMode: false } : {}) }),
+    setShellMode: (shellMode) => commit({ shellMode, ...(shellMode ? { codeMode: false, workflowMode: false } : {}) }),
+    setCodeMode: (codeMode) => commit({ codeMode, ...(codeMode ? { shellMode: false, workflowMode: false } : {}) }),
+    setWorkflowMode: (workflowMode) => commit({ workflowMode, ...(workflowMode ? { shellMode: false, codeMode: false } : {}) }),
     setShellLayout: (shellLayout) => commit({ shellLayout }),
     setShellHeight: (height) => commit({ shellHeight: clampShellHeight(height) }),
     bindShellPane: (index, id) => {

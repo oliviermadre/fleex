@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { TicketUnreadCounts, TicketAgentActivity } from '@fleex/shared';
-import { deriveTicketAgentActivity, deriveActivitySince } from '../../domain/services/ticket-agent-activity.js';
+import { deriveTicketAgentActivity, deriveActivitySince, deriveRunningDetails, deriveWaitingWorkflowDetails } from '../../domain/services/ticket-agent-activity.js';
 import type { Container } from '../container.js';
 
 /**
@@ -21,7 +21,15 @@ import type { Container } from '../container.js';
 
 type BulkQueryDeps = Pick<
   Container,
-  'kvStore' | 'commentStore' | 'deliverableStore' | 'agentEventStore' | 'mentionStore' | 'workflowRunStore'
+  | 'kvStore'
+  | 'commentStore'
+  | 'deliverableStore'
+  | 'agentEventStore'
+  | 'mentionStore'
+  | 'workflowRunStore'
+  | 'personaStore'
+  | 'skillStore'
+  | 'panelStore'
 >;
 
 /** Accepts both `?ticketIds=a,b,c` (GET) and `{ ticketIds: [...] }` (POST). */
@@ -120,12 +128,17 @@ export async function computeAgentActivity(
   const requested = new Set(requestedIds);
 
   // Workflow stores are optional (only wired when workflow templates exist).
-  const [executions, mentions, runningRuns, needsReviewRuns, blockedRuns] = await Promise.all([
+  // Personas / skills / panels are fetched to resolve the running-detail label's
+  // display names (slug → "Les chapeaux de Bono", etc.).
+  const [executions, mentions, runningRuns, needsReviewRuns, blockedRuns, personas, skills, panels] = await Promise.all([
     deps.agentEventStore.getAllExecutions(),
     deps.mentionStore.getAll(),
     deps.workflowRunStore?.getByStatus('running') ?? Promise.resolve([]),
     deps.workflowRunStore?.getByStatus('needs_review') ?? Promise.resolve([]),
     deps.workflowRunStore?.getByStatus('blocked') ?? Promise.resolve([]),
+    deps.personaStore.getAll(),
+    deps.skillStore.getAll(),
+    deps.panelStore.getAll(),
   ]);
 
   // Routine-anchored executions and runs have a null ticketId — they belong to
@@ -144,6 +157,29 @@ export async function computeAgentActivity(
   const gateRuns = [...needsReviewRuns, ...blockedRuns].filter(withTicket).filter((r) =>
     requested.has(r.ticketId),
   );
+
+  // Tickets whose LATEST run is failed-and-retryable, with no active run → "needs
+  // you" (a step died — server restart, crash, max turns — awaiting a manual
+  // Retry). getByTicket is hit only for the few candidate tickets (a failed run
+  // and no active run), so this stays cheap even on a large board.
+  const activeTicketIds = new Set<string>([
+    ...runningExecutions.map((e) => e.ticketId),
+    ...scopedRunningRuns.map((r) => r.ticketId),
+    ...gateRuns.map((r) => r.ticketId),
+    ...waitingMentions.map((m) => m.ticketId),
+  ]);
+  const failedRuns = (await (deps.workflowRunStore?.getByStatus('failed') ?? Promise.resolve([])))
+    .filter(withTicket)
+    .filter((r) => requested.has(r.ticketId));
+  const failedCandidateTickets = [...new Set(failedRuns.map((r) => r.ticketId))].filter(
+    (tid) => !activeTicketIds.has(tid),
+  );
+  const failedNeedsYouRuns: typeof scopedRunningRuns = [];
+  for (const tid of failedCandidateTickets) {
+    const runs = (await deps.workflowRunStore?.getByTicket(tid)) ?? [];
+    const latest = runs[0]; // getByTicket returns DESC by startedAt
+    if (latest && withTicket(latest) && latest.status === 'failed') failedNeedsYouRuns.push(latest);
+  }
 
   // When each waiting mention's question was posed = the completion of the
   // execution that carried it (pass 5 "Waiting for {{age}}"). Latest wins
@@ -170,7 +206,7 @@ export async function computeAgentActivity(
       createdAt: m.createdAt.toISOString(),
     })),
     executionCompletedAtByMentionId,
-    gateWorkflowRuns: gateRuns.map((r) => ({
+    gateWorkflowRuns: [...gateRuns, ...failedNeedsYouRuns].map((r) => ({
       ticketId: r.ticketId,
       updatedAt: r.updatedAt.toISOString(),
     })),
@@ -209,16 +245,56 @@ export async function computeAgentActivity(
     costByTicket.set(e.ticketId, (costByTicket.get(e.ticketId) ?? 0) + (e.costUsd ?? 0));
   }
 
+  // Precise "what's running" label per ticket (workflow step / panel / skill /
+  // agent). Display names come from the persona / skill / panel stores; an
+  // unresolved slug is used as-is.
+  const mentionById = new Map(mentions.map((m) => [m.id, { targetType: m.targetType, targetAgent: m.targetAgent }]));
+  const personaDisplayById = new Map(personas.map((p) => [p.id, p.displayName]));
+  const skillDisplayByName = new Map(skills.map((s) => [s.name, s.displayName]));
+  const panelDisplayByName = new Map(panels.map((p) => [p.name, p.displayName]));
+  const panelDisplayById = new Map(panels.map((p) => [p.id, p.displayName]));
+  const toWorkflowInput = (r: (typeof scopedRunningRuns)[number]) => ({
+    ticketId: r.ticketId,
+    name: r.templateSnapshot.name,
+    emoji: r.templateSnapshot.emoji,
+    stepName: r.templateSnapshot.steps.find((s) => s.id === r.currentStepId)?.name ?? null,
+    startedAt: r.startedAt.toISOString(),
+  });
+  const runningDetailByTicket = deriveRunningDetails({
+    workflowRuns: scopedRunningRuns.map(toWorkflowInput),
+    executions: runningExecutions.map((e) => ({
+      ticketId: e.ticketId,
+      mentionId: e.mentionId,
+      personaId: e.personaId,
+      startedAt: e.startedAt,
+    })),
+    mentionById,
+    personaDisplayById,
+    skillDisplayByName,
+    panelDisplayByName,
+    panelDisplayById,
+  });
+  // A workflow run parked at a gate / terminated step (gateRuns = needs_review +
+  // blocked) or a failed-and-retryable run gets a "… › human required" label.
+  // A failed run has no currentStepId (fail() clears it), so its label omits the
+  // step — "📦 {workflow} › human required".
+  const waitingDetailByTicket = deriveWaitingWorkflowDetails(
+    [...gateRuns, ...failedNeedsYouRuns].map(toWorkflowInput),
+  );
+
   return deriveTicketAgentActivity(requestedIds, {
     runningExecutionTicketIds: runningExecutions.map((e) => e.ticketId),
     runningWorkflowTicketIds: scopedRunningRuns.map((r) => r.ticketId),
     waitingMentionTicketIds: waitingMentions.map((m) => m.ticketId),
     waitingWorkflowTicketIds: gateRuns.map((r) => r.ticketId),
+    failedWorkflowTicketIds: failedNeedsYouRuns.map((r) => r.ticketId),
     lastSdkActivityAtByTicket,
     runningSinceByTicket,
     waitingSinceByTicket,
     costByTicket,
     runningExecutionIdByTicket,
+    runningDetailByTicket,
+    waitingDetailByTicket,
   });
 }
 

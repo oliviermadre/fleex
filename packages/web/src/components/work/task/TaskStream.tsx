@@ -14,9 +14,11 @@ import { RunCard } from './RunCard';
 import { DeliverableCard } from './DeliverableCard';
 import { InlineQuestion } from './InlineQuestion';
 import { MessageMarkdown } from './MessageMarkdown';
+import { TicketActionCards } from '../../tickets/TicketActionCards';
 import { buildStream, parseInlineOptions, type QueueActivity } from '../selectors';
 
 interface Props {
+  ticketId: string;
   description: string | null;
   comments: TicketComment[];
   events: TicketActivity[];
@@ -30,6 +32,7 @@ interface Props {
 }
 
 export function TaskStream({
+  ticketId,
   description,
   comments,
   events,
@@ -109,6 +112,18 @@ export function TaskStream({
               );
           }
         })}
+
+        {/* Actionable HITL / workflow cards (Human Gate approve-reject, waiting
+            for input, ambiguous route, failed-step retry, crashed relaunch,
+            running / waiting banners) — same surface as the ticket Comments tab. */}
+        <TicketActionCards
+          ticketId={ticketId}
+          deliverables={deliverables}
+          onOpenExecution={onOpenExecution}
+          // The stream already renders a RunCard per running execution, so the
+          // "…is working" banner would double-report it.
+          showRunningBanner={false}
+        />
 
         {loading && !hasContent && (
           <div className="py-8 text-center text-[12px] text-[var(--theme-text-faint)]">Loading conversation…</div>

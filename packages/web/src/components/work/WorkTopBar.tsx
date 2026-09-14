@@ -49,7 +49,7 @@ export function WorkTopBar({ queue }: Props) {
         <span className="text-[var(--tint-yellow-text)]">{needs} need you</span>
       </div>
 
-      {view === 'task' && selectedTaskId && <ModeSwitcher />}
+      {view === 'task' && selectedTaskId && <ModeSwitcher ticketId={selectedTaskId} />}
 
       <WorkTopBarActions ticketId={selectedTaskId} />
     </header>

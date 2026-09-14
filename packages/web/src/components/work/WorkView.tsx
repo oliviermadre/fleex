@@ -8,10 +8,12 @@
  *   QUEUE 300px · CENTER minmax(0,1fr) · RIGHT PANEL (toggle) · TOOL STRIP 60px.
  * The shell drawer (⌘J) and shell mode land in Phase 2.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
 import { useWorkKeyboard } from './keyboard';
 import { useWorkStore } from '../../stores/workStore';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
 import { WorkTopBar } from './WorkTopBar';
 import { WorkStatusBar } from './WorkStatusBar';
 import { WorkQueue } from './queue/WorkQueue';
@@ -34,11 +36,23 @@ export function WorkView() {
   const shellOpen = useWorkStore((s) => s.shellOpen);
   const shellMode = useWorkStore((s) => s.shellMode);
   const codeMode = useWorkStore((s) => s.codeMode);
+  const workflowMode = useWorkStore((s) => s.workflowMode);
 
   // The queue's displayed order drives ⌘⇧↑/↓ navigation.
   useWorkKeyboard(queue.orderedIds);
 
   const selectedTask = queue.selectedTask;
+
+  // Load the selected ticket's workflow runs regardless of the active center
+  // mode, so the "Workflow" toggle appears reliably (and its view is warm) even
+  // when the user is on Code/Shell. Self-cleaning + seq-guarded in the store.
+  const selectedTaskId = selectedTask?.id ?? null;
+  useEffect(() => {
+    if (selectedTaskId) void useWorkflowRunStore.getState().loadForTicket(selectedTaskId);
+  }, [selectedTaskId]);
+  const hasWorkflowRuns = useWorkflowRunStore((s) =>
+    selectedTaskId ? (s.runsByTicket[selectedTaskId]?.length ?? 0) > 0 : false,
+  );
   // One deliverables subscription for the whole view: feeds the tool-strip badge
   // count and the Delivs panel, both live via WS.
   const { deliverables } = useTicketDeliverables(selectedTask?.id ?? null);
@@ -69,6 +83,8 @@ export function WorkView() {
             <CodeEditor ticketId={selectedTask.id} />
           ) : shellMode && selectedTask ? (
             <ShellSurface ticketId={selectedTask.id} />
+          ) : workflowMode && selectedTask && hasWorkflowRuns ? (
+            <TicketWorkflowTab ticketId={selectedTask.id} />
           ) : (
             <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
           )}

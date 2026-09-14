@@ -1,6 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
-import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel, StepRun, WorkflowStep, WorkflowRun, MentionExecutionFailedPayload } from '@fleex/shared';
-import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
+import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, StepRun, WorkflowStep, WorkflowRun, MentionExecutionFailedPayload } from '@fleex/shared';
 import { tint, tintText, tintClasses } from '../../lib/tints';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -24,7 +23,7 @@ import { selectCrashedMentionCards, crashReasonLabel } from './crashedMentionCar
 import { ModelSelect } from '../agents/ModelSelect';
 import { useTicketStore } from '../../stores/ticketStore';
 import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
-import { useModels } from '../../hooks/useModels';
+import { useExecConfig } from '../../hooks/useExecConfig';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
@@ -43,49 +42,10 @@ import { NoteRefChip } from '../markdown/NoteRefChip';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
 import { userRemarkPlugins } from '../markdown/profiles';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
+import { ComposerExecBar } from '../markdown/ComposerExecBar';
 import { MentionMenu } from '../markdown/MentionMenu';
 import { useMentionAutocomplete } from '../markdown/useMentionAutocomplete';
 import { useAllMentionOptions } from '../markdown/useAllMentionOptions';
-
-/** Per-mode color for the conversation execution-mode pill. */
-const MODE_PILL_CLASS: Record<ConversationMode, string> = {
-  talk: tint('teal'),
-  plan: tint('purple'),
-  edit: tint('green'),
-};
-
-/**
- * Small filled info icon that surfaces an explanatory tooltip on hover/focus.
- * Used next to the execution-bar labels (Mode / Model) to clarify what each
- * control does. Uses a custom CSS tooltip (not the native `title`) so it appears
- * instantly instead of after the browser's ~1s delay.
- */
-function InfoHint({ text }: { text: string }) {
-  return (
-    <span className="group/info relative inline-flex">
-      <span
-        tabIndex={0}
-        role="button"
-        aria-label={text}
-        className="inline-flex cursor-help items-center text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-secondary)] focus:outline-none focus-visible:text-[var(--theme-text-secondary)]"
-      >
-        <svg className="h-[15px] w-[15px]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <path
-            fillRule="evenodd"
-            d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9zm1-4.25a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </span>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 w-72 max-w-[18rem] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-2.5 py-1.5 text-[11px] font-normal normal-case leading-snug text-[var(--theme-text-primary)] opacity-0 shadow-lg transition-opacity duration-75 group-hover/info:opacity-100 group-focus-within/info:opacity-100"
-      >
-        {text}
-      </span>
-    </span>
-  );
-}
 
 /**
  * Build a lookup: commentId -> mentionText -> mentionId
@@ -521,56 +481,14 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
 
   const inputWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Conversation-scoped execution config lives on the ticket (persisted server
-  // side, synced via the ticket:updated WS broadcast). The composer reads it
-  // from the ticket store — it is NO LONGER initialised from the latest mention
-  // (that was the "mode changes by itself" bug). Changing any control PATCHes
-  // /execution-config and sends no message.
+  // Conversation-scoped execution config (mode / model / effort / fast) lives on
+  // the ticket (persisted server side, synced via the ticket:updated WS
+  // broadcast). useExecConfig reads it from the ticket store and PATCHes
+  // /execution-config on change — it is NO LONGER initialised from the latest
+  // mention (that was the "mode changes by itself" bug). `ticket` is still read
+  // here for the missing-repo guard below.
   const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === ticketId));
-  const { models } = useModels();
-  const executionMode: ConversationMode = ticket?.conversationMode ?? 'plan';
-  const modelOverride: string | null = ticket?.modelOverride ?? null;
-  const effortOverride: EffortLevel | null = ticket?.effortOverride ?? null;
-  const fastMode: boolean = ticket?.fastMode ?? false;
-
-  // The model whose capabilities drive the Effort/Fast controls. In "Auto"
-  // (no override) we can't know which persona will run, so we hide those
-  // controls — they degrade cleanly and only appear for an explicit, capable
-  // model override.
-  const overriddenModel = useMemo(
-    () => (modelOverride ? models.find((m) => m.id === modelOverride) : undefined),
-    [models, modelOverride],
-  );
-  // Only the levels THIS model accepts — a model can support effort and still
-  // reject xhigh/max, and an unsupported level is a 400. Fall back to local
-  // inference if the model list predates the effortLevels field.
-  const effortLevels = useMemo(
-    () => (modelOverride ? overriddenModel?.effortLevels ?? inferModelCapabilities(modelOverride).effortLevels : []),
-    [modelOverride, overriddenModel],
-  );
-  const showEffort = effortLevels.length > 0;
-  const showFast = overriddenModel?.supportsFastMode === true;
-  // What will actually run: a stored level above this model's ceiling is clamped
-  // down, so show the clamped value rather than a phantom selection.
-  const effectiveEffort = modelOverride ? resolveEffortLevel(modelOverride, effortOverride) ?? '' : '';
-
-  const patchExecConfig = useCallback(
-    (req: import('@fleex/shared').UpdateTicketExecutionConfigRequest) => {
-      void api.updateTicketExecutionConfig(ticketId, req).catch(() => {});
-    },
-    [ticketId],
-  );
-
-  const cycleMode = useCallback(() => {
-    const order: ConversationMode[] = ['talk', 'plan', 'edit'];
-    const next = order[(order.indexOf(executionMode) + 1) % order.length]!;
-    patchExecConfig({ conversationMode: next });
-  }, [executionMode, patchExecConfig]);
-
-  const setExecutionMode = useCallback(
-    (mode: ConversationMode) => patchExecConfig({ conversationMode: mode }),
-    [patchExecConfig],
-  );
+  const exec = useExecConfig(ticketId);
 
   const commentFileUpload = useFileUpload({
     textareaRef,
@@ -1138,14 +1056,14 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       // Execution mode cycle: Shift+Tab (Talk→Plan→Edit→Talk), à la Claude Code.
       if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault();
-        cycleMode();
+        exec.cycleMode();
         return;
       }
       // Execution mode toggle: Ctrl+1/2/3 (direct selection, conservés)
       if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
-        if (e.key === '1') { e.preventDefault(); setExecutionMode('talk'); return; }
-        if (e.key === '2') { e.preventDefault(); setExecutionMode('plan'); return; }
-        if (e.key === '3') { e.preventDefault(); setExecutionMode('edit'); return; }
+        if (e.key === '1') { e.preventDefault(); exec.setExecutionMode('talk'); return; }
+        if (e.key === '2') { e.preventDefault(); exec.setExecutionMode('plan'); return; }
+        if (e.key === '3') { e.preventDefault(); exec.setExecutionMode('edit'); return; }
       }
       // Normal submit: Enter without shift
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1153,7 +1071,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         handleSubmit();
       }
     },
-    [mentionAc, handleSubmit, cycleMode, setExecutionMode],
+    [mentionAc, handleSubmit, exec],
   );
 
   return (
@@ -1501,79 +1419,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
               </button>
             </>
           }
-          actions={
-            <>
-              {/* Conversation execution bar (mode / model / effort / fast) */}
-              {/* Mode: single pill, cycles Talk→Plan→Edit on click (or Shift+Tab) */}
-              <span className="flex items-center gap-1 text-[var(--theme-text-secondary)]">
-                Mode :
-                <InfoHint text="Le mode définit les droits de l'agent au prochain acknowledge : Talk = réponse sans outils, Plan = lecture seule, Edit = écriture (Write/Edit/Bash). Il appartient à la conversation et s'applique à la prochaine exécution, sans envoyer de message." />
-              </span>
-              <button
-                type="button"
-                onClick={cycleMode}
-                title="Conversation mode — click or Shift+Tab to cycle (Ctrl+1/2/3 to set). Applies to the next agent acknowledge, sends no message."
-                className={`flex items-center gap-1.5 rounded-md border px-2 py-1 font-medium transition-colors ${MODE_PILL_CLASS[executionMode]}`}
-              >
-                <span className="capitalize">{executionMode}</span>
-                <span className="text-[10px] opacity-60">⇧⇥</span>
-              </button>
-
-              {/* Model override dropdown — default "Auto (persona)" */}
-              <span className="ml-1 flex items-center gap-1 text-[var(--theme-text-secondary)]">
-                Model :
-                <InfoHint text="Le modèle utilisé pour la prochaine exécution de l'agent mentionné. Auto = chaque agent garde le modèle de sa config. Choisir un modèle ici est un override de conversation : il s'applique à la prochaine mention sans modifier la config de l'agent." />
-              </span>
-              <ModelSelect
-                variant="inline"
-                icon="🤖"
-                value={modelOverride ?? ''}
-                onChange={(v) => patchExecConfig({ modelOverride: v === '' ? null : v })}
-                leadingOption={{ value: '', label: 'Auto (persona)' }}
-                title="Model for the next agent run. Auto = inherit the agent's own model. An override applies to the next mention without changing the agent config."
-                ariaLabel="Model override"
-              />
-
-              {/* Effort dropdown — shown only when the resolved model supports it */}
-              {showEffort && (
-                <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
-              <span className="opacity-60">◐</span>
-              <select
-                value={effectiveEffort}
-                onChange={(e) => patchExecConfig({ effortOverride: e.target.value === '' ? null : (e.target.value as EffortLevel) })}
-                title={
-                  effortOverride && effectiveEffort !== effortOverride
-                    ? `Reasoning effort for the next agent run. "${effortOverride}" isn't available on this model — it will run at "${effectiveEffort || 'default'}".`
-                    : 'Reasoning effort for the next agent run.'
-                }
-                className="cursor-pointer bg-transparent pr-1 text-xs text-[var(--theme-text-secondary)] focus:outline-none"
-              >
-                <option value="">Effort: default</option>
-                {effortLevels.map((lvl) => (
-                  <option key={lvl} value={lvl}>Effort: {lvl}</option>
-                ))}
-              </select>
-                </label>
-              )}
-
-              {/* Fast toggle — shown only when the resolved model supports it */}
-              {showFast && (
-                <button
-              type="button"
-              onClick={() => patchExecConfig({ fastMode: !fastMode })}
-              title="Fast (low-latency) mode for the next agent run."
-              className={`flex items-center gap-1 rounded-md border px-2 py-1 font-medium transition-colors ${
-                fastMode
-                  ? tint('yellow')
-                  : 'border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
-              }`}
-                >
-                  <span>⚡</span>
-                  <span>Fast</span>
-                </button>
-              )}
-            </>
-          }
+          actions={<ComposerExecBar exec={exec} />}
         />
       </div>
 

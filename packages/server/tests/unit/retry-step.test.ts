@@ -48,7 +48,7 @@ describe('RetryStepUseCase', () => {
     const run = makeRun();
     const step = runningStep('exec-1');
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
-    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), getByWorkflowRun: vi.fn().mockResolvedValue([]), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn().mockResolvedValue(true) };
     const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
@@ -70,7 +70,7 @@ describe('RetryStepUseCase', () => {
     const run = makeRun();
     const step = runningStep(null);
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
-    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), getByWorkflowRun: vi.fn().mockResolvedValue([]), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn() };
     const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
@@ -92,7 +92,7 @@ describe('RetryStepUseCase', () => {
     const step = runningStep('exec-1');
     step.cancel(); // step already settled to `cancelled`
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
-    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), getByWorkflowRun: vi.fn().mockResolvedValue([]), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn() };
     const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
@@ -111,7 +111,7 @@ describe('RetryStepUseCase', () => {
     const run = makeRun();
     const step = runningStep('exec-1');
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
-    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), getByWorkflowRun: vi.fn().mockResolvedValue([]), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn().mockRejectedValue(new Error('gone')) };
     const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
@@ -129,7 +129,7 @@ describe('RetryStepUseCase', () => {
     const step = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'a' });
     step.markNeedsReview({ output: { schemaFields: {}, result: 'needs_review', comment: 'Which repo?' } });
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
-    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), getByWorkflowRun: vi.fn().mockResolvedValue([]), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn() };
     const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
@@ -141,12 +141,37 @@ describe('RetryStepUseCase', () => {
     expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'a');
   });
 
+  // WHY: a stale "Restart" panel that hadn't refreshed let a second click retry
+  // an already-superseded attempt, spawning a duplicate agent. Only the latest
+  // attempt of a step is restartable; retrying an older one is a no-op.
+  it('no-ops when a newer attempt of the step already exists', async () => {
+    const run = makeRun();
+    const step = runningStep('exec-1');
+    step.cancel();
+    const newer = StepRunEntity.create({ id: 'sr-2', workflowRunId: 'run-1', stepId: 'a', attempt: 2 });
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = {
+      getById: vi.fn().mockResolvedValue(step),
+      getByWorkflowRun: vi.fn().mockResolvedValue([step, newer]),
+      save: vi.fn(),
+    };
+    const orchestrator = { runStep: vi.fn() };
+    const canceller = { cancelExecution: vi.fn() };
+    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
+
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1' });
+
+    expect(orchestrator.runStep).not.toHaveBeenCalled();
+    expect(runStore.save).not.toHaveBeenCalled();
+    expect(canceller.cancelExecution).not.toHaveBeenCalled();
+  });
+
   it('leaves the output untouched when no answer was given (plain retry)', async () => {
     const run = makeRun();
     const step = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'a' });
     step.fail({ message: 'boom' });
     const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
-    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), getByWorkflowRun: vi.fn().mockResolvedValue([]), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const canceller = { cancelExecution: vi.fn() };
     const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);

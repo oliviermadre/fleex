@@ -68,6 +68,25 @@ describe('selectFailedStepCards', () => {
     expect(cards.map((c) => [c.run.id, c.step.id, c.stepRun.id])).toEqual([['r1', 'dev', 'r1-dev-1']]);
   });
 
+  // WHY: a server-restart interruption parks the run in `needs_review` while
+  // marking the step `failed` (recover-orphaned). The retry card must still show
+  // so the stream stays actionable, not only the DAG.
+  it('surfaces a card for a failed step on a run PARKED in needs_review', () => {
+    const dev = step('dev');
+    const r = run('r1', 'needs_review', [dev]);
+    const cards = selectFailedStepCards([r], { r1: { stepRuns: [stepRun('r1', 'dev', 1, 'failed')] } });
+    expect(cards.map((c) => c.step.id)).toEqual(['dev']);
+  });
+
+  // WHY: a needs_review run from a human gate / waiting-input step has NO failed
+  // step, so it must produce no failed-step card (owned by the gate/input cards).
+  it('produces no card for a needs_review run whose steps are not failed', () => {
+    const dev = step('dev');
+    const r = run('r1', 'needs_review', [dev]);
+    const cards = selectFailedStepCards([r], { r1: { stepRuns: [stepRun('r1', 'dev', 1, 'needs_review')] } });
+    expect(cards).toEqual([]);
+  });
+
   // WHY: once the user retries, the step must stop offering a retry — otherwise
   // they can fire a second concurrent execution of a step that is already running.
   it('ignores a superseded failed attempt when a newer attempt is live', () => {
