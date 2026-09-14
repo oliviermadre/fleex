@@ -11,6 +11,7 @@ import type { WorkTask } from '../types';
 import { ContextPanel } from './ContextPanel';
 import { DelivsPanel } from './DelivsPanel';
 import { DiffPanel } from './DiffPanel';
+import { ScratchpadTabsPanel } from './ScratchpadTabsPanel';
 
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
@@ -18,6 +19,7 @@ const TITLES: Record<string, string> = {
   thread: 'THREADS',
   diff: 'DIFF',
   code: 'CODE',
+  scratch: 'NOTES',
 };
 
 /** The tool strip is 60px; the panel's right edge sits at that offset. */
@@ -80,6 +82,7 @@ export function RightPanel({ task, deliverables }: { task: WorkTask; deliverable
       {rightPanel === 'context' && <ContextPanel task={task} />}
       {rightPanel === 'diff' && <DiffPanel ticketId={task.id} />}
       {rightPanel === 'deliv' && <DelivsPanel ticketId={task.id} deliverables={deliverables} />}
+      {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}
     </section>
   );
 }

@@ -59,6 +59,18 @@ const TOOLS: Tool[] = [
       </svg>
     ),
   },
+  {
+    key: 'scratch',
+    label: 'Notes',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3h9A1.5 1.5 0 0 1 17 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 5 19.5z" />
+        <line x1="8.5" y1="7.5" x2="13.5" y2="7.5" />
+        <line x1="8.5" y1="11" x2="13.5" y2="11" />
+        <line x1="8.5" y1="14.5" x2="11.5" y2="14.5" />
+      </svg>
+    ),
+  },
 ];
 
 export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; delivCount?: number }) {

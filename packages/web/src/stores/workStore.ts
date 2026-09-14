@@ -10,7 +10,7 @@ import type { TicketType, TicketPriority } from '@fleex/shared';
  */
 
 export type WorkView = 'task' | 'new';
-export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | null;
+export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'scratch' | null;
 export type ThreadTab = 'conv' | 'stream';
 /** Shell pane arrangement — mirrors the prototype's layout presets. */
 export type ShellLayout = '1' | 'cols' | 'rows' | 'three' | 'grid';
@@ -43,6 +43,12 @@ export interface WorkState {
   /** Free-text search over task titles. */
   search: string;
   rightPanel: RightPanel;
+  /**
+   * Active scratchpad tab per ticket ('__global__' or 'org/name'), so the Notes
+   * panel reopens on the tab you last used for that ticket. Resolved against the
+   * ticket's live repo tabs, falling back to Global when the tab no longer exists.
+   */
+  activeScratchTabByTicket: Record<string, string>;
   selectedThreadId: string | null;
   threadTab: ThreadTab;
   shellOpen: boolean;
@@ -77,6 +83,8 @@ export interface WorkState {
   /** Open a right panel, or toggle it closed when it's already the active one. */
   toggleRightPanel: (panel: Exclude<RightPanel, null>) => void;
   setRightPanel: (panel: RightPanel) => void;
+  /** Remember which scratchpad tab is active for a ticket. */
+  setActiveScratchTab: (ticketId: string, tabKey: string) => void;
   setSelectedThread: (id: string | null) => void;
   setThreadTab: (tab: ThreadTab) => void;
   setShellOpen: (open: boolean) => void;
@@ -106,6 +114,7 @@ type PersistedWork = Pick<
   | 'favoriteOnly'
   | 'search'
   | 'rightPanel'
+  | 'activeScratchTabByTicket'
   | 'selectedThreadId'
   | 'threadTab'
   | 'shellOpen'
@@ -150,6 +159,7 @@ const DEFAULTS: PersistedWork = {
   favoriteOnly: false,
   search: '',
   rightPanel: 'context',
+  activeScratchTabByTicket: {},
   selectedThreadId: null,
   threadTab: 'conv',
   shellOpen: false,
@@ -191,6 +201,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
       favoriteOnly: s.favoriteOnly,
       search: s.search,
       rightPanel: s.rightPanel,
+      activeScratchTabByTicket: s.activeScratchTabByTicket,
       selectedThreadId: s.selectedThreadId,
       threadTab: s.threadTab,
       shellOpen: s.shellOpen,
@@ -234,6 +245,8 @@ export const useWorkStore = create<WorkState>((set, get) => {
     toggleRightPanel: (panel) =>
       commit({ rightPanel: get().rightPanel === panel ? null : panel }),
     setRightPanel: (rightPanel) => commit({ rightPanel }),
+    setActiveScratchTab: (ticketId, tabKey) =>
+      commit({ activeScratchTabByTicket: { ...get().activeScratchTabByTicket, [ticketId]: tabKey } }),
     setSelectedThread: (selectedThreadId) => commit({ selectedThreadId }),
     setThreadTab: (threadTab) => commit({ threadTab }),
     setShellOpen: (shellOpen) => commit({ shellOpen }),

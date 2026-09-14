@@ -54,6 +54,21 @@ web palette `node ../../scripts/check-raw-palette.mjs`. Rebuild shared after a s
 
 ## What's next (not yet built)
 
+### Notes panel (scratchpads in the right sidebar) — IMPLEMENTED, user-confirmed, uncommitted
+Adds a **Notes** tool to the right sidebar (alongside Context/Diff/Code/Delivs): a Global scratchpad
+tab + one tab per repo attached to the ticket — the session-view ergonomics the user liked
+(`SidebarTopPanel`). No backend or scratchpad-store change: reuses `scratchpadStore` (keys
+`__global__` | `org/name`, per-repo endpoints) + embeddable `ScratchpadContent` (`compact`).
+- `panel/scratchTabs.ts` — pure tab model (`scratchTabs` Global+per-repo dedup, `resolveActiveScratchTab`
+  persisted→Global fallback). Unit-tested (`scratchTabs.test.ts`, 8 cases).
+- `panel/ScratchpadTabsPanel.tsx` — resolves the ticket's `repository` links (via `ticketStore`, same
+  source as `ContextPanel`, so tabs track attach/detach live), renders the tab strip +
+  `ScratchpadContent key={activeKey}`. Active tab remembered per ticket.
+- `workStore.ts` — `'scratch'` added to `RightPanel`; new persisted `activeScratchTabByTicket` map +
+  `setActiveScratchTab`.
+- `ToolStrip.tsx` — "Notes" button (notebook icon). `RightPanel.tsx` — `NOTES` title + render.
+- Verified: web tsc clean · 786 tests (8 new) · palette clean. User-confirmed. **Not committed yet.**
+
 ### Phase 1 polish (optional, small)
 **Session 2 (this branch, not yet committed):**
 - ✅ **PR state colour** — `ContextPanel.tsx` now fetches `api.fetchPRStates(ticket.id)` on ticket
