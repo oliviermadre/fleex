@@ -6,20 +6,24 @@ point across context resets — update it as work progresses.
 
 ## Where we are
 
-**Phases 0, 1 and 2a are DONE and committed. Phase 2b is IMPLEMENTED + verified green, uncommitted,
-pending manual UI test.** → **NEXT: manual test of Diff/Code panels, then commit; then Phase 3.**
-See the "Phase 2b" section below for what was built.
+**Phases 0, 1, 2a AND 2b are DONE, committed and pushed.** → **NEXT: Phase 3 (assistant ⇄ agent threads).**
+See "Phase 2b" below (sessions 4–9 log) for what was built and the deferred items.
 
 - Phase 0 (wiring) + Phase 1 (core screen): commit `308d11ac` + 9 feedback rounds.
 - **Phase 2a (shell drawer + shell mode + split panes): commits `13e899d2` and `db27fa1c`.** Full detail in
-  the "Phase 2 → Phase 2a" section below. The `>_ Shell` top-bar button opens shell mode; the bottom
-  tool-strip Shell button + ⌘J open the drawer.
+  the "Phase 2 → Phase 2a" section below. Shell mode now opens via the top-bar **Chat/Code/Shell ModeSwitcher**
+  (added in 2b); the bottom tool-strip Shell button + ⌘J open the drawer.
+- **Phase 2b (Diff panel + full Code editor): commit `c94fed78`, pushed to `origin/ticket/b12c65-focus-view`
+  (PR #278).** Diff panel (collapsible + filter + combined multi-repo) and Code mode (tree + tabs + Monaco
+  edit/save + Edit/Diff toggle + diff gutter + create/delete + persistent tabs via `codeEditorStore`). Server
+  endpoints under `/api/worktrees/:id` (diff/tree/file get·base·put·create·delete) + new `GitPort` methods.
 
-Working tree clean at last checkpoint. Verified green: `packages/web` → **778 tests**;
-`tsc --noEmit -p packages/web` clean; `node scripts/check-raw-palette.mjs` clean (theme tokens only).
+Working tree clean; branch in sync with origin. Verified green at commit: **server tsc + 1307 tests**;
+**web tsc + 778 tests**; `check-raw-palette.mjs` clean.
 
-Run checks from `packages/web`: `../../node_modules/.bin/vitest run`; `../../node_modules/.bin/tsc --noEmit -p .`;
-`node ../../scripts/check-raw-palette.mjs` (deps installed via `bun install` at repo root).
+Run checks per package: `../../node_modules/.bin/vitest run`; `../../node_modules/.bin/tsc --noEmit -p .`;
+web palette `node ../../scripts/check-raw-palette.mjs`. Rebuild shared after a shared type change:
+`(cd packages/shared && ../../node_modules/.bin/tsc)`. (deps installed via `bun install` at repo root.)
 
 ### Done
 
