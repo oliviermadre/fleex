@@ -1050,6 +1050,19 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    // Bulk PR details (state, draft, title, size, url) — the Work queue's PR glyph.
+    // Capped so one request can't build an unbounded GraphQL query.
+    app.post<{ Body: { refs?: string[] } }>(
+      '/api/pr-details',
+      async (request) => {
+        const refs = (request.body?.refs ?? []).slice(0, 100);
+        if (refs.length === 0) return {};
+
+        const details = await container.githubGraphql.fetchPRDetails(parsePRRefs(refs));
+        return Object.fromEntries(details);
+      },
+    );
+
     // Batch reorder
     app.post<{ Body: { updates: { id: string; status: TicketStatus; position: number }[] } }>(
       '/api/tickets/reorder',
