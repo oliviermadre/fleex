@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -88,11 +88,17 @@ export class CreateSessionFromTicketUseCase {
 
     for (const repo of repos) {
       const wtPath = this.resolver.workspaceRepoPath(workspaceId, repo.name);
+      // D9 precedence: an existing worktree link or a PR checkout wins; the
+      // per-repo base only applies when we're minting a fresh ticket branch.
+      const baseBranch = !worktreeLink && !prNumber
+        ? resolveBaseRef(ticket.links, repo.org, repo.name)
+        : undefined;
       try {
         const existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
           branch: branchName,
           createNewBranch: !worktreeLink,
           ...(prNumber ? { prNumber } : {}),
+          ...(baseBranch ? { baseBranch } : {}),
         });
         const actualPath = existingPath ?? wtPath;
         // Add/update worktree link with the actual path

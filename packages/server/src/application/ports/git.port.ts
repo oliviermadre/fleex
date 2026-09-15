@@ -14,6 +14,12 @@ export interface GitPort {
   removeWorktree(repoPath: string, wtPath: string): Promise<void>;
   moveWorktree(repoPath: string, wtPath: string, newPath: string): Promise<void>;
   getDefaultBranch(repoPath: string): Promise<string>;
+  /**
+   * True when `origin` has a branch head named exactly `branch`. Uses
+   * `git ls-remote --heads` (a cheap network round-trip, no full fetch) so a
+   * base branch can be validated at attach time.
+   */
+  remoteBranchExists(repoPath: string, branch: string): Promise<boolean>;
   fetch(repoPath: string): Promise<void>;
   fetchRef(repoPath: string, refspec: string): Promise<void>;
   cloneBare(remote: string, barePath: string): Promise<void>;
