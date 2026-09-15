@@ -148,6 +148,35 @@ export class GitCliAdapter implements GitPort {
     this.logger.debug('Worktree removed', { repoPath, wtPath });
   }
 
+  async forceBranch(repoPath: string, branch: string, startPoint: string): Promise<void> {
+    // --no-track for the same reason as createWorktree: never adopt the base as upstream.
+    await this.execFn('git', ['branch', '-f', '--no-track', branch, startPoint], { cwd: repoPath });
+    this.logger.debug('Branch moved', { repoPath, branch, startPoint });
+  }
+
+  async countOwnCommits(repoPath: string, branch: string): Promise<number> {
+    // `--exclude` patterns applied to `--remotes` are relative to refs/remotes/.
+    const { stdout } = await this.execFn(
+      'git',
+      ['rev-list', '--count', branch, '--not', `--exclude=origin/${branch}`, '--remotes'],
+      { cwd: repoPath },
+    );
+    const count = Number.parseInt(stdout.trim(), 10);
+    // Never read garbage as "no commits of its own": callers move the branch on 0.
+    if (Number.isNaN(count)) throw new Error(`Unexpected rev-list output for ${branch}: ${stdout}`);
+    return count;
+  }
+
+  async isAncestor(repoPath: string, ancestor: string, ref: string): Promise<boolean> {
+    try {
+      await this.execFn('git', ['merge-base', '--is-ancestor', ancestor, ref], { cwd: repoPath });
+      return true;
+    } catch {
+      // Exit 1 means "not an ancestor"; any other failure can't prove that it is.
+      return false;
+    }
+  }
+
   async moveWorktree(repoPath: string, wtPath: string, newPath: string): Promise<void> {
     mkdirSync(dirname(newPath), { recursive: true });
     await this.execFn('git', ['worktree', 'move', wtPath, newPath], {

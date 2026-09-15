@@ -12,6 +12,16 @@ export interface GitPort {
     base?: string,
   ): Promise<void>;
   removeWorktree(repoPath: string, wtPath: string): Promise<void>;
+  /** Re-point an existing local branch at `startPoint` (`git branch -f --no-track`). */
+  forceBranch(repoPath: string, branch: string, startPoint: string): Promise<void>;
+  /**
+   * Commits on `branch` that no other remote branch has — the work only this
+   * branch carries (its own `origin/<branch>` copy doesn't count as elsewhere).
+   * 0 means the branch is a mere pointer into history published elsewhere.
+   */
+  countOwnCommits(repoPath: string, branch: string): Promise<number>;
+  /** True when `ancestor` is reachable from `ref`; false when not, or unresolvable. */
+  isAncestor(repoPath: string, ancestor: string, ref: string): Promise<boolean>;
   moveWorktree(repoPath: string, wtPath: string, newPath: string): Promise<void>;
   getDefaultBranch(repoPath: string): Promise<string>;
   /**

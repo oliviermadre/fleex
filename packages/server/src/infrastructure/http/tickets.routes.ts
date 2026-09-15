@@ -654,8 +654,9 @@ export function ticketRoutes(container: Container) {
     );
 
     // PATCH /api/tickets/:id/links/:linkId — change a repository link's base
-    // branch. Only editable while no worktree exists for the repo (D5); once a
-    // worktree is created the base is immutable (detach/reattach to rebase).
+    // branch. A base applies when the ticket branch is created, so an existing
+    // worktree is re-derived from the new base — only when nothing can be lost
+    // (clean, idle, no commits of its own); otherwise 409 with the reason.
     app.patch<{ Params: { id: string; linkId: string }; Body: { baseBranch: string | null } }>(
       '/api/tickets/:id/links/:linkId',
       async (request, reply) => {
@@ -671,19 +672,45 @@ export function ticketRoutes(container: Container) {
         if (!parsed) return reply.code(400).send({ error: `invalid repository ref '${link.ref}'` });
         const { org, name } = parsed;
 
-        // D5: applied only at creation, so a base change once the worktree exists
-        // would silently not take effect — refuse it loudly.
-        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
-        const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
-        if (existsSync(wtPath)) {
-          return reply.code(409).send({ error: 'worktree already exists', worktreePath: wtPath });
-        }
-
+        // Validate before anything destructive: a 400/422 must leave the worktree alone.
         const resolved = await resolveLinkBaseBranch(org, name, request.body.baseBranch);
         if ('status' in resolved) return reply.code(resolved.status).send({ error: resolved.message });
+        if (link.baseBranch === resolved.baseBranch) return ticket.toDTO(); // no-op (unchanged)
+
+        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
+        const barePath = container.resolver.barePath(org, name);
+        const ticketBranch = buildTicketBranchName(ticket.title, ticket.id);
+        const hasWorktree = existsSync(wtPath);
+        if (hasWorktree) {
+          const blocker = await container.rebaseTicketWorktree.findBlocker({
+            ticketId: ticket.id, barePath, wtPath, ticketBranch,
+          });
+          if (blocker) {
+            return reply.code(409).send({ error: `Can't change the base branch: ${blocker}.`, worktreePath: wtPath });
+          }
+        }
 
         const diff = ticket.setLinkBaseBranch(link.id, resolved.baseBranch);
         if (!diff) return ticket.toDTO(); // no-op (unchanged)
+
+        let recreateError: string | null = null;
+        if (hasWorktree) {
+          const wtLink = ticket.links.find((l) => l.type === 'worktree' && (l.ref === wtPath || l.ref.startsWith(`${org}/${name}:`)));
+          if (wtLink) ticket.removeLink(wtLink.id);
+          try {
+            await container.rebaseTicketWorktree.recreate({
+              org, name, barePath, wtPath, ticketBranch, baseRef: resolveBaseRef(ticket.links, org, name),
+            });
+            ticket.addLink('worktree', wtPath, ticketBranch, null, randomUUID());
+          } catch (err) {
+            // The base change stands: the worktree is created from it on next use.
+            recreateError = err instanceof Error ? err.message : String(err);
+            container.logger.warn('Failed to recreate worktree after base branch change', {
+              ticketId: ticket.id, repo: link.ref, error: recreateError,
+            });
+          }
+        }
 
         await container.ticketStore.saveTicket(ticket);
         const changes = { baseBranch: { from: diff.from ?? null, to: diff.to ?? null } };
@@ -695,6 +722,11 @@ export function ticketRoutes(container: Container) {
           source: 'web',
         }));
         emit({ type: 'ticket.updated', ticketId: ticket.id, changes, occurredAt: new Date() });
+        if (recreateError) {
+          return reply.code(500).send({
+            error: `Base branch changed, but the worktree could not be recreated: ${recreateError}`,
+          });
+        }
         return ticket.toDTO();
       },
     );
