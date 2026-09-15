@@ -13,6 +13,7 @@ import { useToastStore } from '../../../stores/toastStore';
 import { useCodeEditorStore, tabKey } from '../../../stores/codeEditorStore';
 import { cn } from '../../../lib/cn';
 import { FileTree } from './FileTree';
+import { useCodeTreeWidth } from './useCodeTreeWidth';
 
 const WorktreeMonaco = lazy(() => import('./WorktreeMonaco'));
 const WorktreeDiffEditor = lazy(() => import('./WorktreeDiffEditor'));
@@ -37,6 +38,7 @@ export function CodeEditor({ ticketId }: { ticketId: string }) {
   const patchFile = useCodeEditorStore((s) => s.patchFile);
 
   const [tree, setTree] = useState<WorktreeTree | null>(null);
+  const { width: treeWidth, resizing: treeResizing, startResize: startTreeResize, nudge: nudgeTree } = useCodeTreeWidth();
   const [showDiff, setShowDiff] = useState(false);
   const [baseByKey, setBaseByKey] = useState<Record<string, { loading: boolean; content: string }>>({});
   const inflight = useRef<Set<string>>(new Set());
@@ -224,13 +226,31 @@ export function CodeEditor({ ticketId }: { ticketId: string }) {
 
       {/* Body row: full-height tree + editor column. */}
       <div className="flex min-h-0 flex-1">
-      {/* Left: full-height file tree. */}
-      <div className="w-[260px] shrink-0 overflow-auto border-r border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
-        {repos.length === 0 ? (
-          <div className="p-4 text-center text-[12px] text-[var(--theme-text-faint)]">No files to show yet.</div>
-        ) : (
-          <FileTree repos={repos} activeKey={activeKey} onOpenFile={openFile} onCreateFile={createFile} onDeleteFile={deleteFile} />
-        )}
+      {/* Left: full-height file tree, drag-resizable. */}
+      <div className="relative flex shrink-0" style={{ width: treeWidth }}>
+        <div className="min-h-0 w-full overflow-auto border-r border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
+          {repos.length === 0 ? (
+            <div className="p-4 text-center text-[12px] text-[var(--theme-text-faint)]">No files to show yet.</div>
+          ) : (
+            <FileTree repos={repos} activeKey={activeKey} onOpenFile={openFile} onCreateFile={createFile} onDeleteFile={deleteFile} />
+          )}
+        </div>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize file tree"
+          tabIndex={0}
+          onMouseDown={startTreeResize}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeTree(-16); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); nudgeTree(16); }
+          }}
+          className={cn(
+            'absolute -right-[2px] top-0 z-10 h-full w-[4px] cursor-col-resize transition-colors',
+            'hover:bg-[var(--theme-accent)]/40 focus:bg-[var(--theme-accent)]/40 focus:outline-none',
+            treeResizing && 'bg-[var(--theme-accent)]/60',
+          )}
+        />
       </div>
 
       {/* Right: tabs above the editor. */}
