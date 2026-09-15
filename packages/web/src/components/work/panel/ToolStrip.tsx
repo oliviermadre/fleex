@@ -82,6 +82,8 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
   const codeMode = useWorkStore((s) => s.codeMode);
   const setCodeMode = useWorkStore((s) => s.setCodeMode);
   const shellActive = shellOpen || shellMode;
+  const sessionCount = task?.sessionCount ?? 0;
+  const sessionBadge = sessionCount > 0 ? (sessionCount > 99 ? '99+' : String(sessionCount)) : null;
 
   return (
     <nav className="flex w-[60px] shrink-0 flex-col items-center gap-1 border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-2">
@@ -118,14 +120,19 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
         );
       })}
 
-      {/* Shell toggles the bottom drawer (⌘J), not a right panel — pinned bottom. */}
+      {/* Shell toggles the bottom drawer (⌘J), not a right panel — pinned bottom.
+          Its badge counts the ticket's tmux sessions. */}
       <button
         type="button"
         disabled={!task}
         onClick={() => setShellOpen(!shellOpen)}
-        title="Toggle shell drawer (⌘J)"
+        title={
+          sessionCount > 0
+            ? `Toggle shell drawer (⌘J) · ${sessionCount} tmux session${sessionCount > 1 ? 's' : ''}`
+            : 'Toggle shell drawer (⌘J)'
+        }
         className={cn(
-          'mt-auto flex w-[52px] flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] transition-colors disabled:opacity-40',
+          'relative mt-auto flex w-[52px] flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] transition-colors disabled:opacity-40',
           shellActive
             ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
@@ -137,6 +144,11 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
           <line x1="13" y1="15" x2="17" y2="15" />
         </svg>
         Shell
+        {sessionBadge && (
+          <span className="absolute right-1.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--theme-accent)] px-1 text-[9px] font-semibold text-[var(--theme-accent-fg)]">
+            {sessionBadge}
+          </span>
+        )}
       </button>
     </nav>
   );
