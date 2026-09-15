@@ -5,8 +5,9 @@
  * three queue sections, and resolves the selected task. Every Work component
  * consumes this; none reaches into a store for queue data itself.
  */
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AgentActivityState, BoardWithCounts, TicketLink } from '@fleex/shared';
+import * as api from '../../services/api';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -17,6 +18,10 @@ import { partitionQueue, type QueueItem } from './selectors';
 import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
 import type { WorkTask, WorkWorktree, QueueGroup } from './types';
+import { prLinksFor } from './queue/prLinks';
+
+/** How often the queue re-reads its PRs' state from GitHub (it changes without a Fleex event). */
+const PR_DETAILS_REFRESH_MS = 2 * 60_000;
 
 function toMs(iso: string | null | undefined): number | null {
   if (!iso) return null;
@@ -130,6 +135,34 @@ export function useWorkQueue(): WorkQueueModel {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopedIdsKey, loadActivity]);
 
+  // Every PR linked to a ticket in scope, fetched in one batch for the queue's PR
+  // glyph and refreshed periodically.
+  const prRefsKey = useMemo(() => {
+    const refs = new Set<string>();
+    for (const t of scopedTickets) for (const l of t.links) if (l.type === 'github_pr') refs.add(l.ref);
+    return [...refs].sort().join('\n');
+  }, [scopedTickets]);
+  const [prDetails, setPrDetails] = useState<Record<string, api.PullRequestDetails>>({});
+  useEffect(() => {
+    if (!prRefsKey) return;
+    const refs = prRefsKey.split('\n');
+    let cancelled = false;
+    const load = () => {
+      api
+        .fetchBulkPRDetails(refs)
+        .then((details) => {
+          if (!cancelled) setPrDetails((prev) => ({ ...prev, ...details }));
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = setInterval(load, PR_DETAILS_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [prRefsKey]);
+
   // Session count and PR diff stats per ticket come from the session groups —
   // the only place the ticket↔worktree link (and its diffStats) lives. Worktrees
   // and the PR ref itself come from the ticket's own links (below).
@@ -218,6 +251,7 @@ export function useWorkQueue(): WorkQueueModel {
         suggestedRepos: [],
         changedLines: wtStats ? wtStats.additions + wtStats.deletions : 0,
         pr,
+        prs: prLinksFor(t.links, prDetails),
         deliverableCount: 0,
         sessionCount: sessionCountByTicket.get(t.id) ?? 0,
       } satisfies WorkTask;
@@ -238,6 +272,7 @@ export function useWorkQueue(): WorkQueueModel {
     diffStatsByTicket,
     runsByTicket,
     boardById,
+    prDetails,
   ]);
 
   const byId = useMemo(() => {

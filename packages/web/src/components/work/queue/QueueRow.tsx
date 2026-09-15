@@ -13,6 +13,7 @@ import { useTicketStore } from '../../../stores/ticketStore';
 import { TypePickerPopover } from '../../tickets/TypePickerPopover';
 import { PriorityPickerPopover } from '../../tickets/PriorityPickerPopover';
 import { QueueActivityTimer } from './QueueActivityTimer';
+import { QueuePrGlyph } from './QueuePrGlyph';
 import type { WorkTask } from '../types';
 
 /** ms epoch → ISO string for ActivityBadge / formatAge, or null. */
@@ -109,6 +110,9 @@ export function QueueRow({ task, selected, onSelect, onOpenExecution }: Props) {
             </svg>
           </button>
         )}
+
+        {/* PR state stays visible at rest: it's a status, not a hover action */}
+        {task.prs.length > 0 && <QueuePrGlyph prs={task.prs} />}
 
         <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
           <QueueActivityTimer

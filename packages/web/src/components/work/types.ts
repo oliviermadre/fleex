@@ -23,6 +23,23 @@ export interface WorkPullRequest {
   url?: string;
 }
 
+/** A linked PR's state as the queue glyph shows it (draft = an open PR not ready yet). */
+export type WorkPrState = 'open' | 'draft' | 'merged' | 'closed';
+
+/** One pull request linked to a task (`github_pr` link), with its live details once loaded. */
+export interface WorkPrLink {
+  /** The link ref, "org/name#123". */
+  ref: string;
+  /** Display label, "name#123". */
+  label: string;
+  url: string;
+  /** null until GitHub has answered. */
+  state: WorkPrState | null;
+  title: string | null;
+  additions: number | null;
+  deletions: number | null;
+}
+
 /**
  * One task as every Work surface (queue row, center, context panel, status bar)
  * needs it — a ticket plus its live activity and related entities.
@@ -56,6 +73,8 @@ export interface WorkTask {
   /** Total changed lines (additions + deletions) on the worktree, 0 when none. */
   changedLines: number;
   pr: WorkPullRequest | null;
+  /** Every PR linked to the task, in link order. */
+  prs: WorkPrLink[];
   deliverableCount: number;
   sessionCount: number;
 }

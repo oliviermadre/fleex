@@ -525,6 +525,26 @@ export async function fetchBulkPRStates(refs: string[]): Promise<Record<string, 
   });
 }
 
+/** A pull request's live details, as returned by `fetchBulkPRDetails` (state is GitHub's OPEN / MERGED / CLOSED). */
+export interface PullRequestDetails {
+  state: string;
+  isDraft: boolean;
+  title: string;
+  additions: number;
+  deletions: number;
+  url: string;
+}
+
+/** Details for many PRs at once, keyed by their "org/name#123" ref; PRs GitHub didn't answer are absent. */
+export async function fetchBulkPRDetails(refs: string[]): Promise<Record<string, PullRequestDetails>> {
+  if (refs.length === 0) return {};
+  return request<Record<string, PullRequestDetails>>('/pr-details', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refs }),
+  });
+}
+
 // ── Ticket Mentions API ──
 
 export async function fetchTicketMentions(ticketId: string): Promise<import('@fleex/shared').TicketMention[]> {
