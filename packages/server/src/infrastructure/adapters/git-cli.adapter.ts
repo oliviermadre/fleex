@@ -120,9 +120,15 @@ export class GitCliAdapter implements GitPort {
   ): Promise<void> {
     const args = ['worktree', 'add'];
     if (createNew) {
-      args.push('-b', branch, wtPath);
+      // --no-track: the ticket branch must NOT adopt the base as its upstream.
+      // A base like `origin/feat/big-refacto` is an unprotected PR branch; with
+      // git's default upstream tracking, a bare `git push` (push.default=upstream)
+      // would overwrite the parent PR. We always create detached-from-upstream
+      // ticket branches; the agent pushes to its own branch explicitly.
       if (base) {
-        args.push(base);
+        args.push('--no-track', '-b', branch, wtPath, base);
+      } else {
+        args.push('-b', branch, wtPath);
       }
     } else {
       args.push(wtPath, branch);
@@ -140,6 +146,35 @@ export class GitCliAdapter implements GitPort {
       cwd: repoPath,
     });
     this.logger.debug('Worktree removed', { repoPath, wtPath });
+  }
+
+  async forceBranch(repoPath: string, branch: string, startPoint: string): Promise<void> {
+    // --no-track for the same reason as createWorktree: never adopt the base as upstream.
+    await this.execFn('git', ['branch', '-f', '--no-track', branch, startPoint], { cwd: repoPath });
+    this.logger.debug('Branch moved', { repoPath, branch, startPoint });
+  }
+
+  async countOwnCommits(repoPath: string, branch: string): Promise<number> {
+    // `--exclude` patterns applied to `--remotes` are relative to refs/remotes/.
+    const { stdout } = await this.execFn(
+      'git',
+      ['rev-list', '--count', branch, '--not', `--exclude=origin/${branch}`, '--remotes'],
+      { cwd: repoPath },
+    );
+    const count = Number.parseInt(stdout.trim(), 10);
+    // Never read garbage as "no commits of its own": callers move the branch on 0.
+    if (Number.isNaN(count)) throw new Error(`Unexpected rev-list output for ${branch}: ${stdout}`);
+    return count;
+  }
+
+  async isAncestor(repoPath: string, ancestor: string, ref: string): Promise<boolean> {
+    try {
+      await this.execFn('git', ['merge-base', '--is-ancestor', ancestor, ref], { cwd: repoPath });
+      return true;
+    } catch {
+      // Exit 1 means "not an ancestor"; any other failure can't prove that it is.
+      return false;
+    }
   }
 
   async moveWorktree(repoPath: string, wtPath: string, newPath: string): Promise<void> {
@@ -164,6 +199,22 @@ export class GitCliAdapter implements GitPort {
       if (branches.includes('main')) return 'main';
       if (branches.includes('master')) return 'master';
       return branches[0] ?? 'main';
+    }
+  }
+
+  async remoteBranchExists(repoPath: string, branch: string): Promise<boolean> {
+    try {
+      const { stdout } = await this.execFn(
+        'git',
+        ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+        { cwd: repoPath },
+      );
+      return stdout.trim().length > 0;
+    } catch {
+      // Network/remote failure: treat as "can't confirm". Callers decide how to
+      // handle — the worktree creation will surface a hard error later if the
+      // branch really is gone (D7), so we don't block attachment on a transient.
+      return false;
     }
   }
 
@@ -250,6 +301,89 @@ export class GitCliAdapter implements GitPort {
       this.logger.debug('Failed to get log oneline', { repoPath, branch, base });
       return '';
     }
+  }
+
+  async getDiffPatch(worktreePath: string, baseBranch?: string): Promise<string> {
+    const target = await this.resolveDiffTarget(worktreePath, baseBranch);
+    const { stdout } = await this.execFn('git', ['diff', '--no-color', target], {
+      cwd: worktreePath,
+      timeout: 15_000,
+      maxBuffer: 8 * 1024 * 1024, // headroom above the route's 400 KB cap
+    });
+    return stdout;
+  }
+
+  async getChangedFiles(worktreePath: string, baseBranch?: string): Promise<string[]> {
+    const target = await this.resolveDiffTarget(worktreePath, baseBranch);
+    const { stdout } = await this.execFn('git', ['diff', '--name-only', target], {
+      cwd: worktreePath,
+      timeout: 10_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return stdout.split('\n').map((s) => s.trim()).filter((s) => s.length > 0);
+  }
+
+  /**
+   * The commit to diff the working tree against: the merge-base of the base ref
+   * and HEAD, so base's own divergent commits don't appear as noise. Falls back
+   * to the base ref itself (two-dot) if merge-base can't be resolved (e.g. base
+   * not fetched).
+   */
+  private async resolveDiffTarget(worktreePath: string, baseBranch?: string): Promise<string> {
+    const base = baseBranch ?? `origin/${await this.getDefaultBranch(worktreePath)}`;
+    try {
+      const { stdout } = await this.execFn('git', ['merge-base', base, 'HEAD'], {
+        cwd: worktreePath,
+        timeout: 15_000,
+      });
+      const mergeBase = stdout.trim();
+      if (mergeBase) return mergeBase;
+    } catch {
+      this.logger.debug('merge-base failed, diffing against base directly', { worktreePath, base });
+    }
+    return base;
+  }
+
+  async getFileDiffPatch(worktreePath: string, path: string, baseBranch?: string): Promise<string> {
+    const target = await this.resolveDiffTarget(worktreePath, baseBranch);
+    const { stdout } = await this.execFn('git', ['diff', '--no-color', target, '--', path], {
+      cwd: worktreePath,
+      timeout: 10_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return stdout;
+  }
+
+  async getFileBaseContent(worktreePath: string, path: string, baseBranch?: string): Promise<string> {
+    const target = await this.resolveDiffTarget(worktreePath, baseBranch);
+    try {
+      const { stdout } = await this.execFn('git', ['show', `${target}:${path}`], {
+        cwd: worktreePath,
+        timeout: 10_000,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      return stdout;
+    } catch {
+      // File didn't exist at base (newly added) — no base content.
+      return '';
+    }
+  }
+
+  async listTrackedFiles(worktreePath: string): Promise<string> {
+    const { stdout } = await this.execFn('git', ['ls-tree', '-r', '--name-only', 'HEAD'], {
+      cwd: worktreePath,
+      timeout: 10_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return stdout;
+  }
+
+  async getStatusPorcelain(worktreePath: string): Promise<string> {
+    const { stdout } = await this.execFn('git', ['status', '--porcelain'], {
+      cwd: worktreePath,
+      timeout: 10_000,
+    });
+    return stdout;
   }
 
   async repairWorktrees(repoPath: string): Promise<void> {

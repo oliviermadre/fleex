@@ -6,6 +6,7 @@ import { isMissingRepo, NO_REPO_TAG, topReposForBoard } from '../../lib/repoStat
 import { cn } from '../../lib/cn';
 import { tint, tintText } from '../../lib/tints';
 import { MissingRepoIcon } from '../sidebar/icons';
+import { Spinner, BusyLine } from '../ui/Spinner';
 
 /**
  * Detail-view guard-rail (ticket #401). When a ticket has no `repository` link
@@ -24,6 +25,8 @@ export function MissingRepoBanner({ ticket }: { ticket: Ticket }) {
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
   const [busy, setBusy] = useState(false);
+  // The repo being linked — its worktree creation can take a while on a big repo.
+  const [linkingRef, setLinkingRef] = useState<string | null>(null);
 
   // Suggestions: the repos most used on THIS board (likely the right default),
   // falling back to the global resolved list so the picker is never empty on a
@@ -39,10 +42,12 @@ export function MissingRepoBanner({ ticket }: { ticket: Ticket }) {
   const linkRepo = async (ref: string) => {
     if (busy || !ref) return;
     setBusy(true);
+    setLinkingRef(ref);
     try {
       await addLink(ticket.id, { type: 'repository', ref, label: ref });
     } finally {
       setBusy(false);
+      setLinkingRef(null);
     }
   };
 
@@ -69,12 +74,12 @@ export function MissingRepoBanner({ ticket }: { ticket: Ticket }) {
         {suggestions.map((ref) => (
           <button
             key={ref}
-            className="rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-0.5 text-[11px] text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)] disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-0.5 text-[11px] text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)] disabled:opacity-50"
             onClick={() => linkRepo(ref)}
             disabled={busy}
             title={`Lier ${ref}`}
           >
-            + {ref}
+            {linkingRef === ref ? <Spinner size={10} /> : '+'} {ref}
           </button>
         ))}
 
@@ -104,6 +109,8 @@ export function MissingRepoBanner({ ticket }: { ticket: Ticket }) {
           Marquer sans code
         </button>
       </div>
+
+      {linkingRef && <BusyLine label={`Liaison de ${linkingRef} · création du worktree…`} />}
     </div>
   );
 }

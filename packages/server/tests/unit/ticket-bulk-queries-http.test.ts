@@ -25,6 +25,9 @@ function makeDeps() {
     agentEventStore: { getAllExecutions: async () => [] },
     mentionStore: { getAll: async () => [] },
     workflowRunStore: { getByStatus: async () => [] },
+    personaStore: { getAll: async () => [] },
+    skillStore: { getAll: async () => [] },
+    panelStore: { getAll: async () => [] },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }

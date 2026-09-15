@@ -43,6 +43,26 @@ interface Props {
 const SIDEBAR_MIN_WIDTH = 320;
 const DEFAULT_SIDEBAR_WIDTH = 420;
 
+// Friendly run-status pill. `needs_review` covers both a human gate and a run
+// parked on a terminated step (awaiting Restart) — both read as "Needs you", in
+// yellow, so a parked run no longer masquerades as a plain "running".
+const RUN_STATUS_LABEL: Record<string, string> = {
+  running: 'Running',
+  needs_review: 'Needs you',
+  blocked: 'Needs you',
+  completed: 'Completed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
+const RUN_STATUS_TEXT: Record<string, string> = {
+  running: 'text-[var(--theme-accent)]',
+  needs_review: 'text-[var(--tint-yellow-text)]',
+  blocked: 'text-[var(--tint-yellow-text)]',
+  completed: 'text-[var(--theme-text-secondary)]',
+  failed: 'text-[var(--tint-red-text)]',
+  cancelled: 'text-[var(--theme-text-muted)]',
+};
+
 export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
@@ -246,12 +266,12 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
             </div>
           </div>
           <span
-            className="text-[10px] px-2 py-0.5 rounded border border-[var(--theme-border-input)] text-[var(--theme-text-secondary)]"
+            className={`text-[10px] px-2 py-0.5 rounded border border-[var(--theme-border-input)] ${RUN_STATUS_TEXT[run.status] ?? 'text-[var(--theme-text-secondary)]'}`}
           >
-            {run.status}
+            {RUN_STATUS_LABEL[run.status] ?? run.status}
           </span>
         </div>
-        {['running', 'blocked', 'needs_review'].includes(run.status) && (
+        {['running', 'blocked', 'needs_review', 'failed'].includes(run.status) && (
           <button
             onClick={() => cancel(run.id)}
             className="text-xs px-3 py-1 rounded border border-[var(--theme-border-input)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] transition-colors"

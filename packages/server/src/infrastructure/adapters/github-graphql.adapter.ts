@@ -35,6 +35,19 @@ interface GraphQLRepoResult {
   closedIssues: { nodes: GraphQLIssueNode[] };
 }
 
+/** A pull request's live state and size — what the Work queue's PR glyph shows. */
+export interface PRDetails {
+  state: string;
+  isDraft: boolean;
+  title: string;
+  additions: number;
+  deletions: number;
+  url: string;
+}
+
+/** Owner and repo names are interpolated into GraphQL: only plain GitHub identifiers get through. */
+const GITHUB_NAME_RE = /^[A-Za-z0-9_.-]+$/;
+
 export interface RepoBatchResult {
   pulls: PullRequest[];
   issues: GitHubIssue[];
@@ -215,6 +228,42 @@ export class GitHubGraphQLAdapter {
       });
     } catch (err) {
       this.logger.warn('Failed to fetch PR states', { error: String(err) });
+    }
+
+    return result;
+  }
+
+  /**
+   * State, draft flag, title, size and URL for a batch of PRs in one GraphQL call.
+   * PRs whose owner or name isn't a plain GitHub identifier are skipped; a failed
+   * call yields a partial (possibly empty) map, like fetchPRStates.
+   */
+  async fetchPRDetails(prs: { org: string; name: string; number: number }[]): Promise<Map<string, PRDetails>> {
+    const result = new Map<string, PRDetails>();
+    const safe = prs.filter((pr) => GITHUB_NAME_RE.test(pr.org) && GITHUB_NAME_RE.test(pr.name));
+    if (safe.length === 0) return result;
+
+    const prQueries = safe.map((pr, idx) => {
+      return `pr${idx}: repository(owner: "${pr.org}", name: "${pr.name}") {
+      pullRequest(number: ${pr.number}) { state isDraft title additions deletions url }
+    }`;
+    });
+
+    try {
+      const query = `{ ${prQueries.join('\n')} }`;
+      const { stdout } = await this.execFn('gh', [
+        'api', 'graphql',
+        '-f', `query=${query}`,
+        '--jq', '.data',
+      ], { timeout: 15_000 });
+
+      const data = JSON.parse(stdout) as Record<string, { pullRequest: PRDetails | null } | null>;
+      safe.forEach((pr, idx) => {
+        const details = data[`pr${idx}`]?.pullRequest;
+        if (details) result.set(`${pr.org}/${pr.name}#${pr.number}`, details);
+      });
+    } catch (err) {
+      this.logger.warn('Failed to fetch PR details', { error: String(err) });
     }
 
     return result;

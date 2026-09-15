@@ -44,6 +44,9 @@ import type {
   TicketDeliverable,
   MemoryAskStage,
   MemoryAskEvent,
+  WorktreeDiff,
+  WorktreeTree,
+  WorktreeFile,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -149,6 +152,61 @@ export async function fetchDefaultBranch(
   return request<{ defaultBranch: string; currentBranch: string; isOnDefault: boolean }>(
     `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/default-branch`
   );
+}
+
+/**
+ * Ticket-scoped working-branch diff vs base (Work view Diff panel). `ticketId`
+ * resolves to the ticket's worktree server-side; a ticket with no worktree
+ * returns an empty diff (`base`/`head` = '').
+ */
+export async function fetchWorktreeDiff(ticketId: string): Promise<WorktreeDiff> {
+  return request<WorktreeDiff>(`/worktrees/${encodeURIComponent(ticketId)}/diff`);
+}
+
+/** Ticket-scoped file tree (per repo) with changed markers (Work view Code panel). */
+export async function fetchWorktreeTree(ticketId: string): Promise<WorktreeTree> {
+  return request<WorktreeTree>(`/worktrees/${encodeURIComponent(ticketId)}/tree`);
+}
+
+/** A single file's contents from a ticket's worktree (Code editor). */
+export async function fetchWorktreeFile(ticketId: string, repo: string, path: string): Promise<WorktreeFile> {
+  const qs = `repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`;
+  return request<WorktreeFile>(`/worktrees/${encodeURIComponent(ticketId)}/file?${qs}`);
+}
+
+/** A file's base (merge-base) contents, for the Code editor's side-by-side diff. */
+export async function fetchWorktreeFileBase(ticketId: string, repo: string, path: string): Promise<{ content: string }> {
+  const qs = `repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`;
+  return request<{ content: string }>(`/worktrees/${encodeURIComponent(ticketId)}/file/base?${qs}`);
+}
+
+/** Save a file in place in a ticket's worktree (Code editor). */
+export async function saveWorktreeFile(ticketId: string, repo: string, path: string, content: string): Promise<void> {
+  await request<void>(`/worktrees/${encodeURIComponent(ticketId)}/file`, {
+    method: 'PUT',
+    body: JSON.stringify({ repo, path, content }),
+  });
+}
+
+/** Create an empty file (or directory) in a ticket's worktree (Code editor). */
+export async function createWorktreeFile(
+  ticketId: string,
+  repo: string,
+  path: string,
+  type: 'file' | 'directory' = 'file',
+): Promise<void> {
+  await request<{ ok: boolean }>(`/worktrees/${encodeURIComponent(ticketId)}/file/create`, {
+    method: 'POST',
+    body: JSON.stringify({ repo, path, type }),
+  });
+}
+
+/** Delete a file or directory in a ticket's worktree (Code editor). */
+export async function deleteWorktreeFile(ticketId: string, repo: string, path: string): Promise<void> {
+  await request<void>(`/worktrees/${encodeURIComponent(ticketId)}/file`, {
+    method: 'DELETE',
+    body: JSON.stringify({ repo, path }),
+  });
 }
 
 export type CheckCwdResult =
@@ -394,9 +452,19 @@ export async function reorderTickets(updates: { id: string; status: import('@fle
   await request<{ ok: boolean }>('/tickets/reorder', { method: 'POST', body: JSON.stringify({ updates }) });
 }
 
-export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string }): Promise<import('@fleex/shared').TicketLink> {
+export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string }): Promise<import('@fleex/shared').TicketLink> {
   return request<import('@fleex/shared').TicketLink>(`/tickets/${encodeURIComponent(id)}/links`, {
     method: 'POST', body: JSON.stringify(link),
+  });
+}
+
+/**
+ * Set (or clear, with `null`) the base branch of a repository link. The server
+ * validates the branch against origin and returns the full updated ticket DTO.
+ */
+export async function patchTicketLink(id: string, linkId: string, baseBranch: string | null): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}`, {
+    method: 'PATCH', body: JSON.stringify({ baseBranch }),
   });
 }
 
@@ -451,6 +519,26 @@ export async function fetchPRStates(ticketId: string): Promise<Record<string, st
 export async function fetchBulkPRStates(refs: string[]): Promise<Record<string, string>> {
   if (refs.length === 0) return {};
   return request<Record<string, string>>('/pr-states', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refs }),
+  });
+}
+
+/** A pull request's live details, as returned by `fetchBulkPRDetails` (state is GitHub's OPEN / MERGED / CLOSED). */
+export interface PullRequestDetails {
+  state: string;
+  isDraft: boolean;
+  title: string;
+  additions: number;
+  deletions: number;
+  url: string;
+}
+
+/** Details for many PRs at once, keyed by their "org/name#123" ref; PRs GitHub didn't answer are absent. */
+export async function fetchBulkPRDetails(refs: string[]): Promise<Record<string, PullRequestDetails>> {
+  if (refs.length === 0) return {};
+  return request<Record<string, PullRequestDetails>>('/pr-details', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refs }),

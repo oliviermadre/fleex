@@ -8,7 +8,7 @@ import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, normalizeBaseBranchInput, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import { parsePRRefs } from '../../domain/services/pr-ref.js';
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
@@ -53,6 +53,58 @@ function deliverableFiltersFromQuery(query: {
 
 export function ticketRoutes(container: Container) {
   const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
+  /**
+   * Normalise + validate a base branch supplied for a `repository` link.
+   * - empty/undefined ⇒ `{ baseBranch: undefined }` (clear / default),
+   * - `refs/...` or empty-after-strip ⇒ `{ status: 400 }`,
+   * - equal to the repo default ⇒ collapsed to `undefined` (D3),
+   * - absent on origin (only checked when the bare clone exists) ⇒ `{ status: 422 }` (D6),
+   * - otherwise `{ baseBranch }` (stripped of any `origin/` prefix).
+   * Never throws.
+   */
+  const resolveLinkBaseBranch = async (
+    org: string,
+    name: string,
+    raw: string | null | undefined,
+  ): Promise<{ baseBranch: string | undefined } | { status: number; message: string }> => {
+    if (raw === undefined || raw === null || raw.trim() === '') {
+      return { baseBranch: undefined };
+    }
+    const norm = normalizeBaseBranchInput(raw);
+    if (!norm.ok) return { status: 400, message: norm.error };
+    const branch = norm.branch;
+
+    const barePath = container.resolver.barePath(org, name);
+    let bareExists = false;
+    try {
+      bareExists = existsSync(barePath);
+    } catch {
+      bareExists = false;
+    }
+    if (bareExists) {
+      // D3: equal to the repo default is the same as "no custom base".
+      try {
+        const def = await container.git.getDefaultBranch(barePath);
+        if (def === branch) return { baseBranch: undefined };
+      } catch {
+        /* ignore — fall through to the existence check */
+      }
+      // D6: the branch must exist on origin.
+      const exists = await container.git.remoteBranchExists(barePath, branch);
+      if (!exists) {
+        return { status: 422, message: `Branch '${branch}' not found on origin for ${org}/${name}` };
+      }
+    }
+    return { baseBranch: branch };
+  };
+
+  /** Split a `org/name` repo ref; null when malformed. */
+  const parseRepoRef = (ref: string): { org: string; name: string } | null => {
+    const slashIdx = ref.indexOf('/');
+    if (slashIdx <= 0 || slashIdx === ref.length - 1) return null;
+    return { org: ref.substring(0, slashIdx), name: ref.substring(slashIdx + 1) };
+  };
 
   // ── Epic enrichment helpers (used by /api/tickets and /api/tickets/:id) ──
 
@@ -228,8 +280,33 @@ export function ticketRoutes(container: Container) {
 
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
       const { boardId, title, description, status, priority, type, tags, links, dueDate } = request.body;
+
+      // Validate/normalise any per-repo base branches before creating the ticket.
+      let normalizedLinks = links;
+      if (links && links.length > 0) {
+        normalizedLinks = [];
+        for (const l of links) {
+          if (l.baseBranch != null && l.type !== 'repository') {
+            return reply.code(400).send({ error: 'baseBranch is only valid on repository links' });
+          }
+          if (l.type === 'repository' && l.baseBranch != null) {
+            const parsed = parseRepoRef(l.ref);
+            if (parsed) {
+              const resolved = await resolveLinkBaseBranch(parsed.org, parsed.name, l.baseBranch);
+              if ('status' in resolved) return reply.code(resolved.status).send({ error: resolved.message });
+              const { baseBranch: _drop, ...rest } = l;
+              (normalizedLinks as typeof links).push(
+                resolved.baseBranch ? { ...rest, baseBranch: resolved.baseBranch } : rest,
+              );
+              continue;
+            }
+          }
+          (normalizedLinks as typeof links).push(l);
+        }
+      }
+
       const ticket = await container.createTicket.execute({
-        boardId, title, description, status, priority, type, tags, links, dueDate,
+        boardId, title, description, status, priority, type, tags, links: normalizedLinks, dueDate,
       });
       return reply.code(201).send(ticket.toDTO());
     });
@@ -409,13 +486,29 @@ export function ticketRoutes(container: Container) {
     );
 
     // Links
-    app.post<{ Params: { id: string }; Body: { type: string; ref: string; label: string; url?: string } }>(
+    app.post<{ Params: { id: string }; Body: { type: string; ref: string; label: string; url?: string; baseBranch?: string | null } }>(
       '/api/tickets/:id/links',
-      async (request) => {
+      async (request, reply) => {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
         let ref = request.body.ref;
+
+        // baseBranch is a repository-only concept (D1). Reject it elsewhere so a
+        // caller can't smuggle a dead field onto a PR/session/worktree link.
+        if (request.body.baseBranch != null && request.body.type !== 'repository') {
+          return reply.code(400).send({ error: 'baseBranch is only valid on repository links' });
+        }
+        // Resolve/normalise it now (needs org/name from the ref).
+        let baseBranch: string | undefined;
+        if (request.body.type === 'repository') {
+          const parsed = parseRepoRef(ref);
+          if (parsed && request.body.baseBranch != null) {
+            const resolved = await resolveLinkBaseBranch(parsed.org, parsed.name, request.body.baseBranch);
+            if ('status' in resolved) return reply.code(resolved.status).send({ error: resolved.message });
+            baseBranch = resolved.baseBranch;
+          }
+        }
 
         // When linking a worktree to a ticket, move it into the ticket workspace
         if (request.body.type === 'worktree' && ref.includes(':') && !ref.startsWith('/')) {
@@ -465,6 +558,7 @@ export function ticketRoutes(container: Container) {
           request.body.label,
           request.body.url ?? null,
           randomUUID(),
+          baseBranch,
         );
 
         // When adding a repository link, create worktree if ticket already has a workspace
@@ -511,8 +605,17 @@ export function ticketRoutes(container: Container) {
                 branchName = buildTicketBranchName(ticket.title, ticket.id);
               }
 
+              // Per-repo base (D9): only when minting a fresh ticket branch (no PR checkout).
+              const wtBaseBranch = createNewBranch
+                ? resolveBaseRef(ticket.links, org, name)
+                : undefined;
+
               try {
-                await container.createWorktree.execute(org, name, wtPath, { branch: branchName, createNewBranch });
+                await container.createWorktree.execute(org, name, wtPath, {
+                  branch: branchName,
+                  createNewBranch,
+                  ...(wtBaseBranch ? { baseBranch: wtBaseBranch } : {}),
+                });
                 ticket.addLink('worktree', wtPath, branchName, null, randomUUID());
                 container.logger.info('Worktree created for added repo', { ticketId: ticket.id, repo: ref, branch: branchName, wtPath });
               } catch (err) {
@@ -547,6 +650,84 @@ export function ticketRoutes(container: Container) {
           occurredAt: new Date(),
         });
         return { ...link, created: true };
+      },
+    );
+
+    // PATCH /api/tickets/:id/links/:linkId — change a repository link's base
+    // branch. A base applies when the ticket branch is created, so an existing
+    // worktree is re-derived from the new base — only when nothing can be lost
+    // (clean, idle, no commits of its own); otherwise 409 with the reason.
+    app.patch<{ Params: { id: string; linkId: string }; Body: { baseBranch: string | null } }>(
+      '/api/tickets/:id/links/:linkId',
+      async (request, reply) => {
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
+        if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        const link = ticket.findLinkById(request.params.linkId);
+        if (!link) return reply.code(404).send({ error: 'link not found' });
+        if (link.type !== 'repository') {
+          return reply.code(400).send({ error: 'baseBranch is only valid on repository links' });
+        }
+        const parsed = parseRepoRef(link.ref);
+        if (!parsed) return reply.code(400).send({ error: `invalid repository ref '${link.ref}'` });
+        const { org, name } = parsed;
+
+        // Validate before anything destructive: a 400/422 must leave the worktree alone.
+        const resolved = await resolveLinkBaseBranch(org, name, request.body.baseBranch);
+        if ('status' in resolved) return reply.code(resolved.status).send({ error: resolved.message });
+        if (link.baseBranch === resolved.baseBranch) return ticket.toDTO(); // no-op (unchanged)
+
+        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
+        const barePath = container.resolver.barePath(org, name);
+        const ticketBranch = buildTicketBranchName(ticket.title, ticket.id);
+        const hasWorktree = existsSync(wtPath);
+        if (hasWorktree) {
+          const blocker = await container.rebaseTicketWorktree.findBlocker({
+            ticketId: ticket.id, barePath, wtPath, ticketBranch,
+          });
+          if (blocker) {
+            return reply.code(409).send({ error: `Can't change the base branch: ${blocker}.`, worktreePath: wtPath });
+          }
+        }
+
+        const diff = ticket.setLinkBaseBranch(link.id, resolved.baseBranch);
+        if (!diff) return ticket.toDTO(); // no-op (unchanged)
+
+        let recreateError: string | null = null;
+        if (hasWorktree) {
+          const wtLink = ticket.links.find((l) => l.type === 'worktree' && (l.ref === wtPath || l.ref.startsWith(`${org}/${name}:`)));
+          if (wtLink) ticket.removeLink(wtLink.id);
+          try {
+            await container.rebaseTicketWorktree.recreate({
+              org, name, barePath, wtPath, ticketBranch, baseRef: resolveBaseRef(ticket.links, org, name),
+            });
+            ticket.addLink('worktree', wtPath, ticketBranch, null, randomUUID());
+          } catch (err) {
+            // The base change stands: the worktree is created from it on next use.
+            recreateError = err instanceof Error ? err.message : String(err);
+            container.logger.warn('Failed to recreate worktree after base branch change', {
+              ticketId: ticket.id, repo: link.ref, error: recreateError,
+            });
+          }
+        }
+
+        await container.ticketStore.saveTicket(ticket);
+        const changes = { baseBranch: { from: diff.from ?? null, to: diff.to ?? null } };
+        await container.ticketStore.saveActivity(TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: ticket.id,
+          action: 'updated',
+          changes,
+          source: 'web',
+        }));
+        emit({ type: 'ticket.updated', ticketId: ticket.id, changes, occurredAt: new Date() });
+        if (recreateError) {
+          return reply.code(500).send({
+            error: `Base branch changed, but the worktree could not be recreated: ${recreateError}`,
+          });
+        }
+        return ticket.toDTO();
       },
     );
 
@@ -866,6 +1047,19 @@ export function ticketRoutes(container: Container) {
 
         const stateMap = await container.githubGraphql.fetchPRStates(prs);
         return Object.fromEntries(stateMap);
+      },
+    );
+
+    // Bulk PR details (state, draft, title, size, url) — the Work queue's PR glyph.
+    // Capped so one request can't build an unbounded GraphQL query.
+    app.post<{ Body: { refs?: string[] } }>(
+      '/api/pr-details',
+      async (request) => {
+        const refs = (request.body?.refs ?? []).slice(0, 100);
+        if (refs.length === 0) return {};
+
+        const details = await container.githubGraphql.fetchPRDetails(parsePRRefs(refs));
+        return Object.fromEntries(details);
       },
     );
 

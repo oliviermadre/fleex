@@ -19,6 +19,8 @@ import { cn } from '../../lib/cn';
 import { tintText, tintClasses } from '../../lib/tints';
 import { STATUS_COLORS } from '../../lib/statusColors';
 import { topReposForBoard } from '../../lib/repoStatus';
+import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from './RepoBaseBranchSelect';
+import { Spinner, BusyLine } from '../ui/Spinner';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
 
@@ -647,6 +649,7 @@ function ExpandedTicketMetaSidebar({
 
       {/* Repository & Worktree */}
       <RepoWorktreePicker
+        ticketId={ticket.id}
         boardId={ticket.boardId}
         repoLinks={ticket.links.filter((l: TicketLink) => l.type === 'repository')}
         onAddLink={(link) => addLink(ticket.id, link)}
@@ -792,18 +795,43 @@ function ExpandedTicketMetaSidebar({
 // Multi-repo picker — manages repository links on the ticket.
 
 function RepoWorktreePicker({
+  ticketId,
   boardId,
   repoLinks,
   onAddLink,
   onRemoveLink,
 }: {
+  ticketId: string;
   boardId: string;
   repoLinks: Ticket['links'][number][];
-  onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
+  onAddLink: (link: { type: string; ref: string; label: string; url?: string; baseBranch?: string }) => Promise<void>;
   onRemoveLink: (linkId: string) => Promise<void>;
 }) {
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
   const tickets = useTicketStore((s) => s.tickets);
+
+  // Staged repo for the "+ Add" flow: chosen but not yet linked, so a base
+  // branch can be picked first.
+  const [pendingRepo, setPendingRepo] = useState<string | null>(null);
+  const [pendingBaseBranch, setPendingBaseBranch] = useState<string>('');
+  // The repo being attached right now ('' base = default) — shown as a busy row
+  // until the server has created its worktree, which takes a while on a big repo.
+  const [attaching, setAttaching] = useState<{ ref: string; baseBranch: string } | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+
+  const attach = async (ref: string, baseBranch = '') => {
+    setAttachError(null);
+    setAttaching({ ref, baseBranch });
+    try {
+      await onAddLink({ type: 'repository', ref, label: ref, ...(baseBranch ? { baseBranch } : {}) });
+      setPendingRepo(null);
+      setPendingBaseBranch('');
+    } catch (e) {
+      setAttachError(`Couldn't attach ${ref}: ${extractLinkError(e)}`);
+    } finally {
+      setAttaching(null);
+    }
+  };
 
   const repos = useMemo(() => {
     return resolvedRepositories
@@ -838,28 +866,22 @@ function RepoWorktreePicker({
         Repositories
       </label>
       {/* Linked repos */}
-      {repoLinks.length > 0 && (
+      {(repoLinks.length > 0 || attaching) && (
         <div className="mb-1.5 space-y-1">
           {repoLinks.map((link) => (
-            <div key={link.id} className="flex items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-                  <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
-                </svg>
-                <span className="truncate text-xs text-[var(--theme-text-secondary)]">{link.ref}</span>
-              </div>
-              <button
-                className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-                onClick={() => onRemoveLink(link.id)}
-                title="Remove repository"
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="4" y1="4" x2="12" y2="12" />
-                  <line x1="12" y1="4" x2="4" y2="12" />
-                </svg>
-              </button>
-            </div>
+            <RepoLinkRow key={link.id} ticketId={ticketId} link={link} onRemoveLink={onRemoveLink} />
           ))}
+          {attaching && !linkedRepoKeys.has(attaching.ref) && (
+            <div className="rounded-md border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+              <div className="flex items-center gap-1.5">
+                <Spinner className="text-[var(--theme-accent)]" />
+                <span className="min-w-0 truncate text-xs text-[var(--theme-text-secondary)]" title={attaching.ref}>
+                  {attaching.ref}
+                </span>
+              </div>
+              <BusyLine className="mt-0.5 pl-[18px]" label={REPO_BUSY_LABEL.attach(attaching.baseBranch || undefined)} />
+            </div>
+          )}
         </div>
       )}
       {/* Frequently-used on this board — 1-click add */}
@@ -868,8 +890,9 @@ function RepoWorktreePicker({
           {suggestions.map((ref) => (
             <button
               key={ref}
-              className="rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
-              onClick={() => onAddLink({ type: 'repository', ref, label: ref })}
+              className="rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] disabled:opacity-50"
+              onClick={() => void attach(ref)}
+              disabled={!!attaching}
               title={`Lier ${ref}`}
             >
               + {ref}
@@ -878,14 +901,46 @@ function RepoWorktreePicker({
         </div>
       )}
       {/* Add repo */}
-      {availableRepos.length > 0 ? (
+      {pendingRepo && !attaching ? (
+        <div className="space-y-1 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] p-1.5">
+          <div className="flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+              <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+            </svg>
+            <span className="truncate text-xs text-[var(--theme-text-secondary)]">{pendingRepo}</span>
+          </div>
+          <RepoBaseBranchSelect
+            repoKey={pendingRepo}
+            value={pendingBaseBranch}
+            onChange={setPendingBaseBranch}
+            className="bg-[var(--theme-bg-base)] text-xs"
+          />
+          <div className="flex gap-1">
+            <button
+              className="flex-1 rounded-md bg-[var(--theme-accent)] px-2 py-1 text-[10px] font-medium text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
+              onClick={() => void attach(pendingRepo, pendingBaseBranch)}
+            >
+              Add repository
+            </button>
+            <button
+              className="rounded-md border border-[var(--theme-border-input)] px-2 py-1 text-[10px] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] disabled:opacity-50"
+              onClick={() => { setPendingRepo(null); setPendingBaseBranch(''); setAttachError(null); }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : availableRepos.length > 0 ? (
         <select
-          className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+          className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none disabled:opacity-50"
           value=""
-          onChange={async (e) => {
+          disabled={!!attaching}
+          onChange={(e) => {
             const key = e.target.value;
             if (key) {
-              await onAddLink({ type: 'repository', ref: key, label: key });
+              setPendingBaseBranch('');
+              setAttachError(null);
+              setPendingRepo(key);
             }
           }}
         >
@@ -897,6 +952,125 @@ function RepoWorktreePicker({
       ) : repos.length === 0 ? (
         <span className="text-[10px] text-[var(--theme-text-muted)]">No repositories configured</span>
       ) : null}
+      {attachError && <p className="mt-1 text-[10px] text-[var(--theme-danger)]">{attachError}</p>}
+    </div>
+  );
+}
+
+/**
+ * One linked repository row: the repo pill with its base-branch badge, an edit
+ * control that opens an inline branch picker, and the remove button. Editing
+ * PATCHes the link's base branch (the server re-derives an existing worktree
+ * when it safely can); a refusal — 409 with its reason, or 422 for a branch
+ * origin lacks — is surfaced inline in red.
+ */
+function RepoLinkRow({
+  ticketId,
+  link,
+  onRemoveLink,
+}: {
+  ticketId: string;
+  link: Ticket['links'][number];
+  onRemoveLink: (linkId: string) => Promise<void>;
+}) {
+  const patchLinkBaseBranch = useTicketStore((s) => s.patchLinkBaseBranch);
+  const [editing, setEditing] = useState(false);
+  // The base being switched to while the server re-derives the worktree ('' = default).
+  const [savingTo, setSavingTo] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busy = savingTo !== null || removing;
+
+  const handleSelect = async (value: string) => {
+    setError(null);
+    setSavingTo(value);
+    try {
+      await patchLinkBaseBranch(ticketId, link.id, value || null);
+      setEditing(false);
+    } catch (e) {
+      setError(extractLinkError(e));
+    } finally {
+      setSavingTo(null);
+    }
+  };
+
+  const handleRemove = async () => {
+    setError(null);
+    setRemoving(true);
+    try {
+      // Success unmounts the row; only a failure brings it back.
+      await onRemoveLink(link.id);
+    } catch (e) {
+      setError(extractLinkError(e));
+      setRemoving(false);
+    }
+  };
+
+  return (
+    <div className={cn(removing && 'opacity-60')}>
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+            <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+          </svg>
+          {/* Base branch on its own truncated line: agent branch names are long
+              and must not crowd out the repo name. */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="min-w-0 truncate text-xs text-[var(--theme-text-secondary)]" title={link.ref}>{link.ref}</span>
+              {!link.baseBranch && (
+                <span className="ml-auto flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]" title="Uses the repository default branch">
+                  default
+                </span>
+              )}
+            </div>
+            {link.baseBranch && (
+              <div className="truncate text-[10px] font-medium text-[var(--theme-accent)]" title={`Base branch: ${link.baseBranch}`}>
+                ⎇ {link.baseBranch}
+              </div>
+            )}
+          </div>
+        </div>
+        <button
+          className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-accent)] disabled:pointer-events-none disabled:opacity-40"
+          onClick={() => { setError(null); setEditing((v) => !v); }}
+          disabled={busy}
+          title="Change base branch"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.249.249 0 0 0 .108-.064l6.286-6.286Z" />
+          </svg>
+        </button>
+        <button
+          className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)] disabled:pointer-events-none"
+          onClick={() => void handleRemove()}
+          disabled={busy}
+          title="Remove repository"
+        >
+          {removing ? (
+            <Spinner />
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="4" y1="4" x2="12" y2="12" />
+              <line x1="12" y1="4" x2="4" y2="12" />
+            </svg>
+          )}
+        </button>
+      </div>
+      {editing && (
+        <RepoBaseBranchSelect
+          repoKey={link.ref}
+          value={link.baseBranch ?? ''}
+          disabled={busy}
+          onChange={(v) => void handleSelect(v)}
+          className="mt-1 bg-[var(--theme-bg-surface)] text-xs"
+        />
+      )}
+      {savingTo !== null && <BusyLine className="mt-1" label={REPO_BUSY_LABEL.switchBase(savingTo)} />}
+      {removing && <BusyLine className="mt-1" label={REPO_BUSY_LABEL.remove} />}
+      {error && (
+        <p className="mt-1 text-[10px] text-[var(--theme-danger)]">{error}</p>
+      )}
     </div>
   );
 }

@@ -43,6 +43,11 @@ describe('parseUrl', () => {
     expect(result.sessionTabKey).toBe('s:abc123');
   });
 
+  it('parses /work', () => {
+    const result = parseUrl('/work', '');
+    expect(result.panel).toBe('work');
+  });
+
   it('parses /repositories', () => {
     const result = parseUrl('/repositories', '');
     expect(result.panel).toBe('repositories');
@@ -218,6 +223,12 @@ describe('storeToUrl', () => {
   it('generates /sessions/system when system shells selected', () => {
     const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'system', null);
     expect(url.pathname).toBe('/sessions/system');
+  });
+
+  it('generates /work for the work panel', () => {
+    const url = storeToUrl('work', null, null, null, null, null, null, null, null, 'config', 'general');
+    expect(url.pathname).toBe('/work');
+    expect(url.search).toBe('');
   });
 
   it('generates /repositories when no repo selected', () => {

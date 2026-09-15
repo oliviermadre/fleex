@@ -70,6 +70,20 @@ export type {
 } from './types/repository.js';
 
 export type {
+  DiffLineKind,
+  DiffLine,
+  DiffHunk,
+  DiffFile,
+  RepoDiff,
+  WorktreeDiff,
+  FileTreeKind,
+  FileTreeNode,
+  RepoTree,
+  WorktreeTree,
+  WorktreeFile,
+} from './types/worktree-diff.js';
+
+export type {
   RepositorySummary,
   RepositoryDashboardData,
   WorktreeTicketRef,

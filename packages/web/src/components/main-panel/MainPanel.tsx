@@ -29,6 +29,7 @@ import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 import { RoutinesPage } from '../routines/RoutinesPage';
 import { DocumentsPage } from '../documents/DocumentsPage';
 import { AssistantConversation } from '../assistant/AssistantConversation';
+import { WorkView } from '../work/WorkView';
 
 function GroupEmptyCell() {
   return (
@@ -90,6 +91,10 @@ export function MainPanel() {
 
   if (activePanel === 'list-focus') {
     return <ListFocusView />;
+  }
+
+  if (activePanel === 'work') {
+    return <WorkView />;
   }
 
   if (activePanel === 'assistant') {

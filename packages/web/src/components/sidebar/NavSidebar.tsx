@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
@@ -35,6 +36,7 @@ export function NavSidebar() {
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const toggleNav = useUIStore((s) => s.toggleNav);
   const activePanel = useUIStore((s) => s.activePanel);
+  const workViewEnabled = useSettingsStore((s) => s.settings.workViewEnabled) !== false;
   const sessions = useSessionStore((s) => s.sessions);
   const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
@@ -72,6 +74,24 @@ export function NavSidebar() {
 
         {/* === Operational === */}
         <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
+
+        {/* Work (single-screen ergonomics — queue · conversation · context).
+            Icon: a two-column layout glyph. Gated by the workViewEnabled flag. */}
+        {workViewEnabled && (
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="20" height="18" rx="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            }
+            label="Work"
+            shortLabel="Work"
+            active={activePanel === 'work'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/work')}
+          />
+        )}
 
         {/* Kanban (was Backlog / Tickets) */}
         <NavItem
