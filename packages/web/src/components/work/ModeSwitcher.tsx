@@ -1,16 +1,20 @@
 /**
- * The always-visible center-mode switch for the Work view: Chat / Code / Shell /
- * Workflow. Lives in the top bar so switching modes is consistent. Chat = none of
- * the takeover flags; the takeover modes are mutually exclusive in the store.
+ * The always-visible center-mode switch for the Work view: Chat / Shell / Code /
+ * Workflow, also cycled with ⌃< / ⌃⇧< (keyboard.ts). Lives in the top bar so
+ * switching modes is consistent. Chat = none of the takeover flags; the takeover
+ * modes are mutually exclusive in the store.
  * Workflow only appears when the selected ticket actually has workflow runs
  * (mirrors the old ticket-detail "Workflow" tab). Rendered icon-only to stay
  * compact with four items; each item expands to show its label on hover.
  */
-import { useWorkStore } from '../../stores/workStore';
+import { useWorkStore, type WorkMode } from '../../stores/workStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { cn } from '../../lib/cn';
+import { activeMode } from './modes';
 
-type Mode = 'chat' | 'code' | 'shell' | 'workflow';
+type Mode = WorkMode;
+
+const CYCLE_HINT = ' · ⌃< / ⌃⇧< to cycle modes';
 
 /** `ticketId` is the RESOLVED selected task (queue fallback included), not the raw
  * persisted selection — so the Workflow item shows even on a fallback selection. */
@@ -18,9 +22,7 @@ export function ModeSwitcher({ ticketId }: { ticketId: string | null }) {
   const codeMode = useWorkStore((s) => s.codeMode);
   const shellMode = useWorkStore((s) => s.shellMode);
   const workflowMode = useWorkStore((s) => s.workflowMode);
-  const setCodeMode = useWorkStore((s) => s.setCodeMode);
-  const setShellMode = useWorkStore((s) => s.setShellMode);
-  const setWorkflowMode = useWorkStore((s) => s.setWorkflowMode);
+  const setMode = useWorkStore((s) => s.setMode);
 
   const hasWorkflowRuns = useWorkflowRunStore((s) =>
     ticketId ? (s.runsByTicket[ticketId]?.length ?? 0) > 0 : false,
@@ -28,27 +30,7 @@ export function ModeSwitcher({ ticketId }: { ticketId: string | null }) {
 
   // Workflow only counts as active while the ticket still has runs — switching to
   // a run-less ticket falls back to Chat without losing the flag.
-  const active: Mode = codeMode
-    ? 'code'
-    : shellMode
-      ? 'shell'
-      : workflowMode && hasWorkflowRuns
-        ? 'workflow'
-        : 'chat';
-
-  const select = (mode: Mode) => {
-    if (mode === 'chat') {
-      setCodeMode(false);
-      setShellMode(false);
-      setWorkflowMode(false);
-    } else if (mode === 'code') {
-      setCodeMode(true);
-    } else if (mode === 'shell') {
-      setShellMode(true);
-    } else {
-      setWorkflowMode(true);
-    }
-  };
+  const active = activeMode({ codeMode, shellMode, workflowMode }, hasWorkflowRuns);
 
   const items: { mode: Mode; label: string; title: string; icon: React.ReactNode }[] = [
     {
@@ -62,6 +44,12 @@ export function ModeSwitcher({ ticketId }: { ticketId: string | null }) {
       ),
     },
     {
+      mode: 'shell',
+      label: 'Shell',
+      title: 'Shell (⌘⇧J)',
+      icon: <span className="font-mono text-[11px] leading-none">›_</span>,
+    },
+    {
       mode: 'code',
       label: 'Code',
       title: 'Code editor',
@@ -71,12 +59,6 @@ export function ModeSwitcher({ ticketId }: { ticketId: string | null }) {
           <path d="m15 8 4 4-4 4" />
         </svg>
       ),
-    },
-    {
-      mode: 'shell',
-      label: 'Shell',
-      title: 'Shell (⌘⇧J)',
-      icon: <span className="font-mono text-[11px] leading-none">›_</span>,
     },
     // Only offered when the ticket has workflow runs — like the old detail tab.
     ...(hasWorkflowRuns
@@ -105,8 +87,8 @@ export function ModeSwitcher({ ticketId }: { ticketId: string | null }) {
           <button
             key={it.mode}
             type="button"
-            onClick={() => select(it.mode)}
-            title={it.title}
+            onClick={() => setMode(it.mode)}
+            title={`${it.title}${CYCLE_HINT}`}
             aria-label={it.label}
             className={cn(
               'flex cursor-pointer items-center rounded px-1.5 py-0.5 text-[11px] transition-colors',

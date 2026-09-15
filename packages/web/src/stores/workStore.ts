@@ -102,6 +102,8 @@ export interface WorkState {
   setShellMode: (mode: boolean) => void;
   setCodeMode: (mode: boolean) => void;
   setWorkflowMode: (mode: boolean) => void;
+  /** Switch the center to one mode, remembered for the ticket it belongs to. */
+  setMode: (mode: WorkMode) => void;
   /** Apply the ticket's remembered center mode (chat when none) and track it. */
   restoreTicketMode: (ticketId: string) => void;
   setShellLayout: (ticketId: string, layout: ShellLayout) => void;
@@ -325,6 +327,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
     setShellMode: (shellMode) => commitMode({ shellMode, ...(shellMode ? { codeMode: false, workflowMode: false } : {}) }),
     setCodeMode: (codeMode) => commitMode({ codeMode, ...(codeMode ? { shellMode: false, workflowMode: false } : {}) }),
     setWorkflowMode: (workflowMode) => commitMode({ workflowMode, ...(workflowMode ? { shellMode: false, codeMode: false } : {}) }),
+    setMode: (mode) => commitMode(modeFlags(mode)),
     restoreTicketMode: (ticketId) =>
       commit({ modeTicketId: ticketId, ...modeFlags(get().modeByTicket[ticketId] ?? 'chat') }),
     setShellLayout: (ticketId, layout) =>
