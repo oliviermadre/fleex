@@ -162,6 +162,9 @@ export class FakeGitPort implements GitPort {
   async getFileDiffPatch(): Promise<string> { return ''; }
   async getFileBaseContent(): Promise<string> { return ''; }
   async getStatusPorcelain(): Promise<string> { return ''; }
+  async countOwnCommits(): Promise<number> { return 0; }
+  async isAncestor(): Promise<boolean> { return true; }
+  async forceBranch(): Promise<void> {}
   async repairWorktrees(): Promise<void> {}
   async pruneWorktrees(): Promise<void> {}
 }
