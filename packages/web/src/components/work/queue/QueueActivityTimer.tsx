@@ -1,8 +1,10 @@
 /**
  * Queue row activity timer. Compact by default — just the coloured age ("4h"
  * grey idle, "5m" blue running, "12m" yellow waiting), live off the shared
- * `useNow` clock. On row hover (`group-hover`) it grows to the left, revealing
- * the full "State for {age}" with a status dot. A running/waiting state with an
+ * `useNow` clock. Hovering the timer itself (`group/timer`) grows it to the left,
+ * revealing the full "State for {age}" with a status dot. Not on row hover: that
+ * would shift the icons left of it (PR, favorite, blocked) out from under the
+ * pointer, e.g. while it travels into the PR popover. A running/waiting state with an
  * SDK execution is a button that opens the execution log; otherwise it's inert.
  *
  * State is SDK-based (idle/running/waiting from ticketActivityStore); the age of
@@ -35,7 +37,7 @@ export function QueueActivityTimer({ activity, since, lastActivityAt, onOpen }: 
   const age = ageSrc ? formatAge(ageSrc, now) : null;
 
   const pill = cn(
-    'inline-flex items-center overflow-hidden whitespace-nowrap rounded-full px-2 py-[3px] text-[10px] font-medium tabular-nums',
+    'group/timer inline-flex items-center overflow-hidden whitespace-nowrap rounded-full px-2 py-[3px] text-[10px] font-medium tabular-nums',
     t.bg,
     t.text,
   );
@@ -43,7 +45,7 @@ export function QueueActivityTimer({ activity, since, lastActivityAt, onOpen }: 
   const body = (
     <>
       {age && (
-        <span className="flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-all duration-200 group-hover:mr-1 group-hover:max-w-[110px] group-hover:opacity-100 motion-reduce:transition-none">
+        <span className="flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-all duration-200 group-hover/timer:mr-1 group-hover/timer:max-w-[110px] group-hover/timer:opacity-100 motion-reduce:transition-none">
           <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', t.solid)} />
           <span className="whitespace-nowrap">{LABEL[activity]}</span>
         </span>
