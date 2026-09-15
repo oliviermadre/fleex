@@ -364,10 +364,16 @@ branch. Absent ⇒ the default branch (unchanged behaviour).
 
 - Attach with a base via the CLI: `fleex ticket create "…" --repo evaneos/odys-front@feat/big-refacto`
   or `fleex ticket link <id> --repo evaneos/odys-front@feat/big-refacto`.
-- Edit it (only while no worktree exists yet) with
-  `PATCH /api/tickets/:id/links/:linkId` body `{ "baseBranch": "feat/x" | null }`
-  (`null` restores the default). Returns `409` once a worktree exists — detach
-  and reattach the repo to derive from a different base.
+- Edit it with `PATCH /api/tickets/:id/links/:linkId` body
+  `{ "baseBranch": "feat/x" | null }` (`null` restores the default). If the
+  worktree already exists it is removed and re-derived from the new base — only
+  when nothing can be lost: the worktree is on the ticket branch, has no
+  uncommitted changes, the branch has no commits of its own, and no agent or
+  terminal session is using it. Otherwise `409` with the reason.
+- Unlinking a repo removes its worktree but keeps the ticket branch. Re-linking
+  moves that branch onto the requested base when it has no commits of its own;
+  with commits of its own that aren't based on the requested custom base,
+  worktree creation fails loudly instead of checking them out on the wrong base.
 - **Base-branch resolution precedence** when a worktree is created: a linked
   `github_pr` (checks out the PR head) → a pre-existing `worktree` link →
   the repo link's `baseBranch` → the repository default branch. An explicit
