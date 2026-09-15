@@ -25,7 +25,15 @@ const TITLES: Record<string, string> = {
 /** The tool strip is 60px; the panel's right edge sits at that offset. */
 const TOOL_STRIP_WIDTH = 60;
 
-export function RightPanel({ task, deliverables }: { task: WorkTask; deliverables: TicketDeliverable[] }) {
+export function RightPanel({
+  task,
+  deliverables,
+  onDeleteTask,
+}: {
+  task: WorkTask;
+  deliverables: TicketDeliverable[];
+  onDeleteTask: (id: string) => void;
+}) {
   const rightPanel = useWorkStore((s) => s.rightPanel);
   const width = useWorkStore((s) => s.rightPanelWidth);
   const setRightPanelWidth = useWorkStore((s) => s.setRightPanelWidth);
@@ -79,7 +87,7 @@ export function RightPanel({ task, deliverables }: { task: WorkTask; deliverable
       <div className="flex h-9 shrink-0 items-center border-b border-[var(--theme-border)] px-3 text-[11px] font-semibold tracking-[0.06em] text-[var(--theme-text-secondary)]">
         {TITLES[rightPanel] ?? ''}
       </div>
-      {rightPanel === 'context' && <ContextPanel task={task} />}
+      {rightPanel === 'context' && <ContextPanel task={task} onDelete={() => onDeleteTask(task.id)} />}
       {rightPanel === 'diff' && <DiffPanel ticketId={task.id} />}
       {rightPanel === 'deliv' && <DelivsPanel ticketId={task.id} deliverables={deliverables} />}
       {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}

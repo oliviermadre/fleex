@@ -12,7 +12,7 @@ import * as api from '../../../services/api';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { cn } from '../../../lib/cn';
-import { tintText } from '../../../lib/tints';
+import { tintClasses, tintText } from '../../../lib/tints';
 import { PrBadge } from '../../ui/PrBadge';
 import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from '../../tickets/RepoBaseBranchSelect';
 import { Spinner, BusyLine } from '../../ui/Spinner';
@@ -175,7 +175,7 @@ function RepoRow({ ticketId, link }: { ticketId: string; link: TicketLink }) {
   );
 }
 
-export function ContextPanel({ task }: { task: WorkTask }) {
+export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () => void }) {
   const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === task.id) ?? null);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const addLink = useTicketStore((s) => s.addLink);
@@ -238,7 +238,7 @@ export function ContextPanel({ task }: { task: WorkTask }) {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {/* Board / Status / Type / Priority — four Kanban-style pickers, 2×2 */}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-b border-[var(--theme-border-subtle)] px-3 py-3">
         <Field label="Board">
@@ -432,6 +432,20 @@ export function ContextPanel({ task }: { task: WorkTask }) {
           </button>
         </form>
       </Section>
+
+      {/* Actions — pinned to the bottom, like the ticket detail sidebar */}
+      <div className="mt-auto border-t border-[var(--theme-border)] px-3 py-3">
+        <button
+          type="button"
+          onClick={onDelete}
+          className={cn(
+            'w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors',
+            tintClasses('red').hoverBg,
+          )}
+        >
+          Delete Ticket
+        </button>
+      </div>
     </div>
   );
 }

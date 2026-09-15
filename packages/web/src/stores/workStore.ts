@@ -14,6 +14,8 @@ export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'scr
 export type ThreadTab = 'conv' | 'stream';
 /** Shell pane arrangement — mirrors the prototype's layout presets. */
 export type ShellLayout = '1' | 'cols' | 'rows' | 'three' | 'grid';
+/** What the center shows for a ticket. Chat = none of the takeover flags. */
+export type WorkMode = 'chat' | 'code' | 'shell' | 'workflow';
 /** New tasks can be any ticket type (the picker mirrors Context's). */
 export type DraftType = TicketType;
 /** How the queue groups its rows. 'activity' is the handoff default. */
@@ -59,9 +61,14 @@ export interface WorkState {
   codeMode: boolean;
   /** When true, the center is the ticket's Workflow DAG / run view. */
   workflowMode: boolean;
-  shellLayout: ShellLayout;
-  /** Explicit session id shown in each pane slot; null = auto-fill (see panesModel). */
-  shellPaneIds: (string | null)[];
+  /** Center mode remembered per ticket; absent = chat. */
+  modeByTicket: Record<string, WorkMode>;
+  /** The ticket the shellMode / codeMode / workflowMode flags currently belong to. */
+  modeTicketId: string | null;
+  /** Shell split preset per ticket; absent = a single pane. */
+  shellLayoutByTicket: Record<string, ShellLayout>;
+  /** Session id pinned to each pane slot, per ticket; null = empty pane (see panesModel). */
+  shellPaneIdsByTicket: Record<string, (string | null)[]>;
   /** Height in px of the bottom shell drawer, user-resizable. */
   shellHeight: number;
   /** Width in px of the right tool window (Context / Delivs), user-resizable. */
@@ -95,9 +102,13 @@ export interface WorkState {
   setShellMode: (mode: boolean) => void;
   setCodeMode: (mode: boolean) => void;
   setWorkflowMode: (mode: boolean) => void;
-  setShellLayout: (layout: ShellLayout) => void;
-  /** Pin a session to a pane slot (removing it from any other slot); null clears. */
-  bindShellPane: (index: number, id: string | null) => void;
+  /** Apply the ticket's remembered center mode (chat when none) and track it. */
+  restoreTicketMode: (ticketId: string) => void;
+  setShellLayout: (ticketId: string, layout: ShellLayout) => void;
+  /** Pin a session to one of the ticket's pane slots (removing it from its other slots); null clears. */
+  bindShellPane: (ticketId: string, index: number, id: string | null) => void;
+  /** Drop everything remembered for a ticket (after it's deleted). */
+  forgetTicket: (ticketId: string) => void;
   setShellHeight: (height: number) => void;
   updateDraft: (patch: Partial<WorkDraft>) => void;
   resetDraft: () => void;
@@ -126,8 +137,10 @@ type PersistedWork = Pick<
   | 'shellMode'
   | 'codeMode'
   | 'workflowMode'
-  | 'shellLayout'
-  | 'shellPaneIds'
+  | 'modeByTicket'
+  | 'modeTicketId'
+  | 'shellLayoutByTicket'
+  | 'shellPaneIdsByTicket'
   | 'shellHeight'
   | 'rightPanelWidth'
   | 'queueWidth'
@@ -155,6 +168,37 @@ export const SHELL_MAX_HEIGHT = 720;
 const clampShellHeight = (h: number) =>
   Math.min(SHELL_MAX_HEIGHT, Math.max(SHELL_MIN_HEIGHT, Math.round(h)));
 
+type ModeFlags = Pick<WorkState, 'shellMode' | 'codeMode' | 'workflowMode'>;
+
+function modeOf(flags: ModeFlags): WorkMode {
+  return flags.codeMode ? 'code' : flags.shellMode ? 'shell' : flags.workflowMode ? 'workflow' : 'chat';
+}
+
+function modeFlags(mode: WorkMode): ModeFlags {
+  return { shellMode: mode === 'shell', codeMode: mode === 'code', workflowMode: mode === 'workflow' };
+}
+
+/** A copy of a per-ticket map without that ticket. */
+function withoutTicket<T>(map: Record<string, T>, ticketId: string): Record<string, T> {
+  const next = { ...map };
+  delete next[ticketId];
+  return next;
+}
+
+const NO_PANE_BINDINGS: (string | null)[] = [];
+
+/** Selector: the ticket's shell split preset (a single pane until chosen). */
+export const selectShellLayout =
+  (ticketId: string) =>
+  (s: WorkState): ShellLayout =>
+    s.shellLayoutByTicket[ticketId] ?? '1';
+
+/** Selector: the ticket's pane bindings (a stable empty array until one is set). */
+export const selectShellPaneIds =
+  (ticketId: string) =>
+  (s: WorkState): (string | null)[] =>
+    s.shellPaneIdsByTicket[ticketId] ?? NO_PANE_BINDINGS;
+
 const DEFAULTS: PersistedWork = {
   selectedTicketId: null,
   view: 'task',
@@ -172,8 +216,10 @@ const DEFAULTS: PersistedWork = {
   shellMode: false,
   codeMode: false,
   workflowMode: false,
-  shellLayout: '1',
-  shellPaneIds: [],
+  modeByTicket: {},
+  modeTicketId: null,
+  shellLayoutByTicket: {},
+  shellPaneIdsByTicket: {},
   shellHeight: 240,
   rightPanelWidth: 296,
   queueWidth: 300,
@@ -215,8 +261,10 @@ export const useWorkStore = create<WorkState>((set, get) => {
       shellMode: s.shellMode,
       codeMode: s.codeMode,
       workflowMode: s.workflowMode,
-      shellLayout: s.shellLayout,
-      shellPaneIds: s.shellPaneIds,
+      modeByTicket: s.modeByTicket,
+      modeTicketId: s.modeTicketId,
+      shellLayoutByTicket: s.shellLayoutByTicket,
+      shellPaneIdsByTicket: s.shellPaneIdsByTicket,
       shellHeight: s.shellHeight,
       rightPanelWidth: s.rightPanelWidth,
       queueWidth: s.queueWidth,
@@ -234,6 +282,21 @@ export const useWorkStore = create<WorkState>((set, get) => {
   function commit(patch: Partial<WorkState>): void {
     set(patch);
     persist();
+  }
+
+  /** Apply a center-mode change and remember the result for the ticket it belongs to. */
+  function commitMode(patch: Partial<ModeFlags>): void {
+    const s = get();
+    const ticketId = s.modeTicketId;
+    if (!ticketId) {
+      commit(patch);
+      return;
+    }
+    const mode = modeOf({ ...s, ...patch });
+    const modeByTicket = mode === 'chat'
+      ? withoutTicket(s.modeByTicket, ticketId)
+      : { ...s.modeByTicket, [ticketId]: mode };
+    commit({ ...patch, modeByTicket });
   }
 
   return {
@@ -259,18 +322,31 @@ export const useWorkStore = create<WorkState>((set, get) => {
     setThreadTab: (threadTab) => commit({ threadTab }),
     setShellOpen: (shellOpen) => commit({ shellOpen }),
     // Shell mode and Code mode both take over the center — entering one exits the other.
-    setShellMode: (shellMode) => commit({ shellMode, ...(shellMode ? { codeMode: false, workflowMode: false } : {}) }),
-    setCodeMode: (codeMode) => commit({ codeMode, ...(codeMode ? { shellMode: false, workflowMode: false } : {}) }),
-    setWorkflowMode: (workflowMode) => commit({ workflowMode, ...(workflowMode ? { shellMode: false, codeMode: false } : {}) }),
-    setShellLayout: (shellLayout) => commit({ shellLayout }),
+    setShellMode: (shellMode) => commitMode({ shellMode, ...(shellMode ? { codeMode: false, workflowMode: false } : {}) }),
+    setCodeMode: (codeMode) => commitMode({ codeMode, ...(codeMode ? { shellMode: false, workflowMode: false } : {}) }),
+    setWorkflowMode: (workflowMode) => commitMode({ workflowMode, ...(workflowMode ? { shellMode: false, codeMode: false } : {}) }),
+    restoreTicketMode: (ticketId) =>
+      commit({ modeTicketId: ticketId, ...modeFlags(get().modeByTicket[ticketId] ?? 'chat') }),
+    setShellLayout: (ticketId, layout) =>
+      commit({ shellLayoutByTicket: { ...get().shellLayoutByTicket, [ticketId]: layout } }),
     setShellHeight: (height) => commit({ shellHeight: clampShellHeight(height) }),
-    bindShellPane: (index, id) => {
-      const ids = [...get().shellPaneIds];
+    bindShellPane: (ticketId, index, id) => {
+      const ids = [...(get().shellPaneIdsByTicket[ticketId] ?? [])];
       while (ids.length <= index) ids.push(null);
       // A session lives in one pane only — clear it from any other slot first.
       if (id) for (let i = 0; i < ids.length; i++) if (ids[i] === id && i !== index) ids[i] = null;
       ids[index] = id;
-      commit({ shellPaneIds: ids });
+      commit({ shellPaneIdsByTicket: { ...get().shellPaneIdsByTicket, [ticketId]: ids } });
+    },
+    forgetTicket: (ticketId) => {
+      const s = get();
+      commit({
+        modeByTicket: withoutTicket(s.modeByTicket, ticketId),
+        shellLayoutByTicket: withoutTicket(s.shellLayoutByTicket, ticketId),
+        shellPaneIdsByTicket: withoutTicket(s.shellPaneIdsByTicket, ticketId),
+        activeScratchTabByTicket: withoutTicket(s.activeScratchTabByTicket, ticketId),
+        ...(s.modeTicketId === ticketId ? { modeTicketId: null } : {}),
+      });
     },
     updateDraft: (patch) => commit({ draft: { ...get().draft, ...patch } }),
     resetDraft: () => commit({ draft: EMPTY_DRAFT }),

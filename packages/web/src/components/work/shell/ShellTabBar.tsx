@@ -122,6 +122,8 @@ export function ShellTabBar({
   onNewShell,
   onKill,
   onRename,
+  layout,
+  onLayoutChange,
 }: {
   sessions: Session[];
   shownIds: Set<string>;
@@ -130,9 +132,10 @@ export function ShellTabBar({
   onNewShell: () => void;
   onKill: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  /** The ticket's split preset; the preset buttons change it for that ticket only. */
+  layout: ShellLayout;
+  onLayoutChange: (layout: ShellLayout) => void;
 }) {
-  const shellLayout = useWorkStore((s) => s.shellLayout);
-  const setShellLayout = useWorkStore((s) => s.setShellLayout);
   const shellMode = useWorkStore((s) => s.shellMode);
   const setShellMode = useWorkStore((s) => s.setShellMode);
 
@@ -167,11 +170,11 @@ export function ShellTabBar({
           <button
             key={p.layout}
             type="button"
-            onClick={() => setShellLayout(p.layout)}
+            onClick={() => onLayoutChange(p.layout)}
             title={p.title}
             className={cn(
               'flex h-6 w-6 items-center justify-center rounded text-[12px]',
-              shellLayout === p.layout
+              layout === p.layout
                 ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
                 : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
             )}

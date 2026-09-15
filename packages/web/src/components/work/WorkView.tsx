@@ -8,10 +8,11 @@
  *   QUEUE 300px · CENTER minmax(0,1fr) · RIGHT PANEL (toggle) · TOOL STRIP 60px.
  * The shell drawer (⌘J) and shell mode land in Phase 2.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
 import { useWorkKeyboard } from './keyboard';
 import { useWorkStore } from '../../stores/workStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
 import { WorkTopBar } from './WorkTopBar';
@@ -50,6 +51,27 @@ export function WorkView() {
   useEffect(() => {
     if (selectedTaskId) void useWorkflowRunStore.getState().loadForTicket(selectedTaskId);
   }, [selectedTaskId]);
+
+  // Each ticket keeps its own center mode (chat / code / shell / workflow): apply
+  // the selected one's before paint, so switching never flashes the previous mode.
+  const restoreTicketMode = useWorkStore((s) => s.restoreTicketMode);
+  useLayoutEffect(() => {
+    if (selectedTaskId) restoreTicketMode(selectedTaskId);
+  }, [selectedTaskId, restoreTicketMode]);
+
+  // Deleting from the Context panel lands on the queue neighbour, not the first row.
+  const deleteTicket = useTicketStore((s) => s.deleteTicket);
+  const selectTicket = useWorkStore((s) => s.selectTicket);
+  const forgetTicket = useWorkStore((s) => s.forgetTicket);
+  const deleteTask = async (id: string) => {
+    if (!confirm('Delete this ticket?')) return;
+    const ids = queue.orderedIds;
+    const idx = ids.indexOf(id);
+    const neighbour = idx >= 0 ? (ids[idx + 1] ?? ids[idx - 1] ?? null) : null;
+    await deleteTicket(id);
+    forgetTicket(id);
+    selectTicket(neighbour);
+  };
   const hasWorkflowRuns = useWorkflowRunStore((s) =>
     selectedTaskId ? (s.runsByTicket[selectedTaskId]?.length ?? 0) > 0 : false,
   );
@@ -82,7 +104,7 @@ export function WorkView() {
           ) : codeMode && selectedTask ? (
             <CodeEditor ticketId={selectedTask.id} />
           ) : shellMode && selectedTask ? (
-            <ShellSurface ticketId={selectedTask.id} />
+            <ShellSurface key={selectedTask.id} ticketId={selectedTask.id} />
           ) : workflowMode && selectedTask && hasWorkflowRuns ? (
             <TicketWorkflowTab ticketId={selectedTask.id} />
           ) : (
@@ -91,7 +113,7 @@ export function WorkView() {
         </main>
 
         {view === 'task' && rightPanel && selectedTask && (
-          <RightPanel task={selectedTask} deliverables={deliverables} />
+          <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
         )}
 
         {view === 'task' && <ToolStrip task={selectedTask} delivCount={deliverables.length} />}
@@ -99,7 +121,7 @@ export function WorkView() {
 
       {/* Bottom shell drawer (⌘J) — full width, below the middle row (SPEC §7). */}
       {view === 'task' && selectedTask && shellOpen && !shellMode && (
-        <ShellDrawer ticketId={selectedTask.id} />
+        <ShellDrawer key={selectedTask.id} ticketId={selectedTask.id} />
       )}
 
       {view === 'task' && <WorkStatusBar task={selectedTask} />}

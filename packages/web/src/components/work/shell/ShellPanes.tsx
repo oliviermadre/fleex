@@ -11,7 +11,6 @@
  */
 import type { CSSProperties } from 'react';
 import type { Session } from '@fleex/shared';
-import { useWorkStore } from '../../../stores/workStore';
 import { terminalManager } from '../../../services/terminalManager';
 import { paneCount, type ShellLayout } from './shellLayout';
 import { ShellPane } from './ShellPane';
@@ -40,6 +39,7 @@ function paneStyle(layout: ShellLayout, i: number): CSSProperties | undefined {
 }
 
 export function ShellPanes({
+  layout,
   resolved,
   sessionById,
   unshown,
@@ -51,6 +51,8 @@ export function ShellPanes({
   onUnbindPane,
   onNewShellInPane,
 }: {
+  /** The ticket's split preset. */
+  layout: ShellLayout;
   resolved: (string | null)[];
   sessionById: Map<string, Session>;
   /** Sessions not currently shown in any pane — offered by the bind menu. */
@@ -64,7 +66,6 @@ export function ShellPanes({
   onUnbindPane: (paneIndex: number) => void;
   onNewShellInPane: (paneIndex: number) => void;
 }) {
-  const layout = useWorkStore((s) => s.shellLayout);
   const count = paneCount(layout);
 
   const focusPane = (i: number) => {

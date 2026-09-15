@@ -3,10 +3,12 @@
  * drawer (⌘J) and shell mode (⌘⇧J). Owns the focused-pane index and resolves which
  * session each pane shows (panesModel). Binding is explicit and pane-local: the tab
  * bar is a session roster (new / rename / kill), and panes bind via their own title
- * dropdown / empty-pane menu — a tab click never re-binds a pane.
+ * dropdown / empty-pane menu — a tab click never re-binds a pane. The split preset
+ * and pane bindings are remembered per ticket, so one ticket's layout or sessions
+ * never leak into another's.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { useWorkStore } from '../../../stores/workStore';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useWorkStore, selectShellLayout, selectShellPaneIds, type ShellLayout } from '../../../stores/workStore';
 import { terminalManager } from '../../../services/terminalManager';
 import { ShellTabBar } from './ShellTabBar';
 import { ShellPanes } from './ShellPanes';
@@ -16,9 +18,19 @@ import { resolvePanes } from './panesModel';
 
 export function ShellSurface({ ticketId }: { ticketId: string }) {
   const { sessions, creating, newShell, killShell, renameShell } = useShellSessions(ticketId);
-  const layout = useWorkStore((s) => s.shellLayout);
-  const bindings = useWorkStore((s) => s.shellPaneIds);
-  const bindShellPane = useWorkStore((s) => s.bindShellPane);
+  const layout = useWorkStore(selectShellLayout(ticketId));
+  const bindings = useWorkStore(selectShellPaneIds(ticketId));
+  const setTicketShellLayout = useWorkStore((s) => s.setShellLayout);
+  const bindTicketShellPane = useWorkStore((s) => s.bindShellPane);
+
+  const setLayout = useCallback(
+    (next: ShellLayout) => setTicketShellLayout(ticketId, next),
+    [setTicketShellLayout, ticketId],
+  );
+  const bindShellPane = useCallback(
+    (paneIndex: number, id: string | null) => bindTicketShellPane(ticketId, paneIndex, id),
+    [bindTicketShellPane, ticketId],
+  );
 
   const count = paneCount(layout);
   const [focusedPane, setFocusedPane] = useState(0);
@@ -104,8 +116,11 @@ export function ShellSurface({ ticketId }: { ticketId: string }) {
         onNewShell={() => void newShell()}
         onKill={killShell}
         onRename={renameShell}
+        layout={layout}
+        onLayoutChange={setLayout}
       />
       <ShellPanes
+        layout={layout}
         resolved={resolved}
         sessionById={sessionById}
         unshown={unshown}
