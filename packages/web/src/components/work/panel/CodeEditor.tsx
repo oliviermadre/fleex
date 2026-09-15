@@ -38,6 +38,7 @@ export function CodeEditor({ ticketId }: { ticketId: string }) {
   const patchFile = useCodeEditorStore((s) => s.patchFile);
 
   const [tree, setTree] = useState<WorktreeTree | null>(null);
+  const [fileQuery, setFileQuery] = useState('');
   const { width: treeWidth, resizing: treeResizing, startResize: startTreeResize, nudge: nudgeTree } = useCodeTreeWidth();
   const [showDiff, setShowDiff] = useState(false);
   const [baseByKey, setBaseByKey] = useState<Record<string, { loading: boolean; content: string }>>({});
@@ -57,6 +58,11 @@ export function CodeEditor({ ticketId }: { ticketId: string }) {
     const timer = window.setInterval(() => void loadTree(), POLL_MS);
     return () => window.clearInterval(timer);
   }, [loadTree]);
+
+  // A search belongs to the ticket it was typed on.
+  useEffect(() => {
+    setFileQuery('');
+  }, [ticketId]);
 
   // Load content for any open tab we don't have yet (fills after a reload too).
   useEffect(() => {
@@ -226,14 +232,48 @@ export function CodeEditor({ ticketId }: { ticketId: string }) {
 
       {/* Body row: full-height tree + editor column. */}
       <div className="flex min-h-0 flex-1">
-      {/* Left: full-height file tree, drag-resizable. */}
+      {/* Left: full-height file tree — file-name search on top, drag-resizable. */}
       <div className="relative flex shrink-0" style={{ width: treeWidth }}>
-        <div className="min-h-0 w-full overflow-auto border-r border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
-          {repos.length === 0 ? (
-            <div className="p-4 text-center text-[12px] text-[var(--theme-text-faint)]">No files to show yet.</div>
-          ) : (
-            <FileTree repos={repos} activeKey={activeKey} onOpenFile={openFile} onCreateFile={createFile} onDeleteFile={deleteFile} />
+        <div className="flex min-h-0 w-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
+          {repos.length > 0 && (
+            <div className="flex h-9 shrink-0 items-center border-b border-[var(--theme-border)] px-2">
+              <div className="relative min-w-0 flex-1">
+                <input
+                  value={fileQuery}
+                  onChange={(e) => setFileQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape' && fileQuery) {
+                      e.stopPropagation();
+                      setFileQuery('');
+                    }
+                  }}
+                  placeholder="Search files…"
+                  aria-label="Search files by name"
+                  className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-1 pl-2 pr-6 text-[12px] text-[var(--theme-text-primary)] outline-none placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)]"
+                />
+                {fileQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setFileQuery('')}
+                    title="Clear search"
+                    aria-label="Clear search"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-primary)]"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
           )}
+          <div className="min-h-0 flex-1 overflow-auto">
+            {repos.length === 0 ? (
+              <div className="p-4 text-center text-[12px] text-[var(--theme-text-faint)]">No files to show yet.</div>
+            ) : (
+              <FileTree repos={repos} query={fileQuery} activeKey={activeKey} onOpenFile={openFile} onCreateFile={createFile} onDeleteFile={deleteFile} />
+            )}
+          </div>
         </div>
         <div
           role="separator"
