@@ -10,6 +10,7 @@ import { useRepositoryStore } from '../../stores/repositoryStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintSolid, tintText } from '../../lib/tints';
+import { RepoBaseBranchSelect } from '../tickets/RepoBaseBranchSelect';
 
 type TaskMode = 'ticket' | 'my-prs' | 'review' | 'new';
 
@@ -19,54 +20,6 @@ const MODES: { key: TaskMode; label: string }[] = [
   { key: 'my-prs', label: 'My PRs' },
   { key: 'review', label: 'To Review' },
 ];
-
-/**
- * Base-branch picker options from a raw `fetchBranches` list: origin remote
- * branches (minus `origin/HEAD`, `origin/` prefix stripped) plus the local
- * default, offered as "default".
- */
-function originBranchOptions(branches: string[]): { defaultBranch: string | null; originBranches: string[] } {
-  const local = branches.filter((b) => !b.startsWith('origin/'));
-  const defaultBranch = local.find((b) => b === 'main' || b === 'master') ?? local[0] ?? null;
-  const originBranches = branches
-    .filter((b) => b.startsWith('origin/') && b !== 'origin/HEAD')
-    .map((b) => b.slice('origin/'.length));
-  return { defaultBranch, originBranches };
-}
-
-/** Native base-branch select for one selected repo; loads its branches on mount. */
-function RepoBaseBranchPicker({ repoKey, value, onChange }: { repoKey: string; value: string; onChange: (v: string) => void }) {
-  const [branches, setBranches] = useState<string[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    const slashIdx = repoKey.indexOf('/');
-    if (slashIdx <= 0) return;
-    const org = repoKey.slice(0, slashIdx);
-    const name = repoKey.slice(slashIdx + 1);
-    let cancelled = false;
-    setLoading(true);
-    api.fetchBranches(org, name)
-      .then((b) => { if (!cancelled) setBranches(b); })
-      .catch(() => { if (!cancelled) setBranches([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [repoKey]);
-  const options = originBranchOptions(branches ?? []);
-  return (
-    <select
-      className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none disabled:opacity-50"
-      value={value}
-      disabled={loading}
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">{loading ? 'Loading branches…' : `${options.defaultBranch ?? 'main'} (default)`}</option>
-      {options.originBranches.map((b) => (
-        <option key={b} value={b}>{b}</option>
-      ))}
-    </select>
-  );
-}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -501,7 +454,7 @@ export function CreateTaskModal() {
                       </button>
                       {selected && (
                         <div className="mb-1 mt-0.5 pl-8 pr-2">
-                          <RepoBaseBranchPicker
+                          <RepoBaseBranchSelect
                             repoKey={key}
                             value={repoBaseBranch[key] ?? ''}
                             onChange={(v) => setRepoBaseBranch((prev) => ({ ...prev, [key]: v }))}
