@@ -22,6 +22,8 @@ export type QueueGroupBy = 'activity' | 'repo' | 'type' | 'priority' | 'board' |
 export interface WorkDraft {
   text: string;
   repoKeys: string[];
+  /** Chosen base branch per selected repo key; absent or '' = the repo's default branch. */
+  repoBaseBranches: Record<string, string>;
   boardId: string | null;
   type: DraftType;
   priority: TicketPriority;
@@ -103,7 +105,7 @@ export interface WorkState {
 
 const STORAGE_KEY = 'fleex_work';
 
-const EMPTY_DRAFT: WorkDraft = { text: '', repoKeys: [], boardId: null, type: 'build', priority: 'none' };
+const EMPTY_DRAFT: WorkDraft = { text: '', repoKeys: [], repoBaseBranches: {}, boardId: null, type: 'build', priority: 'none' };
 
 /** The subset of state we persist — everything except the action functions. */
 type PersistedWork = Pick<

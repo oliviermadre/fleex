@@ -1,8 +1,9 @@
 /**
  * Context panel — the ticket's meta, edited in place against the real ticket
  * mutation + link APIs. Board / Status / Type / Priority are four dropdowns;
- * favorite, blocked and due date are togglable; repos (repository links) and PRs
- * (github_pr links) can be attached and detached; deliverables open the existing
+ * favorite, blocked and due date are togglable; repos (repository links, each
+ * with an editable base branch) and PRs (github_pr links) can be attached and
+ * detached; deliverables open the existing
  * overlay. Reads the live Ticket from ticketStore so every edit round-trips.
  */
 import { useEffect, useMemo, useState } from 'react';
@@ -13,6 +14,8 @@ import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { cn } from '../../../lib/cn';
 import { tintText } from '../../../lib/tints';
 import { PrBadge } from '../../ui/PrBadge';
+import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from '../../tickets/RepoBaseBranchSelect';
+import { Spinner, BusyLine } from '../../ui/Spinner';
 import { DueDatePickerPopover } from '../../tickets/DueDatePickerPopover';
 import { TypePickerPopover } from '../../tickets/TypePickerPopover';
 import { PriorityPickerPopover } from '../../tickets/PriorityPickerPopover';
@@ -72,6 +75,106 @@ function Section({ label, right, children }: { label: string; right?: React.Reac
   );
 }
 
+/**
+ * One attached repo: `⎇ org/name`, its base branch when it isn't the default,
+ * an inline base-branch editor (the server's refusal reason — a worktree it
+ * can't safely re-derive, or a branch origin lacks — is shown inline) and detach.
+ */
+function RepoRow({ ticketId, link }: { ticketId: string; link: TicketLink }) {
+  const removeLink = useTicketStore((s) => s.removeLink);
+  const patchLinkBaseBranch = useTicketStore((s) => s.patchLinkBaseBranch);
+  const [editing, setEditing] = useState(false);
+  // The base being switched to while the server re-derives the worktree ('' = default).
+  const [savingTo, setSavingTo] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busy = savingTo !== null || removing;
+
+  async function pick(value: string) {
+    setError(null);
+    setSavingTo(value);
+    try {
+      await patchLinkBaseBranch(ticketId, link.id, value || null);
+      setEditing(false);
+    } catch (e) {
+      setError(extractLinkError(e));
+    } finally {
+      setSavingTo(null);
+    }
+  }
+
+  async function remove() {
+    setError(null);
+    setRemoving(true);
+    try {
+      // Success unmounts the row; only a failure brings it back.
+      await removeLink(ticketId, link.id);
+    } catch (e) {
+      setError(extractLinkError(e));
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className={cn('group', removing && 'opacity-60')}>
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-mono text-[11px] text-[var(--theme-text-secondary)]" title={link.ref}>
+            ⎇ {link.ref}
+          </div>
+          {link.baseBranch && (
+            <div
+              className="truncate pl-3 font-mono text-[10.5px] text-[var(--theme-accent)]"
+              title={`Base branch: ${link.baseBranch}`}
+            >
+              ↳ {link.baseBranch}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setEditing((v) => !v);
+          }}
+          disabled={busy}
+          className={cn(
+            'shrink-0 text-[11px] text-[var(--theme-text-faint)] group-hover:opacity-100 hover:text-[var(--theme-accent)] disabled:pointer-events-none disabled:opacity-40',
+            editing ? 'opacity-100' : 'opacity-0',
+          )}
+          title="Change base branch"
+        >
+          ✎
+        </button>
+        <button
+          type="button"
+          onClick={() => void remove()}
+          disabled={busy}
+          className={cn(
+            'shrink-0 text-[var(--theme-text-faint)] group-hover:opacity-100 hover:text-[var(--theme-danger)] disabled:pointer-events-none',
+            removing ? 'opacity-100' : 'opacity-0',
+          )}
+          title="Detach repo"
+        >
+          {removing ? <Spinner size={11} /> : '✕'}
+        </button>
+      </div>
+      {editing && (
+        <RepoBaseBranchSelect
+          repoKey={link.ref}
+          value={link.baseBranch ?? ''}
+          disabled={busy}
+          onChange={(v) => void pick(v)}
+          className="mt-1 bg-[var(--theme-bg-surface)] text-[11px]"
+        />
+      )}
+      {savingTo !== null && <BusyLine className="mt-1" label={REPO_BUSY_LABEL.switchBase(savingTo)} />}
+      {removing && <BusyLine className="mt-1" label={REPO_BUSY_LABEL.remove} />}
+      {error && <div className="mt-0.5 text-[10.5px] text-[var(--theme-danger)]">{error}</div>}
+    </div>
+  );
+}
+
 export function ContextPanel({ task }: { task: WorkTask }) {
   const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === task.id) ?? null);
   const updateTicket = useTicketStore((s) => s.updateTicket);
@@ -81,6 +184,19 @@ export function ContextPanel({ task }: { task: WorkTask }) {
   const [prUrl, setPrUrl] = useState('');
   const [addingPr, setAddingPr] = useState(false);
   const [prStates, setPrStates] = useState<Record<string, string>>({});
+  // Staged repo for "+ attach repo…": chosen but not linked yet, so a base
+  // branch can be picked first.
+  const [pendingRepo, setPendingRepo] = useState<string | null>(null);
+  const [pendingBaseBranch, setPendingBaseBranch] = useState('');
+  const [attaching, setAttaching] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+
+  // Never carry a staged repo over to another task.
+  useEffect(() => {
+    setPendingRepo(null);
+    setPendingBaseBranch('');
+    setAttachError(null);
+  }, [task.id]);
 
   const repoLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'repository'), [ticket]);
   const prLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'github_pr'), [ticket]);
@@ -99,6 +215,26 @@ export function ContextPanel({ task }: { task: WorkTask }) {
 
   if (!ticket) {
     return <div className="p-3 text-[12px] text-[var(--theme-text-faint)]">Ticket not loaded.</div>;
+  }
+
+  async function attachPending() {
+    if (!ticket || !pendingRepo) return;
+    setAttaching(true);
+    setAttachError(null);
+    try {
+      await addLink(ticket.id, {
+        type: 'repository',
+        ref: pendingRepo,
+        label: pendingRepo,
+        ...(pendingBaseBranch ? { baseBranch: pendingBaseBranch } : {}),
+      });
+      setPendingRepo(null);
+      setPendingBaseBranch('');
+    } catch (e) {
+      setAttachError(extractLinkError(e));
+    } finally {
+      setAttaching(false);
+    }
   }
 
   return (
@@ -159,27 +295,68 @@ export function ContextPanel({ task }: { task: WorkTask }) {
         )}
         <div className="flex flex-col gap-1">
           {repoLinks.map((l) => (
-            <div key={l.id} className="group flex items-center justify-between gap-2">
-              <span className="truncate font-mono text-[11px] text-[var(--theme-text-secondary)]">⎇ {l.ref}</span>
+            <RepoRow key={l.id} ticketId={ticket.id} link={l} />
+          ))}
+          {/* The repo being attached, until the server has created its worktree */}
+          {attaching && pendingRepo && !repoLinks.some((l) => l.ref === pendingRepo) && (
+            <div>
+              <div className="flex items-center gap-1.5 font-mono text-[11px] text-[var(--theme-text-secondary)]">
+                <Spinner size={11} className="text-[var(--theme-accent)]" />
+                <span className="truncate" title={pendingRepo}>{pendingRepo}</span>
+              </div>
+              <BusyLine className="mt-0.5 pl-[17px]" label={REPO_BUSY_LABEL.attach(pendingBaseBranch || undefined)} />
+            </div>
+          )}
+        </div>
+        {pendingRepo && !attaching ? (
+          <div className="mt-1.5 flex flex-col gap-1 rounded-md border border-[var(--theme-border-input)] p-1.5">
+            <span className="truncate font-mono text-[11px] text-[var(--theme-text-secondary)]" title={pendingRepo}>
+              ⎇ {pendingRepo}
+            </span>
+            <RepoBaseBranchSelect
+              repoKey={pendingRepo}
+              value={pendingBaseBranch}
+              disabled={attaching}
+              onChange={setPendingBaseBranch}
+              className="bg-[var(--theme-bg-surface)] text-[11px]"
+            />
+            {attachError && <div className="text-[10.5px] text-[var(--theme-danger)]">{attachError}</div>}
+            <div className="flex gap-1">
               <button
                 type="button"
-                onClick={() => void removeLink(ticket.id, l.id)}
-                className="shrink-0 text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-100 hover:text-[var(--theme-danger)]"
-                title="Detach repo"
+                onClick={() => void attachPending()}
+                disabled={attaching}
+                className="flex-1 rounded-md bg-[var(--theme-accent)] px-2 py-1 text-[11px] font-medium text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)] disabled:opacity-40"
               >
-                ✕
+                Attach
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingRepo(null);
+                  setPendingBaseBranch('');
+                  setAttachError(null);
+                }}
+                disabled={attaching}
+                className="rounded-md px-2 py-1 text-[11px] text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] disabled:opacity-40"
+              >
+                Cancel
               </button>
             </div>
-          ))}
-        </div>
-        {attachableRepos.length > 0 && (
+          </div>
+        ) : attachableRepos.length > 0 && (
           <select
             value=""
+            disabled={attaching}
             onChange={(e) => {
               const key = e.target.value;
-              if (key) void addLink(ticket.id, { type: 'repository', ref: key, label: key });
+              if (key) {
+                setPendingBaseBranch('');
+                setAttachError(null);
+                setPendingRepo(key);
+              }
             }}
-            className="mt-1.5 w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none"
+            className="mt-1.5 w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none disabled:opacity-50"
           >
             <option value="">+ attach repo…</option>
             {attachableRepos.map((key) => (

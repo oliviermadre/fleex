@@ -2,7 +2,8 @@
  * New task card (⌥N or + New). One card, no form: describe the task, pick a
  * board, a type, and optionally one or more repos, then Start. On start it
  * creates a real ticket (status Doing, title = first sentence ≤ 70 chars),
- * attaches a `repository` link per selected repo, and selects it. Board + type +
+ * attaches a `repository` link per selected repo (with its base branch when one
+ * was picked), and selects it. Board + type +
  * repos + description are the base of a ticket.
  */
 import { useMemo, useState } from 'react';
@@ -15,6 +16,8 @@ import { MultiSelect } from '../../ui/MultiSelect';
 import { WorkBoardPicker } from '../panel/WorkBoardPicker';
 import { DraftTypePicker } from './DraftTypePicker';
 import { DraftPriorityPicker } from './DraftPriorityPicker';
+import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from '../../tickets/RepoBaseBranchSelect';
+import { BusyLine } from '../../ui/Spinner';
 
 /** Title = the first sentence, capped at 70 chars (SPEC §8). */
 export function deriveTitle(text: string): string {
@@ -36,6 +39,8 @@ export function NewTask() {
   const selectTicket = useWorkStore((s) => s.selectTicket);
   const addToast = useToastStore((s) => s.addToast);
   const [creating, setCreating] = useState(false);
+  // The step in flight while starting — attaching a big repo's worktree takes a while.
+  const [progress, setProgress] = useState<string | null>(null);
 
   const effectiveBoardId = draft.boardId ?? boards[0]?.id ?? null;
   const canStart = draft.text.trim().length > 0 && !!effectiveBoardId && !creating;
@@ -48,6 +53,7 @@ export function NewTask() {
   async function start() {
     if (!canStart || !effectiveBoardId) return;
     setCreating(true);
+    setProgress('Creating ticket…');
     try {
       const ticket = await createTicket({
         boardId: effectiveBoardId,
@@ -59,10 +65,12 @@ export function NewTask() {
       });
       // Attach each selected repo as a repository link (keeps going on failure).
       for (const key of draft.repoKeys) {
+        const baseBranch = draft.repoBaseBranches[key];
+        setProgress(`${key} · ${REPO_BUSY_LABEL.attach(baseBranch || undefined)}`);
         try {
-          await addLink(ticket.id, { type: 'repository', ref: key, label: key });
-        } catch {
-          addToast('error', `Couldn't attach ${key}`);
+          await addLink(ticket.id, { type: 'repository', ref: key, label: key, ...(baseBranch ? { baseBranch } : {}) });
+        } catch (e) {
+          addToast('error', `Couldn't attach ${key}: ${extractLinkError(e)}`);
         }
       }
       resetDraft();
@@ -72,6 +80,7 @@ export function NewTask() {
       addToast('error', e instanceof Error ? e.message : 'Failed to create task');
     } finally {
       setCreating(false);
+      setProgress(null);
     }
   }
 
@@ -111,7 +120,14 @@ export function NewTask() {
                 label="Repos"
                 allLabel="No repo"
                 values={draft.repoKeys}
-                onChange={(repoKeys) => updateDraft({ repoKeys })}
+                onChange={(repoKeys) =>
+                  updateDraft({
+                    repoKeys,
+                    repoBaseBranches: Object.fromEntries(
+                      Object.entries(draft.repoBaseBranches).filter(([key]) => repoKeys.includes(key)),
+                    ),
+                  })
+                }
                 options={repoOptions}
                 searchPlaceholder="Filter repos…"
               />
@@ -127,10 +143,37 @@ export function NewTask() {
           </div>
         </div>
 
+        {/* Base branch per selected repo — empty means the repo's default branch */}
+        {draft.repoKeys.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-[var(--theme-border-subtle)] pt-3">
+            <span className="text-[9.5px] font-semibold tracking-[0.06em] text-[var(--theme-text-muted)]">BASE BRANCH</span>
+            {draft.repoKeys.map((key) => (
+              <div key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="w-56 max-w-full truncate font-mono text-[11px] text-[var(--theme-text-secondary)]" title={key}>
+                  ⎇ {key}
+                </span>
+                <div className="min-w-[12rem] flex-1">
+                  <RepoBaseBranchSelect
+                    repoKey={key}
+                    value={draft.repoBaseBranches[key] ?? ''}
+                    disabled={creating}
+                    onChange={(v) => updateDraft({ repoBaseBranches: { ...draft.repoBaseBranches, [key]: v } })}
+                    className="bg-[var(--theme-bg-base)] text-[11px]"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="mt-3 flex items-center gap-2 border-t border-[var(--theme-border-subtle)] pt-3">
-          <span className="text-[11px] text-[var(--theme-text-faint)]">
-            ⏎ starts{effectiveBoardId ? ` · on ${boards.find((b) => b.id === effectiveBoardId)?.name}` : ''}
-          </span>
+          {progress ? (
+            <BusyLine label={progress} />
+          ) : (
+            <span className="text-[11px] text-[var(--theme-text-faint)]">
+              ⏎ starts{effectiveBoardId ? ` · on ${boards.find((b) => b.id === effectiveBoardId)?.name}` : ''}
+            </span>
+          )}
           <button
             type="button"
             onClick={cancel}
