@@ -46,6 +46,13 @@ export interface TicketLink {
   readonly label: string;
   readonly url: string | null;
   readonly createdAt: string;
+  /**
+   * Only meaningful for `type === 'repository'`. Remote branch on `origin`
+   * (stored WITHOUT the `origin/` prefix, e.g. `feat/big-refacto`) that the
+   * ticket's worktree branch is derived from. Absent ⇒ the repository's default
+   * branch. Applied only at worktree creation; never rebases an existing one.
+   */
+  readonly baseBranch?: string;
 }
 
 export interface GitHubIssueMetadata {
@@ -129,7 +136,6 @@ export interface CreateTicketRequest {
   readonly links?: Omit<TicketLink, 'id' | 'createdAt'>[];
   readonly dueDate?: string | null;
   readonly githubIssueUrl?: string;
-  readonly worktreeBranch?: string;
 }
 
 export interface UpdateTicketRequest {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import type { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
@@ -1105,14 +1105,24 @@ Be concise and decision-oriented. Write in the same language as the panel member
         }
       }
 
+      // Per-repo base branch (D9): only when we mint a fresh ticket branch.
+      const baseBranch = resolveBaseRef(ticket.links, repo.org, repo.name);
       try {
         let usedBranch = branchName;
         try {
-          await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: branchName, createNewBranch });
+          await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+            branch: branchName,
+            createNewBranch,
+            ...(createNewBranch && baseBranch ? { baseBranch } : {}),
+          });
         } catch {
           if (!createNewBranch) {
             usedBranch = buildTicketBranchName(ticket.title, ticket.id);
-            await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: usedBranch, createNewBranch: true });
+            await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+              branch: usedBranch,
+              createNewBranch: true,
+              ...(baseBranch ? { baseBranch } : {}),
+            });
           } else {
             throw new Error(`Failed to create branch ${branchName}`);
           }

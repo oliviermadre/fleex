@@ -240,7 +240,14 @@ export class TicketEntity {
    * rows behind. Callers that need to tell a create from a no-op compare the
    * returned `id` against the one they passed in, or use `findLink` first.
    */
-  addLink(type: TicketLinkType, ref: string, label: string, url: string | null, linkId: string): TicketLink {
+  addLink(
+    type: TicketLinkType,
+    ref: string,
+    label: string,
+    url: string | null,
+    linkId: string,
+    baseBranch?: string,
+  ): TicketLink {
     const existing = this.findLink(type, ref);
     if (existing) return existing;
 
@@ -251,6 +258,9 @@ export class TicketEntity {
       label,
       url,
       createdAt: new Date().toISOString(),
+      // Only carry a base branch on repository links; keep it off the JSON
+      // entirely when absent so unrelated link types stay byte-identical.
+      ...(type === 'repository' && baseBranch ? { baseBranch } : {}),
     };
     this.links = [...this.links, link];
     this.updatedAt = new Date();
@@ -260,6 +270,36 @@ export class TicketEntity {
   /** Find an existing link by its identity pair `(type, ref)`. */
   findLink(type: TicketLinkType, ref: string): TicketLink | undefined {
     return this.links.find((l) => l.type === type && l.ref === ref);
+  }
+
+  /** Find a link by its opaque id. */
+  findLinkById(linkId: string): TicketLink | undefined {
+    return this.links.find((l) => l.id === linkId);
+  }
+
+  /**
+   * Set (or clear, with `undefined`) the base branch of a repository link.
+   * Returns the `{from,to}` diff for the activity trail, or `null` when the
+   * link is unknown, not a repository, or the value is unchanged. Normalisation
+   * (strip `origin/`, default-branch collapsing) is the caller's job — this
+   * only mutates and reports.
+   */
+  setLinkBaseBranch(
+    linkId: string,
+    baseBranch: string | undefined,
+  ): { from: string | undefined; to: string | undefined } | null {
+    const link = this.findLinkById(linkId);
+    if (!link || link.type !== 'repository') return null;
+    const from = link.baseBranch;
+    if (from === baseBranch) return null;
+
+    const next: TicketLink = { ...link };
+    if (baseBranch) (next as { baseBranch?: string }).baseBranch = baseBranch;
+    else delete (next as { baseBranch?: string }).baseBranch;
+
+    this.links = this.links.map((l) => (l.id === linkId ? next : l));
+    this.updatedAt = new Date();
+    return { from, to: baseBranch };
   }
 
   removeLink(linkId: string): boolean {

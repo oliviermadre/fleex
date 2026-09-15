@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
 
 export function agentWorktreesRoutes(container: Container) {
@@ -69,7 +69,9 @@ export function agentWorktreesRoutes(container: Container) {
         const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
         const wtPath = container.resolver.workspaceRepoPath(workspaceId, repoName);
 
-        const baseBranch = request.body?.baseBranch;
+        // D9: an explicit body baseBranch wins; otherwise fall back to the
+        // repository link's configured base (as `origin/<base>`).
+        const baseBranch = request.body?.baseBranch ?? resolveBaseRef(ticket.links, repoOrg, repoName);
         await container.createWorktree.execute(repoOrg, repoName, wtPath, {
           branch: branchName,
           createNewBranch: true,

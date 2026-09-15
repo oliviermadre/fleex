@@ -66,6 +66,35 @@ export function colorizeCost(usd: number): string {
 }
 
 /**
+ * Parse a repository ref with an optional base branch: `org/name` or
+ * `org/name@feat/x`. The base branch is the (optional) remote branch on origin
+ * a ticket's worktree should be derived from. Exits with a helpful message on
+ * malformed input (bad `org/name`, or an `@` with no branch after it).
+ *
+ * `@` is used as the separator because it is invalid inside `org/name`, so the
+ * whole thing stays a single, shell-friendly token.
+ */
+export function parseRepoRef(input: string): { ref: string; org: string; name: string; baseBranch?: string } {
+  const atIdx = input.indexOf('@');
+  const repoPart = atIdx === -1 ? input : input.substring(0, atIdx);
+  const basePart = atIdx === -1 ? undefined : input.substring(atIdx + 1);
+
+  const slashIdx = repoPart.indexOf('/');
+  if (slashIdx <= 0 || slashIdx !== repoPart.lastIndexOf('/') || slashIdx === repoPart.length - 1) {
+    die(`Invalid --repo "${input}" (expected format org/name or org/name@base, e.g. github/fleex or github/fleex@feat/x)`);
+  }
+  if (atIdx !== -1 && (!basePart || basePart.trim() === '')) {
+    die(`Invalid --repo "${input}" (found '@' but no base branch after it, e.g. github/fleex@feat/x)`);
+  }
+  return {
+    ref: repoPart,
+    org: repoPart.substring(0, slashIdx),
+    name: repoPart.substring(slashIdx + 1),
+    ...(basePart ? { baseBranch: basePart.trim() } : {}),
+  };
+}
+
+/**
  * Parse and validate a GitHub PR/issue reference in the form `org/name#123`.
  * Exits with a helpful message on malformed input. Returns the canonical ref
  * plus its parts and a GitHub URL (`/pull/` or `/issues/` per `kind`).

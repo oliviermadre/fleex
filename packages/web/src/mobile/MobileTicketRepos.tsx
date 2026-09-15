@@ -45,6 +45,14 @@ export function MobileTicketRepos({ ticket }: { ticket: Ticket }) {
           className="flex items-center gap-1 rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] py-1 pl-2.5 pr-1 text-[11px] text-[var(--theme-text-secondary)]"
         >
           {link.ref}
+          {link.baseBranch && (
+            <span
+              className="rounded-full bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-accent)]"
+              title={`Base branch: ${link.baseBranch}`}
+            >
+              ⎇ {link.baseBranch}
+            </span>
+          )}
           <button
             onClick={() => removeLink(ticket.id, link.id)}
             className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--theme-text-faint)] active:text-[var(--theme-danger)]"
