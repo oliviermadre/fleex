@@ -647,6 +647,7 @@ function ExpandedTicketMetaSidebar({
 
       {/* Repository & Worktree */}
       <RepoWorktreePicker
+        ticketId={ticket.id}
         boardId={ticket.boardId}
         repoLinks={ticket.links.filter((l: TicketLink) => l.type === 'repository')}
         onAddLink={(link) => addLink(ticket.id, link)}
@@ -791,19 +792,96 @@ function ExpandedTicketMetaSidebar({
 // ── Repository & Worktree Picker ──
 // Multi-repo picker — manages repository links on the ticket.
 
+/**
+ * Turn the raw `git branch` list from `fetchBranches` into base-branch picker
+ * options: the origin remote's branches (minus `origin/HEAD`, `origin/` prefix
+ * stripped) plus the local default branch, which the picker offers as "default".
+ */
+function toBaseBranchOptions(branches: string[]): { defaultBranch: string | null; originBranches: string[] } {
+  const local = branches.filter((b) => !b.startsWith('origin/'));
+  const defaultBranch = local.find((b) => b === 'main' || b === 'master') ?? local[0] ?? null;
+  const originBranches = branches
+    .filter((b) => b.startsWith('origin/') && b !== 'origin/HEAD')
+    .map((b) => b.slice('origin/'.length));
+  return { defaultBranch, originBranches };
+}
+
+/** Pull the clean `{ error }` message out of a request() failure (thrown as `API error NNN: {json}`). */
+function extractLinkError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  const braceIdx = msg.indexOf('{');
+  if (braceIdx >= 0) {
+    try {
+      const json = JSON.parse(msg.slice(braceIdx)) as { error?: unknown };
+      if (typeof json.error === 'string') return json.error;
+    } catch {
+      // fall through to the raw message
+    }
+  }
+  return msg;
+}
+
 function RepoWorktreePicker({
+  ticketId,
   boardId,
   repoLinks,
   onAddLink,
   onRemoveLink,
 }: {
+  ticketId: string;
   boardId: string;
   repoLinks: Ticket['links'][number][];
-  onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
+  onAddLink: (link: { type: string; ref: string; label: string; url?: string; baseBranch?: string }) => Promise<void>;
   onRemoveLink: (linkId: string) => Promise<void>;
 }) {
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
   const tickets = useTicketStore((s) => s.tickets);
+
+  // Staged repo for the "+ Add" flow: chosen but not yet linked, so a base
+  // branch can be picked first.
+  const [pendingRepo, setPendingRepo] = useState<string | null>(null);
+  const [pendingBaseBranch, setPendingBaseBranch] = useState<string>('');
+  const [pendingBranches, setPendingBranches] = useState<string[] | null>(null);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    if (!pendingRepo) return;
+    const slashIdx = pendingRepo.indexOf('/');
+    if (slashIdx <= 0) return;
+    const org = pendingRepo.slice(0, slashIdx);
+    const name = pendingRepo.slice(slashIdx + 1);
+    let cancelled = false;
+    setPendingLoading(true);
+    setPendingBranches(null);
+    api.fetchBranches(org, name)
+      .then((b) => { if (!cancelled) setPendingBranches(b); })
+      .catch(() => { if (!cancelled) setPendingBranches([]); })
+      .finally(() => { if (!cancelled) setPendingLoading(false); });
+    return () => { cancelled = true; };
+  }, [pendingRepo]);
+
+  const pendingOptions = useMemo(
+    () => toBaseBranchOptions(pendingBranches ?? []),
+    [pendingBranches],
+  );
+
+  const confirmAdd = async () => {
+    if (!pendingRepo) return;
+    setAdding(true);
+    try {
+      await onAddLink({
+        type: 'repository',
+        ref: pendingRepo,
+        label: pendingRepo,
+        ...(pendingBaseBranch ? { baseBranch: pendingBaseBranch } : {}),
+      });
+      setPendingRepo(null);
+      setPendingBaseBranch('');
+    } finally {
+      setAdding(false);
+    }
+  };
 
   const repos = useMemo(() => {
     return resolvedRepositories
@@ -841,24 +919,7 @@ function RepoWorktreePicker({
       {repoLinks.length > 0 && (
         <div className="mb-1.5 space-y-1">
           {repoLinks.map((link) => (
-            <div key={link.id} className="flex items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-                  <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
-                </svg>
-                <span className="truncate text-xs text-[var(--theme-text-secondary)]">{link.ref}</span>
-              </div>
-              <button
-                className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-                onClick={() => onRemoveLink(link.id)}
-                title="Remove repository"
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="4" y1="4" x2="12" y2="12" />
-                  <line x1="12" y1="4" x2="4" y2="12" />
-                </svg>
-              </button>
-            </div>
+            <RepoLinkRow key={link.id} ticketId={ticketId} link={link} onRemoveLink={onRemoveLink} />
           ))}
         </div>
       )}
@@ -878,14 +939,53 @@ function RepoWorktreePicker({
         </div>
       )}
       {/* Add repo */}
-      {availableRepos.length > 0 ? (
+      {pendingRepo ? (
+        <div className="space-y-1 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] p-1.5">
+          <div className="flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+              <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+            </svg>
+            <span className="truncate text-xs text-[var(--theme-text-secondary)]">{pendingRepo}</span>
+          </div>
+          <select
+            className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none disabled:opacity-50"
+            value={pendingBaseBranch}
+            disabled={pendingLoading || adding}
+            onChange={(e) => setPendingBaseBranch(e.target.value)}
+          >
+            <option value="">
+              {pendingLoading ? 'Loading branches…' : `${pendingOptions.defaultBranch ?? 'main'} (default)`}
+            </option>
+            {pendingOptions.originBranches.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+          <div className="flex gap-1">
+            <button
+              className="flex-1 rounded-md bg-[var(--theme-accent)] px-2 py-1 text-[10px] font-medium text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
+              onClick={confirmAdd}
+              disabled={adding}
+            >
+              {adding ? 'Adding…' : 'Add repository'}
+            </button>
+            <button
+              className="rounded-md border border-[var(--theme-border-input)] px-2 py-1 text-[10px] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] disabled:opacity-50"
+              onClick={() => { setPendingRepo(null); setPendingBaseBranch(''); }}
+              disabled={adding}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : availableRepos.length > 0 ? (
         <select
           className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
           value=""
-          onChange={async (e) => {
+          onChange={(e) => {
             const key = e.target.value;
             if (key) {
-              await onAddLink({ type: 'repository', ref: key, label: key });
+              setPendingBaseBranch('');
+              setPendingRepo(key);
             }
           }}
         >
@@ -897,6 +997,121 @@ function RepoWorktreePicker({
       ) : repos.length === 0 ? (
         <span className="text-[10px] text-[var(--theme-text-muted)]">No repositories configured</span>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * One linked repository row: the repo pill with its base-branch badge, an edit
+ * control that opens an inline branch picker, and the remove button. Editing
+ * PATCHes the link's base branch; a 409 (worktree exists) or 422 (missing
+ * branch) is surfaced inline in red.
+ */
+function RepoLinkRow({
+  ticketId,
+  link,
+  onRemoveLink,
+}: {
+  ticketId: string;
+  link: Ticket['links'][number];
+  onRemoveLink: (linkId: string) => Promise<void>;
+}) {
+  const patchLinkBaseBranch = useTicketStore((s) => s.patchLinkBaseBranch);
+  const [editing, setEditing] = useState(false);
+  const [branches, setBranches] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const slashIdx = link.ref.indexOf('/');
+  const org = slashIdx > 0 ? link.ref.slice(0, slashIdx) : '';
+  const name = slashIdx > 0 ? link.ref.slice(slashIdx + 1) : '';
+
+  useEffect(() => {
+    if (!editing || branches !== null || !org || !name) return;
+    let cancelled = false;
+    setLoading(true);
+    api.fetchBranches(org, name)
+      .then((b) => { if (!cancelled) setBranches(b); })
+      .catch(() => { if (!cancelled) setBranches([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [editing, branches, org, name]);
+
+  const options = useMemo(() => toBaseBranchOptions(branches ?? []), [branches]);
+
+  const handleSelect = async (value: string) => {
+    setError(null);
+    setSaving(true);
+    try {
+      await patchLinkBaseBranch(ticketId, link.id, value || null);
+      setEditing(false);
+    } catch (e) {
+      setError(extractLinkError(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+            <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+          </svg>
+          <span className="truncate text-xs text-[var(--theme-text-secondary)]">{link.ref}</span>
+          {link.baseBranch ? (
+            <span
+              className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1 py-0.5 text-[10px] font-medium text-[var(--theme-accent)]"
+              title={`Base branch: ${link.baseBranch}`}
+            >
+              ⎇ {link.baseBranch}
+            </span>
+          ) : (
+            <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]" title="Uses the repository default branch">
+              default
+            </span>
+          )}
+        </div>
+        <button
+          className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-accent)]"
+          onClick={() => { setError(null); setEditing((v) => !v); }}
+          title="Change base branch"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.249.249 0 0 0 .108-.064l6.286-6.286Z" />
+          </svg>
+        </button>
+        <button
+          className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+          onClick={() => onRemoveLink(link.id)}
+          title="Remove repository"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="4" y1="4" x2="12" y2="12" />
+            <line x1="12" y1="4" x2="4" y2="12" />
+          </svg>
+        </button>
+      </div>
+      {editing && (
+        <select
+          className="mt-1 w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none disabled:opacity-50"
+          value={link.baseBranch ?? ''}
+          disabled={loading || saving}
+          onChange={(e) => handleSelect(e.target.value)}
+        >
+          <option value="">
+            {loading ? 'Loading branches…' : `${options.defaultBranch ?? 'main'} (default)`}
+          </option>
+          {options.originBranches.map((b) => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+      )}
+      {error && (
+        <p className="mt-1 text-[10px] text-[var(--theme-danger)]">{error}</p>
+      )}
     </div>
   );
 }

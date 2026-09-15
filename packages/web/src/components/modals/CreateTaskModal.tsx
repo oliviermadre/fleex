@@ -20,6 +20,54 @@ const MODES: { key: TaskMode; label: string }[] = [
   { key: 'review', label: 'To Review' },
 ];
 
+/**
+ * Base-branch picker options from a raw `fetchBranches` list: origin remote
+ * branches (minus `origin/HEAD`, `origin/` prefix stripped) plus the local
+ * default, offered as "default".
+ */
+function originBranchOptions(branches: string[]): { defaultBranch: string | null; originBranches: string[] } {
+  const local = branches.filter((b) => !b.startsWith('origin/'));
+  const defaultBranch = local.find((b) => b === 'main' || b === 'master') ?? local[0] ?? null;
+  const originBranches = branches
+    .filter((b) => b.startsWith('origin/') && b !== 'origin/HEAD')
+    .map((b) => b.slice('origin/'.length));
+  return { defaultBranch, originBranches };
+}
+
+/** Native base-branch select for one selected repo; loads its branches on mount. */
+function RepoBaseBranchPicker({ repoKey, value, onChange }: { repoKey: string; value: string; onChange: (v: string) => void }) {
+  const [branches, setBranches] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const slashIdx = repoKey.indexOf('/');
+    if (slashIdx <= 0) return;
+    const org = repoKey.slice(0, slashIdx);
+    const name = repoKey.slice(slashIdx + 1);
+    let cancelled = false;
+    setLoading(true);
+    api.fetchBranches(org, name)
+      .then((b) => { if (!cancelled) setBranches(b); })
+      .catch(() => { if (!cancelled) setBranches([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [repoKey]);
+  const options = originBranchOptions(branches ?? []);
+  return (
+    <select
+      className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none disabled:opacity-50"
+      value={value}
+      disabled={loading}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">{loading ? 'Loading branches…' : `${options.defaultBranch ?? 'main'} (default)`}</option>
+      {options.originBranches.map((b) => (
+        <option key={b} value={b}>{b}</option>
+      ))}
+    </select>
+  );
+}
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   if (diff < 0) return 'now';
@@ -63,6 +111,7 @@ export function CreateTaskModal() {
   const repos = useRepositoryStore((s) => s.repositories);
   const fetchRepositories = useRepositoryStore((s) => s.fetchRepositories);
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+  const [repoBaseBranch, setRepoBaseBranch] = useState<Record<string, string>>({});
   const [loadingRepos, setLoadingRepos] = useState(false);
 
   // Load data when modal opens
@@ -115,6 +164,7 @@ export function CreateTaskModal() {
       setSelectedPR(null);
       setTaskTitle('');
       setSelectedRepos(new Set());
+      setRepoBaseBranch({});
       setError('');
       setCreating(false);
     }
@@ -185,7 +235,8 @@ export function CreateTaskModal() {
         if (!boardId) { setError('No board available'); return; }
         const repoLinks = [...selectedRepos].map((key) => {
           const name = key.split('/')[1] ?? key;
-          return { type: 'repository' as const, ref: key, label: name, url: null as string | null };
+          const baseBranch = repoBaseBranch[key];
+          return { type: 'repository' as const, ref: key, label: name, url: null as string | null, ...(baseBranch ? { baseBranch } : {}) };
         });
         const ticket = await createTicket({
           boardId,
@@ -215,7 +266,7 @@ export function CreateTaskModal() {
       setError(err instanceof Error ? err.message : 'Failed to create task');
       setCreating(false);
     }
-  }, [mode, selectedTicketId, selectedPR, taskTitle, selectedBoardId, selectedRepos, boards, tickets, createTicket, openSessionFromTicket, setActivePanel, selectTicketTab, closeModal]);
+  }, [mode, selectedTicketId, selectedPR, taskTitle, selectedBoardId, selectedRepos, repoBaseBranch, boards, tickets, createTicket, openSessionFromTicket, setActivePanel, selectTicketTab, closeModal]);
 
   // Cmd+Enter to submit
   useEffect(() => {
@@ -427,27 +478,37 @@ export function CreateTaskModal() {
                   const key = `${r.org}/${r.name}`;
                   const selected = selectedRepos.has(key);
                   return (
-                    <button
-                      key={key}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
-                        selected
-                          ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'
-                          : 'text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]',
+                    <div key={key}>
+                      <button
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
+                          selected
+                            ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'
+                            : 'text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]',
+                        )}
+                        onClick={() => toggleRepo(key)}
+                      >
+                        <span className={cn(
+                          'flex h-4 w-4 items-center justify-center rounded border text-[10px] flex-shrink-0',
+                          selected
+                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
+                            : 'border-[var(--theme-border-input)]',
+                        )}>
+                          {selected && '✓'}
+                        </span>
+                        <span className="text-[var(--theme-text-faint)] text-xs">{r.org}/</span>
+                        <span className="font-medium">{r.name}</span>
+                      </button>
+                      {selected && (
+                        <div className="mb-1 mt-0.5 pl-8 pr-2">
+                          <RepoBaseBranchPicker
+                            repoKey={key}
+                            value={repoBaseBranch[key] ?? ''}
+                            onChange={(v) => setRepoBaseBranch((prev) => ({ ...prev, [key]: v }))}
+                          />
+                        </div>
                       )}
-                      onClick={() => toggleRepo(key)}
-                    >
-                      <span className={cn(
-                        'flex h-4 w-4 items-center justify-center rounded border text-[10px] flex-shrink-0',
-                        selected
-                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
-                          : 'border-[var(--theme-border-input)]',
-                      )}>
-                        {selected && '✓'}
-                      </span>
-                      <span className="text-[var(--theme-text-faint)] text-xs">{r.org}/</span>
-                      <span className="font-medium">{r.name}</span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

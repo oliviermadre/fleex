@@ -133,13 +133,23 @@ export class FakeGitPort implements GitPort {
     return [];
   }
 
-  async createWorktree(): Promise<void> {}
+  /** Every createWorktree call, in order — lets tests assert branch/base args. */
+  createWorktreeCalls: Array<{ repoPath: string; wtPath: string; branch: string; createNew: boolean; base?: string }> = [];
+  /** Branches origin is pretended to have for `remoteBranchExists`. null ⇒ all exist. */
+  remoteBranches: Set<string> | null = null;
+  async createWorktree(repoPath: string, wtPath: string, branch: string, createNew: boolean, base?: string): Promise<void> {
+    this.createWorktreeCalls.push({ repoPath, wtPath, branch, createNew, base });
+  }
   async removeWorktree(): Promise<void> {}
   async moveWorktree(): Promise<void> {}
   async getDefaultBranch(): Promise<string> {
     return 'main';
   }
+  async remoteBranchExists(_repoPath: string, branch: string): Promise<boolean> {
+    return this.remoteBranches === null ? true : this.remoteBranches.has(branch);
+  }
   async fetch(): Promise<void> {}
+  async fetchRef(): Promise<void> {}
   async getDiffStats(): Promise<DiffStats> {
     return { commitsAhead: 0, commitsBehind: 0, filesChanged: 0, additions: 0, deletions: 0 };
   }

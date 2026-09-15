@@ -120,9 +120,15 @@ export class GitCliAdapter implements GitPort {
   ): Promise<void> {
     const args = ['worktree', 'add'];
     if (createNew) {
-      args.push('-b', branch, wtPath);
+      // --no-track: the ticket branch must NOT adopt the base as its upstream.
+      // A base like `origin/feat/big-refacto` is an unprotected PR branch; with
+      // git's default upstream tracking, a bare `git push` (push.default=upstream)
+      // would overwrite the parent PR. We always create detached-from-upstream
+      // ticket branches; the agent pushes to its own branch explicitly.
       if (base) {
-        args.push(base);
+        args.push('--no-track', '-b', branch, wtPath, base);
+      } else {
+        args.push('-b', branch, wtPath);
       }
     } else {
       args.push(wtPath, branch);
@@ -164,6 +170,22 @@ export class GitCliAdapter implements GitPort {
       if (branches.includes('main')) return 'main';
       if (branches.includes('master')) return 'master';
       return branches[0] ?? 'main';
+    }
+  }
+
+  async remoteBranchExists(repoPath: string, branch: string): Promise<boolean> {
+    try {
+      const { stdout } = await this.execFn(
+        'git',
+        ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+        { cwd: repoPath },
+      );
+      return stdout.trim().length > 0;
+    } catch {
+      // Network/remote failure: treat as "can't confirm". Callers decide how to
+      // handle — the worktree creation will surface a hard error later if the
+      // branch really is gone (D7), so we don't block attachment on a transient.
+      return false;
     }
   }
 

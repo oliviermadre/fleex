@@ -181,6 +181,23 @@ export class CreateWorktreeUseCase {
           });
         }
       }
+      // A custom base branch that git can't resolve means the branch the ticket
+      // was derived from is gone from origin (e.g. the parent PR was merged and
+      // its branch deleted). Fail loud with an actionable message — NEVER fall
+      // back to the default branch, which would silently produce work against
+      // the wrong base (D7).
+      if (
+        request.baseBranch &&
+        (message.includes('invalid reference') ||
+          message.includes('not a valid object name') ||
+          message.includes(request.baseBranch))
+      ) {
+        const bareBase = request.baseBranch.replace(/^origin\//, '');
+        throw new WorktreeError(
+          `Base branch '${bareBase}' not found on origin for ${org}/${name}. ` +
+            `Edit the ticket's base branch.`,
+        );
+      }
       throw new WorktreeError(`Failed to create worktree: ${message}`);
     }
   }

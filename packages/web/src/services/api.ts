@@ -452,9 +452,19 @@ export async function reorderTickets(updates: { id: string; status: import('@fle
   await request<{ ok: boolean }>('/tickets/reorder', { method: 'POST', body: JSON.stringify({ updates }) });
 }
 
-export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string }): Promise<import('@fleex/shared').TicketLink> {
+export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string }): Promise<import('@fleex/shared').TicketLink> {
   return request<import('@fleex/shared').TicketLink>(`/tickets/${encodeURIComponent(id)}/links`, {
     method: 'POST', body: JSON.stringify(link),
+  });
+}
+
+/**
+ * Set (or clear, with `null`) the base branch of a repository link. The server
+ * validates the branch against origin and returns the full updated ticket DTO.
+ */
+export async function patchTicketLink(id: string, linkId: string, baseBranch: string | null): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}`, {
+    method: 'PATCH', body: JSON.stringify({ baseBranch }),
   });
 }
 
