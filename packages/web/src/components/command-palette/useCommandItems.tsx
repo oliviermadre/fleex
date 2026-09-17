@@ -58,7 +58,7 @@ export function useCommandItems(query: string): CommandItem[] {
 
     // ── Views ──
     const views: { panel: 'work' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings'; label: string }[] = [
-      { panel: 'work', label: 'Work' },
+      { panel: 'work', label: 'Tasks' },
       { panel: 'sessions', label: 'Sessions' },
       { panel: 'repositories', label: 'Repositories' },
       { panel: 'tickets', label: 'Tickets' },

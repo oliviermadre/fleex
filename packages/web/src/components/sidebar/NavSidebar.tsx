@@ -85,8 +85,8 @@ export function NavSidebar() {
                 <line x1="9" y1="3" x2="9" y2="21" />
               </svg>
             }
-            label="Work"
-            shortLabel="Work"
+            label="Tasks"
+            shortLabel="Tasks"
             active={activePanel === 'work'}
             collapsed={navCollapsed}
             onClick={() => navigate('/work')}
