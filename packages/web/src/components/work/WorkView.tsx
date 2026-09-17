@@ -1,12 +1,12 @@
 /**
  * WorkView — the « Work » single-screen surface, rendered by MainPanel when
- * activePanel === 'work'. It owns everything right of the nav rail: its own top
- * bar and status bar, the task queue (left), the conversation / new-task center,
- * and the one-at-a-time right tool window with its tool strip.
+ * activePanel === 'work'. It owns everything right of the nav rail: the task
+ * queue (left), the conversation / new-task center with its own top bar, the
+ * one-at-a-time right tool window with its tool strip, and the status bar.
  *
- * Layout (SPEC §1): a top bar and status bar sandwich a middle row of
- *   QUEUE 300px · CENTER minmax(0,1fr) · RIGHT PANEL (toggle) · TOOL STRIP 60px.
- * The shell drawer (⌘J) and shell mode land in Phase 2.
+ * Layout (SPEC §1): the full-height QUEUE 300px, then a column holding the top
+ * bar above CENTER minmax(0,1fr) · RIGHT PANEL (toggle) · TOOL STRIP 60px and
+ * the shell drawer (⌘J). The status bar spans the whole width, underneath.
  */
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
@@ -89,40 +89,45 @@ export function WorkView() {
       className="flex h-full min-h-0 w-full flex-col overflow-auto bg-[var(--theme-bg-base)] text-[var(--theme-text-primary)]"
       style={{ minWidth: 1180, minHeight: 560 }}
     >
-      <WorkTopBar queue={queue} />
-
       <div className="flex min-h-0 flex-1">
+        {/* The queue runs the full height, so the top bar starts to its right. */}
         {queueCollapsed ? (
           <CollapsedQueueRail counts={queue.counts} />
         ) : (
           <WorkQueue queue={queue} onOpenExecution={openExecution} />
         )}
 
-        <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
-          {view === 'new' ? (
-            <NewTask />
-          ) : codeMode && selectedTask ? (
-            <CodeEditor ticketId={selectedTask.id} />
-          ) : shellMode && selectedTask ? (
-            <ShellSurface key={selectedTask.id} ticketId={selectedTask.id} />
-          ) : workflowMode && selectedTask && hasWorkflowRuns ? (
-            <TicketWorkflowTab ticketId={selectedTask.id} />
-          ) : (
-            <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <WorkTopBar queue={queue} />
+
+          <div className="flex min-h-0 flex-1">
+            <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
+              {view === 'new' ? (
+                <NewTask />
+              ) : codeMode && selectedTask ? (
+                <CodeEditor ticketId={selectedTask.id} />
+              ) : shellMode && selectedTask ? (
+                <ShellSurface key={selectedTask.id} ticketId={selectedTask.id} />
+              ) : workflowMode && selectedTask && hasWorkflowRuns ? (
+                <TicketWorkflowTab ticketId={selectedTask.id} />
+              ) : (
+                <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+              )}
+            </main>
+
+            {view === 'task' && rightPanel && selectedTask && (
+              <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
+            )}
+
+            {view === 'task' && <ToolStrip task={selectedTask} delivCount={deliverables.length} />}
+          </div>
+
+          {/* Shell drawer (⌘J) — under the working area, beside the queue (SPEC §7). */}
+          {view === 'task' && selectedTask && shellOpen && !shellMode && (
+            <ShellDrawer key={selectedTask.id} ticketId={selectedTask.id} />
           )}
-        </main>
-
-        {view === 'task' && rightPanel && selectedTask && (
-          <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
-        )}
-
-        {view === 'task' && <ToolStrip task={selectedTask} delivCount={deliverables.length} />}
+        </div>
       </div>
-
-      {/* Bottom shell drawer (⌘J) — full width, below the middle row (SPEC §7). */}
-      {view === 'task' && selectedTask && shellOpen && !shellMode && (
-        <ShellDrawer key={selectedTask.id} ticketId={selectedTask.id} />
-      )}
 
       {view === 'task' && <WorkStatusBar task={selectedTask} />}
 
