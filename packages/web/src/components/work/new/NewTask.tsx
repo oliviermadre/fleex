@@ -1,5 +1,5 @@
 /**
- * New task card (⌥N or + New). One card, no form: describe the task, pick a
+ * New task card (⌥N or + New Task). One card, no form: describe the task, pick a
  * board, a type, and optionally epics and repos, then Start. On start it
  * creates a real ticket (status Doing, title = first sentence ≤ 70 chars), adds
  * it to each selected epic, attaches a `repository` link per selected repo (with

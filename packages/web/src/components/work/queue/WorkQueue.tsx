@@ -13,6 +13,8 @@ import { GroupBySelect } from './GroupBySelect';
 import { PriorityIndicator, PRIORITY_LABELS } from '../../tickets/PriorityIndicator';
 import type { WorkQueueModel } from '../useWorkQueue';
 import { QueueRow } from './QueueRow';
+import { PlusIcon, SidePanelIcon } from '../../sidebar/icons';
+import { HotkeyBadge } from '../../ui/HotkeyBadge';
 
 interface Props {
   queue: WorkQueueModel;
@@ -95,34 +97,26 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
         className="absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize hover:bg-[var(--theme-accent-muted)]"
         title="Drag to resize"
       />
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5">
-        <span className="text-[13px] font-semibold">
-          TASKS <span className="text-[var(--theme-text-muted)]">{queue.counts.total}</span>
+      {/* Header — same title treatment as the app's other sidebars (SidebarHeader) */}
+      <div
+        className="flex shrink-0 items-center justify-between border-b border-[var(--theme-border)] px-3"
+        style={{ height: 'var(--header-height)' }}
+      >
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Tasks <span className="text-[var(--theme-text-faint)]">{queue.counts.total}</span>
         </span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setView('new')}
-            className="rounded-md bg-[var(--theme-accent)] px-2 py-1 text-[12px] font-medium text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]"
-          >
-            + New
-          </button>
-          <button
-            type="button"
-            onClick={toggleQueueCollapsed}
-            title="Collapse queue"
-            className="rounded-md p-1 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 6l-6 6 6 6" />
-            </svg>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={toggleQueueCollapsed}
+          title="Collapse tasks"
+          className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+        >
+          <SidePanelIcon size={14} />
+        </button>
       </div>
 
       {/* Filters: board multi-select · priority multi-select · favorite toggle · search */}
-      <div className="flex flex-col gap-1.5 px-3 pb-2">
+      <div className="flex flex-col gap-1.5 px-3 pb-2 pt-2">
         <div className="flex flex-wrap items-center gap-1">
           <MultiSelect
             label="Boards"
@@ -220,12 +214,31 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
           </div>
         ))}
 
+        {/* Carries on where the list stops, on a task row's own template (browser
+            tab strips do this): close enough to the last task to be seen, quiet
+            enough not to compete with it. It scrolls with the list — ⌥N is the
+            way in from anywhere. */}
+        <button
+          type="button"
+          onClick={() => setView('new')}
+          title="New task (⌥N)"
+          className="flex w-full cursor-pointer items-center gap-1.5 border-l-2 border-transparent px-2.5 py-2 text-left text-[13px] text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-accent)]"
+        >
+          {/* Sits in the row's picto column, so the label lines up with task titles. */}
+          <span className="flex w-[26px] shrink-0 items-center justify-center">
+            <PlusIcon size={14} />
+          </span>
+          New Task
+          <HotkeyBadge hotkey="⌥N" position="inline" />
+        </button>
+
         {queue.counts.total === 0 && (
-          <div className="px-3 py-8 text-center text-[12px] text-[var(--theme-text-faint)]">
-            No tasks match. Adjust filters, or start one with <span className="font-medium">+ New</span>.
+          <div className="px-3 pb-8 pt-2 text-center text-[12px] text-[var(--theme-text-faint)]">
+            No tasks match. Adjust the filters above.
           </div>
         )}
       </div>
+
     </aside>
   );
 }
