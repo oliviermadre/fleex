@@ -12,11 +12,10 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { OverlaySyncButton } from '../overlay-sync/OverlaySyncButton';
+import { GROUP_LABEL } from './topBarStyles';
 
 const ICON_BTN =
   'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
-
-const GROUP_LABEL = 'text-[9.5px] font-semibold tracking-[0.08em] text-[var(--theme-text-faint)]';
 
 /** First repository link "org/name" of a ticket, split for the overlay button. */
 function firstRepo(refs: string[]): { org: string; name: string } {

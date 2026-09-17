@@ -4,13 +4,14 @@
  * switching modes is consistent. Chat = none of the takeover flags; the takeover
  * modes are mutually exclusive in the store.
  * Workflow only appears when the selected ticket actually has workflow runs
- * (mirrors the old ticket-detail "Workflow" tab). Rendered icon-only to stay
- * compact with four items; each item expands to show its label on hover.
+ * (mirrors the old ticket-detail "Workflow" tab). Icon + full label on every
+ * item, under a MODE caption matching the bar's other groups.
  */
 import { useWorkStore, type WorkMode } from '../../stores/workStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { cn } from '../../lib/cn';
 import { activeMode } from './modes';
+import { GROUP_LABEL } from './topBarStyles';
 
 type Mode = WorkMode;
 
@@ -78,32 +79,31 @@ export function ModeSwitcher({ ticketId }: { ticketId: string | null }) {
   ];
 
   return (
-    // The whole switch is the hover group, so hovering any item unfurls ALL four
-    // labels at once (icon-only at rest keeps it compact with four items).
-    <div className="group/modes flex shrink-0 items-center gap-0.5 rounded-md border border-[var(--theme-border)] p-0.5">
-      {items.map((it) => {
-        const isActive = active === it.mode;
-        return (
-          <button
-            key={it.mode}
-            type="button"
-            onClick={() => setMode(it.mode)}
-            title={`${it.title}${CYCLE_HINT}`}
-            aria-label={it.label}
-            className={cn(
-              'flex cursor-pointer items-center rounded px-1.5 py-0.5 text-[11px] transition-colors',
-              isActive
-                ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
-                : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
-            )}
-          >
-            {it.icon}
-            <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-150 group-hover/modes:ml-1 group-hover/modes:max-w-[72px] group-hover/modes:opacity-100">
-              {it.label}
-            </span>
-          </button>
-        );
-      })}
+    <div className="flex shrink-0 items-center gap-1.5">
+      <span className={GROUP_LABEL}>MODE</span>
+      <div className="flex items-center gap-0.5 rounded-md border border-[var(--theme-border)] p-0.5">
+        {items.map((it) => {
+          const isActive = active === it.mode;
+          return (
+            <button
+              key={it.mode}
+              type="button"
+              onClick={() => setMode(it.mode)}
+              title={`${it.title}${CYCLE_HINT}`}
+              aria-label={it.label}
+              className={cn(
+                'flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors',
+                isActive
+                  ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                  : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
+              )}
+            >
+              {it.icon}
+              <span className="whitespace-nowrap">{it.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
