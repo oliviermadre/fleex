@@ -352,3 +352,28 @@ export function MissingRepoIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Side panel: a pane with its rail. Marks every collapse / expand control of a
+ * side panel (Session Tasks, the Work queue), so one gesture always looks the
+ * same. `mirrored` flips it to point the other way once the panel is collapsed.
+ */
+export function SidePanelIcon({ size = 16, className, mirrored }: IconProps & { mirrored?: boolean }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      style={mirrored ? { transform: 'scaleX(-1)' } : undefined}
+    >
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+      <line x1="6" y1="1.5" x2="6" y2="14.5" />
+    </svg>
+  );
+}
