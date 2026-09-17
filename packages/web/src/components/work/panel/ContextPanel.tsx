@@ -209,6 +209,11 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
     api.fetchPRStates(ticket.id).then(setPrStates).catch(() => {});
   }, [ticket?.id, prLinks.length]);
 
+  // Each PR's own size, from GitHub. Never `task.pr`: that one carries the
+  // worktree diff summed over every repo of the workspace, so showing it on a
+  // row would repeat one ticket-wide total next to each PR.
+  const prStatsByRef = useMemo(() => new Map(task.prs.map((p) => [p.ref, p])), [task.prs]);
+
   const attachableRepos = useMemo(() => {
     const attached = new Set(repoLinks.map((l) => l.ref));
     return repositories.map((r) => `${r.org}/${r.name}`).filter((key) => !attached.has(key));
@@ -379,7 +384,7 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
         <div className="flex flex-col gap-1.5">
           {prLinks.map((l) => {
             const parsed = parsePrLink(l);
-            const stats = task.pr && task.pr.additions != null ? task.pr : null;
+            const stats = prStatsByRef.get(l.ref) ?? null;
             return (
               <div key={l.id} className="group flex items-center gap-2">
                 {parsed ? (
@@ -392,9 +397,9 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
                 ) : (
                   <span className="font-mono text-[11px]">{l.ref}</span>
                 )}
-                {stats && (stats.additions! > 0 || (stats.deletions ?? 0) > 0) && (
+                {stats && ((stats.additions ?? 0) > 0 || (stats.deletions ?? 0) > 0) && (
                   <span className="inline-flex gap-1 font-mono text-[10.5px]">
-                    {stats.additions! > 0 && <span className={tintText('green')}>+{stats.additions}</span>}
+                    {(stats.additions ?? 0) > 0 && <span className={tintText('green')}>+{stats.additions}</span>}
                     {(stats.deletions ?? 0) > 0 && <span className={tintText('red')}>-{stats.deletions}</span>}
                   </span>
                 )}
