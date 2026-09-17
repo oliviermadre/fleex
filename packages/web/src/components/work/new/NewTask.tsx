@@ -1,10 +1,10 @@
 /**
  * New task card (⌥N or + New). One card, no form: describe the task, pick a
- * board, a type, and optionally one or more repos, then Start. On start it
- * creates a real ticket (status Doing, title = first sentence ≤ 70 chars),
- * attaches a `repository` link per selected repo (with its base branch when one
- * was picked), and selects it. Board + type +
- * repos + description are the base of a ticket.
+ * board, a type, and optionally epics and repos, then Start. On start it
+ * creates a real ticket (status Doing, title = first sentence ≤ 70 chars), adds
+ * it to each selected epic, attaches a `repository` link per selected repo (with
+ * its base branch when one was picked), and selects it. The board is kept for
+ * the next task; the repo picker lists the board's most used repos first.
  */
 import { useMemo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
@@ -12,12 +12,16 @@ import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { useWorkStore } from '../../../stores/workStore';
 import { useToastStore } from '../../../stores/toastStore';
+import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
+import { useBoardEpics } from '../../../hooks/useBoardEpics';
+import { topReposForBoard } from '../../../lib/repoStatus';
 import { MultiSelect } from '../../ui/MultiSelect';
 import { WorkBoardPicker } from '../panel/WorkBoardPicker';
 import { DraftTypePicker } from './DraftTypePicker';
 import { DraftPriorityPicker } from './DraftPriorityPicker';
 import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from '../../tickets/RepoBaseBranchSelect';
 import { BusyLine } from '../../ui/Spinner';
+import { epicOptions, repoOptions } from './draftOptions';
 
 /** Title = the first sentence, capped at 70 chars (SPEC §8). */
 export function deriveTitle(text: string): string {
@@ -29,8 +33,10 @@ export function deriveTitle(text: string): string {
 
 export function NewTask() {
   const boards = useTicketStore((s) => s.boards);
+  const tickets = useTicketStore((s) => s.tickets);
   const createTicket = useTicketStore((s) => s.createTicket);
   const addLink = useTicketStore((s) => s.addLink);
+  const addTicketToGroup = useTicketGroupStore((s) => s.addTicketToGroup);
   const repositories = useRepositoryStore((s) => s.repositories);
   const draft = useWorkStore((s) => s.draft);
   const updateDraft = useWorkStore((s) => s.updateDraft);
@@ -42,13 +48,19 @@ export function NewTask() {
   // The step in flight while starting — attaching a big repo's worktree takes a while.
   const [progress, setProgress] = useState<string | null>(null);
 
-  const effectiveBoardId = draft.boardId ?? boards[0]?.id ?? null;
+  // The last task's board, unless it has been deleted since.
+  const effectiveBoardId = boards.some((b) => b.id === draft.boardId) ? draft.boardId : (boards[0]?.id ?? null);
   const canStart = draft.text.trim().length > 0 && !!effectiveBoardId && !creating;
 
-  const repoOptions = useMemo(
-    () => repositories.map((r) => ({ value: `${r.org}/${r.name}`, label: `${r.org}/${r.name}` })),
-    [repositories],
-  );
+  const boardEpics = useBoardEpics(effectiveBoardId);
+  const epicChoices = useMemo(() => epicOptions(boardEpics), [boardEpics]);
+  // A stale pick (epic closed meanwhile, or restored from another board) is dropped.
+  const selectedEpicIds = draft.epicIds.filter((id) => epicChoices.some((o) => o.value === id));
+
+  const repoChoices = useMemo(() => {
+    const rankedRefs = effectiveBoardId ? topReposForBoard(tickets, effectiveBoardId, { limit: Infinity }) : [];
+    return repoOptions(repositories.map((r) => `${r.org}/${r.name}`), rankedRefs);
+  }, [repositories, tickets, effectiveBoardId]);
 
   async function start() {
     if (!canStart || !effectiveBoardId) return;
@@ -63,6 +75,15 @@ export function NewTask() {
         priority: draft.priority,
         status: 'doing',
       });
+      for (const epicId of selectedEpicIds) {
+        const name = epicChoices.find((o) => o.value === epicId)?.label ?? epicId;
+        setProgress(`Adding to ${name}…`);
+        try {
+          await addTicketToGroup(epicId, ticket.id);
+        } catch (e) {
+          addToast('error', `Couldn't add to ${name}: ${e instanceof Error ? e.message : 'unknown error'}`);
+        }
+      }
       // Attach each selected repo as a repository link (keeps going on failure).
       for (const key of draft.repoKeys) {
         const baseBranch = draft.repoBaseBranches[key];
@@ -73,7 +94,7 @@ export function NewTask() {
           addToast('error', `Couldn't attach ${key}: ${extractLinkError(e)}`);
         }
       }
-      resetDraft();
+      resetDraft(effectiveBoardId);
       selectTicket(ticket.id);
       setView('task');
     } catch (e) {
@@ -113,8 +134,20 @@ export function NewTask() {
         <div className="mt-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-t border-[var(--theme-border-subtle)] pt-3">
           <div className="flex items-start gap-3">
             <Cell label="BOARD">
-              <WorkBoardPicker value={effectiveBoardId} onChange={(boardId) => updateDraft({ boardId })} />
+              <WorkBoardPicker value={effectiveBoardId} onChange={(boardId) => updateDraft({ boardId, epicIds: [] })} />
             </Cell>
+            {epicChoices.length > 0 && (
+              <Cell label="EPICS">
+                <MultiSelect
+                  label="Epics"
+                  allLabel="No epic"
+                  values={selectedEpicIds}
+                  onChange={(epicIds) => updateDraft({ epicIds })}
+                  options={epicChoices}
+                  searchPlaceholder="Filter epics…"
+                />
+              </Cell>
+            )}
             <Cell label="REPOS">
               <MultiSelect
                 label="Repos"
@@ -128,7 +161,7 @@ export function NewTask() {
                     ),
                   })
                 }
-                options={repoOptions}
+                options={repoChoices}
                 searchPlaceholder="Filter repos…"
               />
             </Cell>

@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { TicketGroup } from '@fleex/shared';
+import { useEffect, useMemo } from 'react';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
-import * as api from '../../services/api';
+import { useBoardEpics } from '../../hooks/useBoardEpics';
 
 /**
  * Picker for assigning/removing a ticket from epics.
@@ -14,34 +13,7 @@ export function EpicPicker({ ticketId, boardId }: { ticketId: string; boardId: s
   const addTicketToGroup = useTicketGroupStore((s) => s.addTicketToGroup);
   const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
   const fetchMemberships = useTicketGroupStore((s) => s.fetchTicketMemberships);
-  const storeGroups = useTicketGroupStore((s) => s.groups);
-
-  const [boardGroups, setBoardGroups] = useState<TicketGroup[]>([]);
-
-  useEffect(() => {
-    if (!boardId) return;
-    let alive = true;
-    api
-      .fetchTicketGroups(boardId)
-      .then((groups) => {
-        if (alive) setBoardGroups(groups);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [boardId]);
-
-  // Pick up WS updates for the groups we know about.
-  const mergedGroups = useMemo(() => {
-    const byId = new Map<string, TicketGroup>(boardGroups.map((g) => [g.id, g]));
-    for (const g of storeGroups) {
-      if (byId.has(g.id) || g.boardIds.includes(boardId)) {
-        byId.set(g.id, g);
-      }
-    }
-    return Array.from(byId.values());
-  }, [boardGroups, storeGroups, boardId]);
+  const mergedGroups = useBoardEpics(boardId);
 
   useEffect(() => {
     if (!ticketGroupIds[ticketId]) {

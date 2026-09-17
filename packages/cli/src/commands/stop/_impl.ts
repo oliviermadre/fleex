@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { info, warn, ok } from '../../core/colors.ts';
 import { FLEEX_HOME, resolveInstance, ensureDirs } from '../../core/instance.ts';
-import { SERVICES } from '../../core/ports.ts';
+import { SERVICES, retirePortsFile } from '../../core/ports.ts';
 import { isAlive, killByPort, killGroup, killTree, sleep } from '../../core/process.ts';
 import { countRunningInstances, stopCompanion } from '../../core/companion.ts';
 
@@ -54,7 +54,7 @@ export async function stopInstance(slug: string): Promise<void> {
     }
   } catch { /* no ports file — nothing to reap */ }
 
-  try { fs.unlinkSync(portsFile); } catch { /* ignore */ }
+  retirePortsFile(portsFile);
 
   if (stopped === 0) warn(`[${slug}] No services were running.`);
   else ok(`[${slug}] All services stopped.`);

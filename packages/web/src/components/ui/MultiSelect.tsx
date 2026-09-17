@@ -6,8 +6,10 @@
  * Selection semantics: an empty `values` array means "all" (no filter). The
  * trigger shows the active count, or `allLabel` when nothing is selected. The
  * menu stays open across toggles so several options can be picked at once.
+ * Options may carry a `group`: a heading is shown wherever the group changes, so
+ * callers list them already ordered by group (e.g. Suggested, then the rest).
  */
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 
@@ -15,6 +17,8 @@ export interface MultiSelectOption<V extends string> {
   value: V;
   label: string;
   icon?: React.ReactNode;
+  /** Section heading this option is listed under. */
+  group?: string;
 }
 
 interface Props<V extends string> {
@@ -130,24 +134,31 @@ export function MultiSelect<V extends string>({
                 </span>
               </button>
 
-              {filtered.map((o) => {
+              {filtered.map((o, i) => {
                 const isOn = selected.has(o.value);
+                const heading = o.group !== undefined && o.group !== filtered[i - 1]?.group ? o.group : null;
                 return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggle(o.value);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--theme-bg-hover)]"
-                  >
-                    <Checkbox checked={isOn} />
-                    {o.icon}
-                    <span className={cn('truncate', isOn ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-secondary)]')}>
-                      {o.label}
-                    </span>
-                  </button>
+                  <Fragment key={o.value}>
+                    {heading && (
+                      <div className="px-3 pb-0.5 pt-2 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-[var(--theme-text-faint)]">
+                        {heading}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggle(o.value);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                    >
+                      <Checkbox checked={isOn} />
+                      {o.icon}
+                      <span className={cn('truncate', isOn ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-secondary)]')}>
+                        {o.label}
+                      </span>
+                    </button>
+                  </Fragment>
                 );
               })}
 

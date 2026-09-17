@@ -1,7 +1,7 @@
 /**
  * Work top bar (36px, full width): brand, a ⌘K search field that opens the
- * existing command palette, a live summary of the queue, then the overlay-sync
- * button and pinned / workspace actions scoped to the selected task (SPEC §2).
+ * existing command palette, then the pinned actions and the selected task's
+ * ticket actions, overlay sync last (SPEC §2).
  */
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkStore } from '../../stores/workStore';
@@ -16,7 +16,6 @@ interface Props {
 export function WorkTopBar({ queue }: Props) {
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
   const view = useWorkStore((s) => s.view);
-  const { total, running, needs } = queue.counts;
   const selectedTaskId = queue.selectedTask?.id ?? null;
 
   return (
@@ -41,13 +40,7 @@ export function WorkTopBar({ queue }: Props) {
         <kbd className="text-[10px] text-[var(--theme-text-faint)]">⌘K</kbd>
       </button>
 
-      <div className="ml-auto flex items-center gap-1 text-[11px] text-[var(--theme-text-muted)]">
-        <span>{total} tasks</span>
-        <span className="text-[var(--theme-text-faint)]">·</span>
-        <span className="text-[var(--theme-accent)]">{running} running</span>
-        <span className="text-[var(--theme-text-faint)]">·</span>
-        <span className="text-[var(--tint-yellow-text)]">{needs} need you</span>
-      </div>
+      <div className="ml-auto" />
 
       {view === 'task' && selectedTaskId && <ModeSwitcher ticketId={selectedTaskId} />}
 

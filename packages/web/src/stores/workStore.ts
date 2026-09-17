@@ -26,6 +26,8 @@ export interface WorkDraft {
   repoKeys: string[];
   /** Chosen base branch per selected repo key; absent or '' = the repo's default branch. */
   repoBaseBranches: Record<string, string>;
+  /** Epics (of the draft's board) the new ticket joins. */
+  epicIds: string[];
   boardId: string | null;
   type: DraftType;
   priority: TicketPriority;
@@ -113,12 +115,21 @@ export interface WorkState {
   forgetTicket: (ticketId: string) => void;
   setShellHeight: (height: number) => void;
   updateDraft: (patch: Partial<WorkDraft>) => void;
-  resetDraft: () => void;
+  /** Clear the draft after a task is created — keeping its board (default: the draft's) for the next one. */
+  resetDraft: (boardId?: string | null) => void;
 }
 
 const STORAGE_KEY = 'fleex_work';
 
-const EMPTY_DRAFT: WorkDraft = { text: '', repoKeys: [], repoBaseBranches: {}, boardId: null, type: 'build', priority: 'none' };
+const EMPTY_DRAFT: WorkDraft = {
+  text: '',
+  repoKeys: [],
+  repoBaseBranches: {},
+  epicIds: [],
+  boardId: null,
+  type: 'build',
+  priority: 'none',
+};
 
 /** The subset of state we persist — everything except the action functions. */
 type PersistedWork = Pick<
@@ -352,6 +363,6 @@ export const useWorkStore = create<WorkState>((set, get) => {
       });
     },
     updateDraft: (patch) => commit({ draft: { ...get().draft, ...patch } }),
-    resetDraft: () => commit({ draft: EMPTY_DRAFT }),
+    resetDraft: (boardId = get().draft.boardId) => commit({ draft: { ...EMPTY_DRAFT, boardId } }),
   };
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useWorkStore } from './workStore';
 
 // Each ticket keeps its own center mode, shell split and pane bindings — switching
@@ -86,5 +86,50 @@ describe('workStore — per-ticket memory', () => {
     const stored = JSON.parse(localStorage.getItem('fleex_work')!);
     expect(stored.shellLayoutByTicket).toEqual({ A: 'three' });
     expect(stored.shellPaneIdsByTicket).toEqual({ A: [null, null, 'a1'] });
+  });
+});
+
+// Creating several tasks in a row usually happens on the same board, so the
+// draft forgets what was typed and picked but keeps the board it was created on.
+describe('workStore — new task draft', () => {
+  const s = () => useWorkStore.getState();
+
+  beforeEach(() => {
+    localStorage.clear();
+    useWorkStore.setState({
+      draft: { text: '', repoKeys: [], repoBaseBranches: {}, epicIds: [], boardId: null, type: 'build', priority: 'none' },
+    });
+  });
+
+  it('keeps the board when the draft is reset after a task was created', () => {
+    s().updateDraft({
+      text: 'Fix the login',
+      boardId: 'board-2',
+      epicIds: ['epic-1'],
+      repoKeys: ['acme/web'],
+      repoBaseBranches: { 'acme/web': 'develop' },
+      type: 'fix',
+      priority: 'high',
+    });
+
+    s().resetDraft();
+
+    expect(s().draft).toEqual({
+      text: '',
+      repoKeys: [],
+      repoBaseBranches: {},
+      epicIds: [],
+      boardId: 'board-2',
+      type: 'build',
+      priority: 'none',
+    });
+  });
+
+  it('starts with no epic when restoring a draft saved before epics were pickable', async () => {
+    localStorage.setItem('fleex_work', JSON.stringify({ draft: { text: 'hello', boardId: 'board-1' } }));
+    vi.resetModules();
+    const { useWorkStore: fresh } = await import('./workStore');
+
+    expect(fresh.getState().draft).toMatchObject({ text: 'hello', boardId: 'board-1', epicIds: [] });
   });
 });

@@ -1,5 +1,6 @@
 import net from 'node:net';
 import fs from 'node:fs';
+import path from 'node:path';
 import { die } from './colors.ts';
 import { resolveInstance, type InstanceContext } from './instance.ts';
 import { defaultWorkspaceName } from './workspaces.ts';
@@ -41,10 +42,51 @@ export function findFreePort(): Promise<number> {
   return tryHost(undefined).catch(() => tryHost('127.0.0.1'));
 }
 
+/**
+ * Whether nothing listens on `port`. Every loopback flavour is probed: with
+ * SO_REUSEADDR (set by Node on macOS) a wildcard bind still succeeds while
+ * `::1` or `127.0.0.1` holds the port — and the web dev server binds `::1`.
+ * A host the machine doesn't have (no IPv6) is skipped rather than failing.
+ */
+export async function isPortFree(port: number): Promise<boolean> {
+  for (const host of [undefined, '127.0.0.1', '::1']) {
+    const free = await new Promise<boolean>((resolve) => {
+      const srv = net.createServer();
+      srv.unref();
+      srv.once('error', (err: NodeJS.ErrnoException) =>
+        resolve(err.code !== 'EADDRINUSE' && err.code !== 'EACCES'),
+      );
+      srv.listen(port, host, () => srv.close(() => resolve(true)));
+    });
+    if (!free) return false;
+  }
+  return true;
+}
+
+/**
+ * Pick the instance's ports, reusing the previous run's when still free. The
+ * web UI keeps its preferences in localStorage, which is scoped to
+ * `localhost:<port>` — a new web port on every start would reset them all.
+ *
+ * Callers allocate only once nothing is running, so a `ports.json` still present
+ * is a leftover of a run that ended without `fleex stop` (reboot, crash) — the
+ * most recent run, hence preferred over the retired ports.
+ */
 export async function allocatePorts(ctx: InstanceContext = resolveInstance()): Promise<Ports> {
-  const gateway = await findFreePort();
-  const server = await findFreePort();
-  const web = await findFreePort();
+  const previous = readPortsFile(ctx.portsFile) ?? readPortsFile(lastPortsFileFor(ctx.portsFile));
+  const taken = new Set<number>();
+
+  async function pick(last: number | undefined): Promise<number> {
+    let port = last !== undefined && !taken.has(last) && (await isPortFree(last)) ? last : await findFreePort();
+    // The kernel may hand back a port another service just reserved (not bound yet).
+    while (taken.has(port)) port = await findFreePort();
+    taken.add(port);
+    return port;
+  }
+
+  const gateway = await pick(previous?.gateway);
+  const server = await pick(previous?.server);
+  const web = await pick(previous?.web);
   const ports: Ports = { gateway, server, web };
   fs.writeFileSync(ctx.portsFile, JSON.stringify(ports));
   return ports;
@@ -54,10 +96,31 @@ export function writePorts(ports: Ports, ctx: InstanceContext = resolveInstance(
   fs.writeFileSync(ctx.portsFile, JSON.stringify(ports));
 }
 
-export function loadPorts(ctx: InstanceContext = resolveInstance()): Ports | null {
-  if (!fs.existsSync(ctx.portsFile)) return null;
+/** Where a stopped instance's ports are kept so the next start can reuse them. */
+function lastPortsFileFor(portsFile: string): string {
+  return path.join(path.dirname(portsFile), 'last-ports.json');
+}
+
+/**
+ * On stop: `ports.json` must disappear (its presence means "running" to status,
+ * desktop and hooks), but its ports are kept aside for the next start.
+ */
+export function retirePortsFile(portsFile: string): void {
   try {
-    const raw = fs.readFileSync(ctx.portsFile, 'utf8');
+    fs.renameSync(portsFile, lastPortsFileFor(portsFile));
+  } catch {
+    /* no ports file — nothing to keep */
+  }
+}
+
+export function loadPorts(ctx: InstanceContext = resolveInstance()): Ports | null {
+  return readPortsFile(ctx.portsFile);
+}
+
+function readPortsFile(file: string): Ports | null {
+  if (!fs.existsSync(file)) return null;
+  try {
+    const raw = fs.readFileSync(file, 'utf8');
     const j = JSON.parse(raw);
     if (
       typeof j.gateway === 'number' &&

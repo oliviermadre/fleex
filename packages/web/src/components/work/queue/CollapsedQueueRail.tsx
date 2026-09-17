@@ -1,5 +1,5 @@
 /**
- * The queue collapsed to a thin rail: an expand button and a vertical "QUEUE N"
+ * The queue collapsed to a thin rail: an expand button and a vertical "TASKS N"
  * label. Clicking anywhere on the rail expands it back.
  */
 import { useWorkStore } from '../../../stores/workStore';
@@ -21,7 +21,7 @@ export function CollapsedQueueRail({ counts }: { counts: { total: number } }) {
         className="text-[10.5px] font-semibold tracking-[0.08em]"
         style={{ writingMode: 'vertical-rl' }}
       >
-        QUEUE {counts.total}
+        TASKS {counts.total}
       </span>
     </button>
   );

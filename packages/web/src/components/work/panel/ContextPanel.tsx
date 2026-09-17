@@ -19,6 +19,7 @@ import { Spinner, BusyLine } from '../../ui/Spinner';
 import { DueDatePickerPopover } from '../../tickets/DueDatePickerPopover';
 import { TypePickerPopover } from '../../tickets/TypePickerPopover';
 import { PriorityPickerPopover } from '../../tickets/PriorityPickerPopover';
+import { EpicPicker } from '../../tickets/EpicPicker';
 import { WorkBoardPicker } from './WorkBoardPicker';
 import { WorkStatusPicker } from './WorkStatusPicker';
 import type { WorkTask } from '../types';
@@ -286,6 +287,11 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
           ⛌ Blocked
         </button>
         <DueDatePickerPopover ticket={ticket} />
+      </div>
+
+      {/* Epic (ticket-group membership, scoped to the ticket's board) */}
+      <div className="border-b border-[var(--theme-border-subtle)] px-3 py-2.5">
+        <EpicPicker ticketId={ticket.id} boardId={ticket.boardId} />
       </div>
 
       {/* Repos (repository links) */}

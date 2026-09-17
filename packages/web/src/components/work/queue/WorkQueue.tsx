@@ -98,7 +98,7 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5">
         <span className="text-[13px] font-semibold">
-          QUEUE <span className="text-[var(--theme-text-muted)]">{queue.counts.total}</span>
+          TASKS <span className="text-[var(--theme-text-muted)]">{queue.counts.total}</span>
         </span>
         <div className="flex items-center gap-1">
           <button
