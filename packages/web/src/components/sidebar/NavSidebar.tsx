@@ -8,6 +8,7 @@ import { useRoutineStore } from '../../stores/routineStore';
 import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
 import { cn } from '../../lib/cn';
 import { RoutineIcon } from '../../lib/primitives';
+import { TasksIcon } from './icons';
 import { RepositoriesIcon } from './icons';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
 
@@ -75,16 +76,11 @@ export function NavSidebar() {
         {/* === Operational === */}
         <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
 
-        {/* Work (single-screen ergonomics — queue · conversation · context).
-            Icon: a two-column layout glyph. Gated by the workViewEnabled flag. */}
+        {/* Tasks (single-screen ergonomics — queue · conversation · context).
+            Gated by the workViewEnabled flag. */}
         {workViewEnabled && (
           <NavItem
-            icon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="18" rx="2" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-              </svg>
-            }
+            icon={<TasksIcon size={20} />}
             label="Tasks"
             shortLabel="Tasks"
             active={activePanel === 'work'}
