@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -34,7 +34,11 @@ interface CreateCall {
   baseBranch?: string;
 }
 
-/** A ticket linked to `repos`, with a worktree link for each of `withWorktree`. */
+/**
+ * A ticket linked to `repos`. `withWorktree` repos are the ones already derived:
+ * they carry a worktree link AND their directory sits on disk, the way a repo
+ * attached earlier does.
+ */
 function harness(repos: string[], withWorktree: string[]) {
   const ticket = TicketEntity.create({
     id: TICKET_ID, boardId: 'b-1', displayId: 584, title: 'test', status: 'doing',
@@ -44,7 +48,9 @@ function harness(repos: string[], withWorktree: string[]) {
   }
   const workspaceId = 'd1df20-test';
   for (const name of withWorktree) {
-    ticket.addLink('worktree', join(root, 'workspaces', workspaceId, name), BRANCH, null, randomUUID());
+    const wtPath = join(root, 'workspaces', workspaceId, name);
+    mkdirSync(wtPath, { recursive: true });
+    ticket.addLink('worktree', wtPath, BRANCH, null, randomUUID());
   }
 
   const calls: CreateCall[] = [];
@@ -128,5 +134,49 @@ describe('CreateSessionFromTicketUseCase — worktree per repo', () => {
     await h.uc.execute(TICKET_ID);
 
     expect(h.calls.map((c) => c.createNewBranch)).toEqual([true, true]);
+  });
+});
+
+/**
+ * Opening a shell is not the moment to re-derive what is already there. Handing
+ * an existing path to create-worktree costs a failed `git worktree add`, a
+ * repair, a prune and a second failed add — about a second and a half per repo,
+ * which is the whole wait before the tab shows up.
+ */
+describe('CreateSessionFromTicketUseCase — worktrees already on disk', () => {
+  it('leaves git alone for a repo whose worktree is already there', async () => {
+    const h = harness(['agentic-dmc', 'agentic-dmc-2'], ['agentic-dmc', 'agentic-dmc-2']);
+
+    await h.uc.execute(TICKET_ID);
+
+    expect(h.calls).toEqual([]);
+  });
+
+  it('still derives the repo that is missing one', async () => {
+    const h = harness(['odys-front', 'agentic-dmc', 'agentic-dmc-2'], ['agentic-dmc', 'agentic-dmc-2']);
+
+    await h.uc.execute(TICKET_ID);
+
+    expect(h.calls.map((c) => c.name)).toEqual(['odys-front']);
+  });
+
+  it('keeps the worktree link of a repo it skips', async () => {
+    const h = harness(['agentic-dmc', 'agentic-dmc-2'], ['agentic-dmc', 'agentic-dmc-2']);
+
+    await h.uc.execute(TICKET_ID);
+
+    expect(h.ticket.links.filter((l) => l.type === 'worktree')).toHaveLength(2);
+  });
+
+  it('links a worktree that exists on disk but was never linked', async () => {
+    const h = harness(['agentic-dmc'], []);
+    mkdirSync(join(root, 'workspaces', 'd1df20-test', 'agentic-dmc'), { recursive: true });
+
+    await h.uc.execute(TICKET_ID);
+
+    expect(h.calls).toEqual([]);
+    const wt = h.ticket.links.filter((l) => l.type === 'worktree');
+    expect(wt).toHaveLength(1);
+    expect(wt[0]!.ref).toBe(join(root, 'workspaces', 'd1df20-test', 'agentic-dmc'));
   });
 });
