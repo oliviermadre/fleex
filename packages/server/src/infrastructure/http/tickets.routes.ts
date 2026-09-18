@@ -570,6 +570,23 @@ export function ticketRoutes(container: Container) {
           const workspaceRoot = container.resolver.workspacePath(workspaceId);
           const manifestPath = join(workspaceRoot, '.fleex.json');
 
+          // Create the workspace rather than wait for one. This used to run only
+          // when the manifest already existed, so attaching a repo to a ticket
+          // that had none stored the link and derived nothing — silently, with
+          // no log line. It then depended on whether something else (a reconcile,
+          // a session) happened to write the manifest first, which is what made
+          // a repo go missing on one ticket and not the next.
+          try {
+            mkdirSync(workspaceRoot, { recursive: true });
+            if (!existsSync(manifestPath)) {
+              writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
+            }
+          } catch (err) {
+            container.logger.warn('Failed to create workspace for added repo', {
+              ticketId: ticket.id, repo: ref, error: err instanceof Error ? err.message : String(err),
+            });
+          }
+
           if (existsSync(manifestPath)) {
             const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
             if (!existsSync(wtPath)) {
