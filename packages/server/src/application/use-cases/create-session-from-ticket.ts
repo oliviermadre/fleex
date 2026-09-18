@@ -88,22 +88,31 @@ export class CreateSessionFromTicketUseCase {
 
     for (const repo of repos) {
       const wtPath = this.resolver.workspaceRepoPath(workspaceId, repo.name);
-      // D9 precedence: an existing worktree link or a PR checkout wins; the
+      // Every repo shares the ticket branch, but that branch only exists in the
+      // repos whose worktree was already derived. So the choice is this repo's
+      // alone: checking out the shared branch in a repo that never got it is a
+      // `fatal: invalid reference`. Same match as the base-branch PATCH route.
+      const repoWorktreeLink = ticket.links.find(
+        (l) => l.type === 'worktree'
+          && (l.ref === wtPath || l.ref.startsWith(`${repo.org}/${repo.name}:`)),
+      );
+      // D9 precedence: this repo's own worktree link or a PR checkout wins; the
       // per-repo base only applies when we're minting a fresh ticket branch.
-      const baseBranch = !worktreeLink && !prNumber
+      const baseBranch = !repoWorktreeLink && !prNumber
         ? resolveBaseRef(ticket.links, repo.org, repo.name)
         : undefined;
       try {
         const existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
           branch: branchName,
-          createNewBranch: !worktreeLink,
+          createNewBranch: !repoWorktreeLink,
           ...(prNumber ? { prNumber } : {}),
           ...(baseBranch ? { baseBranch } : {}),
         });
         const actualPath = existingPath ?? wtPath;
-        // Add/update worktree link with the actual path
-        if (worktreeLink) {
-          ticket.removeLink(worktreeLink.id);
+        // Replace this repo's own link — never a sibling's, which would leave
+        // the ticket with one worktree link for several repos.
+        if (repoWorktreeLink) {
+          ticket.removeLink(repoWorktreeLink.id);
         }
         ticket.addLink('worktree', actualPath, branchName, null, randomUUID());
       } catch (err) {
