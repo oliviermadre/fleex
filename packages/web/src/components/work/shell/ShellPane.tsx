@@ -14,10 +14,19 @@ import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { useTerminal } from '../../../hooks/useTerminal';
+import { terminalManager } from '../../../services/terminalManager';
 
-function ShellTerminal({ sessionId }: { sessionId: string }) {
+function ShellTerminal({ sessionId, autoFocus }: { sessionId: string; autoFocus: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   useTerminal(sessionId, containerRef);
+  // Focused here rather than by whoever asked for the shell: terminalManager is
+  // a plain Map, so an outside watcher that finds no terminal yet never hears
+  // when one appears. This effect is declared after useTerminal's, so React runs
+  // it in the same commit, once the terminal has been created and attached.
+  useEffect(() => {
+    if (!autoFocus) return;
+    terminalManager.get(sessionId)?.terminal.focus();
+  }, [autoFocus, sessionId]);
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={containerRef} className="xterm-container absolute inset-0" />
@@ -90,11 +99,14 @@ export function ShellPane({
   onBind,
   onNewShell,
   creating,
+  autoFocus = false,
 }: {
   session: Session | null;
   focused: boolean;
   /** Existing sessions not shown elsewhere — offered by the bind menu. */
   bindable: Session[];
+  /** This pane's session was just opened: its terminal takes the keyboard. */
+  autoFocus?: boolean;
   onFocus: () => void;
   onUnbind: () => void;
   onBind: (sessionId: string) => void;
@@ -174,7 +186,7 @@ export function ShellPane({
             </div>
           )}
 
-          <ShellTerminal sessionId={session.id} />
+          <ShellTerminal sessionId={session.id} autoFocus={autoFocus} />
         </>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-1 p-3">

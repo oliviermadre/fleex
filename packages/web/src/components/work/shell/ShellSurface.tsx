@@ -47,12 +47,41 @@ export function ShellSurface({ ticketId }: { ticketId: string }) {
   const shownIds = useMemo(() => new Set(resolved.filter((id): id is string => !!id)), [resolved]);
   const unshown = useMemo(() => sessions.filter((s) => !shownIds.has(s.id)), [sessions, shownIds]);
 
-  // Open a new shell and pin it to the pane that asked for it (pane menus only —
-  // the tab-bar "+" creates an unbound shell that lands in the roster).
-  const newShellInPane = async (paneIndex: number) => {
+  // The shell we opened and still owe the keyboard to. Its terminal only exists
+  // once a pane shows it, which is a render later — the effect below waits.
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
+
+  // Open a new shell, pin it to the pane that asked for it, and leave the
+  // keyboard in it. Panes have no auto-fill (panesModel), so an unbound shell
+  // shows nowhere: the tab bar's "+" used to land one in the roster only, which
+  // is why opening a shell always cost a click before you could type. It now
+  // opens into the focused pane, like the pane menus already did.
+  const openShell = async (paneIndex: number) => {
     const id = await newShell();
-    if (id) bindShellPane(paneIndex, id);
+    if (!id) return;
+    bindShellPane(paneIndex, id);
+    setPendingFocusId(id);
   };
+  const newShellInPane = (paneIndex: number) => openShell(paneIndex);
+
+  // The keyboard itself is taken by the pane's own terminal (ShellPane reads
+  // `autoFocus`), because only it knows when the terminal exists. All that is
+  // left here is the surface's state: move the focus ring to that pane, then
+  // let go. Parent effects run after the children's, so by now it has focused.
+  useEffect(() => {
+    if (!pendingFocusId) return;
+    // Absent from every pane reads as "the refetch hasn't delivered it yet",
+    // never as "gone": the POST answers with the id a WS round-trip before the
+    // session reaches the store. A later render brings it; one that never comes
+    // just leaves a stale id the next shell replaces.
+    const pane = resolved.indexOf(pendingFocusId);
+    if (pane < 0) return;
+    setFocusedPane(pane);
+    setPendingFocusId(null);
+  }, [pendingFocusId, resolved]);
+
+  // Another ticket's shells are not the one we owe the keyboard to.
+  useEffect(() => setPendingFocusId(null), [ticketId]);
 
   const focusPane = (i: number) => {
     setFocusedPane(i);
@@ -113,7 +142,7 @@ export function ShellSurface({ ticketId }: { ticketId: string }) {
         shownIds={shownIds}
         creating={creating}
         onSelectTab={(id) => bindShellPane(focusedPane, id)}
-        onNewShell={() => void newShell()}
+        onNewShell={() => void openShell(focusedPane)}
         onKill={killShell}
         onRename={renameShell}
         layout={layout}
@@ -131,6 +160,7 @@ export function ShellSurface({ ticketId }: { ticketId: string }) {
         onBindToPane={bindShellPane}
         onUnbindPane={(i) => bindShellPane(i, null)}
         onNewShellInPane={newShellInPane}
+        autoFocusId={pendingFocusId}
       />
     </div>
   );

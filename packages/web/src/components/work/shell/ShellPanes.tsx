@@ -50,6 +50,7 @@ export function ShellPanes({
   onBindToPane,
   onUnbindPane,
   onNewShellInPane,
+  autoFocusId,
 }: {
   /** The ticket's split preset. */
   layout: ShellLayout;
@@ -65,6 +66,8 @@ export function ShellPanes({
   onBindToPane: (paneIndex: number, id: string) => void;
   onUnbindPane: (paneIndex: number) => void;
   onNewShellInPane: (paneIndex: number) => void;
+  /** Session just opened, whose terminal should take the keyboard once it mounts. */
+  autoFocusId?: string | null;
 }) {
   const count = paneCount(layout);
 
@@ -93,6 +96,7 @@ export function ShellPanes({
               onBind={(sid) => onBindToPane(i, sid)}
               onNewShell={() => onNewShellInPane(i)}
               creating={creating}
+              autoFocus={!!id && id === autoFocusId}
             />
           </div>
         );
