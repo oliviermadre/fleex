@@ -96,6 +96,19 @@ export class CreateSessionFromTicketUseCase {
         (l) => l.type === 'worktree'
           && (l.ref === wtPath || l.ref.startsWith(`${repo.org}/${repo.name}:`)),
       );
+
+      // Already derived — leave git alone. Handing an existing path to
+      // create-worktree costs a failed `git worktree add`, a repair, a prune and
+      // a second failed add before it concludes the directory was fine: about a
+      // second and a half per repo, spent every time a shell opens. Same
+      // short-circuit as reconcile-worktree and the agent's ensureWorkspace.
+      if (existsSync(wtPath)) {
+        if (!repoWorktreeLink) {
+          ticket.addLink('worktree', wtPath, branchName, null, randomUUID());
+        }
+        continue;
+      }
+
       // D9 precedence: this repo's own worktree link or a PR checkout wins; the
       // per-repo base only applies when we're minting a fresh ticket branch.
       const baseBranch = !repoWorktreeLink && !prNumber
