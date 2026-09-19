@@ -20,6 +20,9 @@ import { DueDatePickerPopover } from '../../tickets/DueDatePickerPopover';
 import { TypePickerPopover } from '../../tickets/TypePickerPopover';
 import { PriorityPickerPopover } from '../../tickets/PriorityPickerPopover';
 import { EpicPicker } from '../../tickets/EpicPicker';
+import { MultiSelect } from '../../ui/MultiSelect';
+import { repoOptions } from '../new/draftOptions';
+import { topReposForBoard } from '../../../lib/repoStatus';
 import { WorkBoardPicker } from './WorkBoardPicker';
 import { WorkStatusPicker } from './WorkStatusPicker';
 import type { WorkTask } from '../types';
@@ -182,20 +185,22 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
   const addLink = useTicketStore((s) => s.addLink);
   const removeLink = useTicketStore((s) => s.removeLink);
   const repositories = useRepositoryStore((s) => s.repositories);
+  const reposLoaded = useRepositoryStore((s) => s.loaded);
+  const tickets = useTicketStore((s) => s.tickets);
   const [prUrl, setPrUrl] = useState('');
   const [addingPr, setAddingPr] = useState(false);
   const [prStates, setPrStates] = useState<Record<string, string>>({});
   // Staged repo for "+ attach repo…": chosen but not linked yet, so a base
   // branch can be picked first.
-  const [pendingRepo, setPendingRepo] = useState<string | null>(null);
-  const [pendingBaseBranch, setPendingBaseBranch] = useState('');
+  const [pendingRepos, setPendingRepos] = useState<string[]>([]);
+  const [pendingBaseBranches, setPendingBaseBranches] = useState<Record<string, string>>({});
   const [attaching, setAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
 
   // Never carry a staged repo over to another task.
   useEffect(() => {
-    setPendingRepo(null);
-    setPendingBaseBranch('');
+    setPendingRepos([]);
+    setPendingBaseBranches({});
     setAttachError(null);
   }, [task.id]);
 
@@ -214,33 +219,48 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
   // row would repeat one ticket-wide total next to each PR.
   const prStatsByRef = useMemo(() => new Map(task.prs.map((p) => [p.ref, p])), [task.prs]);
 
-  const attachableRepos = useMemo(() => {
+  // The repos still attachable, ranked and grouped the way the new-task card
+  // ranks them (the board's most used first) — with enough repos configured, a
+  // flat alphabetical list is unusable.
+  const repoChoices = useMemo(() => {
     const attached = new Set(repoLinks.map((l) => l.ref));
-    return repositories.map((r) => `${r.org}/${r.name}`).filter((key) => !attached.has(key));
-  }, [repositories, repoLinks]);
+    const keys = repositories.map((r) => `${r.org}/${r.name}`).filter((key) => !attached.has(key));
+    const ranked = ticket ? topReposForBoard(tickets, ticket.boardId, { exclude: [...attached], limit: Infinity }) : [];
+    return repoOptions(keys, ranked);
+  }, [repositories, repoLinks, tickets, ticket]);
 
   if (!ticket) {
     return <div className="p-3 text-[12px] text-[var(--theme-text-faint)]">Ticket not loaded.</div>;
   }
 
+  /**
+   * Attach every staged repo, one call each — the server derives a worktree per
+   * link, so these are not cheap. A failure on one doesn't cancel the others;
+   * the staged list keeps exactly those that failed, with the reason.
+   */
   async function attachPending() {
-    if (!ticket || !pendingRepo) return;
+    if (!ticket || pendingRepos.length === 0) return;
     setAttaching(true);
     setAttachError(null);
-    try {
-      await addLink(ticket.id, {
-        type: 'repository',
-        ref: pendingRepo,
-        label: pendingRepo,
-        ...(pendingBaseBranch ? { baseBranch: pendingBaseBranch } : {}),
-      });
-      setPendingRepo(null);
-      setPendingBaseBranch('');
-    } catch (e) {
-      setAttachError(extractLinkError(e));
-    } finally {
-      setAttaching(false);
+    const failed: string[] = [];
+    const errors: string[] = [];
+    for (const ref of pendingRepos) {
+      const baseBranch = pendingBaseBranches[ref];
+      try {
+        await addLink(ticket.id, {
+          type: 'repository',
+          ref,
+          label: ref,
+          ...(baseBranch ? { baseBranch } : {}),
+        });
+      } catch (e) {
+        failed.push(ref);
+        errors.push(`${ref}: ${extractLinkError(e)}`);
+      }
     }
+    setPendingRepos(failed);
+    setAttachError(errors.length > 0 ? errors.join(' · ') : null);
+    setAttaching(false);
   }
 
   return (
@@ -308,29 +328,65 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
           {repoLinks.map((l) => (
             <RepoRow key={l.id} ticketId={ticket.id} link={l} />
           ))}
-          {/* The repo being attached, until the server has created its worktree */}
-          {attaching && pendingRepo && !repoLinks.some((l) => l.ref === pendingRepo) && (
-            <div>
+          {/* The repos being attached, until the server has created their worktrees */}
+          {attaching && pendingRepos.filter((ref) => !repoLinks.some((l) => l.ref === ref)).map((ref) => (
+            <div key={ref}>
               <div className="flex items-center gap-1.5 font-mono text-[11px] text-[var(--theme-text-secondary)]">
                 <Spinner size={11} className="text-[var(--theme-accent)]" />
-                <span className="truncate" title={pendingRepo}>{pendingRepo}</span>
+                <span className="truncate" title={ref}>{ref}</span>
               </div>
-              <BusyLine className="mt-0.5 pl-[17px]" label={REPO_BUSY_LABEL.attach(pendingBaseBranch || undefined)} />
+              <BusyLine className="mt-0.5 pl-[17px]" label={REPO_BUSY_LABEL.attach(pendingBaseBranches[ref] || undefined)} />
+            </div>
+          ))}
+        </div>
+
+        {/* The picker is always offered. Hiding it whenever the repository list
+            came back empty took away the only way in — and that list is empty
+            for the first seconds of every load, and for good if the call fails. */}
+        <div className="mt-1.5">
+          <MultiSelect
+            label="Repos"
+            allLabel="+ attach repo…"
+            values={pendingRepos}
+            options={repoChoices}
+            onChange={(next) => {
+              setAttachError(null);
+              setPendingRepos(next);
+              setPendingBaseBranches((prev) =>
+                Object.fromEntries(Object.entries(prev).filter(([key]) => next.includes(key))),
+              );
+            }}
+            searchPlaceholder="Filter repos…"
+            className="w-full"
+          />
+          {repoChoices.length === 0 && (
+            <div className="mt-1 text-[10.5px] text-[var(--theme-text-faint)]">
+              {!reposLoaded
+                ? 'Loading repositories…'
+                : repositories.length === 0
+                  ? 'No repository configured in this Fleex instance.'
+                  : 'Every configured repo is already attached.'}
             </div>
           )}
         </div>
-        {pendingRepo && !attaching ? (
+
+        {/* Base branch per staged repo — empty means the repo's default branch */}
+        {pendingRepos.length > 0 && !attaching && (
           <div className="mt-1.5 flex flex-col gap-1 rounded-md border border-[var(--theme-border-input)] p-1.5">
-            <span className="truncate font-mono text-[11px] text-[var(--theme-text-secondary)]" title={pendingRepo}>
-              ⎇ {pendingRepo}
-            </span>
-            <RepoBaseBranchSelect
-              repoKey={pendingRepo}
-              value={pendingBaseBranch}
-              disabled={attaching}
-              onChange={setPendingBaseBranch}
-              className="bg-[var(--theme-bg-surface)] text-[11px]"
-            />
+            {pendingRepos.map((ref) => (
+              <div key={ref} className="flex flex-col gap-1">
+                <span className="truncate font-mono text-[11px] text-[var(--theme-text-secondary)]" title={ref}>
+                  ⎇ {ref}
+                </span>
+                <RepoBaseBranchSelect
+                  repoKey={ref}
+                  value={pendingBaseBranches[ref] ?? ''}
+                  disabled={attaching}
+                  onChange={(v) => setPendingBaseBranches((prev) => ({ ...prev, [ref]: v }))}
+                  className="bg-[var(--theme-bg-surface)] text-[11px]"
+                />
+              </div>
+            ))}
             {attachError && <div className="text-[10.5px] text-[var(--theme-danger)]">{attachError}</div>}
             <div className="flex gap-1">
               <button
@@ -344,8 +400,8 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
               <button
                 type="button"
                 onClick={() => {
-                  setPendingRepo(null);
-                  setPendingBaseBranch('');
+                  setPendingRepos([]);
+                  setPendingBaseBranches({});
                   setAttachError(null);
                 }}
                 disabled={attaching}
@@ -355,27 +411,6 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
               </button>
             </div>
           </div>
-        ) : attachableRepos.length > 0 && (
-          <select
-            value=""
-            disabled={attaching}
-            onChange={(e) => {
-              const key = e.target.value;
-              if (key) {
-                setPendingBaseBranch('');
-                setAttachError(null);
-                setPendingRepo(key);
-              }
-            }}
-            className="mt-1.5 w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none disabled:opacity-50"
-          >
-            <option value="">+ attach repo…</option>
-            {attachableRepos.map((key) => (
-              <option key={key} value={key}>
-                {key}
-              </option>
-            ))}
-          </select>
         )}
       </Section>
 
