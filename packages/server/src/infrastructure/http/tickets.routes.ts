@@ -900,7 +900,10 @@ export function ticketRoutes(container: Container) {
             id: randomUUID(),
             ticketId: ticket.id,
             action: 'unlinked',
-            changes: { linkId: { from: request.params.linkId, to: null } },
+            // The whole link, mirroring what `linked` writes: the timeline names
+            // the row from its type and ref, so an id alone resolved to nothing
+            // and the detach never showed at all.
+            changes: { link: { from: link ?? { id: request.params.linkId }, to: null } },
             source: 'web',
           }));
           emit({
