@@ -1,47 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { TicketGroup } from '@fleex/shared';
+import { useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
-import * as api from '../../services/api';
+import { useBoardEpics } from '../../hooks/useBoardEpics';
 
 /**
  * Picker for assigning/removing a ticket from epics.
  * The dropdown is scoped to the ticket's own board (not the Kanban view's
  * selected board) so it always offers the relevant epics regardless of where
- * the ticket detail is opened from.
+ * the ticket detail is opened from. An assigned epic is a link to its own page,
+ * so a ticket is a way into the epic it belongs to, from Work as from Kanban.
  */
 export function EpicPicker({ ticketId, boardId }: { ticketId: string; boardId: string }) {
   const ticketGroupIds = useTicketGroupStore((s) => s.ticketGroupIds);
   const addTicketToGroup = useTicketGroupStore((s) => s.addTicketToGroup);
   const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
   const fetchMemberships = useTicketGroupStore((s) => s.fetchTicketMemberships);
-  const storeGroups = useTicketGroupStore((s) => s.groups);
-
-  const [boardGroups, setBoardGroups] = useState<TicketGroup[]>([]);
-
-  useEffect(() => {
-    if (!boardId) return;
-    let alive = true;
-    api
-      .fetchTicketGroups(boardId)
-      .then((groups) => {
-        if (alive) setBoardGroups(groups);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [boardId]);
-
-  // Pick up WS updates for the groups we know about.
-  const mergedGroups = useMemo(() => {
-    const byId = new Map<string, TicketGroup>(boardGroups.map((g) => [g.id, g]));
-    for (const g of storeGroups) {
-      if (byId.has(g.id) || g.boardIds.includes(boardId)) {
-        byId.set(g.id, g);
-      }
-    }
-    return Array.from(byId.values());
-  }, [boardGroups, storeGroups, boardId]);
+  const navigate = useNavigate();
+  const mergedGroups = useBoardEpics(boardId);
 
   useEffect(() => {
     if (!ticketGroupIds[ticketId]) {
@@ -71,10 +46,17 @@ export function EpicPicker({ ticketId, boardId }: { ticketId: string; boardId: s
         <div className="mb-1.5 space-y-1">
           {assignedGroups.map((group) => (
             <div key={group.id} className="flex items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+              <button
+                type="button"
+                onClick={() => navigate(`/tickets/board/${group.boardIds[0] ?? boardId}/epic/${group.id}`)}
+                title={`Open ${group.name}`}
+                className="group/epic flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-left transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-bg-hover)]"
+              >
                 <span className="flex-shrink-0 text-xs">{group.emoji}</span>
-                <span className="truncate text-xs text-[var(--theme-text-secondary)]">{group.name}</span>
-              </div>
+                <span className="truncate text-xs text-[var(--theme-text-secondary)] group-hover/epic:text-[var(--theme-accent)]">
+                  {group.name}
+                </span>
+              </button>
               <button
                 className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
                 onClick={() => removeTicketFromGroup(group.id, ticketId)}

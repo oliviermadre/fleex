@@ -1,10 +1,12 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import { resolveBaseRef } from '../../domain/services/branch-utils.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { HostFs } from '../../infrastructure/host/types.js';
 
 export interface ReconcileResult {
@@ -30,6 +32,7 @@ export class ReconcileWorktreeUseCase {
     private readonly bareCloneManager: BareCloneManager,
     private readonly git: GitPort,
     private readonly logger: LoggerPort,
+    private readonly ticketStore: TicketStorePort,
   ) {}
 
   async execute(
@@ -103,18 +106,24 @@ export class ReconcileWorktreeUseCase {
       this.logger.info('Reconciled worktree', { org, repoName, branch, path: finalPath });
       return { path: finalPath, status: 'created' };
     } catch (err) {
-      // Branch might not exist remotely — try creating a new local branch from origin/main
-      this.logger.debug('Failed to checkout existing branch, trying new branch from origin/main', {
-        branch, error: String(err),
+      // Branch might not exist remotely — try creating a new local branch. Base
+      // it on the ticket's per-repo base branch when set (so a reconciled
+      // worktree derives from the same branch its siblings do), otherwise the
+      // repo default. Resolving the ticket is best-effort — a missing store or
+      // ticket just falls back to the default branch.
+      const baseBranch = await this.resolveTicketBaseBranch(ws.ticketId, org, repoName);
+      this.logger.debug('Failed to checkout existing branch, trying new branch', {
+        branch, baseBranch, error: String(err),
       });
       try {
         const existingPath = await this.createWorktree.execute(org, repoName, wtPath, {
           branch,
           createNewBranch: true,
           ...prOpt,
+          ...(baseBranch ? { baseBranch } : {}),
         });
         const finalPath = existingPath ?? wtPath;
-        this.logger.info('Reconciled worktree (new branch from origin/main)', { org, repoName, branch, path: finalPath });
+        this.logger.info('Reconciled worktree (new branch)', { org, repoName, branch, baseBranch, path: finalPath });
         return { path: finalPath, status: 'created' };
       } catch (retryErr) {
         this.logger.warn('Failed to reconcile worktree', {
@@ -122,6 +131,24 @@ export class ReconcileWorktreeUseCase {
         });
         return { path: null, status: 'failed' };
       }
+    }
+  }
+
+  /**
+   * Resolve the `origin/<base>` ref for a ticket's repo, or `undefined` when the
+   * ticket has no custom base for it. Never throws — reconciliation must keep
+   * working even if the ticket lookup fails.
+   */
+  private async resolveTicketBaseBranch(
+    ticketId: string,
+    org: string,
+    repoName: string,
+  ): Promise<string | undefined> {
+    try {
+      const ticket = await this.ticketStore.getTicketById(ticketId);
+      return ticket ? resolveBaseRef(ticket.links, org, repoName) : undefined;
+    } catch {
+      return undefined;
     }
   }
 

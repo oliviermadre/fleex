@@ -1,0 +1,139 @@
+/**
+ * WorkView — the « Work » single-screen surface, rendered by MainPanel when
+ * activePanel === 'work'. It owns everything right of the nav rail: the task
+ * queue (left), the conversation / new-task center with its own top bar, the
+ * one-at-a-time right tool window with its tool strip, and the status bar.
+ *
+ * Layout (SPEC §1): the full-height QUEUE 300px, then a column holding the top
+ * bar above CENTER minmax(0,1fr) · RIGHT PANEL (toggle) · TOOL STRIP 60px and
+ * the shell drawer (⌘J). The status bar spans the whole width, underneath.
+ */
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { useWorkQueue } from './useWorkQueue';
+import { useWorkKeyboard } from './keyboard';
+import { useWorkStore } from '../../stores/workStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
+import { WorkTopBar } from './WorkTopBar';
+import { WorkStatusBar } from './WorkStatusBar';
+import { WorkQueue } from './queue/WorkQueue';
+import { CollapsedQueueRail } from './queue/CollapsedQueueRail';
+import { TaskPane } from './task/TaskPane';
+import { NewTask } from './new/NewTask';
+import { ToolStrip } from './panel/ToolStrip';
+import { RightPanel } from './panel/RightPanel';
+import { ShellSurface } from './shell/ShellSurface';
+import { ShellDrawer } from './shell/ShellDrawer';
+import { CodeEditor } from './panel/CodeEditor';
+import { useTicketDeliverables } from './panel/useTicketDeliverables';
+import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
+
+export function WorkView() {
+  const queue = useWorkQueue();
+  const view = useWorkStore((s) => s.view);
+  const rightPanel = useWorkStore((s) => s.rightPanel);
+  const queueCollapsed = useWorkStore((s) => s.queueCollapsed);
+  const shellOpen = useWorkStore((s) => s.shellOpen);
+  const shellMode = useWorkStore((s) => s.shellMode);
+  const codeMode = useWorkStore((s) => s.codeMode);
+  const workflowMode = useWorkStore((s) => s.workflowMode);
+
+  // The queue's displayed order drives ⌘⇧↑/↓ navigation.
+  useWorkKeyboard(queue.orderedIds);
+
+  const selectedTask = queue.selectedTask;
+
+  // Load the selected ticket's workflow runs regardless of the active center
+  // mode, so the "Workflow" toggle appears reliably (and its view is warm) even
+  // when the user is on Code/Shell. Self-cleaning + seq-guarded in the store.
+  const selectedTaskId = selectedTask?.id ?? null;
+  useEffect(() => {
+    if (selectedTaskId) void useWorkflowRunStore.getState().loadForTicket(selectedTaskId);
+  }, [selectedTaskId]);
+
+  // Each ticket keeps its own center mode (chat / code / shell / workflow): apply
+  // the selected one's before paint, so switching never flashes the previous mode.
+  const restoreTicketMode = useWorkStore((s) => s.restoreTicketMode);
+  useLayoutEffect(() => {
+    if (selectedTaskId) restoreTicketMode(selectedTaskId);
+  }, [selectedTaskId, restoreTicketMode]);
+
+  // Deleting from the Context panel lands on the queue neighbour, not the first row.
+  const deleteTicket = useTicketStore((s) => s.deleteTicket);
+  const selectTicket = useWorkStore((s) => s.selectTicket);
+  const forgetTicket = useWorkStore((s) => s.forgetTicket);
+  const deleteTask = async (id: string) => {
+    if (!confirm('Delete this ticket?')) return;
+    const ids = queue.orderedIds;
+    const idx = ids.indexOf(id);
+    const neighbour = idx >= 0 ? (ids[idx + 1] ?? ids[idx - 1] ?? null) : null;
+    await deleteTicket(id);
+    forgetTicket(id);
+    selectTicket(neighbour);
+  };
+  const hasWorkflowRuns = useWorkflowRunStore((s) =>
+    selectedTaskId ? (s.runsByTicket[selectedTaskId]?.length ?? 0) > 0 : false,
+  );
+  // One deliverables subscription for the whole view: feeds the tool-strip badge
+  // count and the Delivs panel, both live via WS.
+  const { deliverables } = useTicketDeliverables(selectedTask?.id ?? null);
+
+  // A single execution-log panel for the whole view — opened from a queue row's
+  // running badge or a timeline run card.
+  const [execLog, setExecLog] = useState<{ id: string; title: string } | null>(null);
+  const openExecution = (id: string, title: string) => setExecLog({ id, title });
+
+  return (
+    <div
+      className="flex h-full min-h-0 w-full flex-col overflow-auto bg-[var(--theme-bg-base)] text-[var(--theme-text-primary)]"
+      style={{ minWidth: 1180, minHeight: 560 }}
+    >
+      <div className="flex min-h-0 flex-1">
+        {/* The queue runs the full height, so the top bar starts to its right. */}
+        {queueCollapsed ? (
+          <CollapsedQueueRail counts={queue.counts} />
+        ) : (
+          <WorkQueue queue={queue} onOpenExecution={openExecution} />
+        )}
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <WorkTopBar queue={queue} />
+
+          <div className="flex min-h-0 flex-1">
+            <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
+              {view === 'new' ? (
+                <NewTask />
+              ) : codeMode && selectedTask ? (
+                <CodeEditor ticketId={selectedTask.id} />
+              ) : shellMode && selectedTask ? (
+                <ShellSurface key={selectedTask.id} ticketId={selectedTask.id} />
+              ) : workflowMode && selectedTask && hasWorkflowRuns ? (
+                <TicketWorkflowTab ticketId={selectedTask.id} />
+              ) : (
+                <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+              )}
+            </main>
+
+            {view === 'task' && rightPanel && selectedTask && (
+              <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
+            )}
+
+            {view === 'task' && <ToolStrip task={selectedTask} delivCount={deliverables.length} />}
+          </div>
+
+          {/* Shell drawer (⌘J) — under the working area, beside the queue (SPEC §7). */}
+          {view === 'task' && selectedTask && shellOpen && !shellMode && (
+            <ShellDrawer key={selectedTask.id} ticketId={selectedTask.id} />
+          )}
+        </div>
+      </div>
+
+      {view === 'task' && <WorkStatusBar task={selectedTask} />}
+
+      {execLog && (
+        <FloatingExecutionPanel executionId={execLog.id} title={execLog.title} onClose={() => setExecLog(null)} />
+      )}
+    </div>
+  );
+}

@@ -89,6 +89,7 @@ export class CreateWorktreeUseCase {
       }
       const branchExistsMatch = message.match(/branch named '([^']+)' already exists/i);
       if (branchExistsMatch && effectiveRequest.createNewBranch) {
+        await this.alignExistingBranch(org, name, barePath, effectiveRequest.branch, effectiveRequest.baseBranch, request.baseBranch);
         this.logger.info('Branch already exists, checking out existing branch', {
           barePath, wtPath, branch: effectiveRequest.branch,
         });
@@ -181,7 +182,64 @@ export class CreateWorktreeUseCase {
           });
         }
       }
+      // A custom base branch that git can't resolve means the branch the ticket
+      // was derived from is gone from origin (e.g. the parent PR was merged and
+      // its branch deleted). Fail loud with an actionable message — NEVER fall
+      // back to the default branch, which would silently produce work against
+      // the wrong base (D7).
+      if (
+        request.baseBranch &&
+        (message.includes('invalid reference') ||
+          message.includes('not a valid object name') ||
+          message.includes(request.baseBranch))
+      ) {
+        const bareBase = request.baseBranch.replace(/^origin\//, '');
+        throw new WorktreeError(
+          `Base branch '${bareBase}' not found on origin for ${org}/${name}. ` +
+            `Edit the ticket's base branch.`,
+        );
+      }
       throw new WorktreeError(`Failed to create worktree: ${message}`);
+    }
+  }
+
+  /**
+   * A ticket branch outlives its worktree (unlinking a repo keeps the branch), so
+   * "create it from <base>" can find it already there. Before it is checked out:
+   * - no commits of its own → it is a mere pointer: move it onto `base`, even if
+   *   it already contains `base` (agent/550 contains main, yet isn't main);
+   * - commits of its own that don't contain a custom base → fail loud (D7),
+   *   never check the work out on the wrong base;
+   * - otherwise → resume it as is.
+   */
+  private async alignExistingBranch(
+    org: string,
+    name: string,
+    barePath: string,
+    branch: string,
+    base: string | undefined,
+    customBase: string | undefined,
+  ): Promise<void> {
+    const ownCommits = await this.git.countOwnCommits(barePath, branch);
+    if (ownCommits === 0) {
+      if (!base) return;
+      this.logger.info('Existing branch has no commits of its own, moving it onto the requested base', {
+        barePath, branch, base,
+      });
+      try {
+        await this.git.forceBranch(barePath, branch, base);
+      } catch (err) {
+        const stderr = (err as { stderr?: string }).stderr?.trim();
+        throw new WorktreeError(`Failed to move branch '${branch}' onto '${base}': ${stderr || String(err)}`);
+      }
+      return;
+    }
+    if (customBase && !(await this.git.isAncestor(barePath, customBase, branch))) {
+      const bareBase = customBase.replace(/^origin\//, '');
+      throw new WorktreeError(
+        `Branch '${branch}' already exists in ${org}/${name} with ${ownCommits} commit(s) of its own ` +
+          `that are not based on '${bareBase}'. Push or delete that branch before deriving it from '${bareBase}'.`,
+      );
     }
   }
 

@@ -349,6 +349,43 @@ POST /api/agents/v1/tickets/:id/worktree → use response.worktree.path as CWD
 | Get ticket worktree | `GET` | `/tickets/:id/worktree` | — |
 | Create ticket worktree | `POST` | `/tickets/:id/worktree` | `{ baseBranch? }` |
 
+### Per-repo base branch on ticket links
+
+A ticket's `repository` links can each carry an optional `baseBranch` — a remote
+branch on `origin` (stored **without** the `origin/` prefix, e.g.
+`feat/big-refacto`). When set, the ticket's worktree branch for that repo is
+created **from `origin/<baseBranch>`** instead of the repository's default
+branch. Absent ⇒ the default branch (unchanged behaviour).
+
+```json
+// A ticket link with a custom base:
+{ "type": "repository", "ref": "evaneos/odys-front", "label": "odys-front", "baseBranch": "feat/big-refacto" }
+```
+
+- Attach with a base via the CLI: `fleex ticket create "…" --repo evaneos/odys-front@feat/big-refacto`
+  or `fleex ticket link <id> --repo evaneos/odys-front@feat/big-refacto`.
+- Edit it with `PATCH /api/tickets/:id/links/:linkId` body
+  `{ "baseBranch": "feat/x" | null }` (`null` restores the default). If the
+  worktree already exists it is removed and re-derived from the new base — only
+  when nothing can be lost: the worktree is on the ticket branch, has no
+  uncommitted changes, the branch has no commits of its own, and no agent or
+  terminal session is using it. Otherwise `409` with the reason.
+- Unlinking a repo removes its worktree but keeps the ticket branch. Re-linking
+  moves that branch onto the requested base when it has no commits of its own;
+  with commits of its own that aren't based on the requested custom base,
+  worktree creation fails loudly instead of checking them out on the wrong base.
+- **Base-branch resolution precedence** when a worktree is created: a linked
+  `github_pr` (checks out the PR head) → a pre-existing `worktree` link →
+  the repo link's `baseBranch` → the repository default branch. An explicit
+  `baseBranch` in the `POST /tickets/:id/worktree` body overrides the link.
+- **Pull requests:** Fleex never opens PRs. When a repo has a custom base, the
+  agent's system prompt instructs it to run `gh pr create --base <baseBranch>`
+  and to never push to `<baseBranch>` directly. Ticket branches are created
+  with `--no-track` so a stray `git push` can't overwrite the base branch.
+- If the base branch has disappeared from `origin` by the time the worktree is
+  created, worktree creation **fails loudly** (`Base branch '<x>' not found on
+  origin for <org>/<name>`) rather than silently falling back to the default.
+
 ---
 
 ## Activity & Audit Log

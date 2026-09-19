@@ -10,7 +10,7 @@ interface ShowOptions {
   full?: boolean;
 }
 
-interface Link { type: string; label?: string; url?: string; ref?: string }
+interface Link { type: string; label?: string; url?: string; ref?: string; baseBranch?: string }
 interface Ticket {
   id: string;
   displayId: number;
@@ -122,7 +122,8 @@ const def: CommandDef = {
       process.stdout.write('\n');
       process.stdout.write(`  ${c.bold('Links:')}\n`);
       for (const l of others) {
-        process.stdout.write(`    [${l.type}] ${l.label ?? ''} ${l.url ?? l.ref ?? ''}\n`);
+        const baseSuffix = l.type === 'repository' && l.baseBranch ? ` ${c.dim(`(base: ${l.baseBranch})`)}` : '';
+        process.stdout.write(`    [${l.type}] ${l.label ?? ''} ${l.url ?? l.ref ?? ''}${baseSuffix}\n`);
       }
     }
 

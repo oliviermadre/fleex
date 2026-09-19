@@ -35,6 +35,26 @@ export function TicketWorkflowTab({ ticketId }: Props) {
     void loadForTicket(ticketId);
   }, [ticketId, loadForTicket]);
 
+  // Live-follow workflow events for this ticket so the DAG + side panel refresh
+  // as steps advance — most importantly after a Restart, so the "step cancelled"
+  // panel gives way to the fresh running attempt instead of re-offering Restart
+  // (a stale panel let a second click spawn a duplicate agent). Mirrors the
+  // wiring TicketDetail does on the Kanban side; here the Work view has no such
+  // parent, so the tab wires it itself. applyEvent reloads the ticket's runs and
+  // the loaded run's detail (seq-guarded), so double-wiring is harmless.
+  useEffect(() => {
+    return appWs.onChannel('tickets', (raw) => {
+      if (!raw.type.startsWith('workflow:')) return;
+      const tid = (raw.data as { ticketId?: string } | null)?.ticketId;
+      if (tid !== ticketId) return;
+      useWorkflowRunStore.getState().applyEvent({
+        type: raw.type,
+        ticketId,
+        payload: raw.data as Record<string, unknown>,
+      });
+    });
+  }, [ticketId]);
+
   useEffect(() => {
     let cancelled = false;
     fetchTicketDeliverables(ticketId)

@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject, ContextInjectionItem, MemorySnippetRef } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject, ContextInjectionItem, MemorySnippetRef, TicketLink } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel, parseRepoRef } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
@@ -855,7 +855,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
       // 4. Compose system prompt from persona files
       const repoCount = ticket ? ticket.links.filter((l) => l.type === 'repository').length : 0;
-      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount);
+      const repoBases = ticket ? this.repoBasesFromLinks(ticket.links) : [];
+      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount, repoBases);
 
       // 5. Load ticket context
       const context = await this.getTicketContext.execute({
@@ -1601,13 +1602,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       model: persona.model,
     });
 
-    // 4. Compose prompts
-    const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
-
     const context = await this.getTicketContext.execute({
       ticketId,
       agentName: persona.name,
     });
+
+    // 4. Compose prompts (after context so the base-branch section can read the
+    // ticket's repository links).
+    const repoBases = this.repoBasesFromLinks(context.ticket.links);
+    const repoCount = context.ticket.links.filter((l) => l.type === 'repository').length;
+    const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount, repoBases);
 
     const { blocks: skillPromptBlocks, manifest: skillPromptManifest } =
       await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody);
@@ -2118,7 +2122,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const repoCount = context
         ? context.ticket.links.filter((l) => l.type === 'repository').length
         : (params.subject?.repos?.length ?? 0);
-      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount);
+      const repoBases = context ? this.repoBasesFromLinks(context.ticket.links) : [];
+      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount, repoBases);
       const { blocks: userPromptBlocks, manifest: userPromptManifest } = context
         ? await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt)
         : await this.composeRoutineUserPrompt(params.subject ?? null, params.workflowContextPrompt);
@@ -2521,15 +2526,25 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         }
       }
 
+      // Per-repo base branch (D9): only when we mint a fresh ticket branch.
+      const baseBranch = resolveBaseRef(ticket.links, repo.org, repo.name);
       try {
         let usedBranch = branchName;
         try {
-          await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: branchName, createNewBranch });
+          await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+            branch: branchName,
+            createNewBranch,
+            ...(createNewBranch && baseBranch ? { baseBranch } : {}),
+          });
         } catch {
           // Branch may not exist on this repo (e.g. PR branch from another repo) — create a new one
           if (!createNewBranch) {
             usedBranch = buildTicketBranchName(ticket.title, ticket.id);
-            await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: usedBranch, createNewBranch: true });
+            await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+              branch: usedBranch,
+              createNewBranch: true,
+              ...(baseBranch ? { baseBranch } : {}),
+            });
           } else {
             throw new Error(`Failed to create branch ${branchName}`);
           }
@@ -2636,7 +2651,30 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     return workspaceRoot;
   }
 
-  private composeSystemPrompt(persona: AgentPersonaEntity, humanName: string | null, worktreePath: string | null = null, repoCount?: number): string {
+  /**
+   * Repositories whose worktree branch was derived from a non-default base
+   * branch. Fleex never opens PRs itself — the agent runs `gh pr create`, which
+   * targets the GitHub default branch unless told otherwise — so the base MUST
+   * be stated explicitly to the agent (AC13).
+   */
+  private baseBranchSection(repoBases: Array<{ ref: string; baseBranch: string }>): string | null {
+    if (repoBases.length === 0) return null;
+    const lines = repoBases.map(
+      (r) =>
+        `- \`${r.ref}\` is checked out on a branch derived from \`${r.baseBranch}\`. `
+        + `Open pull requests against \`${r.baseBranch}\` (\`gh pr create --base ${r.baseBranch}\`). `
+        + `Never push to \`${r.baseBranch}\` directly.`,
+    );
+    return `## Base Branches\n\n${lines.join('\n')}`;
+  }
+
+  private composeSystemPrompt(
+    persona: AgentPersonaEntity,
+    humanName: string | null,
+    worktreePath: string | null = null,
+    repoCount?: number,
+    repoBases: Array<{ ref: string; baseBranch: string }> = [],
+  ): string {
     const parts: string[] = [];
 
     if (persona.soulMd) {
@@ -2678,7 +2716,17 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       );
     }
 
+    const baseSection = this.baseBranchSection(repoBases);
+    if (baseSection) parts.push(baseSection);
+
     return parts.join('\n\n');
+  }
+
+  /** Custom (non-default) base branches per repository link, for the prompt. */
+  private repoBasesFromLinks(links: readonly TicketLink[]): Array<{ ref: string; baseBranch: string }> {
+    return links
+      .filter((l) => l.type === 'repository' && l.baseBranch)
+      .map((l) => ({ ref: l.ref, baseBranch: l.baseBranch! }));
   }
 
   private async composeUserPrompt(

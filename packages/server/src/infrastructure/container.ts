@@ -29,6 +29,7 @@ import { DiscoverExistingSessionsUseCase } from '../application/use-cases/discov
 import { ListRepositoriesUseCase } from '../application/use-cases/list-repositories.js';
 import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js';
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
+import { RebaseTicketWorktreeUseCase } from '../application/use-cases/rebase-ticket-worktree.js';
 import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
@@ -247,6 +248,7 @@ export async function createContainer() {
   const createSession = new CreateSessionUseCase(tmux, sessionStore_, namingService, git, config, logger);
   const renameSession = new RenameSessionUseCase(tmux, sessionStore_, namingService, logger);
   const createWorktreeUC = new CreateWorktreeUseCase(git, logger, bareCloneManager, overlayManager, resolver);
+  const rebaseTicketWorktree = new RebaseTicketWorktreeUseCase(git, createWorktreeUC, agentEventStore_, sessionStore_, logger);
   const detectMerge = new DetectMergeUseCase(ticketStore_, logger, (prs) => githubGraphql.fetchPRStates(prs));
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
     ticketStore_, createSession, createWorktreeUC, git, config, logger, resolver,
@@ -661,7 +663,7 @@ export async function createContainer() {
     await recoverOrphans.execute();
   }
 
-  const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, resolver, hostFs, bareCloneManager, git, logger);
+  const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, resolver, hostFs, bareCloneManager, git, logger, ticketStore_);
 
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore_, namingService, logger, git, resolver, ticketStore_);
   const getSessionGroups = new GetSessionGroupsUseCase(sessionStore_, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore_, personaStore_, agentEventStore_, reconcileWorktree, hostFs, config, namingService);
@@ -716,6 +718,7 @@ export async function createContainer() {
     listRepositories: new ListRepositoriesUseCase(git, config, logger, hostFs, resolver),
     listWorktrees: new ListWorktreesUseCase(git, logger, resolver, bareCloneManager),
     createWorktree: createWorktreeUC,
+    rebaseTicketWorktree,
     getClaudeUsage,
     agentTokenStore,
     ticketStore: ticketStore_,

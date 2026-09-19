@@ -14,8 +14,10 @@ import type { LoggerPort } from '../ports/logger.port.js';
  *  - Any step_run still in `running` is presumed orphaned; mark it `failed`
  *    with a sentinel error so the UI's existing `FailedStepRetryPanel` shows
  *    up and the user can simply click Retry.
- *  - Mark the parent run as `failed` so it leaves the active filter and the
- *    workflow tab doesn't try to keep streaming for it.
+ *  - PARK the parent run in `needs_review` (not `failed`): a server restart is a
+ *    resumable interruption, not a genuine failure. Parking keeps the run active
+ *    and surfaces it as "needs you" (queue pill + workflow header) awaiting a
+ *    Restart, instead of a dead `failed` run that the sidebar reads as idle.
  *
  * We do NOT auto-retry — that would race with whatever the user is doing on
  * page reload, and might silently re-run something they wanted to inspect.
@@ -46,21 +48,28 @@ export class RecoverOrphanedWorkflowStepsUseCase {
         sr.fail({ message: 'Interrupted by server restart' });
         await this.stepRunStore.save(sr);
         recoveredStepRuns++;
-        this.eventBus.emit({
-          type: 'workflow.run_failed',
-          workflowRunId: run.id,
-          stepRunId: sr.id,
-          stepId: sr.stepId,
-          ticketId: run.ticketId,
-          routineId: run.routineId,
-          error: 'Interrupted by server restart',
-          occurredAt: new Date(),
-        });
       }
 
-      run.fail();
+      // Park the run (needs_review) rather than fail it — see the class doc.
+      // currentStepId is preserved (block() doesn't clear it), so the run stays
+      // pointed at the interrupted step for the "…› {step} › human required" label.
+      run.block();
       await this.runStore.save(run);
       recoveredRuns++;
+
+      // One needs_review event per run so the queue pill + workflow view flip to
+      // "needs you" live (the DAG reloads its detail and shows the failed step's
+      // Retry). Anchored to an orphan step for the payload shape.
+      const anchor = orphans[0]!;
+      this.eventBus.emit({
+        type: 'workflow.needs_review',
+        workflowRunId: run.id,
+        stepRunId: anchor.id,
+        stepId: anchor.stepId,
+        ticketId: run.ticketId,
+        routineId: run.routineId,
+        occurredAt: new Date(),
+      });
     }
 
     if (recoveredRuns > 0) {

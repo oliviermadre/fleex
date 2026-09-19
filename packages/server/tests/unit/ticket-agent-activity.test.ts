@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   deriveTicketAgentActivity,
   deriveActivitySince,
+  deriveRunningDetails,
+  deriveWaitingWorkflowDetails,
+  type RunningDetailInputs,
 } from '../../src/domain/services/ticket-agent-activity.js';
 
 const EMPTY = {
@@ -278,5 +281,234 @@ describe('deriveActivitySince', () => {
     const { runningSinceByTicket, waitingSinceByTicket } = deriveActivitySince(EMPTY_INPUTS);
     expect(runningSinceByTicket.size).toBe(0);
     expect(waitingSinceByTicket.size).toBe(0);
+  });
+});
+
+const EMPTY_DETAIL: RunningDetailInputs = {
+  workflowRuns: [],
+  executions: [],
+  mentionById: new Map(),
+  personaDisplayById: new Map(),
+  skillDisplayByName: new Map(),
+  panelDisplayByName: new Map(),
+  panelDisplayById: new Map(),
+};
+
+describe('deriveRunningDetails', () => {
+  it('returns an empty map for empty inputs', () => {
+    expect(deriveRunningDetails(EMPTY_DETAIL).size).toBe(0);
+  });
+
+  // WHY: a workflow line ("🚦 WF › Step") describes the whole run; its own member
+  // executions must not also be counted, or every workflow would read "+N more".
+  it('shows the workflow step and ignores that ticket\'s executions', () => {
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      workflowRuns: [{ ticketId: 'T1', name: 'Spec Dev PR', emoji: '🚦', stepName: 'Check Spec', startedAt: '2026-01-01T00:00:00.000Z' }],
+      executions: [{ ticketId: 'T1', mentionId: 'm', personaId: 'p', startedAt: '2026-01-01T00:00:00.000Z' }],
+      mentionById: new Map([['m', { targetType: 'agent', targetAgent: 'x' }]]),
+      personaDisplayById: new Map([['p', 'Someone']]),
+    });
+    expect(out.get('T1')).toBe('🚦 Spec Dev PR › Check Spec');
+  });
+
+  it('omits the step separator when no current step is known', () => {
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      workflowRuns: [{ ticketId: 'T1', name: 'Spec Dev PR', emoji: null, stepName: null, startedAt: '2026-01-01T00:00:00.000Z' }],
+    });
+    expect(out.get('T1')).toBe('Spec Dev PR');
+  });
+
+  // WHY: concurrent workflow runs → the freshest is primary, the rest fold into "+N more".
+  it('shows the most recent workflow run first with "+N more" for extras', () => {
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      workflowRuns: [
+        { ticketId: 'T1', name: 'Old WF', emoji: null, stepName: 'A', startedAt: '2026-01-01T00:00:00.000Z' },
+        { ticketId: 'T1', name: 'New WF', emoji: null, stepName: 'B', startedAt: '2026-01-01T02:00:00.000Z' },
+      ],
+    });
+    expect(out.get('T1')).toBe('New WF › B +1 more');
+  });
+
+  // WHY: panel members share one @panel mention → they must aggregate into one
+  // "N panelists" line, not N agents.
+  it('aggregates panel members sharing a mention into one panel line', () => {
+    const mention = { targetType: 'panel', targetAgent: 'bono' };
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      executions: [
+        { ticketId: 'T1', mentionId: 'pm', personaId: 'a', startedAt: '2026-01-01T00:00:00.000Z' },
+        { ticketId: 'T1', mentionId: 'pm', personaId: 'b', startedAt: '2026-01-01T00:00:01.000Z' },
+        { ticketId: 'T1', mentionId: 'pm', personaId: 'c', startedAt: '2026-01-01T00:00:02.000Z' },
+      ],
+      mentionById: new Map([['pm', mention]]),
+      panelDisplayByName: new Map([['bono', 'Les chapeaux de Bono']]),
+    });
+    expect(out.get('T1')).toBe('🏛 Les chapeaux de Bono · 3 panelists');
+  });
+
+  it('labels a skill run with its display name', () => {
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      executions: [{ ticketId: 'T1', mentionId: 'sm', personaId: 'a', startedAt: '2026-01-01T00:00:00.000Z' }],
+      mentionById: new Map([['sm', { targetType: 'skill', targetAgent: 'pr-faq' }]]),
+      skillDisplayByName: new Map([['pr-faq', 'Press Release - FAQ']]),
+    });
+    expect(out.get('T1')).toBe('Running skill: Press Release - FAQ');
+  });
+
+  it('labels a lone agent with its persona display name', () => {
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      executions: [{ ticketId: 'T1', mentionId: 'am', personaId: 'p1', startedAt: '2026-01-01T00:00:00.000Z' }],
+      mentionById: new Map([['am', { targetType: 'agent', targetAgent: 'catalyst' }]]),
+      personaDisplayById: new Map([['p1', 'The Catalyst']]),
+    });
+    expect(out.get('T1')).toBe('The Catalyst is working');
+  });
+
+  // WHY: precedence panel > skill > agent; other distinct primitives fold into "+N more".
+  it('applies precedence panel > skill > agent with "+N more"', () => {
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      executions: [
+        { ticketId: 'T1', mentionId: 'pm', personaId: 'a', startedAt: '2026-01-01T00:00:00.000Z' },
+        { ticketId: 'T1', mentionId: 'pm', personaId: 'b', startedAt: '2026-01-01T00:00:01.000Z' },
+        { ticketId: 'T1', mentionId: 'sm', personaId: 'c', startedAt: '2026-01-01T00:00:02.000Z' },
+        { ticketId: 'T1', mentionId: 'am', personaId: 'd', startedAt: '2026-01-01T00:00:03.000Z' },
+      ],
+      mentionById: new Map([
+        ['pm', { targetType: 'panel', targetAgent: 'bono' }],
+        ['sm', { targetType: 'skill', targetAgent: 'pr-faq' }],
+        ['am', { targetType: 'agent', targetAgent: 'catalyst' }],
+      ]),
+      panelDisplayByName: new Map([['bono', 'Les chapeaux de Bono']]),
+      skillDisplayByName: new Map([['pr-faq', 'Press Release - FAQ']]),
+      personaDisplayById: new Map([['d', 'The Catalyst']]),
+    });
+    expect(out.get('T1')).toBe('🏛 Les chapeaux de Bono · 2 panelists +2 more');
+  });
+
+  // WHY: a panel started outside an @panel mention carries a synthetic
+  // `panel:<id>:<rand>` mentionId with no real mention row — still a panel.
+  it('recognises a synthetic panel run with no real mention', () => {
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      executions: [{ ticketId: 'T1', mentionId: 'panel:pnl1:ab12', personaId: 'a', startedAt: '2026-01-01T00:00:00.000Z' }],
+      panelDisplayById: new Map([['pnl1', 'UI Panel']]),
+    });
+    expect(out.get('T1')).toBe('🏛 UI Panel · 1 panelist');
+  });
+
+  // WHY: display-name lookups are best-effort — an unresolved slug is shown as-is
+  // rather than blanking the label.
+  it('falls back to the slug / "Agent" when a display name is missing', () => {
+    const out = deriveRunningDetails({
+      ...EMPTY_DETAIL,
+      executions: [
+        { ticketId: 'T1', mentionId: 'sm', personaId: 'a', startedAt: '2026-01-01T00:00:00.000Z' },
+        { ticketId: 'T2', mentionId: 'am', personaId: 'zz', startedAt: '2026-01-01T00:00:00.000Z' },
+      ],
+      mentionById: new Map([
+        ['sm', { targetType: 'skill', targetAgent: 'raw-slug' }],
+        ['am', { targetType: 'agent', targetAgent: 'unknown' }],
+      ]),
+    });
+    expect(out.get('T1')).toBe('Running skill: raw-slug');
+    expect(out.get('T2')).toBe('Agent is working');
+  });
+});
+
+describe('deriveTicketAgentActivity — running detail', () => {
+  it('uses the precise running detail when provided, else the generic string', () => {
+    const [precise] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+      runningDetailByTicket: new Map([['T1', '🏛 Les chapeaux de Bono · 6 panelists']]),
+    });
+    expect(precise?.detail).toBe('🏛 Les chapeaux de Bono · 6 panelists');
+
+    const [generic] = deriveTicketAgentActivity(['T1'], { ...EMPTY, runningExecutionTicketIds: ['T1'] });
+    expect(generic?.detail).toBe('An agent is working on this ticket');
+  });
+});
+
+describe('deriveWaitingWorkflowDetails', () => {
+  it('labels a parked workflow run with its step and "human required"', () => {
+    const out = deriveWaitingWorkflowDetails([
+      { ticketId: 'T1', name: 'Spec Dev PR (HITL)', emoji: '📦', stepName: 'Build', startedAt: '2026-01-01T00:00:00.000Z' },
+    ]);
+    expect(out.get('T1')).toBe('📦 Spec Dev PR (HITL) › Build › human required');
+  });
+
+  it('omits the step when unknown', () => {
+    const out = deriveWaitingWorkflowDetails([
+      { ticketId: 'T1', name: 'WF', emoji: null, stepName: null, startedAt: '2026-01-01T00:00:00.000Z' },
+    ]);
+    expect(out.get('T1')).toBe('WF › human required');
+  });
+
+  it('keeps the most recent run per ticket', () => {
+    const out = deriveWaitingWorkflowDetails([
+      { ticketId: 'T1', name: 'Old', emoji: null, stepName: 'A', startedAt: '2026-01-01T00:00:00.000Z' },
+      { ticketId: 'T1', name: 'New', emoji: null, stepName: 'B', startedAt: '2026-01-01T02:00:00.000Z' },
+    ]);
+    expect(out.get('T1')).toBe('New › B › human required');
+  });
+
+  it('returns an empty map for no runs', () => {
+    expect(deriveWaitingWorkflowDetails([]).size).toBe(0);
+  });
+});
+
+describe('deriveTicketAgentActivity — waiting detail', () => {
+  it('uses the workflow waiting detail when provided, else the generic string', () => {
+    const [precise] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      waitingWorkflowTicketIds: ['T1'],
+      waitingDetailByTicket: new Map([['T1', '📦 Spec Dev PR (HITL) › Build › human required']]),
+    });
+    expect(precise?.activity).toBe('waiting');
+    expect(precise?.detail).toBe('📦 Spec Dev PR (HITL) › Build › human required');
+
+    const [generic] = deriveTicketAgentActivity(['T1'], { ...EMPTY, waitingMentionTicketIds: ['T1'] });
+    expect(generic?.detail).toBe('Waiting for a human response');
+  });
+});
+
+describe('deriveTicketAgentActivity — failed-and-retryable run', () => {
+  // WHY: a run whose latest attempt failed (server restart, crash, max turns) is
+  // stuck awaiting a manual Retry — the sidebar must read "needs you", not idle.
+  it('classifies a failed-retryable workflow ticket as waiting (needs you)', () => {
+    const [t] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      failedWorkflowTicketIds: ['T1'],
+      waitingDetailByTicket: new Map([['T1', '📦 Spec Dev PR (HITL) › human required']]),
+    });
+    expect(t?.activity).toBe('waiting');
+    expect(t?.detail).toBe('📦 Spec Dev PR (HITL) › human required');
+  });
+
+  // WHY: it is checked AFTER running, so a fresh run the ticket kicked off after
+  // the failure still wins — the old failed run must not mask live work.
+  it('lets a running run win over a failed-retryable one on the same ticket', () => {
+    const [t] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      failedWorkflowTicketIds: ['T1'],
+      runningExecutionTicketIds: ['T1'],
+    });
+    expect(t?.activity).toBe('running');
+  });
+
+  // WHY: and a waiting gate still outranks a failed run (waiting is checked first).
+  it('lets a waiting gate win over a failed-retryable run', () => {
+    const [t] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      failedWorkflowTicketIds: ['T1'],
+      waitingWorkflowTicketIds: ['T1'],
+    });
+    expect(t?.activity).toBe('waiting');
   });
 });

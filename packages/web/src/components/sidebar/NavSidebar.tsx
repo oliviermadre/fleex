@@ -2,11 +2,13 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
 import { cn } from '../../lib/cn';
 import { RoutineIcon } from '../../lib/primitives';
+import { TasksIcon } from './icons';
 import { RepositoriesIcon } from './icons';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
 
@@ -35,6 +37,7 @@ export function NavSidebar() {
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const toggleNav = useUIStore((s) => s.toggleNav);
   const activePanel = useUIStore((s) => s.activePanel);
+  const workViewEnabled = useSettingsStore((s) => s.settings.workViewEnabled) !== false;
   const sessions = useSessionStore((s) => s.sessions);
   const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
@@ -72,6 +75,19 @@ export function NavSidebar() {
 
         {/* === Operational === */}
         <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
+
+        {/* Tasks (single-screen ergonomics — queue · conversation · context).
+            Gated by the workViewEnabled flag. */}
+        {workViewEnabled && (
+          <NavItem
+            icon={<TasksIcon size={20} />}
+            label="Tasks"
+            shortLabel="Tasks"
+            active={activePanel === 'work'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/work')}
+          />
+        )}
 
         {/* Kanban (was Backlog / Tickets) */}
         <NavItem

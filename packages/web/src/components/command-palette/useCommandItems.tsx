@@ -57,7 +57,8 @@ export function useCommandItems(query: string): CommandItem[] {
     }
 
     // ── Views ──
-    const views: { panel: 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings'; label: string }[] = [
+    const views: { panel: 'work' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings'; label: string }[] = [
+      { panel: 'work', label: 'Tasks' },
       { panel: 'sessions', label: 'Sessions' },
       { panel: 'repositories', label: 'Repositories' },
       { panel: 'tickets', label: 'Tickets' },
@@ -247,6 +248,13 @@ export function useCommandItems(query: string): CommandItem[] {
 
 function getViewIcon(panel: string): React.ReactNode {
   switch (panel) {
+    case 'work':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="1.5" y="2" width="13" height="12" rx="1.5" />
+          <line x1="6.5" y1="2" x2="6.5" y2="14" />
+        </svg>
+      );
     case 'sessions':
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

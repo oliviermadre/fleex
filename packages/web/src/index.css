@@ -385,6 +385,14 @@ html, body {
   font-weight: bold;
 }
 
+/* ── Work Code editor: Monaco diff gutter (lines changed vs base) ── */
+
+.wt-diff-gutter {
+  background: var(--tint-green-solid);
+  width: 3px !important;
+  margin-left: 3px;
+}
+
 /* ── Deliverable Reading Overlay ── */
 
 .deliverable-overlay-backdrop {

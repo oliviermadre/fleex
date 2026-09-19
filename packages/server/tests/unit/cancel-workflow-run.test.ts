@@ -47,6 +47,26 @@ describe('CancelWorkflowRunUseCase', () => {
     expect(eventBus.emit).not.toHaveBeenCalled();
   });
 
+  // WHY: a `failed` run must be cancellable — the user may want to abandon it
+  // (and abort any lingering step execution) instead of retrying. `isActive()`
+  // wrongly made it a no-op, trapping the user.
+  it('cancels a failed run (and aborts its lingering running step)', async () => {
+    const run = makeRun();
+    run.fail();
+    const step = runningStep('exec-1'); // an execution the failed run left alive
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { getByWorkflowRun: vi.fn().mockResolvedValue([step]), save: vi.fn() };
+    const canceller = { cancelExecution: vi.fn().mockResolvedValue(true) };
+    const eventBus = { emit: vi.fn() };
+    const uc = new CancelWorkflowRunUseCase(runStore as never, stepRunStore as never, canceller as never, eventBus as never);
+
+    await uc.execute('run-1');
+
+    expect(run.status).toBe('cancelled');
+    expect(canceller.cancelExecution).toHaveBeenCalledWith('exec-1');
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_cancelled' }));
+  });
+
   // WHY (AC3): cancelling the run must ALSO abort the agent of the step still
   // running, otherwise the run flips to `cancelled` while the agent keeps
   // working on the worktree.

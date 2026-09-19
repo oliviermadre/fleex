@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { usePullRequestStore } from '../../stores/pullRequestStore';
 import { cn } from '../../lib/cn';
+import { SidePanelIcon } from './icons';
 
 export function SidebarHeader() {
   const toggleContentPanel = useUIStore((s) => s.toggleContentPanel);
@@ -41,10 +42,7 @@ export function SidebarHeader() {
           className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
           title="Collapse panel"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
-            <line x1="6" y1="1.5" x2="6" y2="14.5" />
-          </svg>
+          <SidePanelIcon size={14} />
         </button>
       </div>
     </div>

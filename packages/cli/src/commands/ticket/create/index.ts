@@ -1,7 +1,7 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
-import { assertValidStatus, assertValidPriority, assertValidType, normalizeDueDate } from '../_shared.ts';
+import { accumulate, assertValidStatus, assertValidPriority, assertValidType, normalizeDueDate, parseRepoRef } from '../_shared.ts';
 import { resolveBoardIdOrDefault } from '../../board/_shared.ts';
 
 interface CreateOptions {
@@ -13,6 +13,7 @@ interface CreateOptions {
   type?: string;
   due?: string;
   tag?: string[];
+  repo?: string[];
 }
 
 const def: CommandDef = {
@@ -29,6 +30,7 @@ const def: CommandDef = {
     cmd.option('--type <type>', 'Type: build | fix | review | ops | lead | think');
     cmd.option('--due <date>', 'Due date (YYYY-MM-DD or ISO 8601)');
     cmd.option('--tag <tag>', 'Tag (repeatable)', (val: string, prev: string[] = []) => [...prev, val], [] as string[]);
+    cmd.option('--repo <org/name[@base]>', 'Attach a repository, optionally deriving the worktree from a base branch (org/name@feat/x) (repeatable)', accumulate, [] as string[]);
   },
   action: async (opts: CreateOptions) => {
     if (!opts.title) die('Missing required --title');
@@ -44,6 +46,15 @@ const def: CommandDef = {
     if (opts.type) body.type = opts.type;
     if (opts.due) body.dueDate = normalizeDueDate(opts.due);
     if (opts.tag && opts.tag.length > 0) body.tags = opts.tag;
+    if (opts.repo && opts.repo.length > 0) {
+      // Parse `org/name[@base]` (exits on malformed input) into repository links.
+      body.links = opts.repo.map(parseRepoRef).map((r) => ({
+        type: 'repository',
+        ref: r.ref,
+        label: r.ref,
+        ...(r.baseBranch ? { baseBranch: r.baseBranch } : {}),
+      }));
+    }
 
     const base = apiBase();
     const result = await apiPost<{ displayId: number; title: string; status: string }>(`${base}/api/tickets`, body);

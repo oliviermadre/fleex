@@ -36,8 +36,12 @@ export function selectFailedStepCards(
   const latestRun = [...(runs ?? [])].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
   if (!latestRun) return [];
 
-  // R2 — `cancelled` is a deliberate Terminate, `completed` has nothing to retry.
-  if (latestRun.status !== 'failed') return [];
+  // R2 — a `failed` run, or one PARKED in `needs_review` after a server-restart
+  // interruption marked a step `failed` (recover-orphaned): both carry a failed
+  // step to retry. `cancelled` is a deliberate Terminate; `completed` has nothing
+  // to retry. A gate/waiting-input run is also `needs_review` but has no failed
+  // step, so it produces no card here.
+  if (latestRun.status !== 'failed' && latestRun.status !== 'needs_review') return [];
 
   // R3 — step-run status lives in the run detail; render nothing rather than guess.
   const detail = detailByRunId[latestRun.id];

@@ -4,6 +4,12 @@ import * as api from '../services/api';
 
 interface RepositoryState {
   repositories: Repository[];
+  /**
+   * Whether `GET /repositories` has come back at least once. Pickers need to
+   * tell "none configured" from "not answered yet": that call shells out to git
+   * per repo, so an empty list is the normal state for the first seconds.
+   */
+  loaded: boolean;
   branchesByRepo: Record<string, string[]>;
   worktreesByRepo: Record<string, Worktree[]>;
   setRepositories: (repos: Repository[]) => void;
@@ -27,6 +33,7 @@ let inFlightFetch: Promise<void> | null = null;
 
 export const useRepositoryStore = create<RepositoryState>((set) => ({
   repositories: [],
+  loaded: false,
   branchesByRepo: {},
   worktreesByRepo: {},
 
@@ -46,7 +53,7 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
     if (inFlightFetch) return inFlightFetch;
     inFlightFetch = api
       .fetchRepositories()
-      .then((repos) => { set({ repositories: repos }); })
+      .then((repos) => { set({ repositories: repos, loaded: true }); })
       // Keep the last known list rather than blanking the pickers: callers
       // don't catch, and request() already raised a toast.
       .catch(() => {})

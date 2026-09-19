@@ -41,8 +41,9 @@ interface TicketState {
   archiveTicket: (id: string) => Promise<void>;
   unarchiveTicket: (id: string) => Promise<void>;
   moveTicket: (id: string, status: TicketStatus, position?: number) => Promise<void>;
-  addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
+  addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
+  patchLinkBaseBranch: (ticketId: string, linkId: string, baseBranch: string | null) => Promise<void>;
   importGitHubIssue: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
   importSlackMessage: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
   retrySlackImport: (ticketId: string) => Promise<void>;
@@ -208,6 +209,16 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       tickets: s.tickets.map((t) =>
         t.id === ticketId ? { ...t, links: t.links.filter((l: TicketLink) => l.id !== linkId) } : t,
       ),
+    }));
+  },
+
+  patchLinkBaseBranch: async (ticketId, linkId, baseBranch) => {
+    // Server validates the branch against origin and returns the full updated
+    // ticket; a 409/422 rejects and is surfaced by the caller. Mirrors addLink's
+    // "apply the server's authoritative ticket" reconciliation.
+    const updated = await api.patchTicketLink(ticketId, linkId, baseBranch);
+    set((s) => ({
+      tickets: s.tickets.map((t) => (t.id === ticketId ? updated : t)),
     }));
   },
 

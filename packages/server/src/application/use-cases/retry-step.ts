@@ -29,6 +29,15 @@ export class RetryStepUseCase {
     const stepRun = await this.stepRunStore.getById(params.stepRunId);
     if (!stepRun) throw new StepRunNotFoundError(params.stepRunId);
 
+    // Idempotency: only the latest attempt of a step is restartable. If a newer
+    // attempt already exists, this step has already been restarted (e.g. a second
+    // click on a stale "Restart" panel that hadn't refreshed) — re-running would
+    // spawn a duplicate agent on the same worktree, so no-op.
+    const siblings = await this.stepRunStore.getByWorkflowRun(params.workflowRunId);
+    if (siblings.some((sr) => sr.stepId === stepRun.stepId && sr.attempt > stepRun.attempt)) {
+      return;
+    }
+
     if (params.humanResponse && params.humanResponse.trim().length > 0) {
       stepRun.recordHumanResponse(params.humanResponse.trim());
       await this.stepRunStore.save(stepRun);

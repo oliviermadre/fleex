@@ -197,7 +197,26 @@ export class RunWorkflowStepUseCase {
           stepRun.cancel();
           await this.deps.stepRunStore.save(stepRun);
         }
-        // Emit a workflow event so the Workflow view refreshes live. Without
+        // Park the run: a terminated step must surface as "needs you" (awaiting a
+        // manual Restart) rather than a phantom "running" that never advances.
+        // This branch is shared by three flows — bare step terminate, whole-run
+        // cancel, and force-restart — and `cancelExecution` only *signals* the
+        // abort, so this catch runs asynchronously, after the other two have
+        // already moved the run. Re-read the authoritative state and only park a
+        // run that is still `running` on THIS step with no newer attempt:
+        //  - whole-run cancel already set it `cancelled` (terminal) → skip;
+        //  - force-restart re-dispatched a fresh attempt of this step and set the
+        //    run back to `running` itself → a newer attempt exists → skip.
+        const fresh = await this.deps.runStore.getById(run.id);
+        if (fresh && fresh.status === 'running' && fresh.currentStepId === step.id) {
+          const stepRuns = await this.deps.stepRunStore.getByWorkflowRun(run.id);
+          const restarted = stepRuns.some((sr) => sr.stepId === step.id && sr.attempt > stepRun.attempt);
+          if (!restarted) {
+            fresh.block(); // → needs_review: still active, but "waiting on a human" so it leaves the RUNNING bucket
+            await this.deps.runStore.save(fresh);
+          }
+        }
+        // Emit a workflow event so the Workflow view + queue refresh live. Without
         // this, a Terminate on a step leaves the UI showing "running" until a
         // manual page refresh (the DB is `cancelled`, but nothing was pushed).
         this.deps.eventBus.emit({

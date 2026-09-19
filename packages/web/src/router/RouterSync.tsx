@@ -22,7 +22,7 @@ import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -108,6 +108,13 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // List/Focus cockpit (cross-board monitoring, view #400)
   if (pathname === '/list-focus') {
     return { ...base, panel: 'list-focus' };
+  }
+
+  // Work (single-screen ergonomics — queue · conversation · context). Selection
+  // and shell/panel layout live in workStore (localStorage), not the URL, so the
+  // route carries only the panel. /work/:ticketId is reserved for a later deep link.
+  if (pathname === '/work') {
+    return { ...base, panel: 'work' };
   }
 
   // Agent worktree within sessions panel
@@ -379,6 +386,8 @@ export function storeToUrl(
       return { pathname: '/assistant', search: '' };
     case 'list-focus':
       return { pathname: '/list-focus', search: '' };
+    case 'work':
+      return { pathname: '/work', search: '' };
     case 'execution-log':
       return { pathname: '/execution-log', search: '' };
     case 'routines':

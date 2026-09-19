@@ -15,7 +15,11 @@ export class CancelWorkflowRunUseCase {
   async execute(workflowRunId: string): Promise<void> {
     const run = await this.runStore.getById(workflowRunId);
     if (!run) throw new WorkflowRunNotFoundError(workflowRunId);
-    if (!run.isActive()) return; // idempotent
+    // Idempotent only against a run already settled to a terminal state. A
+    // `failed` run IS cancellable: the user may want to abandon it (and abort any
+    // still-lingering step execution) instead of retrying. Using `isActive()`
+    // here made a failed run un-cancellable, trapping the user with no way out.
+    if (run.status === 'cancelled' || run.status === 'completed') return;
 
     run.cancel();
     await this.runStore.save(run);
