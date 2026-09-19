@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><style>body{margin:0;background:#f4f4f5;font-family:-apple-system,system-ui,"Segoe UI",sans-serif;color:#18181b;-webkit-font-smoothing:antialiased}a{color:#4f46e5;text-decoration:none}a:hover{color:#4338ca}textarea{font:inherit;color:inherit}*{box-sizing:border-box}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}</style></helmet>
+<div style="height:100vh;overflow:auto;background:#f4f4f5"><div style="height:100%;min-width:1180px;min-height:560px;display:flex;flex-direction:column;background:#f4f4f5;overflow:hidden;font-size:13px">
+
+<!-- ── top bar (full width) ── -->
+<div style="height:36px;flex:none;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:8px;padding:0 10px 0 12px">
+  <div style="width:22px;height:22px;border-radius:6px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700">ϟ</div>
+  <span style="font-size:12.5px;font-weight:600;color:#18181b">Fleex</span>
+  <div style="width:1px;height:16px;background:#e4e4e7;margin:0 4px"></div>
+  <div title="Command palette" style="height:24px;width:260px;border:1px solid #e4e4e7;background:#f4f4f5;border-radius:6px;display:flex;align-items:center;gap:8px;padding:0 8px;font-size:12px;color:#828289;cursor:pointer" style-hover="border-color:#a5b4fc"><span>⌕</span><span style="flex:1">Search, jump, run…</span><span style="font:600 10.5px ui-monospace,Menlo,monospace">⌘K</span></div>
+  <span style="font-size:11.5px;color:#828289">{{ topSummary }}</span>
+  <div style="flex:1"></div>
+  <div onClick="{{ syncOverlay }}" title="Capture gitignored files into the per-repo overlay" style="height:24px;padding:0 9px;border:1px solid #e4e4e7;border-radius:6px;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#52525b;cursor:pointer;background:#fff" style-hover="border-color:#4f46e5;background:rgba(99,102,241,.06)"><span style="font-size:12px">⟳</span>Sync overlay</div>
+  <div style="width:1px;height:16px;background:#e4e4e7;margin:0 2px"></div>
+  <span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#a1a1aa">PINNED</span>
+  <div title="Open worktree in Cursor" style="height:24px;padding:0 8px;border:1px solid #e4e4e7;border-radius:6px;display:flex;align-items:center;gap:5px;font-size:11.5px;color:#52525b;cursor:pointer;background:#fff" style-hover="border-color:#4f46e5;background:rgba(99,102,241,.06)"><span style="font-size:11px">‹›</span>Cursor</div>
+  <div title="Reveal worktree in Finder" style="height:24px;padding:0 8px;border:1px solid #e4e4e7;border-radius:6px;display:flex;align-items:center;gap:5px;font-size:11.5px;color:#52525b;cursor:pointer;background:#fff" style-hover="border-color:#4f46e5;background:rgba(99,102,241,.06)"><span style="font-size:11px">▣</span>Finder</div>
+  <div title="Open localhost:3000" style="height:24px;padding:0 8px;border:1px solid #e4e4e7;border-radius:6px;display:flex;align-items:center;gap:5px;font-size:11.5px;color:#52525b;cursor:pointer;background:#fff" style-hover="border-color:#4f46e5;background:rgba(99,102,241,.06)"><span style="font-size:11px">◍</span>localhost</div>
+  <div title="Tail dev logs" style="height:24px;padding:0 8px;border:1px solid #e4e4e7;border-radius:6px;display:flex;align-items:center;gap:5px;font-size:11.5px;color:#52525b;cursor:pointer;background:#fff" style-hover="border-color:#4f46e5;background:rgba(99,102,241,.06)"><span style="font-size:11px">≣</span>Logs</div>
+  <div style="width:1px;height:16px;background:#e4e4e7;margin:0 2px"></div>
+  <div title="Notifications" style="width:26px;height:26px;border-radius:6px;color:#646469;display:grid;place-items:center;font-size:13px;position:relative;cursor:pointer" style-hover="background:#f4f4f5">🔔<span style="position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#dc2626"></span></div>
+  <div style="width:24px;height:24px;border-radius:50%;background:#e4e4e7;color:#52525b;display:grid;place-items:center;font-size:9.5px;font-weight:600">NaS</div>
+</div>
+
+<!-- ── body: nav rail | column(workspace + drawer) ── -->
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:48px minmax(0,1fr)">
+
+<!-- ── nav rail ── -->
+<div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:6px">
+  <div title="Working on" style="width:34px;height:34px;border-radius:8px;background:rgba(99,102,241,.12);color:#4f46e5;display:grid;place-items:center;font-size:15px">◧</div>
+  <div title="Kanban · Cockpit · Sessions · Assistant" style="width:34px;height:34px;border-radius:8px;color:#828289;display:grid;place-items:center;font-size:16px;cursor:pointer" style-hover="background:#f4f4f5">⋯</div>
+  <div style="flex:1"></div>
+  <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px">⚙</div>
+</div>
+
+<div style="display:flex;flex-direction:column;min-height:0;min-width:0">
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:{{ gridCols }}">
+
+<!-- ── queue ── -->
+<div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;min-height:0">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 10px 0 16px;border-bottom:1px solid #f0f0f2;flex:none">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52525b">QUEUE <span style="color:#828289;font-weight:500">{{ total }}</span></div>
+    <div title="New task ⌥N" onClick="{{ newTask }}" style="height:26px;padding:0 8px 0 6px;border-radius:6px;background:#4f46e5;color:#fff;display:flex;align-items:center;gap:5px;font-size:12px;font-weight:500;cursor:pointer" style-hover="background:#4338ca"><span style="font-size:16px;line-height:1">+</span>New</div>
+  </div>
+  <div style="display:flex;gap:4px;padding:8px 10px 4px;flex-wrap:wrap;flex:none">
+    <sc-for list="{{ filters }}" as="f" hint-placeholder-count="5"><div onClick="{{ f.onClick }}" style="font-size:11px;padding:2px 8px;border-radius:12px;cursor:pointer;background:{{ f.bg }};color:{{ f.color }};border:1px solid {{ f.border }}">{{ f.name }}</div></sc-for>
+  </div>
+  <div style="flex:1;overflow:auto;padding:4px 8px 8px">
+    <sc-if value="{{ hasNeeds }}" hint-placeholder-val="{{ true }}"><div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#854d0e;padding:6px 8px 6px;display:flex;gap:6px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:#a16207;animation:pulse 1.4s infinite"></span>NEEDS YOU · {{ needsCount }}</div></sc-if>
+    <sc-for list="{{ needs }}" as="t" hint-placeholder-count="2">
+      <div onClick="{{ t.select }}" style="padding:9px 10px;border-radius:8px;border:1px solid rgba(234,179,8,.35);background:{{ t.bg }};margin-bottom:6px;cursor:pointer;animation:fadein .25s">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.title }}</div><span style="font-size:10.5px;color:#828289;flex:none">{{ t.campaign }}</span></div>
+        <div style="font-size:12px;color:#3f3f46;margin:5px 0 7px;line-height:1.45"><b style="color:#7e22ce">{{ t.agent }}</b> asks: {{ t.qText }}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ t.qOptions }}" as="o" hint-placeholder-count="2"><span onClick="{{ o.onClick }}" style="font-size:11.5px;padding:3px 9px;border-radius:5px;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};border:1px solid {{ o.border }}">{{ o.label }}</span></sc-for><span onClick="{{ t.select }}" style="font-size:11.5px;padding:3px 7px;color:#52525b;cursor:pointer">Reply…</span></div>
+      </div>
+    </sc-for>
+
+    <sc-if value="{{ hasRunning }}" hint-placeholder-val="{{ true }}"><div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#4338ca;padding:10px 8px 6px">RUNNING · {{ runningCount }}</div></sc-if>
+    <sc-for list="{{ running }}" as="t" hint-placeholder-count="2">
+      <div onClick="{{ t.select }}" style="padding:8px 10px;border-radius:8px;background:{{ t.bg }};border-left:2px solid {{ t.border }};margin-bottom:2px;cursor:pointer;animation:fadein .25s" style-hover="background:#f4f4f5">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:{{ t.weight }};color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.title }}</div><span style="font-size:10.5px;color:#828289;flex:none">{{ t.campaign }}</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px"><span style="display:flex;align-items:center;gap:4px;color:#4338ca"><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5;animation:pulse 1.4s infinite"></span>{{ t.activity }}</span><span style="color:#828289">· {{ t.num }}</span></div>
+        <div style="margin-top:6px;height:3px;border-radius:2px;background:#e4e4e7;overflow:hidden"><div style="width:{{ t.pct }};height:100%;background:#4f46e5;transition:width .35s"></div></div>
+      </div>
+    </sc-for>
+
+    <sc-if value="{{ hasIdle }}" hint-placeholder-val="{{ true }}"><div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#828289;padding:10px 8px 6px">IDLE · {{ idleCount }}</div></sc-if>
+    <sc-for list="{{ idle }}" as="t" hint-placeholder-count="3">
+      <div onClick="{{ t.select }}" style="padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between;gap:8px;align-items:baseline;cursor:pointer;background:{{ t.bg }}" style-hover="background:#f4f4f5"><div style="font-size:13px;color:#3f3f46;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:{{ t.weight }}">{{ t.title }}</div><span style="font-size:11px;color:#828289;flex:none">{{ t.statusLabel }}</span></div>
+    </sc-for>
+  </div>
+  <div style="padding:9px 14px;border-top:1px solid #f0f0f2;display:flex;justify-content:space-between;font-size:11px;color:#828289;flex:none"><span>Done this week <b style="color:#52525b">4</b></span><span style="cursor:pointer" style-hover="color:#4f46e5">Backlog 3 ›</span></div>
+</div>
+
+<!-- ── main ── -->
+<div style="display:flex;flex-direction:column;min-height:0;min-width:0;border-right:1px solid #e4e4e7;overflow:hidden">
+
+  <!-- new task -->
+  <sc-if value="{{ isNew }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;min-height:0;animation:fadein .25s">
+    <div style="width:min(720px,100%);display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font-size:22px;font-weight:600;letter-spacing:-.01em">What are you working on?</div><span onClick="{{ cancelNew }}" style="font-size:12px;color:#828289;cursor:pointer" style-hover="color:#18181b">Cancel <span style="font-family:ui-monospace,Menlo,monospace">esc</span></span></div>
+      <div style="background:#fff;border:1px solid #4f46e5;border-radius:14px;box-shadow:0 0 0 3px rgba(99,102,241,.12),0 8px 30px rgba(0,0,0,.06)">
+        <textarea value="{{ draftText }}" onChange="{{ onDraft }}" onKeyDown="{{ onDraftKey }}" placeholder="Describe the task. Code or not, framed or not." rows="4" style="width:100%;border:0;outline:0;resize:none;background:transparent;padding:16px 18px 6px;font-size:15px;line-height:1.55;display:block"></textarea>
+        <div style="padding:4px 14px 6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px">
+          <span style="color:#828289;font-size:10.5px;font-weight:700;letter-spacing:.06em;width:58px">REPOS</span>
+          <sc-for list="{{ draftRepos }}" as="r" hint-placeholder-count="4"><span onClick="{{ r.onClick }}" style="cursor:pointer;border-radius:5px;padding:2px 8px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:{{ r.bg }};color:{{ r.color }};border:1px solid {{ r.border }}">⎇ {{ r.name }}</span></sc-for>
+        </div>
+        <div style="padding:2px 14px 6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px">
+          <span style="color:#828289;font-size:10.5px;font-weight:700;letter-spacing:.06em;width:58px">BOARD</span>
+          <sc-for list="{{ draftBoards }}" as="b" hint-placeholder-count="4"><span onClick="{{ b.onClick }}" style="cursor:pointer;border-radius:5px;padding:2px 8px;background:{{ b.bg }};color:{{ b.color }};border:1px solid {{ b.border }}">{{ b.name }}</span></sc-for>
+        </div>
+        <div style="padding:2px 14px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px">
+          <span style="color:#828289;font-size:10.5px;font-weight:700;letter-spacing:.06em;width:58px">TYPE</span>
+          <sc-for list="{{ draftTypes }}" as="b" hint-placeholder-count="3"><span onClick="{{ b.onClick }}" style="cursor:pointer;border-radius:5px;padding:2px 8px;background:{{ b.bg }};color:{{ b.color }};border:1px solid {{ b.border }}">{{ b.name }}</span></sc-for>
+          <span style="width:10px"></span>
+          <span style="color:#828289;font-size:10.5px;font-weight:700;letter-spacing:.06em">SIZE</span>
+          <sc-for list="{{ draftSizes }}" as="b" hint-placeholder-count="3"><span onClick="{{ b.onClick }}" style="cursor:pointer;border-radius:5px;padding:2px 8px;background:{{ b.bg }};color:{{ b.color }};border:1px solid {{ b.border }}">{{ b.name }}</span></sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px 12px;border-top:1px solid #f0f0f2;font-size:12px;color:#52525b"><span style="color:#828289">📎</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Auto (persona) ▾</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Opus ▾</span><div style="flex:1"></div><span style="font-size:11.5px;color:#828289">{{ startHint }}</span><span onClick="{{ startTask }}" style="height:30px;padding:0 14px;border-radius:8px;color:#fff;display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;background:{{ startBg }}">Start <span style="opacity:.75;font-family:ui-monospace,Menlo,monospace;font-size:11px">⏎</span></span></div>
+      </div>
+      <div style="font-size:11.5px;color:#828289;text-align:center">The ticket is created silently on start. Repos become worktrees. Everything is changeable later from the context panel.</div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- task -->
+  <sc-if value="{{ isTask }}" hint-placeholder-val="{{ true }}">
+  <div style="height:44px;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:10px;padding:0 16px;flex:none">
+    <div style="flex:1;min-width:0;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.title }}</div><span style="flex:none;font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#{{ t.num }}</span>
+    <span onClick="{{ toggleShell }}" title="Shell drawer ⌘J" style="flex:none;white-space:nowrap;font-size:12px;color:{{ shellBtnColor }};border:1px solid {{ shellBtnBorder }};background:{{ shellBtnBg }};border-radius:6px;padding:3px 9px;font-family:ui-monospace,Menlo,monospace;cursor:pointer">&gt;_ Shell <span style="opacity:.6">{{ shellCount }}</span></span>
+    <span onClick="{{ toggleShellMode }}" title="Shell mode ⌘⇧J" style="flex:none;white-space:nowrap;font-size:12px;color:{{ modeBtnColor }};border:1px solid {{ modeBtnBorder }};background:{{ modeBtnBg }};border-radius:6px;padding:3px 9px;cursor:pointer">{{ modeBtnLabel }}</span>
+    <span style="flex:none;color:#828289;font-size:16px;padding:0 4px;cursor:pointer">⋯</span>
+  </div>
+  <sc-if value="{{ notShellMode }}" hint-placeholder-val="{{ true }}">
+  <div style="flex:1;overflow:auto;padding:18px 24px 8px;display:flex;flex-direction:column;gap:14px;min-height:120px">
+    <sc-for list="{{ t.msgs }}" as="m" hint-placeholder-count="4">
+      <sc-if value="{{ m.isDiv }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;font-size:11.5px;color:#828289"><span style="flex:1;height:1px;background:#e4e4e7"></span>{{ m.text }}<span style="flex:1;height:1px;background:#e4e4e7"></span></div></sc-if>
+      <sc-if value="{{ m.isEvent }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#646469;padding-left:36px;animation:fadein .3s"><span style="color:#15803d">✓</span><span>{{ m.text }}</span><sc-if value="{{ m.hasLink }}" hint-placeholder-val="{{ false }}"><span onClick="{{ m.onLink }}" style="color:#4338ca;cursor:pointer">{{ m.link }}</span></sc-if><span style="color:#828289">· {{ m.time }}</span></div></sc-if>
+      <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:flex-end;animation:fadein .3s"><div style="max-width:78%;background:rgba(99,102,241,.10);border-radius:12px 12px 3px 12px;padding:10px 14px;font-size:13.5px;line-height:1.5;white-space:pre-wrap">{{ m.text }}</div></div></sc-if>
+      <sc-if value="{{ m.isAgent }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:10px;animation:fadein .3s"><div style="width:26px;height:26px;border-radius:7px;background:{{ m.avBg }};color:{{ m.avColor }};display:grid;place-items:center;font-size:13px;flex:none">{{ m.avGlyph }}</div><div style="flex:1;min-width:0"><div style="font-size:12px;color:#52525b;margin-bottom:4px"><b style="color:#18181b">{{ m.agent }}</b> · {{ m.time }}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap">{{ m.text }}</div>
+          <sc-if value="{{ m.hasRun }}" hint-placeholder-val="{{ false }}"><div style="margin-top:8px;border:1px solid #e4e4e7;border-radius:8px;padding:8px 12px;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#52525b;background:#fff;display:flex;flex-direction:column;gap:3px"><sc-for list="{{ m.runLines }}" as="l" hint-placeholder-count="2"><div><span style="color:{{ l.color }}">{{ l.mark }}</span> {{ l.text }}</div></sc-for></div></sc-if>
+          <sc-if value="{{ m.hasQ }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:10px;border:1px solid {{ m.qBorder }};background:{{ m.qBg }};border-radius:9px;padding:10px 12px">
+              <div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:{{ m.qHead }};display:flex;align-items:center;gap:6px">{{ m.qLabel }}</div>
+              <div style="font-size:13px;margin:6px 0 8px">{{ m.qText }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ m.qOptions }}" as="o" hint-placeholder-count="2"><span onClick="{{ o.onClick }}" style="font-size:12.5px;padding:5px 11px;border-radius:6px;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};border:1px solid {{ o.border }}">{{ o.label }}</span></sc-for></div>
+            </div>
+          </sc-if>
+        </div></div>
+      </sc-if>
+      <sc-if value="{{ m.isDeleg }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ m.open }}" style="margin-left:36px;max-width:640px;border:1px solid {{ m.dBorder }};background:{{ m.dBg }};border-radius:10px;padding:10px 12px;cursor:pointer;animation:fadein .3s" style-hover="border-color:#4f46e5">
+          <div style="display:flex;align-items:center;gap:7px;font-size:12.5px">
+            <span style="width:20px;height:20px;border-radius:6px;background:rgba(99,102,241,.12);color:#4338ca;display:grid;place-items:center;font-size:11px">◆</span><span style="color:#52525b">Assistant</span>
+            <span style="color:#a1a1aa">⇄</span>
+            <span style="width:20px;height:20px;border-radius:6px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:11px">⌬</span><b style="color:#18181b">{{ m.agent }}</b>
+            <div style="flex:1"></div>
+            <span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:{{ m.dColor }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ m.dColor }};animation:{{ m.dAnim }}"></span>{{ m.dLabel }}</span>
+          </div>
+          <div style="margin-top:7px;font-size:13px;color:#18181b;line-height:1.45">{{ m.brief }}</div>
+          <div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#a1a1aa">FORWARDED</span><sc-for list="{{ m.ctx }}" as="c" hint-placeholder-count="2"><span style="font-size:11px;color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:4px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace">{{ c }}</span></sc-for></div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f2;display:flex;gap:8px;align-items:center;font-size:12px;color:#646469"><span style="white-space:nowrap">{{ m.turnsLabel }}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-style:italic">{{ m.lastLine }}</span><span style="color:#4338ca;white-space:nowrap;font-weight:500">Open thread ›</span></div>
+        </div>
+      </sc-if>
+    </sc-for>
+    <sc-if value="{{ t.typing }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:10px;align-items:center;padding-left:36px;font-size:12px;color:#7e22ce"><span style="width:6px;height:6px;border-radius:50%;background:#9333ea;animation:pulse 1s infinite"></span>{{ t.activity }}</div></sc-if>
+  </div>
+  <div style="padding:8px 24px 14px;background:linear-gradient(180deg,rgba(244,244,245,0),#f4f4f5 30%);flex:none">
+    <sc-if value="{{ t.hasNext }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#fff;border:1px solid rgba(99,102,241,.35);border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:10px;margin-bottom:8px;animation:fadein .3s"><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#4338ca">NEXT</span><span style="font-size:12.5px;flex:1">{{ t.next }}</span><span onClick="{{ t.doNext }}" style="font-size:11.5px;color:#4338ca;font-weight:600;cursor:pointer" style-hover="color:#312e81">Do it <span style="font-family:ui-monospace,Menlo,monospace;color:#828289;font-weight:400">⌘⏎</span></span><span onClick="{{ t.dismissNext }}" style="font-size:11.5px;color:#828289;cursor:pointer">Dismiss</span></div>
+    </sc-if>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:12px;flex-wrap:wrap"><span style="color:#828289;font-size:10.5px;font-weight:700;letter-spacing:.06em">SUGGESTED</span><sc-for list="{{ t.suggestions }}" as="s" hint-placeholder-count="3"><span onClick="{{ s.onClick }}" style="color:#4338ca;background:#fff;border:1px solid rgba(99,102,241,.35);border-radius:14px;padding:3px 10px;cursor:pointer" style-hover="background:rgba(99,102,241,.08)">{{ s.label }}</span></sc-for></div>
+    <div style="background:#fff;border:1px solid #d4d4d8;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+      <textarea value="{{ composer }}" onChange="{{ onComposer }}" onKeyDown="{{ onComposerKey }}" rows="2" placeholder="Reply, or @ to bring in agents, skills, panels, workflows, tickets…" style="width:100%;border:0;outline:0;resize:none;background:transparent;padding:12px 14px 4px;font-size:13.5px;line-height:1.5;display:block"></textarea>
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 10px 10px;font-size:12px;color:#52525b"><span style="color:#828289">📎</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Mode <b style="color:#166534">Edit</b> ⇧⇥</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Auto (persona) ▾</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Opus ▾</span><div style="flex:1"></div><span style="font-family:ui-monospace,Menlo,monospace;color:#828289;font-size:11px">⇧⏎ newline</span><span onClick="{{ send }}" style="width:28px;height:28px;border-radius:7px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:13px;cursor:pointer" style-hover="background:#4338ca">➤</span></div>
+    </div>
+  </div>
+
+  </sc-if>
+
+  <!-- shell mode: shells take the whole center -->
+  <sc-if value="{{ shellMode }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;min-height:0;background:#18181b;display:flex;flex-direction:column;animation:fadein .2s">
+    <div style="height:36px;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid #27272a;flex:none;overflow:hidden">
+      <sc-for list="{{ shellTabs }}" as="s" hint-placeholder-count="2"><div onClick="{{ s.onClick }}" style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;cursor:pointer;background:{{ s.bg }};color:{{ s.color }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ s.dot }}"></span>{{ s.title }}<span style="opacity:.5">{{ s.id }}</span></div></sc-for>
+      <div onClick="{{ addShell }}" title="New shell" style="padding:4px 8px;color:#a1a1aa;font-size:14px;cursor:pointer" style-hover="color:#fff">+</div>
+      <div style="flex:1"></div>
+      <span style="white-space:nowrap;font-size:10.5px;color:#71717a;letter-spacing:.06em;font-weight:700;margin-right:4px">LAYOUT</span>
+      <sc-for list="{{ layouts }}" as="l" hint-placeholder-count="5"><div onClick="{{ l.onClick }}" title="{{ l.title }}" style="width:26px;height:22px;border-radius:5px;display:grid;place-items:center;font-size:12px;cursor:pointer;background:{{ l.bg }};color:{{ l.color }}">{{ l.glyph }}</div></sc-for>
+      <span style="width:1px;height:16px;background:#3f3f46;margin:0 6px"></span>
+      <span style="white-space:nowrap;font-size:11px;color:#71717a;font-family:ui-monospace,Menlo,monospace">⌘1‑4 focus · ⌘⇧J back to chat</span>
+    </div>
+    <div style="flex:1;display:grid;grid-template-columns:{{ paneCols }};grid-template-rows:{{ paneRows }};gap:1px;background:#27272a;min-height:0">
+      <sc-for list="{{ panes }}" as="p" hint-placeholder-count="1">
+        <div onClick="{{ p.onClick }}" style="grid-area:{{ p.area }};background:#18181b;min-height:0;display:flex;flex-direction:column;outline:1px solid {{ p.outline }};outline-offset:-1px;cursor:text">
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 10px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#a1a1aa;border-bottom:1px solid #27272a"><span style="color:{{ p.color }}">{{ p.title }}</span><span style="opacity:.5">{{ p.path }}</span><div style="flex:1"></div><span onClick="{{ p.splitRight }}" title="Split right" style="cursor:pointer;padding:0 3px" style-hover="color:#fff">◫</span><span onClick="{{ p.splitDown }}" title="Split down" style="cursor:pointer;padding:0 3px" style-hover="color:#fff">⊟</span><span onClick="{{ p.close }}" title="Close pane" style="cursor:pointer;padding:0 3px" style-hover="color:#fff">✕</span></div>
+          <div style="flex:1;overflow:hidden;padding:10px 12px;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.6;color:#d4d4d8;white-space:pre-wrap">{{ p.body }}<span style="display:inline-block;width:7px;height:13px;background:#a1a1aa;vertical-align:-2px;animation:pulse 1s infinite"></span></div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+  </sc-if>
+</div>
+
+<!-- ── right panel ── -->
+<sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ true }}">
+<div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;min-height:0;min-width:0;font-size:12px;animation:fadein .2s">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #f0f0f2;flex:none"><span style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52525b">{{ panelTitle }}</span><span onClick="{{ closePanel }}" style="color:#828289;cursor:pointer;font-size:14px" style-hover="color:#18181b">▸</span></div>
+
+  <sc-if value="{{ isContext }}" hint-placeholder-val="{{ true }}">
+  <div style="padding:12px 14px;display:flex;flex-direction:column;gap:14px;overflow:auto">
+    <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">STATUS</div><div style="display:flex;gap:6px;flex-wrap:wrap"><span onClick="{{ t.cycleStatus }}" title="Click to change" style="cursor:pointer;color:{{ t.statusColor }};background:{{ t.statusBg }};border:1px solid {{ t.statusBorder }};border-radius:6px;padding:3px 9px;display:flex;gap:6px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:{{ t.statusDot }}"></span>{{ t.ticketStatus }} ▾</span><span style="color:#52525b;border:1px solid #e4e4e7;border-radius:6px;padding:3px 9px">{{ t.type }} · {{ t.size }}</span></div></div>
+    <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">BOARD</div><div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ t.boards }}" as="b" hint-placeholder-count="4"><span onClick="{{ b.onClick }}" style="cursor:pointer;border-radius:5px;padding:2px 8px;background:{{ b.bg }};color:{{ b.color }};border:1px solid {{ b.border }}">{{ b.name }}</span></sc-for></div></div>
+    <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">AGENTS</div><div style="display:flex;flex-direction:column;gap:5px"><div style="display:flex;align-items:center;gap:7px"><span style="width:20px;height:20px;border-radius:6px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:11px">⌬</span><span>{{ t.agent }}</span><span style="margin-left:auto;display:flex;gap:4px;align-items:center;color:{{ t.agentStateColor }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ t.agentStateColor }}"></span>{{ t.agentState }}</span></div><div style="display:flex;align-items:center;gap:7px;color:#828289;cursor:pointer" style-hover="color:#4f46e5"><span style="width:20px;height:20px;border-radius:6px;border:1px dashed #d4d4d8;display:grid;place-items:center;font-size:11px">+</span>add persona or panel</div></div></div>
+    <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">WORKTREES</div><div style="display:flex;flex-direction:column;gap:5px">
+      <sc-for list="{{ t.worktrees }}" as="w" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:6px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px"><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⎇ {{ w.repo }}</span><span style="color:#828289;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">{{ w.branch }}</span><span onClick="{{ w.detach }}" title="Detach" style="color:#a1a1aa;cursor:pointer;font-family:system-ui" style-hover="color:#dc2626">✕</span></div></sc-for>
+      <sc-if value="{{ t.noWorktrees }}" hint-placeholder-val="{{ false }}"><div style="color:#828289">No repo attached — that's fine.</div></sc-if>
+      <sc-for list="{{ t.suggestedRepos }}" as="w" hint-placeholder-count="1"><div onClick="{{ w.attach }}" style="color:#4338ca;cursor:pointer;display:flex;gap:6px" style-hover="color:#312e81">+ <span style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px">{{ w.repo }}</span><span style="color:#828289">· attach</span></div></sc-for>
+    </div></div>
+    <sc-if value="{{ t.hasPr }}" hint-placeholder-val="{{ false }}"><div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">PULL REQUEST</div><div onClick="{{ openDiff }}" style="border:1px solid rgba(34,197,94,.30);background:rgba(34,197,94,.08);border-radius:7px;padding:7px 10px;cursor:pointer"><div style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#166534">{{ t.pr.ref }}</div><div style="color:#52525b;margin-top:2px">{{ t.pr.checks }} checks · {{ t.pr.delta }}</div></div></div></sc-if>
+    <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">DELIVERABLES · {{ t.delivCount }}</div><div style="display:flex;flex-direction:column;gap:4px"><sc-for list="{{ t.deliverables }}" as="d" hint-placeholder-count="2"><div onClick="{{ openDeliv }}" style="display:flex;gap:6px;cursor:pointer" style-hover="color:#4f46e5"><span style="font-size:9.5px;font-weight:700;color:#52525b;letter-spacing:.05em;padding-top:2px;width:32px;flex:none">{{ d.kind }}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.title }}</span></div></sc-for></div></div>
+    <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">SESSIONS</div><div style="display:flex;flex-direction:column;gap:4px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#52525b"><sc-for list="{{ t.shells }}" as="s" hint-placeholder-count="2"><div onClick="{{ s.focus }}" style="cursor:pointer;display:flex;justify-content:space-between" style-hover="color:#4f46e5"><span>{{ s.id }} · {{ s.title }}</span><span style="color:#828289">{{ s.meta }}</span></div></sc-for></div></div>
+    <div style="color:#828289;font-size:11.5px">{{ t.cost }}</div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isThread }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;min-height:0;flex:1">
+    <div style="padding:8px;border-bottom:1px solid #f0f0f2;display:flex;flex-direction:column;gap:2px;flex:none;max-height:160px;overflow:auto">
+      <sc-for list="{{ t.threads }}" as="d" hint-placeholder-count="2"><div onClick="{{ d.open }}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer;background:{{ d.bg }}" style-hover="background:#f4f4f5"><span style="width:6px;height:6px;border-radius:50%;background:{{ d.color }};animation:{{ d.anim }};flex:none"></span><span style="font-weight:600;color:#18181b;white-space:nowrap">{{ d.agent }}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#646469">{{ d.brief }}</span><span style="color:#a1a1aa;font-size:11px;white-space:nowrap">{{ d.time }}</span></div></sc-for>
+      <sc-if value="{{ t.noThreads }}" hint-placeholder-val="{{ false }}"><div style="padding:18px 10px;color:#828289;text-align:center;line-height:1.5">No agent threads yet.<br>Ask the assistant to « see with the PM / the dev ».</div></sc-if>
+    </div>
+    <sc-if value="{{ t.hasThread }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:10px 12px 0;flex:none">
+      <div style="display:flex;align-items:center;gap:7px;font-size:12.5px"><span style="width:20px;height:20px;border-radius:6px;background:rgba(99,102,241,.12);color:#4338ca;display:grid;place-items:center;font-size:11px">◆</span><span style="color:#a1a1aa">⇄</span><span style="width:20px;height:20px;border-radius:6px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:11px">⌬</span><b style="color:#18181b">{{ t.th.agent }}</b><div style="flex:1"></div><span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:{{ t.th.color }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ t.th.color }};animation:{{ t.th.anim }}"></span>{{ t.th.label }}</span></div>
+      <div style="margin-top:8px;display:flex;gap:2px;border-bottom:1px solid #f0f0f2">
+        <span onClick="{{ t.th.tabConv }}" style="padding:5px 10px;font-size:12px;cursor:pointer;border-bottom:2px solid {{ t.th.convBorder }};color:{{ t.th.convColor }};font-weight:600">Conversation</span>
+        <span onClick="{{ t.th.tabStream }}" style="padding:5px 10px;font-size:12px;cursor:pointer;border-bottom:2px solid {{ t.th.streamBorder }};color:{{ t.th.streamColor }};font-weight:600">Agent SDK stream</span>
+        <div style="flex:1"></div><span style="font-size:11px;color:#828289;padding:5px 0;font-family:ui-monospace,Menlo,monospace">{{ t.th.cost }}</span>
+      </div>
+    </div>
+    <sc-if value="{{ t.th.isConv }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;overflow:auto;padding:12px 12px 6px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#a1a1aa">CONTEXT FORWARDED</span><sc-for list="{{ t.th.ctx }}" as="c" hint-placeholder-count="2"><span style="font-size:11px;color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:4px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace">{{ c }}</span></sc-for></div>
+      <sc-for list="{{ t.th.turns }}" as="u" hint-placeholder-count="3">
+        <div style="display:flex;gap:8px;animation:fadein .3s"><span style="width:22px;height:22px;border-radius:6px;background:{{ u.bg }};color:{{ u.color }};display:grid;place-items:center;font-size:11px;flex:none">{{ u.glyph }}</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#828289;margin-bottom:2px"><b style="color:#52525b">{{ u.who }}</b></div><div style="font-size:12.5px;line-height:1.5;color:#18181b">{{ u.text }}</div><sc-if value="{{ u.hasTools }}" hint-placeholder-val="{{ false }}"><div style="margin-top:5px;display:flex;flex-direction:column;gap:2px"><sc-for list="{{ u.tools }}" as="k" hint-placeholder-count="1"><span style="font-size:11px;color:#52525b;font-family:ui-monospace,Menlo,monospace;display:flex;gap:6px"><span style="color:#15803d">›</span>{{ k }}</span></sc-for></div></sc-if></div></div>
+      </sc-for>
+      <sc-if value="{{ t.th.running }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;align-items:center;padding-left:30px;font-size:11.5px;color:#7e22ce"><span style="width:6px;height:6px;border-radius:50%;background:#9333ea;animation:pulse 1s infinite"></span>{{ t.th.agent }} is working…</div></sc-if>
+      <sc-if value="{{ t.th.done }}" hint-placeholder-val="{{ false }}"><div style="border-top:1px dashed #e4e4e7;padding-top:8px;font-size:11.5px;color:#828289">Concluded · summary posted back to the main thread</div></sc-if>
+    </div>
+    <div style="padding:8px 12px 10px;border-top:1px solid #f0f0f2;flex:none;display:flex;flex-direction:column;gap:6px">
+      <textarea value="{{ t.th.draft }}" onChange="{{ t.th.onDraft }}" onKeyDown="{{ t.th.onKey }}" rows="1" placeholder="Step into the thread…" style="width:100%;border:1px solid #d4d4d8;border-radius:8px;outline:0;resize:none;padding:7px 10px;font-size:12.5px;line-height:1.4;display:block;background:#fff"></textarea>
+      <sc-if value="{{ t.th.running }}" hint-placeholder-val="{{ false }}"><span onClick="{{ t.th.conclude }}" style="align-self:flex-end;font-size:11.5px;color:#4338ca;font-weight:600;cursor:pointer" style-hover="color:#312e81">Conclude now &amp; bring back ↩</span></sc-if>
+    </div>
+    </sc-if>
+    <sc-if value="{{ t.th.isStream }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow:auto;background:#18181b;margin:0;padding:8px 0;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.65">
+      <sc-for list="{{ t.th.stream }}" as="l" hint-placeholder-count="6"><div style="display:flex;gap:8px;padding:0 12px;color:#d4d4d8"><span style="color:#71717a;flex:none;width:52px">{{ l.t }}</span><span style="color:{{ l.color }};flex:none;width:118px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.kind }}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.text }}</span></div></sc-for>
+    </div>
+    <div style="padding:7px 12px;border-top:1px solid #f0f0f2;display:flex;gap:8px;align-items:center;font-size:11px;color:#52525b;font-family:ui-monospace,Menlo,monospace;flex:none">exec {{ t.th.executionId }}<div style="flex:1"></div><span style="color:#4338ca;cursor:pointer;font-family:system-ui,sans-serif">Open in Execution log</span><span style="color:#dc2626;cursor:pointer;font-family:system-ui,sans-serif">Terminate</span></div>
+    </sc-if>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isDiff }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;min-height:0;flex:1">
+    <div style="padding:8px 14px;border-bottom:1px solid #f0f0f2;display:flex;align-items:center;gap:8px;flex:none"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#52525b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⎇ {{ t.diffBranch }}</span><div style="flex:1"></div><span style="font-size:10.5px;color:#166534;background:rgba(34,197,94,.10);border-radius:3px;padding:0 5px;font-family:ui-monospace,Menlo,monospace">{{ t.diffDelta }}</span></div>
+    <sc-if value="{{ t.hasDiff }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.7;color:#3f3f46;padding:8px 0">
+      <sc-for list="{{ t.diff }}" as="l" hint-placeholder-count="6"><div style="padding:0 12px;white-space:pre;background:{{ l.bg }};color:{{ l.color }};margin-top:{{ l.mt }}">{{ l.text }}</div></sc-for>
+    </div>
+    <div style="border-top:1px solid #f0f0f2;padding:8px 14px;display:flex;gap:10px;align-items:center;font-size:11.5px;color:#52525b;flex:none"><span style="color:#15803d">✓</span>{{ t.diffFooter }}<div style="flex:1"></div><span onClick="{{ openCode }}" style="color:#4338ca;cursor:pointer">Open in editor</span></div>
+    </sc-if>
+    <sc-if value="{{ t.noDiff }}" hint-placeholder-val="{{ false }}"><div style="padding:24px 14px;color:#828289;text-align:center;line-height:1.5">No changes yet on this task.<br>Attach a repo or ask an agent to start.</div></sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isCode }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;min-height:0;flex:1">
+    <div style="padding:8px 14px;border-bottom:1px solid #f0f0f2;display:flex;gap:6px;flex-wrap:wrap;flex:none"><sc-for list="{{ t.worktrees }}" as="w" hint-placeholder-count="2"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 7px">{{ w.repo }}</span></sc-for></div>
+    <div style="flex:1;overflow:auto;padding:8px 6px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.9;color:#3f3f46">
+      <sc-for list="{{ t.tree }}" as="f" hint-placeholder-count="6"><div style="padding-left:{{ f.indent }};display:flex;gap:6px;align-items:center;color:{{ f.color }};font-weight:{{ f.weight }}"><span style="color:#a1a1aa">{{ f.glyph }}</span>{{ f.name }}<sc-if value="{{ f.changed }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:#ca8a04;margin-left:auto;margin-right:8px"></span></sc-if></div></sc-for>
+    </div>
+    <div style="border-top:1px solid #f0f0f2;padding:8px 14px;display:flex;flex-direction:column;gap:6px;flex:none"><span style="display:flex;align-items:center;justify-content:center;gap:8px;height:30px;border-radius:7px;background:#18181b;color:#fff;cursor:pointer;font-weight:500">Open in VS Code <span style="opacity:.6;font-family:ui-monospace,Menlo,monospace;font-size:10.5px">⌘⇧O</span></span><span style="display:flex;align-items:center;justify-content:center;height:30px;border-radius:7px;border:1px solid #d4d4d8;cursor:pointer;color:#52525b">Open in browser (code-server)</span></div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isDeliv }}" hint-placeholder-val="{{ false }}">
+  <div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;overflow:auto">
+    <sc-for list="{{ t.deliverablesFull }}" as="d" hint-placeholder-count="3"><div style="border:1px solid #e4e4e7;border-radius:8px;padding:9px 11px;cursor:pointer" style-hover="border-color:#a5b4fc"><div style="display:flex;gap:8px;align-items:center"><span style="font-size:9.5px;font-weight:700;color:#52525b;letter-spacing:.05em;background:#f4f4f5;border-radius:3px;padding:1px 5px">{{ d.kind }}</span><span style="font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.title }}</span></div><div style="color:#828289;margin-top:4px;font-size:11.5px">{{ d.meta }}</div></div></sc-for>
+    <sc-if value="{{ t.noDeliv }}" hint-placeholder-val="{{ false }}"><div style="padding:24px 14px;color:#828289;text-align:center;line-height:1.5">Nothing delivered yet.</div></sc-if>
+  </div>
+  </sc-if>
+</div>
+</sc-if>
+
+<!-- ── tool strip ── -->
+<div style="background:#fff;display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:4px">
+  <sc-for list="{{ tools }}" as="k" hint-placeholder-count="4"><div onClick="{{ k.onClick }}" title="{{ k.title }}" style="width:52px;padding:6px 0 5px;border-radius:7px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;background:{{ k.bg }};color:{{ k.color }};position:relative" style-hover="background:#f4f4f5"><span style="font-size:14px;line-height:1">{{ k.glyph }}</span><span style="font-size:9.5px;font-weight:600;letter-spacing:.02em;line-height:1">{{ k.title }}</span><sc-if value="{{ k.badge }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:4px;right:6px;width:6px;height:6px;border-radius:50%;background:#ca8a04"></span></sc-if></div></sc-for>
+  <div style="flex:1"></div>
+  <div onClick="{{ toggleShell }}" title="Shell ⌘J" style="width:52px;padding:6px 0 5px;border-radius:7px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;background:{{ shellBtnBg }};color:{{ shellBtnColor }}" style-hover="background:#f4f4f5"><span style="font:600 12px ui-monospace,Menlo,monospace;line-height:1">&gt;_</span><span style="font-size:9.5px;font-weight:600;letter-spacing:.02em;line-height:1">Shell</span></div>
+</div>
+</div>
+
+<!-- ── bottom drawer (full width minus nav rail) ── -->
+<sc-if value="{{ shellOpen }}" hint-placeholder-val="{{ false }}">
+<div style="height:clamp(180px,38vh,300px);flex:none;background:#18181b;border-top:1px solid #3f3f46;display:flex;flex-direction:column;animation:fadein .2s">
+  <div style="height:34px;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid #27272a;flex:none;overflow:hidden">
+    <span style="font:600 11px ui-monospace,Menlo,monospace;color:#71717a;padding:0 6px">&gt;_</span>
+    <sc-for list="{{ shellTabs }}" as="s" hint-placeholder-count="2"><div onClick="{{ s.onClick }}" style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;cursor:pointer;background:{{ s.bg }};color:{{ s.color }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ s.dot }}"></span>{{ s.title }}<span style="opacity:.5">{{ s.id }}</span></div></sc-for>
+    <div onClick="{{ addShell }}" title="New shell" style="padding:4px 8px;color:#a1a1aa;font-size:14px;cursor:pointer" style-hover="color:#fff">+</div>
+    <div style="flex:1"></div>
+    <span style="white-space:nowrap;font-size:10.5px;color:#71717a;letter-spacing:.06em;font-weight:700;margin-right:4px">LAYOUT</span>
+    <sc-for list="{{ layouts }}" as="l" hint-placeholder-count="5"><div onClick="{{ l.onClick }}" title="{{ l.title }}" style="width:26px;height:22px;border-radius:5px;display:grid;place-items:center;font-size:12px;cursor:pointer;background:{{ l.bg }};color:{{ l.color }}">{{ l.glyph }}</div></sc-for>
+    <span style="width:1px;height:16px;background:#3f3f46;margin:0 6px"></span>
+    <div onClick="{{ toggleShellMode }}" title="Shell mode ⌘⇧J" style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:5px;border:1px solid #3f3f46;color:#d4d4d8;font-size:11.5px;cursor:pointer" style-hover="background:#27272a">⤢ Shell mode</div>
+    <span style="font-size:11px;color:#71717a;font-family:ui-monospace,Menlo,monospace;margin-left:6px">⌘J</span>
+    <div onClick="{{ toggleShell }}" title="Hide" style="padding:2px 8px;color:#a1a1aa;font-size:14px;cursor:pointer" style-hover="color:#fff">▾</div>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:{{ paneCols }};grid-template-rows:{{ paneRows }};gap:1px;background:#27272a;min-height:0">
+    <sc-for list="{{ panes }}" as="p" hint-placeholder-count="1">
+      <div onClick="{{ p.onClick }}" style="grid-area:{{ p.area }};background:#18181b;min-height:0;display:flex;flex-direction:column;outline:1px solid {{ p.outline }};outline-offset:-1px;cursor:text">
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#a1a1aa;border-bottom:1px solid #27272a"><span style="color:{{ p.color }}">{{ p.title }}</span><span style="opacity:.5">{{ p.path }}</span><div style="flex:1"></div><span onClick="{{ p.splitRight }}" title="Split right" style="cursor:pointer;padding:0 3px" style-hover="color:#fff">◫</span><span onClick="{{ p.splitDown }}" title="Split down" style="cursor:pointer;padding:0 3px" style-hover="color:#fff">⊟</span><span onClick="{{ p.close }}" title="Close pane" style="cursor:pointer;padding:0 3px" style-hover="color:#fff">✕</span></div>
+        <div style="flex:1;overflow:hidden;padding:8px 10px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.6;color:#d4d4d8;white-space:pre-wrap">{{ p.body }}<span style="display:inline-block;width:7px;height:13px;background:#a1a1aa;vertical-align:-2px;animation:pulse 1s infinite"></span></div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+</div>
+</div>
+
+<!-- ── status bar (full width) ── -->
+<div style="height:26px;flex:none;background:#fff;border-top:1px solid #e4e4e7;display:flex;align-items:center;gap:6px;padding:0 12px;font-size:11.5px;color:#52525b;overflow:hidden;white-space:nowrap">
+  <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="3"><span onClick="{{ c.onClick }}" style="display:flex;align-items:center;gap:6px;cursor:pointer;color:{{ c.color }};font-family:{{ c.font }};max-width:340px;overflow:hidden;text-overflow:ellipsis" style-hover="color:#4f46e5"><sc-if value="{{ c.sep }}" hint-placeholder-val="{{ false }}"><span style="color:#c7c7cc">›</span></sc-if>{{ c.label }}</span></sc-for>
+  <div style="flex:1"></div>
+  <sc-for list="{{ statusItems }}" as="i" hint-placeholder-count="4"><span onClick="{{ i.onClick }}" title="{{ i.title }}" style="display:flex;align-items:center;gap:5px;padding:0 8px;height:26px;cursor:pointer;color:{{ i.color }};border-left:1px solid #f0f0f2" style-hover="background:#f4f4f5"><sc-if value="{{ i.dot }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ i.dotColor }};animation:{{ i.anim }}"></span></sc-if>{{ i.label }}</span></sc-for>
+</div>
+</div></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultPanel&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;context&quot;,&quot;thread&quot;,&quot;diff&quot;,&quot;code&quot;,&quot;deliv&quot;],&quot;default&quot;:&quot;context&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  constructor(p){ super(p);
+    const T=(a)=>a;
+    this.state={ sel:550, view:'task', filter:'All', panel:(p&&p.defaultPanel)||'context', threadSel:'d2', threadTab:'conv', threadDraft:'', shellOpen:false, shellMode:false, layout:'1', activeShell:0, composer:'',
+      draft:{text:'',repos:[],board:null,type:'Build',size:'M'},
+      tasks:[
+       {id:550,num:550,title:'dummy sidebar odys-ai on odys-front with feature flagging',campaign:'Odys',board:'Odys',type:'Build',size:'M',ticketStatus:'Doing',agent:'builder',progress:.6,activity:'builder · running tests',
+        worktrees:[{repo:'odys-front',branch:'feat/550-ai-sidebar'},{repo:'agentic-dmc',branch:'main'}],suggestedRepos:['odys-api'],
+        pr:{ref:'odys-front#2782',checks:'13/13',delta:'+4285 −49'},cost:'$114.74 · 3 sessions · 1w',
+        next:'When tests pass: commit, push to PR #2782, run PR review workflow, move to Reviewing',
+        deliverables:[{kind:'CODE',title:'PR #2782 — Panneau Odys AI : package, resize, API agentic-dmc',meta:'odys-front · updated 3d ago'},{kind:'FD',title:'FD-20260909125118 — devise du champ Airtable',meta:'functional doc · 1w'},{kind:'NOTE',title:'Déploiement : flag Amplitude + AGENTIC_DMC_API_URL',meta:'checklist · 3d'},{kind:'TEST',title:'board-fields.test.ts — nom de champ non déduit',meta:'added today'}],
+        shells:[{id:'ff0cd9',title:'claude · Opus',path:'~/wt/odys-front',meta:'60.4%',body:'● Running 5400 tests (odys)…\n  ✓ apps/odys/src/app/ai/board-fields.test.ts (12)\n  ✓ apps/odys/src/app/ai/parse-number.test.ts (8)\n  ⠸ apps/odys/src/app/ai/projects.route.test.ts\n\n╭─ builder ───────────────────────────────╮\n│ Waiting for the suite before proposing  │\n│ the commit.                             │\n╰─────────────────────────────────────────╯\n> '},{id:'a41c02',title:'zsh',path:'~/wt/odys-front',meta:'idle',body:'$ git status -sb\n## feat/550-ai-sidebar...origin/feat/550-ai-sidebar\n M apps/odys/src/app/ai/board-fields.ts\n M apps/odys/src/app/ai/parse-number.ts\n?? apps/odys/src/app/ai/board-fields.test.ts\n$ '}],
+        diffBranch:'odys-front · feat/550-ai-sidebar',diffDelta:'+18 −4 · 3 files',diffFooter:'5400 tests · 44/44 lint · build 7/7',
+        diff:[['file','apps/odys/src/app/ai/board-fields.ts'],['hunk','@@ -12,7 +12,7 @@ export const BOARD_FIELDS = ['],['ctx',"   'client_name',"],['ctx',"   'status',"],['del',"-  'initial_budget',"],['add',"+  'budget_form',"],['ctx',"   'budget_brief',"],['ctx',"   'amount_trip',"],['file','apps/odys/src/app/ai/board-fields.test.ts'],['hunk','@@ -40,0 +41,9 @@'],['add',"+it('never projects a deduced field name', () => {"],['add','+  // unknown name in projection fails the board (422)'],['add',"+  expect(BOARD_FIELDS).not.toContain('initial_budget');"],['add','+});'],['file','apps/odys/src/app/ai/parse-number.ts'],['hunk','@@ -3,3 +3,3 @@'],['del','-  return Number(value);'],['add',"+  return typeof value === 'number' ? value"],['add',"+    : Number(String(value).replace(/\\s/g, ''));"]],
+        tree:[['apps/',0,'▾',0],['odys/',1,'▾',0],['src/app/ai/',2,'▾',0],['board-fields.ts',3,'',1],['board-fields.test.ts',3,'',1],['parse-number.ts',3,'',1],['projects.route.ts',3,'',0],['sidebar/',2,'▸',0],['.env.local.example',1,'',0],['packages/',0,'▸',0],['agentic-dmc/',0,'▸',0]],
+        msgs:[
+         {k:'event',text:'Ticket #550 created on Odys — board inferred from repo',link:'change',time:'1w'},
+         {k:'event',text:'Worktree odys-front · feat/550-ai-sidebar created',time:'1w'},
+         {k:'user',text:"on arrête de push sur github pour le moment. On va continuer de bosser localement. Actuellement l'app me remonte depuis localhost:3000 des 503"},
+         {k:'agent',agent:'Assistant',time:'3d',text:"Je vois ça avec le builder — il a le worktree et la PR #2782 en contexte, je lui transmets la consigne « local seulement »."},
+         {k:'deleg',id:'d1',agent:'The Builder',persona:'builder',status:'done',time:'3d',brief:"Trouver la cause des 503 sur localhost:3000 et corriger, sans rien pousser (travail local uniquement).",ctx:['#550','odys-front · feat/550-ai-sidebar','PR #2782'],cost:'$2.14 · 4 turns · 6m',executionId:'ff0cd9',
+          turns:[{from:'assistant',text:"Contexte : Olivier travaille en local, plus de push pour le moment. localhost:3000 renvoie des 503 depuis le panneau Odys AI. Trouve la cause et corrige. Ne pousse rien."},
+                 {from:'agent',text:"Les 503 viennent de AGENTIC_DMC_API_URL absent en local : le panneau appelle l'API agentic-dmc et le proxy échoue.",tools:['Read apps/odys/.env.local','Grep AGENTIC_DMC_API_URL','Bash pnpm dev --filter odys']},
+                 {from:'assistant',text:"Incident, ou état à supporter ? Olivier veut pouvoir bosser sans agentic-dmc."},
+                 {from:'agent',text:"État à supporter. Variable documentée dans apps/odys/.env.local.example ; le panneau affiche « not connected » au lieu de casser. Rien n'est commité.",tools:['Edit apps/odys/.env.local.example','Edit apps/odys/src/app/ai/sidebar/Panel.tsx']},
+                 {from:'assistant',text:"Parfait, je remonte."}],
+          summary:"Cause : AGENTIC_DMC_API_URL absent en local. Documenté dans .env.local.example, le panneau affiche « not connected » — état supporté, pas un incident. Rien n'est commité."},
+         {k:'agent',agent:'Assistant',time:'3d',text:"Retour du builder : AGENTIC_DMC_API_URL manquait en local. Il a documenté la variable dans .env.local.example et le panneau affiche « not connected » — état supporté, pas un incident. Rien n'est commité. Il a aussi attaché agentic-dmc pour tester l'intégration."},
+         {k:'event',text:'builder attached agentic-dmc · main',time:'3d'},
+         {k:'div',text:'today'},
+         {k:'user',text:'ça marche, le board se charge'},
+         {k:'agent',agent:'Assistant',time:'2m',text:"Bien. Le builder corrige le nom de champ et relance la suite complète avant de proposer un commit — je te préviens quand il a fini."},
+         {k:'deleg',id:'d2',agent:'The Builder',persona:'builder',status:'running',time:'2m',persona:'builder',brief:"Corriger initial_budget → budget_form, ajouter un test, relancer la suite complète. Proposer le commit sans le faire.",ctx:['#550','odys-front · feat/550-ai-sidebar','FD-20260909125118'],cost:'$0.88 · 2 turns · 2m',executionId:'ff0cd9',
+          turns:[{from:'assistant',text:"Le board se charge côté Olivier. initial_budget est déduit du camelCase, le vrai nom livré est budget_form. Corrige, ajoute un test qui garde ce nom, relance toute la suite. Propose le commit, ne le fais pas."},
+                 {from:'agent',text:"Corrigé dans board-fields.ts, test ajouté. Lint et build passent, je relance les 5400 tests odys…",tools:['Edit apps/odys/src/app/ai/board-fields.ts','Write apps/odys/src/app/ai/board-fields.test.ts','Bash pnpm static-code-analysis ✓ 44/44','Bash pnpm test --filter odys']}],
+          summary:null}
+        ]},
+       {id:556,num:556,title:'skill api',campaign:'Odys',board:'Odys',type:'Build',size:'M',ticketStatus:'Doing',agent:'builder',progress:null,activity:'',
+        worktrees:[{repo:'agentic-dmc',branch:'feat/556-skill-api'}],suggestedRepos:[],pr:{ref:'agentic-dmc#127',checks:'9/9',delta:'+612 −40'},cost:'$31.10 · 1 session · 2d',next:null,
+        deliverables:[{kind:'CODE',title:'PR #127 — skill API: register, list, invoke',meta:'agentic-dmc · 2d'}],
+        shells:[{id:'c81e2f',title:'claude · Opus',path:'~/wt/agentic-dmc',meta:'22%',body:'╭─ builder ───────────────────────────────╮\n│ Migration 0042_skills is ready.         │\n│ Run on staging now, or wait for the     │\n│ API key rotation?                       │\n╰─────────────────────────────────────────╯\n> '}],
+        diffBranch:'agentic-dmc · feat/556-skill-api',diffDelta:'+612 −40 · 9 files',diffFooter:'9/9 checks',diff:[['file','src/skills/router.ts'],['hunk','@@ -1,0 +1,6 @@'],['add',"+export const skillRouter = router({"],['add','+  list: publicProcedure.query(listSkills),'],['add','+  invoke: protectedProcedure.input(InvokeInput).mutation(invokeSkill),'],['add','+});'],['file','migrations/0042_skills.sql'],['add','+create table skills (id text primary key, name text, manifest jsonb);']],
+        tree:[['src/',0,'▾',0],['skills/',1,'▾',0],['router.ts',2,'',1],['invoke.ts',2,'',1],['migrations/',0,'▾',0],['0042_skills.sql',1,'',1]],
+        q:{text:'run the migration 0042_skills on staging now, or wait for the API key rotation?',options:['Run now','Wait']},
+        msgs:[{k:'event',text:'Ticket #556 created on Odys',time:'2d'},{k:'event',text:'Worktree agentic-dmc · feat/556-skill-api created',time:'2d'},{k:'user',text:'expose les skills via une API REST : list, register, invoke. Auth par clé.'},{k:'agent',agent:'The Builder',time:'1h',text:'Router, invoke et migration sont prêts, PR #127 verte. Une décision de déploiement reste de ton côté.',q:{text:'Je lance la migration 0042_skills sur staging maintenant, ou on attend la rotation des clés API ?',options:['Run now','Wait']}}]},
+       {id:549,num:549,title:'avis convergence <> agentic-dmc',campaign:'Leadership',board:'Leadership',type:'Think',size:'M',ticketStatus:'Doing',agent:'panel · leadership',progress:null,activity:'',
+        worktrees:[],suggestedRepos:['agentic-dmc'],pr:null,cost:'$8.40 · 1 panel · 1w',next:null,
+        deliverables:[{kind:'MEMO',title:'Convergence Odys ↔ agentic-dmc — synthèse du panel',meta:'3 personas · 1w'}],shells:[],
+        diffBranch:'—',diffDelta:'',diffFooter:'',diff:[],tree:[],
+        q:{text:'the panel reached a conclusion. Approve the summary deliverable?',options:['Approve','Read first']},
+        msgs:[{k:'event',text:'Ticket #549 created on Leadership',time:'1w'},{k:'user',text:'panel leadership : faut-il converger agentic-dmc dans le monorepo odys ? tranchez.'},{k:'agent',agent:'Panel · leadership',time:'1w',text:'Trois personas ont débattu sur 4 tours. Conclusion : converger en deux temps (packages partagés d\'abord, runtime ensuite). La synthèse est prête.',q:{text:'Approuver le livrable de synthèse ?',options:['Approve','Read first']}}]},
+       {id:545,num:545,title:'problème de caractère dans le side-panel',campaign:'Fleex',board:'Fleex',type:'Fix',size:'S',ticketStatus:'Reviewing',agent:'reviewer',progress:.5,activity:'workflow · PR review 2/4',
+        worktrees:[{repo:'fleex',branch:'fix/545-charset'}],suggestedRepos:[],pr:{ref:'fleex#277',checks:'6/6',delta:'+14 −3'},cost:'$4.02 · 2 sessions · 1d',next:null,
+        deliverables:[{kind:'CODE',title:'PR #277 — normalize NFC in side-panel titles',meta:'fleex · 1d'}],
+        shells:[{id:'9b0d11',title:'claude · Sonnet',path:'~/wt/fleex',meta:'41%',body:'▷ workflow PR review — step 2/4: static review\n  reading packages/web/src/components/tickets/SidePanel.tsx\n> '}],
+        diffBranch:'fleex · fix/545-charset',diffDelta:'+14 −3 · 2 files',diffFooter:'6/6 checks',diff:[['file','packages/web/src/components/tickets/SidePanel.tsx'],['hunk','@@ -88,1 +88,1 @@'],['del','-  <h2>{ticket.title}</h2>'],['add',"+  <h2>{ticket.title.normalize('NFC')}</h2>"]],
+        tree:[['packages/web/src/',0,'▾',0],['components/tickets/',1,'▾',0],['SidePanel.tsx',2,'',1]],
+        msgs:[{k:'event',text:'Ticket #545 created on Fleex',time:'1d'},{k:'user',text:'les accents s\'affichent en mojibake dans le side-panel ticket'},{k:'agent',agent:'The Builder',time:'1d',text:'Normalisation NFC ajoutée au titre. PR #277 ouverte, workflow PR review en cours.'}]},
+       {id:559,num:559,title:'annual review pol valentin',campaign:'Leadership',board:'Leadership',type:'Think',size:'S',ticketStatus:'Doing',agent:'assistant',progress:null,activity:'',idle:'21h',worktrees:[],suggestedRepos:[],pr:null,cost:'$1.20 · 1d',next:null,deliverables:[],shells:[],diffBranch:'—',diffDelta:'',diffFooter:'',diff:[],tree:[],
+        msgs:[{k:'event',text:'Ticket #559 created on Leadership',time:'1d'},{k:'user',text:'prépare la trame de l\'annual review de Pol-Valentin à partir des 1:1 de l\'année'}]},
+       {id:553,num:553,title:'Summer Review 2026 - NaS',campaign:'Leadership',board:'Leadership',type:'Think',size:'L',ticketStatus:'Doing',agent:'assistant',progress:null,activity:'',idle:'3d',worktrees:[],suggestedRepos:[],pr:null,cost:'$2.80 · 3d',next:null,deliverables:[{kind:'DOC',title:'Summer review — draft v1',meta:'3d'}],shells:[],diffBranch:'—',diffDelta:'',diffFooter:'',diff:[],tree:[],
+        msgs:[{k:'event',text:'Ticket #553 created on Leadership',time:'3d'},{k:'user',text:'draft de ma summer review'}]},
+       {id:551,num:551,title:'feedback sur la presentation strat',campaign:'Audit',board:'Audit',type:'Think',size:'S',ticketStatus:'Doing',agent:'assistant',progress:null,activity:'',idle:'6d',worktrees:[],suggestedRepos:[],pr:null,cost:'$0.90 · 6d',next:null,deliverables:[],shells:[],diffBranch:'—',diffDelta:'',diffFooter:'',diff:[],tree:[],
+        msgs:[{k:'event',text:'Ticket #551 created on Audit',time:'6d'},{k:'user',text:'relis la présentation strat et donne-moi 5 points d\'amélioration'}]}
+      ]};
+    this.LAY={'1':{cols:'1fr',rows:'1fr',areas:['1 / 1 / 2 / 2']},'cols':{cols:'1fr 1fr',rows:'1fr',areas:['1 / 1 / 2 / 2','1 / 2 / 2 / 3']},'rows':{cols:'1fr',rows:'1fr 1fr',areas:['1 / 1 / 2 / 2','2 / 1 / 3 / 2']},'three':{cols:'1fr 1fr',rows:'1fr 1fr',areas:['1 / 1 / 3 / 2','1 / 2 / 2 / 3','2 / 2 / 3 / 3']},'grid':{cols:'1fr 1fr',rows:'1fr 1fr',areas:['1 / 1 / 2 / 2','1 / 2 / 2 / 3','2 / 1 / 3 / 2','2 / 2 / 3 / 3']}};
+    this.REPOS=['odys-front','odys-api','agentic-dmc','fleex'];
+    this.BOARDS=['Odys','Leadership','Fleex','Audit'];
+    this.nextNum=560;
+  }
+  componentDidMount(){ this._kd=(e)=>{ const m=e.metaKey||e.ctrlKey;
+      if(m&&e.shiftKey&&e.key.toLowerCase()==='j'){e.preventDefault();this.toggleMode();}
+      else if(m&&e.key.toLowerCase()==='j'){e.preventDefault();this.setState(s=>({shellOpen:!s.shellOpen}));}
+      else if(e.altKey&&(e.key.toLowerCase()==='n'||e.code==='KeyN')){e.preventDefault();this.newTask();}
+      else if(e.key==='Escape'&&this.state.view==='new'){this.setState({view:'task'});}
+      else if(m&&e.key==='Enter'&&this.state.view==='task'){const t=this.cur();if(t&&t.next){e.preventDefault();this.doNext(t.id);}}
+      else if(m&&(this.state.shellOpen||this.state.shellMode)&&/^[1-4]$/.test(e.key)){e.preventDefault();this.setState({activeShell:+e.key-1});} };
+    window.addEventListener('keydown',this._kd); }
+  componentWillUnmount(){ window.removeEventListener('keydown',this._kd); Object.values(this._timers||{}).forEach(clearInterval); Object.values(this._dt||{}).forEach(clearTimeout); }
+  cur(){ return this.state.tasks.find(t=>t.id===this.state.sel); }
+  toggleMode(){ this.setState(s=>({shellMode:!s.shellMode,shellOpen:false,view:'task'})); }
+  split(dir){ this.setState(s=>{ const l=s.layout; const n=l==='1'?(dir==='right'?'cols':'rows'):(l==='cols'||l==='rows')?'three':'grid'; return {layout:n}; }); }
+  closePane(){ this.setState(s=>{ const l=s.layout; const n=l==='grid'?'three':l==='three'?'cols':'1'; return {layout:n}; }); }
+  syncOverlay(){ const t=this.cur(); if(!t) return; const repo=t.worktrees[0]?t.worktrees[0].repo:null;
+    this.push(t.id,{k:'event',text:repo?'Overlay synced · 3 gitignored files captured for '+repo+' (.env.local, .claude/settings.local.json, .cache/)':'Overlay sync skipped · no worktree attached',time:'now'}); }
+  upd(id,fn){ this.setState(s=>({tasks:s.tasks.map(t=>t.id===id?{...t,...fn(t)}:t)})); }
+  push(id,msg){ this.upd(id,t=>({msgs:[...t.msgs,msg]})); }
+  run(id,label,done,ms){ this._timers=this._timers||{}; clearInterval(this._timers[id]);
+    this.upd(id,()=>({progress:0.02,activity:label,typing:true}));
+    this._timers[id]=setInterval(()=>{ const t=this.state.tasks.find(x=>x.id===id); if(!t) return clearInterval(this._timers[id]);
+      const p=(t.progress||0)+0.06; if(p>=1){ clearInterval(this._timers[id]); this.upd(id,tt=>({progress:null,activity:'',typing:false,...done(tt)})); } else this.upd(id,()=>({progress:p})); },ms||220); }
+  answer(id,opt){ this.upd(id,t=>({q:null,msgs:t.msgs.map(m=>m.q&&!m.q.answer?{...m,q:{...m.q,answer:opt}}:m)}));
+    this.push(id,{k:'user',text:opt});
+    const t=this.state.tasks.find(x=>x.id===id); const isPanel=t.agent.startsWith('panel');
+    this.run(id,isPanel?'panel · finalizing memo':t.agent+' · '+opt.toLowerCase(),tt=>{
+      if(opt==='Approve') return {ticketStatus:'Reviewing',msgs:[...tt.msgs,{k:'event',text:'Memo approved · ticket moved to Reviewing',time:'now'}],next:'Share the memo with the leadership channel and close the ticket'};
+      if(opt==='Read first') return {msgs:[...tt.msgs,{k:'agent',agent:'Panel · leadership',time:'now',text:'Voici la synthèse (2 pages). Points clés : partager les packages d\'abord, garder le runtime séparé jusqu\'à Q1, mesurer le coût de build.',q:{text:'Approuver maintenant ?',options:['Approve','Ask for a revision']}}],q:{text:'approve the memo now?',options:['Approve','Ask for a revision']}};
+      if(opt==='Run now') return {msgs:[...tt.msgs,{k:'event',text:'Migration 0042_skills applied on staging',time:'now'},{k:'agent',agent:'The Builder',time:'now',text:'Migration appliquée, 3 skills enregistrés, /skills/list répond en 42 ms. Prêt pour review.'}],next:'Run PR review workflow on agentic-dmc#127 and move to Reviewing'};
+      if(opt==='Push it') return {ticketStatus:'Reviewing',msgs:[...tt.msgs,{k:'event',text:'Pushed to '+(tt.pr?tt.pr.ref:'origin')+' · ticket moved to Reviewing',time:'now'}],next:'Run PR review workflow and share the summary'};
+      if(opt==='Hold') return {msgs:[...tt.msgs,{k:'agent',agent:'Assistant',time:'now',text:'Ok, le commit reste local. Dis-moi quand pousser.'}]};
+      if(opt==='Wait') return {msgs:[...tt.msgs,{k:'agent',agent:'The Builder',time:'now',text:'Ok, je laisse la migration en attente et je pose un rappel sur la rotation des clés.'}]};
+      return {msgs:[...tt.msgs,{k:'agent',agent:'The Builder',time:'now',text:'Fait.'}]}; });
+  }
+  doNext(id){ const t=this.state.tasks.find(x=>x.id===id); if(!t||!t.next) return;
+    this.push(id,{k:'user',text:'go'}); this.upd(id,()=>({next:null}));
+    this.run(id,'workflow · PR review 1/4',tt=>({ticketStatus:'Reviewing',pr:tt.pr?{...tt.pr,checks:tt.pr.checks.split('/')[1]+'/'+tt.pr.checks.split('/')[1]}:tt.pr,
+      msgs:[...tt.msgs,{k:'event',text:tt.pr?'Pushed to '+tt.pr.ref+' · ticket moved to Reviewing':'Ticket moved to Reviewing',time:'now'},{k:'agent',agent:'The Reviewer',time:'now',text:'PR review terminé : 2 remarques mineures (nommage, un test redondant), aucune bloquante. Résumé posté en commentaire de la PR.'}],
+      deliverables:[{kind:'REVIEW',title:'PR review — 2 minor remarks',meta:'reviewer · now'},...tt.deliverables]}),160); }
+  dstate(m){ return m.status==='running'?{color:'#4f46e5',label:'in progress',anim:'pulse 1.4s infinite'}:m.status==='waiting'?{color:'#a16207',label:'waiting for you',anim:'none'}:{color:'#15803d',label:'concluded',anim:'none'}; }
+  streamOf(th){ const out=[]; let sec=0; const T=()=>{sec+=3+Math.floor(Math.random()*0)+((out.length*7)%9); return (Math.floor(sec/60)+'').padStart(2,'0')+':'+((sec%60)+'').padStart(2,'0');};
+    out.push({t:T(),kind:'system.init',color:'#71717a',text:'session '+th.executionId+' · model claude-opus · cwd ~/wt/odys-front'});
+    th.turns.forEach(u=>{ if(u.from!=='agent'){ out.push({t:T(),kind:'user',color:'#a5b4fc',text:(u.from==='user'?'[you] ':'[assistant] ')+u.text}); return; }
+      out.push({t:T(),kind:'turn_start',color:'#71717a',text:'—'});
+      (u.tools||[]).forEach(k=>{ const [name,...rest]=k.split(' '); out.push({t:T(),kind:'tool_use · '+name,color:'#fcd34d',text:rest.join(' ')}); out.push({t:T(),kind:'tool_result',color:'#86efac',text:'ok'}); });
+      out.push({t:T(),kind:'text',color:'#d4d4d8',text:u.text}); out.push({t:T(),kind:'message_stop',color:'#71717a',text:'—'}); });
+    if(th.status==='done') out.push({t:T(),kind:'result',color:'#86efac',text:th.cost}); else out.push({t:T(),kind:'…',color:'#4f46e5',text:'streaming'});
+    return out; }
+  updDeleg(taskId,id,fn){ this.upd(taskId,t=>({msgs:t.msgs.map(m=>m.k==='deleg'&&m.id===id?{...m,...fn(m)}:m)})); }
+  scripts(p,t){ const n='#'+t.num; const S={
+    pm:{name:'The PM',brief:'Avis produit sur « '+t.title+' » : qu\'est-ce qui manque pour que ce soit livrable ?',ctx:[n,'description','deliverables'],turns:[
+      {from:'assistant',text:'Olivier veut ton avis produit. Je te transmets la description, les livrables et le dernier état du builder. Qu\'est-ce qui manque pour que ce soit livrable ?'},
+      {from:'agent',text:'Trois écarts : pas de critère d\'acceptation sur le fallback « not connected », pas de plan de rollout pour le flag, rien sur l\'accessibilité du panneau.',tools:['Read ticket '+n,'Read deliverables '+n]},
+      {from:'assistant',text:'Le fallback est déjà implémenté. Tu peux formaliser les critères d\'acceptation pour les trois points, une dizaine de lignes ?'},
+      {from:'agent',text:'Fait : section « Acceptance » ajoutée à la description. Rollout proposé 10 % interne → 50 % → 100 % sur deux semaines.',tools:['Edit ticket '+n+' description']},
+      {from:'assistant',text:'Merci, je remonte à Olivier.'}]},
+    builder:{name:'The Builder',brief:'Point technique sur « '+t.title+' » : état, risques, prochaine étape.',ctx:[n].concat(t.worktrees.map(w=>w.repo+' · '+w.branch)),turns:[
+      {from:'assistant',text:'Olivier veut un point d\'avancement. Où en es-tu, quels risques, quelle prochaine étape ?'},
+      {from:'agent',text:'La branche est à jour, tests verts. Risque : le champ budget_form dépend du config livré, pas d\'un type. Prochaine étape : commit + push si tu valides.',tools:['Bash git status','Bash pnpm test --filter odys']},
+      {from:'assistant',text:'Ajoute un test qui échoue si le nom du champ diverge du config, puis prépare le commit.'},
+      {from:'agent',text:'Test ajouté, suite verte. Commit prêt : « fix(ai-board): read budget_form from delivered config ». Je ne pousse pas sans ton go.',tools:['Write board-fields.test.ts','Bash git commit']},
+      {from:'assistant',text:'Parfait, je remonte.'}]},
+    reviewer:{name:'The Reviewer',brief:'Revue de la branche courante de « '+t.title+' ».',ctx:[n].concat(t.pr?[t.pr.ref]:[]),turns:[
+      {from:'assistant',text:'Peux-tu relire la branche courante ? Focus lisibilité et régressions.'},
+      {from:'agent',text:'Deux remarques mineures : un nom de variable trompeur dans parse-number.ts, un test redondant. Rien de bloquant.',tools:['Read diff','Grep parseNumber']},
+      {from:'assistant',text:'Merci, je remonte.'}]},
+    archi:{name:'The Architect',brief:'Impact architecture de « '+t.title+' ».',ctx:[n],turns:[
+      {from:'assistant',text:'Y a-t-il un impact architecture à anticiper ?'},
+      {from:'agent',text:'Non structurel. Point d\'attention : la projection des champs board devrait venir d\'un schéma partagé plutôt que d\'une liste locale.',tools:['Read apps/odys/src/app/ai/']},
+      {from:'assistant',text:'Noté, je remonte.'}]}}; return S[p]||S.builder; }
+  delegate(taskId,persona,brief){ const t=this.state.tasks.find(x=>x.id===taskId); if(!t) return; const sc=this.scripts(persona,t); const id='d'+Math.random().toString(16).slice(2,7);
+    this.push(taskId,{k:'agent',agent:'Assistant',time:'now',text:'Je vois ça avec '+sc.name.replace('The ','le ').toLowerCase().replace('le pm','la PM').replace('le builder','le builder')+' — je lui transmets le contexte du ticket.'});
+    this.push(taskId,{k:'deleg',id,agent:sc.name,persona,status:'running',time:'now',brief:brief||sc.brief,ctx:sc.ctx,cost:'$0.00 · 0 turns',executionId:Math.random().toString(16).slice(2,8),turns:[sc.turns[0]],summary:null});
+    this.setState({panel:'thread',threadSel:id,threadTab:'conv'}); this.upd(taskId,tt=>({prevRun:tt.progress!=null?{progress:tt.progress,activity:tt.activity}:null,progress:0.1,activity:persona+' · in thread with assistant'}));
+    this._dt=this._dt||{}; let i=1; const step=()=>{ const tt=this.state.tasks.find(x=>x.id===taskId); const d=tt&&tt.msgs.find(m=>m.k==='deleg'&&m.id===id); if(!d||d.status!=='running') return;
+      if(i<sc.turns.length){ const k=i; this.updDeleg(taskId,id,m=>({turns:[...m.turns,sc.turns[k]],cost:'$'+(0.4*(k+1)).toFixed(2)+' · '+(k+1)+' turns'})); this.upd(taskId,()=>({progress:Math.min(.95,(k+1)/sc.turns.length)})); i++; this._dt[id]=setTimeout(step,sc.turns[k].from==='agent'?2600:1400); }
+      else this.conclude(taskId,id); };
+    this._dt[id]=setTimeout(step,1800); }
+  conclude(taskId,id){ const t=this.state.tasks.find(x=>x.id===taskId); const d=t&&t.msgs.find(m=>m.k==='deleg'&&m.id===id); if(!d||d.status!=='running') return; if(this._dt&&this._dt[id]) clearTimeout(this._dt[id]);
+    const lastA=[...d.turns].reverse().find(u=>u.from==='agent'); const summary=lastA?lastA.text:'Pas de conclusion.';
+    this.updDeleg(taskId,id,()=>({status:'done',summary}));
+    this.upd(taskId,tt=>{ const other=tt.msgs.find(m=>m.k==='deleg'&&m.status==='running'&&m.id!==id);
+      if(other) return {progress:tt.progress,activity:other.persona+' · in thread with assistant',typing:false};
+      if(tt.prevRun) return {progress:tt.prevRun.progress,activity:tt.prevRun.activity,prevRun:null,typing:false};
+      return {progress:null,activity:'',typing:false}; });
+    const msg={k:'agent',agent:'Assistant',time:'now',text:'Retour de '+d.agent.replace('The ','').toLowerCase()+' : '+summary}; if(d.persona==='builder') msg.q={text:'Je lui dis de pousser ?',options:['Push it','Hold']};
+    this.push(taskId,msg); if(d.persona==='builder') this.upd(taskId,()=>({q:{text:'push the prepared commit?',options:['Push it','Hold']}})); }
+  stepIn(taskId,id){ const txt=this.state.threadDraft.trim(); if(!txt) return; this.setState({threadDraft:''});
+    this.updDeleg(taskId,id,m=>({turns:[...m.turns,{from:'user',text:txt}]}));
+    setTimeout(()=>this.updDeleg(taskId,id,m=>({turns:[...m.turns,{from:'agent',text:'Noté, je prends ça en compte dans la suite.'}]})),1200); }
+  send(){ const txt=this.state.composer.trim(); const t=this.cur(); if(!txt||!t) return;
+    this.setState({composer:''}); this.push(t.id,{k:'user',text:txt});
+    const mm=txt.match(/(?:vois? avec|voir avec|demande (?:au|à la|à)|see with|ask|check with|@agent:)\s*(?:le |la |the )?(pm|dev|builder|reviewer|archi|architecte)/i);
+    if(mm){ const map={dev:'builder',architecte:'archi'}; const p=mm[1].toLowerCase(); this.delegate(t.id,map[p]||p); return; }
+    if(t.progress==null) this.run(t.id,(t.agent.startsWith('panel')?'panel':t.agent)+' · working',tt=>({msgs:[...tt.msgs,{k:'agent',agent:tt.agent==='assistant'?'Assistant':'The Builder',time:'now',text:'Pris en compte. J\'ai mis à jour le ticket et le plan ; dis-moi si tu veux que je lance directement.'}]}),300); }
+  newTask(){ this.setState({view:'new',draft:{text:'',repos:[],board:null,type:'Build',size:'M'}}); }
+  startTask(){ const d=this.state.draft; if(!d.text.trim()) return; const num=this.nextNum++; const board=d.board||'Inbox';
+    const slug=d.text.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,24).replace(/-$/,'');
+    const title=d.text.trim().split(/[.\n]/)[0].slice(0,70);
+    const msgs=[{k:'event',text:'Ticket #'+num+' created on '+board+' · '+d.type+' · '+d.size,time:'now'},...d.repos.map(r=>({k:'event',text:'Worktree '+r+' · feat/'+num+'-'+slug+' created',time:'now'})),{k:'user',text:d.text.trim()}];
+    const task={id:num,num,title,campaign:board,board,type:d.type,size:d.size,ticketStatus:'Doing',agent:'assistant',progress:null,activity:'',worktrees:d.repos.map(r=>({repo:r,branch:'feat/'+num+'-'+slug})),suggestedRepos:this.REPOS.filter(r=>!d.repos.includes(r)).slice(0,1),pr:null,cost:'$0.00 · now',next:null,deliverables:[],
+      shells:d.repos.length?[{id:Math.random().toString(16).slice(2,8),title:'zsh',path:'~/wt/'+d.repos[0],meta:'idle',body:'$ '}]:[],diffBranch:d.repos.length?d.repos[0]+' · feat/'+num+'-'+slug:'—',diffDelta:'',diffFooter:'',diff:[],tree:[],msgs};
+    this.setState(s=>({tasks:[task,...s.tasks],sel:num,view:'task',panel:'context'}));
+    this.run(num,'assistant · framing',tt=>({q:{text:d.type==='Build'?'hand it to the builder now, or frame it together first?':'run it as a panel, or think it through together?',options:d.type==='Build'?['Hand to builder','Frame first']:['Convene panel','Think together']},
+      msgs:[...tt.msgs,{k:'agent',agent:'Assistant',time:'now',text:'Ticket rangé dans '+board+(d.repos.length?', worktree'+(d.repos.length>1?'s':'')+' prêt'+(d.repos.length>1?'s':''):'')+'. J\'ai résumé l\'intention dans la description.',q:{text:d.type==='Build'?'Je passe la main au builder maintenant, ou on cadre ensemble d\'abord ?':'On lance un panel, ou on réfléchit ensemble ?',options:d.type==='Build'?['Hand to builder','Frame first']:['Convene panel','Think together']}}]}),120); }
+  chip(name,active,onClick,mono){ return {name,onClick,bg:active?'rgba(99,102,241,.12)':'#fff',color:active?'#4338ca':'#52525b',border:active?'rgba(99,102,241,.5)':'#e4e4e7'}; }
+  opt(label,onClick,i,answered){ const chosen=answered===label; const dim=answered&&!chosen;
+    return {label,onClick:answered?()=>{}:onClick,bg:chosen?'#15803d':(i===0&&!answered?'#4f46e5':'#fff'),color:(chosen||(i===0&&!answered))?'#fff':(dim?'#a1a1aa':'#18181b'),border:chosen?'#15803d':(i===0&&!answered?'#4f46e5':'#d4d4d8')}; }
+  renderVals(){
+    const s=this.state; const t=this.cur(); const sel=id=>this.setState({sel:id,view:'task'});
+    const F=s.filter; const vis=s.tasks.filter(x=>F==='All'||x.campaign===F);
+    const row=(x,g)=>{ const isSel=x.id===s.sel&&s.view==='task';
+      return {id:x.id,num:'#'+x.num,title:x.title,campaign:x.campaign,agent:x.agent,activity:x.activity,pct:Math.round((x.progress||0)*100)+'%',weight:isSel?600:500,
+        bg:isSel?'rgba(99,102,241,.10)':(g==='needs'?'rgba(234,179,8,.06)':'transparent'),border:isSel?'#4f46e5':'transparent',
+        qText:x.q?x.q.text:'',qOptions:x.q?x.q.options.map((o,i)=>this.opt(o,(e)=>{e.stopPropagation();this.answer(x.id,o);},i)):[],
+        statusLabel:x.ticketStatus==='Reviewing'?'review':(x.idle||'idle'),select:()=>sel(x.id)}; };
+    const needs=vis.filter(x=>x.q).map(x=>row(x,'needs')), running=vis.filter(x=>!x.q&&x.progress!=null).map(x=>row(x,'run')), idle=vis.filter(x=>!x.q&&x.progress==null).map(x=>row(x,'idle'));
+    const filters=['All',...this.BOARDS].map(n=>({name:n,onClick:()=>this.setState({filter:n}),bg:F===n?'#18181b':'transparent',color:F===n?'#fff':'#52525b',border:F===n?'#18181b':'#e4e4e7'}));
+    const panelOpen=!!s.panel&&s.view==='task'; const gridCols='300px minmax(0,1fr)'+(panelOpen?(s.panel==='thread'?' 400px':' 296px'):'')+' 60px';
+    const anyRunningThread=!!(t&&t.msgs.some(m=>m.k==='deleg'&&m.status==='running'));
+    const tools=[['context','◫','Context'],['thread','⇄','Threads'],['diff','±','Diff'],['code','‹›','Code'],['deliv','▤','Delivs']].map(([k,g,ti])=>({glyph:g,title:ti,onClick:()=>this.setState({panel:s.panel===k?null:k}),bg:s.panel===k?'rgba(99,102,241,.12)':'transparent',color:s.panel===k?'#4f46e5':'#646469',badge:(k==='diff'&&!!(t&&t.diff.length))||(k==='thread'&&anyRunningThread)}));
+    const d=s.draft; const chipD=(arr,key,multi)=>arr.map(n=>this.chip(n,multi?d[key].includes(n):d[key]===n,()=>this.setState(st=>{const dd={...st.draft}; if(multi){dd[key]=dd[key].includes(n)?dd[key].filter(x=>x!==n):[...dd[key],n];} else dd[key]=dd[key]===n?null:n; return {draft:dd};})));
+    const canStart=!!d.text.trim();
+    let tv={};
+    if(t){ const st=t.ticketStatus; const stc={Doing:['#4338ca','rgba(99,102,241,.10)','rgba(99,102,241,.30)','#4f46e5'],Reviewing:['#7e22ce','rgba(168,85,247,.10)','rgba(168,85,247,.30)','#9333ea'],Done:['#166534','rgba(34,197,94,.10)','rgba(34,197,94,.30)','#16a34a'],Todo:['#52525b','#f4f4f5','#e4e4e7','#a1a1aa']}[st];
+      const agentState=t.q?'waiting for you':(t.progress!=null?'running':'idle'); const asc=t.q?'#a16207':(t.progress!=null?'#4f46e5':'#a1a1aa');
+      const sugg=[{label:'⇄ See with the PM',onClick:()=>this.delegate(t.id,'pm')},{label:'⇄ See with the dev',onClick:()=>this.delegate(t.id,'builder')}]; if(t.pr&&st==='Doing') sugg.push({label:'▷ Run workflow · PR review',onClick:()=>{this.upd(t.id,()=>({next:'Run PR review workflow on '+t.pr.ref+' and move to Reviewing'}));setTimeout(()=>this.doNext(t.id),50);}});
+      if(st==='Doing') sugg.push({label:'→ Move to Reviewing',onClick:()=>{this.upd(t.id,()=>({ticketStatus:'Reviewing'}));this.push(t.id,{k:'event',text:'Ticket moved to Reviewing',time:'now'});}});
+      if(st==='Reviewing') sugg.push({label:'✓ Mark done',onClick:()=>{this.upd(t.id,()=>({ticketStatus:'Done'}));this.push(t.id,{k:'event',text:'Ticket closed',time:'now'});}});
+      t.suggestedRepos.forEach(r=>sugg.push({label:'⎇ Attach '+r,onClick:()=>this.attach(t.id,r)}));
+      if(t.type==='Think'&&!t.agent.startsWith('panel')) sugg.push({label:'⦿ Convene a panel',onClick:()=>{this.setState({composer:'@panel:leadership '});}});
+      sugg.push({label:'⌬ Ask reviewer persona',onClick:()=>this.setState({composer:'@agent:reviewer '})});
+      const th=t.msgs.find(m=>m.k==='deleg'&&m.id===s.threadSel)||t.msgs.filter(m=>m.k==='deleg').slice(-1)[0]||null;
+      const msgs=t.msgs.map((m,i)=>{ const q=m.q; const answered=q&&q.answer;
+        const isA=m.agent==='Assistant'; const dl=m.k==='deleg'?this.dstate(m):null; const lastT=m.turns&&m.turns[m.turns.length-1];
+        return {isDiv:m.k==='div',isEvent:m.k==='event',isUser:m.k==='user',isAgent:m.k==='agent',isDeleg:m.k==='deleg',text:m.text,agent:m.agent,time:m.time,hasLink:!!m.link,link:m.link,onLink:()=>this.setState({panel:'context'}),
+          avBg:isA?'rgba(99,102,241,.12)':'rgba(168,85,247,.12)',avColor:isA?'#4338ca':'#7e22ce',avGlyph:isA?'◆':'⌬',
+          brief:m.brief,ctx:m.ctx||[],dColor:dl?dl.color:'',dLabel:dl?dl.label:'',dAnim:dl?dl.anim:'none',dBorder:m.status==='running'?'rgba(99,102,241,.35)':'#e4e4e7',dBg:s.threadSel===m.id&&s.panel==='thread'?'rgba(99,102,241,.05)':'#fff',
+          turnsLabel:m.turns?m.turns.length+' exchange'+(m.turns.length===1?'':'s'):'',lastLine:lastT?(lastT.from==='agent'?m.agent.replace('The ','').toLowerCase():'assistant')+': « '+lastT.text.slice(0,90)+(lastT.text.length>90?'…':'')+' »':'',
+          open:()=>this.setState({panel:'thread',threadSel:m.id,threadTab:'conv'}),
+          hasRun:!!m.run,runLines:(m.run||[]).map(([mark,color,text])=>({mark,color,text})),
+          hasQ:!!q,qText:q?q.text:'',qLabel:answered?'ANSWERED · '+answered.toUpperCase():'WAITING FOR YOUR CHOICE',qBorder:answered?'#e4e4e7':'rgba(234,179,8,.35)',qBg:answered?'#fafafa':'rgba(234,179,8,.07)',qHead:answered?'#828289':'#854d0e',
+          qOptions:q?q.options.map((o,j)=>this.opt(o,()=>this.answer(t.id,o),j,answered)):[]}; });
+      tv={title:t.title,num:t.num,ticketStatus:st,statusColor:stc[0],statusBg:stc[1],statusBorder:stc[2],statusDot:stc[3],type:t.type,size:t.size,agent:t.agent,agentState,agentStateColor:asc,
+        cycleStatus:()=>{const order=['Todo','Doing','Reviewing','Done'];const n=order[(order.indexOf(st)+1)%4];this.upd(t.id,()=>({ticketStatus:n}));this.push(t.id,{k:'event',text:'Ticket moved to '+n,time:'now'});},
+        boards:this.BOARDS.map(b=>this.chip(b,t.board===b,()=>{if(t.board!==b){this.upd(t.id,()=>({board:b,campaign:b}));this.push(t.id,{k:'event',text:'Ticket moved to board '+b,time:'now'});}})),
+        worktrees:t.worktrees.map(w=>({repo:w.repo,branch:w.branch,detach:()=>{this.upd(t.id,tt=>({worktrees:tt.worktrees.filter(x=>x.repo!==w.repo),suggestedRepos:[w.repo,...tt.suggestedRepos]}));this.push(t.id,{k:'event',text:'Worktree '+w.repo+' detached (kept on disk)',time:'now'});}})),
+        noWorktrees:!t.worktrees.length,suggestedRepos:t.suggestedRepos.map(r=>({repo:r,attach:()=>this.attach(t.id,r)})),
+        hasPr:!!t.pr,pr:t.pr||{},delivCount:t.deliverables.length,deliverables:t.deliverables.slice(0,3),deliverablesFull:t.deliverables,noDeliv:!t.deliverables.length,
+        shells:t.shells.map((sh,i)=>({id:sh.id,title:sh.title,meta:sh.meta,focus:()=>this.setState({shellOpen:true,activeShell:i})})),cost:t.cost,
+        msgs,typing:!!t.typing&&t.progress!=null,activity:t.activity,hasNext:!!t.next,next:t.next,doNext:()=>this.doNext(t.id),dismissNext:()=>this.upd(t.id,()=>({next:null})),suggestions:sugg,
+        threads:t.msgs.filter(m=>m.k==='deleg').map(m=>{const d=this.dstate(m);return {agent:m.agent,brief:m.brief,time:m.time,color:d.color,anim:d.anim,bg:s.threadSel===m.id?'rgba(99,102,241,.10)':'transparent',open:()=>this.setState({threadSel:m.id,threadTab:'conv'})};}),
+        noThreads:!t.msgs.some(m=>m.k==='deleg'),hasThread:!!th,th:th?(()=>{const d=this.dstate(th);const conv=s.threadTab==='conv';return {agent:th.agent,color:d.color,anim:d.anim,label:d.label,cost:th.cost,ctx:th.ctx,executionId:th.executionId,running:th.status==='running',done:th.status==='done',
+          isConv:conv,isStream:!conv,tabConv:()=>this.setState({threadTab:'conv'}),tabStream:()=>this.setState({threadTab:'stream'}),convBorder:conv?'#4f46e5':'transparent',convColor:conv?'#18181b':'#828289',streamBorder:conv?'transparent':'#4f46e5',streamColor:conv?'#828289':'#18181b',
+          turns:th.turns.map(u=>({who:u.from==='agent'?th.agent:(u.from==='user'?'You':'Assistant'),text:u.text,tools:u.tools||[],hasTools:!!(u.tools&&u.tools.length),glyph:u.from==='agent'?'⌬':(u.from==='user'?'NaS':'◆'),bg:u.from==='agent'?'rgba(168,85,247,.12)':(u.from==='user'?'#e4e4e7':'rgba(99,102,241,.12)'),color:u.from==='agent'?'#7e22ce':(u.from==='user'?'#52525b':'#4338ca')})),
+          stream:this.streamOf(th),draft:s.threadDraft,onDraft:e=>this.setState({threadDraft:e.target.value}),onKey:e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();this.stepIn(t.id,th.id);}},conclude:()=>this.conclude(t.id,th.id)};})():{},
+        diffBranch:t.diffBranch,diffDelta:t.diffDelta,diffFooter:t.diffFooter,hasDiff:!!t.diff.length,noDiff:!t.diff.length,
+        diff:t.diff.map(([k,text])=>({text,bg:k==='add'?'rgba(34,197,94,.12)':k==='del'?'rgba(239,68,68,.10)':'transparent',color:k==='add'?'#166534':k==='del'?'#991b1b':(k==='ctx'?'#3f3f46':'#828289'),mt:k==='file'?'10px':'0'})),
+        tree:t.tree.map(([name,lvl,glyph,ch])=>({name,indent:(8+lvl*14)+'px',glyph:glyph||'·',changed:!!ch,color:ch?'#18181b':(glyph?'#52525b':'#71717a'),weight:ch?600:400}))}; }
+    const shells=t?t.shells:[]; const L=this.LAY[s.layout]||this.LAY['1']; const n=L.areas.length; const act=Math.min(s.activeShell,Math.max(0,shells.length-1));
+    const paneOps={splitRight:e=>{e.stopPropagation();this.split('right');},splitDown:e=>{e.stopPropagation();this.split('down');},close:e=>{e.stopPropagation();this.closePane();}};
+    const panes=Array.from({length:n},(_,i)=>{ const sh=shells[(act+i)%Math.max(1,shells.length)]||null; const real=sh&&(i<shells.length);
+      return real?{...paneOps,area:L.areas[i],title:sh.title,path:sh.path,body:sh.body,color:sh.title.startsWith('claude')?'#c4b5fd':'#86efac',outline:i===0?'#4f46e5':'transparent',onClick:()=>this.setState({activeShell:(act+i)%shells.length})}
+        :{...paneOps,area:L.areas[i],title:'new shell',path:t&&t.worktrees[0]?'~/wt/'+t.worktrees[0].repo:'~',body:'$ ',color:'#71717a',outline:'transparent',onClick:()=>this.addShell()}; });
+    const needCount=s.tasks.filter(x=>x.q).length, runCount=s.tasks.filter(x=>!x.q&&x.progress!=null).length;
+    const topSummary=s.tasks.length+' tasks · '+runCount+' running · '+needCount+' need you';
+    const mono='ui-monospace,Menlo,monospace', sys='inherit';
+    const crumbs=t&&s.view==='task'?[{label:t.campaign,sep:false,color:'#52525b',font:sys,onClick:()=>this.setState({filter:t.campaign})},{label:'#'+t.num+' '+t.title,sep:true,color:'#18181b',font:sys,onClick:()=>this.setState({panel:'context'})},
+      ...(t.worktrees[0]?[{label:'⎇ '+t.worktrees[0].repo+' · '+t.worktrees[0].branch,sep:true,color:'#52525b',font:mono,onClick:()=>this.setState({panel:'diff'})}]:[])]:[{label:'New task',sep:false,color:'#18181b',font:sys,onClick:()=>{}}];
+    const statusItems=t&&s.view==='task'?[
+      {label:t.q?t.agent+' · waiting for you':(t.progress!=null?t.activity+' · '+Math.round(t.progress*100)+'%':t.agent+' · idle'),title:'Agent state',dot:true,dotColor:t.q?'#a16207':(t.progress!=null?'#4f46e5':'#a1a1aa'),anim:t.progress!=null?'pulse 1.4s infinite':'none',color:t.q?'#854d0e':(t.progress!=null?'#4338ca':'#52525b'),onClick:()=>this.setState({panel:'context'})},
+      ...(t.pr?[{label:t.pr.ref+' · '+t.pr.checks+' ✓',title:'Pull request',dot:false,color:'#166534',onClick:()=>this.setState({panel:'diff'})}]:[]),
+      {label:t.worktrees.length+' worktree'+(t.worktrees.length===1?'':'s'),title:'Worktrees',dot:false,color:'#52525b',onClick:()=>this.setState({panel:'context'})},
+      {label:shells.length+' shell'+(shells.length===1?'':'s'),title:'Shells · ⌘J',dot:false,color:'#52525b',onClick:()=>this.setState(st=>({shellOpen:!st.shellOpen}))},
+      {label:t.ticketStatus,title:'Ticket status',dot:false,color:'#52525b',onClick:tv.cycleStatus||(()=>{})},
+      {label:t.cost.split(' · ')[0]+' · Opus',title:'Cost · model',dot:false,color:'#828289',onClick:()=>{}}]:[];
+    return { gridCols,total:s.tasks.length,filters,needs,running,idle,hasNeeds:!!needs.length,hasRunning:!!running.length,hasIdle:!!idle.length,needsCount:needs.length,runningCount:running.length,idleCount:idle.length,
+      newTask:()=>this.newTask(),cancelNew:()=>this.setState({view:'task'}),isNew:s.view==='new',isTask:s.view==='task'&&!!t,
+      draftText:d.text,onDraft:e=>this.setState(st=>({draft:{...st.draft,text:e.target.value}})),onDraftKey:e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();this.startTask();}},
+      draftRepos:chipD(this.REPOS,'repos',true),draftBoards:chipD(this.BOARDS,'board',false),draftTypes:chipD(['Build','Think','Fix'],'type',false),draftSizes:chipD(['S','M','L'],'size',false),
+      startHint:canStart?'⏎ starts · ticket #'+this.nextNum+' on '+(d.board||'Inbox'):'write something to start',startBg:canStart?'#4f46e5':'#c7c7cc',startTask:()=>this.startTask(),
+      t:tv,composer:s.composer,onComposer:e=>this.setState({composer:e.target.value}),onComposerKey:e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.metaKey){e.preventDefault();this.send();}},send:()=>this.send(),
+      shellOpen:s.shellOpen&&s.view==='task'&&!s.shellMode,toggleShell:()=>this.setState(st=>({shellOpen:!st.shellOpen,shellMode:false})),shellCount:shells.length||'',shellBtnColor:s.shellOpen?'#4338ca':'#52525b',shellBtnBorder:s.shellOpen?'rgba(99,102,241,.5)':'#d4d4d8',shellBtnBg:s.shellOpen?'rgba(99,102,241,.10)':'#fff',
+      shellMode:s.shellMode,notShellMode:!s.shellMode,toggleShellMode:()=>this.toggleMode(),modeBtnLabel:s.shellMode?'💬 Back to chat':'⤢ Shell mode',modeBtnColor:s.shellMode?'#fff':'#52525b',modeBtnBorder:s.shellMode?'#18181b':'#d4d4d8',modeBtnBg:s.shellMode?'#18181b':'#fff',
+      topSummary,syncOverlay:()=>this.syncOverlay(),crumbs,statusItems,
+      shellTabs:shells.map((sh,i)=>({id:sh.id,title:sh.title,onClick:()=>this.setState({activeShell:i}),bg:i===act?'#27272a':'transparent',color:i===act?'#fff':'#a1a1aa',dot:sh.title.startsWith('claude')?'#a78bfa':'#4ade80'})),addShell:()=>this.addShell(),
+      layouts:[['1','▭','Single'],['cols','◫','Split right (vertical divider)'],['rows','⊟','Split down (horizontal divider)'],['three','◨','One + two stacked'],['grid','⊞','2 × 2']].map(([k,g,ti])=>({glyph:g,title:ti,onClick:()=>this.setState({layout:k}),bg:s.layout===k?'#3f3f46':'transparent',color:s.layout===k?'#fff':'#a1a1aa'})),
+      paneCols:L.cols,paneRows:L.rows,panes,
+      panelOpen,panelTitle:{context:'CONTEXT',thread:'AGENT THREADS',diff:'DIFF',code:'CODE',deliv:'DELIVERABLES'}[s.panel]||'',isContext:s.panel==='context',isThread:s.panel==='thread',isDiff:s.panel==='diff',isCode:s.panel==='code',isDeliv:s.panel==='deliv',closePanel:()=>this.setState({panel:null}),openDiff:()=>this.setState({panel:'diff'}),openCode:()=>this.setState({panel:'code'}),openDeliv:()=>this.setState({panel:'deliv'}),tools };
+  }
+  attach(id,r){ const t=this.state.tasks.find(x=>x.id===id); const br=t.worktrees[0]?t.worktrees[0].branch:'feat/'+t.num;
+    this.upd(id,tt=>({worktrees:[...tt.worktrees,{repo:r,branch:br}],suggestedRepos:tt.suggestedRepos.filter(x=>x!==r),shells:[...tt.shells,{id:Math.random().toString(16).slice(2,8),title:'zsh',path:'~/wt/'+r,meta:'idle',body:'$ '}]}));
+    this.push(id,{k:'event',text:'Worktree '+r+' · '+br+' attached',time:'now'}); }
+  addShell(){ const t=this.cur(); if(!t) return; const path=t.worktrees[0]?'~/wt/'+t.worktrees[0].repo:'~';
+    this.upd(t.id,tt=>({shells:[...tt.shells,{id:Math.random().toString(16).slice(2,8),title:'zsh',path,meta:'idle',body:'$ '}]})); this.setState({shellOpen:true,activeShell:t.shells.length}); }
+}
+</script>
+</body>
+</html>

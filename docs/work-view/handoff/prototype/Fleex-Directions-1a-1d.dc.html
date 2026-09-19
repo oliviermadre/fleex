@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#ebebed;font-family:-apple-system,system-ui,"Segoe UI",sans-serif;color:#18181b}a{color:#4f46e5;text-decoration:none}a:hover{color:#4338ca}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#18181b;color:#fff;border-radius:4px}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#18181b}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:10px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#18181b;border-radius:5px}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.4 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1440px}.dv-card{background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06),0 12px 40px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#4f46e5;color:#fff}.dv-next{margin:26px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.55)}</style></helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Écran unique, « travail en cours d'abord » — 4 directions</span></div>
+
+<div style="max-width:880px;margin:0 0 28px;padding:18px 22px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:10px;font-size:13px;line-height:1.55;color:#3f3f46">
+<div style="font-weight:600;color:#18181b;margin-bottom:6px">Hypothèses et raisonnement</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 28px">
+<div><b style="color:#18181b">Une seule surface.</b> Trois zones fixes : mes tâches (gauche), la tâche active (centre), le contexte (droite ou en tête). Kanban, Cockpit, Sessions, Assistant deviennent des vues secondaires via ⌘K et un « ⋯ » discret. La nav de 14 entrées passe à 4.</div>
+<div><b style="color:#18181b">La conversation est le fil unique.</b> Commentaires, événements agents, questions en attente, livrables, runs de workflow : tout est dans le même flux, chronologique. Plus de bascule Ticket ↔ Session ↔ Chat.</div>
+<div><b style="color:#18181b">Le ticket est un effet de bord.</b> Démarrer = écrire. Le ticket, le board, les worktrees se créent ou se suggèrent silencieusement et apparaissent comme événements du flux, annulables d'un clic.</div>
+<div><b style="color:#18181b">L'attention est l'unité de tri.</b> Une tâche où un agent attend ma réponse remonte, et la question est répondable sur place. Le terminal est à la demande (tiroir bas), jamais imposé.</div>
+</div>
+<div style="margin-top:10px;font-size:12px;color:#71717a">Tokens du thème Light de Fleex (accent indigo #4f46e5, neutres zinc, tints). Contenu tiré de tes captures. Les 4 directions partagent le squelette et divergent sur : groupement de la liste, place du contexte, forme des suggestions, état de démarrage.</div>
+</div>
+
+<div class="dv-opts">
+
+<!-- ═══════════════ 1a ═══════════════ -->
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a><span><b style="color:#18181b">Stream</b> — liste groupée par repo, contexte réduit à une ligne de chips sous le titre, suggestions en chips au-dessus du composer. Maximum d'espace pour le flux.</span></div>
+<div class="dv-card" style="width:1440px;height:900px;display:grid;grid-template-columns:48px 272px 1fr;background:#f4f4f5" data-screen-label="1a Stream">
+  <!-- nav -->
+  <div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px">
+    <div style="width:26px;height:26px;border-radius:7px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700;margin-bottom:10px">ϟ</div>
+    <div title="Working" style="width:34px;height:34px;border-radius:8px;background:rgba(99,102,241,.12);color:#4f46e5;display:grid;place-items:center;font-size:15px">◧</div>
+    <div title="Notifs" style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px;position:relative">🔔<span style="position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:#dc2626"></span></div>
+    <div title="⌘K" style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font:600 11px ui-monospace,Menlo,monospace">⌘K</div>
+    <div title="More views" style="width:34px;height:34px;border-radius:8px;color:#828289;display:grid;place-items:center;font-size:16px">⋯</div>
+    <div style="flex:1"></div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px">⚙</div>
+    <div style="width:26px;height:26px;border-radius:50%;background:#e4e4e7;color:#52525b;display:grid;place-items:center;font-size:10px;font-weight:600">NaS</div>
+  </div>
+  <!-- task list -->
+  <div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;min-height:0">
+    <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 16px;border-bottom:1px solid #f0f0f2">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52525b">WORKING ON <span style="color:#828289;font-weight:500">7</span></div>
+      <div style="display:flex;gap:6px;align-items:center"><span style="font-size:11px;color:#828289">⌥N</span><span style="width:24px;height:24px;border-radius:6px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:15px;line-height:1">+</span></div>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:8px 8px 0">
+      <!-- attention banner -->
+      <div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:rgba(234,179,8,.10);border:1px solid rgba(234,179,8,.30);font-size:12px;color:#854d0e;display:flex;gap:8px;align-items:center"><span style="width:7px;height:7px;border-radius:50%;background:#a16207;animation:pulse 1.6s infinite"></span><b>2 agents</b> wait for you</div>
+
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#828289;padding:4px 8px 6px;display:flex;justify-content:space-between"><span>ODYS-TRAVEL</span><span style="font-family:ui-monospace,Menlo,monospace;font-weight:500">3</span></div>
+      <div style="padding:8px 8px 8px 10px;border-radius:8px;background:rgba(99,102,241,.10);border-left:2px solid #4f46e5;margin-bottom:2px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">dummy sidebar odys-ai with feature flagging</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#550</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px"><span style="color:#166534;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:4px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace">odys-front#2782</span><span style="display:flex;align-items:center;gap:4px;color:#4338ca"><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5;animation:pulse 1.4s infinite"></span>builder · working</span></div>
+      </div>
+      <div style="padding:8px 8px 8px 10px;border-radius:8px;border-left:2px solid transparent;margin-bottom:2px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">skill api</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#556</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px"><span style="color:#166534;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:4px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace">agentic-dmc#127</span><span style="display:flex;align-items:center;gap:4px;color:#854d0e;font-weight:600"><span style="width:6px;height:6px;border-radius:50%;background:#a16207"></span>needs you</span></div>
+      </div>
+      <div style="padding:8px 8px 8px 10px;border-radius:8px;border-left:2px solid transparent;margin-bottom:2px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Summer Review 2026 - NaS</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#553</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px;color:#646469"><span style="width:6px;height:6px;border-radius:50%;background:#a1a1aa"></span>idle 3d</div>
+      </div>
+
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#828289;padding:12px 8px 6px;display:flex;justify-content:space-between"><span>OLIVIERMADRE/FLEEX</span><span style="font-family:ui-monospace,Menlo,monospace;font-weight:500">2</span></div>
+      <div style="padding:8px 8px 8px 10px;border-radius:8px;border-left:2px solid transparent;margin-bottom:2px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">problème de caractère dans le side-panel</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#545</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px"><span style="color:#166534;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:4px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace">fleex#277</span><span style="display:flex;align-items:center;gap:4px;color:#7e22ce"><span style="width:6px;height:6px;border-radius:50%;background:#9333ea"></span>reviewing</span></div>
+      </div>
+      <div style="padding:8px 8px 8px 10px;border-radius:8px;border-left:2px solid transparent;margin-bottom:2px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">avis convergence &lt;&gt; agentic-dmc</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#549</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px"><span style="display:flex;align-items:center;gap:4px;color:#854d0e;font-weight:600"><span style="width:6px;height:6px;border-radius:50%;background:#a16207"></span>needs you</span><span style="color:#828289">· panel · 1w</span></div>
+      </div>
+
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#828289;padding:12px 8px 6px;display:flex;justify-content:space-between"><span>NO REPO</span><span style="font-family:ui-monospace,Menlo,monospace;font-weight:500">2</span></div>
+      <div style="padding:8px 8px 8px 10px;border-radius:8px;border-left:2px solid transparent;margin-bottom:2px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">annual review pol valentin</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#559</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px;color:#646469"><span style="width:6px;height:6px;border-radius:50%;background:#a1a1aa"></span>idle 21h</div>
+      </div>
+      <div style="padding:8px 8px 8px 10px;border-radius:8px;border-left:2px solid transparent">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">feedback sur la presentation strat</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#551</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px;color:#646469"><span style="width:6px;height:6px;border-radius:50%;background:#a1a1aa"></span>idle 6d</div>
+      </div>
+    </div>
+    <div style="padding:10px 12px;border-top:1px solid #f0f0f2;display:flex;justify-content:space-between;font-size:11px;color:#828289"><span>Done this week <b style="color:#52525b">4</b></span><span>Backlog <b style="color:#52525b">3</b> ›</span></div>
+  </div>
+  <!-- main -->
+  <div style="display:flex;flex-direction:column;min-height:0;min-width:0">
+    <div style="height:44px;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:10px;padding:0 16px">
+      <div style="font-size:14px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">dummy sidebar odys-ai on odys-front with feature flagging</div>
+      <span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#550</span>
+      <div style="flex:1"></div>
+      <span style="font-size:12px;color:#4338ca;background:rgba(99,102,241,.10);border:1px solid rgba(99,102,241,.30);border-radius:6px;padding:3px 9px;display:flex;gap:6px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5"></span>Doing ▾</span>
+      <span style="font-size:12px;color:#52525b;border:1px solid #d4d4d8;border-radius:6px;padding:3px 9px;font-family:ui-monospace,Menlo,monospace">&gt;_ Shell</span>
+      <span style="font-size:12px;color:#52525b;border:1px solid #d4d4d8;border-radius:6px;padding:3px 9px">Deliverables <b>7</b></span>
+      <span style="color:#828289;font-size:16px;padding:0 4px">⋯</span>
+    </div>
+    <!-- context chips line -->
+    <div style="height:36px;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:6px;padding:0 16px;font-size:11.5px;overflow:hidden">
+      <span style="color:#828289;font-size:10.5px;font-weight:700;letter-spacing:.06em;margin-right:2px">CONTEXT</span>
+      <span style="color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 8px">⚡ Odys</span>
+      <span style="color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 8px;font-family:ui-monospace,Menlo,monospace">⎇ odys-front · feat/550-ai-sidebar</span>
+      <span style="color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 8px;font-family:ui-monospace,Menlo,monospace">⎇ agentic-dmc · main</span>
+      <span style="color:#166534;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:5px;padding:2px 8px;font-family:ui-monospace,Menlo,monospace">PR #2782 · 13/13 ✓</span>
+      <span style="color:#7e22ce;background:rgba(168,85,247,.10);border:1px solid rgba(168,85,247,.30);border-radius:5px;padding:2px 8px">⌬ builder</span>
+      <span style="color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 8px">Build · Medium</span>
+      <span style="color:#828289;padding:2px 6px">+ add</span>
+    </div>
+    <!-- stream -->
+    <div style="flex:1;overflow:hidden;padding:18px 0 0;display:flex;flex-direction:column;gap:14px;min-height:0">
+      <div style="width:min(860px,100%);margin:0 auto;padding:0 24px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:10px;font-size:11.5px;color:#828289"><span style="flex:1;height:1px;background:#e4e4e7"></span>3 days ago<span style="flex:1;height:1px;background:#e4e4e7"></span></div>
+        <div style="display:flex;justify-content:flex-end"><div style="max-width:78%;background:rgba(99,102,241,.10);border-radius:12px 12px 3px 12px;padding:10px 14px;font-size:13.5px;line-height:1.5;color:#18181b">continue <span style="color:#4338ca;background:rgba(99,102,241,.12);border-radius:4px;padding:0 5px">@agent:builder</span> — on arrête de push sur github pour le moment, on bosse en local. Actuellement l'app me remonte depuis localhost:3000 des 503.</div></div>
+        <div style="display:flex;gap:10px"><div style="width:26px;height:26px;border-radius:7px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:13px;flex:none">⌬</div><div style="flex:1;min-width:0"><div style="font-size:12px;color:#52525b;margin-bottom:4px"><b style="color:#18181b">The Builder</b> · agent · 3d</div><div style="font-size:13.5px;line-height:1.55;color:#18181b">Les trois retours sont livrés sur la PR #2782 (mise à jour, pas de nouvelle PR) — 13/13 checks CI verts. Deux choses restent de ton côté, ce sont des actions de déploiement : créer le flag <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f4f4f5;border-radius:4px;padding:1px 5px">odys-ai-sidebar</code> dans Amplitude et fournir <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f4f4f5;border-radius:4px;padding:1px 5px">AGENTIC_DMC_API_URL</code> sur staging.</div>
+          <div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;border:1px solid #d4d4d8;border-radius:7px;padding:6px 10px;font-size:12.5px;background:#fff"><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#52525b">CODE</span><span style="color:#18181b">PR #2782 — Panneau Odys AI : package, resize, API agentic-dmc</span><span style="color:#828289">⧉</span></div></div></div>
+        <!-- system events -->
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#646469;padding-left:36px"><span style="color:#15803d">✓</span>Worktree <span style="font-family:ui-monospace,Menlo,monospace;color:#52525b">agentic-dmc · main</span> attached by builder<span style="color:#828289">· 3d</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#646469;padding-left:36px"><span style="color:#828289">›</span>Session <span style="font-family:ui-monospace,Menlo,monospace;color:#52525b">ff0cd9</span> churned 6m 0s · 60.4% context · Opus<span style="color:#4338ca">open shell</span></div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:11.5px;color:#828289"><span style="flex:1;height:1px;background:#e4e4e7"></span>today<span style="flex:1;height:1px;background:#e4e4e7"></span></div>
+        <div style="display:flex;justify-content:flex-end"><div style="max-width:78%;background:rgba(99,102,241,.10);border-radius:12px 12px 3px 12px;padding:10px 14px;font-size:13.5px;line-height:1.5;color:#18181b">ça marche, le board se charge</div></div>
+        <div style="display:flex;gap:10px"><div style="width:26px;height:26px;border-radius:7px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:13px;flex:none">⌬</div><div style="flex:1;min-width:0"><div style="font-size:12px;color:#52525b;margin-bottom:4px"><b style="color:#18181b">The Builder</b> · agent · just now</div><div style="font-size:13.5px;line-height:1.55;color:#18181b">Corrigé. <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f4f4f5;border-radius:4px;padding:1px 5px">initial_budget</code> était le seul nom déduit du camelCase au lieu d'être lu dans le config livré. Le vrai nom est <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f4f4f5;border-radius:4px;padding:1px 5px">budget_form</code>. Un test garde ce nom. 5400 tests odys passent, rien n'est commité.</div>
+          <!-- inline question -->
+          <div style="margin-top:10px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.07);border-radius:9px;padding:10px 12px">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#854d0e;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#a16207;animation:pulse 1.4s infinite"></span>WAITING FOR YOUR CHOICE</div>
+            <div style="font-size:13px;color:#18181b;margin:6px 0 8px">Je commite et je pousse sur la PR #2782, ou tu veux d'abord relancer <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px">GET /api/ai-board/projects</code> en local ?</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap"><span style="font-size:12.5px;padding:5px 11px;border-radius:6px;background:#4f46e5;color:#fff;font-weight:500">Commit &amp; push <span style="opacity:.7;font-family:ui-monospace,Menlo,monospace;font-size:10.5px">1</span></span><span style="font-size:12.5px;padding:5px 11px;border-radius:6px;border:1px solid #d4d4d8;background:#fff;color:#18181b">Relance en local d'abord <span style="color:#828289;font-family:ui-monospace,Menlo,monospace;font-size:10.5px">2</span></span><span style="font-size:12.5px;padding:5px 11px;border-radius:6px;color:#52525b">Autre chose…</span></div>
+          </div></div></div>
+      </div>
+    </div>
+    <!-- composer -->
+    <div style="padding:10px 24px 14px;background:linear-gradient(180deg,rgba(244,244,245,0),#f4f4f5 30%)">
+      <div style="width:min(860px,100%);margin:0 auto">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:12px;flex-wrap:wrap"><span style="color:#828289;font-size:10.5px;font-weight:700;letter-spacing:.06em">SUGGESTED</span><span style="color:#4338ca;background:#fff;border:1px solid rgba(99,102,241,.35);border-radius:14px;padding:3px 10px">▷ Run workflow · PR review</span><span style="color:#4338ca;background:#fff;border:1px solid rgba(99,102,241,.35);border-radius:14px;padding:3px 10px">→ Move to Reviewing</span><span style="color:#4338ca;background:#fff;border:1px solid rgba(99,102,241,.35);border-radius:14px;padding:3px 10px">⌬ Ask reviewer persona</span><span style="color:#4338ca;background:#fff;border:1px solid rgba(99,102,241,.35);border-radius:14px;padding:3px 10px">⎇ Attach odys-travel/odys-api</span></div>
+        <div style="background:#fff;border:1px solid #d4d4d8;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+          <div style="padding:12px 14px 6px;font-size:13.5px;color:#828289">Reply, or @ to bring in agents, skills, panels, workflows, tickets…</div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 10px 10px;font-size:12px;color:#52525b"><span style="color:#828289">📎</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Mode <b style="color:#166534">Edit</b> ⇧⇥</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Auto (persona) ▾</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Opus ▾</span><div style="flex:1"></div><span style="font-family:ui-monospace,Menlo,monospace;color:#828289;font-size:11px">⇧⏎ newline</span><span style="width:28px;height:28px;border-radius:7px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:13px">➤</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ═══════════════ 1b ═══════════════ -->
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a><span><b style="color:#18181b">Queue</b> — liste plate triée par attention, questions des agents répondables directement dans la liste, rail contexte ouvert à droite, bande « Next » avec raccourcis clavier. Rien à ouvrir pour débloquer un agent.</span></div>
+<div class="dv-card" style="width:1440px;height:900px;display:grid;grid-template-columns:48px 300px 1fr 264px;background:#f4f4f5" data-screen-label="1b Queue">
+  <div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px">
+    <div style="width:26px;height:26px;border-radius:7px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700;margin-bottom:10px">ϟ</div>
+    <div style="width:34px;height:34px;border-radius:8px;background:rgba(99,102,241,.12);color:#4f46e5;display:grid;place-items:center;font-size:15px">◧</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px">🔔</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font:600 11px ui-monospace,Menlo,monospace">⌘K</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#828289;display:grid;place-items:center;font-size:16px">⋯</div>
+    <div style="flex:1"></div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px">⚙</div>
+    <div style="width:26px;height:26px;border-radius:50%;background:#e4e4e7;color:#52525b;display:grid;place-items:center;font-size:10px;font-weight:600">NaS</div>
+  </div>
+  <!-- queue -->
+  <div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;min-height:0">
+    <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 16px;border-bottom:1px solid #f0f0f2">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52525b">QUEUE <span style="color:#828289;font-weight:500">7</span></div>
+      <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:#828289"><span>sorted by <b style="color:#52525b">attention</b> ▾</span><span style="width:24px;height:24px;border-radius:6px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:15px;line-height:1">+</span></div>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:8px">
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#854d0e;padding:4px 8px 6px;display:flex;gap:6px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:#a16207;animation:pulse 1.4s infinite"></span>NEEDS YOU · 2</div>
+      <!-- row with inline question -->
+      <div style="padding:9px 10px;border-radius:8px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.06);margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">skill api</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#556</span></div>
+        <div style="font-size:12px;color:#3f3f46;margin:5px 0 7px;line-height:1.45"><b style="color:#7e22ce">builder</b> asks: run the migration on staging now, or wait for the API key rotation?</div>
+        <div style="display:flex;gap:5px"><span style="font-size:11.5px;padding:3px 9px;border-radius:5px;background:#4f46e5;color:#fff">Run now</span><span style="font-size:11.5px;padding:3px 9px;border-radius:5px;border:1px solid #d4d4d8;background:#fff">Wait</span><span style="font-size:11.5px;padding:3px 7px;color:#52525b">Reply…</span></div>
+      </div>
+      <div style="padding:9px 10px;border-radius:8px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.06);margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">avis convergence &lt;&gt; agentic-dmc</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#549</span></div>
+        <div style="font-size:12px;color:#3f3f46;margin:5px 0 7px;line-height:1.45"><b style="color:#7e22ce">panel · leadership</b> reached a conclusion. Approve the summary deliverable?</div>
+        <div style="display:flex;gap:5px"><span style="font-size:11.5px;padding:3px 9px;border-radius:5px;background:#4f46e5;color:#fff">Approve</span><span style="font-size:11.5px;padding:3px 9px;border-radius:5px;border:1px solid #d4d4d8;background:#fff">Read first</span></div>
+      </div>
+
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#4338ca;padding:10px 8px 6px">RUNNING · 2</div>
+      <div style="padding:8px 10px;border-radius:8px;background:rgba(99,102,241,.10);border-left:2px solid #4f46e5;margin-bottom:2px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">dummy sidebar odys-ai with feature flagging</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#550</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px"><span style="display:flex;align-items:center;gap:4px;color:#4338ca"><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5;animation:pulse 1.4s infinite"></span>builder · running tests</span><span style="color:#828289">· odys-front · 2m</span></div>
+        <div style="margin-top:6px;height:3px;border-radius:2px;background:#e4e4e7;overflow:hidden"><div style="width:60%;height:100%;background:#4f46e5"></div></div>
+      </div>
+      <div style="padding:8px 10px;border-radius:8px;border-left:2px solid transparent;margin-bottom:2px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;font-weight:500;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">problème de caractère dans le side-panel</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#545</span></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px"><span style="display:flex;align-items:center;gap:4px;color:#4338ca"><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5;animation:pulse 1.4s infinite"></span>workflow · PR review 2/4</span><span style="color:#828289">· fleex</span></div>
+      </div>
+
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#828289;padding:10px 8px 6px">IDLE · 3</div>
+      <div style="padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;color:#3f3f46;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">annual review pol valentin</div><span style="font-size:11px;color:#828289">21h</span></div>
+      <div style="padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;color:#3f3f46;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Summer Review 2026 - NaS</div><span style="font-size:11px;color:#828289">3d</span></div>
+      <div style="padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-size:13px;color:#3f3f46;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">feedback sur la presentation strat</div><span style="font-size:11px;color:#828289">6d</span></div>
+    </div>
+  </div>
+  <!-- main -->
+  <div style="display:flex;flex-direction:column;min-height:0;min-width:0;border-right:1px solid #e4e4e7">
+    <div style="height:44px;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:10px;padding:0 16px">
+      <div style="font-size:14px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">dummy sidebar odys-ai on odys-front with feature flagging</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#550</span>
+      <div style="flex:1"></div>
+      <span style="font-size:12px;color:#52525b;border:1px solid #d4d4d8;border-radius:6px;padding:3px 9px;font-family:ui-monospace,Menlo,monospace">&gt;_ Shell</span><span style="color:#828289;font-size:16px;padding:0 4px">⋯</span>
+    </div>
+    <!-- chapters -->
+    <div style="height:34px;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:0;padding:0 16px;font-size:11.5px">
+      <span style="color:#15803d;display:flex;align-items:center;gap:5px">✓ Framed</span><span style="width:28px;height:1px;background:#d4d4d8;margin:0 8px"></span>
+      <span style="color:#15803d;display:flex;align-items:center;gap:5px">✓ Ticket · Odys</span><span style="width:28px;height:1px;background:#d4d4d8;margin:0 8px"></span>
+      <span style="color:#15803d;display:flex;align-items:center;gap:5px">✓ Worktrees ×2</span><span style="width:28px;height:1px;background:#d4d4d8;margin:0 8px"></span>
+      <span style="color:#4338ca;font-weight:600;display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5;animation:pulse 1.4s infinite"></span>Building</span><span style="width:28px;height:1px;background:#d4d4d8;margin:0 8px"></span>
+      <span style="color:#828289">Review</span><span style="width:28px;height:1px;background:#d4d4d8;margin:0 8px"></span><span style="color:#828289">Done</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:18px 24px 0;display:flex;flex-direction:column;gap:14px;min-height:0">
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#646469;padding-left:36px"><span style="color:#15803d">✓</span>Ticket <span style="font-family:ui-monospace,Menlo,monospace;color:#52525b">#550</span> created on <b style="color:#52525b">Odys</b> — board inferred from repo<span style="color:#4338ca">change</span><span style="color:#828289">· 1w</span></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#646469;padding-left:36px"><span style="color:#15803d">✓</span>Worktree <span style="font-family:ui-monospace,Menlo,monospace;color:#52525b">odys-front · feat/550-ai-sidebar</span> created<span style="color:#828289">· 1w</span></div>
+      <div style="display:flex;justify-content:flex-end"><div style="max-width:78%;background:rgba(99,102,241,.10);border-radius:12px 12px 3px 12px;padding:10px 14px;font-size:13.5px;line-height:1.5;color:#18181b">on arrête de push sur github pour le moment. On va continuer de bosser localement. Actuellement l'app me remonte depuis localhost:3000 des 503</div></div>
+      <div style="display:flex;gap:10px"><div style="width:26px;height:26px;border-radius:7px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:13px;flex:none">⌬</div><div style="flex:1;min-width:0"><div style="font-size:12px;color:#52525b;margin-bottom:4px"><b style="color:#18181b">The Builder</b> · 3d</div><div style="font-size:13.5px;line-height:1.55;color:#18181b">Les 503 venaient de <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f4f4f5;border-radius:4px;padding:1px 5px">AGENTIC_DMC_API_URL</code> absent en local. Documenté dans <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f4f4f5;border-radius:4px;padding:1px 5px">apps/odys/.env.local.example</code>. Le panneau affiche « not connected » — état supporté, pas un incident.</div></div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#646469;padding-left:36px"><span style="color:#828289">›</span>builder attached <span style="font-family:ui-monospace,Menlo,monospace;color:#52525b">agentic-dmc · main</span><span style="color:#828289">· 3d</span></div>
+      <div style="display:flex;align-items:center;gap:10px;font-size:11.5px;color:#828289"><span style="flex:1;height:1px;background:#e4e4e7"></span>today<span style="flex:1;height:1px;background:#e4e4e7"></span></div>
+      <div style="display:flex;justify-content:flex-end"><div style="max-width:78%;background:rgba(99,102,241,.10);border-radius:12px 12px 3px 12px;padding:10px 14px;font-size:13.5px;line-height:1.5;color:#18181b">ça marche, le board se charge</div></div>
+      <div style="display:flex;gap:10px"><div style="width:26px;height:26px;border-radius:7px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:13px;flex:none">⌬</div><div style="flex:1;min-width:0"><div style="font-size:12px;color:#52525b;margin-bottom:4px"><b style="color:#18181b">The Builder</b> · running · 2m</div><div style="font-size:13.5px;line-height:1.55;color:#18181b">Corrigé. Je relance la suite complète avant de proposer le commit.</div>
+        <div style="margin-top:8px;border:1px solid #e4e4e7;border-radius:8px;padding:8px 12px;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#52525b;background:#fff;display:flex;flex-direction:column;gap:3px"><div><span style="color:#15803d">✓</span> pnpm static-code-analysis 44/44</div><div><span style="color:#15803d">✓</span> knip:gate OK · build --affected 7/7</div><div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4f46e5;animation:pulse 1s infinite"></span> 5400 tests odys · 3241 passed…</div></div></div></div>
+    </div>
+    <!-- next strip + composer -->
+    <div style="padding:10px 24px 14px;background:linear-gradient(180deg,rgba(244,244,245,0),#f4f4f5 30%)">
+      <div style="display:flex;align-items:stretch;gap:8px;margin-bottom:8px">
+        <div style="flex:1;background:#fff;border:1px solid rgba(99,102,241,.35);border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:10px"><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#4338ca">NEXT</span><span style="font-size:12.5px;color:#18181b">When tests pass: <b>commit, push to PR #2782, run PR review workflow</b>, move to Reviewing</span><div style="flex:1"></div><span style="font-size:11.5px;color:#4338ca;font-weight:600">Do it <span style="font-family:ui-monospace,Menlo,monospace;color:#828289">⌘⏎</span></span><span style="font-size:11.5px;color:#828289">Edit</span></div>
+      </div>
+      <div style="background:#fff;border:1px solid #d4d4d8;border-radius:12px">
+        <div style="padding:12px 14px 6px;font-size:13.5px;color:#828289">Reply…</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px 10px;font-size:12px;color:#52525b"><span style="color:#828289">📎</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Edit ⇧⇥</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Auto (persona) ▾</span><div style="flex:1"></div><span style="width:28px;height:28px;border-radius:7px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:13px">➤</span></div>
+      </div>
+    </div>
+  </div>
+  <!-- context rail -->
+  <div style="background:#fff;display:flex;flex-direction:column;min-height:0;font-size:12px">
+    <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #f0f0f2"><span style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52525b">CONTEXT</span><span style="color:#828289">▸</span></div>
+    <div style="padding:12px 14px;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+      <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">STATUS</div><div style="display:flex;gap:6px"><span style="color:#4338ca;background:rgba(99,102,241,.10);border:1px solid rgba(99,102,241,.30);border-radius:6px;padding:3px 9px;display:flex;gap:6px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5"></span>Doing</span><span style="color:#52525b;border:1px solid #e4e4e7;border-radius:6px;padding:3px 9px">Build · Med</span></div></div>
+      <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">BOARD</div><div style="color:#18181b">⚡ Odys <span style="color:#828289">· inferred from repo</span></div></div>
+      <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">AGENTS</div><div style="display:flex;flex-direction:column;gap:5px"><div style="display:flex;align-items:center;gap:7px"><span style="width:20px;height:20px;border-radius:6px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:11px">⌬</span><span style="color:#18181b">builder</span><span style="color:#4338ca;margin-left:auto;display:flex;gap:4px;align-items:center"><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5;animation:pulse 1.4s infinite"></span>running</span></div><div style="display:flex;align-items:center;gap:7px;color:#828289"><span style="width:20px;height:20px;border-radius:6px;border:1px dashed #d4d4d8;display:grid;place-items:center;font-size:11px">+</span>reviewer · suggested</div></div></div>
+      <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">WORKTREES</div><div style="display:flex;flex-direction:column;gap:5px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px"><div style="display:flex;justify-content:space-between;color:#18181b"><span>⎇ odys-front</span><span style="color:#828289">feat/550…</span></div><div style="display:flex;justify-content:space-between;color:#18181b"><span>⎇ agentic-dmc</span><span style="color:#828289">main</span></div><div style="color:#4338ca;font-family:system-ui,sans-serif;font-size:12px">+ odys-api <span style="color:#828289">· suggested</span></div></div></div>
+      <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">PULL REQUEST</div><div style="border:1px solid rgba(34,197,94,.30);background:rgba(34,197,94,.08);border-radius:7px;padding:7px 10px"><div style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#166534">odys-front#2782</div><div style="color:#52525b;margin-top:2px">13/13 checks · +4285 −49</div></div></div>
+      <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">DELIVERABLES · 7</div><div style="display:flex;flex-direction:column;gap:4px;color:#18181b"><div style="display:flex;gap:6px"><span style="font-size:9.5px;font-weight:700;color:#52525b;letter-spacing:.05em;padding-top:2px">CODE</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">PR #2782 — Panneau Odys AI</span></div><div style="display:flex;gap:6px"><span style="font-size:9.5px;font-weight:700;color:#52525b;letter-spacing:.05em;padding-top:2px">FD</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FD-20260909125118 devise</span></div><div style="color:#828289">5 more…</div></div></div>
+      <div><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">SESSIONS</div><div style="display:flex;flex-direction:column;gap:4px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#52525b"><div>ff0cd9 · Opus · 60.4%</div><div>a41c02 · shell · idle</div></div></div>
+      <div style="color:#828289;font-size:11.5px">$114.74 · 3 sessions · 1w</div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ═══════════════ 1c ═══════════════ -->
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a><span><b style="color:#18181b">Split</b> — la tâche se divise en conversation + panneau « live » (livrable, diff, shell, ticket) que les agents poussent eux-mêmes. Les suggestions sont des propositions d'agent dans le flux, à accepter ou ignorer.</span></div>
+<div class="dv-card" style="width:1440px;height:900px;display:grid;grid-template-columns:48px 248px 1fr;background:#f4f4f5" data-screen-label="1c Split">
+  <div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px">
+    <div style="width:26px;height:26px;border-radius:7px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700;margin-bottom:10px">ϟ</div>
+    <div style="width:34px;height:34px;border-radius:8px;background:rgba(99,102,241,.12);color:#4f46e5;display:grid;place-items:center;font-size:15px">◧</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px">🔔</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font:600 11px ui-monospace,Menlo,monospace">⌘K</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#828289;display:grid;place-items:center;font-size:16px">⋯</div>
+    <div style="flex:1"></div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px">⚙</div>
+    <div style="width:26px;height:26px;border-radius:50%;background:#e4e4e7;color:#52525b;display:grid;place-items:center;font-size:10px;font-weight:600">NaS</div>
+  </div>
+  <!-- dense list -->
+  <div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;min-height:0">
+    <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 14px;border-bottom:1px solid #f0f0f2">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52525b">WORKING ON</div>
+      <span style="width:24px;height:24px;border-radius:6px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:15px;line-height:1">+</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:6px">
+      <div style="display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:8px 8px;border-radius:7px;background:rgba(99,102,241,.10)"><span style="width:7px;height:7px;border-radius:50%;background:#4f46e5;animation:pulse 1.4s infinite"></span><span style="font-size:12.5px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">dummy sidebar odys-ai</span><span style="font-size:10.5px;color:#828289;font-family:ui-monospace,Menlo,monospace">550</span></div>
+      <div style="display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:8px 8px;border-radius:7px"><span style="width:7px;height:7px;border-radius:50%;background:#a16207"></span><span style="font-size:12.5px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">skill api</span><span style="font-size:10.5px;color:#854d0e;font-weight:600">asks</span></div>
+      <div style="display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:8px 8px;border-radius:7px"><span style="width:7px;height:7px;border-radius:50%;background:#a16207"></span><span style="font-size:12.5px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">avis convergence &lt;&gt; agentic-dmc</span><span style="font-size:10.5px;color:#854d0e;font-weight:600">asks</span></div>
+      <div style="display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:8px 8px;border-radius:7px"><span style="width:7px;height:7px;border-radius:50%;background:#4f46e5;animation:pulse 1.4s infinite"></span><span style="font-size:12.5px;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">problème de caractère side-panel</span><span style="font-size:10.5px;color:#828289;font-family:ui-monospace,Menlo,monospace">545</span></div>
+      <div style="display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:8px 8px;border-radius:7px"><span style="width:7px;height:7px;border-radius:50%;background:#9333ea"></span><span style="font-size:12.5px;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Feedback Pol-Valentin</span><span style="font-size:10.5px;color:#7e22ce">review</span></div>
+      <div style="display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:8px 8px;border-radius:7px"><span style="width:7px;height:7px;border-radius:50%;background:#d4d4d8"></span><span style="font-size:12.5px;color:#52525b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">annual review pol valentin</span><span style="font-size:10.5px;color:#828289">21h</span></div>
+      <div style="display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:8px 8px;border-radius:7px"><span style="width:7px;height:7px;border-radius:50%;background:#d4d4d8"></span><span style="font-size:12.5px;color:#52525b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Summer Review 2026 - NaS</span><span style="font-size:10.5px;color:#828289">3d</span></div>
+      <div style="display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:8px 8px;border-radius:7px"><span style="width:7px;height:7px;border-radius:50%;background:#d4d4d8"></span><span style="font-size:12.5px;color:#52525b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">feedback presentation strat</span><span style="font-size:10.5px;color:#828289">6d</span></div>
+      <div style="margin:10px 8px 0;padding-top:10px;border-top:1px solid #f0f0f2;font-size:11px;color:#828289;display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between"><span>Legend</span></div><div style="display:flex;gap:10px;flex-wrap:wrap"><span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4f46e5;margin-right:4px"></span>running</span><span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#a16207;margin-right:4px"></span>needs you</span><span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#9333ea;margin-right:4px"></span>review</span></div></div>
+    </div>
+  </div>
+  <!-- main split -->
+  <div style="display:flex;flex-direction:column;min-height:0;min-width:0">
+    <div style="height:44px;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:10px;padding:0 16px">
+      <div style="font-size:14px;font-weight:600;color:#18181b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">dummy sidebar odys-ai on odys-front with feature flagging</div><span style="font-size:11px;color:#828289;font-family:ui-monospace,Menlo,monospace">#550</span>
+      <span style="font-size:11.5px;color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 8px">⚡ Odys</span><span style="font-size:11.5px;color:#7e22ce;background:rgba(168,85,247,.10);border:1px solid rgba(168,85,247,.30);border-radius:5px;padding:2px 8px">⌬ builder</span>
+      <div style="flex:1"></div>
+      <span style="font-size:12px;color:#4338ca;background:rgba(99,102,241,.10);border:1px solid rgba(99,102,241,.30);border-radius:6px;padding:3px 9px">Doing ▾</span><span style="color:#828289;font-size:16px;padding:0 4px">⋯</span>
+    </div>
+    <div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:0">
+      <!-- conversation -->
+      <div style="display:flex;flex-direction:column;min-height:0;border-right:1px solid #e4e4e7">
+        <div style="flex:1;overflow:hidden;padding:16px 18px 0;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:flex-end"><div style="max-width:85%;background:rgba(99,102,241,.10);border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:13px;line-height:1.5;color:#18181b">ça marche, le board se charge</div></div>
+          <div style="display:flex;gap:10px"><div style="width:24px;height:24px;border-radius:6px;background:rgba(168,85,247,.12);color:#7e22ce;display:grid;place-items:center;font-size:12px;flex:none">⌬</div><div style="flex:1;min-width:0"><div style="font-size:11.5px;color:#52525b;margin-bottom:3px"><b style="color:#18181b">The Builder</b> · just now</div><div style="font-size:13px;line-height:1.55;color:#18181b">Corrigé. <code style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:#f4f4f5;border-radius:4px;padding:1px 5px">initial_budget</code> → <code style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:#f4f4f5;border-radius:4px;padding:1px 5px">budget_form</code>, avec un test qui garde ce nom. Le diff est ouvert à droite. 5400 tests passent, rien n'est commité.</div>
+            <!-- proposal cards -->
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+              <div style="border:1px solid rgba(99,102,241,.35);background:#fff;border-radius:9px;padding:9px 11px;display:flex;align-items:center;gap:10px"><span style="width:22px;height:22px;border-radius:6px;background:rgba(99,102,241,.10);color:#4338ca;display:grid;place-items:center;font-size:12px;flex:none">↑</span><div style="flex:1;min-width:0"><div style="font-size:12.5px;color:#18181b;font-weight:500">Commit &amp; push to PR #2782</div><div style="font-size:11.5px;color:#646469">« fix(ai-board): read budget_form from delivered config »</div></div><span style="font-size:11.5px;padding:4px 10px;border-radius:6px;background:#4f46e5;color:#fff">Accept</span><span style="font-size:11.5px;color:#828289;padding:4px 4px">Skip</span></div>
+              <div style="border:1px solid rgba(99,102,241,.35);background:#fff;border-radius:9px;padding:9px 11px;display:flex;align-items:center;gap:10px"><span style="width:22px;height:22px;border-radius:6px;background:rgba(99,102,241,.10);color:#4338ca;display:grid;place-items:center;font-size:12px;flex:none">▷</span><div style="flex:1;min-width:0"><div style="font-size:12.5px;color:#18181b;font-weight:500">Then run workflow <b>PR review</b> with reviewer</div><div style="font-size:11.5px;color:#646469">4 steps · ~6 min · moves ticket to Reviewing</div></div><span style="font-size:11.5px;padding:4px 10px;border-radius:6px;border:1px solid #d4d4d8;background:#fff;color:#18181b">Accept</span><span style="font-size:11.5px;color:#828289;padding:4px 4px">Skip</span></div>
+              <div style="border:1px dashed #d4d4d8;background:transparent;border-radius:9px;padding:8px 11px;display:flex;align-items:center;gap:10px;color:#646469"><span style="width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:12px;flex:none;color:#828289">⎇</span><div style="flex:1;font-size:12.5px">Attach <span style="font-family:ui-monospace,Menlo,monospace">odys-travel/odys-api</span>? Mentioned 3× in this thread.</div><span style="font-size:11.5px;color:#4338ca">Attach</span><span style="font-size:11.5px;color:#828289">No</span></div>
+            </div></div></div>
+        </div>
+        <div style="padding:10px 14px 12px">
+          <div style="background:#fff;border:1px solid #d4d4d8;border-radius:11px"><div style="padding:11px 13px 6px;font-size:13px;color:#828289">Reply…</div><div style="display:flex;align-items:center;gap:8px;padding:4px 10px 9px;font-size:11.5px;color:#52525b"><span style="color:#828289">📎</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Edit</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Auto ▾</span><div style="flex:1"></div><span style="width:26px;height:26px;border-radius:7px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:12px">➤</span></div></div>
+        </div>
+      </div>
+      <!-- live pane -->
+      <div style="display:flex;flex-direction:column;min-height:0;background:#fff">
+        <div style="height:36px;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:2px;padding:0 10px;font-size:12px">
+          <span style="padding:5px 10px;border-radius:6px;color:#646469">Ticket</span>
+          <span style="padding:5px 10px;border-radius:6px;background:#f4f4f5;color:#18181b;font-weight:600;display:flex;gap:6px;align-items:center">Diff <span style="font-size:10px;color:#166534;background:rgba(34,197,94,.10);border-radius:3px;padding:0 4px;font-family:ui-monospace,Menlo,monospace">+18 −4</span></span>
+          <span style="padding:5px 10px;border-radius:6px;color:#646469">Deliverables <span style="color:#828289">7</span></span>
+          <span style="padding:5px 10px;border-radius:6px;color:#646469;font-family:ui-monospace,Menlo,monospace">&gt;_</span>
+          <div style="flex:1"></div><span style="font-size:11px;color:#828289">pushed by builder · now</span>
+        </div>
+        <div style="flex:1;overflow:hidden;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.7;color:#3f3f46;padding:10px 0">
+          <div style="padding:0 14px;color:#828289;margin-bottom:4px">apps/odys/src/app/ai/board-fields.ts</div>
+          <div style="padding:0 14px;color:#828289">@@ -12,7 +12,7 @@ export const BOARD_FIELDS = [</div>
+          <div style="padding:0 14px">   'client_name',</div>
+          <div style="padding:0 14px">   'status',</div>
+          <div style="padding:0 14px;background:rgba(239,68,68,.10);color:#991b1b">-  'initial_budget',</div>
+          <div style="padding:0 14px;background:rgba(34,197,94,.12);color:#166534">+  'budget_form',</div>
+          <div style="padding:0 14px">   'budget_brief',</div>
+          <div style="padding:0 14px">   'amount_trip',</div>
+          <div style="padding:0 14px;color:#828289;margin:10px 0 4px">apps/odys/src/app/ai/board-fields.test.ts</div>
+          <div style="padding:0 14px;color:#828289">@@ -40,0 +41,9 @@</div>
+          <div style="padding:0 14px;background:rgba(34,197,94,.12);color:#166534">+it('never projects a deduced field name', () =&gt; {</div>
+          <div style="padding:0 14px;background:rgba(34,197,94,.12);color:#166534">+  // an unknown name in the projection fails the whole board (422)</div>
+          <div style="padding:0 14px;background:rgba(34,197,94,.12);color:#166534">+  expect(BOARD_FIELDS).not.toContain('initial_budget');</div>
+          <div style="padding:0 14px;background:rgba(34,197,94,.12);color:#166534">+});</div>
+          <div style="padding:0 14px;color:#828289;margin:10px 0 4px">apps/odys/src/app/ai/parse-number.ts</div>
+          <div style="padding:0 14px;background:rgba(239,68,68,.10);color:#991b1b">-  return Number(value);</div>
+          <div style="padding:0 14px;background:rgba(34,197,94,.12);color:#166534">+  return typeof value === 'number' ? value : Number(String(value).replace(/\s/g, ''));</div>
+        </div>
+        <div style="border-top:1px solid #e4e4e7;padding:8px 14px;display:flex;gap:8px;align-items:center;font-size:11.5px;color:#52525b"><span style="color:#15803d">✓</span>5400 tests · 44/44 lint · build 7/7<div style="flex:1"></div><span style="color:#4338ca">Open in VS Code</span><span style="color:#4338ca">Open shell</span></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ═══════════════ 1d ═══════════════ -->
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a><span><b style="color:#18181b">Start</b> — l'état « nouvelle tâche » du même écran (squelette <a class="dv-oid" href="#1a">1a</a>). Aucun formulaire : on écrit, l'assistant détecte le repo, le board, les tickets proches et propose une primitive. Le ticket se crée à l'envoi.</span></div>
+<div class="dv-card" style="width:1440px;height:900px;display:grid;grid-template-columns:48px 272px 1fr;background:#f4f4f5" data-screen-label="1d Start">
+  <div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px">
+    <div style="width:26px;height:26px;border-radius:7px;background:#4f46e5;color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700;margin-bottom:10px">ϟ</div>
+    <div style="width:34px;height:34px;border-radius:8px;background:rgba(99,102,241,.12);color:#4f46e5;display:grid;place-items:center;font-size:15px">◧</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px">🔔</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font:600 11px ui-monospace,Menlo,monospace">⌘K</div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#828289;display:grid;place-items:center;font-size:16px">⋯</div>
+    <div style="flex:1"></div>
+    <div style="width:34px;height:34px;border-radius:8px;color:#646469;display:grid;place-items:center;font-size:15px">⚙</div>
+    <div style="width:26px;height:26px;border-radius:50%;background:#e4e4e7;color:#52525b;display:grid;place-items:center;font-size:10px;font-weight:600">NaS</div>
+  </div>
+  <div style="background:#fff;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;min-height:0">
+    <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 16px;border-bottom:1px solid #f0f0f2">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52525b">WORKING ON <span style="color:#828289;font-weight:500">7</span></div>
+      <span style="width:24px;height:24px;border-radius:6px;background:rgba(99,102,241,.14);color:#4f46e5;display:grid;place-items:center;font-size:15px;line-height:1">+</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:8px">
+      <div style="padding:9px 10px;border-radius:8px;background:rgba(99,102,241,.10);border:1px dashed rgba(99,102,241,.45);margin-bottom:8px"><div style="font-size:13px;font-weight:600;color:#4338ca">New task</div><div style="font-size:11px;color:#646469;margin-top:3px">draft · not yet a ticket</div></div>
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#828289;padding:4px 8px 6px">ODYS-TRAVEL</div>
+      <div style="padding:7px 10px;font-size:13px;color:#3f3f46;display:flex;justify-content:space-between"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">dummy sidebar odys-ai</span><span style="width:6px;height:6px;border-radius:50%;background:#4f46e5;margin-top:6px;flex:none"></span></div>
+      <div style="padding:7px 10px;font-size:13px;color:#3f3f46;display:flex;justify-content:space-between"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">skill api</span><span style="width:6px;height:6px;border-radius:50%;background:#a16207;margin-top:6px;flex:none"></span></div>
+      <div style="padding:7px 10px;font-size:13px;color:#3f3f46;display:flex;justify-content:space-between"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Summer Review 2026 - NaS</span><span style="width:6px;height:6px;border-radius:50%;background:#d4d4d8;margin-top:6px;flex:none"></span></div>
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#828289;padding:12px 8px 6px">OLIVIERMADRE/FLEEX</div>
+      <div style="padding:7px 10px;font-size:13px;color:#3f3f46;display:flex;justify-content:space-between"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">problème de caractère side-panel</span><span style="width:6px;height:6px;border-radius:50%;background:#9333ea;margin-top:6px;flex:none"></span></div>
+      <div style="padding:7px 10px;font-size:13px;color:#3f3f46;display:flex;justify-content:space-between"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">avis convergence &lt;&gt; agentic-dmc</span><span style="width:6px;height:6px;border-radius:50%;background:#a16207;margin-top:6px;flex:none"></span></div>
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#828289;padding:12px 8px 6px">NO REPO</div>
+      <div style="padding:7px 10px;font-size:13px;color:#3f3f46;display:flex;justify-content:space-between"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">annual review pol valentin</span><span style="width:6px;height:6px;border-radius:50%;background:#d4d4d8;margin-top:6px;flex:none"></span></div>
+      <div style="padding:7px 10px;font-size:13px;color:#3f3f46;display:flex;justify-content:space-between"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">feedback presentation strat</span><span style="width:6px;height:6px;border-radius:50%;background:#d4d4d8;margin-top:6px;flex:none"></span></div>
+    </div>
+  </div>
+  <!-- start state -->
+  <div style="display:flex;flex-direction:column;min-height:0;min-width:0;align-items:center;justify-content:center;padding:0 24px">
+    <div style="width:min(760px,100%);display:flex;flex-direction:column;gap:18px">
+      <div style="font-size:22px;font-weight:600;color:#18181b;letter-spacing:-.01em">What are you working on?</div>
+      <div style="background:#fff;border:1px solid #4f46e5;border-radius:14px;box-shadow:0 0 0 3px rgba(99,102,241,.12),0 8px 30px rgba(0,0,0,.06)">
+        <div style="padding:16px 18px 8px;font-size:15px;line-height:1.55;color:#18181b">les stats ventes dans odys ne matchent plus airtable depuis la migration du champ budget, je veux comprendre et corriger<span style="display:inline-block;width:1.5px;height:17px;background:#4f46e5;vertical-align:-3px;margin-left:1px;animation:pulse 1s infinite"></span></div>
+        <!-- detected context -->
+        <div style="padding:6px 14px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px">
+          <span style="color:#828289;font-size:10.5px;font-weight:700;letter-spacing:.06em">DETECTED</span>
+          <span style="color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 8px;display:flex;gap:5px;align-items:center">⚡ Odys <span style="color:#828289">board</span><span style="color:#828289">✕</span></span>
+          <span style="color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 8px;font-family:ui-monospace,Menlo,monospace;display:flex;gap:5px;align-items:center">⎇ odys-travel/odys-front <span style="color:#828289">✕</span></span>
+          <span style="color:#52525b;background:#f4f4f5;border:1px solid #e4e4e7;border-radius:5px;padding:2px 8px;font-family:ui-monospace,Menlo,monospace;display:flex;gap:5px;align-items:center">⎇ odys-travel/odys-api <span style="color:#828289">✕</span></span>
+          <span style="color:#1d4ed8;background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.30);border-radius:5px;padding:2px 8px">Think</span>
+          <span style="color:#828289;padding:2px 4px">+ repo, agent, skill…</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px 12px;border-top:1px solid #f0f0f2;font-size:12px;color:#52525b"><span style="color:#828289">📎</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Auto (persona) ▾</span><span style="border:1px solid #e4e4e7;border-radius:6px;padding:2px 8px">Opus ▾</span><div style="flex:1"></div><span style="font-size:11.5px;color:#828289">⏎ starts · ticket created silently</span><span style="height:30px;padding:0 14px;border-radius:8px;background:#4f46e5;color:#fff;display:flex;align-items:center;gap:8px;font-weight:500">Start <span style="opacity:.75;font-family:ui-monospace,Menlo,monospace;font-size:11px">⏎</span></span></div>
+      </div>
+      <!-- suggestions under -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:12px 14px">
+          <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:8px">HOW TO RUN IT</div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+            <div style="display:flex;gap:9px;align-items:center;padding:7px 9px;border-radius:7px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3)"><span style="color:#4338ca">◆</span><div style="flex:1"><div style="color:#18181b;font-weight:500">Talk to the assistant first</div><div style="color:#646469;font-size:11.5px">frame it, then hand off</div></div><span style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#828289">⏎</span></div>
+            <div style="display:flex;gap:9px;align-items:center;padding:7px 9px;border-radius:7px"><span style="color:#7e22ce">⌬</span><div style="flex:1"><div style="color:#18181b">Hand to <b>builder</b> directly</div><div style="color:#646469;font-size:11.5px">creates worktree, starts session</div></div><span style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#828289">⌘1</span></div>
+            <div style="display:flex;gap:9px;align-items:center;padding:7px 9px;border-radius:7px"><span style="color:#0f766e">▷</span><div style="flex:1"><div style="color:#18181b">Workflow <b>Investigate → Fix → PR</b></div><div style="color:#646469;font-size:11.5px">4 steps · used 6× on Odys</div></div><span style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#828289">⌘2</span></div>
+            <div style="display:flex;gap:9px;align-items:center;padding:7px 9px;border-radius:7px"><span style="color:#9a3412">⦿</span><div style="flex:1"><div style="color:#18181b">Panel <b>data-quality</b></div><div style="color:#646469;font-size:11.5px">3 personas debate, conclude</div></div><span style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#828289">⌘3</span></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="background:#fff;border:1px solid rgba(234,179,8,.35);border-radius:10px;padding:12px 14px">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#854d0e;margin-bottom:8px">LOOKS RELATED</div>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+              <div style="display:flex;gap:8px;align-items:baseline"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#828289">#205</span><span style="color:#18181b;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">incohérence activation metric</span><span style="color:#4338ca;font-size:11.5px">continue there</span></div>
+              <div style="display:flex;gap:8px;align-items:baseline"><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#828289">#207</span><span style="color:#18181b;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">reproduire as-is l'interface airtable stats ventes</span><span style="color:#4338ca;font-size:11.5px">link</span></div>
+              <div style="display:flex;gap:8px;align-items:baseline"><span style="font-size:9.5px;font-weight:700;color:#52525b;letter-spacing:.05em">FD</span><span style="color:#18181b;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FD-20260909125118 — devise du champ Airtable</span><span style="color:#4338ca;font-size:11.5px">attach</span></div>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:12px 14px;font-size:12px;color:#646469;line-height:1.5"><div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#828289;margin-bottom:6px">MEMORY</div>The Airtable skill warns against deducing field names from camelCase — you hit this on <span style="font-family:ui-monospace,Menlo,monospace;color:#52525b">initial_budget</span> in #550.</div>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:#828289;text-align:center">or paste a GitHub issue URL · drop a screenshot · <span style="color:#4338ca">⌘K</span> for Kanban, Cockpit, Sessions…</div>
+    </div>
+  </div>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: « prototype <a class="dv-oid" href="#1a">1a</a> avec la liste de <a class="dv-oid" href="#1b">1b</a> » · « garde le panneau live de <a class="dv-oid" href="#1c">1c</a> mais repliable » · « montre l'état où le tiroir Shell est ouvert » · « version thème sombre (Ember) »</p>
+</section>
+</x-dc>
+</body>
+</html>

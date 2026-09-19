@@ -1,13 +1,18 @@
 # Work view — implementation status
 
-Single-screen "Work" ergonomics (handoff package at `../handoff/`, root of the worktree).
+Single-screen "Work" ergonomics (handoff package in the repo at `docs/work-view/handoff/`).
 Branch `ticket/b12c65-focus-view` · PR **#278** (base `main`). This doc is the resume
 point across context resets — update it as work progresses.
 
 ## Where we are
 
-**Phases 0, 1, 2a AND 2b are DONE, committed and pushed.** → **NEXT: Phase 3 (assistant ⇄ agent threads).**
+**Phases 0, 1, 2a AND 2b are DONE, committed and pushed.**
 See "Phase 2b" below (sessions 4–9 log) for what was built and the deferred items.
+
+**Phase 3 is deliberately OUT of PR #278's scope** (decided 2026-09-19). It was part of the original
+intent, but phases 0 → 2b took enough fine-tuning to fill the PR on their own. It stays a firm
+intention and gets **its own PR, branched from `main` after #278 merges** — see "Phase 3" below and
+`docs/work-view/handoff/DATA_MODEL.md` § Phase 3 for the design.
 
 - Phase 0 (wiring) + Phase 1 (core screen): commit `308d11ac` + 9 feedback rounds.
 - **Phase 2a (shell drawer + shell mode + split panes): commits `13e899d2` and `db27fa1c`.** Full detail in
@@ -371,7 +376,7 @@ while open (or refresh on an `agent_event` Edit/Write tool_result).
 
 ### Phase 3 (~1-2 weeks, server) — assistant ⇄ agent threads
 - `agent_thread` entity, ticket-scoped assistant runs, `delegate_to_persona` tool, WS thread events,
-  Threads panel + delegation cards. See `handoff/DATA_MODEL.md` § Phase 3.
+  Threads panel + delegation cards. See `docs/work-view/handoff/DATA_MODEL.md` § Phase 3, and `screenshots/02-agent-threads-panel.jpg`.
 
 ## Key facts / gotchas (learned during impl)
 
@@ -393,5 +398,9 @@ while open (or refresh on an `agent_event` Edit/Write tool_result).
 
 ## Reference
 
-Handoff (worktree root, not in git): `../handoff/{README,SPEC,DATA_MODEL,IMPLEMENTATION_PLAN,DESIGN_TOKENS}.md`,
-`../handoff/prototype/Fleex-Work-Prototype.dc.html`, `../handoff/screenshots/`.
+Handoff, now **in the repo** at `docs/work-view/handoff/`:
+`{README,SPEC,DATA_MODEL,IMPLEMENTATION_PLAN,DESIGN_TOKENS,CLAUDE_CODE_PROMPT}.md`,
+`prototype/Fleex-Work-Prototype.dc.html`, `screenshots/`.
+
+It used to live at the worktree root, outside git — which is exactly what a worktree cleanup removes.
+`screenshots/02-agent-threads-panel.jpg` is the Phase 3 mock-up and exists nowhere else.
