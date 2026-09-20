@@ -44,14 +44,18 @@ function DashboardSections({ onImport, onOpenTicket }: Props) {
 
   const needed = open.issues || open.review;
   useEffect(() => {
-    if (!needed || data || loading) return;
+    // `error` gates the guard so a failed fetch stops here instead of looping:
+    // `.finally` flips `loading` back to false, which re-runs this effect, and
+    // without the `error` check the guard would pass again → refetch → error →
+    // hammer the endpoint. `retry` clears `error` to fetch once more.
+    if (!needed || data || loading || error) return;
     setLoading(true);
     setError(null);
     fetchDashboard()
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
-  }, [needed, data, loading]);
+  }, [needed, data, loading, error]);
 
   const issues = data ? dedupeIssues([...data.myIssues, ...data.assignedIssues]).slice(0, MAX_ROWS) : [];
   const reviews = data ? data.reviewRequests.slice(0, MAX_ROWS) : [];
@@ -116,6 +120,9 @@ function OpenPullRequestsSection({ onImport, onOpenTicket }: Props) {
   const [prs, setPrs] = useState<PullRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by Retry: setting the same repoKey is a no-op React bails on, so a
+  // dedicated counter is what actually re-runs the fetch.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (expanded) fetchRepositories();
@@ -132,7 +139,7 @@ function OpenPullRequestsSection({ onImport, onOpenTicket }: Props) {
       .then((list) => setPrs(list.filter((p) => p.state === 'open').slice(0, MAX_ROWS)))
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
-  }, [repoKey]);
+  }, [repoKey, attempt]);
 
   const [org, name] = repoKey.split('/');
 
@@ -151,7 +158,7 @@ function OpenPullRequestsSection({ onImport, onOpenTicket }: Props) {
         ))}
       </select>
       {loading && <BusyLine label="Loading…" />}
-      {error && <ErrorLine message={error} onRetry={() => setRepoKey((k) => k)} />}
+      {error && <ErrorLine message={error} onRetry={() => setAttempt((a) => a + 1)} />}
       {!loading && !error && repoKey && prs.length === 0 && <EmptyLine />}
       {!loading && !error && org && name &&
         prs.map((p) => (

@@ -87,13 +87,19 @@ export function NewTask() {
   );
 
   if (resolving) {
+    // Keep the ENTRY mounted (disabled) behind the resolving screen: an instant
+    // source renders nothing for its first 400 ms, and without this backdrop the
+    // center would flash blank (spec 5.3 — the ENTRY stays visible, input off).
     return (
-      <NewTaskResolving
-        match={resolving}
-        onResolved={applyPreview}
-        onCancel={() => setResolving(null)}
-        onOpenTicket={openTicket}
-      />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <NewTaskEntry onImport={setResolving} onOpenTicket={openTicket} disabled />
+        <NewTaskResolving
+          match={resolving}
+          onResolved={applyPreview}
+          onCancel={() => setResolving(null)}
+          onOpenTicket={openTicket}
+        />
+      </div>
     );
   }
 

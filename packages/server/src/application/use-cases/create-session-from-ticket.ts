@@ -115,9 +115,13 @@ export class CreateSessionFromTicketUseCase {
       const checkoutRef = !repoWorktreeLink ? repoLink?.checkoutRef : undefined;
       const worktreeBranch = checkoutRef ?? branchName;
       const createNewBranch = !repoWorktreeLink && !checkoutRef;
-      // D9 precedence: this repo's own worktree link, a PR checkout or a direct
-      // checkout wins; the per-repo base only applies when minting a fresh branch.
-      const baseBranch = createNewBranch && !prNumber
+      // Precedence when minting a fresh ticket branch: a per-repo base wins even
+      // when a `github_pr` link exists — that base IS "branch on top" of an
+      // imported PR (repository link carries `baseBranch = <headRefName>`), and
+      // gating it on `!prNumber` silently forked the branch from the default
+      // branch instead. resolveBaseRef returns undefined for a legacy PR ticket
+      // (no per-repo base), leaving its behaviour unchanged.
+      const baseBranch = createNewBranch
         ? resolveBaseRef(ticket.links, repo.org, repo.name)
         : undefined;
       try {

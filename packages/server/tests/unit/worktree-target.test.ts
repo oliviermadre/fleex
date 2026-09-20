@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { TicketLink } from '@fleex/shared';
-import { resolveWorktreeTarget } from '../../src/domain/services/branch-utils.js';
+import { extractRepoPrNumber, resolveWorktreeTarget } from '../../src/domain/services/branch-utils.js';
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 
 const repoLink = (ref: string, extra: Partial<TicketLink> = {}): TicketLink => ({
@@ -59,6 +59,22 @@ describe('resolveWorktreeTarget', () => {
       branch: TICKET_BRANCH,
       createNewBranch: true,
     });
+  });
+});
+
+describe('extractRepoPrNumber', () => {
+  it('reads the PR number from the repo\'s github_pr link, case-insensitively', () => {
+    const links = [repoLink('Evaneos/Fleex'), prLink('evaneos/fleex#42')];
+    expect(extractRepoPrNumber(links, 'Evaneos', 'Fleex')).toBe(42);
+  });
+
+  it('returns undefined when the repo has no PR link', () => {
+    expect(extractRepoPrNumber([repoLink('evaneos/fleex')], 'evaneos', 'fleex')).toBeUndefined();
+  });
+
+  it('does not confuse another repo\'s PR link', () => {
+    const links = [repoLink('evaneos/fleex'), prLink('acme/web#7')];
+    expect(extractRepoPrNumber(links, 'evaneos', 'fleex')).toBeUndefined();
   });
 });
 

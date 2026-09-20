@@ -122,6 +122,14 @@ describe('ImportFromSourceUseCase.preview', () => {
     await expect(uc.preview('just a title')).rejects.toMatchObject({ code: 'IMPORT_INVALID_INPUT' });
   });
 
+  it('rejects a missing / non-string input with IMPORT_INVALID_INPUT (not a raw 500)', async () => {
+    const uc = new ImportFromSourceUseCase(new ImportSourceRegistry([]), makeTicketStore() as never, makeLogger() as never);
+    // The route body is unvalidated, so `input` can arrive undefined; it must map
+    // to a 422 code, not a TypeError bubbling up as a 500.
+    await expect(uc.preview(undefined as unknown as string)).rejects.toMatchObject({ code: 'IMPORT_INVALID_INPUT' });
+    expect(() => uc.detect({} as unknown as string)).toThrow(ImportError);
+  });
+
   it('forwards the abort signal to the adapter', async () => {
     const adapter = makeAdapter('slack_message', { title: 't', description: 'd', tags: [], links: [] });
     const uc = new ImportFromSourceUseCase(new ImportSourceRegistry([adapter]), makeTicketStore() as never, makeLogger() as never);

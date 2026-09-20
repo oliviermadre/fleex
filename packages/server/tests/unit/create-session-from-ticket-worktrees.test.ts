@@ -180,3 +180,67 @@ describe('CreateSessionFromTicketUseCase — worktrees already on disk', () => {
     expect(wt[0]!.ref).toBe(join(root, 'workspaces', 'd1df20-test', 'agentic-dmc'));
   });
 });
+
+/**
+ * An imported PR always carries a `github_pr` link. "Branch on top" (the default,
+ * box unchecked) puts `baseBranch = <headRefName>` on the repository link, and it
+ * MUST win here — the worktree opened by a shell is the very first one, so if this
+ * site drops the base the ticket branch silently forks from `main` instead of the
+ * PR head. (Regression guard for the `&& !prNumber` gate that used to discard it.)
+ */
+describe('CreateSessionFromTicketUseCase — imported PR branches on top', () => {
+  function wire(ticket: TicketEntity) {
+    const calls: CreateCall[] = [];
+    const createWorktree = {
+      execute: async (
+        _org: string,
+        name: string,
+        _wtPath: string,
+        req: { branch: string; createNewBranch: boolean; baseBranch?: string },
+      ) => {
+        calls.push({ name, branch: req.branch, createNewBranch: req.createNewBranch, ...(req.baseBranch ? { baseBranch: req.baseBranch } : {}) });
+        return null;
+      },
+    };
+    const ticketStore = { getTicketById: async () => ticket, saveTicket: async () => {}, saveActivity: async () => {} };
+    const createSession = { execute: async () => ({ id: 'sess-1', tmuxName: 'fleex_shell_test' }) };
+    const resolver = {
+      workspacePath: (id: string) => join(root, 'workspaces', id),
+      workspaceRepoPath: (id: string, name: string) => join(root, 'workspaces', id, name),
+      barePath: (org: string, name: string) => join(root, '.bare', org, `${name}.git`),
+    };
+    const uc = new CreateSessionFromTicketUseCase(
+      ticketStore as never, createSession as never, createWorktree as never,
+      {} as never, {} as never, new FakeLoggerPort(), resolver as never,
+    );
+    return { uc, calls };
+  }
+
+  it('branches the ticket branch from origin/<headRefName>, not the default branch', async () => {
+    const ticket = TicketEntity.create({ id: TICKET_ID, boardId: 'b-1', displayId: 584, title: 'test', status: 'doing' });
+    ticket.addLink('repository', 'odys-travel/odys-front', 'odys-travel/odys-front', null, randomUUID(), 'feat/import-sources');
+    ticket.addLink('github_pr', 'odys-travel/odys-front#42', '#42', 'https://github.com/odys-travel/odys-front/pull/42', randomUUID());
+
+    const { uc, calls } = wire(ticket);
+    await uc.execute(TICKET_ID);
+
+    const call = calls.find((c) => c.name === 'odys-front');
+    expect(call, 'odys-front worktree was never created').toBeDefined();
+    expect(call!.createNewBranch).toBe(true);
+    expect(call!.baseBranch).toBe('origin/feat/import-sources');
+  });
+
+  it('checks the PR head out directly when the repo link carries a checkoutRef (box checked)', async () => {
+    const ticket = TicketEntity.create({ id: TICKET_ID, boardId: 'b-1', displayId: 584, title: 'test', status: 'doing' });
+    ticket.addLink('repository', 'odys-travel/odys-front', 'odys-travel/odys-front', null, randomUUID(), undefined, 'feat/import-sources');
+    ticket.addLink('github_pr', 'odys-travel/odys-front#42', '#42', 'https://github.com/odys-travel/odys-front/pull/42', randomUUID());
+
+    const { uc, calls } = wire(ticket);
+    await uc.execute(TICKET_ID);
+
+    const call = calls.find((c) => c.name === 'odys-front');
+    expect(call!.createNewBranch).toBe(false);
+    expect(call!.branch).toBe('feat/import-sources');
+    expect(call!.baseBranch).toBeUndefined();
+  });
+});

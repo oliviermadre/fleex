@@ -129,6 +129,12 @@ export class ClaudeSlackImportAdapter implements SlackImportPort {
 
       return this.interpret(structuredOutput, resultText, parsed);
     } catch (err) {
+      // A client that abandoned the preview aborted the read: expected, not a
+      // failure. Don't log an error (the route short-circuits and won't respond
+      // on the closed socket). Spec §4.3.
+      if (opts?.signal?.aborted) {
+        return { status: 'inaccessible', detail: 'Import cancelled' };
+      }
       this.logger.error('Claude Agent SDK call failed for Slack import', {
         channelId: parsed.channelId,
         ts: parsed.ts,

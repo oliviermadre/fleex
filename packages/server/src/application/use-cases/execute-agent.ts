@@ -6,7 +6,7 @@ import { inferModelCapabilities, resolveEffortLevel, parseRepoRef } from '@fleex
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
@@ -2535,6 +2535,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const repoBranch = checkoutRef ?? branchName;
       const repoCreateNew = checkoutRef ? false : createNewBranch;
       const baseBranch = resolveBaseRef(ticket.links, repo.org, repo.name);
+      // A fork PR's head lives only on refs/pull/<n>/head, so a direct checkout
+      // of it needs the PR number to fetch it — otherwise create-worktree can't
+      // recover and the catch below mints an empty ticket branch instead.
+      const prNumber = checkoutRef ? extractRepoPrNumber(ticket.links, repo.org, repo.name) : undefined;
       try {
         let usedBranch = repoBranch;
         try {
@@ -2542,6 +2546,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             branch: repoBranch,
             createNewBranch: repoCreateNew,
             ...(repoCreateNew && baseBranch ? { baseBranch } : {}),
+            ...(prNumber ? { prNumber } : {}),
           });
         } catch {
           // Branch may not exist on this repo (e.g. PR branch from another repo) — create a new one

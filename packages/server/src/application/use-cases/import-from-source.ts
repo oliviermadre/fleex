@@ -34,7 +34,10 @@ export class ImportFromSourceUseCase {
 
   /** Detect a source from raw input, or fail with IMPORT_INVALID_INPUT. */
   detect(input: string): SourceMatch {
-    const match = detectSource(input);
+    // The HTTP body isn't schema-validated, so `input` can be missing or a
+    // non-string at runtime — guard here so it maps to a 422, not a raw
+    // TypeError bubbling up as a 500.
+    const match = typeof input === 'string' ? detectSource(input) : null;
     if (!match) {
       throw new ImportError("That link isn't a source Fleex can import.", 'IMPORT_INVALID_INPUT');
     }

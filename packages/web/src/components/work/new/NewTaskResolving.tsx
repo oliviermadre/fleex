@@ -88,11 +88,13 @@ export function NewTaskResolving({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Instant + still pending + within the 400 ms grace: render nothing.
+  // Instant + still pending + within the 400 ms grace: render nothing, so the
+  // ENTRY kept mounted behind us (disabled) stays visible instead of a blank
+  // flash. Once we do render, our opaque overlay covers it.
   if (phase === 'pending' && !slow && !showInstant) return null;
 
   return (
-    <div className="flex flex-1 items-start justify-center overflow-y-auto p-6">
+    <div className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[var(--theme-bg-base)] p-6">
       <div className="w-full max-w-2xl rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
         <div className="mb-3 text-[12px] text-[var(--theme-text-secondary)]">
           ◆ {descriptor.name} · <span className="font-mono">{match.display}</span>

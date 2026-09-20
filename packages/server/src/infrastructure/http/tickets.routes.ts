@@ -1039,7 +1039,20 @@ export function ticketRoutes(container: Container) {
         request.raw.on('close', onClose);
         try {
           const preview = await container.importFromSource.preview(input, { signal: ac.signal });
+          // The client abandoned the resolving screen mid-read: the socket is
+          // gone, so take the reply over and send nothing rather than write to a
+          // closed connection (or let the error handler try a 422 on it). §4.3.
+          if (ac.signal.aborted) {
+            reply.hijack();
+            return;
+          }
           return reply.code(200).send(preview);
+        } catch (err) {
+          if (ac.signal.aborted) {
+            reply.hijack();
+            return;
+          }
+          throw err;
         } finally {
           request.raw.off('close', onClose);
         }

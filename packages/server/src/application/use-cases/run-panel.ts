@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import type { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
@@ -1114,6 +1114,10 @@ Be concise and decision-oriented. Write in the same language as the panel member
       const repoBranch = checkoutRef ?? branchName;
       const repoCreateNew = checkoutRef ? false : createNewBranch;
       const baseBranch = resolveBaseRef(ticket.links, repo.org, repo.name);
+      // A fork PR's head lives only on refs/pull/<n>/head, so a direct checkout
+      // of it needs the PR number to fetch it — otherwise create-worktree can't
+      // recover and the catch below mints an empty ticket branch instead.
+      const prNumber = checkoutRef ? extractRepoPrNumber(ticket.links, repo.org, repo.name) : undefined;
       try {
         let usedBranch = repoBranch;
         try {
@@ -1121,6 +1125,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
             branch: repoBranch,
             createNewBranch: repoCreateNew,
             ...(repoCreateNew && baseBranch ? { baseBranch } : {}),
+            ...(prNumber ? { prNumber } : {}),
           });
         } catch {
           if (!repoCreateNew) {

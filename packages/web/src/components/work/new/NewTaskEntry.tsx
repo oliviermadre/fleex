@@ -12,9 +12,12 @@ import { BrowseSources } from './BrowseSources';
 export function NewTaskEntry({
   onImport,
   onOpenTicket,
+  disabled = false,
 }: {
   onImport: (match: SourceMatch) => void;
   onOpenTicket: (ticketId: string) => void;
+  /** Frozen backdrop while an import resolves on top (avoids a blank flash). */
+  disabled?: boolean;
 }) {
   const draft = useWorkStore((s) => s.draft);
   const updateDraft = useWorkStore((s) => s.updateDraft);
@@ -23,8 +26,8 @@ export function NewTaskEntry({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (!disabled) inputRef.current?.focus();
+  }, [disabled]);
 
   const value = draft.title;
   const match = useMemo(() => detectSource(value), [value]);
@@ -59,13 +62,14 @@ export function NewTaskEntry({
   }
 
   return (
-    <div className="flex flex-1 items-start justify-center overflow-y-auto p-6">
+    <div className={`flex flex-1 items-start justify-center overflow-y-auto p-6${disabled ? ' pointer-events-none' : ''}`}>
       <div className="w-full max-w-2xl rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
         <h2 className="mb-2 text-[13px] font-semibold text-[var(--theme-text-primary)]">Where does this task come from?</h2>
         <input
           ref={inputRef}
           type="text"
           value={value}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Paste a link, or name the task…"

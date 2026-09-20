@@ -52,6 +52,21 @@ export function resolveBaseRef(
   return link?.baseBranch ? `origin/${link.baseBranch}` : undefined;
 }
 
+/**
+ * The PR number of the `github_pr` link for `org/name`, matched case-insensitively
+ * (historical links mix casing). Undefined when the ticket has no such link. Used
+ * so a fork PR's head can be fetched via `refs/pull/<n>/head` on a direct checkout.
+ */
+export function extractRepoPrNumber(
+  links: readonly TicketLink[],
+  org: string,
+  name: string,
+): number | undefined {
+  const prefix = `${org}/${name}#`.toLowerCase();
+  const prLink = links.find((l) => l.type === 'github_pr' && l.ref.toLowerCase().startsWith(prefix));
+  return prLink ? parseInt(prLink.ref.split('#')[1] ?? '', 10) || undefined : undefined;
+}
+
 /** What a worktree should be created as for one repo — see {@link resolveWorktreeTarget}. */
 export interface WorktreeTarget {
   /** The git branch to check out / create. */
@@ -89,10 +104,7 @@ export function resolveWorktreeTarget(
 ): WorktreeTarget {
   const repoRef = `${org}/${name}`;
   const repoLink = links.find((l) => l.type === 'repository' && l.ref === repoRef);
-  const prLink = links.find(
-    (l) => l.type === 'github_pr' && l.ref.toLowerCase().startsWith(`${repoRef.toLowerCase()}#`),
-  );
-  const prNumber = prLink ? parseInt(prLink.ref.split('#')[1] ?? '', 10) || undefined : undefined;
+  const prNumber = extractRepoPrNumber(links, org, name);
 
   if (repoLink?.checkoutRef) {
     return { branch: repoLink.checkoutRef, createNewBranch: false, ...(prNumber ? { prNumber } : {}) };
@@ -100,7 +112,7 @@ export function resolveWorktreeTarget(
   if (repoLink?.baseBranch) {
     return { branch: ticketBranch, createNewBranch: true, baseBranch: `origin/${repoLink.baseBranch}` };
   }
-  if (prLink && prHeadRefName) {
+  if (prNumber !== undefined && prHeadRefName) {
     return { branch: prHeadRefName, createNewBranch: false };
   }
   return { branch: ticketBranch, createNewBranch: true };
