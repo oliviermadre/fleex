@@ -53,6 +53,14 @@ export interface TicketLink {
    * branch. Applied only at worktree creation; never rebases an existing one.
    */
   readonly baseBranch?: string;
+  /**
+   * Only meaningful for `type === 'repository'`. An existing `origin` branch
+   * (stored WITHOUT the `origin/` prefix) to CHECK OUT as-is instead of minting a
+   * ticket branch — "work directly on this branch", e.g. an imported PR's head.
+   * Mutually exclusive with {@link baseBranch}: `checkoutRef` lands commits on the
+   * branch itself, `baseBranch` branches a fresh ticket branch on top of it.
+   */
+  readonly checkoutRef?: string;
 }
 
 export interface GitHubIssueMetadata {
@@ -135,7 +143,6 @@ export interface CreateTicketRequest {
   readonly tags?: string[];
   readonly links?: Omit<TicketLink, 'id' | 'createdAt'>[];
   readonly dueDate?: string | null;
-  readonly githubIssueUrl?: string;
 }
 
 export interface UpdateTicketRequest {

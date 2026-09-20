@@ -77,6 +77,49 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * A failed import preview. Unlike a generic API error it does NOT raise a toast —
+ * the resolving screen shows the message itself — and carries the source error
+ * code so the UI can distinguish e.g. "not found" from "integration unavailable".
+ */
+export class PreviewImportError extends Error {
+  constructor(message: string, readonly code: string, readonly status: number) {
+    super(message);
+    this.name = 'PreviewImportError';
+  }
+}
+
+/**
+ * Resolve a pasted source into a draft preview WITHOUT creating a ticket. Errors
+ * are thrown as {@link PreviewImportError} (no toast); an aborted request throws
+ * the fetch `AbortError`, which the caller treats as a cancel, not a failure.
+ */
+export async function previewImport(
+  input: string,
+  signal?: AbortSignal,
+): Promise<import('@fleex/shared').ImportPreview> {
+  const res = await fetch(`${API_URL}/tickets/import/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input }),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    let message = res.statusText;
+    let code = 'IMPORT_UPSTREAM_FAILED';
+    try {
+      const json = JSON.parse(body);
+      if (typeof json.message === 'string') message = json.message;
+      if (typeof json.error === 'string') code = json.error;
+    } catch {
+      /* not JSON */
+    }
+    throw new PreviewImportError(message, code, res.status);
+  }
+  return res.json() as Promise<import('@fleex/shared').ImportPreview>;
+}
+
 export async function fetchModels(): Promise<ModelsResponse> {
   return request<ModelsResponse>('/models');
 }
@@ -452,7 +495,7 @@ export async function reorderTickets(updates: { id: string; status: import('@fle
   await request<{ ok: boolean }>('/tickets/reorder', { method: 'POST', body: JSON.stringify({ updates }) });
 }
 
-export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string }): Promise<import('@fleex/shared').TicketLink> {
+export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string; checkoutRef?: string }): Promise<import('@fleex/shared').TicketLink> {
   return request<import('@fleex/shared').TicketLink>(`/tickets/${encodeURIComponent(id)}/links`, {
     method: 'POST', body: JSON.stringify(link),
   });

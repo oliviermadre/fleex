@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, resolveWorktreeTarget } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
 
 export function agentWorktreesRoutes(container: Container) {
@@ -65,17 +65,22 @@ export function agentWorktreesRoutes(container: Container) {
           throw new WorktreeError('No repository found on ticket');
         }
 
-        const branchName = buildTicketBranchName(ticket.title, ticket.id);
+        const ticketBranch = buildTicketBranchName(ticket.title, ticket.id);
         const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
         const wtPath = container.resolver.workspaceRepoPath(workspaceId, repoName);
 
-        // D9: an explicit body baseBranch wins; otherwise fall back to the
-        // repository link's configured base (as `origin/<base>`).
-        const baseBranch = request.body?.baseBranch ?? resolveBaseRef(ticket.links, repoOrg, repoName);
+        // An explicit body baseBranch still wins (an operator override); otherwise
+        // follow the shared precedence (checkoutRef > baseBranch > PR head > default).
+        const bodyBase = request.body?.baseBranch;
+        const target = bodyBase
+          ? ({ branch: ticketBranch, createNewBranch: true, baseBranch: bodyBase } as const)
+          : resolveWorktreeTarget(ticket.links, repoOrg, repoName, ticketBranch);
+        const branchName = target.branch;
         await container.createWorktree.execute(repoOrg, repoName, wtPath, {
-          branch: branchName,
-          createNewBranch: true,
-          ...(baseBranch ? { baseBranch } : {}),
+          branch: target.branch,
+          createNewBranch: target.createNewBranch,
+          ...('baseBranch' in target && target.baseBranch ? { baseBranch: target.baseBranch } : {}),
+          ...('prNumber' in target && target.prNumber ? { prNumber: target.prNumber } : {}),
         });
 
         const linkId = randomUUID();

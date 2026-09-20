@@ -16,12 +16,13 @@
  */
 
 /**
- * Matches a Slack message permalink. A trailing slash and the query string are
- * both optional, mirroring the leniency of the GitHub-issue matcher so a stray
- * slash from the clipboard does not break detection.
+ * Matches a Slack message permalink. A trailing slash, the query string and a
+ * `#fragment` are all optional, mirroring the leniency of the GitHub matchers so
+ * a link copied from a browser (which routinely carries a `?…` or `#…` tail)
+ * still resolves.
  */
 export const SLACK_MESSAGE_URL_RE =
-  /^https?:\/\/([a-z0-9][a-z0-9-]*)\.slack\.com\/archives\/([A-Z0-9]+)\/p(\d{16,})\/?(?:\?[^\s]*)?$/i;
+  /^https?:\/\/([a-z0-9][a-z0-9-]*)\.slack\.com\/archives\/([A-Z0-9]+)\/p(\d{16,})\/?(?:\?[^\s#]*)?(?:#[^\s]*)?$/i;
 
 export interface ParsedSlackMessageUrl {
   /** Workspace subdomain, e.g. `acme` for `acme.slack.com`. */

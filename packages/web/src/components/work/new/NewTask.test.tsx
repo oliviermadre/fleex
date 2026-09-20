@@ -32,12 +32,18 @@ beforeEach(() => {
   useTicketGroupStore.setState({ groups: [], ticketGroupIds: {}, addTicketToGroup });
   useRepositoryStore.setState({ repositories: [repo('acme', 'api'), repo('acme', 'web')] });
   useWorkStore.setState({ view: 'new' });
+  // These tests exercise the composer directly, so put the draft in the compose
+  // stage with a title (the entry screen is covered by NewTaskEntry.test.tsx).
   useWorkStore.getState().updateDraft({
+    title: 'Task',
     text: '',
+    stage: 'compose',
+    source: null,
     boardId: 'b1',
     epicIds: [],
     repoKeys: [],
     repoBaseBranches: {},
+    repoCheckoutRefs: {},
   });
 });
 
@@ -89,17 +95,17 @@ describe('NewTask — board, epics, repos', () => {
   });
 
   it('remembers the board the task was actually created on, even when it was the fallback', async () => {
-    useWorkStore.getState().updateDraft({ text: 'Write the docs', boardId: null });
+    useWorkStore.getState().updateDraft({ title: 'Write the docs', boardId: null });
     useTicketStore.setState({ boards: [board('b2', 'Beta'), board('b1', 'Alpha')] });
     render(<NewTask />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
-    await waitFor(() => expect(useWorkStore.getState().draft).toMatchObject({ text: '', boardId: 'b2' }));
+    await waitFor(() => expect(useWorkStore.getState().draft).toMatchObject({ title: '', text: '', boardId: 'b2' }));
   });
 
   it('adds the new ticket to each picked epic and keeps the board for the next task', async () => {
-    useWorkStore.getState().updateDraft({ text: 'Add Apple Pay', epicIds: ['e1', 'e2'] });
+    useWorkStore.getState().updateDraft({ title: 'Add Apple Pay', epicIds: ['e1', 'e2'] });
     render(<NewTask />);
     await screen.findByText('EPICS');
 

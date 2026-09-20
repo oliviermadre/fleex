@@ -35,5 +35,14 @@ export type SlackImportResult =
  * synthesis returned here is persisted.
  */
 export interface SlackImportPort {
-  synthesizeThread(parsed: ParsedSlackMessageUrl): Promise<SlackImportResult>;
+  /**
+   * Read and synthesize a Slack conversation. `opts.signal`, when provided, is
+   * propagated to the Agent SDK query so a client that abandons a preview
+   * (closing the resolving screen) stops Claude mid-read instead of letting it
+   * finish for nothing.
+   */
+  synthesizeThread(
+    parsed: ParsedSlackMessageUrl,
+    opts?: { signal?: AbortSignal },
+  ): Promise<SlackImportResult>;
 }

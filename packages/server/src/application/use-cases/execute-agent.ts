@@ -2526,19 +2526,26 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         }
       }
 
-      // Per-repo base branch (D9): only when we mint a fresh ticket branch.
+      // "Work directly on this branch" (checkoutRef) checks that branch out as-is
+      // for a repo with no worktree link yet; otherwise the shared branch and the
+      // per-repo base (D9, applied only when minting a fresh branch) are unchanged.
+      const repoWtLink = ticket.links.find((l) => l.type === 'worktree' && l.ref.startsWith(`${repo.org}/${repo.name}:`));
+      const repoLink = ticket.links.find((l) => l.type === 'repository' && l.ref === `${repo.org}/${repo.name}`);
+      const checkoutRef = !repoWtLink ? repoLink?.checkoutRef : undefined;
+      const repoBranch = checkoutRef ?? branchName;
+      const repoCreateNew = checkoutRef ? false : createNewBranch;
       const baseBranch = resolveBaseRef(ticket.links, repo.org, repo.name);
       try {
-        let usedBranch = branchName;
+        let usedBranch = repoBranch;
         try {
           await this.createWorktree.execute(repo.org, repo.name, wtPath, {
-            branch: branchName,
-            createNewBranch,
-            ...(createNewBranch && baseBranch ? { baseBranch } : {}),
+            branch: repoBranch,
+            createNewBranch: repoCreateNew,
+            ...(repoCreateNew && baseBranch ? { baseBranch } : {}),
           });
         } catch {
           // Branch may not exist on this repo (e.g. PR branch from another repo) — create a new one
-          if (!createNewBranch) {
+          if (!repoCreateNew) {
             usedBranch = buildTicketBranchName(ticket.title, ticket.id);
             await this.createWorktree.execute(repo.org, repo.name, wtPath, {
               branch: usedBranch,
@@ -2546,7 +2553,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
               ...(baseBranch ? { baseBranch } : {}),
             });
           } else {
-            throw new Error(`Failed to create branch ${branchName}`);
+            throw new Error(`Failed to create branch ${repoBranch}`);
           }
         }
         if (!ticket.links.some((l) => l.type === 'worktree' && l.ref.startsWith(`${repo.org}/${repo.name}:`))) {

@@ -24,6 +24,13 @@ const CODE_TO_STATUS: Record<string, number> = {
   SLACK_INTEGRATION_UNAVAILABLE: 422,
   SLACK_CONVERSATION_INACCESSIBLE: 422,
   SLACK_CONVERSATION_EMPTY: 422,
+  // Generalised import errors (see ImportError). The first four are the caller's
+  // to fix; an upstream failure is transient and deserves a 502.
+  IMPORT_INVALID_INPUT: 422,
+  IMPORT_SOURCE_UNAVAILABLE: 422,
+  IMPORT_NOT_FOUND: 422,
+  IMPORT_EMPTY: 422,
+  IMPORT_UPSTREAM_FAILED: 502,
 };
 
 export function registerErrorHandler(app: FastifyInstance): void {

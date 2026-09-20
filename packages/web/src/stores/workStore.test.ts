@@ -97,7 +97,11 @@ describe('workStore — new task draft', () => {
   beforeEach(() => {
     localStorage.clear();
     useWorkStore.setState({
-      draft: { text: '', repoKeys: [], repoBaseBranches: {}, epicIds: [], boardId: null, type: 'build', priority: 'none' },
+      draft: {
+        title: '', text: '', stage: 'entry', source: null,
+        repoKeys: [], repoBaseBranches: {}, repoCheckoutRefs: {},
+        epicIds: [], boardId: null, type: 'build', priority: 'none',
+      },
     });
   });
 
@@ -115,9 +119,13 @@ describe('workStore — new task draft', () => {
     s().resetDraft();
 
     expect(s().draft).toEqual({
+      title: '',
       text: '',
+      stage: 'entry',
+      source: null,
       repoKeys: [],
       repoBaseBranches: {},
+      repoCheckoutRefs: {},
       epicIds: [],
       boardId: 'board-2',
       type: 'build',
