@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   useFloating,
   autoUpdate,
@@ -6,6 +6,7 @@ import {
   flip,
   shift,
   size,
+  arrow as arrowMiddleware,
   useClick,
   useHover,
   useFocus,
@@ -18,12 +19,14 @@ import {
   type UseFloatingReturn,
   type UseInteractionsReturn,
 } from '@floating-ui/react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 
 // Re-export so call-sites import everything from one place.
 export { FloatingPortal, FloatingFocusManager } from '@floating-ui/react';
 
 const VIEWPORT_PADDING = 8;
+/** Keeps a tooltip's arrow clear of the bubble's rounded corners. */
+const ARROW_PADDING = 6;
 
 interface PopoverReturn {
   open: boolean;
@@ -214,8 +217,28 @@ interface TooltipReturn {
   refs: UseFloatingReturn['refs'];
   floatingStyles: CSSProperties;
   context: UseFloatingReturn['context'];
+  /** Attach to `<FloatingArrow ref={arrowRef} …>` when the `arrow` option is on. */
+  arrowRef: RefObject<SVGSVGElement | null>;
   getReferenceProps: UseInteractionsReturn['getReferenceProps'];
   getFloatingProps: UseInteractionsReturn['getFloatingProps'];
+}
+
+interface TooltipOptions extends Pick<PopoverOptions, 'placement' | 'gap'> {
+  /**
+   * Point at the trigger with an arrow. Enables the arrow middleware, so the
+   * arrow keeps pointing at the trigger even when `shift` slides the bubble to
+   * stay in the viewport. Render `<FloatingArrow ref={arrowRef} context={context} />`
+   * inside the floating element. Default false.
+   */
+  arrow?: boolean;
+  /**
+   * Whether the pointer may travel onto the tooltip (default true): it then
+   * stays open along the way, and a press on the trigger leaves it open.
+   * Pass false for a label-only tooltip that is never interacted with — it then
+   * closes the instant the pointer leaves the trigger or presses it, like a
+   * native `title`.
+   */
+  interactive?: boolean;
 }
 
 /**
@@ -225,12 +248,21 @@ interface TooltipReturn {
 export function useTooltip({
   placement = 'top',
   gap = 6,
-}: Pick<PopoverOptions, 'placement' | 'gap'> = {}): TooltipReturn {
+  arrow = false,
+  interactive = true,
+}: TooltipOptions = {}): TooltipReturn {
   const [open, setOpen] = useState(false);
+  const arrowRef = useRef<SVGSVGElement | null>(null);
 
   const middleware = useMemo(
-    () => [offset(gap), flip({ padding: VIEWPORT_PADDING }), shift({ padding: VIEWPORT_PADDING })],
-    [gap],
+    () => [
+      offset(gap),
+      flip({ padding: VIEWPORT_PADDING }),
+      shift({ padding: VIEWPORT_PADDING }),
+      // Last: it reads the final position, after flip/shift have settled.
+      ...(arrow ? [arrowMiddleware({ element: arrowRef, padding: ARROW_PADDING })] : []),
+    ],
+    [gap, arrow],
   );
 
   const { refs, floatingStyles, context } = useFloating({
@@ -241,12 +273,12 @@ export function useTooltip({
     middleware,
   });
 
-  const hover = useHover(context, { move: false, handleClose: safePolygon() });
+  const hover = useHover(context, { move: false, handleClose: interactive ? safePolygon() : null });
   const focus = useFocus(context);
-  const dismiss = useDismiss(context);
+  const dismiss = useDismiss(context, { referencePress: !interactive });
   const roleInteraction = useRole(context, { role: 'tooltip' });
 
   const { getReferenceProps, getFloatingProps } = useInteractions([hover, focus, dismiss, roleInteraction]);
 
-  return { open, refs, floatingStyles, context, getReferenceProps, getFloatingProps };
+  return { open, refs, floatingStyles, context, arrowRef, getReferenceProps, getFloatingProps };
 }

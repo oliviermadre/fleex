@@ -12,6 +12,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { OverlaySyncButton } from '../overlay-sync/OverlaySyncButton';
+import { Tooltip } from '../ui/Tooltip';
 import { GROUP_LABEL } from './topBarStyles';
 
 const ICON_BTN =
@@ -56,11 +57,13 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
           <span className={GROUP_LABEL}>PINNED</span>
           <div className="flex items-center gap-1">
             {pinnedIcons.map((icon) => (
-              <button key={icon.id} type="button" className={ICON_BTN} onClick={() => executePinnedAction(icon)} title={icon.label}>
-                <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
-                  {renderIcon(icon, 14)}
-                </span>
-              </button>
+              <Tooltip key={icon.id} label={icon.label}>
+                <button type="button" className={ICON_BTN} onClick={() => executePinnedAction(icon)} aria-label={icon.label}>
+                  <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
+                    {renderIcon(icon, 14)}
+                  </span>
+                </button>
+              </Tooltip>
             ))}
           </div>
         </>
@@ -73,23 +76,24 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
           <span className={GROUP_LABEL}>TICKET</span>
           <div className="flex items-center gap-1">
             {workspaceActions.map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                className={ICON_BTN}
-                onClick={() => executeWorkspaceAction(action, workspaceContext)}
-                title={action.label}
-              >
-                {action.icon ? (
-                  <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
-                    {renderIcon(action, 14)}
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-semibold leading-none text-[var(--theme-text-secondary)]">
-                    {action.label.charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </button>
+              <Tooltip key={action.id} label={action.label}>
+                <button
+                  type="button"
+                  className={ICON_BTN}
+                  onClick={() => executeWorkspaceAction(action, workspaceContext)}
+                  aria-label={action.label}
+                >
+                  {action.icon ? (
+                    <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
+                      {renderIcon(action, 14)}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-semibold leading-none text-[var(--theme-text-secondary)]">
+                      {action.label.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
             ))}
             <OverlaySyncButton ticket={ticket} worktree={null} repoOrg={repo.org} repoName={repo.name} />
           </div>
