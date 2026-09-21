@@ -360,6 +360,10 @@ export class DomainEventListener {
   // ── Wake waiting agents on new content ──
 
   private async handleWakeWaitingOnComment(event: CommentPostedEvent): Promise<void> {
+    // The assistant addresses agents explicitly (a new mention, or a targeted
+    // ExecuteAgent.wakeUp on its own thread). Its comments must not wake every
+    // waiting agent on the ticket.
+    if (event.authorType === 'assistant') return;
     // A plain reply (or a re-mention disambiguated as "answer") wakes the waiting
     // agent and is fed to it. Agents the user marked as "new subject" (or the
     // race default) are in wakeExcludeAgents and stay waiting. Also exclude the

@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind, CommentAuthorType } from '@fleex/shared';
 
 // ── Base ──
 
@@ -103,7 +103,7 @@ export interface CommentPostedEvent extends DomainEvent {
   type: 'comment.posted';
   commentId: string;
   ticketId: string;
-  authorType: 'user' | 'agent';
+  authorType: CommentAuthorType;
   authorName: string;
   /** Execution mode selected by the user for this comment */
   executionMode?: MentionExecutionMode;

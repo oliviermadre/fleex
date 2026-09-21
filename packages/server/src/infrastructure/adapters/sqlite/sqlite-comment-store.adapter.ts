@@ -1,4 +1,4 @@
-import type { CommentVisibility } from '@fleex/shared';
+import type { CommentVisibility, CommentAuthorType } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
 import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -13,6 +13,7 @@ interface CommentRow {
   private_recipients: string;
   mentions: string;
   parent_id: string | null;
+  thread_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -54,10 +55,10 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO comments
         (id, ticket_id, author_type, author_name, body, visibility,
-         private_recipients, mentions, parent_id, created_at, updated_at)
+         private_recipients, mentions, parent_id, thread_id, created_at, updated_at)
       VALUES
         (@id, @ticket_id, @author_type, @author_name, @body, @visibility,
-         @private_recipients, @mentions, @parent_id, @created_at, @updated_at)
+         @private_recipients, @mentions, @parent_id, @thread_id, @created_at, @updated_at)
     `);
 
     stmt.run({
@@ -70,6 +71,7 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       private_recipients: JSON.stringify(comment.privateRecipients),
       mentions: JSON.stringify(comment.mentions),
       parent_id: comment.parentId,
+      thread_id: comment.threadId,
       created_at: comment.createdAt.toISOString(),
       updated_at: comment.updatedAt.toISOString(),
     });
@@ -83,7 +85,7 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
     return new TicketCommentEntity(
       row.id,
       row.ticket_id,
-      row.author_type as 'user' | 'agent',
+      row.author_type as CommentAuthorType,
       row.author_name,
       row.body,
       row.visibility as CommentVisibility,
@@ -92,6 +94,7 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       row.parent_id,
       new Date(row.created_at),
       new Date(row.updated_at),
+      row.thread_id ?? null,
     );
   }
 }

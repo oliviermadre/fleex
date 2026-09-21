@@ -188,6 +188,7 @@ export type {
   AgentTokenCreated,
   CommentVisibility,
   TicketComment,
+  CommentAuthorType,
   MentionStatus,
   MentionTargetType,
   MentionExecutionMode,
@@ -538,3 +539,5 @@ export {
   DEFAULT_EMBEDDING_MODEL,
   resolveEmbeddingModel,
 } from './types/embedding-model.js';
+
+export type { AgentThread, AgentThreadStatus } from './types/agent-thread.js';
