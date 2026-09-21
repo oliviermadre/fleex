@@ -1,4 +1,4 @@
-import type { TicketComment, CommentVisibility, AgentQuestion } from '@fleex/shared';
+import type { TicketComment, CommentVisibility, AgentQuestion, CommentAuthorType } from '@fleex/shared';
 import { sanitizeForStorage, sanitizeForStorageDeep } from '@fleex/shared';
 
 const AGENT_MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
@@ -15,7 +15,7 @@ export class TicketCommentEntity {
   constructor(
     public readonly id: string,
     public readonly ticketId: string,
-    public readonly authorType: 'user' | 'agent',
+    public readonly authorType: CommentAuthorType,
     public readonly authorName: string,
     public body: string,
     public readonly visibility: CommentVisibility,
@@ -25,18 +25,20 @@ export class TicketCommentEntity {
     public readonly createdAt: Date,
     public updatedAt: Date,
     public questions: AgentQuestion[] | null = null,
+    public readonly threadId: string | null = null,
   ) {}
 
   static create(params: {
     id: string;
     ticketId: string;
-    authorType: 'user' | 'agent';
+    authorType: CommentAuthorType;
     authorName: string;
     body: string;
     visibility?: CommentVisibility;
     privateRecipients?: string[];
     parentId?: string | null;
     questions?: AgentQuestion[] | null;
+    threadId?: string | null;
   }): TicketCommentEntity {
     const now = new Date();
     const body = sanitizeForStorage(params.body);
@@ -54,6 +56,7 @@ export class TicketCommentEntity {
       now,
       now,
       sanitizeForStorageDeep(params.questions ?? null),
+      params.threadId ?? null,
     );
   }
 
@@ -148,6 +151,7 @@ export class TicketCommentEntity {
       mentions: this.mentions,
       parentId: this.parentId,
       questions: this.questions,
+      threadId: this.threadId,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

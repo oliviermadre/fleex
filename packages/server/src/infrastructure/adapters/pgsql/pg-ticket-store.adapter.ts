@@ -137,8 +137,8 @@ export class PgTicketStore implements TicketStorePort {
         tags, links, blocked, favorite, due_date, assignee,
         agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at,
         conversation_mode, model_override, effort_override, fast_mode, created_at, updated_at,
-        complexity
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+        complexity, assistant_persona_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
       ON CONFLICT (id) DO UPDATE SET
         board_id = $2,
         display_id = $3,
@@ -165,7 +165,8 @@ export class PgTicketStore implements TicketStorePort {
         fast_mode = $24,
         created_at = $25,
         updated_at = $26,
-        complexity = $27`,
+        complexity = $27,
+        assistant_persona_id = $28`,
       [
         ticket.id,
         ticket.boardId,
@@ -194,6 +195,7 @@ export class PgTicketStore implements TicketStorePort {
         ticket.createdAt.toISOString(),
         ticket.updatedAt.toISOString(),
         ticket.complexity,
+        ticket.assistantPersonaId,
       ],
     );
   }
@@ -379,6 +381,7 @@ function rowToTicket(row: Record<string, unknown>): TicketEntity {
     isEffortLevel(row.effort_override) ? row.effort_override : null,
     row.fast_mode === true,
     normalizeTicketComplexity(row.complexity),
+    (row.assistant_persona_id as string | null) ?? null,
   );
 }
 
