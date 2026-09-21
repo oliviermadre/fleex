@@ -481,6 +481,7 @@ export async function createContainer() {
     mentionStore,
     commentStore,
     deliverableStore,
+    threadStore,
     autoReviewWorkflow,
     executeAgent,
     wakeWaitingAgents,

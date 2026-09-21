@@ -5,6 +5,7 @@ import type { TicketStorePort } from './ports/ticket-store.port.js';
 import type { MentionStorePort } from './ports/mention-store.port.js';
 import type { CommentStorePort } from './ports/comment-store.port.js';
 import type { DeliverableStorePort } from './ports/deliverable-store.port.js';
+import type { ThreadStorePort } from './ports/thread-store.port.js';
 import type { AnyDomainEvent } from '../domain/events.js';
 
 export type BroadcastFn = (type: string, data: unknown) => void;
@@ -16,6 +17,7 @@ export interface BroadcastRegistrarDeps {
   mentionStore: MentionStorePort;
   commentStore: CommentStorePort;
   deliverableStore: DeliverableStorePort;
+  threadStore: ThreadStorePort;
 }
 
 /**
@@ -129,6 +131,11 @@ export class BroadcastRegistrar {
         await this.broadcastMentionEntity(e, 'mention:updated');
       }
     });
+
+    // ── Assistant thread broadcasts ──
+    bus.on('thread.created', (e) => this.broadcastThreadEntity(e, 'thread:created'));
+    bus.on('thread.updated', (e) => this.broadcastThreadEntity(e, 'thread:updated'));
+    bus.on('thread.concluded', (e) => this.broadcastThreadEntity(e, 'thread:concluded'));
 
     // ── Deliverable broadcasts ──
     bus.on('deliverable.created', (e) => this.broadcastDeliverableEntity(e, 'deliverable:created'));
@@ -330,6 +337,12 @@ export class BroadcastRegistrar {
     if (!('mentionId' in event)) return;
     const mention = await this.deps.mentionStore.getById((event as { mentionId: string }).mentionId);
     if (mention) this.ticketBroadcast(wsType, mention.toDTO());
+  }
+
+  private async broadcastThreadEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
+    if (!('threadId' in event)) return;
+    const thread = await this.deps.threadStore.getById((event as { threadId: string }).threadId);
+    if (thread) this.ticketBroadcast(wsType, thread.toDTO());
   }
 
   private async broadcastDeliverableEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
