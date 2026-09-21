@@ -2,7 +2,9 @@ import { useCallback, useState } from 'react';
 import type { ImportPreview, SourceMatch } from '@fleex/shared';
 import { useWorkStore, type DraftSource, type WorkDraft } from '../../../stores/workStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
-import { NewTaskEntry } from './NewTaskEntry';
+import { NewTaskEntry, type BrowseSource } from './NewTaskEntry';
+import { SourcePicker } from './SourcePicker';
+import { SlackLinkScreen } from './SlackLinkScreen';
 import { NewTaskResolving } from './NewTaskResolving';
 import { NewTaskCompose } from './NewTaskCompose';
 
@@ -11,8 +13,9 @@ import { NewTaskCompose } from './NewTaskCompose';
  * plus a local `resolving` step (never persisted — a request in flight doesn't
  * survive a reload):
  *
- *   ENTRY → (a recognized link) → RESOLVING → COMPOSE → Start
- *         → (plain text)        →              COMPOSE → Start
+ *   ENTRY → (a recognized link)            → RESOLVING → COMPOSE → Start
+ *         → (a source) → PICKER → (a row)  → RESOLVING → COMPOSE → Start
+ *         → (plain text)                   →             COMPOSE → Start
  *
  * The import never creates the ticket — it prefills the draft, and `Start`
  * (in COMPOSE) creates it by the normal path.
@@ -26,6 +29,8 @@ export function NewTask() {
   const repositories = useRepositoryStore((s) => s.repositories);
 
   const [resolving, setResolving] = useState<SourceMatch | null>(null);
+  // Which source is being browsed. Local, like `resolving`: a reload lands on the entry.
+  const [browsing, setBrowsing] = useState<BrowseSource | null>(null);
 
   const openTicket = useCallback(
     (ticketId: string) => {
@@ -82,17 +87,30 @@ export function NewTask() {
 
       updateDraft(patch);
       setResolving(null);
+      setBrowsing(null);
     },
     [repositories, updateDraft],
   );
 
+  // The screen the user is on. While an import resolves it stays mounted, frozen,
+  // behind the resolving screen: an instant source renders nothing for its first
+  // 400 ms, and without this backdrop the center would flash blank (spec 5.3).
+  // Keeping the PICKER there (not the entry) also means Cancel returns to the list.
+  const frozen = resolving !== null;
+  const back = () => setBrowsing(null);
+  const screen =
+    browsing === 'slack' ? (
+      <SlackLinkScreen onBack={back} onImport={setResolving} disabled={frozen} />
+    ) : browsing ? (
+      <SourcePicker kind={browsing} onBack={back} onImport={setResolving} onOpenTicket={openTicket} disabled={frozen} />
+    ) : (
+      <NewTaskEntry onImport={setResolving} onBrowse={setBrowsing} disabled={frozen} />
+    );
+
   if (resolving) {
-    // Keep the ENTRY mounted (disabled) behind the resolving screen: an instant
-    // source renders nothing for its first 400 ms, and without this backdrop the
-    // center would flash blank (spec 5.3 — the ENTRY stays visible, input off).
     return (
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <NewTaskEntry onImport={setResolving} onOpenTicket={openTicket} disabled />
+        {screen}
         <NewTaskResolving
           match={resolving}
           onResolved={applyPreview}
@@ -107,5 +125,5 @@ export function NewTask() {
     return <NewTaskCompose onStartOver={() => resetDraft()} />;
   }
 
-  return <NewTaskEntry onImport={setResolving} onOpenTicket={openTicket} />;
+  return screen;
 }

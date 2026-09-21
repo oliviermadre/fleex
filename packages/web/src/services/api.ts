@@ -78,6 +78,32 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 /**
+ * Data for the "or browse" pickers. Like the preview, these do NOT raise a toast:
+ * the inbox is prefetched when New Task opens, and a toast for a list nobody asked
+ * for yet would be noise — the picker shows the failure itself, with a retry.
+ */
+async function browseRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { signal });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(body, res.statusText));
+  }
+  return res.json() as Promise<T>;
+}
+
+export function fetchImportBrowseInbox(signal?: AbortSignal): Promise<import('@fleex/shared').ImportBrowseInbox> {
+  return browseRequest('/import/browse', signal);
+}
+
+export function fetchImportBrowseRepo(
+  org: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<import('@fleex/shared').ImportBrowseRepo> {
+  return browseRequest(`/import/browse/${encodeURIComponent(org)}/${encodeURIComponent(name)}`, signal);
+}
+
+/**
  * A failed import preview. Unlike a generic API error it does NOT raise a toast —
  * the resolving screen shows the message itself — and carries the source error
  * code so the UI can distinguish e.g. "not found" from "integration unavailable".
