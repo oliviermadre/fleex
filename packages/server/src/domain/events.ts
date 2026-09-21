@@ -256,6 +256,26 @@ export interface ExecutionCancelledEvent extends DomainEvent {
   ticketId?: string;
 }
 
+// ── Assistant thread events ──
+
+export interface ThreadCreatedEvent extends DomainEvent {
+  type: 'thread.created';
+  threadId: string;
+  ticketId: string;
+}
+
+export interface ThreadUpdatedEvent extends DomainEvent {
+  type: 'thread.updated';
+  threadId: string;
+  ticketId: string;
+}
+
+export interface ThreadConcludedEvent extends DomainEvent {
+  type: 'thread.concluded';
+  threadId: string;
+  ticketId: string;
+}
+
 // ── Deliverable events ──
 
 export interface DeliverableCreatedEvent extends DomainEvent {
@@ -619,6 +639,9 @@ export interface TicketGroupBoardRemovedEvent extends DomainEvent {
 // ── Union type ──
 
 export type AnyDomainEvent =
+  | ThreadCreatedEvent
+  | ThreadUpdatedEvent
+  | ThreadConcludedEvent
   | TicketCreatedEvent
   | TicketUpdatedEvent
   | TicketMovedEvent

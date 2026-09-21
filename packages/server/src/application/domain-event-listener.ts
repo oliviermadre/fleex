@@ -7,6 +7,7 @@ import type { TicketStorePort } from './ports/ticket-store.port.js';
 import type { MentionStorePort } from './ports/mention-store.port.js';
 import type { CommentStorePort } from './ports/comment-store.port.js';
 import type { DeliverableStorePort } from './ports/deliverable-store.port.js';
+import type { ThreadStorePort } from './ports/thread-store.port.js';
 import type { LoggerPort } from './ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './use-cases/auto-review-workflow.js';
 import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
@@ -35,6 +36,7 @@ export interface DomainEventListenerDeps {
   mentionStore: MentionStorePort;
   commentStore: CommentStorePort;
   deliverableStore: DeliverableStorePort;
+  threadStore: ThreadStorePort;
   autoReviewWorkflow: AutoReviewWorkflowUseCase;
   executeAgent: ExecuteAgentUseCase;
   wakeWaitingAgents: WakeWaitingAgentsUseCase;
@@ -71,6 +73,7 @@ export class DomainEventListener {
       mentionStore: deps.mentionStore,
       commentStore: deps.commentStore,
       deliverableStore: deps.deliverableStore,
+      threadStore: deps.threadStore,
     });
   }
 
