@@ -26,9 +26,11 @@ interface Props {
   disabled?: boolean;
   posting?: boolean;
   onSend: (body: string) => void | Promise<void>;
+  /** Set when the last post had to bypass the assistant (none configured). */
+  assistantMissing?: boolean;
 }
 
-export function Composer({ ticketId, value, onChange, disabled, posting, onSend }: Props) {
+export function Composer({ ticketId, value, onChange, disabled, posting, onSend, assistantMissing = false }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   // Populate the mention stores so the @-menu isn't sparse (tickets, personas
@@ -82,6 +84,11 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend 
       className="shrink-0 border-t border-[var(--theme-border)] p-3"
       {...fileUpload.dragProps}
     >
+      {assistantMissing && (
+        <div className="mb-2 rounded-md border border-[var(--tint-yellow-border)] bg-[var(--tint-yellow-bg)] px-2.5 py-1.5 text-[11.5px] text-[var(--tint-yellow-text)]">
+          No assistant configured — pick one below (◆) or set a default in Settings. Your message was posted as a plain comment.
+        </div>
+      )}
       <MarkdownEditor
         variant="composer"
         surfaceKind="comment"
@@ -137,7 +144,7 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend 
         }
         actions={
           <>
-            <ComposerExecBar exec={exec} />
+            <ComposerExecBar exec={exec} assistantPicker />
             <span className="ml-auto text-[11px] text-[var(--theme-text-faint)]">⇧⏎ newline</span>
           </>
         }

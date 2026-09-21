@@ -5,14 +5,18 @@
  * ticket's agent executions (for the run cards) and owns the floating execution
  * log a run card opens. Deliverables come down from WorkView (one shared WS-live
  * subscription). The composer draft is persisted per ticket (useCommentDraft,
- * localStorage) so unsent text survives switching tasks and coming back. The
- * suggestion chips are deferred to a dedicated task — the `Suggestions` component
- * and its `suggestionsFor` rules are kept for that.
+ * localStorage) so unsent text survives switching tasks and coming back.
+ *
+ * Phase 3: the ticket's assistant ⇄ agent threads render as delegation cards,
+ * an assistant turn in flight shows « <name> is thinking… », and a card opens
+ * the Threads panel on its thread.
  */
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useAgentEventStore } from '../../../stores/agentEventStore';
+import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
+import { useWorkStore } from '../../../stores/workStore';
 import { useAgentPersonas } from '../../../hooks/useAgentPersonas';
 import { useCommentDraft } from '../../../hooks/useCommentDraft';
 import type { WorkTask } from '../types';
@@ -20,6 +24,7 @@ import { TaskHeader } from './TaskHeader';
 import { TaskStream } from './TaskStream';
 import { Composer } from './Composer';
 import { useTaskConversation } from './useTaskConversation';
+import { useTicketThreads } from '../panel/useTicketThreads';
 
 export function TaskPane({
   task,
@@ -42,6 +47,7 @@ export function TaskPane({
   // Agent runs for this ticket → the run cards. Persona names come from the
   // persona store (kept fresh here); the executions say who ran and their state.
   useAgentPersonas();
+  const personas = useAgentPersonaStore((s) => s.personas);
   const executions = useAgentEventStore((s) => (task ? s.executionsByTicket[task.id] : undefined));
   const loadExecutionsForTicket = useAgentEventStore((s) => s.loadExecutionsForTicket);
   const subscribeTicket = useAgentEventStore((s) => s.subscribeTicket);
@@ -52,6 +58,27 @@ export function TaskPane({
     subscribeTicket(task.id);
     return () => unsubscribeTicket(task.id);
   }, [task?.id, loadExecutionsForTicket, subscribeTicket, unsubscribeTicket]);
+
+  // Phase 3: threads, persona display names, and the assistant "thinking" state.
+  const threads = useTicketThreads(task?.id ?? null);
+  const personaNames = useMemo(
+    () => Object.fromEntries(personas.map((p) => [p.id, p.displayName])) as Record<string, string>,
+    [personas],
+  );
+  const assistantThinking = useMemo(() => {
+    const running = (executions ?? []).find((e) => e.status === 'running' && e.mentionId.startsWith('assistant:'));
+    return running ? { name: personaNames[running.personaId] ?? 'Assistant' } : null;
+  }, [executions, personaNames]);
+
+  const setRightPanel = useWorkStore((s) => s.setRightPanel);
+  const setSelectedThreadId = useWorkStore((s) => s.setSelectedThreadId);
+  const openThread = useCallback(
+    (threadId: string) => {
+      setSelectedThreadId(threadId);
+      setRightPanel('thread');
+    },
+    [setRightPanel, setSelectedThreadId],
+  );
 
   if (!task) {
     return (
@@ -76,6 +103,11 @@ export function TaskPane({
         error={convo.error}
         onAnswer={convo.post}
         onOpenExecution={onOpenExecution}
+        threads={threads}
+        personaNames={personaNames}
+        assistantThinking={assistantThinking}
+        onOpenThread={openThread}
+        onAnswerThread={convo.postToThread}
       />
       <Composer
         ticketId={task.id}
@@ -83,6 +115,7 @@ export function TaskPane({
         onChange={setDraft}
         posting={convo.posting}
         onSend={convo.post}
+        assistantMissing={convo.assistantMissing}
       />
     </div>
   );
