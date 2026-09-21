@@ -64,6 +64,8 @@ import { UpdateSkillUseCase } from '../application/use-cases/update-skill.js';
 import { DeleteSkillUseCase } from '../application/use-cases/delete-skill.js';
 import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
+import { RunAssistantTurnUseCase } from '../application/use-cases/run-assistant-turn.js';
+import { AssistantThreadListener } from '../application/assistant-thread-listener.js';
 import { AutoReviewWorkflowUseCase } from '../application/use-cases/auto-review-workflow.js';
 import { CreatePanelUseCase } from '../application/use-cases/create-panel.js';
 import { UpdatePanelUseCase } from '../application/use-cases/update-panel.js';
@@ -444,6 +446,11 @@ export async function createContainer() {
   // Unique per-process server identifier — used to filter our own events on the hub fan-out.
   const serverId = process.env['FLEEX_INSTANCE_ID'] ?? randomUUID();
 
+  const runAssistantTurn = new RunAssistantTurnUseCase({
+    threadStore, commentStore, mentionStore, ticketStore: ticketStore_, personaStore: personaStore_, postComment,
+    getTicketContext, agentEventStore: agentEventStore_, executeAgent, config, eventBus, logger,
+  });
+
   const domainEventListener = new DomainEventListener({
     eventBus,
     personaStore: personaStore_,
@@ -461,6 +468,8 @@ export async function createContainer() {
     logger,
   });
   domainEventListener.register();
+  // Assistant threads follow the mentions that drive them (local bus only).
+  new AssistantThreadListener({ eventBus, threadStore, commentStore, runAssistantTurn, logger }).register();
 
   // Keeps the retrieval index current. A sibling of the listener above, on the
   // same local bus: ingestion is a side-effect, so hub-relayed events must not
@@ -803,6 +812,7 @@ export async function createContainer() {
     deleteSkill,
     executeAgent,
     wakeWaitingAgents,
+    runAssistantTurn,
     generateTicketSummary,
     getRelevantSummaries,
     retrieveContext,
