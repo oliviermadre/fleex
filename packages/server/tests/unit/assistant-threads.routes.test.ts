@@ -1,0 +1,78 @@
+import { describe, it, expect } from 'vitest';
+import Fastify from 'fastify';
+import { assistantThreadsRoutes } from '../../src/infrastructure/http/assistant-threads.routes.js';
+import { AgentThreadEntity } from '../../src/domain/entities/agent-thread.entity.js';
+import { EventBus } from '../../src/application/event-bus.js';
+
+function thread(id = 'th') {
+  return AgentThreadEntity.create({ id, ticketId: 't1', personaId: 'p', personaName: 'b', assistantPersonaId: 'a', brief: 'x', forwardedContext: [] });
+}
+
+describe('assistant threads routes', () => {
+  it('POST assistant/messages answers { assistant: null } and posts nothing when no assistant is configured', async () => {
+    const app = Fastify();
+    const posted: unknown[] = [];
+    await app.register(assistantThreadsRoutes({
+      ticketStore: { getTicketById: async () => ({ id: 't1', assistantPersonaId: null }) },
+      runAssistantTurn: { resolveAssistantPersona: async () => null, execute: async () => {} },
+      postComment: { execute: async (p: unknown) => { posted.push(p); return { comment: { id: 'c', toDTO: () => ({}) }, createdMentions: [] }; } },
+      config: { get: () => ({}) }, eventBus: new EventBus(), threadStore: {}, commentStore: {}, mentionStore: {},
+    } as never));
+    const res = await app.inject({ method: 'POST', url: '/api/tickets/t1/assistant/messages', payload: { body: 'hello' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ comment: null, assistant: null });
+    expect(posted).toHaveLength(0);
+  });
+
+  it('POST assistant/messages posts the user comment with agent mentions suppressed and starts a turn', async () => {
+    const app = Fastify();
+    const posted: Array<Record<string, unknown>> = [];
+    const turns: unknown[] = [];
+    await app.register(assistantThreadsRoutes({
+      ticketStore: { getTicketById: async () => ({ id: 't1' }) },
+      runAssistantTurn: {
+        resolveAssistantPersona: async () => ({ id: 'pa', name: 'nas', displayName: 'Nas' }),
+        execute: async (p: unknown) => { turns.push(p); },
+      },
+      postComment: { execute: async (p: Record<string, unknown>) => { posted.push(p); return { comment: { id: 'c1', toDTO: () => ({ id: 'c1' }) }, createdMentions: [] }; } },
+      config: { get: () => ({ humanDisplayName: 'Olivier' }) }, eventBus: new EventBus(), threadStore: {}, commentStore: {}, mentionStore: {},
+    } as never));
+    const res = await app.inject({ method: 'POST', url: '/api/tickets/t1/assistant/messages', payload: { body: '@agent:builder go' } });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toEqual({ comment: { id: 'c1' }, assistant: { personaId: 'pa', displayName: 'Nas' } });
+    expect(posted[0]).toMatchObject({ authorType: 'user', authorName: 'Olivier', suppressAgentMentions: true, threadId: null });
+    expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'user_message', commentId: 'c1' } }]);
+  });
+
+  it('GET /api/threads/open lists open threads', async () => {
+    const app = Fastify();
+    await app.register(assistantThreadsRoutes({ threadStore: { getOpen: async () => [thread()] } } as never));
+    const res = await app.inject({ method: 'GET', url: '/api/threads/open' });
+    expect(res.json()).toHaveLength(1);
+  });
+
+  it('POST /api/threads/:id/conclude refuses a closed thread', async () => {
+    const app = Fastify();
+    const t = thread();
+    t.conclude('done');
+    await app.register(assistantThreadsRoutes({ threadStore: { getById: async () => t } } as never));
+    const res = await app.inject({ method: 'POST', url: '/api/threads/th/conclude' });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('POST /api/threads/:id/messages prefixes the persona mention when the agent is not waiting', async () => {
+    const app = Fastify();
+    const t = thread();
+    const posted: Array<Record<string, unknown>> = [];
+    await app.register(assistantThreadsRoutes({
+      threadStore: { getById: async () => t, save: async () => {} },
+      mentionStore: { getById: async () => null },
+      config: { get: () => ({}) }, eventBus: new EventBus(),
+      postComment: { execute: async (p: Record<string, unknown>) => { posted.push(p); return { comment: { id: 'c2', toDTO: () => ({ id: 'c2' }) }, createdMentions: [{ id: 'm9', targetAgent: 'b', targetType: 'agent', sourceAgent: 'user' }] }; } },
+    } as never));
+    const res = await app.inject({ method: 'POST', url: '/api/threads/th/messages', payload: { body: 'check the fallback' } });
+    expect(res.statusCode).toBe(201);
+    expect(posted[0]).toMatchObject({ body: '@agent:b check the fallback', threadId: 'th', suppressMentionForAgents: [] });
+    expect(t.currentMentionId).toBe('m9');
+  });
+});
