@@ -16,6 +16,7 @@ import { TodoPanel } from './TodoPanel';
 import { ScratchpadTabsPanel } from './ScratchpadTabsPanel';
 import { BrowserPanel } from './browser/BrowserPanel';
 import { TicketMentions } from '../../tickets/TicketMentions';
+import { ThreadsPanel } from './ThreadsPanel';
 
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
@@ -120,6 +121,7 @@ export function RightPanel({
       )}
       {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}
       {rightPanel === 'browser' && <BrowserPanel key={task.id} ticketId={task.id} />}
+      {rightPanel === 'thread' && <ThreadsPanel task={task} />}
     </section>
   );
 }
