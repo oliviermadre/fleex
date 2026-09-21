@@ -81,7 +81,8 @@ export type ExecutionKind =
   | 'skill'
   | 'panel_member'
   | 'panel_orchestrator'
-  | 'workflow_step';
+  | 'workflow_step'
+  | 'assistant';
 
 /** Observability context window summary surfaced in the execution header. */
 export interface ExecutionStartContext {
