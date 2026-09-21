@@ -234,3 +234,7 @@ Détection en langage naturel dans le composer (« vois avec le PM » sans `@age
 ## Livraison
 
 Un PR sur cette branche, en deux séries de commits pour garder l'ordre de revue du plan : `feat(threads)` serveur (entité, migration, stores, use case, listener, routes, WS, config) puis `feat(work)` UI (flag, composer, cartes, panneau, tool strip, settings). Chaque série est verte seule (server tsc + vitest, web tsc + vitest, `check-raw-palette.mjs`). `docs/work-view-status.md` est mis à jour à la fin avec le résumé de la phase et la stratégie de recette ci-dessus.
+
+## Écarts décidés au moment du plan
+
+Voir `docs/superpowers/plans/2026-09-21-work-threads-phase-3.md` § « Écarts assumés » : repli client quand aucune persona assistant n'est configurée (la route répond `{ comment: null, assistant: null }` sans poster), route `GET /api/threads/open` pour le label de queue, et les commentaires d'auteur `assistant` ne réveillent pas les agents en attente par le chemin générique `comment.posted`.
