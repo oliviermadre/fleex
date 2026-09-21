@@ -332,3 +332,10 @@ export class SlackImportError extends ImportError {
     super(message, slackCode, 'slack_message');
   }
 }
+
+/** A connector (Slack…) could not be set up. `CONNECTOR_INVALID_TOKEN` is the user's to fix; `CONNECTOR_UPSTREAM_FAILED` is not. */
+export class ConnectorError extends DomainError {
+  constructor(message: string, code: 'CONNECTOR_INVALID_TOKEN' | 'CONNECTOR_UPSTREAM_FAILED') {
+    super(message, code);
+  }
+}

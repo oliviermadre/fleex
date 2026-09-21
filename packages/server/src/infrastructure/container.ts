@@ -114,6 +114,11 @@ import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
 import { ClaudeSlackImportAdapter } from './adapters/claude-slack-import.adapter.js';
+import { ClaudeSlackThreadSynthesizer } from './adapters/claude-slack-thread-synthesizer.js';
+import { FileSlackConnectionStore } from './adapters/file-slack-connection.store.js';
+import { SlackImportRouter } from './adapters/slack-import-router.js';
+import { SlackWebApiClient } from './adapters/slack-web-api.client.js';
+import { ManageSlackConnectorUseCase } from '../application/use-cases/manage-slack-connector.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { ApiClaudeUsageAdapter } from './adapters/api-claude-usage.adapter.js';
@@ -343,9 +348,20 @@ export async function createContainer() {
 
   const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore_, commentStore, deliverableStore, git, config, logger, resolver, sdkLimiter);
 
-  // Slack message import: retrieval + synthesis delegated to Claude's native
-  // Slack integration via the Agent SDK (gated by the shared sdkLimiter).
-  const slackImportAdapter = new ClaudeSlackImportAdapter(sdkLimiter, logger);
+  // Slack message import. With a token saved in Settings → Connectors, Fleex reads
+  // the Slack API itself and only asks Claude for the summary; without one it
+  // falls back to Claude's native Slack integration via the Agent SDK. The router
+  // sits behind SlackImportPort, so every surface gets the fast path.
+  const slackConnectionStore = new FileSlackConnectionStore(hostFs, execFn, hostHomedir, logger);
+  const slackWebApi = new SlackWebApiClient();
+  const manageSlackConnector = new ManageSlackConnectorUseCase(slackConnectionStore, slackWebApi, logger);
+  const slackImportAdapter = new SlackImportRouter(
+    slackConnectionStore,
+    slackWebApi,
+    new ClaudeSlackThreadSynthesizer(sdkLimiter, logger),
+    new ClaudeSlackImportAdapter(sdkLimiter, logger),
+    logger,
+  );
   const importSlackMessage = new ImportSlackMessageUseCase(ticketStore_, slackImportAdapter, logger);
 
   // Import-source registry: one adapter per source, keyed by source id. Powers
@@ -763,6 +779,7 @@ export async function createContainer() {
     backfillPRTicket,
     importFromSource,
     getImportBrowse,
+    manageSlackConnector,
     commentStore,
     mentionStore,
     deliverableStore,

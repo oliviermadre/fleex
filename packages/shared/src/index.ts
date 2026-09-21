@@ -61,6 +61,7 @@ export type {
   BrowsePullRequest,
   ImportBrowseInbox,
   ImportBrowseRepo,
+  SlackConnectorStatus,
 } from './types/import.js';
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';

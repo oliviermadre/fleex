@@ -23,7 +23,15 @@ export type SlackImportResult =
       /** Faithful markdown synthesis of the message + thread. Becomes the ticket description. */
       readonly synthesis: string;
     }
-  | { readonly status: 'integration_unavailable' }
+  | {
+      readonly status: 'integration_unavailable';
+      /**
+       * Set by the direct Slack API path when the saved token is the problem
+       * (rejected, revoked, missing a scope). Says what to fix; absent on the
+       * Claude path, whose message is "connect Slack to Claude".
+       */
+      readonly detail?: string;
+    }
   | { readonly status: 'inaccessible'; readonly detail?: string }
   | { readonly status: 'empty' };
 
@@ -45,4 +53,10 @@ export interface SlackImportPort {
     parsed: ParsedSlackMessageUrl,
     opts?: { signal?: AbortSignal },
   ): Promise<SlackImportResult>;
+}
+
+/** A title and a faithful synthesis of a conversation Fleex has ALREADY fetched. */
+export interface SlackThreadSynthesizerPort {
+  /** `null` when there is nothing worth summarising. */
+  synthesize(transcript: string, opts?: { signal?: AbortSignal }): Promise<{ title: string; synthesis: string } | null>;
 }

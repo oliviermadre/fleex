@@ -128,3 +128,22 @@ export interface ImportBrowseRepo {
   readonly fetchedAt: string;
   readonly stale: boolean;
 }
+
+/**
+ * What the client may know about the Slack connector. The token itself is
+ * write-only: it goes in through `PUT /api/connectors/slack` and never comes back.
+ */
+export type SlackConnectorStatus =
+  | { readonly connected: false }
+  | {
+      readonly connected: true;
+      readonly teamName: string;
+      /** Workspace subdomain (`acme`): only links from this workspace take the direct path. */
+      readonly teamDomain: string;
+      readonly userName: string;
+      /** Enough to recognise which token is saved, never enough to use it: `xoxp-…a1b2`. */
+      readonly tokenHint: string;
+      /** Scopes the token lacks for some conversations (e.g. `im:history` for DMs). Empty when fine or unknown. */
+      readonly missingScopes: string[];
+      readonly connectedAt: string;
+    };

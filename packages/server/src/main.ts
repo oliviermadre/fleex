@@ -43,6 +43,7 @@ import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.rou
 import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
 import { dashboardRoutes } from './infrastructure/http/dashboard.routes.js';
 import { importBrowseRoutes } from './infrastructure/http/import-browse.routes.js';
+import { connectorsRoutes } from './infrastructure/http/connectors.routes.js';
 import { githubImageProxyRoutes } from './infrastructure/http/github-image-proxy.routes.js';
 import { fileRoutes } from './infrastructure/http/files.routes.js';
 import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
@@ -127,6 +128,7 @@ async function main() {
   await app.register(statisticsRoutes(container));
   await app.register(dashboardRoutes(container));
   await app.register(importBrowseRoutes(container));
+  await app.register(connectorsRoutes(container));
   await app.register(githubImageProxyRoutes(container));
   await app.register(fileRoutes(container));
   await app.register(ticketGroupRoutes(container));

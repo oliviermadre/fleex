@@ -15,7 +15,7 @@ export function buildSlackDescription(synthesis: string, url: string): string {
 export function slackFailureReason(result: Exclude<SlackImportResult, { status: 'ok' }>): string {
   switch (result.status) {
     case 'integration_unavailable':
-      return "Claude's Slack integration is not available. Connect Slack to Claude and retry.";
+      return result.detail ?? "Claude's Slack integration is not available. Connect Slack to Claude and retry.";
     case 'inaccessible':
       return result.detail
         ? `Slack conversation could not be read: ${result.detail}`
