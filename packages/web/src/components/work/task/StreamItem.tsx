@@ -12,6 +12,7 @@ import { CommentDeleteButton } from './CommentDeleteButton';
 
 export function StreamItem({ comment, onDelete }: { comment: TicketComment; onDelete?: () => void }) {
   const isUser = comment.authorType === 'user';
+  const isAssistant = comment.authorType === 'assistant';
 
   if (isUser) {
     return (
@@ -27,14 +28,18 @@ export function StreamItem({ comment, onDelete }: { comment: TicketComment; onDe
   return (
     <div className="group/comment flex gap-2" data-comment-id={comment.id}>
       <div
-        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--tint-purple-bg)] text-[12px] text-[var(--tint-purple-text)]"
+        className={
+          isAssistant
+            ? 'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-accent-muted)] text-[12px] text-[var(--theme-accent)]'
+            : 'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--tint-purple-bg)] text-[12px] text-[var(--tint-purple-text)]'
+        }
         aria-hidden
       >
-        ⌬
+        {isAssistant ? '◆' : '⌬'}
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-center text-[11px] font-medium text-[var(--theme-text-secondary)]">
-          {comment.authorName || 'Agent'}
+          {comment.authorName || (isAssistant ? 'Assistant' : 'Agent')}
           {onDelete && <CommentDeleteButton onClick={onDelete} className="-my-1 ml-auto" />}
         </div>
         <div className="min-w-0 max-w-full overflow-hidden text-[13px] text-[var(--theme-text-primary)]">

@@ -11,7 +11,7 @@
  * deleting a comment or a deliverable — each delete behind a confirmation.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
+import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import { StreamItem } from './StreamItem';
 import { EventLine } from './EventLine';
 import { RunCard } from './RunCard';
@@ -22,7 +22,11 @@ import { TicketActionCards } from '../../tickets/TicketActionCards';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import * as api from '../../../services/api';
 import { useToastStore } from '../../../stores/toastStore';
-import { buildStream, type QueueActivity } from '../selectors';
+import { DelegationCard } from './DelegationCard';
+import { buildStream, threadTurns, type QueueActivity } from '../selectors';
+
+const EMPTY_THREADS: AgentThread[] = [];
+const EMPTY_NAMES: Record<string, string> = {};
 
 interface Props {
   ticketId: string;
@@ -47,6 +51,14 @@ interface Props {
   onCommentDeleted?: (commentId: string) => void;
   /** Called once a deliverable is deleted server-side, to drop it from the list at once. */
   onDeliverableDeleted?: (deliverableId: string) => void;
+  /** Assistant ⇄ agent threads of the ticket (Phase 3); each renders a delegation card. */
+  threads?: AgentThread[];
+  /** Display name per persona id, for the cards. */
+  personaNames?: Record<string, string>;
+  /** Set while an assistant turn runs — shows « <name> is thinking… ». */
+  assistantThinking?: { name: string } | null;
+  onOpenThread?: (threadId: string) => void;
+  onAnswerThread?: (threadId: string, text: string) => void | Promise<void>;
 }
 
 export function TaskStream({
@@ -65,6 +77,11 @@ export function TaskStream({
   editable = false,
   onCommentDeleted,
   onDeliverableDeleted,
+  threads = EMPTY_THREADS,
+  personaNames = EMPTY_NAMES,
+  assistantThinking = null,
+  onOpenThread,
+  onAnswerThread,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -86,8 +103,8 @@ export function TaskStream({
   const askDelete = (commentId: string) => (editable ? () => setPendingDelete(commentId) : undefined);
 
   const stream = useMemo(
-    () => buildStream(comments, events, executions, deliverables),
-    [comments, events, executions, deliverables],
+    () => buildStream(comments, events, executions, deliverables, threads),
+    [comments, events, executions, deliverables, threads],
   );
 
   useEffect(() => {
@@ -100,7 +117,8 @@ export function TaskStream({
     if (!showActionCards || activity !== 'waiting') return null;
     for (let i = comments.length - 1; i >= 0; i--) {
       const c = comments[i]!;
-      if (c.authorType === 'agent') {
+      // The assistant relays agent questions to the user with the same declared shape.
+      if (c.authorType === 'agent' || c.authorType === 'assistant') {
         return c.questions?.length ? c.id : null;
       }
     }
@@ -128,6 +146,17 @@ export function TaskStream({
                   onDeleted={editable ? (id) => onDeliverableDeleted?.(id) : undefined}
                 />
               );
+            case 'delegation':
+              return (
+                <DelegationCard
+                  key={`t-${entry.thread.id}`}
+                  thread={entry.thread}
+                  turns={threadTurns(comments, entry.thread.id)}
+                  personaDisplayName={personaNames[entry.thread.personaId] ?? entry.thread.personaName}
+                  onOpen={(id) => onOpenThread?.(id)}
+                  onAnswer={(id, text) => onAnswerThread?.(id, text)}
+                />
+              );
             case 'comment':
               return entry.comment.id === questionCommentId ? (
                 <InlineQuestion
@@ -143,6 +172,13 @@ export function TaskStream({
               );
           }
         })}
+
+        {assistantThinking && (
+          <div className="flex items-center gap-2 pl-8 text-[11.5px] text-[var(--theme-text-muted)]">
+            <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
+            <span>{assistantThinking.name} is thinking…</span>
+          </div>
+        )}
 
         {/* Actionable HITL / workflow cards (Human Gate approve-reject, waiting
             for input, ambiguous route, failed-step retry, crashed relaunch,
