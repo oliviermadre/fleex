@@ -45,6 +45,25 @@ export interface PRDetails {
   url: string;
 }
 
+/**
+ * The full detail of a single pull request, mirroring {@link GitHubIssueDetail}.
+ * Used by the PR import adapter to prefill a draft (title + body + branch + fork
+ * flag). `state` is GitHub's `OPEN | MERGED | CLOSED`.
+ */
+export interface GitHubPullRequestDetail {
+  number: number;
+  title: string;
+  body: string;
+  url: string;
+  state: string;
+  isDraft: boolean;
+  author: string;
+  headRefName: string;
+  baseRefName: string;
+  isCrossRepository: boolean;
+  nameWithOwner: string;
+}
+
 /** Owner and repo names are interpolated into GraphQL: only plain GitHub identifiers get through. */
 const GITHUB_NAME_RE = /^[A-Za-z0-9_.-]+$/;
 
@@ -135,10 +154,15 @@ export class GitHubGraphQLAdapter {
   ): Promise<Map<string, RepoBatchResult>> {
     const results = new Map<string, RepoBatchResult>();
 
-    // Process in batches of BATCH_SIZE
+    // Batches of BATCH_SIZE, side by side: run one after the other, the wait of
+    // every caller grew with the number of configured repos. `executeBatch`
+    // handles its own failures (it falls back to per-repo calls), so one bad
+    // batch cannot reject the others.
+    const batches: { org: string; name: string }[][] = [];
     for (let i = 0; i < repos.length; i += BATCH_SIZE) {
-      const batch = repos.slice(i, i + BATCH_SIZE);
-      const batchResults = await this.executeBatch(batch);
+      batches.push(repos.slice(i, i + BATCH_SIZE));
+    }
+    for (const batchResults of await Promise.all(batches.map((batch) => this.executeBatch(batch)))) {
       for (const [key, value] of batchResults) {
         results.set(key, value);
       }
@@ -176,7 +200,11 @@ export class GitHubGraphQLAdapter {
       labels: { nodes: { name: string }[] };
       milestone: { title: string } | null;
       comments: { nodes: { author: { login: string } | null; body: string; createdAt: string }[] };
-    };
+    } | null;
+
+    // `--jq .data.repository.issue` yields `null` for a missing issue on an
+    // existing repo (exit 0). Surface it as not-found rather than dereferencing null.
+    if (!raw) throw new Error(`Could not resolve issue ${org}/${name}#${number}`);
 
     return {
       number: raw.number,
@@ -193,6 +221,61 @@ export class GitHubGraphQLAdapter {
         body: c.body,
         createdAt: c.createdAt,
       })),
+    };
+  }
+
+  /**
+   * Fetch the full detail of a single pull request. Mirrors {@link fetchIssueDetail}:
+   * one repository/one node GraphQL query, `--jq` down to the PR node, null → not
+   * found. Guards `org`/`name` with {@link GITHUB_NAME_RE} since they are
+   * interpolated into the query.
+   */
+  async fetchPullRequestDetail(org: string, name: string, number: number): Promise<GitHubPullRequestDetail> {
+    if (!GITHUB_NAME_RE.test(org) || !GITHUB_NAME_RE.test(name)) {
+      throw new Error(`Invalid GitHub repository: ${org}/${name}`);
+    }
+
+    const query = `{
+      repository(owner: "${org}", name: "${name}") {
+        nameWithOwner
+        pullRequest(number: ${number}) {
+          number title body url state isDraft
+          headRefName baseRefName isCrossRepository
+          author { login }
+        }
+      }
+    }`;
+
+    const { stdout } = await this.execFn('gh', [
+      'api', 'graphql',
+      '-f', `query=${query}`,
+      '--jq', '.data.repository',
+    ], { timeout: 15_000 });
+
+    const repo = JSON.parse(stdout) as {
+      nameWithOwner: string;
+      pullRequest: {
+        number: number; title: string; body: string; url: string; state: string; isDraft: boolean;
+        headRefName: string; baseRefName: string; isCrossRepository: boolean;
+        author: { login: string } | null;
+      } | null;
+    } | null;
+
+    if (!repo?.pullRequest) throw new Error(`Could not resolve pull request ${org}/${name}#${number}`);
+    const pr = repo.pullRequest;
+
+    return {
+      number: pr.number,
+      title: pr.title,
+      body: pr.body ?? '',
+      url: pr.url,
+      state: pr.state,
+      isDraft: pr.isDraft,
+      author: pr.author?.login ?? 'unknown',
+      headRefName: pr.headRefName,
+      baseRefName: pr.baseRefName,
+      isCrossRepository: pr.isCrossRepository,
+      nameWithOwner: repo.nameWithOwner,
     };
   }
 

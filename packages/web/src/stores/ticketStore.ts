@@ -41,7 +41,7 @@ interface TicketState {
   archiveTicket: (id: string) => Promise<void>;
   unarchiveTicket: (id: string) => Promise<void>;
   moveTicket: (id: string, status: TicketStatus, position?: number) => Promise<void>;
-  addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string }) => Promise<void>;
+  addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string; checkoutRef?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
   patchLinkBaseBranch: (ticketId: string, linkId: string, baseBranch: string | null) => Promise<void>;
   importGitHubIssue: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;

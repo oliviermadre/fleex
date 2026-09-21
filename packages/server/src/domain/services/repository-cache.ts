@@ -2,6 +2,7 @@ interface CacheEntry<T> {
   data: T;
   expiresAt: number;
   staleAt: number;
+  storedAt: number;
 }
 
 export class RepositoryCache {
@@ -36,10 +37,22 @@ export class RepositoryCache {
     };
   }
 
+  /**
+   * Like `get`, but also returns an entry that has outlived its stale window
+   * (flagged `stale`) and never evicts. For readers that would rather show old
+   * data at once and refresh behind it than block on GitHub — the import pickers.
+   */
+  peek<T>(key: string): { data: T; stale: boolean; storedAt: number } | null {
+    const entry = this.store.get(key) as CacheEntry<T> | undefined;
+    if (!entry) return null;
+    return { data: entry.data, stale: Date.now() > entry.staleAt, storedAt: entry.storedAt };
+  }
+
   set<T>(key: string, data: T, ttlMs: number): void {
     const now = Date.now();
     this.store.set(key, {
       data,
+      storedAt: now,
       staleAt: now + ttlMs,
       expiresAt: now + ttlMs * this.staleMultiplier,
     });

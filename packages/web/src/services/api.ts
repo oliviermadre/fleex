@@ -77,6 +77,97 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * Data for the "or browse" pickers. Like the preview, these do NOT raise a toast:
+ * the inbox is prefetched when New Task opens, and a toast for a list nobody asked
+ * for yet would be noise — the picker shows the failure itself, with a retry.
+ */
+async function browseRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { signal });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(body, res.statusText));
+  }
+  return res.json() as Promise<T>;
+}
+
+export function fetchImportBrowseInbox(signal?: AbortSignal): Promise<import('@fleex/shared').ImportBrowseInbox> {
+  return browseRequest('/import/browse', signal);
+}
+
+export function fetchImportBrowseRepo(
+  org: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<import('@fleex/shared').ImportBrowseRepo> {
+  return browseRequest(`/import/browse/${encodeURIComponent(org)}/${encodeURIComponent(name)}`, signal);
+}
+
+/**
+ * Settings → Connectors. Like the browse calls these do not toast: the form shows
+ * Slack's refusal right under the field it concerns. The token only ever travels
+ * IN — no response carries it back.
+ */
+async function connectorRequest<T>(method: 'GET' | 'PUT' | 'DELETE', body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}/connectors/slack`, {
+    method,
+    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(text, res.statusText));
+  }
+  return res.json() as Promise<T>;
+}
+
+export const fetchSlackConnector = () => connectorRequest<import('@fleex/shared').SlackConnectorStatus>('GET');
+export const connectSlackConnector = (token: string) =>
+  connectorRequest<import('@fleex/shared').SlackConnectorStatus>('PUT', { token });
+export const disconnectSlackConnector = () => connectorRequest<import('@fleex/shared').SlackConnectorStatus>('DELETE');
+
+/**
+ * A failed import preview. Unlike a generic API error it does NOT raise a toast —
+ * the resolving screen shows the message itself — and carries the source error
+ * code so the UI can distinguish e.g. "not found" from "integration unavailable".
+ */
+export class PreviewImportError extends Error {
+  constructor(message: string, readonly code: string, readonly status: number) {
+    super(message);
+    this.name = 'PreviewImportError';
+  }
+}
+
+/**
+ * Resolve a pasted source into a draft preview WITHOUT creating a ticket. Errors
+ * are thrown as {@link PreviewImportError} (no toast); an aborted request throws
+ * the fetch `AbortError`, which the caller treats as a cancel, not a failure.
+ */
+export async function previewImport(
+  input: string,
+  signal?: AbortSignal,
+): Promise<import('@fleex/shared').ImportPreview> {
+  const res = await fetch(`${API_URL}/tickets/import/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input }),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    let message = res.statusText;
+    let code = 'IMPORT_UPSTREAM_FAILED';
+    try {
+      const json = JSON.parse(body);
+      if (typeof json.message === 'string') message = json.message;
+      if (typeof json.error === 'string') code = json.error;
+    } catch {
+      /* not JSON */
+    }
+    throw new PreviewImportError(message, code, res.status);
+  }
+  return res.json() as Promise<import('@fleex/shared').ImportPreview>;
+}
+
 export async function fetchModels(): Promise<ModelsResponse> {
   return request<ModelsResponse>('/models');
 }
@@ -452,7 +543,7 @@ export async function reorderTickets(updates: { id: string; status: import('@fle
   await request<{ ok: boolean }>('/tickets/reorder', { method: 'POST', body: JSON.stringify({ updates }) });
 }
 
-export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string }): Promise<import('@fleex/shared').TicketLink> {
+export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string; baseBranch?: string; checkoutRef?: string }): Promise<import('@fleex/shared').TicketLink> {
   return request<import('@fleex/shared').TicketLink>(`/tickets/${encodeURIComponent(id)}/links`, {
     method: 'POST', body: JSON.stringify(link),
   });

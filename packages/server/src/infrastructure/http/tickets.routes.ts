@@ -3,12 +3,12 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus, TicketType, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
-import { TICKET_STATUSES } from '@fleex/shared';
+import { TICKET_STATUSES, githubIssueSource } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, normalizeBaseBranchInput, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, normalizeBaseBranchInput, resolveBaseRef, resolveWorktreeTarget } from '../../domain/services/branch-utils.js';
 import { parsePRRefs } from '../../domain/services/pr-ref.js';
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
@@ -97,6 +97,47 @@ export function ticketRoutes(container: Container) {
       }
     }
     return { baseBranch: branch };
+  };
+
+  /**
+   * Resolve/normalise a checkout ref (an existing origin branch to check out
+   * directly). Unlike a base branch it is NOT collapsed when equal to the repo
+   * default — checking out `main` directly is legitimate — and its existence on
+   * origin is skipped when the ticket carries a github_pr link for the same repo,
+   * because a fork PR's head only exists via `refs/pull/<n>/head`. Never throws.
+   */
+  const resolveLinkCheckoutRef = async (
+    org: string,
+    name: string,
+    raw: string | null | undefined,
+    links: readonly { type: string; ref: string }[],
+  ): Promise<{ checkoutRef: string | undefined } | { status: number; message: string }> => {
+    if (raw === undefined || raw === null || raw.trim() === '') {
+      return { checkoutRef: undefined };
+    }
+    const norm = normalizeBaseBranchInput(raw);
+    if (!norm.ok) return { status: 400, message: norm.error };
+    const branch = norm.branch;
+
+    const hasPrLink = links.some(
+      (l) => l.type === 'github_pr' && l.ref.toLowerCase().startsWith(`${org}/${name}#`.toLowerCase()),
+    );
+    if (!hasPrLink) {
+      const barePath = container.resolver.barePath(org, name);
+      let bareExists = false;
+      try {
+        bareExists = existsSync(barePath);
+      } catch {
+        bareExists = false;
+      }
+      if (bareExists) {
+        const exists = await container.git.remoteBranchExists(barePath, branch);
+        if (!exists) {
+          return { status: 422, message: `Branch '${branch}' not found on origin for ${org}/${name}` };
+        }
+      }
+    }
+    return { checkoutRef: branch };
   };
 
   /** Split a `org/name` repo ref; null when malformed. */
@@ -281,13 +322,19 @@ export function ticketRoutes(container: Container) {
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
       const { boardId, title, description, status, priority, type, tags, links, dueDate } = request.body;
 
-      // Validate/normalise any per-repo base branches before creating the ticket.
+      // Validate/normalise any per-repo base branch / checkout ref before creating.
       let normalizedLinks = links;
       if (links && links.length > 0) {
         normalizedLinks = [];
         for (const l of links) {
           if (l.baseBranch != null && l.type !== 'repository') {
             return reply.code(400).send({ error: 'baseBranch is only valid on repository links' });
+          }
+          if (l.checkoutRef != null && l.type !== 'repository') {
+            return reply.code(400).send({ error: 'checkoutRef is only valid on repository links' });
+          }
+          if (l.baseBranch != null && l.checkoutRef != null) {
+            return reply.code(400).send({ error: 'baseBranch and checkoutRef are mutually exclusive' });
           }
           if (l.type === 'repository' && l.baseBranch != null) {
             const parsed = parseRepoRef(l.ref);
@@ -297,6 +344,18 @@ export function ticketRoutes(container: Container) {
               const { baseBranch: _drop, ...rest } = l;
               (normalizedLinks as typeof links).push(
                 resolved.baseBranch ? { ...rest, baseBranch: resolved.baseBranch } : rest,
+              );
+              continue;
+            }
+          }
+          if (l.type === 'repository' && l.checkoutRef != null) {
+            const parsed = parseRepoRef(l.ref);
+            if (parsed) {
+              const resolved = await resolveLinkCheckoutRef(parsed.org, parsed.name, l.checkoutRef, links);
+              if ('status' in resolved) return reply.code(resolved.status).send({ error: resolved.message });
+              const { checkoutRef: _drop, ...rest } = l;
+              (normalizedLinks as typeof links).push(
+                resolved.checkoutRef ? { ...rest, checkoutRef: resolved.checkoutRef } : rest,
               );
               continue;
             }
@@ -486,7 +545,7 @@ export function ticketRoutes(container: Container) {
     );
 
     // Links
-    app.post<{ Params: { id: string }; Body: { type: string; ref: string; label: string; url?: string; baseBranch?: string | null } }>(
+    app.post<{ Params: { id: string }; Body: { type: string; ref: string; label: string; url?: string; baseBranch?: string | null; checkoutRef?: string | null } }>(
       '/api/tickets/:id/links',
       async (request, reply) => {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
@@ -494,19 +553,32 @@ export function ticketRoutes(container: Container) {
 
         let ref = request.body.ref;
 
-        // baseBranch is a repository-only concept (D1). Reject it elsewhere so a
-        // caller can't smuggle a dead field onto a PR/session/worktree link.
+        // baseBranch / checkoutRef are repository-only concepts (D1). Reject them
+        // elsewhere so a caller can't smuggle a dead field onto another link type,
+        // and reject them together (they mean opposite things — see TicketLink).
         if (request.body.baseBranch != null && request.body.type !== 'repository') {
           return reply.code(400).send({ error: 'baseBranch is only valid on repository links' });
         }
-        // Resolve/normalise it now (needs org/name from the ref).
+        if (request.body.checkoutRef != null && request.body.type !== 'repository') {
+          return reply.code(400).send({ error: 'checkoutRef is only valid on repository links' });
+        }
+        if (request.body.baseBranch != null && request.body.checkoutRef != null) {
+          return reply.code(400).send({ error: 'baseBranch and checkoutRef are mutually exclusive' });
+        }
+        // Resolve/normalise them now (needs org/name from the ref).
         let baseBranch: string | undefined;
+        let checkoutRef: string | undefined;
         if (request.body.type === 'repository') {
           const parsed = parseRepoRef(ref);
           if (parsed && request.body.baseBranch != null) {
             const resolved = await resolveLinkBaseBranch(parsed.org, parsed.name, request.body.baseBranch);
             if ('status' in resolved) return reply.code(resolved.status).send({ error: resolved.message });
             baseBranch = resolved.baseBranch;
+          }
+          if (parsed && request.body.checkoutRef != null) {
+            const resolved = await resolveLinkCheckoutRef(parsed.org, parsed.name, request.body.checkoutRef, ticket.links);
+            if ('status' in resolved) return reply.code(resolved.status).send({ error: resolved.message });
+            checkoutRef = resolved.checkoutRef;
           }
         }
 
@@ -559,6 +631,7 @@ export function ticketRoutes(container: Container) {
           request.body.url ?? null,
           randomUUID(),
           baseBranch,
+          checkoutRef,
         );
 
         // When adding a repository link, create worktree if ticket already has a workspace
@@ -590,12 +663,18 @@ export function ticketRoutes(container: Container) {
           if (existsSync(manifestPath)) {
             const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
             if (!existsSync(wtPath)) {
-              // Check if this repo has a linked PR — if so, use the PR's branch
-              let branchName: string | null = null;
-              let createNewBranch = true;
-              const prLink = ticket.links.find((l) => l.type === 'github_pr' && l.ref.startsWith(`${org}/${name}#`));
-              if (prLink) {
-                const prNumber = parseInt(prLink.ref.split('#')[1]!, 10);
+              // Decide the worktree target via the shared precedence
+              // (checkoutRef > baseBranch > PR head > default). The PR's head
+              // branch is fetched only when it would actually be used — a PR link
+              // with no explicit checkoutRef/baseBranch (legacy dashboard import).
+              const ticketBranch = buildTicketBranchName(ticket.title, ticket.id);
+              const repoLink = ticket.links.find((l) => l.type === 'repository' && l.ref === `${org}/${name}`);
+              const prLink = ticket.links.find(
+                (l) => l.type === 'github_pr' && l.ref.toLowerCase().startsWith(`${org}/${name}#`.toLowerCase()),
+              );
+              let prHeadRefName: string | undefined;
+              if (prLink && !repoLink?.checkoutRef && !repoLink?.baseBranch) {
+                const prNumber = parseInt(prLink.ref.split('#')[1] ?? '', 10) || undefined;
                 if (prNumber) {
                   // Try cache first, then fetch. Use the mixed-state `pulls-all:`
                   // cache (open+merged+closed) since a linked PR may already be
@@ -603,38 +682,29 @@ export function ticketRoutes(container: Container) {
                   const cached = container.repositoryCache.get<import('@fleex/shared').PullRequest[]>(`pulls-all:${org}/${name}`);
                   const pr = cached?.data?.find((p) => p.number === prNumber);
                   if (pr) {
-                    branchName = pr.headRefName;
-                    createNewBranch = false;
+                    prHeadRefName = pr.headRefName;
                   } else {
                     try {
                       const result = await container.githubGraphql.fetchRepoBatch([{ org, name }]);
                       const repoData = result.get(`${org}/${name}`);
                       const fetchedPR = repoData?.pulls?.find((p: { number: number; headRefName: string }) => p.number === prNumber);
-                      if (fetchedPR) {
-                        branchName = fetchedPR.headRefName;
-                        createNewBranch = false;
-                      }
+                      if (fetchedPR) prHeadRefName = fetchedPR.headRefName;
                     } catch { /* ignore — fall through to ticket branch */ }
                   }
                 }
               }
-              if (!branchName) {
-                branchName = buildTicketBranchName(ticket.title, ticket.id);
-              }
 
-              // Per-repo base (D9): only when minting a fresh ticket branch (no PR checkout).
-              const wtBaseBranch = createNewBranch
-                ? resolveBaseRef(ticket.links, org, name)
-                : undefined;
+              const target = resolveWorktreeTarget(ticket.links, org, name, ticketBranch, prHeadRefName);
 
               try {
                 await container.createWorktree.execute(org, name, wtPath, {
-                  branch: branchName,
-                  createNewBranch,
-                  ...(wtBaseBranch ? { baseBranch: wtBaseBranch } : {}),
+                  branch: target.branch,
+                  createNewBranch: target.createNewBranch,
+                  ...(target.baseBranch ? { baseBranch: target.baseBranch } : {}),
+                  ...(target.prNumber ? { prNumber: target.prNumber } : {}),
                 });
-                ticket.addLink('worktree', wtPath, branchName, null, randomUUID());
-                container.logger.info('Worktree created for added repo', { ticketId: ticket.id, repo: ref, branch: branchName, wtPath });
+                ticket.addLink('worktree', wtPath, target.branch, null, randomUUID());
+                container.logger.info('Worktree created for added repo', { ticketId: ticket.id, repo: ref, branch: target.branch, wtPath });
               } catch (err) {
                 container.logger.warn('Failed to create worktree for added repo', {
                   ticketId: ticket.id, repo: ref, error: err instanceof Error ? err.message : String(err),
@@ -952,12 +1022,62 @@ export function ticketRoutes(container: Container) {
       return reply.send({ workspacePath });
     });
 
-    // Import GitHub issue
+    // ── Unified import (source registry) ────────────────────────────────────
+    // Declared before any parametric `/api/tickets/:id`-style route so `import`
+    // is never captured as an id (Fastify prefers static segments anyway).
+
+    // Resolve a source WITHOUT creating anything — prefills the new-task composer.
+    app.post<{ Body: { input: string } }>(
+      '/api/tickets/import/preview',
+      async (request, reply) => {
+        const { input } = request.body;
+        // A client that abandons the resolving screen closes the connection;
+        // forward that as an abort so a slow (Slack) read stops instead of
+        // finishing for nothing.
+        const ac = new AbortController();
+        const onClose = () => ac.abort();
+        request.raw.on('close', onClose);
+        try {
+          const preview = await container.importFromSource.preview(input, { signal: ac.signal });
+          // The client abandoned the resolving screen mid-read: the socket is
+          // gone, so take the reply over and send nothing rather than write to a
+          // closed connection (or let the error handler try a 422 on it). §4.3.
+          if (ac.signal.aborted) {
+            reply.hijack();
+            return;
+          }
+          return reply.code(200).send(preview);
+        } catch (err) {
+          if (ac.signal.aborted) {
+            reply.hijack();
+            return;
+          }
+          throw err;
+        } finally {
+          request.raw.off('close', onClose);
+        }
+      },
+    );
+
+    // Resolve AND create a ticket (aliases, CLI, agents). Single creation path.
+    app.post<{ Body: { input: string; boardId: string; status?: TicketStatus; type?: TicketType } }>(
+      '/api/tickets/import',
+      async (request, reply) => {
+        const { input, boardId, status, type } = request.body;
+        const match = container.importFromSource.detect(input);
+        const ticket = await container.importFromSource.import(match, boardId, { status, type });
+        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
+        return reply.code(201).send(ticket.toDTO());
+      },
+    );
+
+    // Import GitHub issue (legacy alias → registry). Contract unchanged.
     app.post<{ Body: { org: string; name: string; number: number; boardId: string; status?: TicketStatus; type?: TicketType } }>(
       '/api/tickets/import-github-issue',
       async (request, reply) => {
         const { org, name, number: issueNumber, boardId, status, type } = request.body;
-        const ticket = await container.importGitHubIssue.execute(org, name, issueNumber, boardId, { status, type });
+        const match = githubIssueSource.fromParts(org, name, issueNumber);
+        const ticket = await container.importFromSource.import(match, boardId, { status, type });
         emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
         return reply.code(201).send(ticket.toDTO());
       },

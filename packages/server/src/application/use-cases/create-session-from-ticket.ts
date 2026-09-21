@@ -109,15 +109,25 @@ export class CreateSessionFromTicketUseCase {
         continue;
       }
 
-      // D9 precedence: this repo's own worktree link or a PR checkout wins; the
-      // per-repo base only applies when we're minting a fresh ticket branch.
-      const baseBranch = !repoWorktreeLink && !prNumber
+      // "Work directly on this branch" (checkoutRef) checks that branch out as-is
+      // when the repo has no worktree yet — it wins over minting a ticket branch.
+      const repoLink = ticket.links.find((l) => l.type === 'repository' && l.ref === `${repo.org}/${repo.name}`);
+      const checkoutRef = !repoWorktreeLink ? repoLink?.checkoutRef : undefined;
+      const worktreeBranch = checkoutRef ?? branchName;
+      const createNewBranch = !repoWorktreeLink && !checkoutRef;
+      // Precedence when minting a fresh ticket branch: a per-repo base wins even
+      // when a `github_pr` link exists — that base IS "branch on top" of an
+      // imported PR (repository link carries `baseBranch = <headRefName>`), and
+      // gating it on `!prNumber` silently forked the branch from the default
+      // branch instead. resolveBaseRef returns undefined for a legacy PR ticket
+      // (no per-repo base), leaving its behaviour unchanged.
+      const baseBranch = createNewBranch
         ? resolveBaseRef(ticket.links, repo.org, repo.name)
         : undefined;
       try {
         const existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
-          branch: branchName,
-          createNewBranch: !repoWorktreeLink,
+          branch: worktreeBranch,
+          createNewBranch,
           ...(prNumber ? { prNumber } : {}),
           ...(baseBranch ? { baseBranch } : {}),
         });
@@ -127,10 +137,10 @@ export class CreateSessionFromTicketUseCase {
         if (repoWorktreeLink) {
           ticket.removeLink(repoWorktreeLink.id);
         }
-        ticket.addLink('worktree', actualPath, branchName, null, randomUUID());
+        ticket.addLink('worktree', actualPath, worktreeBranch, null, randomUUID());
       } catch (err) {
         this.logger.warn('Failed to create worktree for ticket', {
-          ticketId, repo: `${repo.org}/${repo.name}`, branch: branchName,
+          ticketId, repo: `${repo.org}/${repo.name}`, branch: worktreeBranch,
           error: err instanceof Error ? err.message : String(err),
         });
       }

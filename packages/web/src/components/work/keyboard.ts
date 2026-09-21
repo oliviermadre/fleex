@@ -76,8 +76,15 @@ export function useWorkKeyboard(orderedIds: readonly string[]): void {
         useWorkStore.getState().setView('new');
         return;
       }
-      // Esc — cancel the new-task card.
-      if (e.key === 'Escape' && useWorkStore.getState().view === 'new') {
+      // Esc — close the composer. The ENTRY and RESOLVING screens own Esc
+      // themselves (refuse a recognized link, cancel a running import → back to
+      // ENTRY) and must not be torn down from under them by this window-level
+      // handler, so it only closes once the draft reached the composer stage.
+      if (
+        e.key === 'Escape'
+        && useWorkStore.getState().view === 'new'
+        && useWorkStore.getState().draft.stage === 'compose'
+      ) {
         setView('task');
       }
     }

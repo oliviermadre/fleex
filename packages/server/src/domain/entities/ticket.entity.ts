@@ -247,6 +247,7 @@ export class TicketEntity {
     url: string | null,
     linkId: string,
     baseBranch?: string,
+    checkoutRef?: string,
   ): TicketLink {
     const existing = this.findLink(type, ref);
     if (existing) return existing;
@@ -258,9 +259,14 @@ export class TicketEntity {
       label,
       url,
       createdAt: new Date().toISOString(),
-      // Only carry a base branch on repository links; keep it off the JSON
-      // entirely when absent so unrelated link types stay byte-identical.
-      ...(type === 'repository' && baseBranch ? { baseBranch } : {}),
+      // Only carry base branch / checkout ref on repository links; keep them off
+      // the JSON entirely when absent so unrelated link types stay byte-identical.
+      // The two are mutually exclusive — checkoutRef wins if both are somehow set.
+      ...(type === 'repository' && checkoutRef
+        ? { checkoutRef }
+        : type === 'repository' && baseBranch
+          ? { baseBranch }
+          : {}),
     };
     this.links = [...this.links, link];
     this.updatedAt = new Date();

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { TicketType, TicketPriority } from '@fleex/shared';
+import type { TicketType, TicketPriority, TicketLink, ImportSourceId } from '@fleex/shared';
+import { EMPTY_DRAFT, migrateDraft } from '../components/work/new/draftMigration';
 
 /**
  * Client-only UI state for the Work view. The ticket is the source of truth for
@@ -21,11 +22,42 @@ export type DraftType = TicketType;
 /** How the queue groups its rows. 'activity' is the handoff default. */
 export type QueueGroupBy = 'activity' | 'repo' | 'type' | 'priority' | 'board' | 'status';
 
+/**
+ * The recognized source an import prefilled the draft from. Kept on the draft so
+ * the composer can show the source chip and `Start` can attach the source link.
+ */
+export interface DraftSource {
+  readonly sourceId: ImportSourceId;
+  readonly ref: string;
+  readonly url: string;
+  readonly label: string;
+  /** The source link(s) to create with the ticket (never the repository link). */
+  readonly links: Omit<TicketLink, 'id' | 'createdAt'>[];
+  readonly tags: string[];
+  /** PR-only: drives the composer's "branch on top / work directly" control. */
+  readonly pr?: {
+    readonly repoKey: string;
+    readonly headRefName: string;
+    readonly isCrossRepository: boolean;
+  };
+  /** Set when the source's repo isn't configured in Fleex, so no repo was attached. */
+  readonly repoWarning?: string;
+}
+
 export interface WorkDraft {
+  /** The ticket title — chosen explicitly now, no longer derived from the text. */
+  title: string;
+  /** The ticket description. */
   text: string;
+  /** Which screen of the new-task flow the draft is on. `resolving` is never persisted. */
+  stage: 'entry' | 'compose';
+  /** Set when the draft was prefilled from an imported source; null otherwise. */
+  source: DraftSource | null;
   repoKeys: string[];
   /** Chosen base branch per selected repo key; absent or '' = the repo's default branch. */
   repoBaseBranches: Record<string, string>;
+  /** Repos to check out directly on an existing branch (exclusive with a base). */
+  repoCheckoutRefs: Record<string, string>;
   /** Epics (of the draft's board) the new ticket joins. */
   epicIds: string[];
   boardId: string | null;
@@ -120,16 +152,6 @@ export interface WorkState {
 }
 
 const STORAGE_KEY = 'fleex_work';
-
-const EMPTY_DRAFT: WorkDraft = {
-  text: '',
-  repoKeys: [],
-  repoBaseBranches: {},
-  epicIds: [],
-  boardId: null,
-  type: 'build',
-  priority: 'none',
-};
 
 /** The subset of state we persist — everything except the action functions. */
 type PersistedWork = Pick<
@@ -246,8 +268,9 @@ function load(): PersistedWork {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<PersistedWork>;
-    // Merge over defaults so a stored blob from an older shape stays valid.
-    return { ...DEFAULTS, ...parsed, draft: { ...EMPTY_DRAFT, ...(parsed.draft ?? {}) } };
+    // Merge over defaults so a stored blob from an older shape stays valid, and
+    // migrate the draft (old blobs had no explicit title/stage — see migrateDraft).
+    return { ...DEFAULTS, ...parsed, draft: migrateDraft(parsed.draft) };
   } catch {
     return DEFAULTS;
   }

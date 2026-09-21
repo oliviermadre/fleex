@@ -1,3 +1,5 @@
+import type { ImportSourceId } from '@fleex/shared';
+
 export class DomainError extends Error {
   constructor(
     message: string,
@@ -287,6 +289,18 @@ export class InvalidRoutineTriggerError extends DomainError {
   }
 }
 
+/**
+ * Error codes shared by every import source. The first four map to a 422 (the
+ * caller can fix the input or the integration); `IMPORT_UPSTREAM_FAILED` maps to
+ * a 502 (a transient failure of the source, worth retrying).
+ */
+export type ImportErrorCode =
+  | 'IMPORT_INVALID_INPUT' // detectSource() returned null
+  | 'IMPORT_SOURCE_UNAVAILABLE' // Slack integration missing · `gh` not authenticated
+  | 'IMPORT_NOT_FOUND' // issue/PR/conversation missing or inaccessible
+  | 'IMPORT_EMPTY' // conversation reached but has no content
+  | 'IMPORT_UPSTREAM_FAILED'; // any other upstream failure (timeout, rate limit, SDK crash)
+
 export type SlackImportErrorCode =
   | 'SLACK_INVALID_URL'
   | 'SLACK_INTEGRATION_UNAVAILABLE'
@@ -294,13 +308,34 @@ export type SlackImportErrorCode =
   | 'SLACK_CONVERSATION_EMPTY';
 
 /**
- * Raised when importing a ticket from a Slack message link fails. Carries a
- * specific {@link SlackImportErrorCode} so the HTTP layer can return a 422 with
- * an actionable code (invalid link, integration unavailable, inaccessible, or
- * empty conversation).
+ * Raised when resolving or importing a task from an external source fails.
+ * Carries a code the HTTP layer maps to a status, and the source it came from so
+ * the front can attribute the message. Generalises the former Slack-only error.
  */
-export class SlackImportError extends DomainError {
+export class ImportError extends DomainError {
+  constructor(
+    message: string,
+    code: ImportErrorCode | SlackImportErrorCode,
+    public readonly sourceId?: ImportSourceId,
+  ) {
+    super(message, code);
+  }
+}
+
+/**
+ * Legacy Slack-import error, kept so the Slack routes keep returning the exact
+ * same `SLACK_*` codes (and `slackCode` field) they always did. Now a subclass
+ * of {@link ImportError}.
+ */
+export class SlackImportError extends ImportError {
   constructor(message: string, public readonly slackCode: SlackImportErrorCode) {
-    super(message, slackCode);
+    super(message, slackCode, 'slack_message');
+  }
+}
+
+/** A connector (Slack…) could not be set up. `CONNECTOR_INVALID_TOKEN` is the user's to fix; `CONNECTOR_UPSTREAM_FAILED` is not. */
+export class ConnectorError extends DomainError {
+  constructor(message: string, code: 'CONNECTOR_INVALID_TOKEN' | 'CONNECTOR_UPSTREAM_FAILED') {
+    super(message, code);
   }
 }

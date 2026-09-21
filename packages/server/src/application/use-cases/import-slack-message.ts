@@ -13,6 +13,7 @@ import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { SlackImportPort, SlackImportResult } from '../ports/slack-import.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { EventBus } from '../event-bus.js';
+import { buildSlackDescription, slackFailureReason } from '../services/import-sources/slack-description.js';
 
 /**
  * Creates a ticket from a pasted Slack message permalink, mirroring the
@@ -213,17 +214,10 @@ export class ImportSlackMessageUseCase {
     return tags.filter((t) => !isSlackImportTag(t));
   }
 
+  // Shared with the synchronous import adapter so both surfaces phrase failures
+  // and build the synthesis body identically.
   private failureReason(result: Exclude<SlackImportResult, { status: 'ok' }>): string {
-    switch (result.status) {
-      case 'integration_unavailable':
-        return "Claude's Slack integration is not available. Connect Slack to Claude and retry.";
-      case 'inaccessible':
-        return result.detail
-          ? `Slack conversation could not be read: ${result.detail}`
-          : 'Slack conversation could not be read (private channel, deleted message, or no access).';
-      case 'empty':
-        return 'Slack conversation has no content to summarize.';
-    }
+    return slackFailureReason(result);
   }
 
   private pendingDescription(kind: 'thread' | 'message', url: string): string {
@@ -235,6 +229,6 @@ export class ImportSlackMessageUseCase {
   }
 
   private buildDescription(synthesis: string, url: string): string {
-    return `${synthesis.trim()}\n\n---\n\n#### Source\n\n- **Slack**: ${url}`;
+    return buildSlackDescription(synthesis, url);
   }
 }

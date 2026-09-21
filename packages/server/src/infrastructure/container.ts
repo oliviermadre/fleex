@@ -43,9 +43,14 @@ import type { SupabaseSessionManager } from './adapters/supabase/supabase-sessio
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
-import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github-issue.js';
 import { ImportSlackMessageUseCase } from '../application/use-cases/import-slack-message.js';
 import { BackfillPRTicketUseCase } from '../application/use-cases/backfill-pr-ticket.js';
+import { ImportFromSourceUseCase } from '../application/use-cases/import-from-source.js';
+import { GetImportBrowseUseCase } from '../application/use-cases/get-import-browse.js';
+import { ImportSourceRegistry } from '../application/services/import-sources/registry.js';
+import { GitHubIssueImportAdapter } from '../application/services/import-sources/github-issue.adapter.js';
+import { GitHubPrImportAdapter } from '../application/services/import-sources/github-pr.adapter.js';
+import { SlackMessageImportAdapter } from '../application/services/import-sources/slack-message.adapter.js';
 import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
 import { SubmitDeliverableUseCase } from '../application/use-cases/submit-deliverable.js';
@@ -109,6 +114,11 @@ import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
 import { ClaudeSlackImportAdapter } from './adapters/claude-slack-import.adapter.js';
+import { ClaudeSlackThreadSynthesizer } from './adapters/claude-slack-thread-synthesizer.js';
+import { FileSlackConnectionStore } from './adapters/file-slack-connection.store.js';
+import { SlackImportRouter } from './adapters/slack-import-router.js';
+import { SlackWebApiClient } from './adapters/slack-web-api.client.js';
+import { ManageSlackConnectorUseCase } from '../application/use-cases/manage-slack-connector.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { ApiClaudeUsageAdapter } from './adapters/api-claude-usage.adapter.js';
@@ -235,6 +245,10 @@ export async function createContainer() {
   // Repository dashboard services
   const repositoryCache = new RepositoryCache();
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
+  // Import-source adapters for GitHub (the Slack one needs the slow SDK adapter
+  // built later; the registry is assembled once all three exist).
+  const githubIssueImportAdapter = new GitHubIssueImportAdapter(githubGraphql, logger);
+  const githubPrImportAdapter = new GitHubPrImportAdapter(githubGraphql, logger);
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
   const repositoryResolver = new RepositoryResolver(execFn, logger);
   const githubDiscovery = new GithubDiscovery(execFn, logger);
@@ -253,8 +267,7 @@ export async function createContainer() {
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
     ticketStore_, createSession, createWorktreeUC, git, config, logger, resolver,
   );
-  const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore_, githubGraphql, logger);
-  const backfillPRTicket = new BackfillPRTicketUseCase(ticketStore_, logger);
+  const backfillPRTicket = new BackfillPRTicketUseCase(ticketStore_, logger, githubPrImportAdapter);
 
   // Agent collaboration use cases
   const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore_, logger);
@@ -335,10 +348,48 @@ export async function createContainer() {
 
   const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore_, commentStore, deliverableStore, git, config, logger, resolver, sdkLimiter);
 
-  // Slack message import: retrieval + synthesis delegated to Claude's native
-  // Slack integration via the Agent SDK (gated by the shared sdkLimiter).
-  const slackImportAdapter = new ClaudeSlackImportAdapter(sdkLimiter, logger);
+  // Slack message import. With a token saved in Settings → Connectors, Fleex reads
+  // the Slack API itself and only asks Claude for the summary; without one it
+  // falls back to Claude's native Slack integration via the Agent SDK. The router
+  // sits behind SlackImportPort, so every surface gets the fast path.
+  const slackConnectionStore = new FileSlackConnectionStore(hostFs, execFn, hostHomedir, logger);
+  const slackWebApi = new SlackWebApiClient();
+  const manageSlackConnector = new ManageSlackConnectorUseCase(slackConnectionStore, slackWebApi, logger);
+  const slackImportAdapter = new SlackImportRouter(
+    slackConnectionStore,
+    slackWebApi,
+    new ClaudeSlackThreadSynthesizer(sdkLimiter, logger),
+    new ClaudeSlackImportAdapter(sdkLimiter, logger),
+    logger,
+  );
   const importSlackMessage = new ImportSlackMessageUseCase(ticketStore_, slackImportAdapter, logger);
+
+  // Import-source registry: one adapter per source, keyed by source id. Powers
+  // the preview/import routes and the legacy import aliases.
+  const slackMessageImportAdapter = new SlackMessageImportAdapter(slackImportAdapter, logger);
+  const importSourceRegistry = new ImportSourceRegistry([
+    githubIssueImportAdapter,
+    githubPrImportAdapter,
+    slackMessageImportAdapter,
+  ]);
+  const importFromSource = new ImportFromSourceUseCase(importSourceRegistry, ticketStore_, logger);
+  const getImportBrowse = new GetImportBrowseUseCase({
+    graphql: githubGraphql,
+    cache: repositoryCache,
+    execFn,
+    ticketStore: ticketStore_,
+    getRepos: () => {
+      const resolved = config.get().resolvedRepositories;
+      if (!Array.isArray(resolved)) return [];
+      return resolved
+        .filter((entry): entry is string => typeof entry === 'string' && entry.includes('/'))
+        .map((entry) => {
+          const [org, name] = entry.split('/');
+          return { org: org!, name: name! };
+        });
+    },
+    logger,
+  });
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
@@ -724,9 +775,11 @@ export async function createContainer() {
     ticketStore: ticketStore_,
     detectMerge,
     createSessionFromTicket,
-    importGitHubIssue,
     importSlackMessage,
     backfillPRTicket,
+    importFromSource,
+    getImportBrowse,
+    manageSlackConnector,
     commentStore,
     mentionStore,
     deliverableStore,

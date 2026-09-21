@@ -73,8 +73,17 @@ export class ClaudeSlackImportAdapter implements SlackImportPort {
     private readonly logger: LoggerPort,
   ) {}
 
-  async synthesizeThread(parsed: ParsedSlackMessageUrl): Promise<SlackImportResult> {
+  async synthesizeThread(
+    parsed: ParsedSlackMessageUrl,
+    opts?: { signal?: AbortSignal },
+  ): Promise<SlackImportResult> {
     const userPrompt = this.buildPrompt(parsed);
+
+    // A client that abandons a preview aborts the request; forward that to the
+    // SDK query via its own AbortController so Claude stops reading immediately.
+    if (opts?.signal?.aborted) {
+      return { status: 'inaccessible', detail: 'Import cancelled' };
+    }
 
     const release = await this.sdkLimiter.acquire();
     try {
@@ -83,6 +92,12 @@ export class ClaudeSlackImportAdapter implements SlackImportPort {
 
       let structuredOutput: SlackSynthesisStructuredOutput | null = null;
       let resultText = '';
+
+      const abortController = new AbortController();
+      if (opts?.signal) {
+        if (opts.signal.aborted) abortController.abort();
+        else opts.signal.addEventListener('abort', () => abortController.abort(), { once: true });
+      }
 
       const options: Record<string, unknown> = {
         model: MODEL,
@@ -95,6 +110,7 @@ export class ClaudeSlackImportAdapter implements SlackImportPort {
         allowDangerouslySkipPermissions: true,
         maxTurns: MAX_TURNS,
         outputFormat: OUTPUT_FORMAT,
+        abortController,
         ...(cliPath ? { pathToClaudeCodeExecutable: cliPath } : {}),
       };
 
@@ -113,6 +129,12 @@ export class ClaudeSlackImportAdapter implements SlackImportPort {
 
       return this.interpret(structuredOutput, resultText, parsed);
     } catch (err) {
+      // A client that abandoned the preview aborted the read: expected, not a
+      // failure. Don't log an error (the route short-circuits and won't respond
+      // on the closed socket). Spec §4.3.
+      if (opts?.signal?.aborted) {
+        return { status: 'inaccessible', detail: 'Import cancelled' };
+      }
       this.logger.error('Claude Agent SDK call failed for Slack import', {
         channelId: parsed.channelId,
         ts: parsed.ts,

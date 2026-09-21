@@ -52,6 +52,72 @@ export function resolveBaseRef(
   return link?.baseBranch ? `origin/${link.baseBranch}` : undefined;
 }
 
+/**
+ * The PR number of the `github_pr` link for `org/name`, matched case-insensitively
+ * (historical links mix casing). Undefined when the ticket has no such link. Used
+ * so a fork PR's head can be fetched via `refs/pull/<n>/head` on a direct checkout.
+ */
+export function extractRepoPrNumber(
+  links: readonly TicketLink[],
+  org: string,
+  name: string,
+): number | undefined {
+  const prefix = `${org}/${name}#`.toLowerCase();
+  const prLink = links.find((l) => l.type === 'github_pr' && l.ref.toLowerCase().startsWith(prefix));
+  return prLink ? parseInt(prLink.ref.split('#')[1] ?? '', 10) || undefined : undefined;
+}
+
+/** What a worktree should be created as for one repo — see {@link resolveWorktreeTarget}. */
+export interface WorktreeTarget {
+  /** The git branch to check out / create. */
+  readonly branch: string;
+  /** True → mint `branch` (from `baseBranch` or the repo default); false → check `branch` out as-is. */
+  readonly createNewBranch: boolean;
+  /** `origin/<base>` when a fresh ticket branch is derived from a custom base. */
+  readonly baseBranch?: string;
+  /** The PR number, so a fork's head can be fetched via `refs/pull/<n>/head` when its branch is missing. */
+  readonly prNumber?: number;
+}
+
+/**
+ * Decide, for one repo, what branch a ticket's worktree targets — the single
+ * precedence every worktree-creation site should follow. Pure: the caller runs
+ * git and supplies the freshly-fetched PR head branch (`prHeadRefName`) when it
+ * has one.
+ *
+ * Precedence (highest first):
+ *  1. the repository link's `checkoutRef` → check that branch out directly (with
+ *     the linked PR's number, so a fork's head can still be fetched);
+ *  2. the repository link's `baseBranch` → branch a fresh ticket branch on top of
+ *     `origin/<base>` — even when a PR link exists (this is what "branch on top"
+ *     of an imported PR means, and it protects the PR);
+ *  3. a `github_pr` link on the repo (legacy dashboard import) → check out the
+ *     PR's head branch as-is — unchanged behaviour;
+ *  4. otherwise → mint the ticket branch from the repo's default branch.
+ */
+export function resolveWorktreeTarget(
+  links: readonly TicketLink[],
+  org: string,
+  name: string,
+  ticketBranch: string,
+  prHeadRefName?: string,
+): WorktreeTarget {
+  const repoRef = `${org}/${name}`;
+  const repoLink = links.find((l) => l.type === 'repository' && l.ref === repoRef);
+  const prNumber = extractRepoPrNumber(links, org, name);
+
+  if (repoLink?.checkoutRef) {
+    return { branch: repoLink.checkoutRef, createNewBranch: false, ...(prNumber ? { prNumber } : {}) };
+  }
+  if (repoLink?.baseBranch) {
+    return { branch: ticketBranch, createNewBranch: true, baseBranch: `origin/${repoLink.baseBranch}` };
+  }
+  if (prNumber !== undefined && prHeadRefName) {
+    return { branch: prHeadRefName, createNewBranch: false };
+  }
+  return { branch: ticketBranch, createNewBranch: true };
+}
+
 /** Build a git branch name for a ticket: ticket/<short-id>-<title-slug> */
 export function buildTicketBranchName(title: string, ticketId: string): string {
   const slug = title

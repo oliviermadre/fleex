@@ -32,12 +32,18 @@ beforeEach(() => {
   useTicketGroupStore.setState({ groups: [], ticketGroupIds: {}, addTicketToGroup });
   useRepositoryStore.setState({ repositories: [repo('acme', 'api'), repo('acme', 'web')] });
   useWorkStore.setState({ view: 'new' });
+  // These tests exercise the composer directly, so put the draft in the compose
+  // stage with a title (the entry screen is covered by NewTaskEntry.test.tsx).
   useWorkStore.getState().updateDraft({
+    title: 'Task',
     text: '',
+    stage: 'compose',
+    source: null,
     boardId: 'b1',
     epicIds: [],
     repoKeys: [],
     repoBaseBranches: {},
+    repoCheckoutRefs: {},
   });
 });
 
@@ -89,17 +95,17 @@ describe('NewTask — board, epics, repos', () => {
   });
 
   it('remembers the board the task was actually created on, even when it was the fallback', async () => {
-    useWorkStore.getState().updateDraft({ text: 'Write the docs', boardId: null });
+    useWorkStore.getState().updateDraft({ title: 'Write the docs', boardId: null });
     useTicketStore.setState({ boards: [board('b2', 'Beta'), board('b1', 'Alpha')] });
     render(<NewTask />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
-    await waitFor(() => expect(useWorkStore.getState().draft).toMatchObject({ text: '', boardId: 'b2' }));
+    await waitFor(() => expect(useWorkStore.getState().draft).toMatchObject({ title: '', text: '', boardId: 'b2' }));
   });
 
   it('adds the new ticket to each picked epic and keeps the board for the next task', async () => {
-    useWorkStore.getState().updateDraft({ text: 'Add Apple Pay', epicIds: ['e1', 'e2'] });
+    useWorkStore.getState().updateDraft({ title: 'Add Apple Pay', epicIds: ['e1', 'e2'] });
     render(<NewTask />);
     await screen.findByText('EPICS');
 
@@ -110,6 +116,60 @@ describe('NewTask — board, epics, repos', () => {
     expect(addTicketToGroup).toHaveBeenCalledWith('e1', 't-new');
     expect(addTicketToGroup).toHaveBeenCalledWith('e2', 't-new');
     await waitFor(() => expect(useWorkStore.getState().draft).toMatchObject({ text: '', epicIds: [], boardId: 'b1' }));
+  });
+});
+
+describe('NewTask — description height', () => {
+  const DESC_PLACEHOLDER = 'Describe the task. Code or not, framed or not.';
+
+  // jsdom computes no layout, so model scrollHeight from the line count: this is
+  // what lets us prove the field tracks its content instead of staying at 4 rows.
+  function mockScrollHeight() {
+    const proto = HTMLTextAreaElement.prototype;
+    const had = Object.prototype.hasOwnProperty.call(proto, 'scrollHeight');
+    const prev = Object.getOwnPropertyDescriptor(proto, 'scrollHeight');
+    Object.defineProperty(proto, 'scrollHeight', {
+      configurable: true,
+      get(this: HTMLTextAreaElement) {
+        // `height:auto` means the box is content-sized when we measure, so newlines drive it.
+        return this.value.split('\n').length * 20 + 8;
+      },
+    });
+    return () => {
+      if (had && prev) Object.defineProperty(proto, 'scrollHeight', prev);
+      else delete (proto as unknown as { scrollHeight?: unknown }).scrollHeight;
+    };
+  }
+
+  it('grows the description with its content so a long import is not clipped to 4 lines', () => {
+    const restore = mockScrollHeight();
+    try {
+      render(<NewTask />);
+      const desc = screen.getByPlaceholderText(DESC_PLACEHOLDER) as HTMLTextAreaElement;
+
+      fireEvent.change(desc, { target: { value: 'one line' } });
+      const short = parseInt(desc.style.height, 10);
+
+      const longImport = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`).join('\n');
+      fireEvent.change(desc, { target: { value: longImport } });
+      const tall = parseInt(desc.style.height, 10);
+
+      expect(short).toBe(1 * 20 + 8);
+      expect(tall).toBe(40 * 20 + 8);
+      expect(tall).toBeGreaterThan(short);
+    } finally {
+      restore();
+    }
+  });
+
+  it('caps the description at a share of the viewport and scrolls inside it, keeping Start reachable', () => {
+    render(<NewTask />);
+    const desc = screen.getByPlaceholderText(DESC_PLACEHOLDER) as HTMLTextAreaElement;
+
+    // The cap (max-height + own scrollbar) is what stops a 100-line paste from
+    // pushing the pickers and Start button off-screen.
+    expect(desc.className).toContain('max-h-[50vh]');
+    expect(desc.className).toContain('overflow-y-auto');
   });
 });
 

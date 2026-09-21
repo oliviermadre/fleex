@@ -33,6 +33,37 @@ export {
 } from './slack.js';
 export type { ParsedSlackMessageUrl } from './slack.js';
 
+export type {
+  ImportSourceId,
+  SourceMatch,
+  ImportSourceDescriptor,
+  GitHubImportSourceDescriptor,
+} from './sources/index.js';
+export {
+  GITHUB_NAME_RE,
+  githubIssueSource,
+  githubPrSource,
+  slackMessageSource,
+  IMPORT_SOURCES,
+  detectSource,
+  getSource,
+} from './sources/index.js';
+
+export type {
+  ImportRepoInfo,
+  ResolvedImport,
+  ImportExistingTicket,
+  ImportPreview,
+  ImportPreviewRequest,
+  ImportRequest,
+  BrowseLinkedTicket,
+  BrowseIssue,
+  BrowsePullRequest,
+  ImportBrowseInbox,
+  ImportBrowseRepo,
+  SlackConnectorStatus,
+} from './types/import.js';
+
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
 export type { ModelFamily, ModelOption, ModelsResponse, ModelCapabilities } from './types/model.js';
