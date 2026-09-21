@@ -7,15 +7,19 @@
  * parses into options — renders as an answerable inline question card.
  */
 import { useEffect, useMemo, useRef } from 'react';
-import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
+import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import { StreamItem } from './StreamItem';
 import { EventLine } from './EventLine';
 import { RunCard } from './RunCard';
 import { DeliverableCard } from './DeliverableCard';
 import { InlineQuestion } from './InlineQuestion';
+import { DelegationCard } from './DelegationCard';
 import { MessageMarkdown } from './MessageMarkdown';
 import { TicketActionCards } from '../../tickets/TicketActionCards';
-import { buildStream, parseInlineOptions, type QueueActivity } from '../selectors';
+import { buildStream, parseInlineOptions, threadTurns, type QueueActivity } from '../selectors';
+
+const EMPTY_THREADS: AgentThread[] = [];
+const EMPTY_NAMES: Record<string, string> = {};
 
 interface Props {
   ticketId: string;
@@ -29,6 +33,14 @@ interface Props {
   error: string | null;
   onAnswer: (optionText: string) => void | Promise<void>;
   onOpenExecution: (executionId: string, title: string) => void;
+  /** Assistant ⇄ agent threads of the ticket (Phase 3); each renders a delegation card. */
+  threads?: AgentThread[];
+  /** Display name per persona id, for the cards. */
+  personaNames?: Record<string, string>;
+  /** Set while an assistant turn runs — shows « <name> is thinking… ». */
+  assistantThinking?: { name: string } | null;
+  onOpenThread?: (threadId: string) => void;
+  onAnswerThread?: (threadId: string, text: string) => void | Promise<void>;
 }
 
 export function TaskStream({
@@ -43,12 +55,17 @@ export function TaskStream({
   error,
   onAnswer,
   onOpenExecution,
+  threads = EMPTY_THREADS,
+  personaNames = EMPTY_NAMES,
+  assistantThinking = null,
+  onOpenThread,
+  onAnswerThread,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const stream = useMemo(
-    () => buildStream(comments, events, executions, deliverables),
-    [comments, events, executions, deliverables],
+    () => buildStream(comments, events, executions, deliverables, threads),
+    [comments, events, executions, deliverables, threads],
   );
 
   useEffect(() => {
@@ -61,7 +78,8 @@ export function TaskStream({
     if (activity !== 'waiting') return null;
     for (let i = comments.length - 1; i >= 0; i--) {
       const c = comments[i]!;
-      if (c.authorType === 'agent') {
+      // The assistant relays agent questions to the user with the same option shape.
+      if (c.authorType === 'agent' || c.authorType === 'assistant') {
         return parseInlineOptions(c.body).length >= 2 ? c.id : null;
       }
     }
@@ -98,6 +116,17 @@ export function TaskStream({
               return <RunCard key={`r-${entry.execution.id}`} execution={entry.execution} onOpen={onOpenExecution} />;
             case 'deliverable':
               return <DeliverableCard key={`d-${entry.deliverable.id}`} deliverable={entry.deliverable} />;
+            case 'delegation':
+              return (
+                <DelegationCard
+                  key={`t-${entry.thread.id}`}
+                  thread={entry.thread}
+                  turns={threadTurns(comments, entry.thread.id)}
+                  personaDisplayName={personaNames[entry.thread.personaId] ?? entry.thread.personaName}
+                  onOpen={(id) => onOpenThread?.(id)}
+                  onAnswer={(id, text) => onAnswerThread?.(id, text)}
+                />
+              );
             case 'comment':
               return entry.comment.id === questionCommentId ? (
                 <InlineQuestion
@@ -112,6 +141,13 @@ export function TaskStream({
               );
           }
         })}
+
+        {assistantThinking && (
+          <div className="flex items-center gap-2 pl-8 text-[11.5px] text-[var(--theme-text-muted)]">
+            <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
+            <span>{assistantThinking.name} is thinking…</span>
+          </div>
+        )}
 
         {/* Actionable HITL / workflow cards (Human Gate approve-reject, waiting
             for input, ambiguous route, failed-step retry, crashed relaunch,

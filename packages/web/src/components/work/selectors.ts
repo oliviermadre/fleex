@@ -5,7 +5,7 @@
  * Kept free of store/React imports so it is unit tested in isolation
  * (selectors.test.ts).
  */
-import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
+import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 
 /** The activity bucket a task falls in, mirrored from ticketActivityStore. */
 export type QueueActivity = 'waiting' | 'running' | 'idle';
@@ -85,8 +85,10 @@ export function suggestionsFor(t: SuggestionInput): Suggestion[] {
   const out: Suggestion[] = [];
   if (t.status === 'doing') out.push({ id: 'move-reviewing', label: '→ Move to Reviewing', moveTo: 'reviewing' });
   if (t.status === 'reviewing') out.push({ id: 'mark-done', label: '✓ Mark done', moveTo: 'done' });
-  out.push({ id: 'see-with-dev', label: '⇄ See with the dev', mention: '@agent:builder ' });
-  if (t.type === 'think') out.push({ id: 'see-with-pm', label: '⇄ See with the PM', mention: '@agent:pm ' });
+  // The chip seeds a sentence for the assistant (every Work message goes through
+  // it); the @agent: tag is its explicit delegation instruction.
+  out.push({ id: 'see-with-dev', label: '⇄ See with the dev', mention: 'Vois ça avec @agent:builder : ' });
+  if (t.type === 'think') out.push({ id: 'see-with-pm', label: '⇄ See with the PM', mention: 'Vois ça avec @agent:pm : ' });
   return out;
 }
 
@@ -253,11 +255,12 @@ export type StreamEntry =
   | { kind: 'run'; at: number; execution: AgentExecution }
   | { kind: 'comment'; at: number; comment: TicketComment }
   | { kind: 'deliverable'; at: number; deliverable: TicketDeliverable }
-  | { kind: 'event'; at: number; id: string; text: string };
+  | { kind: 'event'; at: number; id: string; text: string }
+  | { kind: 'delegation'; at: number; thread: AgentThread };
 
 // Tie-break order for entries sharing a timestamp: a run precedes the comment it
 // produced, which precedes that run's deliverable, and grey event lines come last.
-const STREAM_RANK: Record<StreamEntry['kind'], number> = { run: 0, comment: 1, deliverable: 2, event: 3 };
+const STREAM_RANK: Record<StreamEntry['kind'], number> = { run: 0, comment: 1, delegation: 1, deliverable: 2, event: 3 };
 
 /**
  * Merge agent runs, comments, deliverables and activity event lines into one
@@ -276,14 +279,22 @@ export function buildStream(
   activity: readonly TicketActivity[],
   executions: readonly AgentExecution[] = [],
   deliverables: readonly TicketDeliverable[] = [],
+  threads: readonly AgentThread[] = [],
 ): StreamEntry[] {
   const entries: StreamEntry[] = [];
   for (const execution of executions) {
     if (execution.source === 'cli') continue;
+    // Assistant turns are plumbing, not runs the user follows: no run card.
+    if (execution.mentionId.startsWith('assistant:')) continue;
     entries.push({ kind: 'run', at: Date.parse(execution.startedAt), execution });
   }
   for (const comment of comments) {
+    // Thread turns live in the Threads panel; the main stream shows the card.
+    if (comment.threadId) continue;
     entries.push({ kind: 'comment', at: Date.parse(comment.createdAt), comment });
+  }
+  for (const thread of threads) {
+    entries.push({ kind: 'delegation', at: Date.parse(thread.createdAt), thread });
   }
   for (const deliverable of deliverables) {
     entries.push({ kind: 'deliverable', at: Date.parse(deliverable.createdAt), deliverable });
@@ -322,4 +333,39 @@ function matchInlineMarkers(text: string, re: RegExp): string[] {
     if (seg) out.push(seg);
   }
   return out.length >= 2 ? out : [];
+}
+
+// ── Assistant threads (SPEC §6.2 / §9) ────────────────────────────────────
+
+/** The turns of one thread, oldest first. */
+export function threadTurns(comments: readonly TicketComment[], threadId: string): TicketComment[] {
+  return comments
+    .filter((c) => c.threadId === threadId)
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+}
+
+/**
+ * The agent's pending question inside a thread: its last turn, when that turn
+ * offers a parseable choice. Null when the last agent turn is a plain message.
+ */
+export function lastAgentQuestion(turns: readonly TicketComment[]): { comment: TicketComment; options: string[] } | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const c = turns[i]!;
+    if (c.authorType !== 'agent') continue;
+    const options = parseInlineOptions(c.body);
+    return options.length >= 2 ? { comment: c, options } : null;
+  }
+  return null;
+}
+
+/**
+ * Queue-row label while a thread runs: `<persona> · in thread with assistant`.
+ * Null when no thread is running (the regular activity detail applies).
+ */
+export function threadActivityDetail(
+  threads: readonly AgentThread[],
+  personaLabel: (thread: AgentThread) => string = (t) => t.personaName,
+): string | null {
+  const running = threads.find((t) => t.status === 'running');
+  return running ? `${personaLabel(running)} · in thread with assistant` : null;
 }
