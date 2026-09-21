@@ -10,6 +10,8 @@ export interface ExecConfig {
   modelOverride: string | null;
   effortOverride: EffortLevel | null;
   fastMode: boolean;
+  /** Persona playing the assistant on this ticket; null = workspace default. */
+  assistantPersonaId: string | null;
   /** Only the effort levels the overridden model actually accepts. */
   effortLevels: readonly EffortLevel[];
   /** Effort control shown only for an explicit, effort-capable model override. */
@@ -40,6 +42,7 @@ export function useExecConfig(ticketId: string): ExecConfig {
   const modelOverride: string | null = ticket?.modelOverride ?? null;
   const effortOverride: EffortLevel | null = ticket?.effortOverride ?? null;
   const fastMode: boolean = ticket?.fastMode ?? false;
+  const assistantPersonaId: string | null = ticket?.assistantPersonaId ?? null;
 
   // The model whose capabilities drive the Effort/Fast controls. In "Auto"
   // (no override) we can't know which persona will run, so those controls stay
@@ -85,6 +88,7 @@ export function useExecConfig(ticketId: string): ExecConfig {
     modelOverride,
     effortOverride,
     fastMode,
+    assistantPersonaId,
     effortLevels,
     showEffort,
     showFast,
