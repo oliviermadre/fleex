@@ -171,6 +171,7 @@ function comment(over: Partial<TicketComment> & Pick<TicketComment, 'id' | 'crea
     privateRecipients: [],
     mentions: [],
     parentId: null,
+    threadId: null,
     updatedAt: over.createdAt,
     ...over,
   };
