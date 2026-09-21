@@ -34,6 +34,7 @@ const VALID_SETTINGS_TABS = [
   'agent-tokens',
   'deliverable-types',
   'memory',
+  'connectors',
 ] as const satisfies readonly SettingsTab[];
 
 /**

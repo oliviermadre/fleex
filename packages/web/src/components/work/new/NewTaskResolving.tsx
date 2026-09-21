@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSource, type ImportPreview, type SourceMatch } from '@fleex/shared';
 import { previewImport } from '../../../services/api';
+import { useSlackDirect } from './useSlackDirect';
 
 /**
  * The resolution screen. It calls the preview route for the chosen source and,
@@ -22,6 +23,8 @@ export function NewTaskResolving({
 }) {
   const descriptor = getSource(match.sourceId);
   const slow = descriptor.resolution === 'slow';
+  // `undefined` for the other sources → false: hooks can't be called conditionally.
+  const slackDirect = useSlackDirect(match.sourceId === 'slack_message' ? String(match.params['workspace'] ?? '') : undefined);
 
   const [phase, setPhase] = useState<'pending' | 'duplicate' | 'error'>('pending');
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -117,12 +120,12 @@ export function NewTaskResolving({
           <div className="flex flex-col gap-1.5">
             <StepLine state="done">Link recognized</StepLine>
             <StepLine state="active">
-              Claude is reading the conversation…
+              {slackDirect ? 'Fetching the conversation from Slack…' : 'Claude is reading the conversation…'}
               <span className="ml-auto font-mono text-[11px] text-[var(--theme-text-faint)]">{formatChrono(seconds)}</span>
             </StepLine>
-            <StepLine state="todo">Writing the summary</StepLine>
+            <StepLine state="todo">{slackDirect ? 'Claude writes the summary' : 'Writing the summary'}</StepLine>
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-[11px] text-[var(--theme-text-faint)]">Usually takes 10–40 s. Only the summary is kept.</span>
+              <span className="text-[11px] text-[var(--theme-text-faint)]">{slackDirect ? 'Usually takes a few seconds.' : 'Usually takes 10–40 s.'} Only the summary is kept.</span>
               <button
                 type="button"
                 onClick={cancel}

@@ -104,6 +104,28 @@ export function fetchImportBrowseRepo(
 }
 
 /**
+ * Settings → Connectors. Like the browse calls these do not toast: the form shows
+ * Slack's refusal right under the field it concerns. The token only ever travels
+ * IN — no response carries it back.
+ */
+async function connectorRequest<T>(method: 'GET' | 'PUT' | 'DELETE', body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}/connectors/slack`, {
+    method,
+    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(text, res.statusText));
+  }
+  return res.json() as Promise<T>;
+}
+
+export const fetchSlackConnector = () => connectorRequest<import('@fleex/shared').SlackConnectorStatus>('GET');
+export const connectSlackConnector = (token: string) =>
+  connectorRequest<import('@fleex/shared').SlackConnectorStatus>('PUT', { token });
+export const disconnectSlackConnector = () => connectorRequest<import('@fleex/shared').SlackConnectorStatus>('DELETE');
+
+/**
  * A failed import preview. Unlike a generic API error it does NOT raise a toast —
  * the resolving screen shows the message itself — and carries the source error
  * code so the UI can distinguish e.g. "not found" from "integration unavailable".

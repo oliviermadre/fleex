@@ -3,6 +3,8 @@ import { slackMessageSource, type SourceMatch } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { NewTaskCard } from './NewTaskCard';
 import { Keys } from './BrowseRow';
+import { useSlackConnected, useSlackDirect } from './useSlackDirect';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Slack has nothing to browse: Fleex has no Slack access of its own — Claude
@@ -25,6 +27,13 @@ export function SlackLinkScreen({
   }, [disabled]);
 
   const match = slackMessageSource.detect(value);
+  const connected = useSlackConnected();
+  const linkIsDirect = useSlackDirect(match ? String(match.params['workspace'] ?? '') : undefined);
+  // No link yet: promise the fast path if a token is saved. With a link: only if it covers THAT workspace.
+  const direct = match ? linkIsDirect : connected;
+  const anyToken = connected;
+  const navigate = useNavigate();
+  const openConnectors = () => navigate('/settings/connectors');
   const invalid = value.trim() !== '' && !match;
 
   function onKeyDown(e: KeyboardEvent) {
@@ -70,8 +79,25 @@ export function SlackLinkScreen({
       </p>
 
       <p className="mt-4 rounded-[9px] border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-4 py-3.5 text-[13.5px] leading-relaxed text-[var(--theme-text-secondary)]">
-        Claude reads the conversation through your Slack integration and writes a summary. Fleex stores none of the
-        thread — only the summary and the permalink stay on the ticket.
+        {direct
+          ? 'Fleex fetches the conversation with your Slack token and Claude writes a summary — a few seconds.'
+          : 'Claude reads the conversation through your Slack integration and writes a summary — usually 10–40 s.'}{' '}
+        Fleex stores none of the thread — only the summary and the permalink stay on the ticket.
+        {!direct && (
+          <span className="mt-2 block text-[12.5px] text-[var(--theme-text-muted)]">
+            {anyToken ? (
+              'This link is from another workspace than your Slack token, so it goes through Claude.'
+            ) : (
+              <>
+                Faster and cheaper with a Slack token:{' '}
+                <button type="button" onClick={openConnectors} className="underline decoration-dotted underline-offset-2 hover:text-[var(--theme-text-primary)]">
+                  Settings → Connectors
+                </button>
+                .
+              </>
+            )}
+          </span>
+        )}
       </p>
 
       <div className="mt-6 flex items-center gap-2 border-t border-[var(--theme-border)] pt-3.5 text-[12px] text-[var(--theme-text-muted)]">

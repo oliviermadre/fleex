@@ -60,6 +60,12 @@ const tabIcons: Record<SettingsTab, React.ReactNode> = {
       <path d="M10.4 7.1 7.1 14.9M13.6 7.1l3.3 7.8M8 17h8" />
     </svg>
   ),
+  connectors: (
+    // Plug — an outside service wired into Fleex
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4" />
+    </svg>
+  ),
 };
 
 const tabs: { key: SettingsTab; label: string }[] = [
@@ -70,6 +76,7 @@ const tabs: { key: SettingsTab; label: string }[] = [
   { key: 'agent-tokens', label: 'Agent Tokens' },
   { key: 'deliverable-types', label: 'Deliverable Types' },
   { key: 'memory', label: 'Memory' },
+  { key: 'connectors', label: 'Connectors' },
 ];
 
 // Claude config lives in its own two-panel view (file tree + Monaco editor),
