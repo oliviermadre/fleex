@@ -204,6 +204,7 @@ export type {
   AgentQuestion,
   AnnotationTone,
   TimelineAnnotation,
+  CommentAuthorType,
   MentionStatus,
   MentionTargetType,
   MentionExecutionMode,
@@ -706,3 +707,4 @@ export {
   parseCleanupOlderThan,
   parseCleanupStatuses,
 } from './types/worktree-cleanup.js';
+export type { AgentThread, AgentThreadStatus } from './types/agent-thread.js';
