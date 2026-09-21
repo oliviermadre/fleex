@@ -3,6 +3,9 @@ import { getSource, type ImportPreview, type SourceMatch } from '@fleex/shared';
 import { previewImport } from '../../../services/api';
 import { useSlackDirect } from './useSlackDirect';
 
+/** How long "Fetching…" stays active before the direct path moves to "summarizing". */
+const FETCH_GRACE_MS = 1200;
+
 /**
  * The resolution screen. It calls the preview route for the chosen source and,
  * on success with no duplicate, hands the preview back to prefill the composer.
@@ -32,6 +35,8 @@ export function NewTaskResolving({
   const [showInstant, setShowInstant] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [attempt, setAttempt] = useState(0);
+  // Direct path only: have we (by estimate) moved past the fetch into the summary?
+  const [summarizing, setSummarizing] = useState(false);
 
   const acRef = useRef<AbortController | null>(null);
   const onResolvedRef = useRef(onResolved);
@@ -76,6 +81,21 @@ export function NewTaskResolving({
     return () => clearInterval(t);
   }, [phase]);
 
+  // The preview is ONE opaque request (fetch + summary), with no server-side
+  // progress to read. On the direct path the fetch — one conversations.replies
+  // plus a few parallel users.info — is reliably sub-second, so leaving "Fetching…"
+  // active for the whole request wrongly reads as a multi-second fetch (the seconds
+  // are the summary). Model the switch to "summarizing" after a short grace. This is
+  // an estimate of the known timing shape, not a measurement. The fallback (Claude
+  // reads Slack through MCP) fuses fetch + summary in one loop, so it keeps a single
+  // active line and is left as-is.
+  useEffect(() => {
+    setSummarizing(false);
+    if (!(phase === 'pending' && slow && slackDirect)) return;
+    const t = setTimeout(() => setSummarizing(true), FETCH_GRACE_MS);
+    return () => clearTimeout(t);
+  }, [phase, slow, slackDirect, attempt]);
+
   function cancel() {
     acRef.current?.abort();
     onCancel();
@@ -119,11 +139,26 @@ export function NewTaskResolving({
         {phase === 'pending' && slow && (
           <div className="flex flex-col gap-1.5">
             <StepLine state="done">Link recognized</StepLine>
-            <StepLine state="active">
-              {slackDirect ? 'Fetching the conversation from Slack…' : 'Claude is reading the conversation…'}
-              <span className="ml-auto font-mono text-[11px] text-[var(--theme-text-faint)]">{formatChrono(seconds)}</span>
-            </StepLine>
-            <StepLine state="todo">{slackDirect ? 'Claude writes the summary' : 'Writing the summary'}</StepLine>
+            {slackDirect ? (
+              <>
+                <StepLine state={summarizing ? 'done' : 'active'}>
+                  {summarizing ? 'Conversation fetched' : 'Fetching the conversation from Slack…'}
+                  {!summarizing && <Chrono seconds={seconds} />}
+                </StepLine>
+                <StepLine state={summarizing ? 'active' : 'todo'}>
+                  {summarizing ? 'Claude is writing the summary…' : 'Claude writes the summary'}
+                  {summarizing && <Chrono seconds={seconds} />}
+                </StepLine>
+              </>
+            ) : (
+              <>
+                <StepLine state="active">
+                  Claude is reading the conversation…
+                  <Chrono seconds={seconds} />
+                </StepLine>
+                <StepLine state="todo">Writing the summary</StepLine>
+              </>
+            )}
             <div className="mt-2 flex items-center gap-2">
               <span className="text-[11px] text-[var(--theme-text-faint)]">{slackDirect ? 'Usually takes a few seconds.' : 'Usually takes 10–40 s.'} Only the summary is kept.</span>
               <button
@@ -206,6 +241,10 @@ function StepLine({ state, children }: { state: 'done' | 'active' | 'todo'; chil
       {children}
     </div>
   );
+}
+
+function Chrono({ seconds }: { seconds: number }) {
+  return <span className="ml-auto font-mono text-[11px] text-[var(--theme-text-faint)]">{formatChrono(seconds)}</span>;
 }
 
 function formatChrono(seconds: number): string {
