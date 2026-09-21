@@ -35,10 +35,13 @@ import { TimelineDrawer } from './timeline/TimelineDrawer';
 import { CodeEditor } from './panel/CodeEditor';
 import { useTicketDeliverables } from './panel/useTicketDeliverables';
 import { useTicketMentions } from './panel/useTicketMentions';
+import { useOpenThreads } from './panel/useTicketThreads';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 
 export function WorkView() {
   const queue = useWorkQueue();
+  // Open assistant threads across tickets (queue labels, Threads tool dot), kept live over WS.
+  useOpenThreads();
   const view = useWorkStore((s) => s.view);
   const rightPanel = useEffectiveRightPanel();
   const browserTakesCenter = useBrowserTakesCenter();
