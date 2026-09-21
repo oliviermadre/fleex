@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { useWorkStore } from '../../../stores/workStore';
@@ -52,6 +52,18 @@ export function NewTaskCompose({ onStartOver }: { onStartOver: () => void }) {
     // Run once on mount — subsequent focus is user-driven.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-grow the description to fit its content — including the value we never
+  // typed: a mount with an imported PR or Slack synthesis (dozens of lines). The
+  // CSS `max-h` caps it at a share of the viewport, past which the field scrolls
+  // on its own so the pickers and Start button stay in view. `useLayoutEffect`
+  // so it never flashes at the 4-row minimum before snapping to its real height.
+  useLayoutEffect(() => {
+    const ta = descRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [draft.text]);
 
   const effectiveBoardId = boards.some((b) => b.id === draft.boardId) ? draft.boardId : (boards[0]?.id ?? null);
   const canStart = draft.title.trim().length > 0 && !!effectiveBoardId && !creating;
@@ -217,9 +229,8 @@ export function NewTaskCompose({ onStartOver }: { onStartOver: () => void }) {
           value={draft.text}
           onChange={(e) => updateDraft({ text: e.target.value })}
           onKeyDown={onDescKeyDown}
-          rows={4}
           placeholder="Describe the task. Code or not, framed or not."
-          className="w-full resize-none bg-transparent text-[14px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:outline-none"
+          className="min-h-[5.5rem] max-h-[50vh] w-full resize-none overflow-y-auto bg-transparent text-[14px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:outline-none"
         />
 
         <div className="mt-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-t border-[var(--theme-border-subtle)] pt-3">

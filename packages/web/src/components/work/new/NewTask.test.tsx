@@ -119,6 +119,60 @@ describe('NewTask — board, epics, repos', () => {
   });
 });
 
+describe('NewTask — description height', () => {
+  const DESC_PLACEHOLDER = 'Describe the task. Code or not, framed or not.';
+
+  // jsdom computes no layout, so model scrollHeight from the line count: this is
+  // what lets us prove the field tracks its content instead of staying at 4 rows.
+  function mockScrollHeight() {
+    const proto = HTMLTextAreaElement.prototype;
+    const had = Object.prototype.hasOwnProperty.call(proto, 'scrollHeight');
+    const prev = Object.getOwnPropertyDescriptor(proto, 'scrollHeight');
+    Object.defineProperty(proto, 'scrollHeight', {
+      configurable: true,
+      get(this: HTMLTextAreaElement) {
+        // `height:auto` means the box is content-sized when we measure, so newlines drive it.
+        return this.value.split('\n').length * 20 + 8;
+      },
+    });
+    return () => {
+      if (had && prev) Object.defineProperty(proto, 'scrollHeight', prev);
+      else delete (proto as unknown as { scrollHeight?: unknown }).scrollHeight;
+    };
+  }
+
+  it('grows the description with its content so a long import is not clipped to 4 lines', () => {
+    const restore = mockScrollHeight();
+    try {
+      render(<NewTask />);
+      const desc = screen.getByPlaceholderText(DESC_PLACEHOLDER) as HTMLTextAreaElement;
+
+      fireEvent.change(desc, { target: { value: 'one line' } });
+      const short = parseInt(desc.style.height, 10);
+
+      const longImport = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`).join('\n');
+      fireEvent.change(desc, { target: { value: longImport } });
+      const tall = parseInt(desc.style.height, 10);
+
+      expect(short).toBe(1 * 20 + 8);
+      expect(tall).toBe(40 * 20 + 8);
+      expect(tall).toBeGreaterThan(short);
+    } finally {
+      restore();
+    }
+  });
+
+  it('caps the description at a share of the viewport and scrolls inside it, keeping Start reachable', () => {
+    render(<NewTask />);
+    const desc = screen.getByPlaceholderText(DESC_PLACEHOLDER) as HTMLTextAreaElement;
+
+    // The cap (max-height + own scrollbar) is what stops a 100-line paste from
+    // pushing the pickers and Start button off-screen.
+    expect(desc.className).toContain('max-h-[50vh]');
+    expect(desc.className).toContain('overflow-y-auto');
+  });
+});
+
 function board(id: string, name: string): BoardWithCounts {
   return {
     id,
