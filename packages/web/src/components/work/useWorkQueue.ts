@@ -15,7 +15,9 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useWorkStore, excludedBy, type QueueFilterKey, type QueueGroupBy } from '../../stores/workStore';
-import { partitionQueue, idleActivitySource, type QueueItem } from './selectors';
+import { partitionQueue, idleActivitySource, threadActivityDetail, type QueueItem } from './selectors';
+import { useThreadStore } from '../../stores/threadStore';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
 import type { WorkTask, WorkWorktree, QueueGroup } from './types';
@@ -100,6 +102,9 @@ export function useWorkQueue(): WorkQueueModel {
 
   const activityByTicket = useTicketActivityStore((s) => s.activityByTicket);
   const detailByTicket = useTicketActivityStore((s) => s.detailByTicket);
+  // Phase 3: a running assistant thread labels the row "<persona> · in thread with assistant".
+  const threadsByTicket = useThreadStore((s) => s.threadsByTicket);
+  const personas = useAgentPersonaStore((s) => s.personas);
   const sinceByTicket = useTicketActivityStore((s) => s.sinceByTicket);
   const lastActivityAtByTicket = useTicketActivityStore((s) => s.lastActivityAtByTicket);
   const runningExecutionIdByTicket = useTicketActivityStore((s) => s.runningExecutionIdByTicket);
@@ -255,7 +260,9 @@ export function useWorkQueue(): WorkQueueModel {
       favorite: t.favorite,
       blocked: t.blocked,
       activity,
-      activityDetail: detailByTicket[t.id] ?? null,
+      activityDetail:
+        threadActivityDetail(threadsByTicket[t.id] ?? [], (th) => personas.find((p) => p.id === th.personaId)?.displayName ?? th.personaName) ??
+        detailByTicket[t.id] ?? null,
       since: toMs(sinceByTicket[t.id]),
       lastActivityAt: toMs(idleActivitySource(t, lastActivityAtByTicket[t.id])),
       cost: costByTicket[t.id] ?? null,
@@ -272,6 +279,8 @@ export function useWorkQueue(): WorkQueueModel {
   }, [
     activityByTicket,
     detailByTicket,
+    threadsByTicket,
+    personas,
     sinceByTicket,
     lastActivityAtByTicket,
     costByTicket,

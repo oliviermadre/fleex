@@ -8,6 +8,8 @@ import { DeliverableTypesTab } from './DeliverableTypesTab';
 import { MemoryTab } from './MemoryTab';
 import { ConnectorsTab } from './ConnectorsTab';
 import { ActionsTab } from './actions/ActionsTab';
+import { cn } from '../../lib/cn';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import type { AgentToken } from '@fleex/shared';
 import {
   DEFAULT_AGENT_MAX_TURNS,
@@ -38,6 +40,7 @@ export function SettingsPanel() {
   const [basePath, setBasePath] = useState('');
   const [humanDisplayName, setHumanDisplayName] = useState('');
   const [humanMentionName, setHumanMentionName] = useState('');
+  const [defaultAssistantPersonaId, setDefaultAssistantPersonaId] = useState('');
   const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
   const [agentMaxTurns, setAgentMaxTurns] = useState(DEFAULT_AGENT_MAX_TURNS);
   const [agentTimeoutMinutes, setAgentTimeoutMinutes] = useState(DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES);
@@ -47,6 +50,7 @@ export function SettingsPanel() {
     setBasePath(settings.basePath);
     setHumanDisplayName((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string ?? '');
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
+    setDefaultAssistantPersonaId(settings.defaultAssistantPersonaId ?? '');
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setAgentMaxTurns(settings.agentMaxTurns ?? DEFAULT_AGENT_MAX_TURNS);
     setTodoAgentAccess(settings.todoAgentAccess === true);
@@ -66,6 +70,7 @@ export function SettingsPanel() {
       agentMaxTurns,
       agentExecutionTimeout: agentTimeoutMinutes * MS_IN_MINUTE,
       todoAgentAccess,
+      defaultAssistantPersonaId: defaultAssistantPersonaId || undefined,
     } as Partial<AppSettings> & Record<string, unknown>);
   };
 
@@ -97,6 +102,8 @@ export function SettingsPanel() {
               setAgentTimeoutMinutes={setAgentTimeoutMinutes}
               todoAgentAccess={todoAgentAccess}
               setTodoAgentAccess={setTodoAgentAccess}
+              defaultAssistantPersonaId={defaultAssistantPersonaId}
+              setDefaultAssistantPersonaId={setDefaultAssistantPersonaId}
             />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
@@ -135,6 +142,8 @@ function GeneralTab({
   setAgentTimeoutMinutes,
   todoAgentAccess,
   setTodoAgentAccess,
+  defaultAssistantPersonaId,
+  setDefaultAssistantPersonaId,
 }: {
   basePath: string;
   setBasePath: (v: string) => void;
@@ -150,7 +159,10 @@ function GeneralTab({
   setAgentTimeoutMinutes: (v: number) => void;
   todoAgentAccess: boolean;
   setTodoAgentAccess: (v: boolean) => void;
+  defaultAssistantPersonaId: string;
+  setDefaultAssistantPersonaId: (v: string) => void;
 }) {
+  const personas = useAgentPersonaStore((s) => s.personas);
   return (
     <div className="flex flex-col gap-5">
       <Input
@@ -201,6 +213,26 @@ function GeneralTab({
           Per-agent overrides can be set in agent configuration.
         </p>
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="defaultAssistantPersonaId" className="mb-1 block text-sm font-medium text-[var(--theme-text-secondary)]">
+          Default assistant
+        </label>
+        <select
+          id="defaultAssistantPersonaId"
+          value={defaultAssistantPersonaId}
+          onChange={(e) => setDefaultAssistantPersonaId(e.target.value)}
+          className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
+        >
+          <option value="">None (Work composer posts plain comments)</option>
+          {personas.map((p) => (
+            <option key={p.id} value={p.id}>{p.displayName}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+          The persona that answers in the Work view and delegates to other agents in threads. A ticket can override it from its composer.
+        </p>
       </div>
 
       <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
