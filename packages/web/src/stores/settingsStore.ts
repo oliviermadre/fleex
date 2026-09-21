@@ -50,6 +50,13 @@ export interface AppSettings {
   agentExecutionTimeout?: number;
   /** Agent runs see and use the ticket todo list. Unset → off (server default). */
   todoAgentAccess?: boolean;
+  /**
+   * Feature flag for the Work view's assistant threads (Phase 3). Absent means
+   * enabled: the composer talks to the assistant, the Threads tool shows.
+   */
+  workThreadsEnabled?: boolean;
+  /** Persona that plays the assistant unless a ticket overrides it (server config). */
+  defaultAssistantPersonaId?: string;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**

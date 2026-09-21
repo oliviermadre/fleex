@@ -9,6 +9,8 @@ import { tint } from '../../lib/tints';
 import { ModelSelect } from '../agents/ModelSelect';
 import { InfoHint } from '../ui/InfoHint';
 import type { ExecConfig } from '../../hooks/useExecConfig';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 /** Per-mode color for the conversation execution-mode pill. */
 const MODE_PILL_CLASS: Record<ConversationMode, string> = {
@@ -17,12 +19,16 @@ const MODE_PILL_CLASS: Record<ConversationMode, string> = {
   edit: tint('green'),
 };
 
-export function ComposerExecBar({ exec }: { exec: ExecConfig }) {
+export function ComposerExecBar({ exec, assistantPicker = false }: { exec: ExecConfig; /** Work view: show the per-ticket assistant persona picker. */ assistantPicker?: boolean }) {
+  const personas = useAgentPersonaStore((s) => s.personas);
+  const defaultAssistantId = useSettingsStore((s) => s.settings.defaultAssistantPersonaId);
+  const defaultAssistant = personas.find((p) => p.id === defaultAssistantId);
   const {
     executionMode,
     modelOverride,
     effortOverride,
     fastMode,
+    assistantPersonaId,
     effortLevels,
     showEffort,
     showFast,
@@ -33,6 +39,26 @@ export function ComposerExecBar({ exec }: { exec: ExecConfig }) {
 
   return (
     <>
+      {assistantPicker && (
+        <label
+          className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]"
+          title="Persona that plays the assistant on this ticket. Default = the workspace setting."
+        >
+          <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
+          <select
+            aria-label="Assistant persona"
+            value={assistantPersonaId ?? ''}
+            onChange={(e) => patchExecConfig({ assistantPersonaId: e.target.value === '' ? null : e.target.value })}
+            className="cursor-pointer bg-transparent pr-1 text-xs text-[var(--theme-text-secondary)] focus:outline-none"
+          >
+            <option value="">{defaultAssistant ? `Default (${defaultAssistant.displayName})` : 'Default (none)'}</option>
+            {personas.map((p) => (
+              <option key={p.id} value={p.id}>{p.displayName}</option>
+            ))}
+          </select>
+        </label>
+      )}
+
       {/* Mode: single pill, cycles Talk→Plan→Edit on click (or Shift+Tab) */}
       <span className="flex items-center gap-1 text-[var(--theme-text-secondary)]">
         Mode :
