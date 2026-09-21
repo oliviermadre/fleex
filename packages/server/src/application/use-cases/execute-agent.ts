@@ -17,6 +17,7 @@ import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
+import { resolveExecutionConfig } from '../utils/resolve-execution-config.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { PromptComposer, buildExecutionContextData, promptTextLength } from '../utils/prompt-composer.js';
@@ -735,27 +736,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     persona: AgentPersonaEntity,
     ticket: TicketEntity | null,
   ): { mode: MentionExecutionMode; model: string; effort?: EffortLevel; fast: boolean } {
-    const conversationMode: MentionExecutionMode = ticket?.conversationMode ?? 'plan';
-    const mode: MentionExecutionMode = persona.executionMode === 'message'
-      ? 'talk'
-      : conversationMode;
-
-    const model = ticket?.modelOverride ?? persona.model;
-    const caps = inferModelCapabilities(model);
-
-    const requestedEffort = ticket?.effortOverride ?? null;
-    const effort = resolveEffortLevel(model, requestedEffort);
-    if (requestedEffort && effort !== requestedEffort) {
-      this.logger.warn('Effort override not supported by model — adjusted', {
-        model,
-        requested: requestedEffort,
-        applied: effort ?? 'none',
-        supported: caps.effortLevels,
-      });
-    }
-    const fast = caps.supportsFastMode && (ticket?.fastMode ?? false);
-
-    return { mode, model, effort, fast };
+    return resolveExecutionConfig(persona, ticket, this.logger);
   }
 
   private async executeForMention(
