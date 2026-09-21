@@ -512,7 +512,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
         ) : (
           <div className="flex flex-col gap-3">
             {comments.map((c) => {
-              const isAgent = c.authorType === 'agent';
+              const isAgent = c.authorType !== 'user';
               const commentMentions = mentionsByComment[c.id] ?? [];
               return (
                 <div

@@ -27,10 +27,13 @@ import { ShellSurface } from './shell/ShellSurface';
 import { ShellDrawer } from './shell/ShellDrawer';
 import { CodeEditor } from './panel/CodeEditor';
 import { useTicketDeliverables } from './panel/useTicketDeliverables';
+import { useOpenThreads } from './panel/useTicketThreads';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 
 export function WorkView() {
   const queue = useWorkQueue();
+  // Open assistant threads across tickets (queue labels, Threads tool dot), kept live over WS.
+  useOpenThreads();
   const view = useWorkStore((s) => s.view);
   const rightPanel = useWorkStore((s) => s.rightPanel);
   const queueCollapsed = useWorkStore((s) => s.queueCollapsed);
