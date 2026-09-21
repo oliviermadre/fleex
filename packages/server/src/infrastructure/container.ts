@@ -46,6 +46,7 @@ import { RenameSessionUseCase } from '../application/use-cases/rename-session.js
 import { ImportSlackMessageUseCase } from '../application/use-cases/import-slack-message.js';
 import { BackfillPRTicketUseCase } from '../application/use-cases/backfill-pr-ticket.js';
 import { ImportFromSourceUseCase } from '../application/use-cases/import-from-source.js';
+import { GetImportBrowseUseCase } from '../application/use-cases/get-import-browse.js';
 import { ImportSourceRegistry } from '../application/services/import-sources/registry.js';
 import { GitHubIssueImportAdapter } from '../application/services/import-sources/github-issue.adapter.js';
 import { GitHubPrImportAdapter } from '../application/services/import-sources/github-pr.adapter.js';
@@ -356,6 +357,23 @@ export async function createContainer() {
     slackMessageImportAdapter,
   ]);
   const importFromSource = new ImportFromSourceUseCase(importSourceRegistry, ticketStore_, logger);
+  const getImportBrowse = new GetImportBrowseUseCase({
+    graphql: githubGraphql,
+    cache: repositoryCache,
+    execFn,
+    ticketStore: ticketStore_,
+    getRepos: () => {
+      const resolved = config.get().resolvedRepositories;
+      if (!Array.isArray(resolved)) return [];
+      return resolved
+        .filter((entry): entry is string => typeof entry === 'string' && entry.includes('/'))
+        .map((entry) => {
+          const [org, name] = entry.split('/');
+          return { org: org!, name: name! };
+        });
+    },
+    logger,
+  });
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
@@ -744,6 +762,7 @@ export async function createContainer() {
     importSlackMessage,
     backfillPRTicket,
     importFromSource,
+    getImportBrowse,
     commentStore,
     mentionStore,
     deliverableStore,

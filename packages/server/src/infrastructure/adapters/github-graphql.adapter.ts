@@ -154,10 +154,15 @@ export class GitHubGraphQLAdapter {
   ): Promise<Map<string, RepoBatchResult>> {
     const results = new Map<string, RepoBatchResult>();
 
-    // Process in batches of BATCH_SIZE
+    // Batches of BATCH_SIZE, side by side: run one after the other, the wait of
+    // every caller grew with the number of configured repos. `executeBatch`
+    // handles its own failures (it falls back to per-repo calls), so one bad
+    // batch cannot reject the others.
+    const batches: { org: string; name: string }[][] = [];
     for (let i = 0; i < repos.length; i += BATCH_SIZE) {
-      const batch = repos.slice(i, i + BATCH_SIZE);
-      const batchResults = await this.executeBatch(batch);
+      batches.push(repos.slice(i, i + BATCH_SIZE));
+    }
+    for (const batchResults of await Promise.all(batches.map((batch) => this.executeBatch(batch)))) {
       for (const [key, value] of batchResults) {
         results.set(key, value);
       }

@@ -56,6 +56,11 @@ export type {
   ImportPreview,
   ImportPreviewRequest,
   ImportRequest,
+  BrowseLinkedTicket,
+  BrowseIssue,
+  BrowsePullRequest,
+  ImportBrowseInbox,
+  ImportBrowseRepo,
 } from './types/import.js';
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';

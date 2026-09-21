@@ -69,3 +69,62 @@ export interface ImportRequest {
   readonly status?: TicketStatus;
   readonly type?: TicketType;
 }
+
+/** The ticket a browse row is already imported as — the row opens it instead of re-importing. */
+export interface BrowseLinkedTicket {
+  readonly id: string;
+  readonly displayId: number;
+}
+
+/** One issue row of the "browse" pickers. `org`/`name` use Fleex's casing of the repo. */
+export interface BrowseIssue {
+  readonly org: string;
+  readonly name: string;
+  readonly number: number;
+  readonly title: string;
+  readonly author: string;
+  readonly assignees: string[];
+  readonly updatedAt: string;
+  readonly linkedTicket?: BrowseLinkedTicket;
+}
+
+/** One open pull-request row of the "browse" pickers. */
+export interface BrowsePullRequest {
+  readonly org: string;
+  readonly name: string;
+  readonly number: number;
+  readonly title: string;
+  readonly headRefName: string;
+  readonly author: string;
+  readonly isDraft: boolean;
+  /** Dependabot, Renovate & co — hidden by default in the per-repo list. */
+  readonly isBot: boolean;
+  readonly updatedAt: string;
+  readonly linkedTicket?: BrowseLinkedTicket;
+}
+
+/**
+ * What is mine across every configured repo. Returned by `GET /api/import/browse`,
+ * served from the repository cache the refresh scheduler keeps warm.
+ */
+export interface ImportBrowseInbox {
+  readonly githubUser: string;
+  /** Open issues I opened or am assigned to. */
+  readonly issues: BrowseIssue[];
+  /** Open PRs where my review is requested or I am assigned (and not the author). */
+  readonly reviewRequests: BrowsePullRequest[];
+  /** Open PRs I authored. */
+  readonly myPullRequests: BrowsePullRequest[];
+  /** ISO time of the oldest piece of data in this answer. */
+  readonly fetchedAt: string;
+  /** True when served past its TTL — a refresh is already running behind it. */
+  readonly stale: boolean;
+}
+
+/** Open PRs and issues of one repo. Returned by `GET /api/import/browse/:org/:name`. */
+export interface ImportBrowseRepo {
+  readonly pullRequests: BrowsePullRequest[];
+  readonly issues: BrowseIssue[];
+  readonly fetchedAt: string;
+  readonly stale: boolean;
+}
