@@ -12,6 +12,7 @@ import { ContextPanel } from './ContextPanel';
 import { DelivsPanel } from './DelivsPanel';
 import { DiffPanel } from './DiffPanel';
 import { ScratchpadTabsPanel } from './ScratchpadTabsPanel';
+import { ThreadsPanel } from './ThreadsPanel';
 
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
@@ -91,6 +92,7 @@ export function RightPanel({
       {rightPanel === 'diff' && <DiffPanel ticketId={task.id} />}
       {rightPanel === 'deliv' && <DelivsPanel ticketId={task.id} deliverables={deliverables} />}
       {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}
+      {rightPanel === 'thread' && <ThreadsPanel task={task} />}
     </section>
   );
 }

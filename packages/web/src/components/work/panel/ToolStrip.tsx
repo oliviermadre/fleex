@@ -1,13 +1,15 @@
 /**
  * The right tool strip (60px): icon + label buttons that toggle the one-at-a-time
  * right tool window (JetBrains model — clicking the active tool closes it). Ships
- * Context, Diff, Code and Deliverables; Threads (Phase 3) is still absent. Diff
- * shows a dot when the branch has changes. The bottom Shell button toggles the
+ * Context, Threads, Diff, Code, Deliverables and Notes. Diff shows a dot when the
+ * branch has changes; Threads when a thread is running or waiting. The bottom Shell button toggles the
  * drawer rather than a right panel, so it lives outside the panel-toggling group.
  */
 import { cn } from '../../../lib/cn';
 import { useWorkStore, type RightPanel } from '../../../stores/workStore';
 import type { WorkTask } from '../types';
+import { useThreadStore, selectOpenByTicket } from '../../../stores/threadStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 
 interface Tool {
   key: Exclude<RightPanel, null>;
@@ -28,6 +30,19 @@ const TOOLS: Tool[] = [
         <path d="M14 3v5h5" />
         <circle cx="12" cy="11.3" r="0.4" fill="currentColor" />
         <line x1="12" y1="13.6" x2="12" y2="17" />
+      </svg>
+    ),
+  },
+  {
+    key: 'thread',
+    label: 'Threads',
+    // Two arrows crossing: the assistant ⇄ agent exchange.
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 8h13" />
+        <path d="m14 5 3 3-3 3" />
+        <path d="M20 16H7" />
+        <path d="m10 13-3 3 3 3" />
       </svg>
     ),
   },
@@ -88,16 +103,19 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
   const setCodeMode = useWorkStore((s) => s.setCodeMode);
   const shellActive = shellOpen || shellMode;
   const sessionCount = task?.sessionCount ?? 0;
+  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) !== false;
+  const openThreads = useThreadStore((s) => (task ? selectOpenByTicket(s, task.id).length : 0));
+  const tools = threadsEnabled ? TOOLS : TOOLS.filter((t) => t.key !== 'thread');
   const sessionBadge = sessionCount > 0 ? (sessionCount > 99 ? '99+' : String(sessionCount)) : null;
 
   return (
     <nav className="flex w-[60px] shrink-0 flex-col items-center gap-1 border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-2">
-      {TOOLS.map((tool) => {
+      {tools.map((tool) => {
         // Code is a center-takeover mode, not a right panel.
         const isCode = tool.key === 'code';
         const active = isCode ? codeMode : rightPanel === tool.key;
         const badge = tool.key === 'deliv' && delivCount > 0 ? (delivCount > 99 ? '99+' : String(delivCount)) : null;
-        const dot = tool.key === 'diff' && (task?.changedLines ?? 0) > 0;
+        const dot = (tool.key === 'diff' && (task?.changedLines ?? 0) > 0) || (tool.key === 'thread' && openThreads > 0);
         return (
           <button
             key={tool.key}
