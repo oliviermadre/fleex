@@ -52,3 +52,23 @@ describe('cliToolArgv', () => {
     expect(parseFlags('-x')).toBeNull();
   });
 });
+
+describe('toKey', () => {
+  it('turns CLI names into valid tool property keys', async () => {
+    const { toKey } = await import('../../src/application/assistant/fleex-cli-tools.js');
+    expect(toKey('id|name')).toBe('idOrName');
+    expect(toKey('org/name')).toBe('orgName');
+    expect(toKey('--with-comments')).toBe('withComments');
+    expect(toKey('<id>')).toBe('id');
+    expect(toKey('///')).toBe('value');
+    for (const k of [toKey('id|name'), toKey('org/name'), toKey('--a.b')]) expect(k).toMatch(/^[a-zA-Z0-9_.-]{1,64}$/);
+  });
+  it('dedupes colliding keys inside one tool', () => {
+    const tools = buildCliTools([{
+      path: 'fleex ticket odd', description: 'x', subcommands: [],
+      arguments: [{ name: 'id', description: '', required: true, variadic: false }],
+      options: [{ flags: '--id <id>', description: '', required: true, mandatory: false }],
+    }]);
+    expect(Object.keys(tools[0]!.inputSchema.properties)).toEqual(['id', 'id_2']);
+  });
+});
