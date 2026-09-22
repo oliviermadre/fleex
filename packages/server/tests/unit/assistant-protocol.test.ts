@@ -54,6 +54,13 @@ describe('buildAssistantUserPrompt — triggers', () => {
     const failed = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed' } });
     expect(failed).toContain('2 échec(s) consécutif(s)');
     expect(failed).toContain('continue_thread');
+    expect(failed).not.toContain('Cause :');
+    const maxTurns = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed', failure: { reason: 'max_turns', message: 'Reached maximum number of turns (20)' } } });
+    expect(maxTurns).toContain('Cause : max_turns — Reached maximum number of turns (20).');
+    expect(maxTurns).toContain('pas un problème de permissions');
+    const waiting = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'waiting_for_info' } });
+    expect(waiting).toContain('sans sous-agent ni tâche de fond');
+    expect(waiting).not.toContain('request_mode');
   });
 });
 

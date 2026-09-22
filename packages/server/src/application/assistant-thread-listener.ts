@@ -50,7 +50,10 @@ export class AssistantThreadListener {
     this.deps.eventBus.emit({ type: 'thread.updated', threadId: thread.id, ticketId: thread.ticketId, occurredAt: new Date() });
     await this.deps.runAssistantTurn.execute({
       ticketId: thread.ticketId,
-      trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: status },
+      trigger: {
+        kind: 'thread_reply', threadId: thread.id, mentionStatus: status,
+        ...(status === 'failed' && 'reason' in e && 'message' in e ? { failure: { reason: String(e.reason), message: String(e.message) } } : {}),
+      },
     });
   }
 
