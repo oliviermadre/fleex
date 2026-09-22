@@ -97,12 +97,15 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const t = thread();
     t.openTurn('m1');
     const saved: string[] = [];
+    const turns: unknown[] = [];
     await app.register(assistantThreadsRoutes({
       threadStore: { getByTicket: async () => [t], save: async (x: { status: string }) => { saved.push(x.status); } },
       mentionStore: { getById: async () => ({ status: 'resolved' }) },
+      runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); } },
     } as never));
     const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
     expect(res.json()[0].status).toBe('idle');
     expect(saved).toEqual(['idle']);
+    expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: 'th', mentionStatus: 'resolved' } }]);
   });
 });
