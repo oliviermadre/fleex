@@ -15,6 +15,7 @@ import { DeliverableCard } from './DeliverableCard';
 import { InlineQuestion } from './InlineQuestion';
 import { DelegationCard } from './DelegationCard';
 import { ModeRequestCard } from './ModeRequestCard';
+import { AssistantLiveReply } from './AssistantLiveReply';
 import { MessageMarkdown } from './MessageMarkdown';
 import { TicketActionCards } from '../../tickets/TicketActionCards';
 import { buildStream, parseInlineOptions, parseModeRequest, threadTurns, threadMentionIds, type ModeRequest, type QueueActivity } from '../selectors';
@@ -109,6 +110,12 @@ export function TaskStream({
     return null;
   }, [comments]);
 
+  // An assistant turn in flight streams its answer live at the bottom of the stream.
+  const liveAssistant = useMemo(
+    () => executions.find((e) => e.status === 'running' && e.mentionId.startsWith('assistant:')) ?? null,
+    [executions],
+  );
+
   const hasContent = stream.length > 0 || (description && description.trim().length > 0);
 
   return (
@@ -179,6 +186,10 @@ export function TaskStream({
             }
           }
         })}
+
+        {liveAssistant && (
+          <AssistantLiveReply execution={liveAssistant} name={personaNames[liveAssistant.personaId] ?? 'Assistant'} />
+        )}
 
         {/* Actionable HITL / workflow cards (Human Gate approve-reject, waiting
             for input, ambiguous route, failed-step retry, crashed relaunch,

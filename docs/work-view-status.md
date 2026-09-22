@@ -428,6 +428,17 @@ comments. Flag `workThreadsEnabled` (settings, default on) restores the Phase 1 
 - New task: « Hand over to the assistant » (default on) → `POST /api/tickets/:id/assistant/start` (`ticket_created`
   turn). Runs / crash / waiting cards of thread agents are hidden from the main stream (`threadMentionIds`).
 
+**Runtime switch (2026-09-22, QA):** the assistant no longer runs on the Claude Agent SDK. An SDK turn loaded the
+user's Claude Code settings/hooks (superpowers), kept `Read` available in `dontAsk` mode and thought for minutes in the
+server's cwd. It now runs like the companion: a **streamed Messages-API tool loop** (`@anthropic-ai/sdk`, key from
+`ANTHROPIC_API_KEY` or `~/.fleex/config`), no extended thinking, model = ticket override or persona model. Thread
+actions are **tools** (`delegate_to_persona`, `continue_thread`, `conclude_thread`, `request_mode`) and the CLI surface
+is exposed as `fleex_*` tools built from `fleex documentation --format json` (`application/assistant/fleex-cli-tools.ts`,
+destructive leaves excluded, `--workspace`/`--json` injected). The hard-coded prompt head carries the ticket ids and the
+workspace; the CLI docs are NOT inlined (the tool schemas replace them). The final text of a turn is the message to the
+user, streamed live in the Work stream (`AssistantLiveReply`) and posted as the assistant comment; the run card + log
+stay. Spec §Décisions 1 is superseded by this.
+
 **QA strategy (agreed):** recette on the **QA sqlite instance only** (`FLEEX_STORAGE_DRIVER=sqlite`,
 `FLEEX_SQLITE_PATH` dedicated) — migrations run at boot with no opt-out, so the branch must NOT boot on the prod
 Supabase during the phase. Before the single end-of-phase pass on prod: `pg_dump` via `FLEEX_SUPABASE_DB_URL`, and
