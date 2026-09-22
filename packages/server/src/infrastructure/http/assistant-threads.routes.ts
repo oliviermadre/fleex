@@ -67,11 +67,14 @@ export function assistantThreadsRoutes(container: Deps) {
         if (t.status !== 'running' || !t.currentMentionId) continue;
         const m = await container.mentionStore.getById(t.currentMentionId);
         if (!m) continue;
-        if (m.status === 'resolved') t.markIdle();
-        else if (m.status === 'failed') t.fail();
+        let wake: 'resolved' | 'failed' | null = null;
+        if (m.status === 'resolved') { t.markIdle(); wake = 'resolved'; }
+        else if (m.status === 'failed') { t.fail(); wake = 'failed'; }
         else if (m.status === 'waiting_for_info') t.markWaiting();
         else continue;
         await container.threadStore.save(t);
+        // The event that should have woken the assistant was missed: replay it.
+        if (wake) void container.runAssistantTurn.execute({ ticketId: t.ticketId, trigger: { kind: 'thread_reply', threadId: t.id, mentionStatus: wake } });
       }
       return threads;
     }

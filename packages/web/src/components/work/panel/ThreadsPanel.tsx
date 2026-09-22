@@ -24,7 +24,7 @@ import { resolveSelectedThread } from './threadSelection';
 
 const DOT: Record<AgentThread['status'], string> = {
   running: 'bg-[var(--theme-accent)] animate-pulse',
-  idle: 'bg-[var(--tint-blue-solid)]',
+  idle: 'bg-[var(--tint-gray-solid)]',
   waiting: 'bg-[var(--tint-yellow-solid)]',
   concluded: 'bg-[var(--tint-green-solid)]',
   failed: 'bg-[var(--tint-red-solid)]',
@@ -136,6 +136,15 @@ export function ThreadsPanel({ task, onOpenExecution }: { task: WorkTask; onOpen
       setBusy(false);
     }
   };
+  const nudgeAssistant = async () => {
+    if (!thread || busy) return;
+    setBusy(true);
+    try {
+      await api.postAssistantMessage(task.id, `Reprends le thread avec ${personaName(thread)} : relance-le jusqu'à un résultat concret, ou conclus si c'est terminé.`);
+    } finally {
+      setBusy(false);
+    }
+  };
   const conclude = async () => {
     if (!thread || busy) return;
     setBusy(true);
@@ -240,7 +249,7 @@ export function ThreadsPanel({ task, onOpenExecution }: { task: WorkTask; onOpen
                     {agentState === 'queued' && `${personaName(thread)} is queued — waiting for a free agent slot…`}
                     {agentState === 'asking' && `${personaName(thread)} asked a question — the assistant answers, or you step in below`}
                     {agentState === 'failed' && `${personaName(thread)}'s run failed — the assistant relaunches or reports back`}
-                    {agentState === 'answered' && `${personaName(thread)} answered · the assistant decides the next step`}
+                    {agentState === 'answered' && `${personaName(thread)} answered · the assistant paused the thread here`}
                     {agentState === 'none' && (thread.status === 'waiting' ? 'Waiting for you — answer in the main stream or step in below' : 'No agent run yet')}
                   </span>
                 </div>
@@ -304,6 +313,19 @@ export function ThreadsPanel({ task, onOpenExecution }: { task: WorkTask; onOpen
             </div>
           )}
 
+          {!terminal && thread.status === 'idle' && (
+            <div className="flex shrink-0 items-center gap-2 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-[11.5px] text-[var(--theme-text-secondary)]">
+              <span className="min-w-0 flex-1">The assistant left this thread without relaunching the agent.</span>
+              <button
+                type="button"
+                onClick={() => void nudgeAssistant()}
+                disabled={busy}
+                className="shrink-0 whitespace-nowrap rounded-md bg-[var(--theme-accent)] px-2.5 py-1 text-[12px] text-[var(--theme-accent-fg)] hover:opacity-90 disabled:opacity-50"
+              >
+                ◆ Ask the assistant to continue
+              </button>
+            </div>
+          )}
           {!terminal && (
             <div className="flex shrink-0 gap-2 border-t border-[var(--theme-border)] px-3 py-2">
               <label htmlFor="thread-step-in" className="sr-only">Step into the thread</label>
