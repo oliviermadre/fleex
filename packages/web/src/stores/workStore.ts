@@ -98,6 +98,8 @@ export interface WorkDraft {
   priority: TicketPriority;
   /** Estimate chosen before creation; `null` = not estimated. */
   complexity: TicketComplexity | null;
+  /** Hand the new ticket to the assistant right after creation (Phase 3). */
+  startWithAssistant: boolean;
 }
 
 export interface WorkState {

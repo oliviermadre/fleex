@@ -45,6 +45,7 @@ import migration043 from './migrations/042_ticket_todos.js';
 import migration044 from './migrations/043_ticket_complexity.js';
 import migration045 from './migrations/044_deliverable_origin_standalone.js';
 import migration046 from './migrations/045_agent_threads.js';
+import migration047 from './migrations/046_agent_thread_failures.js';
 
 /**
  * Ordered array of all migrations.
@@ -97,4 +98,5 @@ export const allMigrations: Migration[] = [
   migration044,
   migration045,
   migration046,
+  migration047,
 ];

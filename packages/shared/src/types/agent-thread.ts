@@ -18,6 +18,8 @@ export interface AgentThread {
   readonly status: AgentThreadStatus;
   readonly currentMentionId: string | null;
   readonly exchanges: number;
+  /** Consecutive agent run failures on this thread (reset when a run completes). */
+  readonly failures: number;
   readonly summary: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;

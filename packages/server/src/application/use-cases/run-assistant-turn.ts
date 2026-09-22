@@ -32,6 +32,8 @@ import {
 } from '../assistant/assistant-protocol.js';
 
 export const MAX_ASSISTANT_TURNS_PER_THREAD = 8;
+/** Consecutive agent failures after which the assistant stops relaunching and reports back. */
+export const MAX_THREAD_FAILURES = 3;
 
 /** Runs one SDK query. Injected so tests can script the model's answer. */
 export type SdkRunner = (p: {
@@ -107,7 +109,7 @@ export class RunAssistantTurnUseCase {
       this.deps.threadStore.getByTicket(ticketId),
       this.deps.personaStore.getAll(),
     ]);
-    const threadId = trigger.kind === 'user_message' ? null : trigger.threadId;
+    const threadId = trigger.kind === 'user_message' || trigger.kind === 'ticket_created' ? null : trigger.threadId;
     const turns = threadId ? context.comments.filter((c) => c.threadId === threadId) : [];
 
     const systemPrompt = buildAssistantSystemPrompt({
@@ -298,6 +300,14 @@ export class RunAssistantTurnUseCase {
     thread: AgentThreadEntity,
     turn: string,
   ): Promise<void> {
+    if (thread.status === 'failed' && thread.failures >= MAX_THREAD_FAILURES) {
+      await this.apply(ticket, assistant, {
+        action: 'conclude_thread', threadId: thread.id, question: null,
+        message: `Je n'arrive pas à faire aboutir ${thread.personaName} sur ce point après ${thread.failures} tentatives.`,
+        summary: `Abandon après ${thread.failures} échecs consécutifs de l'agent. À reprendre autrement.`,
+      }, [thread]);
+      return;
+    }
     const assistantTurns = (await this.deps.commentStore.getByTicket(ticket.id))
       .filter((c) => c.threadId === thread.id && c.authorType === 'assistant').length;
     if (assistantTurns >= MAX_ASSISTANT_TURNS_PER_THREAD) {
