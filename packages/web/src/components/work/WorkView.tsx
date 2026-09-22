@@ -119,7 +119,7 @@ export function WorkView() {
             </main>
 
             {view === 'task' && rightPanel && selectedTask && (
-              <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
+              <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} onOpenExecution={openExecution} />
             )}
 
             {view === 'task' && <ToolStrip task={selectedTask} delivCount={deliverables.length} />}
