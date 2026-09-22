@@ -14,9 +14,10 @@ import { RunCard } from './RunCard';
 import { DeliverableCard } from './DeliverableCard';
 import { InlineQuestion } from './InlineQuestion';
 import { DelegationCard } from './DelegationCard';
+import { ModeRequestCard } from './ModeRequestCard';
 import { MessageMarkdown } from './MessageMarkdown';
 import { TicketActionCards } from '../../tickets/TicketActionCards';
-import { buildStream, parseInlineOptions, threadTurns, threadMentionIds, type QueueActivity } from '../selectors';
+import { buildStream, parseInlineOptions, parseModeRequest, threadTurns, threadMentionIds, type ModeRequest, type QueueActivity } from '../selectors';
 
 const EMPTY_THREADS: AgentThread[] = [];
 const EMPTY_NAMES: Record<string, string> = {};
@@ -44,6 +45,10 @@ interface Props {
   assistantThinking?: { name: string } | null;
   onOpenThread?: (threadId: string) => void;
   onAnswerThread?: (threadId: string, text: string) => void | Promise<void>;
+  /** The ticket's current agents execution mode (talk / plan / edit). */
+  conversationMode?: string;
+  onGrantMode?: (request: ModeRequest) => void | Promise<void>;
+  onDeclineMode?: (request: ModeRequest) => void | Promise<void>;
 }
 
 export function TaskStream({
@@ -64,6 +69,9 @@ export function TaskStream({
   assistantThinking = null,
   onOpenThread,
   onAnswerThread,
+  conversationMode = 'plan',
+  onGrantMode,
+  onDeclineMode,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -93,6 +101,16 @@ export function TaskStream({
     }
     return null;
   }, [comments, activity]);
+
+  // Only the most recent mode request is actionable; earlier ones are history.
+  const latestModeRequestId = useMemo(() => {
+    for (let i = comments.length - 1; i >= 0; i--) {
+      const c = comments[i]!;
+      if (c.threadId || c.authorType !== 'assistant') continue;
+      if (parseModeRequest(c.body)) return c.id;
+    }
+    return null;
+  }, [comments]);
 
   const hasContent = stream.length > 0 || (description && description.trim().length > 0);
 
@@ -135,7 +153,21 @@ export function TaskStream({
                   onAnswer={(id, text) => onAnswerThread?.(id, text)}
                 />
               );
-            case 'comment':
+            case 'comment': {
+              const modeRequest = entry.comment.authorType === 'assistant' ? parseModeRequest(entry.comment.body) : null;
+              if (modeRequest) {
+                return (
+                  <ModeRequestCard
+                    key={entry.comment.id}
+                    comment={entry.comment}
+                    request={modeRequest}
+                    currentMode={conversationMode}
+                    actionable={entry.comment.id === latestModeRequestId}
+                    onGrant={(r) => onGrantMode?.(r)}
+                    onDecline={(r) => onDeclineMode?.(r)}
+                  />
+                );
+              }
               return entry.comment.id === questionCommentId ? (
                 <InlineQuestion
                   key={entry.comment.id}
@@ -147,6 +179,7 @@ export function TaskStream({
               ) : (
                 <StreamItem key={entry.comment.id} comment={entry.comment} />
               );
+            }
           }
         })}
 

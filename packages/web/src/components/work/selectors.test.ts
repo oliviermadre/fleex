@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import {
+  parseModeRequest,
+  stripModeRequest,
   threadTurns,
   threadMentionIds,
   lastAgentQuestion,
@@ -502,5 +504,18 @@ describe('buildStream — thread runs and threadMentionIds', () => {
       ({ id, personaId: 'p', ticketId: 't1', mentionId, eventCount: 0, status: 'failed', startedAt: '2026-01-01T10:00:00.000Z', completedAt: null, lastEventAt: null }) as AgentExecution;
     const stream = buildStream([], [], [exec('e1', 'm1'), exec('e2', 'm2')], [], [], new Set(['m1']));
     expect(stream.map((e) => (e.kind === 'run' ? e.execution.id : e.kind))).toEqual(['e2']);
+  });
+});
+
+describe('parseModeRequest / stripModeRequest', () => {
+  const body = 'The Builder doit écrire.\n\n<!-- fleex:mode-request {"mode":"edit","threadId":"th1"} -->';
+  it('extracts the request and strips the marker', () => {
+    expect(parseModeRequest(body)).toEqual({ mode: 'edit', threadId: 'th1' });
+    expect(stripModeRequest(body)).toBe('The Builder doit écrire.');
+  });
+  it('ignores plain comments and malformed markers', () => {
+    expect(parseModeRequest('hello')).toBeNull();
+    expect(parseModeRequest('<!-- fleex:mode-request {"mode":"god","threadId":"x"} -->')).toBeNull();
+    expect(stripModeRequest('hello')).toBe('hello');
   });
 });

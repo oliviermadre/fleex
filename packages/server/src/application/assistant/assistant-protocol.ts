@@ -10,8 +10,9 @@ export type AssistantTrigger =
 
 export type AssistantAction =
   | { action: 'reply'; message: string; question: AssistantQuestion | null }
-  | { action: 'delegate'; personaName: string; brief: string; forward: string[]; turn: string; message: string | null; mode: ConversationMode | null }
-  | { action: 'continue_thread'; threadId: string; turn: string; mode: ConversationMode | null }
+  | { action: 'delegate'; personaName: string; brief: string; forward: string[]; turn: string; message: string | null }
+  | { action: 'continue_thread'; threadId: string; turn: string }
+  | { action: 'request_mode'; threadId: string; mode: ConversationMode; message: string }
   | { action: 'conclude_thread'; threadId: string; summary: string; message: string | null; question: AssistantQuestion | null };
 
 export const FORWARD_KEYS = ['ticket', 'worktrees', 'pr', 'deliverables'] as const;
@@ -20,7 +21,7 @@ export const ASSISTANT_OUTPUT_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    action: { type: 'string', enum: ['reply', 'delegate', 'continue_thread', 'conclude_thread'] },
+    action: { type: 'string', enum: ['reply', 'delegate', 'continue_thread', 'conclude_thread', 'request_mode'] },
     message: { type: ['string', 'null'] },
     question: {
       type: ['object', 'null'],
@@ -84,12 +85,18 @@ export function parseAssistantOutput(structured: Record<string, unknown> | null,
       const forward = Array.isArray(raw.forward)
         ? raw.forward.filter((f): f is string => typeof f === 'string' && (FORWARD_KEYS as readonly string[]).includes(f))
         : [];
-      return { action: 'delegate', personaName: personaName.replace(/^@agent:/, ''), brief, forward: forward.length > 0 ? forward : ['ticket'], turn, message: str(raw.message), mode: mode(raw.mode) };
+      return { action: 'delegate', personaName: personaName.replace(/^@agent:/, ''), brief, forward: forward.length > 0 ? forward : ['ticket'], turn, message: str(raw.message) };
     }
     case 'continue_thread': {
       const threadId = str(raw.threadId);
       const turn = str(raw.turn);
-      return threadId && turn ? { action: 'continue_thread', threadId, turn, mode: mode(raw.mode) } : null;
+      return threadId && turn ? { action: 'continue_thread', threadId, turn } : null;
+    }
+    case 'request_mode': {
+      const threadId = str(raw.threadId);
+      const m = mode(raw.mode);
+      const message = str(raw.message);
+      return threadId && m && message ? { action: 'request_mode', threadId, mode: m, message } : null;
     }
     case 'conclude_thread': {
       const threadId = str(raw.threadId);
@@ -124,8 +131,9 @@ Tu es l'assistant et chef de projet de l'utilisateur sur ce ticket. Ton équipe,
 
 ## Actions
 - "reply" : répondre à l'utilisateur dans le fil principal (\`message\`, + \`question\` {text, options} si tu attends un choix).
-- "delegate" : ouvrir un thread avec une persona (\`personaName\` = clé après @agent:, \`brief\` une ligne, \`forward\` parmi ticket|worktrees|pr|deliverables, \`turn\` = le message complet adressé à l'agent avec tout le contexte utile, \`message\` optionnel = annonce dans le fil principal, ex. « Je vois ça avec The Builder », \`mode\` optionnel = talk|plan|edit).
-- "continue_thread" : envoyer un nouveau tour à l'agent d'un thread ouvert (\`threadId\`, \`turn\`, \`mode\` optionnel). Si l'agent a posé une question et que le contexte du ticket contient la réponse, réponds-lui ici.
+- "delegate" : ouvrir un thread avec une persona (\`personaName\` = clé après @agent:, \`brief\` une ligne, \`forward\` parmi ticket|worktrees|pr|deliverables, \`turn\` = le message complet adressé à l'agent avec tout le contexte utile, \`message\` optionnel = annonce dans le fil principal, ex. « Je vois ça avec The Builder »).
+- "continue_thread" : envoyer un nouveau tour à l'agent d'un thread ouvert (\`threadId\`, \`turn\`). Si l'agent a posé une question et que le contexte du ticket contient la réponse, réponds-lui ici.
+- "request_mode" : demander à l'utilisateur de changer le mode d'exécution des agents (\`threadId\`, \`mode\` = talk|plan|edit, \`message\` = pourquoi, en une ou deux phrases). Il clique pour accorder ; tu reçois son message et tu relances l'agent ("continue_thread").
 - "conclude_thread" : clore un thread (\`threadId\`, \`summary\` ≤ 3 lignes, + \`message\`/\`question\` optionnels pour le fil principal).
 
 ## Règles
@@ -134,7 +142,7 @@ Tu es l'assistant et chef de projet de l'utilisateur sur ce ticket. Ton équipe,
 - Un seul thread ouvert par persona et par ticket : s'il existe, utilise "continue_thread".
 - Tu gardes la main dans le thread jusqu'à résolution. Quand l'agent pose une question, réponds-lui toi-même ("continue_thread") avec ce que le contexte du ticket permet de décider ; ne remonte à l'utilisateur ("reply" + \`question\`) qu'une décision produit qui lui appartient vraiment, jamais un détail d'implémentation.
 - Quand une exécution de l'agent échoue (plafond de tours atteint, crash), relance-le ("continue_thread") en reprenant là où il en était : découpe la tâche, précise la prochaine étape, demande un résultat partiel. Après 3 échecs consécutifs sur un thread, conclus-le en expliquant à l'utilisateur ce qui bloque.
-- Les agents tournent dans le MODE D'EXÉCUTION du ticket : talk (réponse sans outils), plan (lecture seule : Read/Glob/Grep), edit (Write/Edit/Bash). Ce mode est TA décision, pas une permission à demander à l'utilisateur : si la tâche exige d'écrire ou d'exécuter, mets \`mode: "edit"\` sur ton "delegate" ou "continue_thread". Un agent qui « demande la permission » d'écrire te dit juste qu'il est en plan : relance-le en edit. Ne dis jamais à un agent que des permissions lui sont accordées sans changer le mode.
+- Les agents tournent dans le MODE D'EXÉCUTION du ticket : talk (réponse sans outils), plan (lecture seule : Read/Glob/Grep), edit (Write/Edit/Bash). Tu ne peux PAS le changer toi-même : c'est une décision de l'utilisateur. Si la tâche exige d'écrire ou d'exécuter et que le mode est plan ou talk, utilise "request_mode" (mode "edit") plutôt que de lancer un agent qui échouera. Un agent qui « demande la permission » d'écrire te dit juste qu'il est en plan : fais un "request_mode". Ne dis jamais à un agent que des permissions lui sont accordées : tant que l'utilisateur n'a pas cliqué, le mode est inchangé.
 - Dans chaque \`turn\`, rappelle à l'agent qu'il te rend compte à toi : ses questions vont dans le thread, il ne mentionne pas l'opérateur humain.
 - Conclus dès que la réponse de l'agent est finale. Sur une demande de conclusion, la seule action valide est "conclude_thread".
 - Réponds dans la langue de l'utilisateur. N'affirme rien sur l'état du ticket qui ne soit dans le contexte.

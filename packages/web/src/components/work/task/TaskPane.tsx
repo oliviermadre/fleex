@@ -13,6 +13,8 @@
  */
 import { useCallback, useEffect, useMemo } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
+import * as api from '../../../services/api';
+import type { ModeRequest } from '../selectors';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useAgentEventStore } from '../../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
@@ -38,6 +40,9 @@ export function TaskPane({
 }) {
   const description = useTicketStore((s) =>
     task ? s.tickets.find((t) => t.id === task.id)?.description ?? null : null,
+  );
+  const conversationMode = useTicketStore((s) =>
+    task ? s.tickets.find((t) => t.id === task.id)?.conversationMode ?? 'plan' : 'plan',
   );
   const convo = useTaskConversation(task?.id ?? null);
   // Draft is keyed by ticket and stored in localStorage; useCommentDraft re-reads
@@ -82,6 +87,24 @@ export function TaskPane({
     [setRightPanel, setSelectedThreadId],
   );
 
+  // Mode requests: the user's click is the real action (PATCH the ticket mode),
+  // then the assistant is told so it relaunches the agent in the thread.
+  const grantMode = useCallback(
+    async (r: ModeRequest) => {
+      if (!task) return;
+      await api.updateTicketExecutionConfig(task.id, { conversationMode: r.mode });
+      await convo.post(`Mode ${r.mode} accordé aux agents — continue.`);
+    },
+    [task, convo],
+  );
+  const declineMode = useCallback(
+    async (r: ModeRequest) => {
+      await convo.post(`Non, les agents restent en mode ${conversationMode}. Fais avec, ou dis-moi ce qui bloque.`);
+      void r;
+    },
+    [convo, conversationMode],
+  );
+
   if (!task) {
     return (
       <div className="flex flex-1 items-center justify-center text-[13px] text-[var(--theme-text-faint)]">
@@ -111,6 +134,9 @@ export function TaskPane({
         assistantThinking={assistantThinking}
         onOpenThread={openThread}
         onAnswerThread={convo.postToThread}
+        conversationMode={conversationMode}
+        onGrantMode={grantMode}
+        onDeclineMode={declineMode}
       />
       <Composer
         ticketId={task.id}

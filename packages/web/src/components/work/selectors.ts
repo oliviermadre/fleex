@@ -383,3 +383,32 @@ export function threadMentionIds(
   const turnIds = new Set(comments.filter((c) => c.threadId).map((c) => c.id));
   return new Set(mentions.filter((m) => turnIds.has(m.commentId)).map((m) => m.id));
 }
+
+// ── Mode requests (assistant asks the user to change the agents' execution mode) ──
+
+const MODE_REQUEST_RE = /<!--\s*fleex:mode-request\s+(\{[^]*?\})\s*-->/;
+
+export interface ModeRequest {
+  mode: 'talk' | 'plan' | 'edit';
+  threadId: string;
+}
+
+/** The mode request an assistant comment carries, or null. */
+export function parseModeRequest(body: string): ModeRequest | null {
+  const m = body.match(MODE_REQUEST_RE);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1]!) as Partial<ModeRequest>;
+    if ((parsed.mode === 'talk' || parsed.mode === 'plan' || parsed.mode === 'edit') && typeof parsed.threadId === 'string') {
+      return { mode: parsed.mode, threadId: parsed.threadId };
+    }
+  } catch {
+    /* malformed marker: treat as plain text */
+  }
+  return null;
+}
+
+/** The comment body without its machine-readable marker. */
+export function stripModeRequest(body: string): string {
+  return body.replace(MODE_REQUEST_RE, '').trimEnd();
+}

@@ -6,6 +6,7 @@
  */
 import type { TicketComment } from '@fleex/shared';
 import { MessageMarkdown } from './MessageMarkdown';
+import { stripModeRequest } from '../selectors';
 
 export function StreamItem({ comment }: { comment: TicketComment }) {
   const isUser = comment.authorType === 'user';
@@ -38,7 +39,7 @@ export function StreamItem({ comment }: { comment: TicketComment }) {
           {comment.authorName || (isAssistant ? 'Assistant' : 'Agent')}
         </div>
         <div className="min-w-0 max-w-full overflow-hidden text-[13px] text-[var(--theme-text-primary)]">
-          <MessageMarkdown body={comment.body} />
+          <MessageMarkdown body={stripModeRequest(comment.body)} />
         </div>
       </div>
     </div>
