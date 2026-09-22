@@ -254,3 +254,20 @@ describe('RunAssistantTurnUseCase — failures', () => {
     expect(h.comments.saved.map((c) => c.body)).toEqual(['Je prends le ticket.']);
   });
 });
+
+describe('RunAssistantTurnUseCase — execution mode', () => {
+  it('delegate with mode: edit switches the ticket conversation mode before the turn', async () => {
+    const h = harness([{ action: 'delegate', personaName: 'builder', brief: 'A', turn: 'écris le code', mode: 'edit' }]);
+    expect(h.ticket.conversationMode).toBe('plan');
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.ticket.conversationMode).toBe('edit');
+    expect(h.emitted).toContain('ticket.updated');
+  });
+
+  it('a turn without mode leaves the ticket mode alone', async () => {
+    const h = harness([{ action: 'delegate', personaName: 'builder', brief: 'A', turn: 'lis le code' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.ticket.conversationMode).toBe('plan');
+    expect(h.emitted).not.toContain('ticket.updated');
+  });
+});
