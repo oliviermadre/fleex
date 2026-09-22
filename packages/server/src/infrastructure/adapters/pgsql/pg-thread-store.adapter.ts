@@ -8,7 +8,7 @@ function rowToThread(row: Record<string, unknown>): AgentThreadEntity {
     row.id as string, row.ticket_id as string, 'assistant', row.persona_id as string, row.persona_name as string,
     row.assistant_persona_id as string, row.brief as string, JSON.parse(row.forwarded_context as string) as string[],
     row.status as AgentThreadStatus, (row.current_mention_id as string | null) ?? null, Number(row.exchanges),
-    (row.summary as string | null) ?? null, new Date(row.created_at as string), new Date(row.updated_at as string),
+    Number(row.failures ?? 0), (row.summary as string | null) ?? null, new Date(row.created_at as string), new Date(row.updated_at as string),
     row.concluded_at ? new Date(row.concluded_at as string) : null,
   );
 }
@@ -47,13 +47,13 @@ export class PgThreadStore implements ThreadStorePort {
   async save(t: AgentThreadEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO agent_threads (id, ticket_id, initiator, persona_id, persona_name, assistant_persona_id, brief,
-         forwarded_context, status, current_mention_id, exchanges, summary, created_at, updated_at, concluded_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+         forwarded_context, status, current_mention_id, exchanges, summary, created_at, updated_at, concluded_at, failures)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        ON CONFLICT (id) DO UPDATE SET status = $9, current_mention_id = $10, exchanges = $11, summary = $12,
-         updated_at = $14, concluded_at = $15`,
+         updated_at = $14, concluded_at = $15, failures = $16`,
       [t.id, t.ticketId, t.initiator, t.personaId, t.personaName, t.assistantPersonaId, t.brief,
        JSON.stringify(t.forwardedContext), t.status, t.currentMentionId, t.exchanges, t.summary,
-       t.createdAt.toISOString(), t.updatedAt.toISOString(), t.concludedAt?.toISOString() ?? null],
+       t.createdAt.toISOString(), t.updatedAt.toISOString(), t.concludedAt?.toISOString() ?? null, t.failures],
     );
   }
 }

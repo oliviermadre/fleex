@@ -25,6 +25,7 @@ import { TaskStream } from './TaskStream';
 import { Composer } from './Composer';
 import { useTaskConversation } from './useTaskConversation';
 import { useTicketThreads } from '../panel/useTicketThreads';
+import { useTicketMentions } from './useTicketMentions';
 
 export function TaskPane({
   task,
@@ -63,6 +64,7 @@ export function TaskPane({
 
   // Phase 3: threads, persona display names, and the assistant "thinking" state.
   const threads = useTicketThreads(task?.id ?? null);
+  const mentions = useTicketMentions(task?.id ?? null);
   const personaNames = useMemo(
     () => Object.fromEntries(personas.map((p) => [p.id, p.displayName])) as Record<string, string>,
     [personas],
@@ -110,6 +112,7 @@ export function TaskPane({
         onDeliverableDeleted={onDeliverableDeleted}
         threads={threads}
         personaNames={personaNames}
+        mentions={mentions}
         assistantThinking={assistantThinking}
         onOpenThread={openThread}
         onAnswerThread={convo.postToThread}

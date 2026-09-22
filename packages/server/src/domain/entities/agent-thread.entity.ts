@@ -19,6 +19,7 @@ export class AgentThreadEntity {
     public status: AgentThreadStatus,
     public currentMentionId: string | null,
     public exchanges: number,
+    public failures: number,
     public summary: string | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
@@ -38,12 +39,17 @@ export class AgentThreadEntity {
     return new AgentThreadEntity(
       params.id, params.ticketId, 'assistant', params.personaId, params.personaName,
       params.assistantPersonaId, params.brief, [...params.forwardedContext],
-      'running', null, 0, null, now, now, null,
+      'running', null, 0, 0, null, now, now, null,
     );
   }
 
+  /**
+   * Only `concluded` is final. A `failed` thread (agent run crashed or hit its
+   * turn cap) stays open so the assistant can relaunch the agent in place —
+   * the project manager keeps the hand instead of bouncing to the user.
+   */
   get isTerminal(): boolean {
-    return this.status === 'concluded' || this.status === 'failed';
+    return this.status === 'concluded';
   }
 
   /** The assistant posted a turn that opened `mentionId` on the agent. */
@@ -87,12 +93,18 @@ export class AgentThreadEntity {
     return true;
   }
 
+  /** The agent run driving this thread crashed or hit its turn cap. */
   fail(): boolean {
     if (this.isTerminal) return false;
     this.status = 'failed';
-    this.concludedAt = new Date();
+    this.failures += 1;
     this.touch();
     return true;
+  }
+
+  /** A run completed: the failure streak is over. */
+  clearFailures(): void {
+    this.failures = 0;
   }
 
   private touch(): void {
@@ -112,6 +124,7 @@ export class AgentThreadEntity {
       status: this.status,
       currentMentionId: this.currentMentionId,
       exchanges: this.exchanges,
+      failures: this.failures,
       summary: this.summary,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
