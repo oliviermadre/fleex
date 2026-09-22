@@ -45,7 +45,7 @@ const MUTATING_LEAVES = new Set([
   'archive', 'import', 'retry', 'resume', 'pause', 'tag', 'untag', 'favorite', 'unfavorite', 'block', 'unblock',
   'upload', 'rename', 'trigger', 'resolve', 'answer', 'approve', 'reject',
 ]);
-const DESTRUCTIVE_LEAVES = new Set(['delete', 'remove', 'kill', 'stop', 'restart', 'self-update', 'prune', 'reset', 'purge']);
+const DESTRUCTIVE_LEAVES = new Set(['delete', 'remove', 'kill', 'stop', 'restart', 'self-update', 'prune', 'reset', 'purge', 'forget', 'unregister', 'bench', 'reindex']);
 const HIDDEN_OPTIONS = new Set(['--help', '--workspace', '--json', '--format', '--version']);
 
 /**
