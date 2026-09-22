@@ -392,6 +392,7 @@ function EventBlock({ event }: { event: AgentEvent }) {
       const endMaxTurns = data?.['maxTurns'] as number | undefined;
       const turnsExhausted = numTurns != null && endMaxTurns != null && numTurns >= endMaxTurns;
       const endModeBadge = endMode === 'talk' ? '🗣' : endMode === 'plan' ? '📋' : endMode === 'edit' ? '📝' : '';
+      const endError = typeof data?.['error'] === 'string' ? (data['error'] as string) : null;
       return (
         <div className="py-1 space-y-0.5">
           <div className={cn(
@@ -401,6 +402,9 @@ function EventBlock({ event }: { event: AgentEvent }) {
             {status === 'completed' ? '✓ Execution completed' : '✗ Execution failed'}
             {endModeBadge && <span className="text-xs font-normal text-[var(--theme-text-faint)]">{endModeBadge}</span>}
           </div>
+          {status !== 'completed' && endError && (
+            <pre className={cn('m-0 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border px-3 py-2 text-xs font-mono', tint('red'))}>{endError}</pre>
+          )}
           {(durationMs || costUsd || inputTokens || numTurns != null) && (
             <div className="text-[10px] text-[var(--theme-text-faint)] pl-4 flex gap-3">
               {durationMs != null && <span>{(durationMs / 1000).toFixed(1)}s</span>}

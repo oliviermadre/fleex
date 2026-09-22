@@ -18,6 +18,8 @@ export interface AppConfig {
    * Talk mode is unaffected (it has no agentic loop).
    */
   agentMaxTurns?: number;
+  /** Persona id that plays the assistant in the Work view unless a ticket overrides it. */
+  defaultAssistantPersonaId?: string;
   repositories?: string[];
   resolvedRepositories?: string[];
   resolvedAt?: string;

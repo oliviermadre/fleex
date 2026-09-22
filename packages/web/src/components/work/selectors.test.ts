@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
+import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import {
+  parseModeRequest,
+  stripModeRequest,
+  threadTurns,
+  threadMentionIds,
+  lastAgentQuestion,
+  threadActivityDetail,
   partitionQueue,
   parseInlineOptions,
   suggestionsFor,
@@ -99,7 +105,7 @@ describe('suggestionsFor', () => {
   it('a move chip carries its target status, a persona chip carries a mention', () => {
     const chips = suggestionsFor({ status: 'reviewing', type: 'build', hasPR: false });
     expect(chips.find((s) => s.id === 'mark-done')?.moveTo).toBe('done');
-    expect(chips.find((s) => s.id === 'see-with-dev')?.mention).toBe('@agent:builder ');
+    expect(chips.find((s) => s.id === 'see-with-dev')?.mention).toBe('Vois ça avec @agent:builder : ');
   });
 });
 
@@ -171,6 +177,7 @@ function comment(over: Partial<TicketComment> & Pick<TicketComment, 'id' | 'crea
     privateRecipients: [],
     mentions: [],
     parentId: null,
+    threadId: null,
     updatedAt: over.createdAt,
     ...over,
   };
@@ -421,5 +428,94 @@ describe('personasForTicket', () => {
 
   it('returns [] when no persona ran the ticket', () => {
     expect(personasForTicket([], personas, {})).toEqual([]);
+  });
+});
+
+// ── Assistant threads ─────────────────────────────────────────────────────
+
+function thread(over: Partial<AgentThread> & { id: string }): AgentThread {
+  return {
+    ticketId: 't1', initiator: 'assistant', personaId: 'p-builder', personaName: 'builder', assistantPersonaId: 'pa',
+    brief: 'Fix e2e', forwardedContext: ['ticket'], status: 'running', currentMentionId: null, exchanges: 1, failures: 0,
+    summary: null, createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-01T10:00:00.000Z', concludedAt: null,
+    ...over,
+  };
+}
+
+describe('buildStream — threads', () => {
+  it('hides thread turns, shows a delegation card at the thread creation time', () => {
+    const stream = buildStream(
+      [
+        comment({ id: 'ann', createdAt: '2026-01-01T09:59:00.000Z', authorType: 'assistant' }),
+        comment({ id: 'turn', createdAt: '2026-01-01T10:01:00.000Z', threadId: 'th1' }),
+        comment({ id: 'later', createdAt: '2026-01-01T10:05:00.000Z' }),
+      ],
+      [], [], [],
+      [thread({ id: 'th1' })],
+    );
+    expect(stream.map((e) => (e.kind === 'comment' ? e.comment.id : e.kind))).toEqual(['ann', 'delegation', 'later']);
+  });
+
+  it('keeps assistant turns as run cards (their log is how the user follows a long think)', () => {
+    const exec = (id: string, mentionId: string): AgentExecution =>
+      ({ id, personaId: 'p', ticketId: 't1', mentionId, eventCount: 0, status: 'completed', startedAt: '2026-01-01T10:00:00.000Z', completedAt: null, lastEventAt: null }) as AgentExecution;
+    const stream = buildStream([], [], [exec('e1', 'assistant:abc'), exec('e2', 'm1')]);
+    expect(stream.map((e) => (e.kind === 'run' ? e.execution.id : e.kind))).toEqual(['e1', 'e2']);
+  });
+});
+
+describe('threadTurns / lastAgentQuestion / threadActivityDetail', () => {
+  it('threadTurns filters and orders the thread comments', () => {
+    const turns = threadTurns([
+      comment({ id: 'b', createdAt: '2026-01-01T10:02:00.000Z', threadId: 'th1' }),
+      comment({ id: 'x', createdAt: '2026-01-01T10:01:00.000Z' }),
+      comment({ id: 'a', createdAt: '2026-01-01T10:00:00.000Z', threadId: 'th1' }),
+    ], 'th1');
+    expect(turns.map((c) => c.id)).toEqual(['a', 'b']);
+  });
+
+  it('lastAgentQuestion returns the options of the last agent turn, or null', () => {
+    const turns = [
+      comment({ id: 'a', createdAt: '2026-01-01T10:00:00.000Z', authorType: 'assistant', body: 'go' }),
+      comment({ id: 'q', createdAt: '2026-01-01T10:01:00.000Z', authorType: 'agent', body: 'Keep it?\n- Keep\n- Drop' }),
+    ];
+    expect(lastAgentQuestion(turns)?.options).toEqual(['Keep', 'Drop']);
+    expect(lastAgentQuestion([...turns, comment({ id: 'p', createdAt: '2026-01-01T10:02:00.000Z', authorType: 'agent', body: 'done' })])).toBeNull();
+    expect(lastAgentQuestion([])).toBeNull();
+  });
+
+  it('threadActivityDetail labels a running thread and ignores the rest', () => {
+    expect(threadActivityDetail([thread({ id: 'a', status: 'waiting' })])).toBeNull();
+    expect(threadActivityDetail([thread({ id: 'a' })], (t) => t.personaName.toUpperCase())).toBe('BUILDER · in thread with assistant');
+    expect(threadActivityDetail([])).toBeNull();
+  });
+});
+
+describe('buildStream — thread runs and threadMentionIds', () => {
+  it('threadMentionIds picks the mentions opened by thread turns', () => {
+    const ids = threadMentionIds(
+      [comment({ id: 'turn', createdAt: '2026-01-01T10:00:00.000Z', threadId: 'th1' }), comment({ id: 'main', createdAt: '2026-01-01T10:01:00.000Z' })],
+      [{ id: 'm1', commentId: 'turn' }, { id: 'm2', commentId: 'main' }],
+    );
+    expect([...ids]).toEqual(['m1']);
+  });
+  it('hides the runs of hidden mentions', () => {
+    const exec = (id: string, mentionId: string): AgentExecution =>
+      ({ id, personaId: 'p', ticketId: 't1', mentionId, eventCount: 0, status: 'failed', startedAt: '2026-01-01T10:00:00.000Z', completedAt: null, lastEventAt: null }) as AgentExecution;
+    const stream = buildStream([], [], [exec('e1', 'm1'), exec('e2', 'm2')], [], [], new Set(['m1']));
+    expect(stream.map((e) => (e.kind === 'run' ? e.execution.id : e.kind))).toEqual(['e2']);
+  });
+});
+
+describe('parseModeRequest / stripModeRequest', () => {
+  const body = 'The Builder doit écrire.\n\n<!-- fleex:mode-request {"mode":"edit","threadId":"th1"} -->';
+  it('extracts the request and strips the marker', () => {
+    expect(parseModeRequest(body)).toEqual({ mode: 'edit', threadId: 'th1' });
+    expect(stripModeRequest(body)).toBe('The Builder doit écrire.');
+  });
+  it('ignores plain comments and malformed markers', () => {
+    expect(parseModeRequest('hello')).toBeNull();
+    expect(parseModeRequest('<!-- fleex:mode-request {"mode":"god","threadId":"x"} -->')).toBeNull();
+    expect(stripModeRequest('hello')).toBe('hello');
   });
 });

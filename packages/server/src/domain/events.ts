@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind, CommentAuthorType } from '@fleex/shared';
 
 // ── Base ──
 
@@ -103,7 +103,7 @@ export interface CommentPostedEvent extends DomainEvent {
   type: 'comment.posted';
   commentId: string;
   ticketId: string;
-  authorType: 'user' | 'agent';
+  authorType: CommentAuthorType;
   authorName: string;
   /** Execution mode selected by the user for this comment */
   executionMode?: MentionExecutionMode;
@@ -119,6 +119,11 @@ export interface CommentPostedEvent extends DomainEvent {
    * disambiguation defaulted that way), so their pending question stays open.
    */
   wakeExcludeAgents?: string[];
+  /**
+   * Assistant thread the comment was posted in (Phase 3), `null`/absent for the
+   * main stream. Scopes which waiting agents the comment may wake.
+   */
+  threadId?: string | null;
 }
 
 export interface CommentUpdatedEvent extends DomainEvent {
@@ -223,6 +228,26 @@ export interface ExecutionCancelledEvent extends DomainEvent {
   mentionId: string;
   personaId: string;
   ticketId?: string;
+}
+
+// ── Assistant thread events ──
+
+export interface ThreadCreatedEvent extends DomainEvent {
+  type: 'thread.created';
+  threadId: string;
+  ticketId: string;
+}
+
+export interface ThreadUpdatedEvent extends DomainEvent {
+  type: 'thread.updated';
+  threadId: string;
+  ticketId: string;
+}
+
+export interface ThreadConcludedEvent extends DomainEvent {
+  type: 'thread.concluded';
+  threadId: string;
+  ticketId: string;
 }
 
 // ── Deliverable events ──
@@ -588,6 +613,9 @@ export interface TicketGroupBoardRemovedEvent extends DomainEvent {
 // ── Union type ──
 
 export type AnyDomainEvent =
+  | ThreadCreatedEvent
+  | ThreadUpdatedEvent
+  | ThreadConcludedEvent
   | TicketCreatedEvent
   | TicketUpdatedEvent
   | TicketMovedEvent

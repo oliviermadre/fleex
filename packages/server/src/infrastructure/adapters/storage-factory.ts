@@ -2,6 +2,7 @@ import type { SessionStorePort } from '../../application/ports/session-store.por
 import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
 import type { AgentTokenStorePort } from '../../application/ports/agent-token-store.port.js';
 import type { CommentStorePort } from '../../application/ports/comment-store.port.js';
+import type { ThreadStorePort } from '../../application/ports/thread-store.port.js';
 import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
 import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
@@ -30,6 +31,7 @@ export interface StorageStores {
   ticketStore: TicketStorePort;
   agentTokenStore: AgentTokenStorePort;
   commentStore: CommentStorePort;
+  threadStore: ThreadStorePort;
   mentionStore: MentionStorePort;
   deliverableStore: DeliverableStorePort;
   personaStore: PersonaStorePort;
@@ -109,6 +111,7 @@ async function createSqliteStores(deps: {
   const { SqliteTicketStoreAdapter } = await import('./sqlite/sqlite-ticket-store.adapter.js');
   const { SqliteAgentTokenStoreAdapter } = await import('./sqlite/sqlite-agent-token-store.adapter.js');
   const { SqliteCommentStoreAdapter } = await import('./sqlite/sqlite-comment-store.adapter.js');
+  const { SqliteThreadStoreAdapter } = await import('./sqlite/sqlite-thread-store.adapter.js');
   const { SqliteMentionStoreAdapter } = await import('./sqlite/sqlite-mention-store.adapter.js');
   const { SqliteDeliverableStoreAdapter } = await import('./sqlite/sqlite-deliverable-store.adapter.js');
   const { SqlitePersonaStoreAdapter } = await import('./sqlite/sqlite-persona-store.adapter.js');
@@ -147,6 +150,7 @@ async function createSqliteStores(deps: {
     ticketStore: new SqliteTicketStoreAdapter(connection),
     agentTokenStore: new SqliteAgentTokenStoreAdapter(connection),
     commentStore: new SqliteCommentStoreAdapter(connection),
+    threadStore: new SqliteThreadStoreAdapter(connection),
     mentionStore: new SqliteMentionStoreAdapter(connection),
     deliverableStore: new SqliteDeliverableStoreAdapter(connection),
     personaStore: new SqlitePersonaStoreAdapter(connection),
@@ -182,6 +186,7 @@ async function createPgsqlStores(deps: {
   const { PgTicketStore } = await import('./pgsql/pg-ticket-store.adapter.js');
   const { PgAgentTokenStore } = await import('./pgsql/pg-agent-token-store.adapter.js');
   const { PgCommentStore } = await import('./pgsql/pg-comment-store.adapter.js');
+  const { PgThreadStore } = await import('./pgsql/pg-thread-store.adapter.js');
   const { PgMentionStore } = await import('./pgsql/pg-mention-store.adapter.js');
   const { PgDeliverableStore } = await import('./pgsql/pg-deliverable-store.adapter.js');
   const { PgPersonaStore } = await import('./pgsql/pg-persona-store.adapter.js');
@@ -217,6 +222,7 @@ async function createPgsqlStores(deps: {
     ticketStore: new PgTicketStore(connection),
     agentTokenStore: new PgAgentTokenStore(connection),
     commentStore: new PgCommentStore(connection),
+    threadStore: new PgThreadStore(connection),
     mentionStore: new PgMentionStore(connection),
     deliverableStore: new PgDeliverableStore(connection),
     personaStore: new PgPersonaStore(connection),
@@ -256,6 +262,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseTicketStore } = await import('./supabase/supabase-ticket-store.adapter.js');
   const { SupabaseAgentTokenStore } = await import('./supabase/supabase-agent-token-store.adapter.js');
   const { SupabaseCommentStore } = await import('./supabase/supabase-comment-store.adapter.js');
+  const { SupabaseThreadStore } = await import('./supabase/supabase-thread-store.adapter.js');
   const { SupabaseMentionStore } = await import('./supabase/supabase-mention-store.adapter.js');
   const { SupabaseDeliverableStore } = await import('./supabase/supabase-deliverable-store.adapter.js');
   const { SupabasePersonaStore } = await import('./supabase/supabase-persona-store.adapter.js');
@@ -298,6 +305,7 @@ async function createSupabaseStores(deps: {
     ticketStore: new SupabaseTicketStore(connection),
     agentTokenStore: new SupabaseAgentTokenStore(connection),
     commentStore: new SupabaseCommentStore(connection),
+    threadStore: new SupabaseThreadStore(connection),
     mentionStore: new SupabaseMentionStore(connection),
     deliverableStore: new SupabaseDeliverableStore(connection),
     personaStore: new SupabasePersonaStore(connection),

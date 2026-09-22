@@ -72,10 +72,20 @@ interface Props {
    * execution already, so it turns this off to avoid double-reporting the run.
    */
   showRunningBanner?: boolean;
+  /**
+   * Comment ids whose mentions must not surface here. The Work stream passes its
+   * assistant-thread turns: the assistant handles those agents (relaunch,
+   * answers), so their crash / waiting cards stay out of the user's main stream.
+   */
+  hideCommentIds?: ReadonlySet<string>;
 }
 
-export function TicketActionCards({ ticketId, deliverables, onOpenExecution, showRunningBanner = true }: Props) {
-  const [mentions, setMentions] = useState<TicketMention[]>([]);
+export function TicketActionCards({ ticketId, deliverables, onOpenExecution, showRunningBanner = true, hideCommentIds }: Props) {
+  const [allMentions, setMentions] = useState<TicketMention[]>([]);
+  const mentions = useMemo(
+    () => (hideCommentIds && hideCommentIds.size > 0 ? allMentions.filter((m) => !hideCommentIds.has(m.commentId)) : allMentions),
+    [allMentions, hideCommentIds],
+  );
   // Live crash reason/message per mention, from the `mention:execution_failed`
   // event. On a cold reload this is empty but the mention is still persisted as
   // `failed`, so the crash card renders with a generic fallback.

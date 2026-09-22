@@ -58,6 +58,7 @@ function makeTicket(id: string, boardId: string, title: string): Ticket {
     modelOverride: null,
     effortOverride: null,
     fastMode: false,
+    assistantPersonaId: null,
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
   };

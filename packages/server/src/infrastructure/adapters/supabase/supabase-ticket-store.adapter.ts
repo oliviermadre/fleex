@@ -44,6 +44,7 @@ interface TicketRow {
   model_override: string | null;
   effort_override: string | null;
   fast_mode: boolean | null;
+  assistant_persona_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -99,6 +100,7 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     r.model_override ?? null,
     isEffortLevel(r.effort_override) ? r.effort_override : null,
     r.fast_mode === true,
+    r.assistant_persona_id ?? null,
   );
 }
 
@@ -290,6 +292,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       model_override: ticket.modelOverride,
       effort_override: ticket.effortOverride,
       fast_mode: ticket.fastMode,
+      assistant_persona_id: ticket.assistantPersonaId,
       created_at: ticket.createdAt.toISOString(),
       updated_at: ticket.updatedAt.toISOString(),
     });

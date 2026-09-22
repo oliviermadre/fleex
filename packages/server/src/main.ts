@@ -23,6 +23,7 @@ import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
 import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
 import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
+import { assistantThreadsRoutes } from './infrastructure/http/assistant-threads.routes.js';
 import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
 import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
 import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
@@ -120,6 +121,7 @@ async function main() {
   await app.register(claudeUsageRoutes(container));
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
+  await app.register(assistantThreadsRoutes(container));
   await app.register(personaRoutes(container));
   await app.register(skillRoutes(container));
   await app.register(panelRoutes(container));

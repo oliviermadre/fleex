@@ -6,6 +6,7 @@ import type { TicketStorePort } from './ports/ticket-store.port.js';
 import type { MentionStorePort } from './ports/mention-store.port.js';
 import type { CommentStorePort } from './ports/comment-store.port.js';
 import type { DeliverableStorePort } from './ports/deliverable-store.port.js';
+import type { ThreadStorePort } from './ports/thread-store.port.js';
 import type { LoggerPort } from './ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './use-cases/auto-review-workflow.js';
 import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
@@ -34,6 +35,7 @@ export interface DomainEventListenerDeps {
   mentionStore: MentionStorePort;
   commentStore: CommentStorePort;
   deliverableStore: DeliverableStorePort;
+  threadStore: ThreadStorePort;
   autoReviewWorkflow: AutoReviewWorkflowUseCase;
   executeAgent: ExecuteAgentUseCase;
   wakeWaitingAgents: WakeWaitingAgentsUseCase;
@@ -68,6 +70,7 @@ export class DomainEventListener {
       mentionStore: deps.mentionStore,
       commentStore: deps.commentStore,
       deliverableStore: deps.deliverableStore,
+      threadStore: deps.threadStore,
     });
   }
 
@@ -360,6 +363,10 @@ export class DomainEventListener {
   // ── Wake waiting agents on new content ──
 
   private async handleWakeWaitingOnComment(event: CommentPostedEvent): Promise<void> {
+    // The assistant addresses agents explicitly (a new mention, or a targeted
+    // ExecuteAgent.wakeUp on its own thread). Its comments must not wake every
+    // waiting agent on the ticket.
+    if (event.authorType === 'assistant') return;
     // A plain reply (or a re-mention disambiguated as "answer") wakes the waiting
     // agent and is fed to it. Agents the user marked as "new subject" (or the
     // race default) are in wakeExcludeAgents and stay waiting. Also exclude the
@@ -368,7 +375,9 @@ export class DomainEventListener {
       ...(event.authorType === 'agent' ? [event.authorName] : []),
       ...(event.wakeExcludeAgents ?? []),
     ];
-    await this.deps.wakeWaitingAgents.execute(event.ticketId, exclude);
+    // Scope: a main-stream comment never wakes an agent parked inside an
+    // assistant thread (the assistant relays); a thread turn wakes only its agent.
+    await this.deps.wakeWaitingAgents.execute(event.ticketId, exclude, { threadId: event.threadId ?? null });
   }
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {

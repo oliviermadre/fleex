@@ -260,6 +260,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
 
     container.executeAgent.onEvent = broadcastAgentEvent;
     container.runPanel.onEvent = broadcastAgentEvent;
+    container.runAssistantTurn.onEvent = broadcastAgentEvent;
 
     container.executeAgent.onExecutionComplete = (personaId, status, _mentionId) => {
       const type = status === 'completed' ? 'persona:execution_completed' : 'persona:execution_failed';

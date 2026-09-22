@@ -1108,13 +1108,13 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 <div className="mb-1.5 flex items-center gap-2">
                   <span
                     className={`text-xs font-semibold ${
-                      c.authorType === 'agent' ? tintText('purple') : tintText('blue')
+                      c.authorType === 'agent' ? tintText('purple') : c.authorType === 'assistant' ? tintText('teal') : tintText('blue')
                     }`}
                   >
                     {c.authorName}
                   </span>
                   <span className="text-[10px] text-[var(--theme-text-faint)]">
-                    {c.authorType === 'agent' ? 'agent' : 'you'}
+                    {c.authorType === 'user' ? 'you' : c.authorType}
                   </span>
                   <span className="text-[10px] text-[var(--theme-text-faint)]">
                     {relativeTime(c.createdAt)}
