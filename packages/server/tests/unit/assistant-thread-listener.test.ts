@@ -46,10 +46,14 @@ describe('AssistantThreadListener', () => {
 
   it('mention.execution_failed → thread failed, assistant informed', async () => {
     const s = setup();
-    s.bus.emit({ type: 'mention.execution_failed', mentionId: 'm1', ticketId: 't1', targetAgent: 'builder', reason: 'crash', message: 'x', occurredAt: new Date() } as never);
+    s.bus.emit({ type: 'mention.execution_failed', mentionId: 'm1', ticketId: 't1', targetAgent: 'builder', reason: 'max_turns', message: 'Reached maximum number of turns (20)', occurredAt: new Date() } as never);
     await tick();
     expect(s.thread.status).toBe('failed');
-    expect((s.turns[0] as { trigger: { mentionStatus: string } }).trigger.mentionStatus).toBe('failed');
+    // The scheduler's verdict travels with the trigger so the assistant relaunches for the right cause.
+    expect((s.turns[0] as { trigger: unknown }).trigger).toEqual({
+      kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed',
+      failure: { reason: 'max_turns', message: 'Reached maximum number of turns (20)' },
+    });
   });
 
   it('mention.woken_up → back to running, no assistant turn', async () => {
