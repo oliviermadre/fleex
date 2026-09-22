@@ -159,6 +159,7 @@ export function WorkView() {
               deliverables={deliverables}
               onDeliverableDeleted={removeDeliverable}
               onDeleteTask={(id) => void deleteTask(id)}
+              onOpenExecution={openExecution}
             />
           )}
         </div>
