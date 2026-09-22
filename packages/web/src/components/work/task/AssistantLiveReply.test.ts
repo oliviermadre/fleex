@@ -14,3 +14,10 @@ describe('liveTextOf', () => {
     expect(liveTextOf([])).toBe('');
   });
 });
+
+describe('liveTextOf — ordering', () => {
+  it('sorts by sequence and drops duplicate ids', () => {
+    const d = (id: string, sequence: number, text: string) => ({ id, sequence, eventType: 'content_block_delta', data: { type: 'assistant', message: { content: [{ type: 'text', text }] } } });
+    expect(liveTextOf([d('c', 3, 'jour'), d('a', 1, 'Bon'), d('b', 2, ''), d('a', 1, 'Bon')])).toBe('Bonjour');
+  });
+});
