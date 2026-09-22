@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { assistantThreadsRoutes } from '../../src/infrastructure/http/assistant-threads.routes.js';
 import { AgentThreadEntity } from '../../src/domain/entities/agent-thread.entity.js';
 import { EventBus } from '../../src/application/event-bus.js';
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 
 function thread(id = 'th') {
   return AgentThreadEntity.create({ id, ticketId: 't1', personaId: 'p', personaName: 'b', assistantPersonaId: 'a', brief: 'x', forwardedContext: [] });
@@ -123,8 +124,12 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const mOld = { id: 'm-old', targetAgent: 'b', status: 'waiting_for_info', commentId: 'c-old', resolve() { this.status = 'resolved'; } };
     const mOther = { id: 'm-other', targetAgent: 'b', status: 'waiting_for_info', commentId: 'c-other', resolve() { this.status = 'resolved'; } };
     const mNew = { id: 'm-new', targetAgent: 'b', status: 'pending', commentId: 'c-new' };
+    const ticket = TicketEntity.create({ id: 't1', boardId: 'b', displayId: 74, title: 'latency' });
+    ticket.update({ blocked: true });
+    let ticketSaves = 0;
     await app.register(assistantThreadsRoutes({
       eventBus: bus,
+      ticketStore: { getTicketById: async () => ticket, saveTicket: async () => { ticketSaves++; } },
       threadStore: { getByTicket: async () => [t], save: async () => {} },
       mentionStore: {
         getById: async (id: string) => (id === 'm-new' ? mNew : null),
@@ -143,5 +148,7 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     expect(mOther.status).toBe('waiting_for_info');
     expect(emitted).toEqual(['m-old']);
     expect(kicked).toEqual(['p']);
+    expect(ticket.blocked).toBe(false);
+    expect(ticketSaves).toBe(1);
   });
 });
