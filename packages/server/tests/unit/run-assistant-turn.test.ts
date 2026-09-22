@@ -61,7 +61,8 @@ function harness(actions: Array<Record<string, unknown>>) {
   const emitted: string[] = [];
   eventBus.on('*', (e) => { emitted.push(e.type); });
   const postComment = new PostCommentUseCase(comments as never, mentions as never, { saveActivity: async () => {} } as never, logger as never);
-  const runner: SdkRunner = async () => ({ resultText: '', structuredOutput: actions.shift() ?? null, metrics: {} });
+  const sdkCalls: Array<{ prompt: string; queryOptions: Record<string, unknown> }> = [];
+  const runner: SdkRunner = async (p) => { sdkCalls.push({ prompt: p.prompt, queryOptions: p.queryOptions }); return { resultText: '', structuredOutput: actions.shift() ?? null, metrics: {} }; };
   const uc = new RunAssistantTurnUseCase({
     threadStore: threads as never, commentStore: comments as never, mentionStore: mentions as never,
     ticketStore: { getTicketById: async () => ticket, saveTicket: async () => {} } as never,
@@ -80,8 +81,9 @@ function harness(actions: Array<Record<string, unknown>>) {
     agentEventStore: agentEvents as never, executeAgent: executeAgent as never,
     config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0 }) } as never,
     eventBus, logger: logger as never,
+    environment: { workspace: 'qa', cliBin: '/opt/fleex', cliDocs: async () => '# fleex CLI\nfleex ticket show <id>' },
   }, runner);
-  return { uc, ticket, comments, mentions, threads, agentEvents, executeAgent, emitted, actions };
+  return { uc, ticket, comments, mentions, threads, agentEvents, executeAgent, emitted, actions, sdkCalls };
 }
 
 const user = (commentId: string) => ({ kind: 'user_message' as const, commentId });
@@ -270,5 +272,28 @@ describe('RunAssistantTurnUseCase — request_mode', () => {
     const c = h.comments.saved.at(-1)!;
     expect(c.threadId).toBeNull();
     expect(c.body).toBe(`The Builder doit écrire des fichiers.\n\n<!-- fleex:mode-request {"mode":"edit","threadId":"${thread.id}"} -->`);
+  });
+});
+
+describe('RunAssistantTurnUseCase — Fleex environment preamble and CLI access', () => {
+  it('starts the system prompt with ticket, workspace and the fleex CLI documentation', async () => {
+    const h = harness([{ action: 'reply', message: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const sys = h.sdkCalls[0]!.queryOptions.systemPrompt as string;
+    expect(sys.startsWith('# Environnement Fleex')).toBe(true);
+    expect(sys).toContain('**#1** · uuid `t1`');
+    expect(sys).toContain('Workspace Fleex : **qa**');
+    expect(sys).toContain('/opt/fleex --workspace qa <commande>');
+    expect(sys).toContain('fleex ticket show <id>');
+    expect(sys.indexOf('# Environnement Fleex')).toBeLessThan(sys.indexOf('# Rôle : assistant du ticket'));
+  });
+
+  it('allows Bash restricted to the fleex CLI, with a bounded agentic budget', async () => {
+    const h = harness([{ action: 'reply', message: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const q = h.sdkCalls[0]!.queryOptions;
+    expect(q.allowedTools).toEqual(['Bash(fleex *)', 'Bash(/opt/fleex *)']);
+    expect(q.permissionMode).toBe('dontAsk');
+    expect(q.maxTurns).toBe(8);
   });
 });

@@ -76,3 +76,13 @@ describe('buildAssistantUserPrompt — thread deliverables', () => {
     expect(out).not.toContain('- Plan (final');
   });
 });
+
+describe('buildAssistantEnvPreamble', () => {
+  it('degrades gracefully without workspace or docs', async () => {
+    const { buildAssistantEnvPreamble } = await import('../../src/application/assistant/assistant-protocol.js');
+    const s = buildAssistantEnvPreamble({ ticketId: 'u', displayId: 7, workspace: null, cliBin: 'fleex', cliDocs: null });
+    expect(s).toContain('Workspace Fleex : **inconnu**');
+    expect(s).toContain('documentation indisponible');
+    expect(s).not.toContain('--workspace');
+  });
+});
