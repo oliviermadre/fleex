@@ -120,7 +120,7 @@ export function RightPanel({
       )}
       {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}
       {rightPanel === 'browser' && <BrowserPanel key={task.id} ticketId={task.id} />}
-      {rightPanel === 'thread' && <ThreadsPanel task={task} onOpenExecution={onOpenExecution} />}
+      {rightPanel === 'thread' && <ThreadsPanel task={task} deliverables={deliverables} onOpenExecution={onOpenExecution} />}
     </section>
   );
 }
