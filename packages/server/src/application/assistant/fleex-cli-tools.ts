@@ -48,8 +48,28 @@ const MUTATING_LEAVES = new Set([
 const DESTRUCTIVE_LEAVES = new Set(['delete', 'remove', 'kill', 'stop', 'restart', 'self-update', 'prune', 'reset', 'purge']);
 const HIDDEN_OPTIONS = new Set(['--help', '--workspace', '--json', '--format', '--version']);
 
-function camel(long: string): string {
-  return long.replace(/^--/, '').replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+/**
+ * Tool property keys must match `^[a-zA-Z0-9_.-]{1,64}$`. CLI names like
+ * `id|name`, `org/name` or `--with-comments` become `idOrName`, `orgName`,
+ * `withComments`. Exported for tests.
+ */
+export function toKey(name: string): string {
+  const words = name
+    .replace(/^--/, '')
+    .replace(/[<>[\]]/g, '')
+    .replace(/\|/g, ' or ')
+    .split(/[^a-zA-Z0-9]+/)
+    .filter((w) => w.length > 0);
+  if (words.length === 0) return 'value';
+  const key = words.map((w, i) => (i === 0 ? w : w[0]!.toUpperCase() + w.slice(1))).join('');
+  return key.slice(0, 64);
+}
+
+function unique(key: string, taken: Set<string>): string {
+  let k = key;
+  for (let i = 2; taken.has(k); i++) k = `${key.slice(0, 60)}_${i}`;
+  taken.add(k);
+  return k;
 }
 
 /** "-b, --board <board>" → { flag: '--board', takesValue: true } */
@@ -71,8 +91,9 @@ export function buildCliTools(docs: readonly CliCommandDoc[], roots: readonly st
     const destructive = DESTRUCTIVE_LEAVES.has(leaf);
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
+    const taken = new Set<string>();
     const args = doc.arguments.map((a) => {
-      const key = camel(a.name.replace(/[<>[\]]/g, ''));
+      const key = unique(toKey(a.name), taken);
       properties[key] = a.variadic
         ? { type: 'array', items: { type: 'string' }, description: a.description }
         : { type: 'string', description: a.description };
@@ -88,7 +109,7 @@ export function buildCliTools(docs: readonly CliCommandDoc[], roots: readonly st
       if (parsed.flag === '--workspace') { workspaceAware = true; continue; }
       if (parsed.flag === '--json') { jsonAware = true; continue; }
       if (HIDDEN_OPTIONS.has(parsed.flag)) continue;
-      const key = camel(parsed.flag);
+      const key = unique(toKey(parsed.flag), taken);
       properties[key] = parsed.takesValue
         ? { type: 'string', description: o.description }
         : { type: 'boolean', description: o.description };
