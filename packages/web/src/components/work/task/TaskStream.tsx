@@ -64,8 +64,6 @@ interface Props {
   personaNames?: Record<string, string>;
   /** The ticket's mentions: tells which runs / crash cards belong to a thread. */
   mentions?: TicketMention[];
-  /** Set while an assistant turn runs — shows « <name> is thinking… ». */
-  assistantThinking?: { name: string } | null;
   onOpenThread?: (threadId: string) => void;
   onAnswerThread?: (threadId: string, text: string) => void | Promise<void>;
   /** The ticket's current agents execution mode (talk / plan / edit). */
@@ -93,7 +91,6 @@ export function TaskStream({
   threads = EMPTY_THREADS,
   personaNames = EMPTY_NAMES,
   mentions = EMPTY_MENTIONS,
-  assistantThinking = null,
   onOpenThread,
   onAnswerThread,
   conversationMode = 'plan',
@@ -250,13 +247,6 @@ export function TaskStream({
             }
           }
         })}
-
-        {assistantThinking && (
-          <div className="flex items-center gap-2 pl-8 text-[11.5px] text-[var(--theme-text-muted)]">
-            <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
-            <span>{assistantThinking.name} is thinking…</span>
-          </div>
-        )}
 
         {/* Actionable HITL / workflow cards (Human Gate approve-reject, waiting
             for input, ambiguous route, failed-step retry, crashed relaunch,
