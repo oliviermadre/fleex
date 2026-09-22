@@ -31,7 +31,7 @@ describe('AssistantThreadListener', () => {
     s.bus.emit({ type: 'mention.resolved', mentionId: 'm1', ticketId: 't1', targetAgent: 'builder', resolvedBy: 'builder', occurredAt: new Date() });
     await tick();
     expect(s.thread.exchanges).toBe(2);
-    expect(s.saved).toEqual(['running']);
+    expect(s.saved).toEqual(['idle']);
     expect(s.turns).toEqual([{ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'resolved' } }]);
     expect(s.emitted).toEqual(['thread.updated']);
   });
