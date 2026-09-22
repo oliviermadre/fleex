@@ -12,6 +12,7 @@ import { PinnedBadge, type CommentPin } from './CommentPin';
 import { CommentActionsMenu, type CommentAction } from './CommentActionsMenu';
 import { TrashIcon } from './TrashIcon';
 import { PinIcon } from '../../ui/icons/AnnotationIcons';
+import { stripModeRequest } from '../selectors';
 
 /** The menu entries a comment offers, in order: pin (or go to its annotation), then delete. */
 export function commentActions({ onDelete, pin }: { onDelete?: () => void; pin?: CommentPin }): CommentAction[] {
@@ -63,7 +64,7 @@ export function StreamItem({ comment, onDelete, pin }: { comment: TicketComment;
           <CommentActionsMenu actions={actions} className="-my-1 ml-auto" />
         </div>
         <div className="min-w-0 max-w-full overflow-hidden text-[13px] text-[var(--theme-text-primary)]">
-          <MessageMarkdown body={comment.body} />
+          <MessageMarkdown body={stripModeRequest(comment.body)} />
         </div>
       </div>
     </div>

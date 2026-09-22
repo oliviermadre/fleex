@@ -28,7 +28,8 @@ import { annotationForComment, useAnnotationStore } from '../../../stores/annota
 import { annotationTitleFromComment } from '@fleex/shared';
 import type { CommentPin } from './CommentPin';
 import { DelegationCard } from './DelegationCard';
-import { buildStream, threadTurns, threadMentionIds, type QueueActivity } from '../selectors';
+import { ModeRequestCard } from './ModeRequestCard';
+import { buildStream, parseModeRequest, threadTurns, threadMentionIds, type ModeRequest, type QueueActivity } from '../selectors';
 
 const EMPTY_THREADS: AgentThread[] = [];
 const EMPTY_NAMES: Record<string, string> = {};
@@ -67,6 +68,10 @@ interface Props {
   assistantThinking?: { name: string } | null;
   onOpenThread?: (threadId: string) => void;
   onAnswerThread?: (threadId: string, text: string) => void | Promise<void>;
+  /** The ticket's current agents execution mode (talk / plan / edit). */
+  conversationMode?: string;
+  onGrantMode?: (request: ModeRequest) => void | Promise<void>;
+  onDeclineMode?: (request: ModeRequest) => void | Promise<void>;
 }
 
 export function TaskStream({
@@ -91,6 +96,9 @@ export function TaskStream({
   assistantThinking = null,
   onOpenThread,
   onAnswerThread,
+  conversationMode = 'plan',
+  onGrantMode,
+  onDeclineMode,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -169,6 +177,17 @@ export function TaskStream({
     return null;
   }, [comments, activity, showActionCards]);
 
+  // Only the most recent mode request is actionable; earlier ones are history.
+  const latestModeRequestId = useMemo(() => {
+    if (!showActionCards) return null;
+    for (let i = comments.length - 1; i >= 0; i--) {
+      const c = comments[i]!;
+      if (c.threadId || c.authorType !== 'assistant') continue;
+      if (parseModeRequest(c.body)) return c.id;
+    }
+    return null;
+  }, [comments, showActionCards]);
+
   const hasContent = stream.length > 0 || (description && description.trim().length > 0);
 
   return (
@@ -201,7 +220,21 @@ export function TaskStream({
                   onAnswer={(id, text) => onAnswerThread?.(id, text)}
                 />
               );
-            case 'comment':
+            case 'comment': {
+              const modeRequest = entry.comment.authorType === 'assistant' ? parseModeRequest(entry.comment.body) : null;
+              if (modeRequest) {
+                return (
+                  <ModeRequestCard
+                    key={entry.comment.id}
+                    comment={entry.comment}
+                    request={modeRequest}
+                    currentMode={conversationMode}
+                    actionable={entry.comment.id === latestModeRequestId}
+                    onGrant={(r) => onGrantMode?.(r)}
+                    onDecline={(r) => onDeclineMode?.(r)}
+                  />
+                );
+              }
               return entry.comment.id === questionCommentId ? (
                 <InlineQuestion
                   key={entry.comment.id}
@@ -214,6 +247,7 @@ export function TaskStream({
               ) : (
                 <StreamItem key={entry.comment.id} comment={entry.comment} onDelete={askDelete(entry.comment.id)} pin={pinOf(entry.comment)} />
               );
+            }
           }
         })}
 
