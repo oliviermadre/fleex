@@ -8,8 +8,8 @@
  * localStorage) so unsent text survives switching tasks and coming back.
  *
  * Phase 3: the ticket's assistant ⇄ agent threads render as delegation cards,
- * an assistant turn in flight shows « <name> is thinking… », and a card opens
- * the Threads panel on its thread.
+ * assistant turns show as run cards like any agent run, and a card opens the
+ * Threads panel on its thread.
  */
 import { useCallback, useEffect, useMemo } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
@@ -72,10 +72,6 @@ export function TaskPane({
     () => Object.fromEntries(personas.map((p) => [p.id, p.displayName])) as Record<string, string>,
     [personas],
   );
-  const assistantThinking = useMemo(() => {
-    const running = (executions ?? []).find((e) => e.status === 'running' && e.mentionId.startsWith('assistant:'));
-    return running ? { name: personaNames[running.personaId] ?? 'Assistant' } : null;
-  }, [executions, personaNames]);
 
   const setRightPanel = useWorkStore((s) => s.setRightPanel);
   const setSelectedThreadId = useWorkStore((s) => s.setSelectedThreadId);
@@ -131,7 +127,6 @@ export function TaskPane({
         threads={threads}
         personaNames={personaNames}
         mentions={mentions}
-        assistantThinking={assistantThinking}
         onOpenThread={openThread}
         onAnswerThread={convo.postToThread}
         conversationMode={conversationMode}

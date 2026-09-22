@@ -456,11 +456,11 @@ describe('buildStream — threads', () => {
     expect(stream.map((e) => (e.kind === 'comment' ? e.comment.id : e.kind))).toEqual(['ann', 'delegation', 'later']);
   });
 
-  it('drops assistant executions from the run cards', () => {
+  it('keeps assistant turns as run cards (their log is how the user follows a long think)', () => {
     const exec = (id: string, mentionId: string): AgentExecution =>
       ({ id, personaId: 'p', ticketId: 't1', mentionId, eventCount: 0, status: 'completed', startedAt: '2026-01-01T10:00:00.000Z', completedAt: null, lastEventAt: null }) as AgentExecution;
     const stream = buildStream([], [], [exec('e1', 'assistant:abc'), exec('e2', 'm1')]);
-    expect(stream.map((e) => (e.kind === 'run' ? e.execution.id : e.kind))).toEqual(['e2']);
+    expect(stream.map((e) => (e.kind === 'run' ? e.execution.id : e.kind))).toEqual(['e1', 'e2']);
   });
 });
 

@@ -288,8 +288,6 @@ export function buildStream(
   const entries: StreamEntry[] = [];
   for (const execution of executions) {
     if (execution.source === 'cli') continue;
-    // Assistant turns are plumbing, not runs the user follows: no run card.
-    if (execution.mentionId.startsWith('assistant:')) continue;
     if (hiddenMentionIds.has(execution.mentionId)) continue;
     entries.push({ kind: 'run', at: Date.parse(execution.startedAt), execution });
   }

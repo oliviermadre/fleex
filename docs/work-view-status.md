@@ -395,7 +395,7 @@ Threads panel; turns only read in the panel).
   the user's Work message (the assistant reads `@agent:x` as a delegation instruction; skills/workflows untouched).
 - `RunAssistantTurnUseCase` — one action per turn (`reply` / `delegate` / `continue_thread` / `conclude_thread`),
   per-ticket lane, 8-turn cap per thread, `conclude_request` forces `conclude_thread`, invalid output → short
-  assistant comment. Executions carry `mentionId = 'assistant:<uuid>'` (web hides them from run cards).
+  assistant comment. Executions carry `mentionId = 'assistant:<uuid>'` and show as run cards in the Work stream like any agent run.
   Prompt/schema/parser in `application/assistant/assistant-protocol.ts`; `resolveExecutionConfig` extracted to
   `application/utils/` and shared with `ExecuteAgent`.
 - `AssistantThreadListener` (local bus only): `mention.resolved|waiting_for_info|execution_failed` on the thread's
