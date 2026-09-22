@@ -6,7 +6,7 @@
  * the assistant to conclude now.
  */
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentExecution, AgentThread, TicketComment, TicketMention } from '@fleex/shared';
+import type { AgentExecution, AgentThread, TicketComment, TicketDeliverable, TicketMention } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { formatAge } from '../../../lib/formatAge';
 import * as api from '../../../services/api';
@@ -17,6 +17,7 @@ import { AgentEventStream } from '../../main-panel/AgentEventStream';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import { ThreadStatusPill } from '../task/DelegationCard';
 import { RunCard } from '../task/RunCard';
+import { DeliverableCard } from '../task/DeliverableCard';
 import type { WorkTask } from '../types';
 import { useTicketThreads } from './useTicketThreads';
 import { useThreadTurns } from './useThreadTurns';
@@ -66,7 +67,7 @@ function Turn({ turn }: { turn: TicketComment }) {
   );
 }
 
-export function ThreadsPanel({ task, onOpenExecution }: { task: WorkTask; onOpenExecution: (executionId: string, title: string) => void }) {
+export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: WorkTask; deliverables: TicketDeliverable[]; onOpenExecution: (executionId: string, title: string) => void }) {
   const threads = useTicketThreads(task.id);
   const selectedThreadId = useWorkStore((s) => s.selectedThreadId);
   const setSelectedThreadId = useWorkStore((s) => s.setSelectedThreadId);
@@ -97,6 +98,11 @@ export function ThreadsPanel({ task, onOpenExecution }: { task: WorkTask; onOpen
   const threadExecutions = useMemo(
     () => (executions ?? []).filter((e) => threadMentionIds.has(e.mentionId)).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
     [executions, threadMentionIds],
+  );
+  // The agent's results: deliverables attached to the thread's mentions.
+  const threadDeliverables = useMemo(
+    () => deliverables.filter((d) => d.mentionId && threadMentionIds.has(d.mentionId)),
+    [deliverables, threadMentionIds],
   );
   const currentExecution = useMemo(() => {
     const ofMention = thread?.currentMentionId ? threadExecutions.filter((e) => e.mentionId === thread.currentMentionId) : [];
@@ -236,6 +242,8 @@ export function ThreadsPanel({ task, onOpenExecution }: { task: WorkTask; onOpen
                 ...turns.map((t) => ({ at: Date.parse(t.createdAt), key: `c-${t.id}`, node: <Turn key={`c-${t.id}`} turn={t} /> })),
                 // A run sits just before the reply it produced (same convention as the main stream).
                 ...threadExecutions.map((e) => ({ at: Date.parse(e.startedAt) - 1, key: `r-${e.id}`, node: <RunCard key={`r-${e.id}`} execution={e} onOpen={onOpenExecution} /> })),
+                // A deliverable sits just after the turn that announced it.
+                ...threadDeliverables.map((d) => ({ at: Date.parse(d.createdAt) + 1, key: `d-${d.id}`, node: <DeliverableCard key={`d-${d.id}`} deliverable={d} /> })),
               ]
                 .sort((a, b) => a.at - b.at)
                 .map((x) => x.node)}
