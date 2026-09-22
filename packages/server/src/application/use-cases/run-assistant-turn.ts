@@ -21,6 +21,7 @@ import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, type SdkQueryMetrics } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { resolveExecutionConfig } from '../utils/resolve-execution-config.js';
+import type { AssistantEnvironmentPort } from '../assistant/assistant-environment.js';
 import {
   ASSISTANT_OUTPUT_SCHEMA,
   buildAssistantSystemPrompt,
@@ -34,6 +35,8 @@ import {
 export const MAX_ASSISTANT_TURNS_PER_THREAD = 8;
 /** Consecutive agent failures after which the assistant stops relaunching and reports back. */
 export const MAX_THREAD_FAILURES = 3;
+/** Agentic turns an assistant turn may spend on `fleex` CLI calls before it must answer. */
+export const ASSISTANT_MAX_TOOL_TURNS = 8;
 
 /** Machine-readable tail of a mode-request comment; the web renders it as a CTA. Invisible in markdown. */
 export function modeRequestMarker(mode: string, threadId: string): string {
@@ -61,6 +64,8 @@ export interface RunAssistantTurnDeps {
   config: ConfigPort;
   eventBus: EventBus;
   logger: LoggerPort;
+  /** Workspace, CLI binary and `fleex documentation` — the hard-coded head of the system prompt. */
+  environment: AssistantEnvironmentPort;
 }
 
 /**
@@ -125,6 +130,13 @@ export class RunAssistantTurnUseCase {
     }
 
     const systemPrompt = buildAssistantSystemPrompt({
+      env: {
+        ticketId: ticket.id,
+        displayId: ticket.displayId,
+        workspace: this.deps.environment.workspace,
+        cliBin: this.deps.environment.cliBin,
+        cliDocs: await this.deps.environment.cliDocs(),
+      },
       persona: assistant,
       assistantName: assistant.displayName || assistant.name,
       personas: personas
@@ -185,6 +197,11 @@ export class RunAssistantTurnUseCase {
     });
     // talk mode never sets resume itself; the assistant keeps one session per ticket.
     if (previousSessionId) queryOptions.resume = previousSessionId;
+    // The assistant operates Fleex through its CLI only: Bash, restricted to `fleex`
+    // invocations, a few agentic turns, and still the JSON action at the end.
+    queryOptions.allowedTools = ['Bash(fleex *)', `Bash(${this.deps.environment.cliBin} *)`];
+    queryOptions.permissionMode = 'dontAsk';
+    queryOptions.maxTurns = ASSISTANT_MAX_TOOL_TURNS;
 
     let action: AssistantAction | null = null;
     try {

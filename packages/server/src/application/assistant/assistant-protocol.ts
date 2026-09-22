@@ -116,16 +116,48 @@ export function renderQuestion(q: AssistantQuestion | null | undefined): string 
   return `\n\n${q.text}\n${q.options.map((o) => `- ${o}`).join('\n')}`;
 }
 
+export interface AssistantEnvContext {
+  ticketId: string;
+  displayId: number;
+  workspace: string | null;
+  cliBin: string;
+  cliDocs: string | null;
+}
+
+/** Hard-coded head of every assistant system prompt, whatever the persona. */
+export function buildAssistantEnvPreamble(env: AssistantEnvContext): string {
+  const ws = env.workspace ?? 'inconnu';
+  const cmd = env.workspace ? `${env.cliBin} --workspace ${env.workspace} <commande>` : `${env.cliBin} <commande>`;
+  const wsRule = env.workspace ? ` Passe toujours \`--workspace ${env.workspace}\`.` : '';
+  const docs = env.cliDocs ?? `(documentation indisponible : la CLI n'a pas répondu ; lance \`${env.cliBin} documentation\` toi-même si besoin)`;
+  return `# Environnement Fleex (injecté par le système)
+
+- Ticket courant : **#${env.displayId}** · uuid \`${env.ticketId}\`
+- Workspace Fleex : **${ws}**
+- Tu opères DEPUIS L'INTÉRIEUR de Fleex, l'ADE (Agentic Development Environment) qui t'exécute. Tu disposes de l'outil Bash, restreint à la CLI \`fleex\` : \`${cmd}\`. Utilise-la quand tu as besoin d'agir ou de lire au-delà du contexte fourni : lire un livrable complet, changer le statut ou la priorité du ticket, consulter d'autres tickets, poster un commentaire…${wsRule} Après tes éventuelles commandes, termine TOUJOURS par l'objet JSON d'action attendu.
+
+## Documentation de la CLI fleex
+
+${docs}
+
+---
+
+`;
+}
+
 export function buildAssistantSystemPrompt(p: {
   persona: { soulMd: string; identityMd: string; memoryMd: string };
   personas: { name: string; displayName: string; identityMd: string }[];
   assistantName: string;
+  /** When given, the environment block is the very first thing in the prompt. */
+  env?: AssistantEnvContext;
 }): string {
+  const preamble = p.env ? buildAssistantEnvPreamble(p.env) : '';
   const identity = [p.persona.soulMd, p.persona.identityMd, p.persona.memoryMd].filter((s) => s.trim().length > 0).join('\n\n---\n\n');
   const roster = p.personas
     .map((x) => `- @agent:${x.name} — ${x.displayName}${x.identityMd.trim() ? ` : ${x.identityMd.trim().split('\n')[0]!.slice(0, 160)}` : ''}`)
     .join('\n');
-  return `${identity ? `${identity}\n\n---\n\n` : ''}# Rôle : assistant du ticket (« ${p.assistantName} »)
+  return `${preamble}${identity ? `${identity}\n\n---\n\n` : ''}# Rôle : assistant du ticket (« ${p.assistantName} »)
 
 Tu es l'assistant et chef de projet de l'utilisateur sur ce ticket. Ton équipe, ce sont les personas ci-dessous : elles travaillent pour toi, jamais en contact direct avec l'utilisateur. Tu lis chaque message, puis tu choisis EXACTEMENT UNE action et tu réponds UNIQUEMENT avec un objet JSON conforme au schéma fourni.
 
