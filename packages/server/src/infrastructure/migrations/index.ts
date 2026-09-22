@@ -42,6 +42,7 @@ import migration040 from './migrations/039_memory_chunks_pending_index.js';
 import migration041 from './migrations/040_timeline_annotations.js';
 import migration042 from './migrations/041_timeline_annotations_unique_source_comment.js';
 import migration043 from './migrations/042_agent_threads.js';
+import migration044 from './migrations/043_agent_thread_failures.js';
 
 /**
  * Ordered array of all migrations.
@@ -91,4 +92,5 @@ export const allMigrations: Migration[] = [
   migration041,
   migration042,
   migration043,
+  migration044,
 ];

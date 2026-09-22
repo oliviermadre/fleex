@@ -5,7 +5,7 @@ import { resolveSelectedThread } from './threadSelection';
 function thread(id: string, status: AgentThread['status'] = 'running'): AgentThread {
   return {
     id, ticketId: 't1', initiator: 'assistant', personaId: 'p', personaName: 'b', assistantPersonaId: 'a', brief: 'x',
-    forwardedContext: [], status, currentMentionId: null, exchanges: 0, summary: null,
+    forwardedContext: [], status, currentMentionId: null, exchanges: 0, failures: 0, summary: null,
     createdAt: '2026-09-21T10:00:00.000Z', updatedAt: '2026-09-21T10:00:00.000Z', concludedAt: null,
   };
 }

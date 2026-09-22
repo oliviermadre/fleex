@@ -12,7 +12,7 @@
  * pinning a comment to the Timeline (an annotation, SPEC annotations §5.4).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
+import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable, TicketMention } from '@fleex/shared';
 import { StreamItem } from './StreamItem';
 import { EventLine } from './EventLine';
 import { RunCard } from './RunCard';
@@ -28,10 +28,11 @@ import { annotationForComment, useAnnotationStore } from '../../../stores/annota
 import { annotationTitleFromComment } from '@fleex/shared';
 import type { CommentPin } from './CommentPin';
 import { DelegationCard } from './DelegationCard';
-import { buildStream, threadTurns, type QueueActivity } from '../selectors';
+import { buildStream, threadTurns, threadMentionIds, type QueueActivity } from '../selectors';
 
 const EMPTY_THREADS: AgentThread[] = [];
 const EMPTY_NAMES: Record<string, string> = {};
+const EMPTY_MENTIONS: TicketMention[] = [];
 
 interface Props {
   ticketId: string;
@@ -60,6 +61,8 @@ interface Props {
   threads?: AgentThread[];
   /** Display name per persona id, for the cards. */
   personaNames?: Record<string, string>;
+  /** The ticket's mentions: tells which runs / crash cards belong to a thread. */
+  mentions?: TicketMention[];
   /** Set while an assistant turn runs — shows « <name> is thinking… ». */
   assistantThinking?: { name: string } | null;
   onOpenThread?: (threadId: string) => void;
@@ -84,6 +87,7 @@ export function TaskStream({
   onDeliverableDeleted,
   threads = EMPTY_THREADS,
   personaNames = EMPTY_NAMES,
+  mentions = EMPTY_MENTIONS,
   assistantThinking = null,
   onOpenThread,
   onAnswerThread,
@@ -138,9 +142,13 @@ export function TaskStream({
     };
   };
 
+  // Runs and action cards of agents working inside a thread stay out of the main
+  // stream: the assistant owns them (relaunch, answers), the Threads panel shows them.
+  const hiddenMentionIds = useMemo(() => threadMentionIds(comments, mentions), [comments, mentions]);
+  const threadCommentIds = useMemo(() => new Set(comments.filter((c) => c.threadId).map((c) => c.id)), [comments]);
   const stream = useMemo(
-    () => buildStream(comments, events, executions, deliverables, threads),
-    [comments, events, executions, deliverables, threads],
+    () => buildStream(comments, events, executions, deliverables, threads, hiddenMentionIds),
+    [comments, events, executions, deliverables, threads, hiddenMentionIds],
   );
 
   useEffect(() => {
@@ -227,6 +235,7 @@ export function TaskStream({
             // The stream already renders a RunCard per running execution, so the
             // "…is working" banner would double-report it.
             showRunningBanner={false}
+            hideCommentIds={threadCommentIds}
           />
         )}
 

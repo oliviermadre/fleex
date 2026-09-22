@@ -8,7 +8,7 @@ import { useThreadStore, upsertThread, selectOpenByTicket } from './threadStore'
 function thread(over: Partial<AgentThread> & { id: string }): AgentThread {
   return {
     ticketId: 't1', initiator: 'assistant', personaId: 'p', personaName: 'builder', assistantPersonaId: 'a',
-    brief: 'b', forwardedContext: [], status: 'running', currentMentionId: null, exchanges: 0, summary: null,
+    brief: 'b', forwardedContext: [], status: 'running', currentMentionId: null, exchanges: 0, failures: 0, summary: null,
     createdAt: '2026-09-21T10:00:00.000Z', updatedAt: '2026-09-21T10:00:00.000Z', concludedAt: null,
     ...over,
   };

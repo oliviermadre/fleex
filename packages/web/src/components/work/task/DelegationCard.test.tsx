@@ -6,7 +6,7 @@ import { DelegationCard } from './DelegationCard';
 function thread(over: Partial<AgentThread> = {}): AgentThread {
   return {
     id: 'th1', ticketId: 't1', initiator: 'assistant', personaId: 'p', personaName: 'builder', assistantPersonaId: 'a',
-    brief: 'Fix the e2e', forwardedContext: ['ticket', 'pr'], status: 'running', currentMentionId: 'm1', exchanges: 3,
+    brief: 'Fix the e2e', forwardedContext: ['ticket', 'pr'], status: 'running', currentMentionId: 'm1', exchanges: 3, failures: 0,
     summary: null, createdAt: '2026-09-21T10:00:00.000Z', updatedAt: '2026-09-21T10:00:00.000Z', concludedAt: null,
     ...over,
   };

@@ -43,3 +43,16 @@ describe('buildAssistantSystemPrompt', () => {
     for (const a of ['reply', 'delegate', 'continue_thread', 'conclude_thread']) expect(s).toContain(`"${a}"`);
   });
 });
+
+describe('buildAssistantUserPrompt — triggers', () => {
+  it('ticket_created and failed triggers carry the project-manager instructions', async () => {
+    const { buildAssistantUserPrompt } = await import('../../src/application/assistant/assistant-protocol.js');
+    const context = { ticket: { displayId: 1, title: 'T', status: 'doing', type: null, priority: 'none', description: '' }, comments: [], deliverables: [] } as never;
+    const created = buildAssistantUserPrompt({ context, threads: [], turns: [], trigger: { kind: 'ticket_created' } });
+    expect(created).toContain('Prends-le en charge');
+    const thread = { id: 'th1', personaName: 'b', status: 'failed', exchanges: 2, brief: 'x', failures: 2 } as never;
+    const failed = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed' } });
+    expect(failed).toContain('2 échec(s) consécutif(s)');
+    expect(failed).toContain('continue_thread');
+  });
+});

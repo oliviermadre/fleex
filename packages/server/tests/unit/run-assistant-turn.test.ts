@@ -214,3 +214,41 @@ describe('RunAssistantTurnUseCase', () => {
     expect(order).toEqual(['start1', 'end1', 'start2', 'end2']);
   });
 });
+
+describe('RunAssistantTurnUseCase — failures', () => {
+  it('continue_thread on a failed thread relaunches the agent with a new mention', async () => {
+    const h = harness([
+      { action: 'delegate', personaName: 'builder', brief: 'A', turn: 'un' },
+      { action: 'continue_thread', threadId: 'SET_BELOW', turn: 'reprends où tu en étais' },
+    ]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    thread.fail(); await h.threads.save(thread);
+    h.actions[0]!.threadId = thread.id;
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'failed' } });
+    expect(thread.status).toBe('running');
+    expect(h.mentions.saved).toHaveLength(2);
+    expect(thread.currentMentionId).toBe(h.mentions.saved[1]!.id);
+  });
+
+  it('after MAX_THREAD_FAILURES the relaunch becomes a conclusion reported to the user', async () => {
+    const h = harness([
+      { action: 'delegate', personaName: 'builder', brief: 'A', turn: 'un' },
+      { action: 'continue_thread', threadId: 'SET_BELOW', turn: 'encore' },
+    ]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    thread.fail(); thread.fail(); thread.fail(); await h.threads.save(thread);
+    h.actions[0]!.threadId = thread.id;
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'failed' } });
+    expect(thread.status).toBe('concluded');
+    expect(h.comments.saved.at(-1)!.body).toMatch(/3 tentatives/);
+    expect(h.mentions.saved).toHaveLength(1);
+  });
+
+  it('ticket_created runs a turn without a user comment', async () => {
+    const h = harness([{ action: 'reply', message: 'Je prends le ticket.' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'ticket_created' } });
+    expect(h.comments.saved.map((c) => c.body)).toEqual(['Je prends le ticket.']);
+  });
+});
