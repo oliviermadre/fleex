@@ -226,6 +226,8 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
   it('delegate on a persona with an open thread becomes a continue', async () => {
     const h = harness([{ tools: [delegateBuilder] }, { text: '' }, { tools: [{ name: 'delegate_to_persona', input: { personaName: 'builder', brief: 'B', turn: 'deux' } }] }, { text: '' }]);
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    // The first turn has settled (otherwise the continue is refused as "still working").
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.resolve(); await h.mentions.save(m);
     await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
     expect(h.threads.saved.size).toBe(1);
     expect(h.mentions.saved).toHaveLength(2);
@@ -245,6 +247,24 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
     expect(h.ticket.blocked).toBe(false);
     expect(h.comments.saved.at(-1)!.threadId).toBe(thread.id);
     expect(thread.status).toBe('running');
+  });
+
+  it('continue_thread while the agent is still on its previous turn sends nothing and tells the model to wait', async () => {
+    // Regression: a user message during a running turn made the assistant open a
+    // second mention, which queued behind the first on the same lane for good.
+    const continueRound: Round = { tools: [{ name: 'continue_thread', input: { threadId: '', turn: 'au fait, 999 tours maintenant' } }] };
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }, continueRound, { text: 'Je lui transmets dès la fin de son tour.' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    continueRound.tools![0]!.input['threadId'] = thread.id;
+    const m = h.mentions.saved[0]!; m.acknowledge(); await h.mentions.save(m);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(h.executeAgent.woken).toEqual([]);
+    expect(h.comments.saved.filter((c) => c.threadId === thread.id)).toHaveLength(1);
+    const results = h.llmCalls[3]!.messages[2]!.content as Anthropic.ToolResultBlockParam[];
+    expect(results[0]!.content).toMatch(/travaille encore sur le tour précédent/);
+    expect(h.comments.saved.at(-1)!.body).toBe('Je lui transmets dès la fin de son tour.');
   });
 
   it('conclude_thread → terminal, live mention cancelled, « Retour de … » posted, thread.concluded', async () => {
@@ -286,6 +306,7 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
     const thread = [...h.threads.saved.values()][0]!;
     h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'reprends' })]));
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.markFailed(); await h.mentions.save(m);
     thread.fail(); await h.threads.save(thread);
     await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'failed' } });
     expect(thread.status).toBe('running');

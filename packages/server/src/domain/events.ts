@@ -119,6 +119,11 @@ export interface CommentPostedEvent extends DomainEvent {
    * disambiguation defaulted that way), so their pending question stays open.
    */
   wakeExcludeAgents?: string[];
+  /**
+   * Assistant thread the comment was posted in (Phase 3), `null`/absent for the
+   * main stream. Scopes which waiting agents the comment may wake.
+   */
+  threadId?: string | null;
 }
 
 export interface CommentUpdatedEvent extends DomainEvent {

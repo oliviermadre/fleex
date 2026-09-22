@@ -439,6 +439,20 @@ workspace; the CLI docs are NOT inlined (the tool schemas replace them). The fin
 user, streamed live in the Work stream (`AssistantLiveReply`) and posted as the assistant comment; the run card + log
 stay. Spec §Décisions 1 is superseded by this.
 
+**QA round 3 (2026-09-22) — the thread lane:** a user message in the main stream used to reach the ticket's
+generic wake-up (`comment.posted` → `WakeWaitingAgents`) and woke the thread agent directly, in parallel with the
+assistant; the assistant's own `continue_thread` then opened a second mention that queued behind the first on the
+(agent, ticket) lane and never ran (« queued — waiting for a free agent slot »). Fixes: `comment.posted` carries a
+`threadId` scope and `WakeWaitingAgents` wakes only main-stream agents for a main-stream comment (a thread turn wakes
+its thread's agent only); `continue_thread` while the current mention is `pending`/`acknowledged` sends nothing and
+tells the model to wait for the callback; the threads GET read-repair closes an older `waiting_for_info` turn stuck
+behind a `pending` one and kicks the scheduler. Protocol: the failure trigger now carries the scheduler's verdict
+(`reason` + `message`, e.g. `max_turns`, read as « not a permissions problem »), plan mode is spelled out as
+read/search allowed (`request_mode` only for explicit write refusals or a task that writes), and a `waiting_for_info`
+that is a status (« investigation launched ») is a relaunch demanding synchronous work. Agent side (structured output
+instructions): `waiting_for_info` is for questions only, and no background sub-agent/task — the execution ends with the
+output and kills whatever still runs.
+
 **QA strategy (agreed):** recette on the **QA sqlite instance only** (`FLEEX_STORAGE_DRIVER=sqlite`,
 `FLEEX_SQLITE_PATH` dedicated) — migrations run at boot with no opt-out, so the branch must NOT boot on the prod
 Supabase during the phase. Before the single end-of-phase pass on prod: `pg_dump` via `FLEEX_SUPABASE_DB_URL`, and
@@ -450,8 +464,9 @@ visible comments in their context (other threads' turns included); the FORWARDED
 (`ticket`/`worktrees`/`pr`/`deliverables`), not resolved labels. **Deferred:** cost per thread relies on the
 ticket's mentions being loaded (best effort); a keyboard shortcut for the Threads tool.
 
-Verified green at the last commit: shared tsc · server tsc + vitest (1536) + bun sqlite tests · web tsc + vitest (936)
-+ palette 0.
+Verified green at the last commit: shared tsc · server tsc + vitest (1564) · web tsc + vitest (942) + palette 0.
+Bun sqlite tests: 109 pass; `memory-event-listener.bun.test.ts` (19) fails under `bun test` with
+`vi.advanceTimersByTimeAsync is not a function` — pre-existing, unrelated to this phase.
 
 ## Key facts / gotchas (learned during impl)
 

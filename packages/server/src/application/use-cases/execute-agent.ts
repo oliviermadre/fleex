@@ -184,6 +184,12 @@ ${typeLines}
     "Should the bundle target Apple silicon only?"). Do NOT write a status report about
     having asked (e.g. "I posed a question to @nas", "Awaiting reply from X") — the system
     does not post any separate question; only what you write in \`comment\` reaches the reader.
+    \`"waiting_for_info"\` is ONLY for a question you cannot answer yourself. It never means
+    "work in progress": your execution ENDS the moment you return this output.
+- **No background work**: never launch a sub-agent or a task in the background (Agent tool with
+  \`run_in_background\`, \`&\` in Bash, "I'll report when it completes"). Everything still running
+  when you return is killed and nobody collects its result. Do the search or the work yourself,
+  synchronously, and return only once you hold the result.
 - Both deliverable and comment can be non-null, or both null (silent completion — only valid with "resolved").
 
 ## CRITICAL — Handoff Rules (ENFORCED BY THE SYSTEM)

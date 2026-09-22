@@ -375,7 +375,9 @@ export class DomainEventListener {
       ...(event.authorType === 'agent' ? [event.authorName] : []),
       ...(event.wakeExcludeAgents ?? []),
     ];
-    await this.deps.wakeWaitingAgents.execute(event.ticketId, exclude);
+    // Scope: a main-stream comment never wakes an agent parked inside an
+    // assistant thread (the assistant relays); a thread turn wakes only its agent.
+    await this.deps.wakeWaitingAgents.execute(event.ticketId, exclude, { threadId: event.threadId ?? null });
   }
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {

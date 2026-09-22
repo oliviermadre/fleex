@@ -397,7 +397,7 @@ export async function createContainer() {
     logger,
   });
 
-  const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
+  const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger, commentStore);
 
   // Domain event bus
   // Two buses to support multi-instance fan-out without duplicating side-effects:

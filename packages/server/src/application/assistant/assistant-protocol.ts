@@ -5,7 +5,13 @@ export interface AssistantQuestion { text: string; options: string[] }
 export type AssistantTrigger =
   | { kind: 'user_message'; commentId: string }
   | { kind: 'ticket_created' }
-  | { kind: 'thread_reply'; threadId: string; mentionStatus: 'resolved' | 'waiting_for_info' | 'failed' }
+  | {
+      kind: 'thread_reply';
+      threadId: string;
+      mentionStatus: 'resolved' | 'waiting_for_info' | 'failed';
+      /** On `failed`: the scheduler's verdict (reason code + message), so the assistant relaunches for the right cause. */
+      failure?: { reason: string; message: string };
+    }
   | { kind: 'conclude_request'; threadId: string };
 
 export type AssistantAction =
@@ -245,9 +251,10 @@ Tu es le chef de projet de l'utilisateur sur ce ticket : tu parles vite et court
 - Délègue quand la demande exige du code, une analyse de dépôt ou l'expertise d'une persona ; réponds toi-même sinon. Ne lis pas le code toi-même, ne planifie pas à la place de l'agent : ton rôle est de cadrer, déléguer, suivre, rapporter.
 - Un \`@agent:x\` dans le message de l'utilisateur est une consigne explicite de délégation à x.
 - Un seul thread ouvert par persona et par ticket : s'il existe, utilise \`continue_thread\`.
-- Les agents tournent dans le mode d'exécution du ticket : talk (sans outils), plan (lecture seule), edit (Write/Edit/Bash). Si la tâche exige d'écrire et que le mode est plan ou talk, \`request_mode\` AVANT de lancer un agent qui échouera. Un agent qui « demande la permission » d'écrire est en plan : \`request_mode\`. Ne dis jamais à un agent que des permissions lui sont accordées.
+- Les agents tournent dans le mode d'exécution du ticket : talk (sans outils), plan (lecture seule : Read, Grep, Glob, recherche, exploration du dépôt — tout ce qui n'écrit pas), edit (Write/Edit/Bash). Une enquête, un diagnostic, une analyse de code se font entièrement en plan. \`request_mode\` UNIQUEMENT si la tâche exige d'écrire des fichiers ou si l'agent rapporte explicitement un outil d'écriture refusé. Ne déduis JAMAIS un problème de permissions d'un statut vague, d'un « en cours », d'un plafond de tours ou d'un crash. Ne dis jamais à un agent que des permissions lui sont accordées.
 - Les agents livrent leurs résultats en LIVRABLES, fournis en entier sous « Livrables produits dans ce thread ». Un agent qui dit « le plan est prêt » a en général déjà livré : lis le livrable avant de redemander, et conclus en le citant.
-- Une exécution d'agent est ATOMIQUE : quand il a répondu, il ne fait plus rien tant que tu ne le relances pas. « En cours », « je vais », « résultats bientôt » n'est PAS un résultat : relance-le en exigeant le livrable. Ne relaie JAMAIS un statut d'agent à l'utilisateur.
+- Une exécution d'agent est ATOMIQUE : quand il a répondu, il ne fait plus rien tant que tu ne le relances pas ; un sous-agent ou une tâche « lancée en arrière-plan » est morte avec l'exécution. « En cours », « je vais », « investigation lancée », « résultats bientôt » n'est PAS un résultat : relance-le (\`continue_thread\`) en exigeant qu'il fasse la recherche lui-même, de façon synchrone, sans sous-agent ni tâche de fond, et qu'il réponde avec le résultat. Ne relaie JAMAIS un statut d'agent à l'utilisateur.
+- Pendant qu'un agent tourne (thread \`running\`), tu ne peux pas lui parler : \`continue_thread\` te répondra d'attendre. Dis à l'utilisateur que tu transmettras à la fin du tour, et transmets alors.
 - Tu gardes la main dans le thread jusqu'à résolution. Quand l'agent pose une question, réponds-lui toi-même (\`continue_thread\`) avec ce que le contexte permet de décider ; ne remonte à l'utilisateur qu'une décision produit qui lui appartient vraiment.
 - Quand une exécution échoue (plafond de tours, crash), relance l'agent en reprenant là où il en était : découpe, précise l'étape suivante, demande un résultat partiel. Après 3 échecs consécutifs, conclus en expliquant ce qui bloque.
 - Dans chaque \`turn\`, rappelle à l'agent qu'il te rend compte à toi : ses questions vont dans le thread, il ne mentionne pas l'opérateur humain.
@@ -255,6 +262,17 @@ Tu es le chef de projet de l'utilisateur sur ce ticket : tu parles vite et court
 
 ## Personas disponibles
 ${roster || '(aucune persona déléguable)'}`;
+}
+
+/** The scheduler's failure verdict, with the operational reading the assistant needs. */
+function renderFailure(f: { reason: string; message: string } | undefined): string {
+  if (!f) return '';
+  const hint = f.reason === 'max_turns'
+    ? " C'est le plafond de tours de l'ADE, pas un problème de permissions : demande un périmètre plus petit ou un résultat partiel livré tout de suite."
+    : f.reason === 'timeout'
+      ? " L'exécution a dépassé le temps alloué : réduis le périmètre."
+      : '';
+  return ` Cause : ${f.reason} — ${f.message}.${hint}`;
 }
 
 function renderComment(c: TicketComment): string {
@@ -292,10 +310,10 @@ export function buildAssistantUserPrompt(p: {
     }
     case 'thread_reply':
       trigger = trig.mentionStatus === 'failed'
-        ? `L'exécution de l'agent du thread ${trig.threadId} a échoué (${p.threads.find((t) => t.id === trig.threadId)?.failures ?? 1} échec(s) consécutif(s)). Relance-le ("continue_thread") en reprenant sa progression et en découpant ce qui reste ; ne préviens l'utilisateur qu'après 3 échecs.`
+        ? `L'exécution de l'agent du thread ${trig.threadId} a échoué (${p.threads.find((t) => t.id === trig.threadId)?.failures ?? 1} échec(s) consécutif(s)).${renderFailure(trig.failure)} Relance-le ("continue_thread") en reprenant sa progression et en découpant ce qui reste ; ne préviens l'utilisateur qu'après 3 échecs.`
         : trig.mentionStatus === 'resolved'
           ? `L'agent du thread ${trig.threadId} a terminé son exécution et a répondu (voir ses tours). Il ne fera plus rien sans toi. Si sa réponse est un résultat final, conclus ("conclude_thread") ; sinon relance-le ("continue_thread") en exigeant le livrable attendu. Ne relaie pas un simple statut à l'utilisateur.`
-          : `L'agent du thread ${trig.threadId} attend une information (statut waiting_for_info). Réponds-lui toi-même ("continue_thread") si le contexte le permet, sinon pose la décision à l'utilisateur ("reply" + question) ou demande un changement de mode ("request_mode").`;
+          : `L'agent du thread ${trig.threadId} s'est arrêté en statut waiting_for_info (voir son dernier tour). Deux cas. S'il pose une vraie question : réponds-lui toi-même ("continue_thread") si le contexte le permet, sinon pose la décision à l'utilisateur ("reply" + question). S'il annonce seulement un travail « en cours » ou « lancé » : ce n'est pas une question, rien ne tourne plus ; relance-le ("continue_thread") en exigeant qu'il fasse le travail lui-même, sans sous-agent ni tâche de fond, et réponde avec le résultat. Ce statut ne signale pas un problème de permissions.`;
       break;
     case 'ticket_created':
       trigger = `Le ticket vient d'être créé et l'utilisateur te le confie. Prends-le en charge à partir de sa description : délègue à la bonne persona ("delegate") ou, si la description ne suffit pas, pose LA question qui débloque ("reply" + question).`;

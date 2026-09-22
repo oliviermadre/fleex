@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 import { TicketNotFoundError } from '../../domain/errors.js';
 
-type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'config' | 'eventBus'>;
+type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'config' | 'eventBus'>;
 
 /**
  * Work view Phase 3: the assistant entry point and the thread read/write routes.
@@ -35,6 +35,8 @@ export function assistantThreadsRoutes(container: Deps) {
       container.eventBus.emit({
         type: 'comment.posted', commentId: comment.id, ticketId: ticket.id, authorType: 'user', authorName,
         createdMentions: createdMentions.map((m) => ({ mentionId: m.id, targetAgent: m.targetAgent, targetType: m.targetType })),
+        // Main stream: this message goes to the assistant; it must not wake a thread agent directly.
+        threadId: null,
         occurredAt: now,
       });
       for (const m of createdMentions) {
@@ -67,6 +69,23 @@ export function assistantThreadsRoutes(container: Deps) {
         if (t.status !== 'running' || !t.currentMentionId) continue;
         const m = await container.mentionStore.getById(t.currentMentionId);
         if (!m) continue;
+        if (m.status === 'pending') {
+          // A new turn queued behind an older turn of the same thread still parked
+          // in waiting_for_info (data from before the busy-agent guard): the older
+          // one holds the (agent, ticket) lane forever. Close it so the new turn runs.
+          const stale = (await container.mentionStore.getByTicket(t.ticketId)).filter((x) =>
+            x.id !== m.id && x.targetAgent === t.personaName && x.status === 'waiting_for_info');
+          let freed = false;
+          for (const s of stale) {
+            if ((await container.commentStore.getById(s.commentId))?.threadId !== t.id) continue;
+            s.resolve();
+            await container.mentionStore.save(s);
+            container.eventBus.emit({ type: 'mention.resolved', mentionId: s.id, ticketId: t.ticketId, targetAgent: s.targetAgent, resolvedBy: 'system', occurredAt: new Date() });
+            freed = true;
+          }
+          if (freed) container.executeAgent.execute(t.personaId).catch(() => {});
+          continue;
+        }
         let wake: 'resolved' | 'failed' | null = null;
         if (m.status === 'resolved') { t.markIdle(); wake = 'resolved'; }
         else if (m.status === 'failed') { t.fail(); wake = 'failed'; }
@@ -124,6 +143,7 @@ export function assistantThreadsRoutes(container: Deps) {
       container.eventBus.emit({
         type: 'comment.posted', commentId: comment.id, ticketId: thread.ticketId, authorType: 'user', authorName,
         createdMentions: createdMentions.map((m) => ({ mentionId: m.id, targetAgent: m.targetAgent, targetType: m.targetType })),
+        threadId: thread.id,
         occurredAt: now,
       });
       for (const m of createdMentions) {
