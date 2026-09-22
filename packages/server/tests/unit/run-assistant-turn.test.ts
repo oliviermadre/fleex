@@ -255,19 +255,20 @@ describe('RunAssistantTurnUseCase — failures', () => {
   });
 });
 
-describe('RunAssistantTurnUseCase — execution mode', () => {
-  it('delegate with mode: edit switches the ticket conversation mode before the turn', async () => {
-    const h = harness([{ action: 'delegate', personaName: 'builder', brief: 'A', turn: 'écris le code', mode: 'edit' }]);
-    expect(h.ticket.conversationMode).toBe('plan');
+describe('RunAssistantTurnUseCase — request_mode', () => {
+  it('posts a CTA comment in the main stream and parks the thread as waiting; the mode is untouched', async () => {
+    const h = harness([
+      { action: 'delegate', personaName: 'builder', brief: 'A', turn: 'lis' },
+      { action: 'request_mode', threadId: 'SET_BELOW', mode: 'edit', message: 'The Builder doit écrire des fichiers.' },
+    ]);
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
-    expect(h.ticket.conversationMode).toBe('edit');
-    expect(h.emitted).toContain('ticket.updated');
-  });
-
-  it('a turn without mode leaves the ticket mode alone', async () => {
-    const h = harness([{ action: 'delegate', personaName: 'builder', brief: 'A', turn: 'lis le code' }]);
-    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    h.actions[0]!.threadId = thread.id;
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'waiting_for_info' } });
     expect(h.ticket.conversationMode).toBe('plan');
-    expect(h.emitted).not.toContain('ticket.updated');
+    expect(thread.status).toBe('waiting');
+    const c = h.comments.saved.at(-1)!;
+    expect(c.threadId).toBeNull();
+    expect(c.body).toBe(`The Builder doit écrire des fichiers.\n\n<!-- fleex:mode-request {"mode":"edit","threadId":"${thread.id}"} -->`);
   });
 });
