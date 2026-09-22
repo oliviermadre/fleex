@@ -366,6 +366,12 @@ export class RunAssistantTurnUseCase {
       }, [thread]);
     }
     const current = thread.currentMentionId ? await this.deps.mentionStore.getById(thread.currentMentionId) : null;
+    // The agent is still on its previous turn (queued or running): a new mention
+    // would queue behind it on the same lane and go stale. The assistant is called
+    // back when the turn settles, with the whole conversation in context.
+    if (current && (current.status === 'pending' || current.status === 'acknowledged')) {
+      return `${thread.personaName} travaille encore sur le tour précédent : rien n'a été envoyé. Tu seras rappelé quand il aura répondu ; transmets alors ce qui est nouveau. Dis simplement à l'utilisateur que tu transmettras à la fin du tour.`;
+    }
     if (current && current.status === 'waiting_for_info') {
       await this.postAssistant(ticket, assistant, thread.id, `@agent:${thread.personaName} ${turn}`, { suppressMentionForAgents: [thread.personaName] });
       thread.recordTurn();

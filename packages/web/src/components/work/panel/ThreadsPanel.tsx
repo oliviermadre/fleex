@@ -254,7 +254,7 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
                     {agentState === 'queued' ? '⌬' : '◆'}
                   </span>
                   <span>
-                    {agentState === 'queued' && `${personaName(thread)} is queued — waiting for a free agent slot…`}
+                    {agentState === 'queued' && `${personaName(thread)} is queued — starts as soon as its previous turn settles…`}
                     {agentState === 'asking' && `${personaName(thread)} asked a question — the assistant answers, or you step in below`}
                     {agentState === 'failed' && `${personaName(thread)}'s run failed — the assistant relaunches or reports back`}
                     {agentState === 'answered' && `${personaName(thread)} answered · the assistant paused the thread here`}
