@@ -238,3 +238,11 @@ Un PR sur cette branche, en deux séries de commits pour garder l'ordre de revue
 ## Écarts décidés au moment du plan
 
 Voir `docs/superpowers/plans/2026-09-21-work-threads-phase-3.md` § « Écarts assumés » : repli client quand aucune persona assistant n'est configurée (la route répond `{ comment: null, assistant: null }` sans poster), route `GET /api/threads/open` pour le label de queue, et les commentaires d'auteur `assistant` ne réveillent pas les agents en attente par le chemin générique `comment.posted`.
+
+## Révision runtime (2026-09-22, recette)
+
+La décision 1 (Claude Agent SDK) est abandonnée pour l'assistant : un tour SDK chargeait la config Claude Code de
+l'utilisateur, gardait `Read` disponible et réfléchissait plusieurs minutes. L'assistant tourne désormais comme le
+companion : boucle Messages API streamée sans extended thinking, actions de thread exposées comme outils, CLI `fleex`
+exposée comme outils `fleex_*` générés depuis `fleex documentation --format json`. Voir `docs/work-view-status.md`
+§ « Runtime switch ». Les agents délégués, eux, restent sur le SDK.
