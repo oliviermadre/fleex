@@ -9,6 +9,7 @@
 import type { TicketComment } from '@fleex/shared';
 import { MessageMarkdown } from './MessageMarkdown';
 import { CommentDeleteButton } from './CommentDeleteButton';
+import { stripModeRequest } from '../selectors';
 
 export function StreamItem({ comment, onDelete }: { comment: TicketComment; onDelete?: () => void }) {
   const isUser = comment.authorType === 'user';
@@ -43,7 +44,7 @@ export function StreamItem({ comment, onDelete }: { comment: TicketComment; onDe
           {onDelete && <CommentDeleteButton onClick={onDelete} className="-my-1 ml-auto" />}
         </div>
         <div className="min-w-0 max-w-full overflow-hidden text-[13px] text-[var(--theme-text-primary)]">
-          <MessageMarkdown body={comment.body} />
+          <MessageMarkdown body={stripModeRequest(comment.body)} />
         </div>
       </div>
     </div>
