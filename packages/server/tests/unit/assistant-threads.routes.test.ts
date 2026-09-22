@@ -76,3 +76,17 @@ describe('assistant threads routes', () => {
     expect(t.currentMentionId).toBe('m9');
   });
 });
+
+describe('POST /api/tickets/:id/assistant/start', () => {
+  it('starts a ticket_created turn when an assistant is configured', async () => {
+    const app = Fastify();
+    const turns: unknown[] = [];
+    await app.register(assistantThreadsRoutes({
+      ticketStore: { getTicketById: async () => ({ id: 't1' }) },
+      runAssistantTurn: { resolveAssistantPersona: async () => ({ id: 'pa', name: 'nas', displayName: 'Nas' }), execute: async (p: unknown) => { turns.push(p); } },
+    } as never));
+    const res = await app.inject({ method: 'POST', url: '/api/tickets/t1/assistant/start' });
+    expect(res.statusCode).toBe(202);
+    expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'ticket_created' } }]);
+  });
+});

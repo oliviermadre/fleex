@@ -38,6 +38,7 @@ export class AssistantThreadListener {
       thread.fail();
     } else {
       thread.recordTurn();
+      if (status === 'resolved') thread.clearFailures();
       if (status === 'waiting_for_info') thread.markWaiting();
       else thread.markRunning();
     }
