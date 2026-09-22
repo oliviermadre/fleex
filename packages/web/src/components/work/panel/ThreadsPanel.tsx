@@ -6,7 +6,7 @@
  * the assistant to conclude now.
  */
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentThread, TicketComment, TicketMention } from '@fleex/shared';
+import type { AgentExecution, AgentThread, TicketComment, TicketMention } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { formatAge } from '../../../lib/formatAge';
 import * as api from '../../../services/api';
@@ -16,6 +16,7 @@ import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
 import { AgentEventStream } from '../../main-panel/AgentEventStream';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import { ThreadStatusPill } from '../task/DelegationCard';
+import { RunCard } from '../task/RunCard';
 import type { WorkTask } from '../types';
 import { useTicketThreads } from './useTicketThreads';
 import { useThreadTurns } from './useThreadTurns';
@@ -65,7 +66,7 @@ function Turn({ turn }: { turn: TicketComment }) {
   );
 }
 
-export function ThreadsPanel({ task }: { task: WorkTask }) {
+export function ThreadsPanel({ task, onOpenExecution }: { task: WorkTask; onOpenExecution: (executionId: string, title: string) => void }) {
   const threads = useTicketThreads(task.id);
   const selectedThreadId = useWorkStore((s) => s.selectedThreadId);
   const setSelectedThreadId = useWorkStore((s) => s.setSelectedThreadId);
@@ -91,16 +92,37 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
     () => (executions ?? []).filter((e) => threadMentionIds.has(e.mentionId)).reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
     [executions, threadMentionIds],
   );
-  const currentExecution = useMemo(
-    () => (thread?.currentMentionId ? (executions ?? []).find((e) => e.mentionId === thread.currentMentionId) ?? null : null),
-    [executions, thread?.currentMentionId],
+  // Every run the thread opened, oldest first — the run cards of the conversation
+  // tab and the run picker of the stream tab (a mention can run several times).
+  const threadExecutions = useMemo(
+    () => (executions ?? []).filter((e) => threadMentionIds.has(e.mentionId)).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
+    [executions, threadMentionIds],
   );
+  const currentExecution = useMemo(() => {
+    const ofMention = thread?.currentMentionId ? threadExecutions.filter((e) => e.mentionId === thread.currentMentionId) : [];
+    return ofMention.at(-1) ?? threadExecutions.at(-1) ?? null;
+  }, [threadExecutions, thread?.currentMentionId]);
+  const [pickedExecutionId, setPickedExecutionId] = useState<string | null>(null);
+  const streamExecution: AgentExecution | null =
+    (pickedExecutionId ? threadExecutions.find((e) => e.id === pickedExecutionId) : undefined) ?? currentExecution;
 
   // "running" on the thread means the mention is open; the agent itself may still be
   // queued behind another run (agent concurrency limit) — say so instead of "working".
-  const agentRunning = currentExecution?.status === 'running';
+  const agentRunning = threadExecutions.some((e) => e.status === 'running');
   const currentMention = thread?.currentMentionId ? mentions.find((m) => m.id === thread.currentMentionId) ?? null : null;
-  const agentQueued = !agentRunning && (currentMention?.status === 'pending' || currentMention?.status === 'acknowledged');
+  // Derived from the mention and the executions, not from the stored thread status,
+  // so a stale status never claims an agent is working.
+  const agentState: 'working' | 'queued' | 'answered' | 'failed' | 'asking' | 'none' = agentRunning
+    ? 'working'
+    : currentMention?.status === 'pending' || currentMention?.status === 'acknowledged'
+      ? 'queued'
+      : currentMention?.status === 'waiting_for_info'
+        ? 'asking'
+        : currentMention?.status === 'failed'
+          ? 'failed'
+          : currentMention?.status === 'resolved'
+            ? 'answered'
+            : 'none';
 
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -201,29 +223,26 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
                   ))}
                 </div>
               )}
-              {turns.map((t) => <Turn key={t.id} turn={t} />)}
-              {thread.status === 'running' && (
+              {[
+                ...turns.map((t) => ({ at: Date.parse(t.createdAt), key: `c-${t.id}`, node: <Turn key={`c-${t.id}`} turn={t} /> })),
+                // A run sits just before the reply it produced (same convention as the main stream).
+                ...threadExecutions.map((e) => ({ at: Date.parse(e.startedAt) - 1, key: `r-${e.id}`, node: <RunCard key={`r-${e.id}`} execution={e} onOpen={onOpenExecution} /> })),
+              ]
+                .sort((a, b) => a.at - b.at)
+                .map((x) => x.node)}
+              {!terminal && (
                 <div className="flex items-center gap-2 pl-7 text-[11.5px] text-[var(--theme-text-muted)]">
-                  <span className="text-[var(--tint-purple-text)]" aria-hidden>⌬</span>
-                  <span>
-                    {agentRunning
-                      ? `${personaName(thread)} is working…`
-                      : agentQueued
-                        ? `${personaName(thread)} is queued — waiting for a free agent slot…`
-                        : `${personaName(thread)} is starting…`}
+                  <span className={agentState === 'working' || agentState === 'queued' ? 'text-[var(--tint-purple-text)]' : 'text-[var(--theme-accent)]'} aria-hidden>
+                    {agentState === 'working' || agentState === 'queued' ? '⌬' : '◆'}
                   </span>
-                </div>
-              )}
-              {thread.status === 'idle' && (
-                <div className="flex items-center gap-2 pl-7 text-[11.5px] text-[var(--theme-text-muted)]">
-                  <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
-                  <span>{personaName(thread)} answered · the assistant decides the next step</span>
-                </div>
-              )}
-              {thread.status === 'waiting' && (
-                <div className="flex items-center gap-2 pl-7 text-[11.5px] text-[var(--tint-yellow-text)]">
-                  <span aria-hidden>◆</span>
-                  <span>Waiting for you — answer in the main stream or step in below</span>
+                  <span>
+                    {agentState === 'working' && `${personaName(thread)} is working…`}
+                    {agentState === 'queued' && `${personaName(thread)} is queued — waiting for a free agent slot…`}
+                    {agentState === 'asking' && `${personaName(thread)} asked a question — the assistant answers, or you step in below`}
+                    {agentState === 'failed' && `${personaName(thread)}'s run failed — the assistant relaunches or reports back`}
+                    {agentState === 'answered' && `${personaName(thread)} answered · the assistant decides the next step`}
+                    {agentState === 'none' && (thread.status === 'waiting' ? 'Waiting for you — answer in the main stream or step in below' : 'No agent run yet')}
+                  </span>
                 </div>
               )}
               {thread.status === 'concluded' && (
@@ -235,18 +254,40 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
-              {currentExecution ? (
+              {streamExecution ? (
                 <>
+                  {threadExecutions.length > 1 && (
+                    <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[11px]">
+                      <span className="mr-1 text-[10px] font-semibold tracking-[0.06em] text-[var(--theme-text-faint)]">RUNS</span>
+                      {threadExecutions.map((e, i) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => setPickedExecutionId(e.id)}
+                          className={cn(
+                            'rounded border px-1.5 py-0.5 font-mono',
+                            e.id === streamExecution.id
+                              ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                              : 'border-[var(--theme-border)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                          )}
+                          title={`${e.status} · ${e.startedAt}`}
+                        >
+                          #{i + 1} {e.status === 'running' ? '●' : e.status === 'failed' ? '✕' : e.status === 'interrupted' ? '◌' : '✓'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <AgentEventStream executionId={currentExecution.id} />
+                    <AgentEventStream executionId={streamExecution.id} />
                   </div>
                   <div className="flex shrink-0 items-center gap-2 border-t border-[var(--theme-border)] px-3 py-2 text-[11.5px] text-[var(--theme-text-secondary)]">
-                    <span className="font-mono text-[var(--theme-text-faint)]">exec {currentExecution.id.slice(0, 8)}</span>
-                    {currentExecution.status === 'running' && (
+                    <span className="font-mono text-[var(--theme-text-faint)]">exec {streamExecution.id.slice(0, 8)} · {streamExecution.status}</span>
+                    <button type="button" onClick={() => onOpenExecution(streamExecution.id, personaName(thread))} className="ml-auto text-[var(--theme-accent)] hover:underline">Open in Execution log</button>
+                    {streamExecution.status === 'running' && (
                       <button
                         type="button"
-                        onClick={() => void api.cancelExecution(currentExecution.id)}
-                        className="ml-auto rounded-md border border-[var(--tint-red-border)] bg-[var(--tint-red-bg)] px-2 py-0.5 text-[11.5px] text-[var(--tint-red-text)]"
+                        onClick={() => void api.cancelExecution(streamExecution.id)}
+                        className="rounded-md border border-[var(--tint-red-border)] bg-[var(--tint-red-bg)] px-2 py-0.5 text-[11.5px] text-[var(--tint-red-text)]"
                       >
                         Terminate
                       </button>
@@ -255,9 +296,9 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
                 </>
               ) : (
                 <div className="flex flex-1 items-center justify-center px-4 text-center text-[12px] text-[var(--theme-text-faint)]">
-                  {thread.status === 'running'
+                  {agentState === 'queued'
                     ? 'No execution yet — the agent is queued behind another run (agent concurrency limit). The stream appears as soon as it starts.'
-                    : 'No execution for this thread.'}
+                    : 'No execution for this thread yet.'}
                 </div>
               )}
             </div>

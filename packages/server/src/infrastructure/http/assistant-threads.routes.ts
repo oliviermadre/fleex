@@ -60,8 +60,24 @@ export function assistantThreadsRoutes(container: Deps) {
       return reply.code(202).send({ assistant: { personaId: assistant.id, displayName: assistant.displayName || assistant.name } });
     });
 
+    // Read-repair: a thread still `running` while its mention is already settled
+    // (missed event, older data) is parked idle / failed so the UI stays honest.
+    async function reconcile(threads: Awaited<ReturnType<typeof container.threadStore.getByTicket>>) {
+      for (const t of threads) {
+        if (t.status !== 'running' || !t.currentMentionId) continue;
+        const m = await container.mentionStore.getById(t.currentMentionId);
+        if (!m) continue;
+        if (m.status === 'resolved') t.markIdle();
+        else if (m.status === 'failed') t.fail();
+        else if (m.status === 'waiting_for_info') t.markWaiting();
+        else continue;
+        await container.threadStore.save(t);
+      }
+      return threads;
+    }
+
     app.get<{ Params: { id: string } }>('/api/tickets/:id/threads', async (request) =>
-      (await container.threadStore.getByTicket(request.params.id)).map((t) => t.toDTO()));
+      (await reconcile(await container.threadStore.getByTicket(request.params.id))).map((t) => t.toDTO()));
 
     app.get('/api/threads/open', async () => (await container.threadStore.getOpen()).map((t) => t.toDTO()));
 
