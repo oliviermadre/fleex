@@ -90,3 +90,19 @@ describe('POST /api/tickets/:id/assistant/start', () => {
     expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'ticket_created' } }]);
   });
 });
+
+describe('GET /api/tickets/:id/threads — read repair', () => {
+  it('parks a running thread whose mention is already resolved as idle', async () => {
+    const app = Fastify();
+    const t = thread();
+    t.openTurn('m1');
+    const saved: string[] = [];
+    await app.register(assistantThreadsRoutes({
+      threadStore: { getByTicket: async () => [t], save: async (x: { status: string }) => { saved.push(x.status); } },
+      mentionStore: { getById: async () => ({ status: 'resolved' }) },
+    } as never));
+    const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
+    expect(res.json()[0].status).toBe('idle');
+    expect(saved).toEqual(['idle']);
+  });
+});
