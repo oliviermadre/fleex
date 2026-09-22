@@ -260,6 +260,8 @@ export type StreamEntry =
 
 // Tie-break order for entries sharing a timestamp: a run precedes the comment it
 // produced, which precedes that run's deliverable, and grey event lines come last.
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
 const STREAM_RANK: Record<StreamEntry['kind'], number> = { run: 0, comment: 1, delegation: 1, deliverable: 2, event: 3 };
 
 /**
@@ -280,12 +282,15 @@ export function buildStream(
   executions: readonly AgentExecution[] = [],
   deliverables: readonly TicketDeliverable[] = [],
   threads: readonly AgentThread[] = [],
+  /** Mention ids driven inside a thread: their runs belong to the Threads panel. */
+  hiddenMentionIds: ReadonlySet<string> = EMPTY_IDS,
 ): StreamEntry[] {
   const entries: StreamEntry[] = [];
   for (const execution of executions) {
     if (execution.source === 'cli') continue;
     // Assistant turns are plumbing, not runs the user follows: no run card.
     if (execution.mentionId.startsWith('assistant:')) continue;
+    if (hiddenMentionIds.has(execution.mentionId)) continue;
     entries.push({ kind: 'run', at: Date.parse(execution.startedAt), execution });
   }
   for (const comment of comments) {
@@ -368,4 +373,13 @@ export function threadActivityDetail(
 ): string | null {
   const running = threads.find((t) => t.status === 'running');
   return running ? `${personaLabel(running)} · in thread with assistant` : null;
+}
+
+/** Mention ids opened by thread turns — the runs the Threads panel owns. */
+export function threadMentionIds(
+  comments: readonly TicketComment[],
+  mentions: readonly { id: string; commentId: string }[],
+): Set<string> {
+  const turnIds = new Set(comments.filter((c) => c.threadId).map((c) => c.id));
+  return new Set(mentions.filter((m) => turnIds.has(m.commentId)).map((m) => m.id));
 }

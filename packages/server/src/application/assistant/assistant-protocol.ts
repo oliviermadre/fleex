@@ -4,6 +4,7 @@ export interface AssistantQuestion { text: string; options: string[] }
 
 export type AssistantTrigger =
   | { kind: 'user_message'; commentId: string }
+  | { kind: 'ticket_created' }
   | { kind: 'thread_reply'; threadId: string; mentionStatus: 'resolved' | 'waiting_for_info' | 'failed' }
   | { kind: 'conclude_request'; threadId: string };
 
@@ -113,7 +114,7 @@ export function buildAssistantSystemPrompt(p: {
     .join('\n');
   return `${identity ? `${identity}\n\n---\n\n` : ''}# Rôle : assistant du ticket (« ${p.assistantName} »)
 
-Tu es l'interlocuteur de l'utilisateur sur ce ticket. Tu lis chaque message, puis tu choisis EXACTEMENT UNE action et tu réponds UNIQUEMENT avec un objet JSON conforme au schéma fourni.
+Tu es l'assistant et chef de projet de l'utilisateur sur ce ticket. Ton équipe, ce sont les personas ci-dessous : elles travaillent pour toi, jamais en contact direct avec l'utilisateur. Tu lis chaque message, puis tu choisis EXACTEMENT UNE action et tu réponds UNIQUEMENT avec un objet JSON conforme au schéma fourni.
 
 ## Actions
 - "reply" : répondre à l'utilisateur dans le fil principal (\`message\`, + \`question\` {text, options} si tu attends un choix).
@@ -125,7 +126,9 @@ Tu es l'interlocuteur de l'utilisateur sur ce ticket. Tu lis chaque message, pui
 - Délègue quand la demande exige du code, une analyse de dépôt ou l'expertise d'une persona ; réponds toi-même sinon.
 - Un \`@agent:x\` dans le message de l'utilisateur est une consigne explicite de délégation à x.
 - Un seul thread ouvert par persona et par ticket : s'il existe, utilise "continue_thread".
-- Si l'agent attend une information que seul l'utilisateur détient, utilise "reply" avec une \`question\` ; ne l'invente jamais.
+- Tu gardes la main dans le thread jusqu'à résolution. Quand l'agent pose une question, réponds-lui toi-même ("continue_thread") avec ce que le contexte du ticket permet de décider ; ne remonte à l'utilisateur ("reply" + \`question\`) qu'une décision produit qui lui appartient vraiment, jamais un détail d'implémentation.
+- Quand une exécution de l'agent échoue (plafond de tours atteint, crash), relance-le ("continue_thread") en reprenant là où il en était : découpe la tâche, précise la prochaine étape, demande un résultat partiel. Après 3 échecs consécutifs sur un thread, conclus-le en expliquant à l'utilisateur ce qui bloque.
+- Dans chaque \`turn\`, rappelle à l'agent qu'il te rend compte à toi : ses questions vont dans le thread, il ne mentionne pas l'opérateur humain.
 - Conclus dès que la réponse de l'agent est finale. Sur une demande de conclusion, la seule action valide est "conclude_thread".
 - Réponds dans la langue de l'utilisateur. N'affirme rien sur l'état du ticket qui ne soit dans le contexte.
 
@@ -161,8 +164,11 @@ export function buildAssistantUserPrompt(p: {
     }
     case 'thread_reply':
       trigger = trig.mentionStatus === 'failed'
-        ? `L'exécution de l'agent du thread ${trig.threadId} a échoué. Informe l'utilisateur ("reply") ou relance ("continue_thread").`
+        ? `L'exécution de l'agent du thread ${trig.threadId} a échoué (${p.threads.find((t) => t.id === trig.threadId)?.failures ?? 1} échec(s) consécutif(s)). Relance-le ("continue_thread") en reprenant sa progression et en découpant ce qui reste ; ne préviens l'utilisateur qu'après 3 échecs.`
         : `L'agent du thread ${trig.threadId} a répondu (statut de sa mention : ${trig.mentionStatus}). Décide : continuer, conclure, ou relayer une question à l'utilisateur.`;
+      break;
+    case 'ticket_created':
+      trigger = `Le ticket vient d'être créé et l'utilisateur te le confie. Prends-le en charge à partir de sa description : délègue à la bonne persona ("delegate") ou, si la description ne suffit pas, pose LA question qui débloque ("reply" + question).`;
       break;
     case 'conclude_request':
       trigger = `L'utilisateur demande de conclure le thread ${trig.threadId} maintenant. Réponds avec "conclude_thread".`;

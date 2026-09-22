@@ -50,6 +50,16 @@ export function assistantThreadsRoutes(container: Deps) {
       });
     });
 
+    // New task with "hand over to the assistant": one turn primed with the description.
+    app.post<{ Params: { id: string } }>('/api/tickets/:id/assistant/start', async (request, reply) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+      const assistant = await container.runAssistantTurn.resolveAssistantPersona(ticket);
+      if (!assistant) return reply.code(200).send({ assistant: null });
+      void container.runAssistantTurn.execute({ ticketId: ticket.id, trigger: { kind: 'ticket_created' } });
+      return reply.code(202).send({ assistant: { personaId: assistant.id, displayName: assistant.displayName || assistant.name } });
+    });
+
     app.get<{ Params: { id: string } }>('/api/tickets/:id/threads', async (request) =>
       (await container.threadStore.getByTicket(request.params.id)).map((t) => t.toDTO()));
 

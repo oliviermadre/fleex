@@ -1654,3 +1654,8 @@ export async function postThreadMessage(threadId: string, body: string): Promise
 export async function concludeThread(threadId: string): Promise<void> {
   await request<{ accepted: boolean }>(`/threads/${encodeURIComponent(threadId)}/conclude`, { method: 'POST' });
 }
+
+/** Hand a freshly created ticket to the assistant (one turn primed with its description). */
+export async function startAssistant(ticketId: string): Promise<{ assistant: { personaId: string; displayName: string } | null }> {
+  return request(`/tickets/${encodeURIComponent(ticketId)}/assistant/start`, { method: 'POST' });
+}

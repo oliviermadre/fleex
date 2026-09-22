@@ -35,6 +35,7 @@ import migration033 from './migrations/032_routine_scheduler_claims.js';
 import migration034 from './migrations/033_memory_chunks.js';
 import migration035 from './migrations/034_memory_pgvector_search.js';
 import migration036 from './migrations/035_agent_threads.js';
+import migration037 from './migrations/036_agent_thread_failures.js';
 
 /**
  * Ordered array of all migrations.
@@ -77,4 +78,5 @@ export const allMigrations: Migration[] = [
   migration034,
   migration035,
   migration036,
+  migration037,
 ];

@@ -46,11 +46,19 @@ describe('AgentThreadEntity', () => {
     expect(t.fail()).toBe(false);
   });
 
-  it('fail is terminal and cannot be re-opened', () => {
+  it('fail is NOT terminal: it counts a failure and the thread can be relaunched', () => {
     const t = thread();
     expect(t.fail()).toBe(true);
     expect(t.status).toBe('failed');
-    expect(t.conclude('x')).toBe(false);
+    expect(t.failures).toBe(1);
+    expect(t.isTerminal).toBe(false);
+    expect(t.openTurn('m2')).toBe(true);
+    expect(t.status).toBe('running');
+    t.fail();
+    expect(t.failures).toBe(2);
+    t.clearFailures();
+    expect(t.failures).toBe(0);
+    expect(t.conclude('x')).toBe(true);
   });
 
   it('recordTurn counts exchanges without touching the mention', () => {

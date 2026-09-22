@@ -6,7 +6,8 @@ import { useToastStore } from '../../../stores/toastStore';
 import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
 import { useBoardEpics } from '../../../hooks/useBoardEpics';
 import { topReposForBoard } from '../../../lib/repoStatus';
-import { syncGithubIssue } from '../../../services/api';
+import { syncGithubIssue, startAssistant } from '../../../services/api';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { MultiSelect } from '../../ui/MultiSelect';
 import { WorkBoardPicker } from '../panel/WorkBoardPicker';
 import { DraftTypePicker } from './DraftTypePicker';
@@ -78,6 +79,8 @@ export function NewTaskCompose({ onStartOver }: { onStartOver: () => void }) {
   }, [repositories, tickets, effectiveBoardId]);
 
   const pr = draft.source?.pr;
+  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) !== false;
+  const handOver = threadsEnabled && draft.startWithAssistant;
 
   async function start() {
     if (!canStart || !effectiveBoardId) return;
@@ -127,6 +130,15 @@ export function NewTaskCompose({ onStartOver }: { onStartOver: () => void }) {
           await syncGithubIssue(ticket.id);
         } catch (e) {
           console.error('sync-github failed after import', e);
+        }
+      }
+      if (handOver) {
+        setProgress('Handing over to the assistant…');
+        try {
+          const res = await startAssistant(ticket.id);
+          if (!res.assistant) addToast('info', 'No assistant configured — the ticket was created without hand-over.');
+        } catch (e) {
+          addToast('error', `Couldn't start the assistant: ${e instanceof Error ? e.message : 'unknown error'}`);
         }
       }
       resetDraft(effectiveBoardId);
@@ -333,10 +345,22 @@ export function NewTaskCompose({ onStartOver }: { onStartOver: () => void }) {
               ⏎ starts{effectiveBoardId ? ` · on ${boards.find((b) => b.id === effectiveBoardId)?.name}` : ''}
             </span>
           )}
+          {threadsEnabled && (
+            <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11.5px] text-[var(--theme-text-secondary)]" title="The assistant takes the ticket right after creation: it reads the description, then answers or delegates.">
+              <input
+                type="checkbox"
+                checked={draft.startWithAssistant}
+                onChange={(e) => updateDraft({ startWithAssistant: e.target.checked })}
+                className="accent-[var(--theme-accent)]"
+              />
+              <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
+              Hand over to the assistant
+            </label>
+          )}
           <button
             type="button"
             onClick={() => setView('task')}
-            className="ml-auto rounded-md px-3 py-1 text-[12px] text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]"
+            className={threadsEnabled ? 'rounded-md px-3 py-1 text-[12px] text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]' : 'ml-auto rounded-md px-3 py-1 text-[12px] text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]'}
           >
             Cancel
           </button>

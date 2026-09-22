@@ -212,7 +212,7 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
             <div className="flex min-h-0 flex-1 flex-col">
               {currentExecution ? (
                 <>
-                  <div className="min-h-0 flex-1 overflow-hidden">
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <AgentEventStream executionId={currentExecution.id} />
                   </div>
                   <div className="flex shrink-0 items-center gap-2 border-t border-[var(--theme-border)] px-3 py-2 text-[11.5px] text-[var(--theme-text-secondary)]">

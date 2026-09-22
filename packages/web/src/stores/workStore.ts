@@ -63,6 +63,8 @@ export interface WorkDraft {
   boardId: string | null;
   type: DraftType;
   priority: TicketPriority;
+  /** Hand the new ticket to the assistant right after creation (Phase 3). */
+  startWithAssistant: boolean;
 }
 
 export interface WorkState {

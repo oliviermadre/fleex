@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import {
   threadTurns,
+  threadMentionIds,
   lastAgentQuestion,
   threadActivityDetail,
   partitionQueue,
@@ -433,7 +434,7 @@ describe('personasForTicket', () => {
 function thread(over: Partial<AgentThread> & { id: string }): AgentThread {
   return {
     ticketId: 't1', initiator: 'assistant', personaId: 'p-builder', personaName: 'builder', assistantPersonaId: 'pa',
-    brief: 'Fix e2e', forwardedContext: ['ticket'], status: 'running', currentMentionId: null, exchanges: 1,
+    brief: 'Fix e2e', forwardedContext: ['ticket'], status: 'running', currentMentionId: null, exchanges: 1, failures: 0,
     summary: null, createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-01T10:00:00.000Z', concludedAt: null,
     ...over,
   };
@@ -485,5 +486,21 @@ describe('threadTurns / lastAgentQuestion / threadActivityDetail', () => {
     expect(threadActivityDetail([thread({ id: 'a', status: 'waiting' })])).toBeNull();
     expect(threadActivityDetail([thread({ id: 'a' })], (t) => t.personaName.toUpperCase())).toBe('BUILDER · in thread with assistant');
     expect(threadActivityDetail([])).toBeNull();
+  });
+});
+
+describe('buildStream — thread runs and threadMentionIds', () => {
+  it('threadMentionIds picks the mentions opened by thread turns', () => {
+    const ids = threadMentionIds(
+      [comment({ id: 'turn', createdAt: '2026-01-01T10:00:00.000Z', threadId: 'th1' }), comment({ id: 'main', createdAt: '2026-01-01T10:01:00.000Z' })],
+      [{ id: 'm1', commentId: 'turn' }, { id: 'm2', commentId: 'main' }],
+    );
+    expect([...ids]).toEqual(['m1']);
+  });
+  it('hides the runs of hidden mentions', () => {
+    const exec = (id: string, mentionId: string): AgentExecution =>
+      ({ id, personaId: 'p', ticketId: 't1', mentionId, eventCount: 0, status: 'failed', startedAt: '2026-01-01T10:00:00.000Z', completedAt: null, lastEventAt: null }) as AgentExecution;
+    const stream = buildStream([], [], [exec('e1', 'm1'), exec('e2', 'm2')], [], [], new Set(['m1']));
+    expect(stream.map((e) => (e.kind === 'run' ? e.execution.id : e.kind))).toEqual(['e2']);
   });
 });

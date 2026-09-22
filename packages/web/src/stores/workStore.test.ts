@@ -100,7 +100,7 @@ describe('workStore — new task draft', () => {
       draft: {
         title: '', text: '', stage: 'entry', source: null,
         repoKeys: [], repoBaseBranches: {}, repoCheckoutRefs: {},
-        epicIds: [], boardId: null, type: 'build', priority: 'none',
+        epicIds: [], boardId: null, type: 'build', priority: 'none', startWithAssistant: true,
       },
     });
   });
@@ -130,6 +130,7 @@ describe('workStore — new task draft', () => {
       boardId: 'board-2',
       type: 'build',
       priority: 'none',
+      startWithAssistant: true,
     });
   });
 
