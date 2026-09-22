@@ -83,7 +83,16 @@ export function assistantThreadsRoutes(container: Deps) {
             container.eventBus.emit({ type: 'mention.resolved', mentionId: s.id, ticketId: t.ticketId, targetAgent: s.targetAgent, resolvedBy: 'system', occurredAt: new Date() });
             freed = true;
           }
-          if (freed) container.executeAgent.execute(t.personaId).catch(() => {});
+          if (freed) {
+            // The stale turn had blocked the ticket (waiting_for_info); nothing waits any more.
+            const ticket = await container.ticketStore.getTicketById(t.ticketId);
+            if (ticket?.blocked) {
+              ticket.update({ blocked: false });
+              await container.ticketStore.saveTicket(ticket);
+              container.eventBus.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: { blocked: { from: true, to: false } }, occurredAt: new Date() });
+            }
+            container.executeAgent.execute(t.personaId).catch(() => {});
+          }
           continue;
         }
         let wake: 'resolved' | 'failed' | null = null;
