@@ -124,6 +124,7 @@ const staticModel = (id: string, label: string, family: ModelFamily): ModelOptio
 export const FALLBACK_MODELS: ModelOption[] = [
   staticModel('claude-fable-5-1', 'Claude Fable 5.1', 'fable'),
   staticModel('claude-fable-5', 'Claude Fable 5', 'fable'),
+  staticModel('claude-opus-5-5', 'Claude Opus 5.5', 'opus'),
   staticModel('claude-opus-5', 'Claude Opus 5', 'opus'),
   staticModel('claude-opus-4-8', 'Claude Opus 4.8', 'opus'),
   staticModel('claude-opus-4-6', 'Claude Opus 4.6', 'opus'),

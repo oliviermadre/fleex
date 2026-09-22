@@ -14,6 +14,8 @@ import { dirname, join } from 'node:path';
 export interface Price { inp: number; out: number; read: number; w5: number; w1: number }
 const price = (inp: number, out: number): Price => ({ inp, out, read: inp * 0.1, w5: inp * 1.25, w1: inp * 2 });
 export const MODEL_PRICING: Record<string, Price> = {
+  // Opus 5.5 cache reads are $0.20/MTok (×0.05), not the usual ×0.1.
+  'claude-opus-5-5': { ...price(4e-6, 20e-6), read: 0.2e-6 },
   'claude-opus-5': price(5e-6, 25e-6),
   'claude-opus-4-8': price(5e-6, 25e-6),
   'claude-opus-4-7': price(5e-6, 25e-6),
