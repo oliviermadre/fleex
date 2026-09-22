@@ -326,6 +326,13 @@ export class RunAssistantTurnUseCase {
       thread.recordTurn();
       thread.markRunning();
       await this.deps.threadStore.save(thread);
+      // ExecuteAgent auto-blocked the ticket when the agent asked; the assistant
+      // answering is the answer, so the block lifts without the user's help.
+      if (ticket.blocked) {
+        ticket.update({ blocked: false });
+        await this.deps.ticketStore.saveTicket(ticket);
+        this.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: { blocked: { from: true, to: false } }, occurredAt: new Date() });
+      }
       await this.deps.executeAgent.wakeUp(current);
       this.emit({ type: 'thread.updated', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
       return;
