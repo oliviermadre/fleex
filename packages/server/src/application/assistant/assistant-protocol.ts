@@ -1,4 +1,4 @@
-import type { AgentThread, ConversationMode, TicketComment, TicketContext } from '@fleex/shared';
+import type { AgentThread, ConversationMode, TicketComment, TicketContext, TicketDeliverable } from '@fleex/shared';
 
 export interface AssistantQuestion { text: string; options: string[] }
 
@@ -140,6 +140,7 @@ Tu es l'assistant et chef de projet de l'utilisateur sur ce ticket. Ton équipe,
 - Délègue quand la demande exige du code, une analyse de dépôt ou l'expertise d'une persona ; réponds toi-même sinon.
 - Un \`@agent:x\` dans le message de l'utilisateur est une consigne explicite de délégation à x.
 - Un seul thread ouvert par persona et par ticket : s'il existe, utilise "continue_thread".
+- Les agents livrent leurs résultats (plans, analyses, code) sous forme de LIVRABLES, dont le contenu complet t'est fourni sous « Livrables produits dans ce thread ». Un agent qui dit « le plan est prêt » a en général déjà livré : lis le livrable avant de redemander quoi que ce soit, et conclus en le citant (« Retour de X : plan livré, voir le livrable « … » »).
 - Une exécution d'agent est ATOMIQUE : quand il a répondu, il ne fait plus rien tant que tu ne le relances pas. Un message d'agent du type « en cours », « je vais », « résultats bientôt », « exploration lancée » n'est PAS un résultat : c'est une exécution terminée sans livrable. Relance-le ("continue_thread") en exigeant le résultat concret (plan, code, réponse). Ne relaie JAMAIS un statut d'agent à l'utilisateur ; "reply" sert à rapporter un résultat final ou à poser une décision produit.
 - Tu gardes la main dans le thread jusqu'à résolution. Quand l'agent pose une question, réponds-lui toi-même ("continue_thread") avec ce que le contexte du ticket permet de décider ; ne remonte à l'utilisateur ("reply" + \`question\`) qu'une décision produit qui lui appartient vraiment, jamais un détail d'implémentation.
 - Quand une exécution de l'agent échoue (plafond de tours atteint, crash), relance-le ("continue_thread") en reprenant là où il en était : découpe la tâche, précise la prochaine étape, demande un résultat partiel. Après 3 échecs consécutifs sur un thread, conclus-le en expliquant à l'utilisateur ce qui bloque.
@@ -162,6 +163,8 @@ export function buildAssistantUserPrompt(p: {
   threads: AgentThread[];
   trigger: AssistantTrigger;
   turns: TicketComment[];
+  /** Deliverables produced inside the thread concerned: shown in full, they ARE the agent's results. */
+  threadDeliverables?: TicketDeliverable[];
 }): string {
   const t = p.context.ticket;
   const main = p.context.comments.filter((c) => !c.threadId).slice(-30).map(renderComment).join('\n');
@@ -169,7 +172,12 @@ export function buildAssistantUserPrompt(p: {
     ? p.threads.map((th) => `- ${th.id} · @agent:${th.personaName} · ${th.status} · ${th.exchanges} tours · « ${th.brief} »`).join('\n')
     : '(aucun)';
   const turns = p.turns.length ? p.turns.map(renderComment).join('\n') : '(aucun)';
-  const deliverables = p.context.deliverables.slice(-10).map((d) => `- ${d.title} (${d.status})`).join('\n') || '(aucun)';
+  const threadDelivIds = new Set((p.threadDeliverables ?? []).map((d) => d.id));
+  const deliverables = p.context.deliverables.filter((d) => !threadDelivIds.has(d.id)).slice(-10)
+    .map((d) => `- ${d.title} (${d.status}, par ${d.agentName})`).join('\n') || '(aucun)';
+  const threadDeliverables = (p.threadDeliverables ?? [])
+    .map((d) => `### Livrable « ${d.title} » (${d.type}, ${d.status}, par ${d.agentName}, ${d.createdAt})\n${d.content.length > 8000 ? `${d.content.slice(0, 8000)}\n[… tronqué, ${d.content.length} caractères au total]` : d.content}`)
+    .join('\n\n') || '(aucun)';
   const trig = p.trigger;
   let trigger: string;
   switch (trig.kind) {
@@ -204,7 +212,10 @@ ${threads}
 ## Tours du thread concerné
 ${turns}
 
-## Livrables
+## Livrables produits dans ce thread (contenu complet — ce sont les résultats de l'agent, ne les redemande pas)
+${threadDeliverables}
+
+## Autres livrables du ticket
 ${deliverables}
 
 ## Déclencheur
