@@ -13,13 +13,15 @@ import { lastAgentQuestion } from '../selectors';
 
 const STATUS_LABEL: Record<AgentThreadStatus, string> = {
   running: 'in progress',
+  idle: 'awaiting assistant',
   waiting: 'waiting for you',
   concluded: 'concluded',
   failed: 'failed',
 };
 
-const STATUS_TINT: Record<AgentThreadStatus, 'yellow' | 'green' | 'red'> = {
+const STATUS_TINT: Record<AgentThreadStatus, 'yellow' | 'green' | 'red' | 'blue'> = {
   running: 'yellow',
+  idle: 'blue',
   waiting: 'yellow',
   concluded: 'green',
   failed: 'red',

@@ -69,3 +69,15 @@ describe('AgentThreadEntity', () => {
     expect(t.currentMentionId).toBeNull();
   });
 });
+
+describe('AgentThreadEntity — idle', () => {
+  it('markIdle parks the thread until the assistant relaunches it', () => {
+    const t = thread();
+    t.openTurn('m1');
+    expect(t.markIdle()).toBe(true);
+    expect(t.status).toBe('idle');
+    expect(t.isTerminal).toBe(false);
+    expect(t.openTurn('m2')).toBe(true);
+    expect(t.status).toBe('running');
+  });
+});

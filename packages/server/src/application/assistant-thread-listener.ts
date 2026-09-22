@@ -38,9 +38,13 @@ export class AssistantThreadListener {
       thread.fail();
     } else {
       thread.recordTurn();
-      if (status === 'resolved') thread.clearFailures();
-      if (status === 'waiting_for_info') thread.markWaiting();
-      else thread.markRunning();
+      if (status === 'waiting_for_info') {
+        thread.markWaiting();
+      } else {
+        // Run complete: nothing executes until the assistant's next turn.
+        thread.clearFailures();
+        thread.markIdle();
+      }
     }
     await this.deps.threadStore.save(thread);
     this.deps.eventBus.emit({ type: 'thread.updated', threadId: thread.id, ticketId: thread.ticketId, occurredAt: new Date() });

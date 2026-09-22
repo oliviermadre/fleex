@@ -415,6 +415,19 @@ Step into the thread · Conclude now · Terminate); Threads tool in the strip (a
 label `<persona> · in thread with assistant`; Settings › General « Default assistant »; Kanban/mobile label assistant
 comments. Flag `workThreadsEnabled` (settings, default on) restores the Phase 1 composer when off.
 
+**QA rounds (2026-09-22) — behaviour changes:**
+- Thread states: `running` (mention open: queued or executing) · `idle` (agent answered, the assistant has the hand)
+  · `waiting` (user asked: agent question or mode request) · `failed` (relaunchable, `failures` counter, migration
+  `036`) · `concluded` (final). The Threads panel tells queued / working / starting / idle / waiting apart.
+- Project-manager protocol: the team never contacts the user; agent questions are answered in the thread; a status-only
+  agent reply (« en cours », « résultats bientôt ») is an ended run → the assistant relaunches until a real result;
+  up to 3 consecutive failures are retried before reporting back.
+- Execution mode stays HITL: the assistant cannot switch talk/plan/edit. It emits `request_mode`; the Work stream
+  renders a CTA card (`ModeRequestCard`, marker `<!-- fleex:mode-request … -->`) whose click PATCHes the ticket mode
+  and tells the assistant.
+- New task: « Hand over to the assistant » (default on) → `POST /api/tickets/:id/assistant/start` (`ticket_created`
+  turn). Runs / crash / waiting cards of thread agents are hidden from the main stream (`threadMentionIds`).
+
 **QA strategy (agreed):** recette on the **QA sqlite instance only** (`FLEEX_STORAGE_DRIVER=sqlite`,
 `FLEEX_SQLITE_PATH` dedicated) — migrations run at boot with no opt-out, so the branch must NOT boot on the prod
 Supabase during the phase. Before the single end-of-phase pass on prod: `pg_dump` via `FLEEX_SUPABASE_DB_URL`, and
