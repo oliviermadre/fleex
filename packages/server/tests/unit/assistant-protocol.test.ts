@@ -7,7 +7,7 @@ describe('parseAssistantOutput', () => {
   });
   it('accepts a delegate with defaults for optional fields', () => {
     const a = parseAssistantOutput({ action: 'delegate', personaName: 'builder', brief: 'Fix e2e', turn: 'Go' }, '');
-    expect(a).toEqual({ action: 'delegate', personaName: 'builder', brief: 'Fix e2e', forward: ['ticket'], turn: 'Go', message: null, mode: null });
+    expect(a).toEqual({ action: 'delegate', personaName: 'builder', brief: 'Fix e2e', forward: ['ticket'], turn: 'Go', message: null });
   });
   it('strips a leading @agent: from personaName', () => {
     const a = parseAssistantOutput({ action: 'delegate', personaName: '@agent:builder', brief: 'x', turn: 'y' }, '');
@@ -57,9 +57,9 @@ describe('buildAssistantUserPrompt — triggers', () => {
   });
 });
 
-describe('parseAssistantOutput — mode', () => {
-  it('keeps a valid execution mode and drops an unknown one', () => {
-    expect(parseAssistantOutput({ action: 'delegate', personaName: 'b', brief: 'x', turn: 'y', mode: 'edit' }, '')).toMatchObject({ mode: 'edit' });
-    expect(parseAssistantOutput({ action: 'continue_thread', threadId: 't', turn: 'y', mode: 'god' }, '')).toMatchObject({ mode: null });
+describe('parseAssistantOutput — request_mode', () => {
+  it('accepts a mode request and rejects an unknown mode', () => {
+    expect(parseAssistantOutput({ action: 'request_mode', threadId: 't', mode: 'edit', message: 'why' }, '')).toEqual({ action: 'request_mode', threadId: 't', mode: 'edit', message: 'why' });
+    expect(parseAssistantOutput({ action: 'request_mode', threadId: 't', mode: 'god', message: 'why' }, '')).toBeNull();
   });
 });
