@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentEventType } from '@fleex/shared';
+import type { AgentEventType, ConversationMode } from '@fleex/shared';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import { AgentThreadEntity } from '../../domain/entities/agent-thread.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
@@ -229,6 +229,7 @@ export class RunAssistantTurnUseCase {
         return;
 
       case 'delegate': {
+        await this.applyMode(ticket, action.mode);
         const open = threads.find((t) => t.personaName === action.personaName && !t.isTerminal);
         if (open) {
           await this.continueThread(ticket, assistant, open, action.turn);
@@ -256,6 +257,7 @@ export class RunAssistantTurnUseCase {
       }
 
       case 'continue_thread': {
+        await this.applyMode(ticket, action.mode);
         const thread = threads.find((t) => t.id === action.threadId);
         if (!thread || thread.isTerminal) {
           await this.postAssistant(ticket, assistant, null, 'Ce thread est déjà clos.');
@@ -291,6 +293,18 @@ export class RunAssistantTurnUseCase {
         return;
       }
     }
+  }
+
+  /**
+   * The agents' tool rights are the ticket's conversation mode, resolved when a
+   * mention is acknowledged or woken. The assistant owns that decision: setting
+   * it here, before the turn, is the only real way to "grant" Write/Bash.
+   */
+  private async applyMode(ticket: TicketEntity, mode: ConversationMode | null): Promise<void> {
+    if (!mode || ticket.conversationMode === mode) return;
+    const diff = ticket.updateExecutionConfig({ conversationMode: mode });
+    await this.deps.ticketStore.saveTicket(ticket);
+    this.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
   }
 
   /** Assistant turn inside a thread: wake a waiting mention, or open a new one. */
