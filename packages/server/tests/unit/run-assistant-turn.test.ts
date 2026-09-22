@@ -133,7 +133,9 @@ describe('RunAssistantTurnUseCase — conversation', () => {
     const h = harness([{ text: 'Bonjour !\n\nOn y va ?\n- Oui\n- Non' }]);
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
     expect(h.comments.saved.map((c) => [c.authorType, c.authorName, c.threadId, c.body])).toEqual([['assistant', 'Nas', null, 'Bonjour !\n\nOn y va ?\n- Oui\n- Non']]);
-    expect(h.agentEvents.events.filter((e) => e.eventType === 'content_block_delta').length).toBeGreaterThan(5);
+    const streamed = h.agentEvents.events.filter((e) => e.eventType === 'content_block_delta')
+      .map((e) => (e.data as { message: { content: Array<{ text: string }> } }).message.content[0]!.text).join('');
+    expect(streamed).toBe('Bonjour !\n\nOn y va ?\n- Oui\n- Non');
     expect((h.agentEvents.executions[0] as { model: string }).model).toBe('claude-haiku-4-5-20251001');
     expect(h.emitted).toContain('comment.posted');
   });
@@ -305,5 +307,22 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
     expect(h.comments.saved).toHaveLength(1);
     expect(h.comments.saved[0]!.body).toMatch(/pas pu traiter/);
+  });
+});
+
+describe('RunAssistantTurnUseCase — streaming order', () => {
+  it('appends coalesced text deltas in sequence order even when the store is slow and out of order', async () => {
+    const h = harness([{ text: 'A'.repeat(70) + 'B'.repeat(70) + 'C'.repeat(70) }]);
+    // Store that resolves appends in reverse arrival order — the chain must still keep the sequence.
+    const pending: Array<() => void> = [];
+    const store = h.agentEvents as unknown as { appendEvent: (e: { eventType: string; data: unknown; sequence: number }) => Promise<void>; events: Array<{ eventType: string; data: unknown; sequence: number }> };
+    const events: Array<{ eventType: string; data: unknown; sequence: number }> = [];
+    store.appendEvent = (e) => new Promise<void>((resolve) => { pending.push(() => { events.push(e); resolve(); }); setTimeout(() => { const f = pending.pop(); f?.(); }, 1); });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const deltas = events.filter((e) => e.eventType === 'content_block_delta');
+    const text = deltas.map((e) => ((e.data as { message: { content: Array<{ text: string }> } }).message.content[0]!.text)).join('');
+    expect(text).toBe('A'.repeat(70) + 'B'.repeat(70) + 'C'.repeat(70));
+    expect(deltas.map((e) => e.sequence)).toEqual([...deltas.map((e) => e.sequence)].sort((a, b) => a - b));
+    expect(deltas.length).toBeLessThan(10);
   });
 });
