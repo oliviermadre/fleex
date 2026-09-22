@@ -10,10 +10,18 @@ import type { AgentExecution } from '@fleex/shared';
 import { useAgentEventStore } from '../../../stores/agentEventStore';
 import { MessageMarkdown } from './MessageMarkdown';
 
-/** Concatenates the streamed text blocks of the assistant's deltas. Exported for tests. */
-export function liveTextOf(events: readonly { eventType: string; data: unknown }[]): string {
+/**
+ * Concatenates the streamed text blocks of the assistant's deltas, in sequence
+ * order and de-duplicated by id: the WS feed and the catch-up load can overlap
+ * and arrive out of order. Exported for tests.
+ */
+export function liveTextOf(events: readonly { id?: string; sequence?: number; eventType: string; data: unknown }[]): string {
+  const seen = new Set<string>();
+  const ordered = events
+    .filter((e) => (e.id ? !seen.has(e.id) && seen.add(e.id) : true))
+    .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
   let out = '';
-  for (const e of events) {
+  for (const e of ordered) {
     if (e.eventType !== 'content_block_delta') continue;
     const d = e.data as { type?: string; message?: { content?: Array<{ type?: string; text?: string }> } } | null;
     if (d?.type !== 'assistant') continue;

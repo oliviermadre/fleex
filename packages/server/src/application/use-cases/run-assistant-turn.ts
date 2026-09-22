@@ -37,6 +37,9 @@ export const MAX_ASSISTANT_TURNS_PER_THREAD = 8;
 export const MAX_THREAD_FAILURES = 3;
 /** Tool rounds one assistant turn may take before it must answer. */
 export const ASSISTANT_MAX_ROUNDS = 8;
+/** Streamed text is coalesced into agent_events of about this size, or after this delay. */
+export const ASSISTANT_DELTA_CHUNK_CHARS = 60;
+export const ASSISTANT_DELTA_FLUSH_MS = 150;
 
 /** Machine-readable tail of a mode-request comment; the web renders it as a CTA. Invisible in markdown. */
 export function modeRequestMarker(mode: string, threadId: string): string {
@@ -141,11 +144,33 @@ export class RunAssistantTurnUseCase {
     const executionId = randomUUID();
     const mentionKey = `assistant:${randomUUID()}`;
     await this.deps.agentEventStore.startExecution({ executionId, personaId: assistant.id, ticketId, mentionId: mentionKey, model });
+    // Events are appended AND broadcast strictly in order: a delta must never
+    // overtake the previous one on the wire, whatever the store's latency.
     let sequence = 0;
-    const emitEvent = async (eventType: AgentEventType, data: unknown) => {
+    let chain: Promise<void> = Promise.resolve();
+    const emitEvent = (eventType: AgentEventType, data: unknown): Promise<void> => {
       const event = AgentEventEntity.create({ executionId, eventType, data, sequence: sequence++ });
-      await this.deps.agentEventStore.appendEvent(event);
-      this.onEvent?.(event);
+      chain = chain.then(async () => {
+        await this.deps.agentEventStore.appendEvent(event);
+        this.onEvent?.(event);
+      });
+      return chain;
+    };
+    // Text is streamed token by token; one agent_event per token would flood the
+    // store and the socket. Deltas are coalesced into small chunks.
+    let textBuffer = '';
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushText = () => {
+      if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+      if (!textBuffer) return;
+      const text = textBuffer;
+      textBuffer = '';
+      void emitEvent('content_block_delta', { type: 'assistant', message: { content: [{ type: 'text', text }] } });
+    };
+    const onTextDelta = (delta: string) => {
+      textBuffer += delta;
+      if (textBuffer.length >= ASSISTANT_DELTA_CHUNK_CHARS) flushText();
+      else if (!flushTimer) flushTimer = setTimeout(flushText, ASSISTANT_DELTA_FLUSH_MS);
     };
     await emitEvent('execution_start', buildExecutionStartData({
       executionId, personaId: assistant.id, personaName: assistant.name, ticketId, mentionId: mentionKey, model,
@@ -168,8 +193,10 @@ export class RunAssistantTurnUseCase {
         let roundText = '';
         const res = await this.llm({ model, system, messages, tools }, (delta) => {
           roundText += delta;
-          void emitEvent('content_block_delta', { type: 'assistant', message: { content: [{ type: 'text', text: delta }] } });
+          onTextDelta(delta);
         });
+        flushText();
+        await chain;
         usage.inputTokens += res.usage?.inputTokens ?? 0;
         usage.outputTokens += res.usage?.outputTokens ?? 0;
         messages.push({ role: 'assistant', content: res.content });
@@ -242,6 +269,7 @@ export class RunAssistantTurnUseCase {
       await this.deps.agentEventStore.completeExecution(executionId, 'completed', { model, effectiveMode: 'talk', ...usage });
       await emitEvent('execution_end', { status: 'completed', ticketId, effectiveMode: 'talk', model, ...usage });
     } catch (err) {
+      flushText();
       await this.deps.agentEventStore.completeExecution(executionId, 'failed', { model, effectiveMode: 'talk' });
       await emitEvent('execution_end', { status: 'failed', ticketId, effectiveMode: 'talk', model, error: err instanceof Error ? err.message : String(err) });
       throw err;
