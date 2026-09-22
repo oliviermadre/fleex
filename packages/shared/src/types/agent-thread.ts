@@ -1,4 +1,10 @@
-export type AgentThreadStatus = 'running' | 'waiting' | 'concluded' | 'failed';
+/**
+ * running = an agent mention is open (queued or executing) · idle = the agent
+ * answered, the assistant has the hand · waiting = the user is asked (agent
+ * question or mode request) · failed = the last agent run crashed, relaunchable ·
+ * concluded = final.
+ */
+export type AgentThreadStatus = 'running' | 'idle' | 'waiting' | 'concluded' | 'failed';
 
 /**
  * A delegation opened by the assistant with one agent persona on a ticket.

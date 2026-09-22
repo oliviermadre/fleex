@@ -77,6 +77,14 @@ export class AgentThreadEntity {
     return true;
   }
 
+  /** The agent's run completed and it answered: the ball is in the assistant's court. */
+  markIdle(): boolean {
+    if (this.isTerminal) return false;
+    this.status = 'idle';
+    this.touch();
+    return true;
+  }
+
   markRunning(): boolean {
     if (this.isTerminal) return false;
     this.status = 'running';
