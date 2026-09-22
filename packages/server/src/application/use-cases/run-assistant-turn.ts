@@ -116,6 +116,13 @@ export class RunAssistantTurnUseCase {
     ]);
     const threadId = trigger.kind === 'user_message' || trigger.kind === 'ticket_created' ? null : trigger.threadId;
     const turns = threadId ? context.comments.filter((c) => c.threadId === threadId) : [];
+    // The agent's results live in deliverables attached to the thread's mentions.
+    let threadDeliverables: typeof context.deliverables = [];
+    if (threadId && turns.length > 0) {
+      const turnIds = new Set(turns.map((c) => c.id));
+      const mentionIds = new Set(context.mentions.all.filter((m) => turnIds.has(m.commentId)).map((m) => m.id));
+      threadDeliverables = context.deliverables.filter((d) => d.mentionId && mentionIds.has(d.mentionId));
+    }
 
     const systemPrompt = buildAssistantSystemPrompt({
       persona: assistant,
@@ -124,7 +131,7 @@ export class RunAssistantTurnUseCase {
         .filter((p) => p.id !== assistant.id)
         .map((p) => ({ name: p.name, displayName: p.displayName, identityMd: p.identityMd })),
     });
-    const prompt = buildAssistantUserPrompt({ context, threads: allThreads.map((t) => t.toDTO()), trigger, turns });
+    const prompt = buildAssistantUserPrompt({ context, threads: allThreads.map((t) => t.toDTO()), trigger, turns, threadDeliverables });
 
     const resolved = resolveExecutionConfig(assistant, ticket, this.deps.logger);
     const sessionKey = `${assistant.id}:${ticketId}`;

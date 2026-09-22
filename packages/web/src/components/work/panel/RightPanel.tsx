@@ -94,7 +94,7 @@ export function RightPanel({
       {rightPanel === 'diff' && <DiffPanel ticketId={task.id} />}
       {rightPanel === 'deliv' && <DelivsPanel ticketId={task.id} deliverables={deliverables} />}
       {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}
-      {rightPanel === 'thread' && <ThreadsPanel task={task} onOpenExecution={onOpenExecution} />}
+      {rightPanel === 'thread' && <ThreadsPanel task={task} deliverables={deliverables} onOpenExecution={onOpenExecution} />}
     </section>
   );
 }

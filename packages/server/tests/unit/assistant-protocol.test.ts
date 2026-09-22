@@ -63,3 +63,16 @@ describe('parseAssistantOutput — request_mode', () => {
     expect(parseAssistantOutput({ action: 'request_mode', threadId: 't', mode: 'god', message: 'why' }, '')).toBeNull();
   });
 });
+
+describe('buildAssistantUserPrompt — thread deliverables', () => {
+  it('inlines the full content of the thread deliverables and lists the others by title', async () => {
+    const { buildAssistantUserPrompt } = await import('../../src/application/assistant/assistant-protocol.js');
+    const d = (id: string, title: string, content: string) => ({ id, title, content, status: 'final', type: 'plan', agentName: 'The Builder', createdAt: 'now', mentionId: 'm1' });
+    const context = { ticket: { displayId: 1, title: 'T', status: 'doing', type: null, priority: 'none', description: '', conversationMode: 'plan' }, comments: [], deliverables: [d('a', 'Plan', 'FULL PLAN BODY'), d('b', 'Autre', 'x')] } as never;
+    const out = buildAssistantUserPrompt({ context, threads: [], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'resolved' }, threadDeliverables: [d('a', 'Plan', 'FULL PLAN BODY') as never] });
+    expect(out).toContain('Livrable « Plan »');
+    expect(out).toContain('FULL PLAN BODY');
+    expect(out).toContain('- Autre (final, par The Builder)');
+    expect(out).not.toContain('- Plan (final');
+  });
+});
