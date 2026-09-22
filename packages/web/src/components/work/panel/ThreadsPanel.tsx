@@ -23,6 +23,7 @@ import { resolveSelectedThread } from './threadSelection';
 
 const DOT: Record<AgentThread['status'], string> = {
   running: 'bg-[var(--theme-accent)] animate-pulse',
+  idle: 'bg-[var(--tint-blue-solid)]',
   waiting: 'bg-[var(--tint-yellow-solid)]',
   concluded: 'bg-[var(--tint-green-solid)]',
   failed: 'bg-[var(--tint-red-solid)]',
@@ -98,6 +99,8 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
   // "running" on the thread means the mention is open; the agent itself may still be
   // queued behind another run (agent concurrency limit) — say so instead of "working".
   const agentRunning = currentExecution?.status === 'running';
+  const currentMention = thread?.currentMentionId ? mentions.find((m) => m.id === thread.currentMentionId) ?? null : null;
+  const agentQueued = !agentRunning && (currentMention?.status === 'pending' || currentMention?.status === 'acknowledged');
 
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -205,8 +208,22 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
                   <span>
                     {agentRunning
                       ? `${personaName(thread)} is working…`
-                      : `${personaName(thread)} is queued — waiting for a free agent slot…`}
+                      : agentQueued
+                        ? `${personaName(thread)} is queued — waiting for a free agent slot…`
+                        : `${personaName(thread)} is starting…`}
                   </span>
+                </div>
+              )}
+              {thread.status === 'idle' && (
+                <div className="flex items-center gap-2 pl-7 text-[11.5px] text-[var(--theme-text-muted)]">
+                  <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
+                  <span>{personaName(thread)} answered · the assistant decides the next step</span>
+                </div>
+              )}
+              {thread.status === 'waiting' && (
+                <div className="flex items-center gap-2 pl-7 text-[11.5px] text-[var(--tint-yellow-text)]">
+                  <span aria-hidden>◆</span>
+                  <span>Waiting for you — answer in the main stream or step in below</span>
                 </div>
               )}
               {thread.status === 'concluded' && (

@@ -140,6 +140,7 @@ Tu es l'assistant et chef de projet de l'utilisateur sur ce ticket. Ton équipe,
 - Délègue quand la demande exige du code, une analyse de dépôt ou l'expertise d'une persona ; réponds toi-même sinon.
 - Un \`@agent:x\` dans le message de l'utilisateur est une consigne explicite de délégation à x.
 - Un seul thread ouvert par persona et par ticket : s'il existe, utilise "continue_thread".
+- Une exécution d'agent est ATOMIQUE : quand il a répondu, il ne fait plus rien tant que tu ne le relances pas. Un message d'agent du type « en cours », « je vais », « résultats bientôt », « exploration lancée » n'est PAS un résultat : c'est une exécution terminée sans livrable. Relance-le ("continue_thread") en exigeant le résultat concret (plan, code, réponse). Ne relaie JAMAIS un statut d'agent à l'utilisateur ; "reply" sert à rapporter un résultat final ou à poser une décision produit.
 - Tu gardes la main dans le thread jusqu'à résolution. Quand l'agent pose une question, réponds-lui toi-même ("continue_thread") avec ce que le contexte du ticket permet de décider ; ne remonte à l'utilisateur ("reply" + \`question\`) qu'une décision produit qui lui appartient vraiment, jamais un détail d'implémentation.
 - Quand une exécution de l'agent échoue (plafond de tours atteint, crash), relance-le ("continue_thread") en reprenant là où il en était : découpe la tâche, précise la prochaine étape, demande un résultat partiel. Après 3 échecs consécutifs sur un thread, conclus-le en expliquant à l'utilisateur ce qui bloque.
 - Les agents tournent dans le MODE D'EXÉCUTION du ticket : talk (réponse sans outils), plan (lecture seule : Read/Glob/Grep), edit (Write/Edit/Bash). Tu ne peux PAS le changer toi-même : c'est une décision de l'utilisateur. Si la tâche exige d'écrire ou d'exécuter et que le mode est plan ou talk, utilise "request_mode" (mode "edit") plutôt que de lancer un agent qui échouera. Un agent qui « demande la permission » d'écrire te dit juste qu'il est en plan : fais un "request_mode". Ne dis jamais à un agent que des permissions lui sont accordées : tant que l'utilisateur n'a pas cliqué, le mode est inchangé.
@@ -180,7 +181,9 @@ export function buildAssistantUserPrompt(p: {
     case 'thread_reply':
       trigger = trig.mentionStatus === 'failed'
         ? `L'exécution de l'agent du thread ${trig.threadId} a échoué (${p.threads.find((t) => t.id === trig.threadId)?.failures ?? 1} échec(s) consécutif(s)). Relance-le ("continue_thread") en reprenant sa progression et en découpant ce qui reste ; ne préviens l'utilisateur qu'après 3 échecs.`
-        : `L'agent du thread ${trig.threadId} a répondu (statut de sa mention : ${trig.mentionStatus}). Décide : continuer, conclure, ou relayer une question à l'utilisateur.`;
+        : trig.mentionStatus === 'resolved'
+          ? `L'agent du thread ${trig.threadId} a terminé son exécution et a répondu (voir ses tours). Il ne fera plus rien sans toi. Si sa réponse est un résultat final, conclus ("conclude_thread") ; sinon relance-le ("continue_thread") en exigeant le livrable attendu. Ne relaie pas un simple statut à l'utilisateur.`
+          : `L'agent du thread ${trig.threadId} attend une information (statut waiting_for_info). Réponds-lui toi-même ("continue_thread") si le contexte le permet, sinon pose la décision à l'utilisateur ("reply" + question) ou demande un changement de mode ("request_mode").`;
       break;
     case 'ticket_created':
       trigger = `Le ticket vient d'être créé et l'utilisateur te le confie. Prends-le en charge à partir de sa description : délègue à la bonne persona ("delegate") ou, si la description ne suffit pas, pose LA question qui débloque ("reply" + question).`;
