@@ -95,6 +95,10 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
     [executions, thread?.currentMentionId],
   );
 
+  // "running" on the thread means the mention is open; the agent itself may still be
+  // queued behind another run (agent concurrency limit) — say so instead of "working".
+  const agentRunning = currentExecution?.status === 'running';
+
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
   const stepIn = async () => {
@@ -198,7 +202,11 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
               {thread.status === 'running' && (
                 <div className="flex items-center gap-2 pl-7 text-[11.5px] text-[var(--theme-text-muted)]">
                   <span className="text-[var(--tint-purple-text)]" aria-hidden>⌬</span>
-                  <span>{personaName(thread)} is working…</span>
+                  <span>
+                    {agentRunning
+                      ? `${personaName(thread)} is working…`
+                      : `${personaName(thread)} is queued — waiting for a free agent slot…`}
+                  </span>
                 </div>
               )}
               {thread.status === 'concluded' && (
@@ -229,7 +237,11 @@ export function ThreadsPanel({ task }: { task: WorkTask }) {
                   </div>
                 </>
               ) : (
-                <div className="flex flex-1 items-center justify-center text-[12px] text-[var(--theme-text-faint)]">No execution yet for this thread.</div>
+                <div className="flex flex-1 items-center justify-center px-4 text-center text-[12px] text-[var(--theme-text-faint)]">
+                  {thread.status === 'running'
+                    ? 'No execution yet — the agent is queued behind another run (agent concurrency limit). The stream appears as soon as it starts.'
+                    : 'No execution for this thread.'}
+                </div>
               )}
             </div>
           )}
