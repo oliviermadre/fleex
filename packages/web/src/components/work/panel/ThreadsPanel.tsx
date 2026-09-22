@@ -239,13 +239,13 @@ export function ThreadsPanel({ task, onOpenExecution }: { task: WorkTask; onOpen
               ]
                 .sort((a, b) => a.at - b.at)
                 .map((x) => x.node)}
-              {!terminal && (
+              {/* The running RunCard above already says the agent is working: no duplicate line. */}
+              {!terminal && agentState !== 'working' && (
                 <div className="flex items-center gap-2 pl-7 text-[11.5px] text-[var(--theme-text-muted)]">
-                  <span className={agentState === 'working' || agentState === 'queued' ? 'text-[var(--tint-purple-text)]' : 'text-[var(--theme-accent)]'} aria-hidden>
-                    {agentState === 'working' || agentState === 'queued' ? '⌬' : '◆'}
+                  <span className={agentState === 'queued' ? 'text-[var(--tint-purple-text)]' : 'text-[var(--theme-accent)]'} aria-hidden>
+                    {agentState === 'queued' ? '⌬' : '◆'}
                   </span>
                   <span>
-                    {agentState === 'working' && `${personaName(thread)} is working…`}
                     {agentState === 'queued' && `${personaName(thread)} is queued — waiting for a free agent slot…`}
                     {agentState === 'asking' && `${personaName(thread)} asked a question — the assistant answers, or you step in below`}
                     {agentState === 'failed' && `${personaName(thread)}'s run failed — the assistant relaunches or reports back`}
