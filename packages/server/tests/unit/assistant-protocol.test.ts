@@ -40,7 +40,7 @@ describe('buildAssistantSystemPrompt', () => {
     });
     expect(s).toContain('SOUL');
     expect(s).toContain('@agent:builder');
-    for (const a of ['reply', 'delegate', 'continue_thread', 'conclude_thread']) expect(s).toContain(`"${a}"`);
+    for (const a of ['delegate_to_persona', 'continue_thread', 'conclude_thread', 'request_mode', 'fleex_*']) expect(s).toContain(`\`${a}\``);
   });
 });
 
@@ -80,9 +80,9 @@ describe('buildAssistantUserPrompt — thread deliverables', () => {
 describe('buildAssistantEnvPreamble', () => {
   it('degrades gracefully without workspace or docs', async () => {
     const { buildAssistantEnvPreamble } = await import('../../src/application/assistant/assistant-protocol.js');
-    const s = buildAssistantEnvPreamble({ ticketId: 'u', displayId: 7, workspace: null, cliBin: 'fleex', cliDocs: null });
+    const s = buildAssistantEnvPreamble({ ticketId: 'u', displayId: 7, workspace: null, cliToolCount: 0 });
     expect(s).toContain('Workspace Fleex : **inconnu**');
-    expect(s).toContain('documentation indisponible');
-    expect(s).not.toContain('--workspace');
+    expect(s).toContain("n'a pas répondu");
+    expect(s).toContain('uuid `u`');
   });
 });
