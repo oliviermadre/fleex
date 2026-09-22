@@ -108,4 +108,40 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     expect(saved).toEqual(['idle']);
     expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: 'th', mentionStatus: 'resolved' } }]);
   });
+
+  it('frees a new turn queued behind an older waiting turn of the same thread (stale lane)', async () => {
+    // Data from before the busy-agent guard: m-old (waiting_for_info) holds the
+    // (agent, ticket) lane, m-new (pending) can never start. The repair closes m-old.
+    const app = Fastify();
+    const t = thread();
+    t.openTurn('m-new');
+    const resolved: string[] = [];
+    const kicked: string[] = [];
+    const emitted: string[] = [];
+    const bus = new EventBus();
+    bus.on('mention.resolved', (e) => { emitted.push((e as { mentionId: string }).mentionId); });
+    const mOld = { id: 'm-old', targetAgent: 'b', status: 'waiting_for_info', commentId: 'c-old', resolve() { this.status = 'resolved'; } };
+    const mOther = { id: 'm-other', targetAgent: 'b', status: 'waiting_for_info', commentId: 'c-other', resolve() { this.status = 'resolved'; } };
+    const mNew = { id: 'm-new', targetAgent: 'b', status: 'pending', commentId: 'c-new' };
+    await app.register(assistantThreadsRoutes({
+      eventBus: bus,
+      threadStore: { getByTicket: async () => [t], save: async () => {} },
+      mentionStore: {
+        getById: async (id: string) => (id === 'm-new' ? mNew : null),
+        getByTicket: async () => [mOld, mOther, mNew],
+        save: async (m: { id: string }) => { resolved.push(m.id); },
+      },
+      // m-other waits in ANOTHER thread: it is not ours to close.
+      commentStore: { getById: async (id: string) => ({ threadId: id === 'c-old' ? 'th' : 'th-2' }) },
+      executeAgent: { execute: async (personaId: string) => { kicked.push(personaId); } },
+      runAssistantTurn: { execute: async () => {} },
+    } as never));
+    const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
+    expect(res.json()[0].status).toBe('running');
+    expect(resolved).toEqual(['m-old']);
+    expect(mOld.status).toBe('resolved');
+    expect(mOther.status).toBe('waiting_for_info');
+    expect(emitted).toEqual(['m-old']);
+    expect(kicked).toEqual(['p']);
+  });
 });

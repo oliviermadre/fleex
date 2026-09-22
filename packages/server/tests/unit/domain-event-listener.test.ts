@@ -439,7 +439,7 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', []);
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', [], { threadId: null });
     });
 
     it('should exclude agent from wake when agent posts comment', async () => {
@@ -456,7 +456,7 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a']);
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a'], { threadId: null });
     });
 
     it('wakes a re-mentioned agent when it is NOT in wakeExcludeAgents (answer case)', async () => {
@@ -476,7 +476,7 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', []);
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', [], { threadId: null });
     });
 
     it('does NOT wake an agent listed in wakeExcludeAgents (new subject)', async () => {
@@ -498,7 +498,7 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a']);
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a'], { threadId: null });
     });
   });
 
