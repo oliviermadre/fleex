@@ -64,7 +64,7 @@ function harness(actions: Array<Record<string, unknown>>) {
   const runner: SdkRunner = async () => ({ resultText: '', structuredOutput: actions.shift() ?? null, metrics: {} });
   const uc = new RunAssistantTurnUseCase({
     threadStore: threads as never, commentStore: comments as never, mentionStore: mentions as never,
-    ticketStore: { getTicketById: async () => ticket } as never,
+    ticketStore: { getTicketById: async () => ticket, saveTicket: async () => {} } as never,
     personaStore: {
       getById: async (id: string) => personas.find((p) => p.id === id) ?? null,
       getByName: async (n: string) => personas.find((p) => p.name === n) ?? null,
@@ -139,10 +139,12 @@ describe('RunAssistantTurnUseCase', () => {
     const thread = [...h.threads.saved.values()][0]!;
     thread.markWaiting(); await h.threads.save(thread);
     const m = h.mentions.saved[0]!; m.acknowledge(); m.waitForInfo(); await h.mentions.save(m);
+    h.ticket.update({ blocked: true });
     h.actions[0]!.threadId = thread.id;
     await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'waiting_for_info' } });
     expect(h.mentions.saved).toHaveLength(1);
     expect(h.executeAgent.woken).toEqual([m.id]);
+    expect(h.ticket.blocked).toBe(false);
     expect(h.comments.saved.at(-1)!.threadId).toBe(thread.id);
     expect(thread.status).toBe('running');
   });
