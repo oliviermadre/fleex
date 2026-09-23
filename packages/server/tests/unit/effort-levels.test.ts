@@ -10,6 +10,7 @@ import { EFFORT_LEVELS, FALLBACK_MODELS, inferModelCapabilities, isEffortLevel, 
 describe('inferModelCapabilities — effort ladder per model', () => {
   const cases: Array<[string, string[]]> = [
     // Full ladder: Opus ≥ 4.7, Sonnet 5, and the Fable line.
+    ['claude-opus-5-5', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-opus-5', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-opus-4-8', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-opus-4-7', ['low', 'medium', 'high', 'xhigh', 'max']],
