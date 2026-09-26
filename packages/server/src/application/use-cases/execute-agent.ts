@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject, ContextInjectionItem, MemorySnippetRef, TicketLink } from '@fleex/shared';
-import { inferModelCapabilities, resolveEffortLevel, parseRepoRef } from '@fleex/shared';
+import { inferModelCapabilities, resolveEffortLevel, parseRepoRef, DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES, MS_IN_MINUTE } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
@@ -946,7 +946,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }));
 
       // 9. Setup execution timeout
-      const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
+      const timeoutMs = this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES * MS_IN_MINUTE;
       const timeoutHandle = setTimeout(() => {
         this.logger.warn('Agent execution timed out', { executionId, persona: persona.name, timeoutMs });
         abortController.abort(new Error('timeout'));
@@ -1706,7 +1706,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const releaseSdkSlot = await this.sdkLimiter.acquire();
 
     // 7. Setup timeout + abort
-    const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
+    const timeoutMs = this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES * MS_IN_MINUTE;
     const timeoutHandle = setTimeout(() => {
       this.logger.warn('Skill execution timed out', { executionId, persona: persona.name, timeoutMs });
       abortController.abort(new Error('timeout'));

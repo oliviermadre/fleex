@@ -57,6 +57,8 @@ export interface AppSettings {
   agentMaxConcurrency: number;
   /** Agentic loop cap for plan/edit executions (talk mode has no loop). */
   agentMaxTurns: number;
+  /** Wall-clock cap (ms) on a single agent/skill execution. Unset → server default. */
+  agentExecutionTimeout?: number;
   /**
    * Feature flag for the single-screen « Work » view (queue · conversation ·
    * context). Absent means enabled — the view ships on by default and a user
