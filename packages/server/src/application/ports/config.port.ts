@@ -12,6 +12,10 @@ export interface AppConfig {
   humanDisplayName?: string;
   humanMentionName?: string;
   agentMaxConcurrency?: number;
+  /**
+   * Wall-clock cap (ms) on a single agent/skill execution before it is aborted.
+   * Unset → DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES.
+   */
   agentExecutionTimeout?: number;
   /**
    * Agentic loop cap for plan/edit executions. Unset → DEFAULT_AGENT_MAX_TURNS.

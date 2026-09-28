@@ -143,6 +143,13 @@ export const DEFAULT_AGENT_MAX_TURNS = 150;
 export const AGENT_MAX_TURNS_MIN = 1;
 export const AGENT_MAX_TURNS_MAX = 1000;
 
+// Wall-clock cap on a single agent/skill execution, after which Fleex aborts the
+// SDK run. Configurable via Settings › General (`agentExecutionTimeout`, stored
+// in ms); these are the fallback and the bounds of the field, in minutes.
+export const DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES = 60;
+export const AGENT_EXECUTION_TIMEOUT_MIN_MINUTES = 5;
+export const AGENT_EXECUTION_TIMEOUT_MAX_MINUTES = 24 * 60;
+
 // Time conversion units
 export const MS_IN_MINUTE = 60_000;
 export const MINUTES_IN_HOUR = 60;
