@@ -811,6 +811,12 @@ export async function fetchTicketAgentActivity(ticketIds: string[]): Promise<imp
   });
 }
 
+// ── Focus (human-attention queue) ──
+
+export async function fetchFocus(): Promise<import('@fleex/shared').FocusResponse> {
+  return request<import('@fleex/shared').FocusResponse>('/focus');
+}
+
 // ── Agent Tokens API ──
 
 export async function fetchAgentTokens(): Promise<import('@fleex/shared').AgentToken[]> {

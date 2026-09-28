@@ -10,6 +10,7 @@ import { useTicketActivity } from '../../hooks/useTicketActivity';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
 import { useSkills } from '../../hooks/useSkills';
+import { useFocusFeed } from '../../hooks/useFocusFeed';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
@@ -43,6 +44,7 @@ export function AppLayout() {
   useNotifications();
   useAgentPersonas();
   useSkills();
+  useFocusFeed();
 
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const activePanel = useUIStore((s) => s.activePanel);
@@ -91,7 +93,7 @@ export function AppLayout() {
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
   // Hide the content panel when editing a workflow so the editor takes the full viewport width
   const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId;
-  const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'list-focus' || activePanel === 'execution-log' || activePanel === 'documents' || activePanel === 'work' || editingWorkflow;
+  const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'list-focus' || activePanel === 'focus' || activePanel === 'execution-log' || activePanel === 'documents' || activePanel === 'work' || editingWorkflow;
   const effectiveContentWidth = hideContentPanel
     ? 0
     : contentPanelCollapsed

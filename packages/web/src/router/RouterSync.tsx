@@ -22,7 +22,7 @@ import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -104,6 +104,11 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // Assistant (companion-backed LLM chat)
   if (pathname === '/assistant') {
     return { ...base, panel: 'assistant' };
+  }
+
+  // Focus — the human-attention queue (Doing/Reviewing tickets waiting on you)
+  if (pathname === '/focus') {
+    return { ...base, panel: 'focus' };
   }
 
   // List/Focus cockpit (cross-board monitoring, view #400)
@@ -387,6 +392,8 @@ export function storeToUrl(
       return { pathname: '/assistant', search: '' };
     case 'list-focus':
       return { pathname: '/list-focus', search: '' };
+    case 'focus':
+      return { pathname: '/focus', search: '' };
     case 'work':
       return { pathname: '/work', search: '' };
     case 'execution-log':

@@ -541,3 +541,17 @@ export {
   DEFAULT_EMBEDDING_MODEL,
   resolveEmbeddingModel,
 } from './types/embedding-model.js';
+
+export type {
+  FocusItemKind,
+  FocusGateOption,
+  FocusPipelineStep,
+  FocusWorkflowRef,
+  FocusGate,
+  FocusQuestion,
+  FocusError,
+  FocusIdle,
+  FocusItem,
+  FocusResponse,
+} from './types/focus.js';
+export { FOCUS_KIND_ORDER } from './types/focus.js';
