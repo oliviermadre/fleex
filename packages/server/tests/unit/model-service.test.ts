@@ -94,6 +94,20 @@ describe('ModelService', () => {
     expect(models[0]).toMatchObject({ label: 'Claude Opus 5.5', family: 'opus', supportsFastMode: true });
   });
 
+  it('ranks Sonnet 5.5 above Sonnet 5 and derives its label', async () => {
+    const fake = makeFakeClient([
+      { id: 'claude-sonnet-4-6' },
+      { id: 'claude-sonnet-5' },
+      { id: 'claude-sonnet-5-5' },
+    ]);
+    const svc = new ModelService(new FakeLoggerPort(), 60_000, () => fake as never);
+
+    const { models } = await svc.getAvailableModels();
+
+    expect(models.map((m) => m.id)).toEqual(['claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6']);
+    expect(models[0]).toMatchObject({ label: 'Claude Sonnet 5.5', family: 'sonnet' });
+  });
+
   it('excludes legacy Claude 1/2/instant models so dropdowns stay clean', async () => {
     const fake = makeFakeClient([
       { id: 'claude-1-2' },

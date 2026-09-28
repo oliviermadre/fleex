@@ -46,6 +46,7 @@ const PRICING: Record<string, Price> = {
   'claude-opus-4-7': price(5e-6, 25e-6),
   'claude-opus-4-6': price(5e-6, 25e-6),
   'claude-opus-4-5': price(5e-6, 25e-6),
+  'claude-sonnet-5-5': price(2e-6, 10e-6),
   'claude-sonnet-5': price(3e-6, 15e-6),
   'claude-sonnet-4-6': price(3e-6, 15e-6),
   'claude-sonnet-4-5': price(3e-6, 15e-6),
