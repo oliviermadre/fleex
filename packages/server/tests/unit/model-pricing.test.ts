@@ -35,6 +35,25 @@ describe('priceFor — Fable 5.1', () => {
   });
 });
 
+describe('priceFor — Sonnet generations', () => {
+  it('prices the Sonnet 5.x line at $2/$10 per MTok', () => {
+    for (const id of ['claude-sonnet-5', 'claude-sonnet-5-5']) {
+      const p = priceFor(id);
+      expect(p, id).not.toBeNull();
+      expect(p!.inp).toBe(2e-6);
+      expect(p!.out).toBe(10e-6);
+    }
+  });
+
+  it('keeps the Sonnet 4.x line at $3/$15 per MTok', () => {
+    for (const id of ['claude-sonnet-4-5', 'claude-sonnet-4-6']) {
+      const p = priceFor(id)!;
+      expect(p.inp).toBe(3e-6);
+      expect(p.out).toBe(15e-6);
+    }
+  });
+});
+
 describe('computeSessionCost — a Fable 5.1 transcript', () => {
   let dir: string;
   beforeAll(() => {

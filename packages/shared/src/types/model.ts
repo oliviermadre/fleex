@@ -128,6 +128,7 @@ export const FALLBACK_MODELS: ModelOption[] = [
   staticModel('claude-opus-5', 'Claude Opus 5', 'opus'),
   staticModel('claude-opus-4-8', 'Claude Opus 4.8', 'opus'),
   staticModel('claude-opus-4-6', 'Claude Opus 4.6', 'opus'),
+  staticModel('claude-sonnet-5-5', 'Claude Sonnet 5.5', 'sonnet'),
   staticModel('claude-sonnet-5', 'Claude Sonnet 5', 'sonnet'),
   staticModel('claude-sonnet-4-6', 'Claude Sonnet 4.6', 'sonnet'),
   staticModel('claude-haiku-4-5', 'Claude Haiku 4.5', 'haiku'),
