@@ -14,6 +14,7 @@ import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { cn } from '../../../lib/cn';
 import { tintClasses, tintText } from '../../../lib/tints';
 import { PrBadge } from '../../ui/PrBadge';
+import { prStateFromGithub } from '../../../lib/prRef';
 import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from '../../tickets/RepoBaseBranchSelect';
 import { Spinner, BusyLine } from '../../ui/Spinner';
 import { DueDatePickerPopover } from '../../tickets/DueDatePickerPopover';
@@ -36,13 +37,6 @@ function parsePrLink(link: TicketLink): { org: string; name: string; number: num
   const slash = repo.indexOf('/');
   if (slash < 0 || Number.isNaN(num)) return null;
   return { org: repo.slice(0, slash), name: repo.slice(slash + 1), number: num };
-}
-
-/** Normalize GitHub's uppercase PR state ("OPEN"|"MERGED"|"CLOSED") to the PrBadge palette. */
-function prState(raw: string | undefined): 'open' | 'merged' | 'closed' {
-  if (raw === 'MERGED') return 'merged';
-  if (raw === 'CLOSED') return 'closed';
-  return 'open';
 }
 
 /** Parse a pasted GitHub PR URL into an addLink payload. */
@@ -426,7 +420,7 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
                   <PrBadge
                     org={parsed.org}
                     name={parsed.name}
-                    pr={{ number: parsed.number, state: prState(prStates[l.ref]), title: l.label }}
+                    pr={{ number: parsed.number, state: prStateFromGithub(prStates[l.ref]), title: l.label }}
                     href={l.url ?? undefined}
                   />
                 ) : (

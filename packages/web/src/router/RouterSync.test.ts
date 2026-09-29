@@ -43,6 +43,10 @@ describe('parseUrl', () => {
     expect(result.sessionTabKey).toBe('s:abc123');
   });
 
+  it('parses /focus', () => {
+    expect(parseUrl('/focus', '').panel).toBe('focus');
+  });
+
   it('parses /work', () => {
     const result = parseUrl('/work', '');
     expect(result.panel).toBe('work');
@@ -223,6 +227,12 @@ describe('storeToUrl', () => {
   it('generates /sessions/system when system shells selected', () => {
     const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'system', null);
     expect(url.pathname).toBe('/sessions/system');
+  });
+
+  it('generates /focus for the focus panel', () => {
+    const url = storeToUrl('focus', null, null, null, null, null, null, null, null, 'config', 'general');
+    expect(url.pathname).toBe('/focus');
+    expect(url.search).toBe('');
   });
 
   it('generates /work for the work panel', () => {

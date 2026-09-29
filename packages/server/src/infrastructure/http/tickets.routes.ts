@@ -11,6 +11,7 @@ import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity
 import { buildTicketBranchName, buildTicketWorkspaceId, normalizeBaseBranchInput, resolveBaseRef, resolveWorktreeTarget } from '../../domain/services/branch-utils.js';
 import { parsePRRefs } from '../../domain/services/pr-ref.js';
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
+import { registerFocusRoutes } from './focus.routes.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
@@ -1727,6 +1728,7 @@ export function ticketRoutes(container: Container) {
     // POST carries the ticket IDs in the body: the GET-only form overflowed
     // Node's maxHeaderSize past ~425 tickets and 431'd (#509).
     registerTicketBulkQueryRoutes(app, container);
+    registerFocusRoutes(app, container);
   };
 }
 

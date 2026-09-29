@@ -9,9 +9,11 @@ interface ModalProps {
   children: React.ReactNode;
   className?: string;
   maxWidth?: string;
+  /** Stacking class of the backdrop (default `z-50`). */
+  zIndexClass?: string;
 }
 
-export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg' }: ModalProps) {
+export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg', zIndexClass = 'z-50' }: ModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   // Selecting the text of a dialog and releasing past its edge used to close it.
   const dismiss = useBackdropDismiss(backdropRef, onClose);
@@ -21,6 +23,8 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        // A floating terminal stacked over the modal keeps its Escape (Claude Code's interrupt).
+        if ((e.target as HTMLElement | null)?.closest?.('[data-floating-panel]')) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         onClose();
@@ -37,7 +41,7 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
     <div
       ref={backdropRef}
       data-overlay-top
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className={cn('fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm', zIndexClass)}
       {...dismiss}
     >
       <div

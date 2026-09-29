@@ -9,7 +9,8 @@ import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
 import { cn } from '../../lib/cn';
 import { RoutineIcon } from '../../lib/primitives';
 import { TasksIcon } from './icons';
-import { RepositoriesIcon } from './icons';
+import { RepositoriesIcon, FocusIcon } from './icons';
+import { useFocusCount } from '../../stores/focusStore';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
 
 function FleexLogo({ collapsed }: { collapsed: boolean }) {
@@ -43,6 +44,7 @@ export function NavSidebar() {
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
   const routinesAwaiting = useRoutineStore((s) => s.routines.filter((r) => r.awaitingAttention).length);
   const loadRoutines = useRoutineStore((s) => s.load);
+  const focusCount = useFocusCount();
   // The badge must be right before the user ever opens /routines, so the nav —
   // always mounted — is what primes the list…
   useEffect(() => { void loadRoutines(); }, [loadRoutines]);
@@ -75,6 +77,18 @@ export function NavSidebar() {
 
         {/* === Operational === */}
         <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
+
+        {/* Focus — Doing/Reviewing tickets waiting on a human (gate, question,
+            error, idle). The badge is the job: keep it at zero. */}
+        <NavItem
+          icon={<FocusIcon size={20} />}
+          label="Focus"
+          shortLabel="Focus"
+          active={activePanel === 'focus'}
+          collapsed={navCollapsed}
+          badge={focusCount > 0 ? (focusCount > 99 ? '99+' : String(focusCount)) : undefined}
+          onClick={() => navigate('/focus')}
+        />
 
         {/* Tasks (single-screen ergonomics — queue · conversation · context).
             Gated by the workViewEnabled flag. */}

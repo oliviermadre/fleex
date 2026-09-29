@@ -25,6 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
 import { ListFocusView } from '../list-focus/ListFocusView';
+import { FocusView } from '../focus/FocusView';
 import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 import { RoutinesPage } from '../routines/RoutinesPage';
 import { DocumentsPage } from '../documents/DocumentsPage';
@@ -91,6 +92,10 @@ export function MainPanel() {
 
   if (activePanel === 'list-focus') {
     return <ListFocusView />;
+  }
+
+  if (activePanel === 'focus') {
+    return <FocusView />;
   }
 
   if (activePanel === 'work') {
