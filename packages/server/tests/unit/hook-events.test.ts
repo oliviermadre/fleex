@@ -77,8 +77,14 @@ describe('mapHookEventToStatus — whitelist', () => {
     expect(r).toEqual({ status: 'waiting', waitingReason: 'question' });
   });
 
-  it('preToolUse(Bash) → null (other tools are observed via Notification, not PreToolUse)', () => {
-    expect(mapHookEventToStatus(event({ event: 'preToolUse', payload: { tool_name: 'Bash' } }))).toBeNull();
+  it('preToolUse(Bash) → working: a tool running again means the user answered the menu', () => {
+    // Answering a plan approval / permission / AskUserQuestion fires no UserPromptSubmit:
+    // without this, the session stays `waiting` (and in Focus) until the end of the turn.
+    expect(mapHookEventToStatus(event({ event: 'preToolUse', payload: { tool_name: 'Bash' } }))).toEqual({ status: 'working' });
+  });
+
+  it('preToolUse without tool_name → null (nothing reliable to derive)', () => {
+    expect(mapHookEventToStatus(event({ event: 'preToolUse', payload: {} }))).toBeNull();
   });
 });
 
@@ -123,6 +129,28 @@ describe('SessionEntity.applyHookUpdate', () => {
       null, null, null, null,
     );
   }
+
+  it('plan approval answered: waiting/permission → working on the next tool call', () => {
+    const s = freshSession();
+    s.applyHookUpdate(mapHookEventToStatus(event({
+      event: 'notification',
+      payload: { notification_type: 'permission_prompt', message: 'Claude Code needs your approval for the plan' },
+    }))!);
+    expect(s.hookStatus).toBe('waiting');
+    expect(s.applyHookUpdate(mapHookEventToStatus(event({ event: 'preToolUse', payload: { tool_name: 'Edit' } }))!)).toBe(true);
+    expect(s.hookStatus).toBe('working');
+    expect(s.hookWaitingReason).toBeNull();
+    // Subsequent tool calls are de-duplicated: no broadcast storm.
+    expect(s.applyHookUpdate(mapHookEventToStatus(event({ event: 'preToolUse', payload: { tool_name: 'Read' } }))!)).toBe(false);
+  });
+
+  it('a tool needing approval still ends in waiting (PreToolUse fires before its Notification)', () => {
+    const s = freshSession();
+    s.applyHookUpdate(mapHookEventToStatus(event({ event: 'preToolUse', payload: { tool_name: 'Bash' } }))!);
+    s.applyHookUpdate(mapHookEventToStatus(event({ event: 'notification', payload: { notification_type: 'permission_prompt' } }))!);
+    expect(s.hookStatus).toBe('waiting');
+    expect(s.hookWaitingReason).toBe('permission');
+  });
 
   it('applies an unknown→working transition', () => {
     const s = freshSession();

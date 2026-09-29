@@ -26,8 +26,9 @@ import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
  *  - hooks fan out to every session under the same cwd, so several sessions of
  *    a worktree carry the same status: they are aggregated, the most demanding
  *    state winning (waiting > working > rest).
- * Not handled: after a permission is granted, no hook fires until the next tool
- * call or the end of the turn, so `waiting` can outlive the approval by a turn.
+ * Not handled: answering a menu (permission, plan, question) fires no hook by
+ * itself — the server clears `waiting` on the next tool call (PreToolUse). If
+ * Claude answers with text only, `waiting` lasts until the end of the turn.
  */
 
 export type CliSignal =
