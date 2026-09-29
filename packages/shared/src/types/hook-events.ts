@@ -76,6 +76,7 @@ export interface HookStatusUpdate {
  *   - notification(permission_prompt|idle_prompt|elicitation_dialog) → waiting
  *   - preToolUse(tool_name=AskUserQuestion)           → waiting/question  (defensive — covers the case where Claude's
  *                                                                          native AskUserQuestion does not fire Notification)
+ *   - preToolUse(any other tool)                      → working  (clears a `waiting` once the user answered)
  *   - stop                                            → complete
  *   - stopFailure                                     → error
  *   - sessionEnd                                      → idle
@@ -136,9 +137,7 @@ export function mapHookEventToStatus(
     }
 
     case 'preToolUse': {
-      // Only react for AskUserQuestion — the native Claude Code tool for structured questions.
-      // All other tool calls (Bash, Edit, Read…) are observed via Notification/permission_prompt
-      // when they need approval, not via PreToolUse, so we don't double-fire.
+      // AskUserQuestion — the native Claude Code tool for structured questions.
       const toolName = stringField(event.payload, 'tool_name');
       if (toolName === 'AskUserQuestion') {
         return {
@@ -146,6 +145,12 @@ export function mapHookEventToStatus(
           waitingReason: 'question',
         };
       }
+      // Any other tool call means Claude is running again. Answering a menu (plan
+      // approval, permission, AskUserQuestion) fires no UserPromptSubmit, so this is
+      // the first signal that clears a stale `waiting`. A tool that needs approval
+      // fires PreToolUse *before* its Notification/permission_prompt, so the
+      // `waiting` it triggers still lands last.
+      if (toolName) return { status: 'working' };
       return null;
     }
 
