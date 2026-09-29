@@ -1,15 +1,22 @@
-import { cloneElement, type ReactElement, type Ref } from 'react';
+import { cloneElement, type ReactElement, type ReactNode, type Ref } from 'react';
 import { FloatingArrow, useMergeRefs, type Placement } from '@floating-ui/react';
 import { useTooltip, FloatingPortal } from '../../hooks/usePopover';
+import { cn } from '../../lib/cn';
 
 /** Room for the arrow (5px tall) plus a hair of air between it and the trigger. */
 const GAP_PX = 8;
 
 interface TooltipProps {
-  /** Short text naming the trigger. Kept to one line. */
-  label: string;
+  /** Short text naming the trigger (kept to one line), or rich content when `interactive`. */
+  label: ReactNode;
   /** Preferred side; flips/shifts on its own near the viewport edge. Default `bottom`. */
   placement?: Placement;
+  /**
+   * Let the pointer travel onto the bubble and click what's inside it (default
+   * false). The bubble then stays open while hovered, pressing the trigger
+   * leaves it open, and its content may wrap over several lines.
+   */
+  interactive?: boolean;
   /**
    * The trigger. It must be a single element that forwards its `ref` (any DOM
    * element does): the tooltip attaches to it directly rather than wrapping it,
@@ -27,12 +34,12 @@ interface TooltipProps {
  * Rendered in a portal, so an `overflow` on the trigger's container can't clip
  * it. Since it replaces `title`, give an icon-only trigger an `aria-label`.
  */
-export function Tooltip({ label, placement = 'bottom', children }: TooltipProps) {
+export function Tooltip({ label, placement = 'bottom', interactive = false, children }: TooltipProps) {
   const { open, refs, floatingStyles, context, arrowRef, getReferenceProps, getFloatingProps } = useTooltip({
     placement,
     gap: GAP_PX,
     arrow: true,
-    interactive: false,
+    interactive,
   });
   const ref = useMergeRefs([refs.setReference, children.props.ref]);
 
@@ -45,7 +52,10 @@ export function Tooltip({ label, placement = 'bottom', children }: TooltipProps)
             ref={refs.setFloating}
             style={floatingStyles}
             {...getFloatingProps()}
-            className="pointer-events-none z-[9999] whitespace-nowrap rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-2 py-1 text-[11px] font-medium leading-none text-[var(--theme-text-primary)] shadow-lg"
+            className={cn(
+              'z-[9999] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] text-[11px] font-medium text-[var(--theme-text-primary)] shadow-lg',
+              interactive ? 'px-2.5 py-2 leading-snug' : 'pointer-events-none whitespace-nowrap px-2 py-1 leading-none',
+            )}
           >
             {label}
             <FloatingArrow

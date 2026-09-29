@@ -95,6 +95,15 @@ describe('focusStore', () => {
     expect(visible()).toEqual(['a', 'b']);
   });
 
+  it('brings back a single snoozed item, leaving the others snoozed', () => {
+    const { snooze, unsnooze } = useFocusStore.getState();
+    snooze('a', Date.now() + 3600_000);
+    snooze('b', Date.now() + 3600_000);
+    unsnooze('a');
+    expect(visible()).toEqual(['a']);
+    expect(Object.keys(JSON.parse(localStorage.getItem('fleex_focus_snoozed')!))).toEqual(['b']);
+  });
+
   it('can leave idle tickets out', () => {
     useFocusStore.setState({ items: [item('a'), item('i', { kind: 'idle' })] });
     expect(visible()).toEqual(['a', 'i']);
