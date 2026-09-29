@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { TicketDeliverable } from '@fleex/shared';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
+type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
 export type SettingsTab = 'general' | 'appearance' | 'pinned-icons' | 'workspace-actions' | 'agent-tokens' | 'deliverable-types' | 'memory' | 'connectors';
 export type AnalyticsTab = 'audit-trail' | 'statistics';
 
@@ -68,17 +68,9 @@ interface UIState {
   contentPanelCollapsed: boolean;
   toggleContentPanel: () => void;
 
-  // Last active session per worktree (key: "org/name:branch")
-  lastActiveTabByWorktree: Record<string, string>;
-  setLastActiveTab: (worktreeKey: string, sessionId: string) => void;
-
   // Ticket meta sidebar collapse
   ticketMetaSidebarCollapsed: boolean;
   toggleTicketMetaSidebar: () => void;
-
-  // Last active session (global — for restoring when switching back to sessions panel)
-  lastActiveSessionId: string | null;
-  setLastActiveSession: (id: string) => void;
 
   // Unified floating panel z-order (sessions + deliverables share one stack)
   floatingPanelOrder: string[];  // ordered IDs — last = top z-index
@@ -110,69 +102,6 @@ interface UIState {
   bringDeliverableToFront: (id: string) => void;
   /** @deprecated use clearFloatingPanelFocus */
   clearFloatingDeliverableFocus: () => void;
-
-  // Agent worktree view (ticket-based)
-  selectedAgentWorktreeTicketId: string | null;
-  setSelectedAgentWorktreeTicketId: (id: string | null) => void;
-
-  // Sidebar section collapse
-  manualFlowCollapsed: boolean;
-  toggleManualFlow: () => void;
-  agenticFlowCollapsed: boolean;
-  toggleAgenticFlow: () => void;
-  doneFlowCollapsed: boolean;
-  toggleDoneFlow: () => void;
-
-  // Session task right sidebar (scratchpad + auxiliary terminals)
-  rightSidebarWidth: number;
-  rightSidebarSplitRatio: number; // 0..1, fraction of height for the TOP panel
-  rightSidebarCollapsed: boolean;
-  setRightSidebarWidth: (width: number) => void;
-  setRightSidebarSplitRatio: (ratio: number) => void;
-  toggleRightSidebar: () => void;
-  setRightSidebarCollapsed: (collapsed: boolean) => void;
-}
-
-const RIGHT_SIDEBAR_STORAGE_KEY = 'fleex_right_sidebar';
-
-interface RightSidebarPersisted {
-  width?: number;
-  splitRatio?: number;
-  collapsed?: boolean;
-}
-
-function loadRightSidebarPersisted(): RightSidebarPersisted {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = window.localStorage.getItem(RIGHT_SIDEBAR_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveRightSidebarPersisted(state: RightSidebarPersisted): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(RIGHT_SIDEBAR_STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // ignore quota / privacy mode failures
-  }
-}
-
-const rightSidebarInitial = loadRightSidebarPersisted();
-const RIGHT_SIDEBAR_DEFAULT_WIDTH = 380;
-const RIGHT_SIDEBAR_DEFAULT_RATIO = 0.5;
-
-export const RIGHT_SIDEBAR_MIN_WIDTH = 280;
-export const RIGHT_SIDEBAR_MAX_RATIO = 0.75;
-
-export function clampRightSidebarWidth(width: number, availableWidth: number): number {
-  const max = Math.floor(availableWidth * RIGHT_SIDEBAR_MAX_RATIO);
-  const effectiveMax = Math.max(max, RIGHT_SIDEBAR_MIN_WIDTH);
-  return Math.min(Math.max(width, RIGHT_SIDEBAR_MIN_WIDTH), effectiveMax);
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -189,64 +118,13 @@ export const useUIStore = create<UIState>((set) => ({
   scratchpadOpen: false,
   scratchpadRepoKey: null,
   contentPanelCollapsed: false,
-  lastActiveTabByWorktree: {},
   ticketMetaSidebarCollapsed: false,
-  lastActiveSessionId: null,
   floatingPanelOrder: [],
   focusedFloatingPanelId: null,
   floatingSessionIds: [],
   deliverableOverlay: null,
   floatingDeliverableIds: [],
   floatingDeliverables: {},
-  selectedAgentWorktreeTicketId: null,
-  manualFlowCollapsed: false,
-  agenticFlowCollapsed: true,
-  doneFlowCollapsed: true,
-  rightSidebarWidth: typeof rightSidebarInitial.width === 'number' ? rightSidebarInitial.width : RIGHT_SIDEBAR_DEFAULT_WIDTH,
-  rightSidebarSplitRatio: typeof rightSidebarInitial.splitRatio === 'number' ? rightSidebarInitial.splitRatio : RIGHT_SIDEBAR_DEFAULT_RATIO,
-  rightSidebarCollapsed: rightSidebarInitial.collapsed === true,
-
-  setRightSidebarWidth: (width) => {
-    // Floor only — the max is enforced by callers that know the parent container's width
-    // (see SidebarWidthHandle + SessionRightSidebar's ResizeObserver, which pass the value
-    // through clampRightSidebarWidth before calling this setter).
-    const clamped = Math.max(width, RIGHT_SIDEBAR_MIN_WIDTH);
-    set({ rightSidebarWidth: clamped });
-    saveRightSidebarPersisted({
-      width: clamped,
-      splitRatio: useUIStore.getState().rightSidebarSplitRatio,
-      collapsed: useUIStore.getState().rightSidebarCollapsed,
-    });
-  },
-
-  setRightSidebarSplitRatio: (ratio) => {
-    const clamped = Math.min(Math.max(ratio, 0.15), 0.85);
-    set({ rightSidebarSplitRatio: clamped });
-    saveRightSidebarPersisted({
-      width: useUIStore.getState().rightSidebarWidth,
-      splitRatio: clamped,
-      collapsed: useUIStore.getState().rightSidebarCollapsed,
-    });
-  },
-
-  toggleRightSidebar: () => {
-    const next = !useUIStore.getState().rightSidebarCollapsed;
-    set({ rightSidebarCollapsed: next });
-    saveRightSidebarPersisted({
-      width: useUIStore.getState().rightSidebarWidth,
-      splitRatio: useUIStore.getState().rightSidebarSplitRatio,
-      collapsed: next,
-    });
-  },
-
-  setRightSidebarCollapsed: (collapsed) => {
-    set({ rightSidebarCollapsed: collapsed });
-    saveRightSidebarPersisted({
-      width: useUIStore.getState().rightSidebarWidth,
-      splitRatio: useUIStore.getState().rightSidebarSplitRatio,
-      collapsed,
-    });
-  },
 
   toggleScratchpad: () =>
     set((state) => ({
@@ -305,11 +183,6 @@ export const useUIStore = create<UIState>((set) => ({
 
   toggleTicketMetaSidebar: () =>
     set((state) => ({ ticketMetaSidebarCollapsed: !state.ticketMetaSidebarCollapsed })),
-
-  setLastActiveTab: (worktreeKey, sessionId) =>
-    set((state) => ({ lastActiveTabByWorktree: { ...state.lastActiveTabByWorktree, [worktreeKey]: sessionId } })),
-
-  setLastActiveSession: (id) => set({ lastActiveSessionId: id }),
 
   // Unified z-order actions
   bringFloatingPanelToFront: (id) =>
@@ -420,15 +293,4 @@ export const useUIStore = create<UIState>((set) => ({
     })),
 
   clearFloatingDeliverableFocus: () => set({ focusedFloatingPanelId: null }),
-
-  setSelectedAgentWorktreeTicketId: (id) => set({ selectedAgentWorktreeTicketId: id }),
-
-  toggleManualFlow: () =>
-    set((state) => ({ manualFlowCollapsed: !state.manualFlowCollapsed })),
-
-  toggleAgenticFlow: () =>
-    set((state) => ({ agenticFlowCollapsed: !state.agenticFlowCollapsed })),
-
-  toggleDoneFlow: () =>
-    set((state) => ({ doneFlowCollapsed: !state.doneFlowCollapsed })),
 }));

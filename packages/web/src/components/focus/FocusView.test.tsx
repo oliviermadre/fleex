@@ -20,6 +20,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useFocusStore, UNDO_MS } from '../../stores/focusStore';
 import { useWorkStore } from '../../stores/workStore';
+import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { FocusView } from './FocusView';
 
@@ -66,7 +67,6 @@ function renderView() {
     <MemoryRouter initialEntries={['/focus']}>
       <Routes>
         <Route path="/focus" element={<FocusView />} />
-        <Route path="/work" element={<div>work view</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -146,7 +146,10 @@ describe('FocusView', () => {
     expect(within(dialog).getByText('→ Build')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: /Ouvrir dans Tasks/ }));
     expect(useWorkStore.getState().selectedTicketId).toBe('t1');
-    expect(screen.getByText('work view')).toBeTruthy();
+    // The Tasks view (RouterSync turns this into /work/t1), and t1 is revealed in
+    // its queue even when the queue filters would hide it.
+    expect(useUIStore.getState().activePanel).toBe('work');
+    expect(useWorkStore.getState().revealTicketId).toBe('t1');
   });
 
   it('shows the empty state when nothing waits', () => {

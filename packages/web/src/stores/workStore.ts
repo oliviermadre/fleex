@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { TicketType, TicketPriority, TicketLink, ImportSourceId } from '@fleex/shared';
 import { EMPTY_DRAFT, migrateDraft } from '../components/work/new/draftMigration';
+import { paneCount } from '../components/work/shell/shellLayout';
 
 /**
  * Client-only UI state for the Work view. The ticket is the source of truth for
@@ -112,6 +113,14 @@ export interface WorkState {
   /** Whether the left queue is collapsed to a thin rail. */
   queueCollapsed: boolean;
   draft: WorkDraft;
+  /**
+   * A ticket we navigated to on purpose (deep link, "open this session") that
+   * must stay the one shown even if the queue filters hide it. useWorkQueue
+   * relaxes the filters once the ticket is loaded, then clears this. Not persisted.
+   */
+  revealTicketId: string | null;
+  /** A session whose shell pane should take the keyboard when it mounts. Not persisted. */
+  shellFocusRequest: string | null;
 
   // ── actions ──
   selectTicket: (id: string | null) => void;
@@ -143,6 +152,21 @@ export interface WorkState {
   setShellLayout: (ticketId: string, layout: ShellLayout) => void;
   /** Pin a session to one of the ticket's pane slots (removing it from its other slots); null clears. */
   bindShellPane: (ticketId: string, index: number, id: string | null) => void;
+  /**
+   * Select a ticket AND set its center mode in one commit (URL → store). Going
+   * through selectTicket + setMode would write the mode onto the previous ticket
+   * (commitMode targets modeTicketId), then restoreTicketMode would overwrite it.
+   */
+  openTicket: (ticketId: string, mode: WorkMode) => void;
+  /**
+   * Open a ticket in shell mode with `sessionId` bound to a pane (the one already
+   * showing it, else the first empty one, else the first) and ask that pane to
+   * take the keyboard. The landing spot of every "open this session" action.
+   */
+  openShellForTicket: (ticketId: string, sessionId: string) => void;
+  /** Apply the filter patch that reveals the pending ticket, and clear the request. */
+  settleReveal: (patch: Partial<Pick<WorkState, QueueFilterKey>> | null) => void;
+  clearShellFocusRequest: () => void;
   /** Drop everything remembered for a ticket (after it's deleted). */
   forgetTicket: (ticketId: string) => void;
   setShellHeight: (height: number) => void;
@@ -152,6 +176,40 @@ export interface WorkState {
 }
 
 const STORAGE_KEY = 'fleex_work';
+
+/** The queue filters a hidden ticket can be excluded by. */
+export type QueueFilterKey = 'boardFilters' | 'statusFilters' | 'priorityFilters' | 'favoriteOnly' | 'search';
+
+/** The fields of a ticket the queue filters look at. */
+export interface RevealableTicket {
+  readonly boardId: string;
+  readonly status: string;
+  readonly priority: string;
+  readonly favorite: boolean;
+  readonly title: string;
+}
+
+/**
+ * The smallest filter change that lets `ticket` into the queue, or null when it
+ * already passes (mirrors useWorkQueue's filtering). Each filter that excludes it
+ * is widened just enough — the ticket's status is added to the status filter
+ * rather than wiping it — so the user's other choices survive.
+ */
+export function filtersRevealing(
+  s: Pick<WorkState, QueueFilterKey>,
+  ticket: RevealableTicket,
+): Partial<Pick<WorkState, QueueFilterKey>> | null {
+  const patch: Partial<Pick<WorkState, QueueFilterKey>> = {};
+  if (s.statusFilters.length > 0 && !s.statusFilters.includes(ticket.status)) {
+    patch.statusFilters = [...s.statusFilters, ticket.status];
+  }
+  if (s.boardFilters.length > 0 && !s.boardFilters.includes(ticket.boardId)) patch.boardFilters = [];
+  if (s.priorityFilters.length > 0 && !s.priorityFilters.includes(ticket.priority)) patch.priorityFilters = [];
+  if (s.favoriteOnly && !ticket.favorite) patch.favoriteOnly = false;
+  const q = s.search.trim().toLowerCase();
+  if (q && !ticket.title.toLowerCase().includes(q)) patch.search = '';
+  return Object.keys(patch).length > 0 ? patch : null;
+}
 
 /** The subset of state we persist — everything except the action functions. */
 type PersistedWork = Pick<
@@ -335,10 +393,27 @@ export const useWorkStore = create<WorkState>((set, get) => {
     commit({ ...patch, modeByTicket });
   }
 
+  /** The commit that selects a ticket with a given center mode (see openTicket). */
+  function ticketModePatch(ticketId: string, mode: WorkMode): Partial<WorkState> {
+    const s = get();
+    return {
+      selectedTicketId: ticketId,
+      view: 'task',
+      modeTicketId: ticketId,
+      ...modeFlags(mode),
+      modeByTicket: mode === 'chat'
+        ? withoutTicket(s.modeByTicket, ticketId)
+        : { ...s.modeByTicket, [ticketId]: mode },
+    };
+  }
+
   return {
     ...load(),
+    revealTicketId: null,
+    shellFocusRequest: null,
 
-    selectTicket: (id) => commit({ selectedTicketId: id, view: 'task' }),
+    // A hand-picked selection supersedes any pending reveal.
+    selectTicket: (id) => commit({ selectedTicketId: id, view: 'task', revealTicketId: null }),
     setView: (view) => commit({ view }),
     setBoardFilters: (boardFilters) => commit({ boardFilters }),
     setPriorityFilters: (priorityFilters) => commit({ priorityFilters }),
@@ -375,6 +450,27 @@ export const useWorkStore = create<WorkState>((set, get) => {
       ids[index] = id;
       commit({ shellPaneIdsByTicket: { ...get().shellPaneIdsByTicket, [ticketId]: ids } });
     },
+    openTicket: (ticketId, mode) => commit({ ...ticketModePatch(ticketId, mode), revealTicketId: ticketId }),
+    openShellForTicket: (ticketId, sessionId) => {
+      const s = get();
+      const ids = [...(s.shellPaneIdsByTicket[ticketId] ?? [])];
+      const count = paneCount(s.shellLayoutByTicket[ticketId] ?? '1');
+      while (ids.length < count) ids.push(null);
+      let idx = ids.indexOf(sessionId);
+      if (idx < 0 || idx >= count) idx = ids.slice(0, count).indexOf(null);
+      if (idx < 0) idx = 0;
+      // A session lives in one pane only.
+      for (let i = 0; i < ids.length; i++) if (ids[i] === sessionId) ids[i] = null;
+      ids[idx] = sessionId;
+      commit({
+        ...ticketModePatch(ticketId, 'shell'),
+        shellPaneIdsByTicket: { ...s.shellPaneIdsByTicket, [ticketId]: ids },
+        revealTicketId: ticketId,
+        shellFocusRequest: sessionId,
+      });
+    },
+    settleReveal: (patch) => commit({ ...(patch ?? {}), revealTicketId: null }),
+    clearShellFocusRequest: () => set({ shellFocusRequest: null }),
     forgetTicket: (ticketId) => {
       const s = get();
       commit({

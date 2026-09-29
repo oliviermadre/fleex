@@ -61,83 +61,23 @@ function preserveRecentlyAdded(sessions: Session[]): Session[] {
 
 interface SessionState {
   sessions: Session[];
-  /** Ticket-based selection: 'system' for shells, ticket UUID for tickets */
-  selectedTicketId: string | null;
-  /** Active tab within the selected ticket: 's:sessionId' or 'e:executionId' */
-  selectedTabKey: string | null;
-  /** @deprecated — kept for backward compat during migration. Derived from selectedTabKey. */
-  selectedSessionId: string | null;
-  splitSessionId: string | null;
-  focusedPane: 'primary' | 'split';
   sessionGroups: SessionGroup[];
-  selectedGroupId: string | null;
-  activeGroupCellIndex: number | null;
   setSessions: (sessions: Session[]) => void;
   setSessionGroups: (groups: SessionGroup[]) => void;
-  selectTicketTab: (ticketId: string | null, tabKey?: string | null) => void;
-  /** @deprecated — use selectTicketTab */
-  selectSession: (id: string | null) => void;
-  openSplit: (id: string) => void;
-  closeSplit: () => void;
-  setFocusedPane: (pane: 'primary' | 'split') => void;
   addSession: (session: Session) => void;
   /** Add session to both sessions list and sessionGroups (optimistic, avoids race with WS broadcasts) */
   addSessionToGroup: (session: Session) => void;
   removeSession: (id: string) => void;
   updateSessionStatus: (id: string, status: SessionStatus) => void;
-  selectGroup: (id: string | null) => void;
-  setActiveGroupCellIndex: (index: number | null) => void;
-}
-
-/** Extract sessionId from a tab key like 's:uuid' */
-function tabKeyToSessionId(tabKey: string | null): string | null {
-  if (!tabKey) return null;
-  return tabKey.startsWith('s:') ? tabKey.slice(2) : null;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
   sessions: [],
-  selectedTicketId: null,
-  selectedTabKey: null,
-  selectedSessionId: null,
-  splitSessionId: null,
-  focusedPane: 'primary',
   sessionGroups: [],
-  selectedGroupId: null,
-  activeGroupCellIndex: null,
 
   setSessions: (sessions) => set({ sessions: preserveRecentlyAdded(filterKilledFromList(sessions)) }),
 
   setSessionGroups: (groups) => set({ sessionGroups: filterKilledSessions(groups) }),
-
-  selectTicketTab: (ticketId, tabKey) => {
-    const tk = tabKey ?? null;
-    set({
-      selectedTicketId: ticketId,
-      selectedTabKey: tk,
-      selectedSessionId: tabKeyToSessionId(tk),
-      splitSessionId: null,
-      focusedPane: 'primary',
-      selectedGroupId: null,
-      activeGroupCellIndex: null,
-    });
-  },
-
-  selectSession: (id) => {
-    // Legacy compat — derive selectedSessionId
-    set({ selectedSessionId: id, selectedTabKey: id ? `s:${id}` : null, splitSessionId: null, focusedPane: 'primary', selectedGroupId: null, activeGroupCellIndex: null });
-  },
-
-  openSplit: (id) =>
-    set((state) => {
-      // No-op if same as primary or no primary selected
-      if (!state.selectedSessionId || id === state.selectedSessionId) return state;
-      return { splitSessionId: id, focusedPane: 'split' };
-    }),
-
-  closeSplit: () => set({ splitSessionId: null, focusedPane: 'primary' }),
-
-  setFocusedPane: (pane) => set({ focusedPane: pane }),
 
   addSession: (session) =>
     set((state) => ({ sessions: [...state.sessions, session] })),
@@ -197,33 +137,7 @@ export const useSessionStore = create<SessionState>((set) => ({
         }))
         .filter((group: SessionGroup) => group.worktrees.length > 0);
 
-      // Handle split session removal
-      let splitSessionId = state.splitSessionId;
-      let focusedPane = state.focusedPane;
-      if (splitSessionId === id) {
-        splitSessionId = null;
-        focusedPane = 'primary';
-      }
-
-      // Auto-select next session if the killed one was selected
-      let selectedSessionId = state.selectedSessionId;
-      if (selectedSessionId === id) {
-        // If we had a split, promote the split session to primary
-        if (splitSessionId) {
-          selectedSessionId = splitSessionId;
-          splitSessionId = null;
-          focusedPane = 'primary';
-        } else {
-          // Try to find a session in the same worktree first
-          const killedWorktree = state.sessionGroups
-            .flatMap((g: SessionGroup) => g.worktrees)
-            .find((wt: WorktreeSessionGroup) => wt.sessions.some((s: Session) => s.id === id));
-          const siblingSession = killedWorktree?.sessions.find((s: Session) => s.id !== id);
-          selectedSessionId = siblingSession?.id ?? sessions[0]?.id ?? null;
-        }
-      }
-
-      return { sessions, sessionGroups, selectedSessionId, splitSessionId, focusedPane };
+      return { sessions, sessionGroups };
     }),
 
   updateSessionStatus: (id, status) =>
@@ -232,14 +146,4 @@ export const useSessionStore = create<SessionState>((set) => ({
         s.id === id ? { ...s, status } : s
       ),
     })),
-
-  selectGroup: (id) => set({
-    selectedGroupId: id,
-    selectedSessionId: null,
-    splitSessionId: null,
-    focusedPane: 'primary',
-    activeGroupCellIndex: null,
-  }),
-
-  setActiveGroupCellIndex: (index) => set({ activeGroupCellIndex: index }),
 }));

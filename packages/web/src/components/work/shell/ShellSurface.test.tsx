@@ -139,3 +139,25 @@ describe('ShellSurface — a new shell takes the keyboard', () => {
     expect(focus).not.toHaveBeenCalled();
   });
 });
+
+// A session opened here from elsewhere — a floating terminal's title bar, a new
+// task — lands in shell mode with the keyboard in it, or "maximise" means
+// "maximise, then click the pane".
+describe('ShellSurface — a session opened from elsewhere takes the keyboard', () => {
+  it("focuses the pane bound by openShellForTicket", async () => {
+    sessions = [session('s-a'), session('s-b')];
+    useWorkStore.getState().openShellForTicket(TICKET, 's-b');
+    render(<ShellSurface ticketId={TICKET} />);
+
+    await waitFor(() => expect(focus).toHaveBeenCalled());
+    expect(useWorkStore.getState().shellFocusRequest).toBeNull();
+  });
+
+  it('does not grab the keyboard when nothing asked for it', async () => {
+    sessions = [session('s-a')];
+    useWorkStore.setState({ shellPaneIdsByTicket: { [TICKET]: ['s-a'] }, shellFocusRequest: null } as never);
+    render(<ShellSurface ticketId={TICKET} />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(focus).not.toHaveBeenCalled();
+  });
+});

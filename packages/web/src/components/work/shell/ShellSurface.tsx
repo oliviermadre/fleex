@@ -83,6 +83,17 @@ export function ShellSurface({ ticketId }: { ticketId: string }) {
   // Another ticket's shells are not the one we owe the keyboard to.
   useEffect(() => setPendingFocusId(null), [ticketId]);
 
+  // A session opened here from elsewhere (a floating terminal's title bar, a new
+  // task…) is owed the keyboard too: adopt the store's request, same path as a
+  // shell opened from the tab bar. Declared after the reset above so it wins.
+  const shellFocusRequest = useWorkStore((s) => s.shellFocusRequest);
+  const clearShellFocusRequest = useWorkStore((s) => s.clearShellFocusRequest);
+  useEffect(() => {
+    if (!shellFocusRequest) return;
+    setPendingFocusId(shellFocusRequest);
+    clearShellFocusRequest();
+  }, [shellFocusRequest, clearShellFocusRequest]);
+
   const focusPane = (i: number) => {
     setFocusedPane(i);
     const id = resolved[i];

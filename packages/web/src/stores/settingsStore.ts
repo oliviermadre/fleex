@@ -59,12 +59,6 @@ export interface AppSettings {
   agentMaxTurns: number;
   /** Wall-clock cap (ms) on a single agent/skill execution. Unset → server default. */
   agentExecutionTimeout?: number;
-  /**
-   * Feature flag for the single-screen « Work » view (queue · conversation ·
-   * context). Absent means enabled — the view ships on by default and a user
-   * hides the nav entry by setting this to false, no code change needed.
-   */
-  workViewEnabled?: boolean;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**
@@ -119,14 +113,8 @@ interface SettingsState {
   saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
   setSessionDisplayName: (sessionId: string, name: string) => void;
   getSessionDisplayName: (sessionId: string) => string | undefined;
-  setRepoOrder: (order: string[]) => void;
-  setWorktreeOrder: (repoGroupId: string, order: string[]) => void;
-  setSessionOrder: (worktreeGroupId: string, order: string[]) => void;
   executePinnedAction: (icon: PinnedIcon) => void;
   executeWorkspaceAction: (action: WorkspaceAction, context: WorkspaceContext) => void;
-  addLayoutGroup: (type: SessionLayoutType) => string;
-  removeLayoutGroup: (id: string) => void;
-  bindLayoutGroupCell: (groupId: string, cellIndex: number, sessionId: string | null) => void;
   getRepoConfig: (org: string, name: string) => RepoConfig;
   setRepoConfig: (org: string, name: string, config: RepoConfig) => void;
   addRepositories: (repos: string[]) => Promise<void>;
@@ -264,44 +252,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     return get().settings.sessionDisplayNames[sessionId];
   },
 
-  setRepoOrder: (order) => {
-    const current = get().settings;
-    const updated = { ...current, repoOrder: order };
-    set({ settings: updated });
-    saveToStorage(updated);
-    fetch(`${API_URL}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
-  },
-
-  setWorktreeOrder: (repoGroupId, order) => {
-    const current = get().settings;
-    const worktreeOrder = { ...current.worktreeOrder, [repoGroupId]: order };
-    const updated = { ...current, worktreeOrder };
-    set({ settings: updated });
-    saveToStorage(updated);
-    fetch(`${API_URL}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
-  },
-
-  setSessionOrder: (worktreeGroupId, order) => {
-    const current = get().settings;
-    const sessionOrder = { ...current.sessionOrder, [worktreeGroupId]: order };
-    const updated = { ...current, sessionOrder };
-    set({ settings: updated });
-    saveToStorage(updated);
-    fetch(`${API_URL}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
-  },
-
   executePinnedAction: (icon: PinnedIcon) => {
     if (icon.actionType === 'url') {
       window.open(icon.actionValue, '_blank');
@@ -331,54 +281,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         body: JSON.stringify({ command: resolved }),
       }).catch(() => { /* ignore */ });
     }
-  },
-
-  addLayoutGroup: (type) => {
-    const current = get().settings;
-    const id = `group_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const cellCount = type === '2x2' ? 4 : 2;
-    const group: SessionLayoutGroup = { id, type, cells: Array(cellCount).fill(null) };
-    const sessionLayoutGroups = [...current.sessionLayoutGroups, group];
-    const updated = { ...current, sessionLayoutGroups };
-    set({ settings: updated });
-    saveToStorage(updated);
-    fetch(`${API_URL}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
-    return id;
-  },
-
-  removeLayoutGroup: (id) => {
-    const current = get().settings;
-    const sessionLayoutGroups = current.sessionLayoutGroups.filter((g) => g.id !== id);
-    const updated = { ...current, sessionLayoutGroups };
-    set({ settings: updated });
-    saveToStorage(updated);
-    fetch(`${API_URL}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
-  },
-
-  bindLayoutGroupCell: (groupId, cellIndex, sessionId) => {
-    const current = get().settings;
-    const sessionLayoutGroups = current.sessionLayoutGroups.map((g) => {
-      if (g.id !== groupId) return g;
-      const cells = [...g.cells];
-      cells[cellIndex] = sessionId;
-      return { ...g, cells };
-    });
-    const updated = { ...current, sessionLayoutGroups };
-    set({ settings: updated });
-    saveToStorage(updated);
-    fetch(`${API_URL}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
   },
 
   getRepoConfig: (org, name) => {

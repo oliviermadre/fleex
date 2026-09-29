@@ -8,12 +8,12 @@
  *   replaces only on pure URL normalisation. See historyActionForNav / navIdentity.
  *
  * Navigation components should call navigate() for user-initiated actions.
- * RouterSync handles programmatic store changes (e.g. auto-select after session kill).
+ * RouterSync handles programmatic store changes (e.g. the Work view landing on a task).
  */
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore, type SettingsTab, type AnalyticsTab } from '../stores/uiStore';
-import { useSessionStore } from '../stores/sessionStore';
+import { useWorkStore, type WorkMode } from '../stores/workStore';
 import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/ticketStore';
 import { useTicketGroupStore, VALID_EPIC_DETAIL_TABS, type EpicDetailTab } from '../stores/ticketGroupStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
@@ -22,7 +22,7 @@ import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
+type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -56,15 +56,23 @@ void _allSettingsTabsAreRoutable;
 type PersonaTab = 'config' | 'soul' | 'identity' | 'memory' | 'events';
 const VALID_PERSONA_TABS: PersonaTab[] = ['config', 'soul', 'identity', 'memory', 'events'];
 
+/** Center modes that get a URL segment; chat is the bare /work/:ticketId. */
+const WORK_URL_MODES = ['code', 'shell', 'workflow'] as const satisfies readonly WorkMode[];
+
+/**
+ * The Work view's URL state. `ticketId` undefined = bare /work (no preference:
+ * the store keeps its remembered selection); `view: 'new'` = /work/new.
+ */
+interface WorkUrl {
+  view: 'task' | 'new';
+  ticketId?: string;
+  mode: WorkMode;
+}
+
 interface ParsedUrl {
   panel: ActivePanel;
-  /** @deprecated — use sessionTicketId + sessionTabKey */
-  sessionId: string | null;
-  splitId: string | null;
-  /** Ticket-based session routing: 'system' or ticket UUID */
-  sessionTicketId: string | null;
-  /** Tab within the ticket: 's:sessionId' or 'e:executionId' */
-  sessionTabKey: string | null;
+  /** Set only for panel 'work'. */
+  work: WorkUrl | null;
   repoKey: string | null;
   /** undefined = "no board preference in URL", null = "all boards", string = specific board */
   boardId: string | null | undefined;
@@ -82,23 +90,17 @@ interface ParsedUrl {
   workflowId: string | null;
   settingsTab: SettingsTab | null;
   analyticsTab: AnalyticsTab | null;
-  agentWorktreeTicketId: string | null;
   redirect?: string;
 }
 
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, sessionTicketId: null as string | null, sessionTabKey: null as string | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, ticketsView: null as 'board' | 'roadmap' | null, epicId: null as string | null, epicDetailTab: null as EpicDetailTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, workflowId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { work: null as WorkUrl | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, ticketsView: null as 'board' | 'roadmap' | null, epicId: null as string | null, epicDetailTab: null as EpicDetailTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, workflowId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null };
 
   // Root: redirect to /tickets (Kanban is the default view)
   if (pathname === '/') {
     return { ...base, panel: 'tickets' as ActivePanel, redirect: '/tickets' };
-  }
-
-  // Dashboard
-  if (pathname === '/dashboard') {
-    return { ...base, panel: 'dashboard' };
   }
 
   // Assistant (companion-backed LLM chat)
@@ -111,39 +113,29 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
     return { ...base, panel: 'focus' };
   }
 
-  // List/Focus cockpit (cross-board monitoring, view #400)
-  if (pathname === '/list-focus') {
-    return { ...base, panel: 'list-focus' };
-  }
-
-  // Work (single-screen ergonomics — queue · conversation · context). Selection
-  // and shell/panel layout live in workStore (localStorage), not the URL, so the
-  // route carries only the panel. /work/:ticketId is reserved for a later deep link.
+  // Work (single-screen ergonomics — queue · conversation · context):
+  //   /work                        — whatever task the view remembers
+  //   /work/new                    — the new-task composer
+  //   /work/:ticketId              — that task, chat center
+  //   /work/:ticketId/:mode        — that task, code / shell / workflow center
+  // Layout (panel widths, shell splits, filters) stays in workStore, not the URL.
   if (pathname === '/work') {
-    return { ...base, panel: 'work' };
+    return { ...base, panel: 'work', work: { view: 'task', mode: 'chat' } };
   }
-
-  // Agent worktree within sessions panel
-  const agentWtMatch = pathname.match(/^\/sessions\/agent\/([^/]+)$/);
-  if (agentWtMatch) {
-    return { ...base, panel: 'sessions', agentWorktreeTicketId: agentWtMatch[1]! };
+  if (pathname === '/work/new') {
+    return { ...base, panel: 'work', work: { view: 'new', mode: 'chat' } };
   }
-
-  // Sessions: /sessions/system/:tabKey or /sessions/system
-  const systemMatch = pathname.match(/^\/sessions\/system(?:\/(.+))?$/);
-  if (systemMatch) {
-    return { ...base, panel: 'sessions', sessionTicketId: 'system', sessionTabKey: systemMatch[1] ? decodeURIComponent(systemMatch[1]) : null };
-  }
-
-  // Sessions: /sessions/:ticketId/:tabKey or /sessions/:ticketId or /sessions
-  const sessionsMatch = pathname.match(/^\/sessions(?:\/([^/]+))?(?:\/(.+))?$/);
-  if (sessionsMatch) {
-    const first = sessionsMatch[1] ?? null;
-    const second = sessionsMatch[2] ? decodeURIComponent(sessionsMatch[2]) : null;
-    if (first) {
-      return { ...base, panel: 'sessions', sessionTicketId: first, sessionTabKey: second };
+  const workMatch = pathname.match(/^\/work\/([^/]+)(?:\/([^/]+))?$/);
+  if (workMatch) {
+    const ticketId = workMatch[1]!;
+    const rawMode = workMatch[2];
+    if (rawMode === undefined) {
+      return { ...base, panel: 'work', work: { view: 'task', ticketId, mode: 'chat' } };
     }
-    return { ...base, panel: 'sessions' };
+    const mode = WORK_URL_MODES.find((m) => m === rawMode);
+    if (mode) return { ...base, panel: 'work', work: { view: 'task', ticketId, mode } };
+    // Unknown mode segment → the task itself.
+    return { ...base, panel: 'work', work: { view: 'task', ticketId, mode: 'chat' }, redirect: `/work/${ticketId}` };
   }
 
   // Repositories
@@ -290,52 +282,59 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
     return { ...base, panel: 'settings', redirect: '/settings' };
   }
 
-  // Unknown route → redirect to /tickets (Kanban is the default view, and the
-  // Dashboard is hidden from the navbar so we never land users on it)
+  // Unknown route → redirect to /tickets (Kanban is the default view). This is
+  // also where the retired /sessions*, /list-focus and /dashboard views land.
   return { ...base, panel: 'tickets', redirect: '/tickets' };
 }
 
 // ─── Store state → URL ───────────────────────────────────────────────────────
 
-export function storeToUrl(
-  activePanel: ActivePanel,
-  selectedSessionId: string | null,
-  splitSessionId: string | null,
-  selectedRepoKey: string | null,
-  selectedBoardId: string | null,
-  selectedTicketId: string | null,
-  selectedScratchpadKey: string | null,
-  selectedPersonaId: string | null,
-  selectedSkillId: string | null,
-  personaTab: PersonaTab,
-  settingsTab: SettingsTab,
-  selectedAgentWorktreeTicketId?: string | null,
-  analyticsTab?: AnalyticsTab,
-  ticketTab?: TicketTab,
-  selectedPanelId?: string | null,
-  sessionTicketId?: string | null,
-  sessionTabKey?: string | null,
-  activeView?: 'board' | 'roadmap',
-  epicDetailId?: string | null,
-  epicDetailTab?: EpicDetailTab,
-  selectedWorkflowId?: string | null,
-): { pathname: string; search: string } {
+/** Everything storeToUrl reads; only the fields of the active panel matter. */
+export interface UrlState {
+  activePanel: ActivePanel;
+  selectedRepoKey?: string | null;
+  selectedBoardId?: string | null;
+  selectedTicketId?: string | null;
+  selectedScratchpadKey?: string | null;
+  selectedPersonaId?: string | null;
+  selectedSkillId?: string | null;
+  personaTab?: PersonaTab;
+  settingsTab?: SettingsTab;
+  analyticsTab?: AnalyticsTab;
+  ticketTab?: TicketTab;
+  selectedPanelId?: string | null;
+  activeView?: 'board' | 'roadmap';
+  epicDetailId?: string | null;
+  epicDetailTab?: EpicDetailTab;
+  selectedWorkflowId?: string | null;
+  /** Work view: which screen, which task, and that task's center mode. */
+  workView?: 'task' | 'new';
+  workTicketId?: string | null;
+  workMode?: WorkMode;
+}
+
+export function storeToUrl({
+  activePanel,
+  selectedRepoKey = null,
+  selectedBoardId = null,
+  selectedTicketId = null,
+  selectedScratchpadKey = null,
+  selectedPersonaId = null,
+  selectedSkillId = null,
+  personaTab = 'config',
+  settingsTab = 'general',
+  analyticsTab,
+  ticketTab,
+  selectedPanelId,
+  activeView,
+  epicDetailId,
+  epicDetailTab,
+  selectedWorkflowId,
+  workView = 'task',
+  workTicketId = null,
+  workMode = 'chat',
+}: UrlState): { pathname: string; search: string } {
   switch (activePanel) {
-    case 'dashboard':
-      return { pathname: '/dashboard', search: '' };
-    case 'sessions': {
-      if (selectedAgentWorktreeTicketId && !sessionTicketId) {
-        return { pathname: `/sessions/agent/${selectedAgentWorktreeTicketId}`, search: '' };
-      }
-      if (sessionTicketId) {
-        const base = sessionTicketId === 'system' ? '/sessions/system' : `/sessions/${sessionTicketId}`;
-        if (sessionTabKey) {
-          return { pathname: `${base}/${encodeURIComponent(sessionTabKey)}`, search: '' };
-        }
-        return { pathname: base, search: '' };
-      }
-      return { pathname: '/sessions', search: '' };
-    }
     case 'repositories': {
       if (selectedRepoKey) {
         return { pathname: `/repositories/${selectedRepoKey}`, search: '' };
@@ -390,12 +389,14 @@ export function storeToUrl(
       return { pathname: '/documents', search: '' };
     case 'assistant':
       return { pathname: '/assistant', search: '' };
-    case 'list-focus':
-      return { pathname: '/list-focus', search: '' };
     case 'focus':
       return { pathname: '/focus', search: '' };
-    case 'work':
-      return { pathname: '/work', search: '' };
+    case 'work': {
+      if (workView === 'new') return { pathname: '/work/new', search: '' };
+      if (!workTicketId) return { pathname: '/work', search: '' };
+      const modeSuffix = workMode === 'chat' ? '' : `/${workMode}`;
+      return { pathname: `/work/${workTicketId}${modeSuffix}`, search: '' };
+    }
     case 'execution-log':
       return { pathname: '/execution-log', search: '' };
     case 'routines':
@@ -443,9 +444,9 @@ export function navIdentity(parsed: ParsedUrl): string {
   const boardId = parsed.boardId === undefined ? null : parsed.boardId;
   return [
     parsed.panel,
-    parsed.sessionTicketId ?? '',
-    parsed.sessionTabKey ?? '',
-    parsed.agentWorktreeTicketId ?? '',
+    parsed.work?.view ?? '',
+    parsed.work?.ticketId ?? '',
+    parsed.work?.mode ?? '',
     parsed.repoKey ?? '',
     boardId ?? '',
     parsed.ticketId ?? '',
@@ -476,9 +477,18 @@ export function historyActionForNav(
   expectedPath: string,
   expectedSearch: string,
 ): 'push' | 'replace' {
-  const current = navIdentity(parseUrl(currentPath, currentSearch));
-  const expected = navIdentity(parseUrl(expectedPath, expectedSearch));
-  return current === expected ? 'replace' : 'push';
+  const currentParsed = parseUrl(currentPath, currentSearch);
+  const expectedParsed = parseUrl(expectedPath, expectedSearch);
+  // Bare /work states no task, so the store filling in the one it remembers is
+  // normalisation, not a navigation — like /tickets → /tickets/board/all.
+  if (
+    currentParsed.work?.view === 'task' &&
+    currentParsed.work.ticketId === undefined &&
+    expectedParsed.work?.view === 'task'
+  ) {
+    return 'replace';
+  }
+  return navIdentity(currentParsed) === navIdentity(expectedParsed) ? 'replace' : 'push';
 }
 
 // ─── RouterSync component ─────────────────────────────────────────────────────
@@ -494,19 +504,16 @@ export function RouterSync() {
   const setSettingsTab = useUIStore((s) => s.setSettingsTab);
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectRepo = useUIStore((s) => s.selectRepo);
-  const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
-  const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
   const analyticsTab = useUIStore((s) => s.analyticsTab);
   const setAnalyticsTab = useUIStore((s) => s.setAnalyticsTab);
 
-  const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
-  const splitSessionId = useSessionStore((s) => s.splitSessionId);
-  const sessionTicketId = useSessionStore((s) => s.selectedTicketId);
-  const sessionTabKey = useSessionStore((s) => s.selectedTabKey);
-  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
-  const selectSession = useSessionStore((s) => s.selectSession);
-  const openSplit = useSessionStore((s) => s.openSplit);
-  const closeSplit = useSessionStore((s) => s.closeSplit);
+  const workView = useWorkStore((s) => s.view);
+  const setWorkView = useWorkStore((s) => s.setView);
+  const workTicketId = useWorkStore((s) => s.selectedTicketId);
+  // The URL carries the selected task's remembered mode — not the live flags,
+  // which briefly still belong to the previous task while the view switches.
+  const workMode = useWorkStore((s) => (s.selectedTicketId ? s.modeByTicket[s.selectedTicketId] ?? 'chat' : 'chat'));
+  const openWorkTicket = useWorkStore((s) => s.openTicket);
 
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const selectBoard = useTicketStore((s) => s.selectBoard);
@@ -557,21 +564,22 @@ export function RouterSync() {
       setActivePanel(parsed.panel);
     }
 
-    // Update session selection
-    if (parsed.panel === 'sessions') {
-      // Agent worktree view
-      if (parsed.agentWorktreeTicketId !== selectedAgentWorktreeTicketId) {
-        setSelectedAgentWorktreeTicketId(parsed.agentWorktreeTicketId);
-      }
-      if (parsed.agentWorktreeTicketId) {
-        if (sessionTicketId) selectTicketTab(null);
-        syncingFromUrl.current = false;
-        return;
-      }
-
-      // Ticket-based routing
-      if (parsed.sessionTicketId !== sessionTicketId || parsed.sessionTabKey !== sessionTabKey) {
-        selectTicketTab(parsed.sessionTicketId, parsed.sessionTabKey);
+    // Update Work view screen / task / center mode
+    if (parsed.work) {
+      const w = parsed.work;
+      if (w.view === 'new') {
+        if (workView !== 'new') setWorkView('new');
+      } else if (w.ticketId !== undefined) {
+        if (w.ticketId !== workTicketId || w.mode !== workMode || workView !== 'task') {
+          openWorkTicket(w.ticketId, w.mode);
+        }
+      } else {
+        if (workView !== 'task') setWorkView('task');
+        // Bare /work: spell out the task the view remembers, so the address bar
+        // always names what is on screen (and can be copied / bookmarked).
+        if (workTicketId) {
+          navigate(storeToUrl({ activePanel: 'work', workTicketId, workMode }), { replace: true });
+        }
       }
     }
 
@@ -694,10 +702,8 @@ export function RouterSync() {
   useEffect(() => {
     if (syncingFromUrl.current) return;
 
-    const expected = storeToUrl(
+    const expected = storeToUrl({
       activePanel,
-      selectedSessionId,
-      splitSessionId,
       selectedRepoKey,
       selectedBoardId,
       selectedTicketId,
@@ -706,17 +712,17 @@ export function RouterSync() {
       selectedSkillId,
       personaTab,
       settingsTab,
-      selectedAgentWorktreeTicketId,
       analyticsTab,
       ticketTab,
       selectedPanelId,
-      sessionTicketId,
-      sessionTabKey,
       activeView,
       epicDetailId,
       epicDetailTab,
       selectedWorkflowId,
-    );
+      workView,
+      workTicketId,
+      workMode,
+    });
 
     const currentPath = location.pathname;
     const currentSearch = location.search;
@@ -735,10 +741,6 @@ export function RouterSync() {
     }
   }, [
     activePanel,
-    selectedSessionId,
-    splitSessionId,
-    sessionTicketId,
-    sessionTabKey,
     selectedRepoKey,
     selectedBoardId,
     selectedTicketId,
@@ -747,7 +749,6 @@ export function RouterSync() {
     selectedSkillId,
     personaTab,
     settingsTab,
-    selectedAgentWorktreeTicketId,
     analyticsTab,
     ticketTab,
     selectedPanelId,
@@ -755,6 +756,9 @@ export function RouterSync() {
     activeView,
     epicDetailId,
     epicDetailTab,
+    workView,
+    workTicketId,
+    workMode,
     // Don't include location to avoid re-triggering on our own navigate calls
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);

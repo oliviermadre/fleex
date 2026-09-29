@@ -1,8 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
@@ -38,8 +36,6 @@ export function NavSidebar() {
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const toggleNav = useUIStore((s) => s.toggleNav);
   const activePanel = useUIStore((s) => s.activePanel);
-  const workViewEnabled = useSettingsStore((s) => s.settings.workViewEnabled) !== false;
-  const sessions = useSessionStore((s) => s.sessions);
   const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
   const routinesAwaiting = useRoutineStore((s) => s.routines.filter((r) => r.awaitingAttention).length);
@@ -90,18 +86,15 @@ export function NavSidebar() {
           onClick={() => navigate('/focus')}
         />
 
-        {/* Tasks (single-screen ergonomics — queue · conversation · context).
-            Gated by the workViewEnabled flag. */}
-        {workViewEnabled && (
-          <NavItem
-            icon={<TasksIcon size={20} />}
-            label="Tasks"
-            shortLabel="Tasks"
-            active={activePanel === 'work'}
-            collapsed={navCollapsed}
-            onClick={() => navigate('/work')}
-          />
-        )}
+        {/* Tasks (single-screen ergonomics — queue · conversation · context) */}
+        <NavItem
+          icon={<TasksIcon size={20} />}
+          label="Tasks"
+          shortLabel="Tasks"
+          active={activePanel === 'work'}
+          collapsed={navCollapsed}
+          onClick={() => navigate('/work')}
+        />
 
         {/* Kanban (was Backlog / Tickets) */}
         <NavItem
@@ -126,43 +119,6 @@ export function NavSidebar() {
           active={activePanel === 'tickets'}
           collapsed={navCollapsed}
           onClick={() => navigate('/tickets')}
-        />
-
-        {/* Cockpit (cross-board list/focus monitoring) */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="8" y1="6" x2="21" y2="6" />
-              <line x1="8" y1="12" x2="21" y2="12" />
-              <line x1="8" y1="18" x2="21" y2="18" />
-              <circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none" />
-              <circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none" />
-              <circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none" />
-            </svg>
-          }
-          label="Cockpit"
-          shortLabel="Cockpit"
-          active={activePanel === 'list-focus'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/list-focus')}
-        />
-
-        {/* Sessions (live agent runs) */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="5" cy="3.5" r="1.5" />
-              <circle cx="5" cy="12.5" r="1.5" />
-              <circle cx="12" cy="7" r="1.5" />
-              <path d="M5 5v6M5 7.5c0-1.5 1-3 4.5-3" />
-            </svg>
-          }
-          label="Sessions"
-          shortLabel="Sessions"
-          active={activePanel === 'sessions'}
-          collapsed={navCollapsed}
-          badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
-          onClick={() => navigate('/sessions')}
         />
 
         {/* Execution Log */}

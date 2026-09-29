@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { FocusItem, FocusItemKind } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useWorkStore } from '../../stores/workStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import {
@@ -31,6 +28,7 @@ import {
 } from './focusModel';
 import { applyCliSessions } from './focusSessions';
 import { FocusRunningSection } from './FocusRunningSection';
+import { openTicketInWork } from '../work/openInWork';
 
 const KINDS: FocusItemKind[] = ['gate', 'question', 'error', 'idle'];
 const TICK_MS = 30_000;
@@ -56,13 +54,11 @@ function isFormField(el: EventTarget | null): boolean {
  * handled without opening the ticket; a click opens a detail popup for the rest.
  */
 export function FocusView() {
-  const navigate = useNavigate();
   const now = useNow(TICK_MS);
 
   const tickets = useTicketStore((s) => s.tickets);
   const boards = useTicketStore((s) => s.boards);
   const moveTicket = useTicketStore((s) => s.moveTicket);
-  const workViewEnabled = useSettingsStore((s) => s.settings.workViewEnabled) !== false;
 
   const serverItems = useFocusStore((s) => s.items);
   const loaded = useFocusStore((s) => s.loaded);
@@ -169,14 +165,9 @@ export function FocusView() {
       const t = ticketById.get(item.ticketId);
       if (!t) return;
       setOpenKey(null);
-      if (workViewEnabled) {
-        useWorkStore.getState().selectTicket(t.id);
-        navigate('/work');
-      } else {
-        navigate(`/tickets/board/${t.boardId}/ticket/${t.id}/comments`);
-      }
+      openTicketInWork(t.id);
     },
-    [ticketById, workViewEnabled, navigate],
+    [ticketById],
   );
 
   // ── Page shortcuts (paused while the popup is open — it has its own) ──
