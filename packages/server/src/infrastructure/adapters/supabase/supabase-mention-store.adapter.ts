@@ -3,6 +3,9 @@ import { TicketMentionEntity } from '../../../domain/entities/ticket-mention.ent
 import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 
+/** PostgREST's max-rows cap (Supabase default) — the page size we paginate on. */
+const PAGE = 1000;
+
 interface MentionRow {
   id: string;
   ticket_id: string;
@@ -68,12 +71,24 @@ export class SupabaseMentionStore implements MentionStorePort {
   }
 
   async getAll(): Promise<TicketMentionEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('mentions')
-      .select('*')
-      .order('created_at');
-    if (error) throw new Error(`SupabaseMentionStore.getAll failed: ${error.message}`);
-    return (data as MentionRow[]).map(rowToEntity);
+    // Paginated: an unpaginated select is silently truncated at PostgREST's
+    // max-rows (1000), and ordered oldest-first that dropped the most recent
+    // mentions — Focus missed a fresh `waiting_for_info` (ticket #615).
+    // Ordering (created_at, id) keeps pages stable and non-overlapping.
+    const rows: MentionRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('mentions')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseMentionStore.getAll failed: ${error.message}`);
+      const page = data as MentionRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(rowToEntity);
   }
 
   async getByComment(commentId: string): Promise<TicketMentionEntity[]> {

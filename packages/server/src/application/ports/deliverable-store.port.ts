@@ -56,6 +56,11 @@ export interface DeliverableStorePort {
   getById(id: string): Promise<TicketDeliverableEntity | null>;
   getAll(): Promise<TicketDeliverableEntity[]>;
   /**
+   * Creation dates (ISO) of every deliverable created in [from, to], oldest
+   * first — what Statistics counts, without loading any `content`.
+   */
+  getCreatedAtBetween(from: Date, to: Date): Promise<string[]>;
+  /**
    * One page of deliverables, newest-updated first, plus the total number of
    * rows matching the filters. Backs the Documents view: the list stays bounded
    * while the header and the "load more" affordance know the real size.

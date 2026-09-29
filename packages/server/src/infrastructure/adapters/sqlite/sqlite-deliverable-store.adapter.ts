@@ -106,6 +106,13 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     return rows.map((r) => this.toEntity(r));
   }
 
+  async getCreatedAtBetween(from: Date, to: Date): Promise<string[]> {
+    const rows = this.conn.db
+      .prepare('SELECT created_at FROM deliverables WHERE created_at >= ? AND created_at <= ? ORDER BY created_at ASC')
+      .all(from.toISOString(), to.toISOString()) as { created_at: string }[];
+    return rows.map((r) => r.created_at);
+  }
+
   async query(options: DeliverableQueryOptions): Promise<DeliverableQueryResult> {
     const { sql: where, params } = buildWhere(options);
     const { count } = this.conn.db

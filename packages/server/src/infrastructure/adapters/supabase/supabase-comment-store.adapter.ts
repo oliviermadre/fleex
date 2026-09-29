@@ -1,8 +1,11 @@
 import type { CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
-import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
+import type { CommentSummary, CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 import { chunkIds } from './supabase-chunk.js';
+
+/** PostgREST's max-rows cap (Supabase default) — the page size we paginate on. */
+const PAGE = 1000;
 
 interface CommentRow {
   id: string;
@@ -86,12 +89,45 @@ export class SupabaseCommentStore implements CommentStorePort {
   }
 
   async getAll(): Promise<TicketCommentEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('comments')
-      .select('*')
-      .order('created_at', { ascending: true });
-    if (error) throw new Error(`SupabaseCommentStore.getAll failed: ${error.message}`);
-    return (data as CommentRow[]).map(rowToEntity);
+    // Paginated: an unpaginated select is silently truncated at max-rows, and
+    // ordered oldest-first that dropped every recent comment (Statistics
+    // reported 0 comments over the last 30 days).
+    const rows: CommentRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('comments')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseCommentStore.getAll failed: ${error.message}`);
+      const page = data as CommentRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(rowToEntity);
+  }
+
+  async getAllSummaries(): Promise<CommentSummary[]> {
+    type Row = { ticket_id: string; created_at: string; author_type: string };
+    const rows: Row[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('comments')
+        .select('ticket_id, created_at, author_type')
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseCommentStore.getAllSummaries failed: ${error.message}`);
+      const page = data as Row[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map((r) => ({
+      ticketId: r.ticket_id,
+      createdAt: new Date(r.created_at).toISOString(),
+      authorType: r.author_type as 'user' | 'agent',
+    }));
   }
 
   async save(comment: TicketCommentEntity): Promise<void> {

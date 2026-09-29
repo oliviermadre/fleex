@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { SupabaseCommentStore } from '../../src/infrastructure/adapters/supabase/supabase-comment-store.adapter.js';
 import { SupabaseDeliverableStore } from '../../src/infrastructure/adapters/supabase/supabase-deliverable-store.adapter.js';
+import { SupabaseMentionStore } from '../../src/infrastructure/adapters/supabase/supabase-mention-store.adapter.js';
+import { SupabaseAgentEventStore } from '../../src/infrastructure/adapters/supabase/supabase-agent-event-store.adapter.js';
 import type { SupabaseConnection } from '../../src/infrastructure/adapters/supabase/connection.js';
 
 /**
@@ -24,6 +26,9 @@ function makeFakeClient(rowsByTable: Record<string, Record<string, unknown>[]>) 
       const builder = {
         select: () => builder,
         in: () => builder,
+        // Filters are not evaluated: these tests are about paging, not matching.
+        gte: () => builder,
+        lte: () => builder,
         order: () => builder,
         range: (f: number, t: number) => {
           from = f;
@@ -110,5 +115,109 @@ describe('SupabaseDeliverableStore.getByTicketIds pagination', () => {
 
     expect(result).toHaveLength(1500);
     expect(result.filter((d) => d.ticketId === 'ticket-c')).toHaveLength(500);
+  });
+});
+
+function mentionRow(i: number) {
+  return {
+    id: `mention-${i}`,
+    ticket_id: `ticket-${i % 7}`,
+    comment_id: `comment-${i}`,
+    target_agent: 'builder',
+    source_agent: 'user',
+    target_type: 'agent',
+    execution_mode: 'edit',
+    status: 'resolved',
+    resolved_at: null,
+    resolved_comment_id: null,
+    resolved_deliverable_id: null,
+    created_at: new Date(1700000000000 + i * 1000).toISOString(),
+  };
+}
+
+function executionRow(i: number) {
+  return {
+    execution_id: `exec-${i}`,
+    persona_id: 'builder',
+    ticket_id: `ticket-${i % 7}`,
+    mention_id: `mention-${i}`,
+    event_count: 0,
+    status: 'completed',
+    started_at: new Date(1700000000000 + i * 1000).toISOString(),
+    completed_at: null,
+    sdk_session_id: null,
+    last_event_at: null,
+    model: null,
+    effective_mode: null,
+    effort: null,
+    fast_mode: null,
+    duration_ms: null,
+    cost_usd: null,
+    input_tokens: null,
+    output_tokens: null,
+    cache_read_tokens: null,
+    cache_creation_tokens: null,
+    source: null,
+    comment_id: null,
+    deliverable_id: null,
+  };
+}
+
+describe('SupabaseMentionStore.getAll pagination', () => {
+  it('returns every mention past the 1000-row PostgREST cap, including the most recent ones', async () => {
+    // Ordered oldest-first, so a truncated read drops exactly the newest mentions —
+    // the ones Focus needs to spot a fresh `waiting_for_info`.
+    const rows = Array.from({ length: 1281 }, (_, i) => mentionRow(i));
+    const store = new SupabaseMentionStore(
+      { client: makeFakeClient({ mentions: rows }) } as unknown as SupabaseConnection,
+    );
+
+    const result = await store.getAll();
+
+    expect(result).toHaveLength(1281);
+    expect(result.some((m) => m.id === 'mention-1280')).toBe(true);
+  });
+});
+
+describe('SupabaseAgentEventStore.getAllExecutions pagination', () => {
+  it('returns every execution past the 1000-row PostgREST cap', async () => {
+    const rows = Array.from({ length: 2009 }, (_, i) => executionRow(i));
+    const store = new SupabaseAgentEventStore(
+      { client: makeFakeClient({ agent_event_executions: rows }) } as unknown as SupabaseConnection,
+    );
+
+    expect(await store.getAllExecutions()).toHaveLength(2009);
+  });
+});
+
+describe('SupabaseCommentStore full reads pagination', () => {
+  it('getAll returns every comment past the 1000-row PostgREST cap', async () => {
+    const rows = Array.from({ length: 3013 }, (_, i) => commentRow(i, 'ticket-a'));
+    const store = new SupabaseCommentStore(
+      { client: makeFakeClient({ comments: rows }) } as unknown as SupabaseConnection,
+    );
+    expect(await store.getAll()).toHaveLength(3013);
+  });
+
+  it('getAllSummaries returns every comment, without its body', async () => {
+    const rows = Array.from({ length: 3013 }, (_, i) => commentRow(i, 'ticket-a'));
+    const store = new SupabaseCommentStore(
+      { client: makeFakeClient({ comments: rows }) } as unknown as SupabaseConnection,
+    );
+    const result = await store.getAllSummaries();
+    expect(result).toHaveLength(3013);
+    expect(result[3012]).toEqual({ ticketId: 'ticket-a', createdAt: rows[3012]!.created_at, authorType: 'agent' });
+  });
+});
+
+describe('SupabaseDeliverableStore.getCreatedAtBetween pagination', () => {
+  it('returns every creation date past the 1000-row PostgREST cap', async () => {
+    const rows = Array.from({ length: 1895 }, (_, i) => deliverableRow(i, 'ticket-a'));
+    const store = new SupabaseDeliverableStore(
+      { client: makeFakeClient({ deliverables: rows }) } as unknown as SupabaseConnection,
+    );
+    const result = await store.getCreatedAtBetween(new Date(0), new Date());
+    expect(result).toHaveLength(1895);
+    expect(result[1894]).toBe(rows[1894]!.created_at);
   });
 });

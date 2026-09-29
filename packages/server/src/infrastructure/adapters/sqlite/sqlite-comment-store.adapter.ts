@@ -1,6 +1,6 @@
 import type { CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
-import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
+import type { CommentSummary, CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { SqliteConnection } from './connection.js';
 
 interface CommentRow {
@@ -48,6 +48,13 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       .prepare('SELECT * FROM comments ORDER BY created_at ASC')
       .all() as CommentRow[];
     return rows.map((r) => this.toEntity(r));
+  }
+
+  async getAllSummaries(): Promise<CommentSummary[]> {
+    const rows = this.conn.db
+      .prepare('SELECT ticket_id, created_at, author_type FROM comments ORDER BY created_at ASC')
+      .all() as { ticket_id: string; created_at: string; author_type: string }[];
+    return rows.map((r) => ({ ticketId: r.ticket_id, createdAt: r.created_at, authorType: r.author_type as 'user' | 'agent' }));
   }
 
   async save(comment: TicketCommentEntity): Promise<void> {

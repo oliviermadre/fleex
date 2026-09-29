@@ -100,9 +100,12 @@ export class GetStatisticsUseCase {
       await Promise.all([
         this.ticketStore.getAllTickets(),
         this.ticketStore.getAllBoards(),
-        this.commentStore.getAll(),
+        // Comments and deliverables: only the counted fields (no body / content),
+        // deliverables only over the period — a full read (~22 MB of deliverable
+        // content) hit Supabase's statement timeout.
+        this.commentStore.getAllSummaries(),
         this.mentionStore.getAll(),
-        this.deliverableStore.getAll(),
+        this.deliverableStore.getCreatedAtBetween(from, to),
         this.agentEventStore.getAllExecutions(),
         this.personaStore.getAll(),
         this.sessionStore.getAll(),
@@ -113,9 +116,9 @@ export class GetStatisticsUseCase {
 
     // Filter to date range
     const filteredTickets = tickets.filter((t) => inRange(t.toDTO().createdAt));
-    const filteredComments = comments.filter((c) => inRange(c.toDTO().createdAt));
+    const filteredComments = comments.filter((c) => inRange(c.createdAt));
     const filteredMentions = mentions.filter((m) => inRange(m.toDTO().createdAt));
-    const filteredDeliverables = deliverables.filter((d) => inRange(d.toDTO().createdAt));
+    const filteredDeliverables = deliverables.filter((createdAt) => inRange(createdAt));
     const filteredExecutions = executions.filter((e) => inRange(e.startedAt));
     const filteredSessions = sessions.filter((s) => inRange(s.createdAt.toISOString()));
 
@@ -132,8 +135,8 @@ export class GetStatisticsUseCase {
       (t) => t.toDTO().status === 'done' && t.toDTO().links.some((l: TicketLink) => l.type === 'github_pr'),
     ).filter((t) => inRange(t.toDTO().statusChangedAt));
 
-    const userComments = filteredComments.filter((c) => c.toDTO().authorType === 'user');
-    const agentComments = filteredComments.filter((c) => c.toDTO().authorType === 'agent');
+    const userComments = filteredComments.filter((c) => c.authorType === 'user');
+    const agentComments = filteredComments.filter((c) => c.authorType === 'agent');
     const resolvedMentions = filteredMentions.filter((m) => m.toDTO().status === 'resolved');
 
     const durations = filteredExecutions
@@ -198,9 +201,9 @@ export class GetStatisticsUseCase {
       };
 
       const bTickets = filteredTickets.filter((t) => inBucket(t.toDTO().createdAt));
-      const bComments = filteredComments.filter((c) => inBucket(c.toDTO().createdAt));
+      const bComments = filteredComments.filter((c) => inBucket(c.createdAt));
       const bMentions = filteredMentions.filter((m) => inBucket(m.toDTO().createdAt));
-      const bDeliverables = filteredDeliverables.filter((d) => inBucket(d.toDTO().createdAt));
+      const bDeliverables = filteredDeliverables.filter((createdAt) => inBucket(createdAt));
       const bExecutions = filteredExecutions.filter((e) => inBucket(e.startedAt));
       const bSessions = filteredSessions.filter((s) => inBucket(s.createdAt.toISOString()));
 
@@ -218,8 +221,8 @@ export class GetStatisticsUseCase {
         agentsSpawned: bExecutions.length,
         deliverablesCreated: bDeliverables.length,
         commentsCreated: bComments.length,
-        commentsCreatedByUser: bComments.filter((c) => c.toDTO().authorType === 'user').length,
-        commentsCreatedByAgent: bComments.filter((c) => c.toDTO().authorType === 'agent').length,
+        commentsCreatedByUser: bComments.filter((c) => c.authorType === 'user').length,
+        commentsCreatedByAgent: bComments.filter((c) => c.authorType === 'agent').length,
         mentionsCreated: bMentions.length,
         mentionsResolved: bMentions.filter((m) => m.toDTO().status === 'resolved').length,
         ticketsCreated: bTickets.length,
@@ -472,7 +475,7 @@ export class GetStatisticsUseCase {
     }
     const commentsByTicket = new Map<string, number>();
     for (const c of comments) {
-      const tid = c.toDTO().ticketId;
+      const tid = c.ticketId;
       commentsByTicket.set(tid, (commentsByTicket.get(tid) ?? 0) + 1);
     }
     const agentRunsByTicket = new Map<string, number>();

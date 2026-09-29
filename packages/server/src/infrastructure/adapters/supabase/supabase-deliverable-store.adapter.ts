@@ -124,6 +124,27 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     return rows.map(rowToEntity);
   }
 
+  async getCreatedAtBetween(from: Date, to: Date): Promise<string[]> {
+    // Only `created_at`: Statistics counts deliverables, and pulling `content`
+    // for every row (~22 MB) hit Supabase's statement timeout.
+    const rows: { created_at: string }[] = [];
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('deliverables')
+        .select('created_at')
+        .gte('created_at', from.toISOString())
+        .lte('created_at', to.toISOString())
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (error) throw new Error(`SupabaseDeliverableStore.getCreatedAtBetween failed: ${error.message}`);
+      const page = data as { created_at: string }[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map((r) => new Date(r.created_at).toISOString());
+  }
+
   /**
    * The Documents view reads the `deliverables_search` view (migration 029) so
    * PostgREST — which cannot join — still sees the origin columns and can match

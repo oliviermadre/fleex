@@ -24,7 +24,7 @@ ticket soient toujours d'accord.
 - Une ligne par ticket : gate > question > erreur > idle.
 - Un ticket où un agent tourne ou attend son tour n'est ni idle ni en erreur (le nouveau run remplace l'échec),
   mais une gate ou une question reste affichée.
-- Un ticket marqué `blocked` à la main n'apparaît pas en idle : il attend volontairement quelque chose.
+- Le flag `blocked` n'influe pas sur Focus : un ticket bloqué y apparaît comme les autres.
 
 ### Sessions Claude Code en CLI
 

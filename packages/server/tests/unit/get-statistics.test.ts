@@ -34,7 +34,11 @@ function makeUseCase(tickets: TicketEntity[], boards: BoardEntity[]): GetStatist
     getAllTickets: vi.fn().mockResolvedValue(tickets),
     getAllBoards: vi.fn().mockResolvedValue(boards),
   } as unknown as TicketStorePort;
-  const empty = () => ({ getAll: vi.fn().mockResolvedValue([]) });
+  const empty = () => ({
+    getAll: vi.fn().mockResolvedValue([]),
+    getAllSummaries: vi.fn().mockResolvedValue([]),
+    getCreatedAtBetween: vi.fn().mockResolvedValue([]),
+  });
 
   return new GetStatisticsUseCase(
     ticketStore,
@@ -110,7 +114,11 @@ describe('GetStatisticsUseCase — costBySource', () => {
         { mentionId: 'cli:abc', personaId: 'cli', startedAt: '2026-06-01T11:00:00Z', completedAt: '2026-06-01T11:30:00Z', status: 'completed', costUsd: 10, source: 'cli' },
       ]),
     } as unknown as AgentEventStorePort;
-    const empty = () => ({ getAll: vi.fn().mockResolvedValue([]) });
+    const empty = () => ({
+      getAll: vi.fn().mockResolvedValue([]),
+      getAllSummaries: vi.fn().mockResolvedValue([]),
+      getCreatedAtBetween: vi.fn().mockResolvedValue([]),
+    });
     const ticketStore = {
       getAllTickets: vi.fn().mockResolvedValue([]),
       getAllBoards: vi.fn().mockResolvedValue([]),
@@ -192,11 +200,14 @@ describe('GetStatisticsUseCase — flow metrics', () => {
     } as unknown as DomainEventLogStorePort;
 
     const comments = {
-      getAll: vi.fn().mockResolvedValue([
-        withItem(() => ({ id: 'c1', ticketId: tid, createdAt: '2026-06-01T10:00:00Z', authorType: 'user' })),
-        withItem(() => ({ id: 'c2', ticketId: tid, createdAt: '2026-06-01T11:00:00Z', authorType: 'agent' })),
+      getAllSummaries: vi.fn().mockResolvedValue([
+        { ticketId: tid, createdAt: '2026-06-01T10:00:00Z', authorType: 'user' },
+        { ticketId: tid, createdAt: '2026-06-01T11:00:00Z', authorType: 'agent' },
       ]),
     } as unknown as CommentStorePort;
+    const deliverables = {
+      getCreatedAtBetween: vi.fn().mockResolvedValue(['2026-06-01T12:00:00.000Z', '2026-06-02T08:00:00.000Z']),
+    } as unknown as DeliverableStorePort;
     const mentions = {
       getAll: vi.fn().mockResolvedValue([
         withItem(() => ({ id: 'm1', ticketId: tid, createdAt: '2026-06-01T09:30:00Z', status: 'resolved' })),
@@ -213,13 +224,17 @@ describe('GetStatisticsUseCase — flow metrics', () => {
       getAllTickets: vi.fn().mockResolvedValue([ticket]),
       getAllBoards: vi.fn().mockResolvedValue([board]),
     } as unknown as TicketStorePort;
-    const empty = () => ({ getAll: vi.fn().mockResolvedValue([]) });
+    const empty = () => ({
+      getAll: vi.fn().mockResolvedValue([]),
+      getAllSummaries: vi.fn().mockResolvedValue([]),
+      getCreatedAtBetween: vi.fn().mockResolvedValue([]),
+    });
 
     const useCase = new GetStatisticsUseCase(
       ticketStore,
       comments,
       mentions,
-      empty() as unknown as DeliverableStorePort,
+      deliverables,
       executions,
       empty() as unknown as PersonaStorePort,
       empty() as unknown as SessionStorePort,
@@ -229,6 +244,13 @@ describe('GetStatisticsUseCase — flow metrics', () => {
     );
 
     const result = await useCase.execute(params);
+
+    // Comments and deliverables come from the slim reads (no body / content).
+    expect(result.summary).toMatchObject({
+      commentsCreated: 2, commentsCreatedByUser: 1, commentsCreatedByAgent: 1, deliverablesCreated: 2,
+    });
+    expect(result.timeSeries[0]).toMatchObject({ commentsCreated: 2, deliverablesCreated: 1 });
+    expect(deliverables.getCreatedAtBetween).toHaveBeenCalledWith(new Date(params.from), new Date(params.to));
 
     // Lead time: doing 06-01T08 → done 06-02T08 = exactly one day.
     expect(result.leadTime.points).toHaveLength(1);
@@ -265,7 +287,11 @@ describe('GetStatisticsUseCase — routine leaderboard', () => {
   const params = { from: '2026-06-01', to: '2026-06-04', granularity: 'day' as const };
 
   function useCaseWith(runs: unknown[], routines: unknown[]) {
-    const empty = () => ({ getAll: vi.fn().mockResolvedValue([]) });
+    const empty = () => ({
+      getAll: vi.fn().mockResolvedValue([]),
+      getAllSummaries: vi.fn().mockResolvedValue([]),
+      getCreatedAtBetween: vi.fn().mockResolvedValue([]),
+    });
     return new GetStatisticsUseCase(
       { getAllTickets: vi.fn().mockResolvedValue([]), getAllBoards: vi.fn().mockResolvedValue([]) } as unknown as TicketStorePort,
       empty() as unknown as CommentStorePort,
