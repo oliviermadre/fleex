@@ -1,11 +1,8 @@
 import { forwardRef, useState } from 'react';
 import type { Board, FocusItem, Ticket } from '@fleex/shared';
-import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { tint, tintClasses } from '../../lib/tints';
-import { getStatusBadgeClass } from '../../lib/statusColors';
-import { PriorityIndicator } from '../tickets/PriorityIndicator';
-import { TicketTypeIcon } from '../tickets/TicketTypeBadge';
+import { FocusFavoriteStar, FocusStatusBadge, FocusTicketLead } from './FocusTicketLead';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -13,9 +10,13 @@ import { executeSkill } from '../../services/api';
 import { KindIcon } from './FocusIcons';
 import { KIND_META, STALE_MS, focusSummary, formatWait, questionOptions, waitedMs, type FocusAction } from './focusModel';
 
-/** Grid shared by every row: kind · ticket · actions · wait · session. */
+/**
+ * Grid shared by every row: kind · status · ticket · actions · session · wait
+ * (status in its own column so the titles line up; the buttons sit together,
+ * the wait closes the row).
+ */
 export const FOCUS_ROW_GRID =
-  'grid-cols-[96px_minmax(0,1fr)_64px_108px] xl:grid-cols-[96px_minmax(0,1fr)_auto_64px_108px]';
+  'grid-cols-[96px_80px_minmax(0,1fr)_108px_76px] xl:grid-cols-[96px_80px_minmax(0,1fr)_auto_108px_76px]';
 
 interface Props {
   item: FocusItem;
@@ -47,7 +48,9 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const sessions = findSessionsForTicketId(ticket.id, sessionGroups);
   const [answer, setAnswer] = useState('');
-  const options = item.kind === 'question' ? questionOptions(item) : [];
+  // A CLI session's question is answered in its terminal, not with a comment.
+  const reply = item.kind === 'question' && item.question?.source !== 'session';
+  const options = reply ? questionOptions(item) : [];
 
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   const send = () => {
@@ -71,7 +74,7 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
       aria-label={`${meta.label} · #${ticket.displayId} ${ticket.title}`}
       onClick={onOpen}
       className={cn(
-        'relative grid cursor-pointer items-center gap-x-3.5 gap-y-2 overflow-hidden rounded-lg border bg-[var(--theme-bg-surface)] py-2.5 pl-4 pr-3 transition-colors',
+        'group relative grid cursor-pointer items-center gap-x-3.5 gap-y-2 overflow-hidden rounded-lg border bg-[var(--theme-bg-surface)] py-2.5 pl-4 pr-3 transition-colors',
         FOCUS_ROW_GRID,
         selected
           ? 'border-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]'
@@ -85,20 +88,19 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
         {meta.label}
       </span>
 
-      <div className="col-start-2 row-start-1 grid min-w-0 gap-0.5">
+      <FocusStatusBadge ticket={ticket} className="col-start-2 row-start-1" />
+
+      <div className="col-start-3 row-start-1 grid min-w-0 gap-0.5">
         <div className="flex min-w-0 items-center gap-1.5">
-          <TicketTypeIcon type={ticket.type} />
+          <FocusTicketLead ticket={ticket} />
           <span className="whitespace-nowrap font-mono text-[11.5px] text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
           <span className="min-w-0 truncate text-[13px] font-semibold text-[var(--theme-text-primary)]">{ticket.title}</span>
-          <PriorityIndicator priority={ticket.priority} />
+          <FocusFavoriteStar ticket={ticket} />
           {board && (
             <span className="shrink-0 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-px text-[10.5px] text-[var(--theme-text-muted)]">
               {board.emoji} {board.name}
             </span>
           )}
-          <span className={cn('shrink-0 rounded-full px-1.5 text-[10.5px] font-medium', getStatusBadgeClass(ticket.status))}>
-            {TICKET_STATUS_LABELS[ticket.status] ?? ticket.status}
-          </span>
         </div>
         <div className="truncate text-[12.5px] text-[var(--theme-text-secondary)]">
           {who && <span className={cn('mr-1.5', tintClasses('purple').text)}>{item.kind === 'question' ? `@${who}` : who}</span>}
@@ -123,10 +125,10 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
 
       {/* Direct actions — second line below xl. */}
       <div
-        className="col-[2/-1] row-start-2 flex flex-wrap items-center gap-1.5 xl:col-[3/4] xl:row-start-1 xl:flex-nowrap xl:justify-end"
+        className="col-[3/-1] row-start-2 flex flex-wrap items-center gap-1.5 xl:col-[4/5] xl:row-start-1 xl:flex-nowrap xl:justify-end"
         onClick={stop}
       >
-        {item.kind === 'question' ? (
+        {reply ? (
           <div className="flex w-full items-center gap-1 xl:w-[300px]">
             <input
               value={answer}
@@ -196,7 +198,7 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
 
       <div
         className={cn(
-          'col-start-3 row-start-1 text-right font-mono xl:col-start-4 text-[11.5px] tabular-nums whitespace-nowrap',
+          'col-start-5 row-start-1 text-right font-mono xl:col-start-6 text-[11.5px] tabular-nums whitespace-nowrap',
           stale ? tintClasses('orange').text : 'text-[var(--theme-text-muted)]',
         )}
         title={item.since ? `En attente depuis le ${new Date(item.since).toLocaleString()}` : undefined}

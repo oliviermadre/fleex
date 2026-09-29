@@ -1,7 +1,9 @@
 import { create } from 'zustand';
-import type { FocusItem } from '@fleex/shared';
+import type { FocusItem, FocusRunning } from '@fleex/shared';
 import * as api from '../services/api';
 import { useToastStore } from './toastStore';
+import { useSessionStore } from './sessionStore';
+import { applyCliSessions } from '../components/focus/focusSessions';
 
 /**
  * Focus — the human-attention queue (Doing/Reviewing tickets waiting on you).
@@ -45,6 +47,8 @@ export interface FocusPrefs {
   chain: boolean;
   /** Include idle tickets (nobody asked anything) in the list. */
   showIdle: boolean;
+  /** Expand the "en cours" recap under the list. */
+  showRunning: boolean;
 }
 
 interface PendingAction {
@@ -56,7 +60,8 @@ interface PendingAction {
 
 interface FocusState {
   items: FocusItem[];
-  runningTicketIds: string[];
+  /** Tickets agents are working on (nothing waits on the human). */
+  running: FocusRunning[];
   loaded: boolean;
   /** Keys whose action is waiting out the undo window. */
   pending: Record<string, PendingAction>;
@@ -102,7 +107,7 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-const DEFAULT_PREFS: FocusPrefs = { zen: false, chain: true, showIdle: true };
+const DEFAULT_PREFS: FocusPrefs = { zen: false, chain: true, showIdle: true, showRunning: false };
 
 function loadPersisted() {
   const now = Date.now();
@@ -181,7 +186,7 @@ export const useFocusStore = create<FocusState>((set, get) => {
 
   return {
     items: [],
-    runningTicketIds: [],
+    running: [],
     loaded: false,
     pending: {},
     settled: {},
@@ -199,7 +204,7 @@ export const useFocusStore = create<FocusState>((set, get) => {
           const now = Date.now();
           set((s) => ({
             items: res.items,
-            runningTicketIds: res.runningTicketIds,
+            running: res.running,
             loaded: true,
             // A settled key the server no longer reports is done; one it still
             // reports stays hidden until its TTL (the action may still be landing).
@@ -305,5 +310,8 @@ export function focusStats(log: FocusLogEntry[], clearedAt: number[], now: numbe
 
 /** Number of rows the Focus page would show right now — the nav badge. */
 export function useFocusCount(): number {
-  return useFocusStore((s) => visibleFocusItems(s, Date.now()).length);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
+  return useFocusStore(
+    (s) => visibleFocusItems({ ...s, items: applyCliSessions(s.items, s.running, sessionGroups).items }, Date.now()).length,
+  );
 }

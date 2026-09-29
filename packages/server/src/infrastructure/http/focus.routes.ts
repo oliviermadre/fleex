@@ -17,7 +17,7 @@ type FocusDeps = Pick<
  */
 export async function computeFocus(deps: FocusDeps): Promise<FocusResponse> {
   const tickets = (await deps.ticketStore.getAllTickets()).map((t) => t.toDTO()).filter(isFocusCandidate);
-  if (tickets.length === 0) return { items: [], runningTicketIds: [] };
+  if (tickets.length === 0) return { items: [], running: [] };
   const ids = new Set(tickets.map((t) => t.id));
 
   const runStore = deps.workflowRunStore;

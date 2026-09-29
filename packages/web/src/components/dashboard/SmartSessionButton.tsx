@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import type { Session } from '@fleex/shared';
 import { StatusDot } from '../ui/StatusDot';
 import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
@@ -35,6 +35,12 @@ interface SmartSessionButtonProps {
   onExecuteSkill?: (skillId: string) => void | Promise<unknown>;
   /** Always show the dropdown menu on click, even with 0-1 sessions and no skills. */
   alwaysShowMenu?: boolean;
+  /**
+   * Render the trigger as a call to action instead of the session status pill:
+   * the launcher menu (sessions, workflows, skills, panels, agents) opens on click.
+   * Used where the status would read as information rather than as an action.
+   */
+  launcher?: { className: string; content: ReactNode };
 }
 
 function FleexIcon() {
@@ -457,7 +463,7 @@ function FilterChip({ label, count, active, onClick }: { label: string; count: n
   );
 }
 
-export function SmartSessionButton({ sessions, creating: externalCreating, onCreateSession: externalOnCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill, alwaysShowMenu }: SmartSessionButtonProps) {
+export function SmartSessionButton({ sessions, creating: externalCreating, onCreateSession: externalOnCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill, alwaysShowMenu, launcher }: SmartSessionButtonProps) {
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
@@ -747,6 +753,24 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
           <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin motion-reduce:animate-none" />
           <span className="whitespace-nowrap">Launching…</span>
         </button>
+      </div>
+    );
+  }
+
+  // ── Call-to-action trigger: same menu, no status ──
+  if (launcher) {
+    return (
+      <div className="relative">
+        <button
+          ref={refs.setReference}
+          type="button"
+          className={cn(launcher.className, (disabled || creating) && 'pointer-events-none opacity-50')}
+          {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
+          disabled={disabled || creating}
+        >
+          {launcher.content}
+        </button>
+        {dropdownOpen && renderPanel()}
       </div>
     );
   }

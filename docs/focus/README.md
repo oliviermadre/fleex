@@ -19,12 +19,41 @@ ticket soient toujours d'accord.
 | Question (étape) | étape non-gate en `needs_review` | commentaire + `retry` de l'étape avec la réponse |
 | Erreur | étape `failed` du **dernier** run | `retry` de l'étape |
 | Erreur | mention agent `failed` (session crashée) | `POST /mentions/:id/run` |
-| Idle | rien en cours, en file ni en attente | relancer le dernier agent (`@agent:<nom>`) ou passer en Done |
+| Idle | rien en cours, en file ni en attente | reprendre la session CLI · relancer le dernier agent (`@agent:<nom>`) · faire avancer le statut (Doing → Reviewing, Reviewing → Done ; jamais Doing → Done) ; dans la popup, en plus : lancer un run (menu du SmartSessionButton) et commenter le ticket |
 
 - Une ligne par ticket : gate > question > erreur > idle.
 - Un ticket où un agent tourne ou attend son tour n'est ni idle ni en erreur (le nouveau run remplace l'échec),
   mais une gate ou une question reste affichée.
 - Un ticket marqué `blocked` à la main n'apparaît pas en idle : il attend volontairement quelque chose.
+
+### Sessions Claude Code en CLI
+
+Le serveur ne voit pas les sessions Claude Code lancées dans un terminal. Le client corrige donc les items idle
+avec le statut des hooks de ces sessions (`Session.hookStatus`, reçu en direct avec les `sessionGroups`), dans
+`web/src/components/focus/focusSessions.ts` :
+
+| Statut des sessions du ticket | Effet sur l'item idle |
+|---|---|
+| `working` | retiré (le ticket est « en cours ») |
+| `waiting` · permission ou question | devient une **Question** (source `session`) → « Ouvrir la session », la réponse se donne dans le terminal |
+| au repos (`complete`, `waiting` idle, `error`, `idle`) | reste idle, en attente depuis la fin du tour → « Ouvrir la session » en action principale |
+
+- Plusieurs sessions du même worktree (les hooks arrivent sur toutes les sessions du cwd) : l'état le plus exigeant
+  l'emporte (waiting > working > repos) ; à égalité, la session dont le pane fait tourner Claude (process `claude`
+  ou numéro de version, ex. `2.1.284`), pour que « Ouvrir la session » ouvre le bon terminal.
+- Une session `claude` dont le pane est revenu au shell n'a plus de Claude : son dernier statut est lu comme du repos.
+- Limite connue : après une autorisation accordée, aucun hook ne part avant l'outil suivant ou la fin du tour,
+  donc l'attente peut rester affichée un tour de trop.
+- Seuls les items idle sont concernés : gates, questions d'agent et erreurs restent ceux du serveur.
+
+### En cours (récap sous la liste)
+
+`GET /api/focus` renvoie aussi `running` : les tickets Doing/Reviewing sur lesquels un agent travaille sans rien
+attendre de l'humain. Source, dans l'ordre : étape de workflow en cours (`workflow`), session SDK active (`agent`),
+mention en file (`queued`) ; le client y ajoute les sessions Claude CLI au travail (`cli`). Sous la liste, une ligne
+« Pendant ce temps, N tickets avancent en autonomie » ; un clic déplie des lignes au format de la file (qui travaille,
+depuis quand, coût), avec « Suivre les logs », « Ouvrir la session » (CLI), « Ouvrir dans Tasks » et le
+SmartSessionButton. Replié par défaut ; l'état est mémorisé (préférence locale).
 
 ## Comportements côté client
 

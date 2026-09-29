@@ -105,7 +105,7 @@ describe('deriveFocusItems', () => {
 
   it('ignores a superseded attempt of a gate step', () => {
     const r = run('r1', 'T1', 'running');
-    const { items, runningTicketIds } = deriveFocusItems(inputs({
+    const { items, running } = deriveFocusItems(inputs({
       tickets: [ticket('T1')],
       runsByTicket: new Map([['T1', [r]]]),
       stepRunsByRun: new Map([['r1', [
@@ -114,7 +114,9 @@ describe('deriveFocusItems', () => {
       ]]]),
     }));
     expect(items).toEqual([]);
-    expect(runningTicketIds).toEqual(['T1']);
+    expect(running).toHaveLength(1);
+    expect(running[0]).toMatchObject({ ticketId: 'T1', source: 'workflow' });
+    expect(running[0]!.workflow!.steps.find((s) => s.state === 'current')?.id).toBe('gate');
   });
 
   it('offers the candidate edges of an ambiguous route', () => {
@@ -185,13 +187,15 @@ describe('deriveFocusItems', () => {
   });
 
   it('hides errors and idleness while something is running or queued', () => {
-    const { items, runningTicketIds } = deriveFocusItems(inputs({
+    const { items, running } = deriveFocusItems(inputs({
       tickets: [ticket('T1'), ticket('T2')],
       mentions: [mention('m1', 'T1', 'failed'), mention('m2', 'T2', 'pending')],
       executions: [exec('x1', 'T1', { mentionId: 'm3', status: 'running' })],
     }));
     expect(items).toEqual([]);
-    expect(runningTicketIds.sort()).toEqual(['T1', 'T2']);
+    const byTicket = new Map(running.map((r) => [r.ticketId, r]));
+    expect(byTicket.get('T1')).toMatchObject({ source: 'agent', executionId: 'x1' });
+    expect(byTicket.get('T2')).toMatchObject({ source: 'queued', executionId: null, label: 'Dev' });
   });
 
   it('keeps a gate visible even while an agent is running on the ticket', () => {
@@ -225,7 +229,7 @@ describe('deriveFocusItems', () => {
     }));
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
-      kind: 'idle', key: 'idle:T1', since: T2, costUsd: 1.5,
+      kind: 'idle', key: 'idle:T1:doing', since: T2, costUsd: 1.5,
       idle: { lastActivityAt: T2, lastAgentName: 'dev', lastAgentDisplayName: 'Dev' },
     });
   });

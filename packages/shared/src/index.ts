@@ -552,6 +552,7 @@ export type {
   FocusError,
   FocusIdle,
   FocusItem,
+  FocusRunning,
   FocusResponse,
 } from './types/focus.js';
 export { FOCUS_KIND_ORDER } from './types/focus.js';

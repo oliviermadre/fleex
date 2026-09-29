@@ -7,7 +7,9 @@
  * - `gate`: a workflow run is parked on a `human_gate` step (pick an outcome),
  *   or on an ambiguous route (pick the edge to take).
  * - `question`: an agent asked something — a mention in `waiting_for_info`, or
- *   a non-gate workflow step paused in `needs_review` with a question.
+ *   a non-gate workflow step paused in `needs_review` with a question — or a
+ *   Claude Code CLI session waits on a permission / a structured question
+ *   (set client-side from the live hook status, see `web/…/focusSessions.ts`).
  * - `error`: the latest workflow run has a failed step awaiting a Retry, or an
  *   agent session crashed (mention `failed`).
  * - `idle`: nothing is running, queued or waiting on the ticket.
@@ -57,8 +59,11 @@ export interface FocusGate {
 }
 
 export interface FocusQuestion {
-  /** `mention` → answer with a ticket comment (wakes the agent); `step` → comment + retry the step. */
-  readonly source: 'mention' | 'step';
+  /**
+   * `mention` → answer with a ticket comment (wakes the agent); `step` → comment + retry the step;
+   * `session` → a CLI session waits in its terminal: the answer is given there.
+   */
+  readonly source: 'mention' | 'step' | 'session';
   readonly mentionId: string | null;
   readonly runId: string | null;
   readonly stepRunId: string | null;
@@ -66,6 +71,10 @@ export interface FocusQuestion {
   readonly askedBy: string | null;
   /** The question itself — the agent's last comment, or the paused step's comment. */
   readonly text: string | null;
+  /** `session` only: the waiting terminal, to open it. */
+  readonly sessionId?: string;
+  /** `session` only: what the session waits for. */
+  readonly sessionWait?: 'permission' | 'question';
 }
 
 export interface FocusError {
@@ -87,13 +96,21 @@ export interface FocusIdle {
   /** The agent that worked on the ticket last — the one "Relancer" wakes. */
   readonly lastAgentName: string | null;
   readonly lastAgentDisplayName: string | null;
+  /**
+   * When a Claude Code CLI session on the ticket last went to rest (turn done,
+   * awaiting instruction, exited). Set client-side from the live hook status.
+   */
+  readonly cliRestAt?: string | null;
+  /** The resting CLI session, to open it. */
+  readonly cliSessionId?: string;
 }
 
 export interface FocusItem {
   /**
    * Stable identity of the *reason*, not the ticket: `gate:<stepRunId>`,
    * `question:<mentionId|stepRunId>`, `error:<stepRunId|mentionId>`,
-   * `idle:<ticketId>`. A snooze keyed on it lapses once the reason changes.
+   * `idle:<ticketId>:<status>`, `session:<sessionId>:<since>` (client-side). A
+   * snooze keyed on it lapses once the reason changes.
    */
   readonly key: string;
   readonly kind: FocusItemKind;
@@ -111,8 +128,33 @@ export interface FocusItem {
   readonly costUsd: number;
 }
 
+/**
+ * A Doing/Reviewing ticket being worked on autonomously right now, with nothing
+ * asked of the human — the "en cours" recap under the Focus list.
+ */
+export interface FocusRunning {
+  readonly ticketId: string;
+  /**
+   * `workflow` → a run executes a step · `agent` → an SDK agent session runs ·
+   * `queued` → an agent mention waits for its turn · `cli` → a Claude Code
+   * terminal session works (set client-side from the live hook status).
+   */
+  readonly source: 'workflow' | 'agent' | 'queued' | 'cli';
+  /** Who is on it: the step name, or the agent's display name. */
+  readonly label: string;
+  /** When this stretch of work started (ISO); null when unknown. */
+  readonly since: string | null;
+  /** The live execution, to follow its logs. */
+  readonly executionId: string | null;
+  readonly workflow: FocusWorkflowRef | null;
+  /** `cli` only: the working terminal, to open it. */
+  readonly sessionId?: string;
+  /** Cumulative agentic cost of the ticket, USD. */
+  readonly costUsd: number;
+}
+
 export interface FocusResponse {
   readonly items: FocusItem[];
-  /** Tickets in Doing/Reviewing with an agent currently running — "in progress" on the empty state. */
-  readonly runningTicketIds: string[];
+  /** Tickets in Doing/Reviewing an agent is working on, nothing waiting on the human. */
+  readonly running: FocusRunning[];
 }

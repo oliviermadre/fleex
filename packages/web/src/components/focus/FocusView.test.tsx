@@ -80,10 +80,10 @@ beforeEach(() => {
     tickets: [ticket('t1', 1284, 'Refonte du flux New task'), ticket('t2', 1291, 'Timeout configurable')],
     boards: [{ id: 'b1', name: 'Fleex', emoji: '⚡', createdAt: '', updatedAt: '', ticketCounts: {} } as BoardWithCounts],
   });
-  vi.mocked(api.fetchFocus).mockResolvedValue({ items: [GATE, QUESTION], runningTicketIds: [] });
+  vi.mocked(api.fetchFocus).mockResolvedValue({ items: [GATE, QUESTION], running: [] });
   useFocusStore.setState({
-    items: [GATE, QUESTION], runningTicketIds: [], loaded: true, pending: {}, settled: {}, snoozed: {},
-    log: [], clearedAt: [], prefs: { zen: false, chain: true, showIdle: true },
+    items: [GATE, QUESTION], running: [], loaded: true, pending: {}, settled: {}, snoozed: {},
+    log: [], clearedAt: [], prefs: { zen: false, chain: true, showIdle: true, showRunning: false },
   });
 });
 afterEach(() => {
@@ -92,6 +92,20 @@ afterEach(() => {
 });
 
 describe('FocusView', () => {
+  it('sums up the tickets in flight under the queue, collapsed until clicked', () => {
+    useFocusStore.setState({
+      items: [QUESTION],
+      running: [{ ticketId: 't1', source: 'agent', label: 'Dev', since: null, executionId: 'x1', workflow: null, costUsd: 0 }],
+    });
+    renderView();
+    const toggle = screen.getByRole('button', { name: /1 ticket.*avance en autonomie/ });
+    expect(screen.queryByText('Dev travaille dessus')).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByText('Dev travaille dessus')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Suivre les logs' })).toBeTruthy();
+    expect(useFocusStore.getState().prefs.showRunning).toBe(true);
+  });
+
   it('lists the waiting tickets oldest first, with their direct actions', () => {
     renderView();
     expect(screen.getByText('2 en attente')).toBeTruthy();

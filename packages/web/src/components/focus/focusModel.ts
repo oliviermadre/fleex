@@ -1,4 +1,4 @@
-import type { FocusItem, FocusItemKind, Ticket, TicketPriority } from '@fleex/shared';
+import type { FocusItem, FocusItemKind, Ticket, TicketPriority, TicketStatus } from '@fleex/shared';
 import { FOCUS_KIND_ORDER } from '@fleex/shared';
 import type { TintHue } from '../../lib/tints';
 import * as api from '../../services/api';
@@ -78,12 +78,18 @@ export function focusSummary(item: FocusItem): string {
       return item.gate?.context?.split('\n').find((l) => l.trim())?.trim()
         ?? `${item.workflow?.name ?? 'Workflow'} en attente de ta décision`;
     case 'question':
+      if (item.question?.source === 'session') {
+        const what = item.question.sessionWait === 'permission' ? 'attend ton autorisation' : 'te pose une question';
+        const msg = item.question.text?.replace(/\s+/g, ' ').trim();
+        return `Session Claude dans le terminal : ${what}${msg ? ` · ${msg}` : ''}`;
+      }
       return item.question?.text?.replace(/\s+/g, ' ').trim() || 'Question sans texte — ouvre le détail';
     case 'error':
       return item.error?.source === 'step'
         ? `Étape « ${item.error.label} » en échec${item.error.message ? ` · ${item.error.message}` : ''}`
         : `La session de ${item.error?.label ?? 'l’agent'} s’est interrompue`;
     case 'idle':
+      if (item.idle?.cliRestAt) return 'Session Claude au repos : elle attend ta prochaine instruction';
       return item.idle?.lastActivityAt
         ? 'Aucun agent ne travaille dessus'
         : 'Aucun agent n’a encore travaillé dessus';
@@ -97,6 +103,8 @@ export interface FocusAction {
   /** Where the choice leads, or what it does. */
   hint?: string;
   primary?: boolean;
+  /** Runs at once, outside the undo window, and leaves the row in place (opening a terminal). */
+  immediate?: boolean;
   /** Toast shown while the undo window is open. */
   toast: string;
   /** `notes` = the optional comment typed in the popup (gates) or the answer text (questions). */
@@ -104,9 +112,17 @@ export interface FocusAction {
 }
 
 export interface FocusActionContext {
-  ticket: Pick<Ticket, 'id' | 'displayId'>;
-  moveToDone: (ticketId: string) => Promise<unknown>;
+  ticket: Pick<Ticket, 'id' | 'displayId' | 'status'>;
+  moveTicket: (ticketId: string, status: TicketStatus) => Promise<unknown>;
+  /** Open a session as a floating terminal. */
+  openSession?: (sessionId: string) => void;
 }
+
+/** The step an idle ticket is nudged to: Doing → Reviewing → Done, never straight to Done. */
+const NEXT_STATUS: Partial<Record<TicketStatus, { status: TicketStatus; label: string; hint: string }>> = {
+  doing: { status: 'reviewing', label: 'Reviewing', hint: 'le travail est prêt à relire' },
+  reviewing: { status: 'done', label: 'Done', hint: 'le ticket sort de Focus' },
+};
 
 /** Relaunch message posted for an idle ticket — the mention wakes the agent. */
 export function relaunchComment(agentName: string): string {
@@ -149,7 +165,18 @@ export function focusActions(item: FocusItem, ctx: FocusActionContext): FocusAct
             : api.resolveWorkflowGate(g.runId, g.stepRunId, { outcome: o.value, notes: notes || undefined }),
       }));
     }
-    case 'question':
+    case 'question': {
+      const q = item.question;
+      if (q?.source === 'session') {
+        const { sessionId } = q;
+        const open = ctx.openSession;
+        if (!sessionId || !open) return [];
+        return [{
+          id: 'open-session', label: 'Ouvrir la session', hint: 'réponds dans le terminal', primary: true, immediate: true,
+          toast: `${ref} · session ouverte`,
+          run: async () => open(sessionId),
+        }];
+      }
       return questionOptions(item).map((opt) => ({
         id: `ans:${opt}`,
         label: opt,
@@ -157,6 +184,7 @@ export function focusActions(item: FocusItem, ctx: FocusActionContext): FocusAct
         toast: `${ref} · réponse envoyée à ${item.question?.askedBy ?? 'l’agent'}`,
         run: () => answerQuestion(item, opt),
       }));
+    }
     case 'error': {
       const e = item.error;
       if (!e) return [];
@@ -180,20 +208,33 @@ export function focusActions(item: FocusItem, ctx: FocusActionContext): FocusAct
     }
     case 'idle': {
       const out: FocusAction[] = [];
+      // A Claude session at rest in a terminal: pick the conversation back up there.
+      const cliSession = item.idle?.cliSessionId;
+      const open = ctx.openSession;
+      if (cliSession && open) {
+        out.push({
+          id: 'open-session', label: 'Ouvrir la session', hint: 'reprendre la conversation', primary: true, immediate: true,
+          toast: `${ref} · session ouverte`,
+          run: async () => open(cliSession),
+        });
+      }
       const agent = item.idle?.lastAgentName;
       if (agent) {
         const name = item.idle?.lastAgentDisplayName ?? agent;
         out.push({
-          id: 'relaunch', label: `Relancer ${name}`, hint: 'reprend là où il s’est arrêté', primary: true,
+          id: 'relaunch', label: `Relancer ${name}`, hint: 'reprend là où il s’est arrêté', primary: out.length === 0,
           toast: `${ref} · ${name} relancé`,
           run: () => api.postTicketComment(item.ticketId, relaunchComment(agent)),
         });
       }
-      out.push({
-        id: 'done', label: 'Passer en Done', hint: 'le ticket sort de Focus', primary: out.length === 0,
-        toast: `${ref} · passé en Done`,
-        run: () => ctx.moveToDone(item.ticketId),
-      });
+      const next = NEXT_STATUS[ctx.ticket.status];
+      if (next) {
+        out.push({
+          id: 'advance', label: `Passer en ${next.label}`, hint: next.hint, primary: out.length === 0,
+          toast: `${ref} · passé en ${next.label}`,
+          run: () => ctx.moveTicket(item.ticketId, next.status),
+        });
+      }
       return out;
     }
   }

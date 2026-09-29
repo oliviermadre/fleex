@@ -4,6 +4,8 @@ import type { FocusItem, FocusItemKind } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useWorkStore } from '../../stores/workStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useUIStore } from '../../stores/uiStore';
 import {
   UNDO_MS,
   focusStats,
@@ -27,6 +29,8 @@ import {
   type FocusAction,
   type FocusSort,
 } from './focusModel';
+import { applyCliSessions } from './focusSessions';
+import { FocusRunningSection } from './FocusRunningSection';
 
 const KINDS: FocusItemKind[] = ['gate', 'question', 'error', 'idle'];
 const TICK_MS = 30_000;
@@ -60,7 +64,7 @@ export function FocusView() {
   const moveTicket = useTicketStore((s) => s.moveTicket);
   const workViewEnabled = useSettingsStore((s) => s.settings.workViewEnabled) !== false;
 
-  const items = useFocusStore((s) => s.items);
+  const serverItems = useFocusStore((s) => s.items);
   const loaded = useFocusStore((s) => s.loaded);
   const pending = useFocusStore((s) => s.pending);
   const settled = useFocusStore((s) => s.settled);
@@ -68,7 +72,14 @@ export function FocusView() {
   const prefs = useFocusStore((s) => s.prefs);
   const log = useFocusStore((s) => s.log);
   const clearedAt = useFocusStore((s) => s.clearedAt);
-  const runningTicketIds = useFocusStore((s) => s.runningTicketIds);
+  const serverRunning = useFocusStore((s) => s.running);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  // The server can't see Claude Code CLI sessions: correct its idle items with their live hook status.
+  const { items, running } = useMemo(
+    () => applyCliSessions(serverItems, serverRunning, sessionGroups),
+    [serverItems, serverRunning, sessionGroups],
+  );
   const { commit, undo, snooze, unsnoozeAll, setPref, load } = useFocusStore.getState();
 
   const [kindFilter, setKindFilter] = useState<FocusItemKind | 'all'>('all');
@@ -109,9 +120,9 @@ export function FocusView() {
   const actionCtx = useCallback(
     (item: FocusItem) => {
       const t = ticketById.get(item.ticketId)!;
-      return { ticket: t, moveToDone: (id: string) => moveTicket(id, 'done') };
+      return { ticket: t, moveTicket, openSession: addFloatingSession };
     },
-    [ticketById, moveTicket],
+    [ticketById, moveTicket, addFloatingSession],
   );
   const actionsOf = useCallback((item: FocusItem) => focusActions(item, actionCtx(item)), [actionCtx]);
 
@@ -131,6 +142,8 @@ export function FocusView() {
 
   const act = useCallback(
     (item: FocusItem, action: FocusAction, notes?: string) => {
+      // Opening a terminal doesn't handle the item: no undo window, the row stays.
+      if (action.immediate) { void action.run(notes); return; }
       advanceFrom(item.key);
       commit(item, action.toast, () => action.run(notes));
     },
@@ -152,7 +165,7 @@ export function FocusView() {
     [advanceFrom, snooze],
   );
   const openTicket = useCallback(
-    (item: FocusItem) => {
+    (item: Pick<FocusItem, 'ticketId'>) => {
       const t = ticketById.get(item.ticketId);
       if (!t) return;
       setOpenKey(null);
@@ -305,7 +318,7 @@ export function FocusView() {
         {!loaded ? (
           <div className="py-16 text-center text-xs text-[var(--theme-text-faint)]">Chargement…</div>
         ) : base.length === 0 ? (
-          <EmptyState running={runningTicketIds.map((id) => ticketById.get(id)).filter((t) => !!t).map((t) => ({ id: t!.id, displayId: t!.displayId, title: t!.title }))} />
+          <EmptyState />
         ) : list.length === 0 ? (
           <div className="py-12 text-center text-xs text-[var(--theme-text-muted)]">
             Rien pour ce filtre.{' '}
@@ -338,6 +351,19 @@ export function FocusView() {
               );
             })}
           </div>
+        )}
+        {loaded && (
+          <FocusRunningSection
+            running={boardFilter === 'all' ? running : running.filter((r) => ticketById.get(r.ticketId)?.boardId === boardFilter)}
+            ticketById={ticketById}
+            boardById={boardById}
+            now={now}
+            open={prefs.showRunning}
+            onToggle={() => setPref('showRunning', !prefs.showRunning)}
+            onOpenTicket={(ticketId) => openTicket({ ticketId })}
+            onOpenLogs={(executionId, title) => setLogs({ executionId, title })}
+            onOpenSession={addFloatingSession}
+          />
         )}
       </div>
 
@@ -474,9 +500,9 @@ function FocusPulse({ handledToday, medianTodayMs, medianByDayMs, clearedThisWee
   );
 }
 
-function EmptyState({ running }: { running: { id: string; displayId: number; title: string }[] }) {
+function EmptyState() {
   return (
-    <div className="grid justify-items-center gap-2.5 px-4 pb-6 pt-14 text-center">
+    <div className="grid justify-items-center gap-2.5 px-4 pb-2 pt-14 text-center">
       <div className={cn('grid h-16 w-16 place-items-center rounded-full border', tintClasses('green').borderColor, tintClasses('green').bg, tintClasses('green').solidText)}>
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6L9 17l-5-5" /></svg>
       </div>
@@ -484,20 +510,6 @@ function EmptyState({ running }: { running: { id: string; displayId: number; tit
       <p className="max-w-[52ch] text-[13px] text-[var(--theme-text-muted)]">
         Les agents ont tout ce qu’il leur faut. Les nouvelles gates, questions et erreurs apparaîtront ici dès qu’elles se présentent.
       </p>
-      {running.length > 0 && (
-        <div className="mt-4 grid w-full max-w-[560px] gap-1 text-left">
-          <div className="px-1 pb-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--theme-text-faint)]">
-            En cours · {running.length} ticket{running.length > 1 ? 's' : ''}
-          </div>
-          {running.slice(0, 8).map((t) => (
-            <div key={t.id} className="flex min-w-0 items-center gap-2 rounded-md border border-[var(--theme-border-subtle)] px-2.5 py-1.5 text-xs text-[var(--theme-text-muted)]">
-              <span className={cn('h-[7px] w-[7px] shrink-0 animate-pulse rounded-full', tintClasses('blue').solid)} />
-              <span className="font-mono">#{t.displayId}</span>
-              <span className="min-w-0 truncate text-[var(--theme-text-secondary)]">{t.title}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

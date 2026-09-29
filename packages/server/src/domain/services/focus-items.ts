@@ -7,6 +7,7 @@ import type {
   FocusItemKind,
   FocusPipelineStep,
   FocusQuestion,
+  FocusRunning,
   FocusWorkflowRef,
   StepRun,
   Ticket,
@@ -54,7 +55,7 @@ export interface FocusInputs {
 
 export interface FocusDerivation {
   readonly items: FocusItem[];
-  readonly runningTicketIds: string[];
+  readonly running: FocusRunning[];
 }
 
 const FOCUS_STATUSES = new Set(['doing', 'reviewing']);
@@ -135,6 +136,50 @@ export function gateOptions(run: WorkflowRun, step: WorkflowStep, outcomes: read
   });
 }
 
+/**
+ * What is in flight on a busy ticket, most concrete first: a workflow step, then
+ * a live SDK session, then a mention waiting for its turn.
+ */
+function describeRunning(
+  ticketId: string,
+  runs: readonly WorkflowRun[],
+  execs: readonly AgentExecution[],
+  mentions: readonly TicketMention[],
+  stepRunsByRun: ReadonlyMap<string, readonly StepRun[]>,
+  mentionById: ReadonlyMap<string, TicketMention>,
+  display: (name: string) => string,
+  costUsd: number,
+): FocusRunning {
+  const liveExec = execs
+    .filter((e) => e.status === 'running')
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  const run = runs.find((r) => r.status === 'running');
+  if (run) {
+    const stepRuns = stepRunsByRun.get(run.id) ?? [];
+    const current = latestPerStep(stepRuns)
+      .filter((sr) => sr.status === 'running' || sr.status === 'queued')
+      .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))[0];
+    const step = current ? run.templateSnapshot.steps.find((s) => s.id === current.stepId) : undefined;
+    return {
+      ticketId, source: 'workflow', label: step?.name ?? run.templateSnapshot.name,
+      since: current?.startedAt ?? run.startedAt, executionId: current?.executionId ?? liveExec?.id ?? null,
+      workflow: pipeline(run, stepRuns, current?.stepId ?? null), costUsd,
+    };
+  }
+  if (liveExec) {
+    const m = mentionById.get(liveExec.mentionId);
+    return {
+      ticketId, source: 'agent', label: m?.targetType === 'agent' ? display(m.targetAgent) : 'Agent',
+      since: liveExec.startedAt, executionId: liveExec.id, workflow: null, costUsd,
+    };
+  }
+  const queued = mentions.find((m) => m.targetType === 'agent' && (m.status === 'pending' || m.status === 'acknowledged'));
+  return {
+    ticketId, source: 'queued', label: queued ? display(queued.targetAgent) : 'Agent',
+    since: queued?.createdAt ?? null, executionId: null, workflow: null, costUsd,
+  };
+}
+
 interface Candidate {
   kind: FocusItemKind;
   key: string;
@@ -167,7 +212,7 @@ export function deriveFocusItems(inputs: FocusInputs): FocusDerivation {
   const display = (name: string) => inputs.personaDisplayByName.get(name) ?? name;
 
   const items: FocusItem[] = [];
-  const runningTicketIds: string[] = [];
+  const running: FocusRunning[] = [];
 
   for (const ticket of candidates) {
     const mentions = mentionsByTicket.get(ticket.id) ?? [];
@@ -289,7 +334,10 @@ export function deriveFocusItems(inputs: FocusInputs): FocusDerivation {
     const top = found[0];
 
     if (!top) {
-      if (busy) { runningTicketIds.push(ticket.id); continue; }
+      if (busy) {
+        running.push(describeRunning(ticket.id, runs, execs, mentions, inputs.stepRunsByRun, mentionById, display, costUsd));
+        continue;
+      }
       // A manually blocked ticket is waiting on something outside Fleex on purpose.
       if (ticket.blocked) continue;
       const lastAgentExec = [...execs]
@@ -297,7 +345,7 @@ export function deriveFocusItems(inputs: FocusInputs): FocusDerivation {
         .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
       const lastAgentName = lastAgentExec ? mentionById.get(lastAgentExec.mentionId)!.targetAgent : null;
       items.push({
-        key: `idle:${ticket.id}`, kind: 'idle', ticketId: ticket.id,
+        key: `idle:${ticket.id}:${ticket.status}`, kind: 'idle', ticketId: ticket.id,
         since: maxIso(lastSdk, ticket.statusChangedAt, runs[0]?.completedAt),
         workflow: null, gate: null, question: null, error: null,
         idle: {
@@ -317,5 +365,5 @@ export function deriveFocusItems(inputs: FocusInputs): FocusDerivation {
     });
   }
 
-  return { items, runningTicketIds };
+  return { items, running };
 }

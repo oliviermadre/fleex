@@ -75,6 +75,6 @@ describe('computeFocus', () => {
   it('returns an empty list when no ticket is in Doing or Reviewing', async () => {
     const { deps: d } = deps();
     d.ticketStore.getAllTickets = async () => [ticket('T9', 'todo')];
-    expect(await computeFocus(d)).toEqual({ items: [], runningTicketIds: [] });
+    expect(await computeFocus(d)).toEqual({ items: [], running: [] });
   });
 });

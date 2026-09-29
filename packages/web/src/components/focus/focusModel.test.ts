@@ -16,7 +16,7 @@ const base: FocusItem = {
   key: 'k', kind: 'gate', ticketId: 'T1', since: null, workflow: null, gate: null, question: null,
   error: null, idle: null, lastAgentComment: null, costUsd: 0,
 };
-const ctx = { ticket: { id: 'T1', displayId: 42 }, moveToDone: vi.fn().mockResolvedValue(undefined) };
+const ctx = { ticket: { id: 'T1', displayId: 42, status: 'doing' as const }, moveTicket: vi.fn().mockResolvedValue(undefined) };
 
 describe('focusActions', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -80,18 +80,25 @@ describe('focusActions', () => {
     expect(api.runMention).toHaveBeenCalledWith('m');
   });
 
-  it('idle tickets relaunch their last agent or move to Done', async () => {
+  it('idle tickets relaunch their last agent or move one step forward', async () => {
     const item: FocusItem = { ...base, kind: 'idle', idle: { lastActivityAt: null, lastAgentName: 'dev', lastAgentDisplayName: 'Dev' } };
-    const [relaunch, done] = focusActions(item, ctx);
+    const [relaunch, advance] = focusActions(item, ctx);
     expect(relaunch!.label).toBe('Relancer Dev');
     await relaunch!.run();
     expect(api.postTicketComment).toHaveBeenCalledWith('T1', relaunchComment('dev'));
     expect(relaunchComment('dev')).toMatch(/^@agent:dev /);
-    await done!.run();
-    expect(ctx.moveToDone).toHaveBeenCalledWith('T1');
+    await advance!.run();
+    expect(ctx.moveTicket).toHaveBeenCalledWith('T1', 'reviewing');
 
     const never: FocusItem = { ...item, idle: { lastActivityAt: null, lastAgentName: null, lastAgentDisplayName: null } };
-    expect(focusActions(never, ctx).map((a) => [a.id, a.primary])).toEqual([['done', true]]);
+    expect(focusActions(never, ctx).map((a) => [a.label, a.primary])).toEqual([['Passer en Reviewing', true]]);
+  });
+
+  it('never offers Done to a Doing ticket: Doing → Reviewing, Reviewing → Done', () => {
+    const item: FocusItem = { ...base, kind: 'idle', idle: { lastActivityAt: null, lastAgentName: null, lastAgentDisplayName: null } };
+    const labels = (status: 'doing' | 'reviewing') => focusActions(item, { ...ctx, ticket: { ...ctx.ticket, status } }).map((a) => a.label);
+    expect(labels('doing')).toEqual(['Passer en Reviewing']);
+    expect(labels('reviewing')).toEqual(['Passer en Done']);
   });
 });
 

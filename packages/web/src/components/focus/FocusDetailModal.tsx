@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Board, FocusItem, Ticket, TicketDeliverable } from '@fleex/shared';
-import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { Modal } from '../ui/Modal';
 import { cn } from '../../lib/cn';
 import { tint, tintClasses } from '../../lib/tints';
-import { getStatusBadgeClass } from '../../lib/statusColors';
-import { parseGithubPrRef } from '../../lib/prRef';
-import { PriorityIndicator } from '../tickets/PriorityIndicator';
-import { TicketTypeIcon } from '../tickets/TicketTypeBadge';
+import { parseGithubPrRef, prStateFromGithub } from '../../lib/prRef';
+import { PrBadge } from '../ui/PrBadge';
+import { FocusFavoriteStar, FocusStatusBadge, FocusTicketLead } from './FocusTicketLead';
 import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { MessageMarkdown } from '../work/task/MessageMarkdown';
 import { useTicketDeliverables } from '../work/panel/useTicketDeliverables';
@@ -16,7 +14,8 @@ import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
-import { executeSkill } from '../../services/api';
+import { executeSkill, fetchPRStates, postTicketComment } from '../../services/api';
+import { useToastStore } from '../../stores/toastStore';
 import { KindIcon } from './FocusIcons';
 import { KIND_META, formatWait, waitedMs, type FocusAction } from './focusModel';
 
@@ -78,6 +77,8 @@ export function FocusDetailModal(props: Props) {
   const meta = KIND_META[item.kind];
   const [notes, setNotes] = useState('');
   const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [commenting, setCommenting] = useState(false);
+  const addToast = useToastStore((s) => s.addToast);
   const answerRef = useRef<HTMLTextAreaElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
 
@@ -95,9 +96,9 @@ export function FocusDetailModal(props: Props) {
   useEffect(() => {
     setNotes('');
     setSnoozeOpen(false);
-    const t = setTimeout(() => (item.kind === 'question' ? answerRef.current : primaryRef.current)?.focus(), 60);
+    const t = setTimeout(() => (item.kind === 'question' && item.question?.source !== 'session' ? answerRef.current : primaryRef.current)?.focus(), 60);
     return () => clearTimeout(t);
-  }, [item.key, item.kind]);
+  }, [item.key, item.kind, item.question?.source]);
 
   const send = () => {
     const text = notes.trim();
@@ -129,6 +130,48 @@ export function FocusDetailModal(props: Props) {
 
   const wait = formatWait(waitedMs(item, now));
   const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+  // Live PR states from GitHub, as in the Tasks context panel: the badge shows merged/closed, not always "open".
+  const [prStates, setPrStates] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setPrStates({});
+    if (prLinks.length === 0) return;
+    let live = true;
+    fetchPRStates(ticket.id).then((s) => { if (live) setPrStates(s); }).catch(() => {});
+    return () => { live = false; };
+  }, [ticket.id, prLinks.length]);
+  // Any agentic run (workflow, skill, panel, agent, new session) — the SmartSessionButton menu, styled as a choice.
+  const launcherButton = (
+    <SmartSessionButton
+      sessions={sessions}
+      ticketId={ticket.id}
+      onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
+      launcher={{
+        className: 'grid h-full w-full gap-0.5 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2.5 text-left text-[var(--theme-text-primary)] hover:border-[var(--theme-text-muted)]',
+        content: (
+          <>
+            <span className="text-[13px] font-semibold">Lancer un run ▾</span>
+            <span className="text-[11.5px] opacity-75">workflow, skill, panel, agent ou session</span>
+          </>
+        ),
+      }}
+    />
+  );
+
+  const comment = async () => {
+    const text = notes.trim();
+    if (!text) { answerRef.current?.focus(); return; }
+    setCommenting(true);
+    try {
+      await postTicketComment(ticket.id, text);
+      setNotes('');
+      addToast('success', `#${ticket.displayId} · commentaire ajouté`);
+    } catch {
+      /* the API layer already toasted the server message; keep the draft */
+    } finally {
+      setCommenting(false);
+    }
+  };
+
   const optionButton = (a: FocusAction, i: number, withNotes: boolean) => (
     <button
       key={a.id}
@@ -173,6 +216,18 @@ export function FocusDetailModal(props: Props) {
         ) : (
           <p className="text-xs text-[var(--theme-text-muted)]">Aucune issue configurée : résous cette gate depuis l’onglet Workflow du ticket.</p>
         )}
+      </>
+    );
+  } else if (item.kind === 'question' && item.question?.source === 'session') {
+    const q = item.question;
+    ask = (
+      <>
+        <AskHeader hue={meta.hue}>
+          Ce qui t’attend · la session Claude du terminal {q.sessionWait === 'permission' ? 'attend ton autorisation' : 'te pose une question'} depuis {wait}
+        </AskHeader>
+        {q.text && <Quote hue={meta.hue}><MessageMarkdown body={q.text} /></Quote>}
+        <p className="mb-2.5 text-[13px] text-[var(--theme-text-primary)]">La réponse se donne dans le terminal : ouvre la session.</p>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">{actions.map((a, i) => optionButton(a, i, false))}</div>
       </>
     );
   } else if (item.kind === 'question') {
@@ -230,8 +285,9 @@ export function FocusDetailModal(props: Props) {
               <span className="text-[11.5px] opacity-75">l’exécution en échec</span>
             </button>
           )}
+          {launcherButton}
         </div>
-        <p className="mt-2 text-[11.5px] text-[var(--theme-text-muted)]">Pour confier le ticket à un autre agent, skill ou workflow : bouton de session ci-dessous.</p>
+
       </>
     );
   } else {
@@ -239,26 +295,54 @@ export function FocusDetailModal(props: Props) {
       <>
         <AskHeader hue={meta.hue}>Ce qui t’attend · inactif depuis {wait}</AskHeader>
         <p className="mb-2.5 text-[13px] text-[var(--theme-text-primary)]">
-          Personne ne travaille sur ce ticket{item.idle?.lastActivityAt ? '' : ' et aucun agent n’y a encore travaillé'}. Relance un agent, ou clos-le.
+          {item.idle?.cliRestAt
+            ? 'La session Claude du terminal est au repos : elle attend ta prochaine instruction. Reprends-la, lance un run, fais avancer le ticket, ou laisse un commentaire.'
+            : <>Personne ne travaille sur ce ticket{item.idle?.lastActivityAt ? '' : ' et aucun agent n’y a encore travaillé'}. Relance un agent, ou clos-le.</>}
         </p>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">{actions.map((a, i) => optionButton(a, i, false))}</div>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
+          {actions.map((a, i) => optionButton(a, i, false))}
+          {launcherButton}
+        </div>
+        <textarea
+          ref={answerRef}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void comment(); }
+          }}
+          rows={2}
+          placeholder="Laisser un commentaire sur le ticket… (⌘⏎)"
+          className="mt-2.5 w-full resize-y rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 py-2 text-[13px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
+        />
+        {notes.trim() && (
+          <div className="mt-1.5 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void comment()}
+              disabled={commenting}
+              className="h-7 rounded-md border border-[var(--theme-border-input)] px-2.5 text-xs font-semibold text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] disabled:opacity-50"
+            >
+              Commenter
+            </button>
+          </div>
+        )}
       </>
     );
   }
 
   return (
-    <Modal open onClose={onClose} maxWidth="max-w-[860px]" className="max-h-[88vh] overflow-y-auto p-0">
+    // Below the floating terminals (z 45+): a session opened from here must show on top of the popup.
+    <Modal open onClose={onClose} maxWidth="max-w-[860px]" className="max-h-[88vh] overflow-y-auto p-0" zIndexClass="z-40">
       <div role="dialog" aria-modal="true" aria-labelledby="focus-detail-title">
-        <header className="grid gap-2 border-b border-[var(--theme-border)] px-5 pb-3.5 pt-4">
+        <header className="group grid gap-2 border-b border-[var(--theme-border)] px-5 pb-3.5 pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn('inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold', tint(meta.hue))}>
               <KindIcon kind={item.kind} />{meta.label}
             </span>
-            <TicketTypeIcon type={ticket.type} />
+            <FocusStatusBadge ticket={ticket} />
+            <FocusTicketLead ticket={ticket} />
             <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
-            <PriorityIndicator priority={ticket.priority} />
             {board && <span className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-px text-[10.5px] text-[var(--theme-text-muted)]">{board.emoji} {board.name}</span>}
-            <span className={cn('rounded-full px-1.5 text-[10.5px] font-medium', getStatusBadgeClass(ticket.status))}>{TICKET_STATUS_LABELS[ticket.status] ?? ticket.status}</span>
             <span className="flex-1" />
             <span className="font-mono text-[11.5px] text-[var(--theme-text-faint)]">{position}</span>
             <IconButton onClick={onPrev} label="Précédent (K)">‹</IconButton>
@@ -273,7 +357,10 @@ export function FocusDetailModal(props: Props) {
             </button>
             <IconButton onClick={onClose} label="Fermer (Échap)">✕</IconButton>
           </div>
-          <h2 id="focus-detail-title" className="text-lg font-bold leading-tight text-[var(--theme-text-primary)] [text-wrap:balance]">{ticket.title}</h2>
+          <div className="flex items-start gap-1.5">
+            <h2 id="focus-detail-title" className="text-lg font-bold leading-tight text-[var(--theme-text-primary)] [text-wrap:balance]">{ticket.title}</h2>
+            <span className="mt-1"><FocusFavoriteStar ticket={ticket} /></span>
+          </div>
         </header>
 
         <section className={cn('mx-5 mt-4 rounded-xl border p-4', tintClasses(meta.hue).borderColor, tintClasses(meta.hue).bg)}>{ask}</section>
@@ -339,20 +426,23 @@ export function FocusDetailModal(props: Props) {
                 <dd className="flex min-w-0 flex-wrap gap-1">
                   {prLinks.length === 0 ? <span className="text-[var(--theme-text-faint)]">aucune</span> : prLinks.map((l) => {
                     const pr = parseGithubPrRef(l.ref);
-                    const href = l.url ?? (pr ? `https://github.com/${pr.org}/${pr.name}/pull/${pr.number}` : undefined);
-                    return (
-                      <a key={l.id} href={href} target="_blank" rel="noopener noreferrer" className="rounded-md border border-[var(--theme-border-input)] px-1.5 font-mono text-[11px] text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)]">
-                        {pr ? `${pr.name}#${pr.number}` : l.label}
+                    return pr ? (
+                      <PrBadge
+                        key={l.id}
+                        org={pr.org}
+                        name={pr.name}
+                        pr={{ number: pr.number, state: prStateFromGithub(prStates[l.ref]), title: l.label }}
+                        href={l.url ?? undefined}
+                      />
+                    ) : (
+                      <a key={l.id} href={l.url ?? undefined} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)]">
+                        {l.label}
                       </a>
                     );
                   })}
                 </dd>
                 <dt className="text-[var(--theme-text-muted)]">Coût</dt>
                 <dd className="font-mono">${item.costUsd.toFixed(2)}</dd>
-                <dt className="text-[var(--theme-text-muted)]">Session</dt>
-                <dd>
-                  <SmartSessionButton sessions={sessions} ticketId={ticket.id} onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)} />
-                </dd>
               </dl>
             </Section>
           </div>

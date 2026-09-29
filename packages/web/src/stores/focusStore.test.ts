@@ -16,17 +16,17 @@ function item(key: string, over: Partial<FocusItem> = {}): FocusItem {
   };
 }
 
-const PREFS = { zen: false, chain: true, showIdle: true };
+const PREFS = { zen: false, chain: true, showIdle: true, showRunning: false };
 
 describe('focusStore', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     localStorage.clear();
     useFocusStore.setState({
-      items: [item('a'), item('b')], runningTicketIds: [], loaded: true,
+      items: [item('a'), item('b')], running: [], loaded: true,
       pending: {}, settled: {}, snoozed: {}, log: [], clearedAt: [], prefs: PREFS,
     });
-    vi.mocked(api.fetchFocus).mockResolvedValue({ items: [], runningTicketIds: [] });
+    vi.mocked(api.fetchFocus).mockResolvedValue({ items: [], running: [] });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -75,7 +75,7 @@ describe('focusStore', () => {
 
   it('drops a settled key once the server no longer reports it', async () => {
     useFocusStore.setState({ settled: { a: Date.now() + 30_000 } });
-    vi.mocked(api.fetchFocus).mockResolvedValue({ items: [item('b')], runningTicketIds: [] });
+    vi.mocked(api.fetchFocus).mockResolvedValue({ items: [item('b')], running: [] });
     await useFocusStore.getState().load();
     expect(useFocusStore.getState().settled).toEqual({});
   });
