@@ -1,38 +1,17 @@
-import { useEffect, useMemo } from 'react';
-import type { Session, WorktreeSessionGroup } from '@fleex/shared';
+import { useEffect } from 'react';
 import { useUIStore } from '../stores/uiStore';
-import { useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useClaudeConfigStore } from '../stores/claudeConfigStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
-import * as api from '../services/api';
-import { worktreeFlow, SESSION_FLOW_ORDER } from '../lib/sessionFlow';
-import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
+import { openSystemShell } from '../lib/systemShell';
 import { floatingPositionRegistry } from '../components/main-panel/FloatingSessionOverlay';
 
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const toggleScratchpad = useUIStore((s) => s.toggleScratchpad);
-  const sessionGroups = useSessionStore((s) => s.sessionGroups);
-  const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
-  const splitSessionId = useSessionStore((s) => s.splitSessionId);
-  const focusedPane = useSessionStore((s) => s.focusedPane);
-  const selectSession = useSessionStore((s) => s.selectSession);
-  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
-  const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
-  const closeSplit = useSessionStore((s) => s.closeSplit);
-  const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
-  const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
-  const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
-  const activeGroupCellIndex = useSessionStore((s) => s.activeGroupCellIndex);
-  const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
   const activePanel = useUIStore((s) => s.activePanel);
-  const lastActiveTabByWorktree = useUIStore((s) => s.lastActiveTabByWorktree);
-  const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
-  const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
   const focusedFloatingPanelId = useUIStore((s) => s.focusedFloatingPanelId);
   const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
   const bringToFront = useUIStore((s) => s.bringToFront);
@@ -40,95 +19,6 @@ export function useKeyboardShortcuts() {
   const scratchpadOpen = useUIStore((s) => s.scratchpadOpen);
   const cycleMarkdownMode = useScratchpadStore((s) => s.cycleMarkdownMode);
   const basePath = useSettingsStore((s) => s.settings.basePath);
-  const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
-  const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
-  const sessionOrder = useSettingsStore((s) => s.settings.sessionOrder);
-  const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
-  const manualFlowCollapsed = useUIStore((s) => s.manualFlowCollapsed);
-  const agenticFlowCollapsed = useUIStore((s) => s.agenticFlowCollapsed);
-  const doneFlowCollapsed = useUIStore((s) => s.doneFlowCollapsed);
-
-  // Build a flat list of worktrees in visual (sidebar) order, matching
-  // SessionGroups: System shells → Manual → Agentic → Done.
-  // Collapsed sections are skipped.
-  const orderedWorktrees = useMemo(() => {
-    const entries: Array<{ key: string; sessions: string[]; ticketId?: string; agentTicketId?: string }> = [];
-
-    // 1. System sessions first (ungrouped)
-    const systemGroup = sessionGroups.find(
-      (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped'
-    );
-    if (systemGroup) {
-      const allSystemSessions = systemGroup.worktrees.flatMap((wt: WorktreeSessionGroup) => wt.sessions);
-      const sysSessOrder = sessionOrder[SYSTEM_GROUP_ID];
-      const sortedSystemSessions = sysSessOrder && sysSessOrder.length > 0
-        ? [...allSystemSessions].sort((a, b) => {
-            const orderMap = new Map(sysSessOrder.map((id, i) => [id, i]));
-            return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
-          })
-        : allSystemSessions;
-      if (sortedSystemSessions.length > 0) {
-        entries.push({ key: SYSTEM_GROUP_ID, ticketId: 'system', sessions: sortedSystemSessions.map((s: Session) => s.id) });
-      }
-    }
-
-    // Repo groups sorted
-    const repoSessionGroups = sessionGroups.filter(
-      (g) => !(g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped')
-    );
-
-    const sortedGroups = [...repoSessionGroups].sort((a, b) => {
-      if (repoOrder.length === 0) return 0;
-      const aId = `${a.repositoryOrg}/${a.repositoryName}`;
-      const bId = `${b.repositoryOrg}/${b.repositoryName}`;
-      const orderMap = new Map(repoOrder.map((id, i) => [id, i]));
-      return (orderMap.get(aId) ?? Infinity) - (orderMap.get(bId) ?? Infinity);
-    });
-
-    // Helper to add worktrees from a group
-    const addWorktrees = (group: typeof sortedGroups[0], filter: (wt: typeof group.worktrees[0]) => boolean) => {
-      const repoId = `${group.repositoryOrg}/${group.repositoryName}`;
-      const wtOrder = worktreeOrder[repoId];
-      const sortedWts = wtOrder && wtOrder.length > 0
-        ? [...group.worktrees].sort((a, b) => {
-            const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
-            return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
-          })
-        : [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
-
-      for (const wt of sortedWts) {
-        if (!filter(wt)) continue;
-        const wtGroupId = `${repoId}:${wt.branch}`;
-        const sessOrder = sessionOrder[wtGroupId];
-        const sortedSessions = sessOrder && sessOrder.length > 0
-          ? [...wt.sessions].sort((a, b) => {
-              const orderMap = new Map(sessOrder.map((id, i) => [id, i]));
-              return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
-            })
-          : wt.sessions;
-        if (sortedSessions.length > 0 || wt.agentWorktree) {
-          entries.push({ key: wtGroupId, ticketId: wt.ticketId ?? wt.agentWorktree?.ticketId, sessions: sortedSessions.map((s: Session) => s.id), agentTicketId: wt.agentWorktree?.ticketId });
-        }
-      }
-    };
-
-    // 2. Manual → 3. Agentic → 4. Done, matching the sidebar's on-screen order
-    // (SessionGroups). Classification is shared via `worktreeFlow` so navigation
-    // can never drift from the rendered order. Collapsed sections are skipped.
-    const collapsedByFlow = {
-      manual: manualFlowCollapsed,
-      agentic: agenticFlowCollapsed,
-      done: doneFlowCollapsed,
-    };
-    for (const flow of SESSION_FLOW_ORDER) {
-      if (collapsedByFlow[flow]) continue;
-      for (const group of sortedGroups) {
-        addWorktrees(group, (wt) => worktreeFlow(wt) === flow);
-      }
-    }
-
-    return entries;
-  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder, manualFlowCollapsed, agenticFlowCollapsed, doneFlowCollapsed]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -149,15 +39,10 @@ export function useKeyboardShortcuts() {
 
       // Alt-only combos (uses e.code for macOS Option key compatibility)
       if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
-        // Alt+T: new system shell session
+        // Alt+T: new system shell, opened as a floating terminal
         if (e.code === 'KeyT') {
           e.preventDefault();
-          const cwd = basePath || '~';
-          api.createSession({ cwd, type: 'shell' }).then((session) => {
-            addSessionToGroup(session);
-            selectSession(session.id);
-            api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
-          }).catch(() => { /* silently fail */ });
+          void openSystemShell(basePath);
           return;
         }
       }
@@ -191,25 +76,6 @@ export function useKeyboardShortcuts() {
       if (meta && e.shiftKey && e.code === 'KeyN') {
         e.preventDefault();
         openCreateModal();
-        return;
-      }
-
-      // Cmd+N: new tab in current worktree (if tab bar visible)
-      if (meta && !e.shiftKey && e.code === 'KeyN') {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent('fleex:new-tab'));
-        return;
-      }
-
-      // Escape: close split view, keep focused pane's session
-      if (e.key === 'Escape' && splitSessionId) {
-        e.preventDefault();
-        if (focusedPane === 'split' && splitSessionId) {
-          // Promote split session to primary before closing
-          selectSession(splitSessionId);
-        } else {
-          closeSplit();
-        }
         return;
       }
 
@@ -266,78 +132,9 @@ export function useKeyboardShortcuts() {
         e.preventDefault();
         return;
       }
-
-      // Cmd+Shift+Left/Right: cycle focus in grouped panes
-      // (the Work view owns ⌘⇧←/→ to cycle its shell panes' sessions, so defer there)
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedGroupId && activePanel !== 'work') {
-        e.preventDefault();
-        const group = layoutGroups.find((g) => g.id === selectedGroupId);
-        if (group) {
-          const cellCount = group.type === '1x2' ? 2 : 4;
-          if (e.key === 'ArrowRight') {
-            const next = activeGroupCellIndex === null ? 0 : (activeGroupCellIndex + 1) % cellCount;
-            setActiveGroupCellIndex(next);
-          } else {
-            const prev = activeGroupCellIndex === null ? cellCount - 1 : (activeGroupCellIndex - 1 + cellCount) % cellCount;
-            setActiveGroupCellIndex(prev);
-          }
-        }
-        return;
-      }
-
-      // Cmd+Shift+Left/Right: toggle focus between split panes
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && splitSessionId && activePanel !== 'work') {
-        e.preventDefault();
-        setFocusedPane(focusedPane === 'primary' ? 'split' : 'primary');
-        return;
-      }
-
-      // Cmd+Shift+Left/Right: navigate sessions within the current worktree (tab bar order, loops)
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedSessionId && activePanel !== 'work') {
-        e.preventDefault();
-        const currentWorktree = orderedWorktrees.find((wt) => wt.sessions.includes(selectedSessionId));
-        if (currentWorktree && currentWorktree.sessions.length > 1) {
-          const currentIdx = currentWorktree.sessions.indexOf(selectedSessionId);
-          const nextIdx = e.key === 'ArrowLeft'
-            ? (currentIdx - 1 + currentWorktree.sessions.length) % currentWorktree.sessions.length
-            : (currentIdx + 1) % currentWorktree.sessions.length;
-          const nextId = currentWorktree.sessions[nextIdx];
-          if (nextId) selectSession(nextId);
-        }
-        return;
-      }
-
-      // Cmd+Shift+Up/Down: navigate between worktrees (sidebar order, including system "Shells").
-      // The Work view owns this shortcut for its own queue, so defer to it there.
-      if (meta && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && activePanel !== 'work') {
-        e.preventDefault();
-        if (orderedWorktrees.length === 0) return;
-
-        const currentTicketId = useSessionStore.getState().selectedTicketId;
-
-        // Find current worktree index by ticketId
-        let currentIndex = currentTicketId
-          ? orderedWorktrees.findIndex((wt) => wt.ticketId === currentTicketId)
-          : -1;
-        if (currentIndex === -1 && selectedAgentWorktreeTicketId) {
-          currentIndex = orderedWorktrees.findIndex((wt) => wt.agentTicketId === selectedAgentWorktreeTicketId);
-        }
-
-        const nextIndex = e.key === 'ArrowUp'
-          ? (currentIndex <= 0 ? orderedWorktrees.length - 1 : currentIndex - 1)
-          : (currentIndex >= orderedWorktrees.length - 1 ? 0 : currentIndex + 1);
-
-        const nextWorktree = orderedWorktrees[nextIndex];
-        if (nextWorktree?.ticketId) {
-          if (selectedAgentWorktreeTicketId) setSelectedAgentWorktreeTicketId(null);
-          const lastActive = lastActiveTabByWorktree[nextWorktree.key] ?? null;
-          selectTicketTab(nextWorktree.ticketId, lastActive);
-        }
-        return;
-      }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, cycleMarkdownMode, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups, focusedFloatingPanelId, floatingSessionIds, bringToFront]);
+  }, [toggleNav, openCreateModal, openCommandPalette, toggleScratchpad, scratchpadOpen, cycleMarkdownMode, activePanel, claudeConfigSaveFile, basePath, focusedFloatingPanelId, floatingSessionIds, bringToFront]);
 }

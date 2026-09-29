@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import type { Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, GitHubIssueMetadata, WorktreeSessionGroup } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -446,7 +445,6 @@ function ExpandedTicketMetaSidebar({
   const removeLink = useTicketStore((s) => s.removeLink);
   const syncGithubIssue = useTicketStore((s) => s.syncGithubIssue);
   const boards = useTicketStore((s) => s.boards);
-  const sessionGroups = useSessionStore((s) => s.sessionGroups);
 
   // Fetch live PR states from GitHub on mount / ticket change
   const [prStates, setPrStates] = useState<Record<string, string>>({});
@@ -468,38 +466,12 @@ function ExpandedTicketMetaSidebar({
     updateTicket(ticket.id, { type });
   };
 
-  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
-
   const handleDelete = async () => {
     if (!confirm('Delete this ticket?')) return;
-
-    // Find a sibling task to navigate to after deletion
-    const allWorktrees: { ticketId?: string; sessionId?: string }[] = [];
-    for (const group of sessionGroups) {
-      for (const wt of group.worktrees) {
-        if (wt.ticketId) {
-          allWorktrees.push({ ticketId: wt.ticketId, sessionId: wt.sessions[0]?.id });
-        } else if (wt.sessions.length > 0) {
-          allWorktrees.push({ sessionId: wt.sessions[0]!.id });
-        }
-      }
-    }
-    const currentIdx = allWorktrees.findIndex((w) => w.ticketId === ticket.id);
-    const sibling = allWorktrees[currentIdx - 1] ?? allWorktrees[currentIdx + 1];
-
     await deleteTicket(ticket.id);
-
-    // Navigate to sibling via sessionStore directly (avoids race with RouterSync)
-    if (sibling?.ticketId) {
-      selectTicketTab(sibling.ticketId);
-      navigate(`/sessions/${sibling.ticketId}`, { replace: true });
-    } else if (sibling?.sessionId) {
-      selectTicketTab(null, `s:${sibling.sessionId}`);
-      navigate(`/sessions/${sibling.sessionId}`, { replace: true });
-    } else {
-      selectTicketTab(null);
-      navigate('/sessions', { replace: true });
-    }
+    // Back to the board the ticket was opened from.
+    const boardId = useTicketStore.getState().selectedBoardId;
+    navigate(`/tickets/board/${boardId ?? 'all'}`, { replace: true });
   };
 
   // no longer need linkedRepo/worktreeLink derivation — repos are managed directly via links

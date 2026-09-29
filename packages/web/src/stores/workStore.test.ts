@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useWorkStore } from './workStore';
+import { useWorkStore, filtersRevealing } from './workStore';
 
 // Each ticket keeps its own center mode, shell split and pane bindings — switching
 // tickets must never apply one ticket's shells or layout to another.
@@ -139,5 +139,114 @@ describe('workStore — new task draft', () => {
     const { useWorkStore: fresh } = await import('./workStore');
 
     expect(fresh.getState().draft).toMatchObject({ text: 'hello', boardId: 'board-1', epicIds: [] });
+  });
+});
+
+// Every "open this session" action (a floating terminal's title bar, a new task,
+// the palette) lands here. Composing selectTicket + setMode would write the shell
+// mode onto the *previous* ticket and lose it on restore — the store does it in
+// one commit instead.
+describe('workStore — openShellForTicket / openTicket', () => {
+  const s = () => useWorkStore.getState();
+
+  beforeEach(() => {
+    localStorage.clear();
+    useWorkStore.setState({
+      selectedTicketId: 'OTHER',
+      view: 'new',
+      modeByTicket: { OTHER: 'code' },
+      modeTicketId: 'OTHER',
+      shellMode: false,
+      codeMode: true,
+      workflowMode: false,
+      shellLayoutByTicket: {},
+      shellPaneIdsByTicket: {},
+      revealTicketId: null,
+      shellFocusRequest: null,
+    });
+  });
+
+  it('selects the ticket in shell mode, remembered for that ticket', () => {
+    s().openShellForTicket('A', 's1');
+    expect(s().selectedTicketId).toBe('A');
+    expect(s().view).toBe('task');
+    expect(s().modeTicketId).toBe('A');
+    expect([s().shellMode, s().codeMode, s().workflowMode]).toEqual([true, false, false]);
+    expect(s().modeByTicket.A).toBe('shell');
+
+    // Leaving and coming back reopens the shell (the WorkView restore path).
+    s().restoreTicketMode('OTHER');
+    s().restoreTicketMode('A');
+    expect(s().shellMode).toBe(true);
+  });
+
+  it("never changes another ticket's mode", () => {
+    s().openShellForTicket('A', 's1');
+    expect(s().modeByTicket.OTHER).toBe('code');
+  });
+
+  it('binds the session into the first empty pane without moving the others', () => {
+    useWorkStore.setState({ shellLayoutByTicket: { A: 'three' }, shellPaneIdsByTicket: { A: ['x', null, 'y'] } });
+    s().openShellForTicket('A', 's1');
+    expect(s().shellPaneIdsByTicket.A).toEqual(['x', 's1', 'y']);
+  });
+
+  it('falls back to the first pane when every pane is taken', () => {
+    useWorkStore.setState({ shellLayoutByTicket: { A: 'cols' }, shellPaneIdsByTicket: { A: ['x', 'y'] } });
+    s().openShellForTicket('A', 's1');
+    expect(s().shellPaneIdsByTicket.A).toEqual(['s1', 'y']);
+  });
+
+  it('is idempotent when the session is already in a pane', () => {
+    useWorkStore.setState({ shellLayoutByTicket: { A: 'cols' }, shellPaneIdsByTicket: { A: ['x', 's1'] } });
+    s().openShellForTicket('A', 's1');
+    s().openShellForTicket('A', 's1');
+    expect(s().shellPaneIdsByTicket.A).toEqual(['x', 's1']);
+  });
+
+  it('asks the pane to take the keyboard, and the queue to reveal the ticket', () => {
+    s().openShellForTicket('A', 's1');
+    expect(s().shellFocusRequest).toBe('s1');
+    expect(s().revealTicketId).toBe('A');
+  });
+
+  it('openTicket applies the given mode to that ticket only, chat forgetting it', () => {
+    s().openTicket('A', 'workflow');
+    expect(s().modeByTicket).toEqual({ OTHER: 'code', A: 'workflow' });
+    expect(s().workflowMode).toBe(true);
+    s().openTicket('A', 'chat');
+    expect(s().modeByTicket).toEqual({ OTHER: 'code' });
+    expect([s().shellMode, s().codeMode, s().workflowMode]).toEqual([false, false, false]);
+  });
+
+  it('a hand-picked selection cancels a pending reveal', () => {
+    s().openTicket('A', 'chat');
+    s().selectTicket('B');
+    expect(s().revealTicketId).toBeNull();
+  });
+});
+
+describe('filtersRevealing', () => {
+  const none = { boardFilters: [], statusFilters: [], priorityFilters: [], favoriteOnly: false, search: '' };
+  const ticket = { boardId: 'b1', status: 'todo', priority: 'low', favorite: false, title: 'Fix login' };
+
+  it('is null when the ticket already passes the filters', () => {
+    expect(filtersRevealing(none, ticket)).toBeNull();
+    expect(filtersRevealing({ ...none, statusFilters: ['todo'], boardFilters: ['b1'], search: 'login' }, ticket)).toBeNull();
+  });
+
+  it("adds the ticket's status to the status filter instead of wiping it", () => {
+    expect(filtersRevealing({ ...none, statusFilters: ['doing', 'reviewing'] }, ticket)).toEqual({
+      statusFilters: ['doing', 'reviewing', 'todo'],
+    });
+  });
+
+  it('clears only the filters that exclude the ticket', () => {
+    expect(
+      filtersRevealing(
+        { boardFilters: ['b2'], statusFilters: ['todo'], priorityFilters: ['high'], favoriteOnly: true, search: 'zzz' },
+        ticket,
+      ),
+    ).toEqual({ boardFilters: [], priorityFilters: [], favoriteOnly: false, search: '' });
   });
 });

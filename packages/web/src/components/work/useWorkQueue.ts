@@ -13,7 +13,7 @@ import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
-import { useWorkStore, type QueueGroupBy } from '../../stores/workStore';
+import { useWorkStore, filtersRevealing, type QueueGroupBy } from '../../stores/workStore';
 import { partitionQueue, type QueueItem } from './selectors';
 import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
@@ -109,6 +109,7 @@ export function useWorkQueue(): WorkQueueModel {
   const favoriteOnly = useWorkStore((s) => s.favoriteOnly);
   const search = useWorkStore((s) => s.search);
   const selectedTicketId = useWorkStore((s) => s.selectedTicketId);
+  const revealTicketId = useWorkStore((s) => s.revealTicketId);
 
   // Prime tickets/boards once. useTickets() may already be mounted higher up;
   // fetching again is cheap and keeps the view self-sufficient when it isn't.
@@ -117,6 +118,17 @@ export function useWorkQueue(): WorkQueueModel {
     void fetchTickets();
     void fetchRepositories();
   }, [fetchBoards, fetchTickets, fetchRepositories]);
+
+  // A ticket we were sent to (deep link, "open this session") is shown even when
+  // the filters hide it: widen them just enough, once the ticket is loaded — the
+  // fallback below would otherwise silently show the queue's first row instead.
+  useEffect(() => {
+    if (!revealTicketId) return;
+    const ticket = tickets.find((t) => t.id === revealTicketId);
+    if (!ticket) return;
+    const store = useWorkStore.getState();
+    store.settleReveal(filtersRevealing(store, ticket));
+  }, [revealTicketId, tickets]);
 
   // The tickets in queue scope = those whose status is in the status filter
   // (defaults to doing + reviewing). An empty filter shows every status.

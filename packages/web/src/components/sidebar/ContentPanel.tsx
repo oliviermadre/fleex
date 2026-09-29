@@ -1,17 +1,13 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { SessionGroup, Session, WorktreeSessionGroup, TicketLink, RepositorySummary } from '@fleex/shared';
+import type { RepositorySummary } from '@fleex/shared';
 import { TOOLTIP_HIDE_DELAY_MS } from '@fleex/shared';
 import { useTooltip, FloatingPortal } from '../../hooks/usePopover';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
-import { SidebarHeader } from './SidebarHeader';
-import { SessionGroups } from './SessionGroups';
 import { SettingsNav } from '../settings/SettingsNav';
 import { AnalyticsNav } from '../analytics/AnalyticsNav';
 import { RepositoriesContent } from './RepositoriesContent';
@@ -26,17 +22,14 @@ import { useRoutineStore } from '../../stores/routineStore';
 import { RoutineIcon } from '../../lib/primitives';
 import { RepositoriesIcon } from './icons';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
-import { StatusDot } from '../ui/StatusDot';
 import { cn } from '../../lib/cn';
-import { tintSolid, tintText } from '../../lib/tints';
+import { tintSolid } from '../../lib/tints';
 
 export function ContentPanel() {
   const activePanel = useUIStore((s) => s.activePanel);
   const contentPanelCollapsed = useUIStore((s) => s.contentPanelCollapsed);
 
   if (contentPanelCollapsed) {
-    if (activePanel === 'sessions') return <CollapsedBranchesPanel />;
     if (activePanel === 'repositories') return <CollapsedRepositoriesPanel />;
     if (activePanel === 'tickets') return <CollapsedTicketsPanel />;
     if (activePanel === 'claude-config') return <CollapsedClaudeConfigPanel />;
@@ -51,12 +44,10 @@ export function ContentPanel() {
 
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
-      {activePanel === 'sessions' && <BranchesContent />}
       {activePanel === 'repositories' && <RepositoriesContent />}
       {activePanel === 'tickets' && <TicketsContentPanel />}
       {activePanel === 'claude-config' && <ClaudeConfigTree />}
       {activePanel === 'agents' && <AgentListPanel />}
-      {activePanel === 'dashboard' && null}
       {activePanel === 'cluster' && null}
       {activePanel === 'scratchpads' && <ScratchpadsContent />}
       {activePanel === 'routines' && <RoutinesContentPanel />}
@@ -64,15 +55,6 @@ export function ContentPanel() {
       {activePanel === 'settings' && <SettingsNav />}
       {activePanel === 'assistant' && <AssistantSidebar />}
     </div>
-  );
-}
-
-function BranchesContent() {
-  return (
-    <>
-      <SidebarHeader />
-      <SessionGroups />
-    </>
   );
 }
 
@@ -127,7 +109,7 @@ function useCollapsedTooltip() {
   return { tooltip, show, hide, refs, floatingStyles, getFloatingProps } as const;
 }
 
-/** Expand button — same height as SidebarHeader, shared by all collapsed panels */
+/** Expand button — header height, shared by all collapsed panels */
 function ExpandButton() {
   const toggleContentPanel = useUIStore((s) => s.toggleContentPanel);
   return (
@@ -201,236 +183,6 @@ function CollapsedSeparator() {
     <div className="relative flex w-full items-center px-4 py-2">
       <div className="absolute inset-x-4 top-1/2 h-px bg-[var(--theme-border)]" />
     </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// ── 1. Collapsed Branches panel ──
-// ═══════════════════════════════════════════════
-
-function isSystemGroup(org: string, name: string): boolean {
-  return org === '_ungrouped' && name === '_ungrouped';
-}
-
-function CollapsedWorktreeItem({
-  status,
-  isSelected,
-  hasTicket,
-  onClick,
-  onMouseEnter,
-  onMouseLeave,
-}: {
-  status: DisplayStatus;
-  isSelected: boolean;
-  hasTicket: boolean;
-  onClick: () => void;
-  onMouseEnter: (e: React.MouseEvent) => void;
-  onMouseLeave: () => void;
-}) {
-  return (
-    <div className="group/wt relative">
-      <button
-        className={cn(
-          'relative flex min-w-0 w-full flex-col gap-0.5 py-2.5 text-left transition-colors border-l-2',
-          isSelected
-            ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
-            : 'border-transparent hover:bg-[var(--theme-bg-hover)]'
-        )}
-        onClick={onClick}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-      >
-        {/* Invisible height structure — mirrors expanded WorktreeGroup rows */}
-        <div className="invisible">
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold font-mono">&nbsp;</span>
-          </div>
-          <div className="flex items-center gap-1.5 pl-5">
-            <span className="text-xs">&nbsp;</span>
-          </div>
-          {hasTicket && (
-            <div className="flex items-center gap-1 pl-5">
-              <span className="text-xs">&nbsp;</span>
-            </div>
-          )}
-        </div>
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-          {status === 'needs-approval' && (
-            <span className={cn('absolute -top-0.5 right-0.5 text-[10px]', tintText('yellow'))}>&#9888;</span>
-          )}
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
-            <circle cx="5" cy="3.5" r="1.5" /><circle cx="11" cy="3.5" r="1.5" /><circle cx="8" cy="12.5" r="1.5" />
-            <line x1="5" y1="5" x2="5" y2="7" /><line x1="11" y1="5" x2="11" y2="7" />
-            <path d="M5 7c0 1.5 1.5 2.5 3 4M11 7c0 1.5-1.5 2.5-3 4" />
-          </svg>
-          <StatusDot status={status} />
-        </div>
-      </button>
-    </div>
-  );
-}
-
-function CollapsedSystemItem({
-  status,
-  isSelected,
-  onClick,
-  onMouseEnter,
-  onMouseLeave,
-}: {
-  status: DisplayStatus;
-  isSelected: boolean;
-  onClick: () => void;
-  onMouseEnter: (e: React.MouseEvent) => void;
-  onMouseLeave: () => void;
-}) {
-  return (
-    <div className="group/wt relative">
-      <button
-        className={cn(
-          'relative flex min-w-0 w-full flex-col gap-0.5 py-2.5 text-left transition-colors border-l-2',
-          isSelected
-            ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
-            : 'border-transparent hover:bg-[var(--theme-bg-hover)]'
-        )}
-        onClick={onClick}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-      >
-        <div className="invisible">
-          <div className="flex items-center gap-1.5"><span className="text-sm font-semibold font-mono">&nbsp;</span></div>
-          <div className="flex items-center gap-1.5 pl-5"><span className="text-xs">&nbsp;</span></div>
-        </div>
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
-            <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
-            <polyline points="4.5,6.5 7,9 4.5,11.5" />
-            <line x1="9" y1="11.5" x2="11.5" y2="11.5" />
-          </svg>
-          <StatusDot status={status} />
-        </div>
-      </button>
-    </div>
-  );
-}
-
-/** Mini horizontal line divider for collapsed sidebar */
-function CollapsedSectionDivider() {
-  return (
-    <div className="relative flex w-full items-center px-4 py-1.5 mt-1">
-      <div className="h-px flex-1 bg-[var(--theme-border)]" />
-    </div>
-  );
-}
-
-function CollapsedBranchesPanel() {
-  const navigate = useNavigate();
-  const sessionGroups = useSessionStore((s) => s.sessionGroups);
-  const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
-  const lastActiveTabByWorktree = useUIStore((s) => s.lastActiveTabByWorktree);
-  const manualFlowCollapsed = useUIStore((s) => s.manualFlowCollapsed);
-  const agenticFlowCollapsed = useUIStore((s) => s.agenticFlowCollapsed);
-  const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
-  const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
-  const tickets = useTicketStore((s) => s.tickets);
-  const tooltipCtl = useCollapsedTooltip();
-  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
-
-  const worktreeHasTicket = useMemo(() => {
-    const set = new Set<string>();
-    for (const ticket of tickets) {
-      for (const link of ticket.links) {
-        if ((link as TicketLink).type === 'worktree') set.add((link as TicketLink).ref);
-      }
-    }
-    return set;
-  }, [tickets]);
-
-  const systemSessions: Session[] = useMemo(() => {
-    const ungrouped = sessionGroups.find((g) => isSystemGroup(g.repositoryOrg, g.repositoryName));
-    if (!ungrouped) return [];
-    return ungrouped.worktrees.flatMap((wt: WorktreeSessionGroup) => wt.sessions);
-  }, [sessionGroups]);
-
-  const repoGroups = useMemo(() => {
-    const groups = sessionGroups.filter((g) => !isSystemGroup(g.repositoryOrg, g.repositoryName));
-    if (repoOrder.length === 0) return groups;
-    const orderMap = new Map(repoOrder.map((id, i) => [id, i]));
-    return [...groups].sort((a, b) => {
-      const aId = `${a.repositoryOrg}/${a.repositoryName}`;
-      const bId = `${b.repositoryOrg}/${b.repositoryName}`;
-      return (orderMap.get(aId) ?? Infinity) - (orderMap.get(bId) ?? Infinity);
-    });
-  }, [sessionGroups, repoOrder]);
-
-  const navigateToWorktree = (worktreeKey: string, sessions: Session[]) => {
-    if (sessions.length === 0) return;
-    const lastActive = lastActiveTabByWorktree[worktreeKey];
-    const targetId = lastActive && sessions.some((s) => s.id === lastActive) ? lastActive : sessions[0]!.id;
-    navigate(`/sessions/${targetId}`, { replace: true });
-  };
-
-  const systemStatus = useMemo(() => aggregateBranchStatus(systemSessions), [systemSessions]);
-  const systemSelected = systemSessions.some((s) => s.id === selectedSessionId);
-
-  // Render worktrees from a group, filtered by predicate
-  const renderWorktrees = (group: SessionGroup, filter: (wt: SessionGroup['worktrees'][0]) => boolean) => {
-    const groupId = `${group.repositoryOrg}/${group.repositoryName}`;
-    const wtOrder = worktreeOrder[groupId];
-    const sorted = wtOrder && wtOrder.length > 0
-      ? [...group.worktrees].sort((a, b) => {
-          const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
-          return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
-        })
-      : [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
-
-    return sorted.filter(filter).map((wt) => {
-      const worktreeKey = `${groupId}:${wt.branch}`;
-      const status = aggregateBranchStatus(wt.sessions);
-      const isSelected = wt.sessions.some((s: Session) => s.id === selectedSessionId);
-      return (
-        <CollapsedWorktreeItem
-          key={`${groupId}:${wt.branch}`}
-          status={status.status}
-          isSelected={isSelected}
-          hasTicket={worktreeHasTicket.has(worktreeKey)}
-          onClick={() => navigateToWorktree(worktreeKey, wt.sessions)}
-          onMouseEnter={(e) => showTooltip(e, wt.branch, groupId)}
-          onMouseLeave={hideTooltip}
-        />
-      );
-    });
-  };
-
-  return (
-    <CollapsedShell>
-      <div className="flex-1 overflow-y-auto w-full">
-        {/* System section */}
-        <CollapsedSectionDivider />
-        {systemSessions.length > 0 && (
-          <CollapsedSystemItem
-            status={systemStatus.status}
-            isSelected={systemSelected}
-            onClick={() => {
-              const lastActive = lastActiveTabByWorktree['_system'];
-              const isValidTabKey = lastActive && systemSessions.some((s) => `s:${s.id}` === lastActive);
-              const tabSuffix = isValidTabKey ? `/${encodeURIComponent(lastActive!)}` : '';
-              navigate(`/sessions/system${tabSuffix}`, { replace: true });
-            }}
-            onMouseEnter={(e) => showTooltip(e, 'Shells', `${systemSessions.length} session${systemSessions.length !== 1 ? 's' : ''}`)}
-            onMouseLeave={hideTooltip}
-          />
-        )}
-
-        {/* Manual Flow section */}
-        <CollapsedSectionDivider />
-        {!manualFlowCollapsed && repoGroups.map((group) => renderWorktrees(group, (wt) => wt.sessions.length > 0))}
-
-        {/* Agentic Flow section */}
-        <CollapsedSectionDivider />
-        {!agenticFlowCollapsed && repoGroups.map((group) => renderWorktrees(group, (wt) => wt.sessions.length === 0 && wt.agentWorktree != null))}
-      </div>
-      <CollapsedTooltip ctl={tooltipCtl} />
-    </CollapsedShell>
   );
 }
 

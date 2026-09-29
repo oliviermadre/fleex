@@ -6,27 +6,28 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { ClaudeIcon, TerminalIcon, PlusIcon } from '../sidebar/icons';
-import * as api from '../../services/api';
+import { useWorkStore } from '../../stores/workStore';
+import { openSessionInWork, ticketIdForSession } from '../work/openInWork';
+import { openSystemShell } from '../../lib/systemShell';
 import type { CommandItem } from './commandPaletteTypes';
 
 export function useCommandItems(query: string): CommandItem[] {
   const sessions = useSessionStore((s) => s.sessions);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
-  const selectSession = useSessionStore((s) => s.selectSession);
-  const selectGroup = useSessionStore((s) => s.selectGroup);
-  const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
-  const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
-  const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
 
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
   const closeCommandPalette = useUIStore((s) => s.closeCommandPalette);
   const toggleScratchpad = useUIStore((s) => s.toggleScratchpad);
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const activePanel = useUIStore((s) => s.activePanel);
+  // The "current session" for workspace actions: the focused floating terminal.
+  const focusedFloatingPanelId = useUIStore((s) => s.focusedFloatingPanelId);
+  const workTicketId = useWorkStore((s) => s.selectedTicketId);
 
   const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
   const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
   const basePath = useSettingsStore((s) => s.settings.basePath);
-  const addLayoutGroup = useSettingsStore((s) => s.addLayoutGroup);
   const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
   const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
   const sessionDisplayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
@@ -52,14 +53,17 @@ export function useCommandItems(query: string): CommandItem[] {
           ? ClaudeIcon({ size: 16, className: 'text-[var(--theme-text-secondary)]' })
           : TerminalIcon({ size: 16, className: 'text-[var(--theme-text-secondary)]' }),
         keywords: [session.tmuxName, session.displayName, displayName, session.repositoryName, session.worktreeBranch].filter(Boolean).join(' '),
-        onExecute: () => { setActivePanel('sessions'); selectSession(session.id); closeCommandPalette(); },
+        // Its ticket's shell in the Work view; a ticketless (system) shell floats.
+        onExecute: () => {
+          if (!openSessionInWork(session.id)) addFloatingSession(session.id);
+          closeCommandPalette();
+        },
       });
     }
 
     // ── Views ──
-    const views: { panel: 'work' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings'; label: string }[] = [
+    const views: { panel: 'work' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings'; label: string }[] = [
       { panel: 'work', label: 'Tasks' },
-      { panel: 'sessions', label: 'Sessions' },
       { panel: 'repositories', label: 'Repositories' },
       { panel: 'tickets', label: 'Tickets' },
       { panel: 'claude-config', label: 'Claude Config' },
@@ -89,32 +93,6 @@ export function useCommandItems(query: string): CommandItem[] {
     });
 
     items.push({
-      id: 'create:group-1x2',
-      label: 'Create group (1x2 side-by-side)',
-      category: 'create',
-      categoryLabel: 'Create',
-      icon: getGridIcon('1x2'),
-      onExecute: () => {
-        const id = addLayoutGroup('1x2');
-        selectGroup(id);
-        closeCommandPalette();
-      },
-    });
-
-    items.push({
-      id: 'create:group-2x2',
-      label: 'Create group (2x2 grid)',
-      category: 'create',
-      categoryLabel: 'Create',
-      icon: getGridIcon('2x2'),
-      onExecute: () => {
-        const id = addLayoutGroup('2x2');
-        selectGroup(id);
-        closeCommandPalette();
-      },
-    });
-
-    items.push({
       id: 'create:shell',
       label: 'New system shell',
       category: 'create',
@@ -122,12 +100,7 @@ export function useCommandItems(query: string): CommandItem[] {
       icon: TerminalIcon({ size: 16, className: 'text-[var(--theme-text-secondary)]' }),
       keywords: 'terminal bash zsh',
       onExecute: () => {
-        const cwd = basePath || '~';
-        api.createSession({ cwd, type: 'shell' }).then((session) => {
-          addSessionToGroup(session);
-          selectSession(session.id);
-          api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
-        }).catch(() => { /* silently fail */ });
+        void openSystemShell(basePath);
         closeCommandPalette();
       },
     });
@@ -144,19 +117,12 @@ export function useCommandItems(query: string): CommandItem[] {
       });
     }
 
-    // ── Workspace actions (conditional on the selected session's ticket) ──
-    if (workspaceActions.length > 0 && selectedSessionId) {
-      // Resolve the ticket linked to the selected session via its worktree group.
-      let ticketId: string | undefined;
-      for (const group of sessionGroups) {
-        for (const wt of group.worktrees) {
-          if (wt.sessions.some((s) => s.id === selectedSessionId)) {
-            ticketId = wt.ticketId ?? wt.agentWorktree?.ticketId;
-            break;
-          }
-        }
-        if (ticketId) break;
-      }
+    // ── Workspace actions (conditional on the current ticket: the focused
+    // floating terminal's, else the task open in the Work view) ──
+    if (workspaceActions.length > 0) {
+      const ticketId =
+        (focusedFloatingPanelId ? ticketIdForSession(sessionGroups, focusedFloatingPanelId) : null) ??
+        (activePanel === 'work' ? workTicketId : null);
       const ticket = ticketId ? ticketItems.find((t) => t.id === ticketId) : undefined;
 
       if (ticket) {
@@ -222,10 +188,10 @@ export function useCommandItems(query: string): CommandItem[] {
 
     return items;
   }, [
-    sessions, sessionGroups, selectedSessionId, sessionDisplayNames,
-    selectSession, selectGroup, setActivePanel, openCreateModal, closeCommandPalette,
+    sessions, sessionGroups, sessionDisplayNames,
+    setActivePanel, openCreateModal, closeCommandPalette, addFloatingSession,
+    activePanel, focusedFloatingPanelId, workTicketId,
     toggleScratchpad, pinnedIcons, workspaceActions, basePath,
-    addLayoutGroup, addSessionToGroup, setSessionGroups,
     executePinnedAction, executeWorkspaceAction,
     ticketItems, selectTicket,
   ]);
@@ -253,14 +219,6 @@ function getViewIcon(panel: string): React.ReactNode {
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect x="1.5" y="2" width="13" height="12" rx="1.5" />
           <line x1="6.5" y1="2" x2="6.5" y2="14" />
-        </svg>
-      );
-    case 'sessions':
-      return (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-          <polyline points="4.5,7 6,8.5 4.5,10" />
-          <line x1="7.5" y1="10.5" x2="11" y2="10.5" />
         </svg>
       );
     case 'repositories':
@@ -309,24 +267,6 @@ function getViewIcon(panel: string): React.ReactNode {
     default:
       return null;
   }
-}
-
-function getGridIcon(type: '1x2' | '2x2'): React.ReactNode {
-  if (type === '1x2') {
-    return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-        <line x1="8" y1="2.5" x2="8" y2="13.5" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-      <line x1="8" y1="2.5" x2="8" y2="13.5" />
-      <line x1="1.5" y1="8" x2="14.5" y2="8" />
-    </svg>
-  );
 }
 
 function getTicketIcon(): React.ReactNode {

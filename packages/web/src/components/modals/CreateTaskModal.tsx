@@ -5,12 +5,12 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintSolid, tintText } from '../../lib/tints';
 import { RepoBaseBranchSelect } from '../tickets/RepoBaseBranchSelect';
+import { openTicketSessionInWork } from '../work/openInWork';
 
 type TaskMode = 'ticket' | 'my-prs' | 'review' | 'new';
 
@@ -36,9 +36,7 @@ function timeAgo(dateStr: string): string {
 export function CreateTaskModal() {
   const open = useUIStore((s) => s.createModalOpen);
   const closeModal = useUIStore((s) => s.closeCreateModal);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
-  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
   const createTicket = useTicketStore((s) => s.createTicket);
   const fetchTickets = useTicketStore((s) => s.fetchTickets);
   const boards = useTicketStore((s) => s.boards);
@@ -202,24 +200,17 @@ export function CreateTaskModal() {
 
       // Open session from ticket (auto-creates workspace + worktree + session)
       const { sessionId } = await openSessionFromTicket(ticketId);
-      // Navigate to session view and wait for session to appear before selecting its tab
-      setActivePanel('sessions');
+      // Land on the task in the Work view, shell mode, the new session in a pane.
+      // No need to wait for the session to reach the store: the pane shows it
+      // (and takes the keyboard) as soon as it arrives over WS.
+      openTicketSessionInWork(ticketId, sessionId);
       closeModal();
-      const trySelect = () => {
-        const sessions = useSessionStore.getState().sessions;
-        if (sessions.some((s) => s.id === sessionId)) {
-          selectTicketTab(ticketId, `s:${sessionId}`);
-          setCreating(false);
-        } else {
-          setTimeout(trySelect, 200);
-        }
-      };
-      trySelect();
+      setCreating(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create task');
       setCreating(false);
     }
-  }, [mode, selectedTicketId, selectedPR, taskTitle, selectedBoardId, selectedRepos, repoBaseBranch, boards, tickets, createTicket, openSessionFromTicket, setActivePanel, selectTicketTab, closeModal]);
+  }, [mode, selectedTicketId, selectedPR, taskTitle, selectedBoardId, selectedRepos, repoBaseBranch, boards, tickets, createTicket, openSessionFromTicket, closeModal]);
 
   // Cmd+Enter to submit
   useEffect(() => {

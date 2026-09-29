@@ -52,6 +52,17 @@ export function WorkView() {
     if (selectedTaskId) void useWorkflowRunStore.getState().loadForTicket(selectedTaskId);
   }, [selectedTaskId]);
 
+  // When the remembered task falls out of the queue (filtered out, deleted), the
+  // view shows the first row instead: adopt it as the selection so the store —
+  // and the /work/:ticketId URL built from it — names what is on screen. Not
+  // while a reveal is pending: that task is about to be let back in.
+  const selectedTicketId = useWorkStore((s) => s.selectedTicketId);
+  const revealTicketId = useWorkStore((s) => s.revealTicketId);
+  useEffect(() => {
+    if (view !== 'task' || revealTicketId || !selectedTaskId || selectedTaskId === selectedTicketId) return;
+    useWorkStore.getState().selectTicket(selectedTaskId);
+  }, [view, revealTicketId, selectedTaskId, selectedTicketId]);
+
   // Each ticket keeps its own center mode (chat / code / shell / workflow): apply
   // the selected one's before paint, so switching never flashes the previous mode.
   const restoreTicketMode = useWorkStore((s) => s.restoreTicketMode);

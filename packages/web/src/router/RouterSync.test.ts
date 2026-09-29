@@ -8,48 +8,49 @@ describe('parseUrl', () => {
     expect(result.panel).toBe('tickets');
   });
 
-  it('parses /sessions', () => {
-    const result = parseUrl('/sessions', '');
-    expect(result.panel).toBe('sessions');
-    expect(result.sessionId).toBeNull();
-    expect(result.splitId).toBeNull();
-  });
-
-  it('parses /sessions/:ticketId', () => {
-    const result = parseUrl('/sessions/abc123', '');
-    expect(result.panel).toBe('sessions');
-    expect(result.sessionTicketId).toBe('abc123');
-    expect(result.sessionTabKey).toBeNull();
-  });
-
-  it('parses /sessions/:ticketId/:tabKey', () => {
-    const result = parseUrl('/sessions/abc123/s%3Adef456', '');
-    expect(result.panel).toBe('sessions');
-    expect(result.sessionTicketId).toBe('abc123');
-    expect(result.sessionTabKey).toBe('s:def456');
-  });
-
-  it('parses /sessions/system', () => {
-    const result = parseUrl('/sessions/system', '');
-    expect(result.panel).toBe('sessions');
-    expect(result.sessionTicketId).toBe('system');
-    expect(result.sessionTabKey).toBeNull();
-  });
-
-  it('parses /sessions/system/:tabKey', () => {
-    const result = parseUrl('/sessions/system/s%3Aabc123', '');
-    expect(result.panel).toBe('sessions');
-    expect(result.sessionTicketId).toBe('system');
-    expect(result.sessionTabKey).toBe('s:abc123');
-  });
-
   it('parses /focus', () => {
     expect(parseUrl('/focus', '').panel).toBe('focus');
   });
 
-  it('parses /work', () => {
+  it('parses bare /work as "no task stated" (the store keeps its selection)', () => {
     const result = parseUrl('/work', '');
     expect(result.panel).toBe('work');
+    expect(result.work).toEqual({ view: 'task', mode: 'chat' });
+    expect(result.work?.ticketId).toBeUndefined();
+  });
+
+  it('parses /work/new as the new-task composer', () => {
+    const result = parseUrl('/work/new', '');
+    expect(result.panel).toBe('work');
+    expect(result.work?.view).toBe('new');
+  });
+
+  it('parses /work/:ticketId as that task in chat mode', () => {
+    const result = parseUrl('/work/t1', '');
+    expect(result.work).toEqual({ view: 'task', ticketId: 't1', mode: 'chat' });
+    expect(result.redirect).toBeUndefined();
+  });
+
+  it('parses /work/:ticketId/:mode for every non-chat center mode', () => {
+    for (const mode of ['code', 'shell', 'workflow'] as const) {
+      const result = parseUrl(`/work/t1/${mode}`, '');
+      expect(result.work, `/work/t1/${mode}`).toEqual({ view: 'task', ticketId: 't1', mode });
+    }
+  });
+
+  it('redirects an unknown /work/:ticketId/:mode to the task itself', () => {
+    const result = parseUrl('/work/t1/nope', '');
+    expect(result.redirect).toBe('/work/t1');
+  });
+
+  it('sends the retired Sessions, Cockpit and Dashboard URLs to /tickets', () => {
+    // Old bookmarks / Electron history must land somewhere real, never on a
+    // view that no longer exists.
+    for (const url of ['/sessions', '/sessions/abc', '/sessions/abc/s%3A1', '/sessions/system', '/sessions/system/s%3A1', '/sessions/agent/t1', '/list-focus', '/dashboard']) {
+      const result = parseUrl(url, '');
+      expect(result.redirect, url).toBe('/tickets');
+      expect(result.panel, url).toBe('tickets');
+    }
   });
 
   it('parses /repositories', () => {
@@ -149,7 +150,7 @@ describe('parseUrl', () => {
     // What the store holds has to survive being turned into a url and read back,
     // or the nav highlight and the panel disagree about which tab is open.
     for (const tab of ['general', 'memory', 'deliverable-types'] as const) {
-      const url = storeToUrl('settings', null, null, null, null, null, null, null, null, 'config', tab);
+      const url = storeToUrl({ activePanel: 'settings', settingsTab: tab });
       expect(parseUrl(url.pathname, url.search).settingsTab).toBe(tab);
     }
   });
@@ -193,14 +194,7 @@ describe('parseUrl', () => {
     expect(result.personaTab).toBe('config');
   });
 
-  it('parses /sessions/agent/:ticketId', () => {
-    const result = parseUrl('/sessions/agent/ticket-123', '');
-    expect(result.panel).toBe('sessions');
-    expect(result.agentWorktreeTicketId).toBe('ticket-123');
-    expect(result.sessionId).toBeNull();
-  });
-
-  it('redirects unknown routes to /tickets (never to the hidden Dashboard)', () => {
+  it('redirects unknown routes to /tickets', () => {
     const result = parseUrl('/unknown-route', '');
     expect(result.redirect).toBe('/tickets');
     expect(result.panel).toBe('tickets');
@@ -208,119 +202,114 @@ describe('parseUrl', () => {
 });
 
 describe('storeToUrl', () => {
-  it('generates /sessions when nothing selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general');
-    expect(url.pathname).toBe('/sessions');
-    expect(url.search).toBe('');
-  });
-
-  it('generates /sessions/:ticketId when ticket selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'ticket-abc', null);
-    expect(url.pathname).toBe('/sessions/ticket-abc');
-  });
-
-  it('generates /sessions/:ticketId/:tabKey when ticket and tab selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'ticket-abc', 's:session-123');
-    expect(url.pathname).toBe('/sessions/ticket-abc/s%3Asession-123');
-  });
-
-  it('generates /sessions/system when system shells selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'system', null);
-    expect(url.pathname).toBe('/sessions/system');
-  });
-
   it('generates /focus for the focus panel', () => {
-    const url = storeToUrl('focus', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'focus' });
     expect(url.pathname).toBe('/focus');
     expect(url.search).toBe('');
   });
 
-  it('generates /work for the work panel', () => {
-    const url = storeToUrl('work', null, null, null, null, null, null, null, null, 'config', 'general');
+  it('generates /work when no task is selected', () => {
+    const url = storeToUrl({ activePanel: 'work' });
     expect(url.pathname).toBe('/work');
     expect(url.search).toBe('');
   });
 
+  it('generates /work/:ticketId for a task in chat mode (the default mode is implicit)', () => {
+    expect(storeToUrl({ activePanel: 'work', workTicketId: 't1' }).pathname).toBe('/work/t1');
+    expect(storeToUrl({ activePanel: 'work', workTicketId: 't1', workMode: 'chat' }).pathname).toBe('/work/t1');
+  });
+
+  it('generates /work/:ticketId/:mode for a task in code / shell / workflow mode', () => {
+    expect(storeToUrl({ activePanel: 'work', workTicketId: 't1', workMode: 'shell' }).pathname).toBe('/work/t1/shell');
+    expect(storeToUrl({ activePanel: 'work', workTicketId: 't1', workMode: 'code' }).pathname).toBe('/work/t1/code');
+  });
+
+  it('generates /work/new for the new-task composer, whatever task is selected', () => {
+    expect(storeToUrl({ activePanel: 'work', workView: 'new', workTicketId: 't1', workMode: 'shell' }).pathname).toBe('/work/new');
+  });
+
+  it('round-trips every Work view state through a url', () => {
+    // What the store holds must survive the url and back, or a reload / a copied
+    // link would open another task or another mode than the one on screen.
+    for (const workMode of ['chat', 'code', 'shell', 'workflow'] as const) {
+      const url = storeToUrl({ activePanel: 'work', workTicketId: 't1', workMode });
+      expect(parseUrl(url.pathname, url.search).work).toEqual({ view: 'task', ticketId: 't1', mode: workMode });
+    }
+    const newUrl = storeToUrl({ activePanel: 'work', workView: 'new' });
+    expect(parseUrl(newUrl.pathname, newUrl.search).work?.view).toBe('new');
+  });
+
   it('generates /repositories when no repo selected', () => {
-    const url = storeToUrl('repositories', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'repositories' });
     expect(url.pathname).toBe('/repositories');
   });
 
   it('generates /repositories/:key when repo selected', () => {
-    const url = storeToUrl('repositories', null, null, 'myorg/myrepo', null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'repositories', selectedRepoKey: 'myorg/myrepo' });
     expect(url.pathname).toBe('/repositories/myorg/myrepo');
   });
 
   it('generates /tickets/board/all when all boards', () => {
-    const url = storeToUrl('tickets', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'tickets' });
     expect(url.pathname).toBe('/tickets/board/all');
   });
 
   it('generates /tickets/board/:id when board selected', () => {
-    const url = storeToUrl('tickets', null, null, null, 'board-123', null, null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'tickets', selectedBoardId: 'board-123' });
     expect(url.pathname).toBe('/tickets/board/board-123');
   });
 
   it('generates /tickets/board/:boardId/ticket/:ticketId when ticket selected', () => {
-    const url = storeToUrl('tickets', null, null, null, 'board-123', 'ticket-456', null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'tickets', selectedBoardId: 'board-123', selectedTicketId: 'ticket-456' });
     expect(url.pathname).toBe('/tickets/board/board-123/ticket/ticket-456');
   });
 
   it('generates /agents when no persona selected', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'agents' });
     expect(url.pathname).toBe('/agents');
   });
 
   it('generates /agents/:id when persona selected', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, 'persona-123', null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'agents', selectedPersonaId: 'persona-123' });
     expect(url.pathname).toBe('/agents/persona-123');
   });
 
   it('generates /agents/:id/:tab when non-config tab active', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, 'persona-123', null, 'soul', 'general');
+    const url = storeToUrl({ activePanel: 'agents', selectedPersonaId: 'persona-123', personaTab: 'soul' });
     expect(url.pathname).toBe('/agents/persona-123/soul');
   });
 
   it('generates /scratchpads/global for global scratchpad', () => {
-    const url = storeToUrl('scratchpads', null, null, null, null, null, '__global__', null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'scratchpads', selectedScratchpadKey: '__global__' });
     expect(url.pathname).toBe('/scratchpads/global');
   });
 
   it('generates /scratchpads/:org/:name for repo scratchpad', () => {
-    const url = storeToUrl('scratchpads', null, null, null, null, null, 'myorg/myrepo', null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'scratchpads', selectedScratchpadKey: 'myorg/myrepo' });
     expect(url.pathname).toBe('/scratchpads/myorg/myrepo');
   });
 
   it('generates /settings/:tab', () => {
-    const url = storeToUrl('settings', null, null, null, null, null, null, null, null, 'config', 'appearance');
+    const url = storeToUrl({ activePanel: 'settings', settingsTab: 'appearance' });
     expect(url.pathname).toBe('/settings/appearance');
   });
 
   it('generates /claude-config', () => {
-    const url = storeToUrl('claude-config', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'claude-config' });
     expect(url.pathname).toBe('/claude-config');
   });
 
   it('generates /cluster', () => {
-    const url = storeToUrl('cluster', null, null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl({ activePanel: 'cluster' });
     expect(url.pathname).toBe('/cluster');
   });
 
-  it('generates /sessions/agent/:ticketId when agent worktree selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', 'ticket-123');
-    expect(url.pathname).toBe('/sessions/agent/ticket-123');
-  });
-
-  it('prefers ticket over agent worktree when both set', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', 'ticket-123', undefined, undefined, undefined, 'ticket-abc', null);
-    expect(url.pathname).toBe('/sessions/ticket-abc');
-  });
 });
 
 // The whole point of these: Back/Forward must retain intermediate views. A
 // store-driven URL change should PUSH a new entry when the primary view changes
-// (panel, selected ticket/epic/persona/repo, roadmap toggle, session/settings
-// section) and REPLACE only when it's a detail-tab switch or URL normalisation —
+// (panel, selected ticket/epic/persona/repo/task, roadmap toggle, Work center
+// mode, settings section) and REPLACE only when it's a detail-tab switch or URL normalisation —
 // otherwise clicking around tabs of one ticket spams history, and the previous
 // unconditional `replace` erased intermediate views entirely.
 describe('historyActionForNav', () => {
@@ -382,7 +371,7 @@ describe('historyActionForNav', () => {
   });
 
   it('pushes when switching top-level panels', () => {
-    expect(action('/sessions', '/tickets/board/all')).toBe('push');
+    expect(action('/work/t1', '/tickets/board/all')).toBe('push');
     expect(action('/tickets/board/all/ticket/t1', '/repositories')).toBe('push');
   });
 
@@ -398,14 +387,30 @@ describe('historyActionForNav', () => {
     expect(action('/settings/general', '/settings/appearance')).toBe('push');
   });
 
-  it('pushes when switching between session terminals', () => {
-    expect(action('/sessions/ticket-abc/s%3Aone', '/sessions/ticket-abc/s%3Atwo')).toBe('push');
+  it('pushes when selecting another task in the Work view', () => {
+    expect(action('/work/t1', '/work/t2')).toBe('push');
   });
 
-  it('replays the reported scenario: sessions → kanban → ticket → repos keeps every step', () => {
+  it('pushes when switching the center mode of a task', () => {
+    // Like a detail tab: Back from the shell returns to the chat.
+    expect(action('/work/t1', '/work/t1/shell')).toBe('push');
+  });
+
+  it('pushes when opening the new-task composer', () => {
+    expect(action('/work/t1', '/work/new')).toBe('push');
+  });
+
+  it('replaces when the store fills bare /work in with the remembered task', () => {
+    // Bare /work states no task: naming the one on screen is normalisation, and
+    // must not leave a dead /work entry behind for Back to stop on.
+    expect(action('/work', '/work/t1')).toBe('replace');
+    expect(action('/work', '/work/t1/shell')).toBe('replace');
+  });
+
+  it('replays the reported scenario: tasks → kanban → ticket → repos keeps every step', () => {
     // Each hop is the URL the store lands on; assert the history action so that
-    // Back walks repos → ticket → kanban → sessions (ticket detail retained).
-    expect(action('/sessions', '/tickets/board/all')).toBe('push'); // sessions → kanban
+    // Back walks repos → ticket → kanban → tasks (ticket detail retained).
+    expect(action('/work/t1', '/tickets/board/all')).toBe('push'); // tasks → kanban
     expect(action('/tickets/board/all', '/tickets/board/all/ticket/t1')).toBe('push'); // kanban → ticket
     expect(action('/tickets/board/all/ticket/t1', '/repositories')).toBe('push'); // ticket → repos
   });
