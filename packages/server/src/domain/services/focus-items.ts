@@ -338,8 +338,6 @@ export function deriveFocusItems(inputs: FocusInputs): FocusDerivation {
         running.push(describeRunning(ticket.id, runs, execs, mentions, inputs.stepRunsByRun, mentionById, display, costUsd));
         continue;
       }
-      // A manually blocked ticket is waiting on something outside Fleex on purpose.
-      if (ticket.blocked) continue;
       const lastAgentExec = [...execs]
         .filter((e) => mentionById.get(e.mentionId)?.targetType === 'agent')
         .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];

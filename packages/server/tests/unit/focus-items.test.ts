@@ -221,9 +221,9 @@ describe('deriveFocusItems', () => {
     expect(items[0]!.kind).toBe('gate');
   });
 
-  it('lists an idle ticket with the agent to relaunch, and skips manually blocked ones', () => {
+  it('lists an idle ticket with the agent to relaunch', () => {
     const { items } = deriveFocusItems(inputs({
-      tickets: [ticket('T1', { statusChangedAt: T0 }), ticket('T2', { blocked: true })],
+      tickets: [ticket('T1', { statusChangedAt: T0 })],
       mentions: [mention('m1', 'T1', 'resolved')],
       executions: [exec('x1', 'T1', { mentionId: 'm1', completedAt: T2, costUsd: 1.5 })],
     }));
@@ -232,6 +232,12 @@ describe('deriveFocusItems', () => {
       kind: 'idle', key: 'idle:T1:doing', since: T2, costUsd: 1.5,
       idle: { lastActivityAt: T2, lastAgentName: 'dev', lastAgentDisplayName: 'Dev' },
     });
+  });
+
+  it('lists a blocked ticket like any other: blocked does not hide it from Focus', () => {
+    const { items } = deriveFocusItems(inputs({ tickets: [ticket('T2', { blocked: true })] }));
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'idle', key: 'idle:T2:doing' });
   });
 });
 

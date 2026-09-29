@@ -1,6 +1,6 @@
 import type { CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
-import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
+import type { CommentSummary, CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { PgConnection } from './connection.js';
 
 export class PgCommentStore implements CommentStorePort {
@@ -31,6 +31,15 @@ export class PgCommentStore implements CommentStorePort {
   async getAll(): Promise<TicketCommentEntity[]> {
     const { rows } = await this.db.query('SELECT * FROM comments ORDER BY created_at ASC');
     return rows.map(rowToComment);
+  }
+
+  async getAllSummaries(): Promise<CommentSummary[]> {
+    const { rows } = await this.db.query('SELECT ticket_id, created_at, author_type FROM comments ORDER BY created_at ASC');
+    return rows.map((r) => ({
+      ticketId: r.ticket_id as string,
+      createdAt: new Date(r.created_at as string | Date).toISOString(),
+      authorType: r.author_type as 'user' | 'agent',
+    }));
   }
 
   async save(comment: TicketCommentEntity): Promise<void> {

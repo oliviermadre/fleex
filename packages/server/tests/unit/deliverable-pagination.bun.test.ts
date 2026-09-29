@@ -249,3 +249,16 @@ describe('search & origin', () => {
     expect(facets.types).toEqual([{ value: 'fireflies', count: 1 }]);
   });
 });
+
+describe('getCreatedAtBetween', () => {
+  it('returns only the creation dates inside [from, to], oldest first', async () => {
+    // Fixtures are one minute apart from 2026-01-01T00:00Z: indexes 10..12.
+    const from = new Date(Date.UTC(2026, 0, 1) + 10 * 60_000);
+    const to = new Date(Date.UTC(2026, 0, 1) + 12 * 60_000);
+    expect(await store.getCreatedAtBetween(from, to)).toEqual([
+      new Date(Date.UTC(2026, 0, 1) + 10 * 60_000).toISOString(),
+      new Date(Date.UTC(2026, 0, 1) + 11 * 60_000).toISOString(),
+      new Date(Date.UTC(2026, 0, 1) + 12 * 60_000).toISOString(),
+    ]);
+  });
+});

@@ -8,6 +8,9 @@ import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 
+/** PostgREST's max-rows cap (Supabase default) — the page size we paginate on. */
+const PAGE = 1000;
+
 interface ExecutionRow {
   execution_id: string;
   persona_id: string;
@@ -199,12 +202,23 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
   }
 
   async getAllExecutions(): Promise<AgentExecution[]> {
-    const { data, error } = await this.conn.client
-      .from('agent_event_executions')
-      .select('*')
-      .order('started_at', { ascending: false });
-    if (error) throw new Error(`SupabaseAgentEventStore.getAllExecutions failed: ${error.message}`);
-    return (data as ExecutionRow[]).map(rowToExecution);
+    // Paginated: an unpaginated select is silently truncated at PostgREST's
+    // max-rows (1000), losing the oldest executions (ticket costs, last activity).
+    // Ordering (started_at, execution_id) keeps pages stable and non-overlapping.
+    const rows: ExecutionRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('agent_event_executions')
+        .select('*')
+        .order('started_at', { ascending: false })
+        .order('execution_id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseAgentEventStore.getAllExecutions failed: ${error.message}`);
+      const page = data as ExecutionRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(rowToExecution);
   }
 
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {

@@ -84,6 +84,14 @@ export class PgDeliverableStore implements DeliverableStorePort {
     return rows.map(rowToDeliverable);
   }
 
+  async getCreatedAtBetween(from: Date, to: Date): Promise<string[]> {
+    const { rows } = await this.db.query(
+      'SELECT created_at FROM deliverables WHERE created_at >= $1 AND created_at <= $2 ORDER BY created_at ASC',
+      [from.toISOString(), to.toISOString()],
+    );
+    return rows.map((r) => new Date(r.created_at as string | Date).toISOString());
+  }
+
   async query(options: DeliverableQueryOptions): Promise<DeliverableQueryResult> {
     const { sql: where, params } = buildWhere(options);
     const countRes = await this.db.query(
