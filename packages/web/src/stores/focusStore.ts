@@ -85,6 +85,7 @@ interface FocusState {
   /** Fire every pending action now (page is going away). */
   flushPending(): void;
   snooze(key: string, untilMs: number): void;
+  unsnooze(key: string): void;
   unsnoozeAll(): void;
   setPref<K extends keyof FocusPrefs>(key: K, value: FocusPrefs[K]): void;
 }
@@ -253,6 +254,14 @@ export const useFocusStore = create<FocusState>((set, get) => {
 
     snooze: (key, untilMs) => {
       set((s) => ({ snoozed: { ...s.snoozed, [key]: untilMs } }));
+      writeJson(SNOOZE_KEY, get().snoozed);
+    },
+
+    unsnooze: (key) => {
+      set((s) => {
+        const { [key]: _gone, ...rest } = s.snoozed;
+        return { snoozed: rest };
+      });
       writeJson(SNOOZE_KEY, get().snoozed);
     },
 

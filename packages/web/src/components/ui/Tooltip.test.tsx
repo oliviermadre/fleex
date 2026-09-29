@@ -84,4 +84,34 @@ describe('Tooltip', () => {
     fireEvent.click(button);
     expect(onClick).toHaveBeenCalledTimes(1);
   });
+
+  describe('interactive', () => {
+    function setupInteractive(onAction = vi.fn()) {
+      render(
+        <Tooltip interactive label={<button type="button" onClick={onAction}>bring back</button>}>
+          <button type="button">trigger</button>
+        </Tooltip>,
+      );
+      return screen.getByRole('button', { name: 'trigger' });
+    }
+
+    it('stays open when the trigger is pressed', () => {
+      // WHY: the trigger has its own action (e.g. "ramener" everything); the
+      // bubble listing the individual items must survive that press.
+      const trigger = setupInteractive();
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerDown(trigger);
+      expect(screen.getByRole('tooltip')).not.toBeNull();
+    });
+
+    it('lets the content inside the bubble be clicked', () => {
+      const onAction = vi.fn();
+      const trigger = setupInteractive(onAction);
+      fireEvent.mouseEnter(trigger);
+      const tooltip = screen.getByRole('tooltip');
+      expect(tooltip.className).not.toContain('pointer-events-none');
+      fireEvent.click(screen.getByRole('button', { name: 'bring back' }));
+      expect(onAction).toHaveBeenCalledTimes(1);
+    });
+  });
 });

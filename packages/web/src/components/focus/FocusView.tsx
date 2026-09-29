@@ -14,6 +14,8 @@ import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { FocusIcon } from '../sidebar/icons';
+import { Tooltip } from '../ui/Tooltip';
+import { KindIcon } from './FocusIcons';
 import { FocusRow } from './FocusRow';
 import { FocusDetailModal, Kbd, SNOOZE_CHOICES } from './FocusDetailModal';
 import {
@@ -76,7 +78,7 @@ export function FocusView() {
     () => applyCliSessions(serverItems, serverRunning, sessionGroups),
     [serverItems, serverRunning, sessionGroups],
   );
-  const { commit, undo, snooze, unsnoozeAll, setPref, load } = useFocusStore.getState();
+  const { commit, undo, snooze, unsnooze, unsnoozeAll, setPref, load } = useFocusStore.getState();
 
   const [kindFilter, setKindFilter] = useState<FocusItemKind | 'all'>('all');
   const [boardFilter, setBoardFilter] = useState<string>('all');
@@ -105,7 +107,11 @@ export function FocusView() {
     () => sortFocusItems(kindFilter === 'all' ? inBoard : inBoard.filter((i) => i.kind === kindFilter), sort, ticketById),
     [inBoard, kindFilter, sort, ticketById],
   );
-  const snoozedCount = snoozedFocusItems({ items, snoozed }, now).length;
+  const snoozedItems = useMemo(
+    () => snoozedFocusItems({ items, snoozed }, now).sort((a, b) => (snoozed[a.key] ?? 0) - (snoozed[b.key] ?? 0)),
+    [items, snoozed, now],
+  );
+  const snoozedCount = snoozedItems.length;
   const stats = useMemo(() => focusStats(log, clearedAt, now), [log, clearedAt, now]);
   const oldest = useMemo(() => Math.max(0, ...base.map((i) => waitedMs(i, now) ?? 0)), [base, now]);
 
@@ -276,9 +282,26 @@ export function FocusView() {
         {snoozedCount > 0 && (
           <span className="text-xs text-[var(--theme-text-muted)]">
             {snoozedCount} en pause ·{' '}
-            <button type="button" onClick={unsnoozeAll} className="text-[var(--theme-accent)] underline decoration-dotted underline-offset-2">
-              ramener
-            </button>
+            <Tooltip
+              interactive
+              label={
+                <SnoozedList
+                  items={snoozedItems}
+                  snoozed={snoozed}
+                  now={now}
+                  titleOf={(i) => ticketById.get(i.ticketId)?.title ?? `#${i.ticketId.slice(0, 6)}`}
+                  onUnsnooze={unsnooze}
+                />
+              }
+            >
+              <button
+                type="button"
+                onClick={unsnoozeAll}
+                className="cursor-pointer text-[var(--theme-accent)] underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--theme-accent-hover)] hover:decoration-solid"
+              >
+                ramener
+              </button>
+            </Tooltip>
           </span>
         )}
         <label htmlFor="focus-board" className="text-xs text-[var(--theme-text-muted)]">Board</label>
@@ -487,6 +510,39 @@ function FocusPulse({ handledToday, medianTodayMs, medianByDayMs, clearedThisWee
           })}
         </svg>
       </span>
+    </div>
+  );
+}
+
+/** Tooltip body under "ramener": what's snoozed, until when, and a way to bring each one back. */
+function SnoozedList({ items, snoozed, now, titleOf, onUnsnooze }: {
+  items: FocusItem[];
+  snoozed: Record<string, number>;
+  now: number;
+  titleOf: (item: FocusItem) => string;
+  onUnsnooze: (key: string) => void;
+}) {
+  return (
+    <div className="flex w-72 flex-col gap-0.5">
+      <div className="px-1 pb-1 text-[10px] uppercase tracking-wide text-[var(--theme-text-muted)]">
+        En pause · clic sur « ramener » pour tout ramener
+      </div>
+      {items.map((item) => (
+        <div key={item.key} className="flex items-center gap-2 rounded px-1 py-1 hover:bg-[var(--theme-bg-overlay-hover)]">
+          <span className={tintClasses(KIND_META[item.kind].hue).text}><KindIcon kind={item.kind} size={11} /></span>
+          <span className="min-w-0 flex-1 truncate text-[var(--theme-text-primary)]">{titleOf(item)}</span>
+          <span className="shrink-0 tabular-nums text-[var(--theme-text-muted)]">
+            encore {formatWait(Math.max(0, (snoozed[item.key] ?? now) - now))}
+          </span>
+          <button
+            type="button"
+            onClick={() => onUnsnooze(item.key)}
+            className="shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-accent-muted)] hover:text-[var(--theme-accent-hover)]"
+          >
+            ramener
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
