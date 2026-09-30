@@ -1,5 +1,5 @@
 import type { WorkflowExecutorType } from '@fleex/shared';
-import { tintClasses } from '../../lib/tints';
+import { tintClasses, type TintHue } from '../../lib/tints';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
@@ -80,6 +80,8 @@ export interface PaletteEntry {
   label: string;
   description: string;
   Icon: IconComponent;
+  /** The executor's hue — `colorClass` is derived from it (for SVG strokes / fills). */
+  hue: TintHue;
   colorClass: string;
 }
 
@@ -89,6 +91,7 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     label: 'Agent',
     description: 'AI agent execution',
     Icon: PersonIcon,
+    hue: 'purple',
     colorClass: `${tintClasses('purple').text} ${tintClasses('purple').borderColor}`,
   },
   {
@@ -96,6 +99,7 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     label: 'Panel',
     description: 'Multi-agent committee with synthesis',
     Icon: UsersIcon,
+    hue: 'blue',
     colorClass: `${tintClasses('blue').text} ${tintClasses('blue').borderColor}`,
   },
   {
@@ -103,6 +107,7 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     label: 'Skill',
     description: 'Deterministic skill instruction file',
     Icon: ZapIcon,
+    hue: 'green',
     colorClass: `${tintClasses('green').text} ${tintClasses('green').borderColor}`,
   },
   {
@@ -110,6 +115,7 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     label: 'Human Gate',
     description: 'Manual approval checkpoint',
     Icon: UserCheckIcon,
+    hue: 'yellow',
     colorClass: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor}`,
   },
   {
@@ -117,6 +123,7 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     label: 'Ticket Actions',
     description: 'Deterministic ticket operations — no agent, no LLM',
     Icon: ListChecksIcon,
+    hue: 'teal',
     colorClass: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
   },
   {
@@ -124,6 +131,7 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     label: 'Router',
     description: 'Convergence point — no action, no agent, only branching',
     Icon: SplitIcon,
+    hue: 'orange',
     colorClass: `${tintClasses('orange').text} ${tintClasses('orange').borderColor}`,
   },
 ];

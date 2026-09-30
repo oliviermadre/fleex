@@ -990,8 +990,13 @@ export function ticketRoutes(container: Container) {
     );
 
     // Activity
-    app.get<{ Params: { id: string } }>('/api/tickets/:id/activity', async (request) => {
-      return (await container.ticketStore.getActivitiesByTicket(request.params.id)).map((a) => a.toDTO());
+    // `?limit=` (1..1000) lets a caller read the whole history (the ticket
+    // Timeline needs the first status moves, not just the latest 50). Absent or
+    // invalid → the store's default page, unchanged for every other caller.
+    app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/tickets/:id/activity', async (request) => {
+      const raw = Number.parseInt(request.query?.limit ?? '', 10);
+      const limit = Number.isFinite(raw) ? Math.min(1000, Math.max(1, raw)) : undefined;
+      return (await container.ticketStore.getActivitiesByTicket(request.params.id, limit)).map((a) => a.toDTO());
     });
 
     // Workflow: open session from ticket
@@ -1212,10 +1217,23 @@ export function ticketRoutes(container: Container) {
           const ticket = await container.ticketStore.getTicketById(upd.id);
           if (!ticket) continue;
           const fromStatus = ticket.status;
-          ticket.moveTo(upd.status);
+          const moveDiff = ticket.moveTo(upd.status);
           ticket.position = upd.position;
           ticket.updatedAt = new Date();
           await container.ticketStore.saveTicket(ticket);
+          // A Kanban drag across columns is a real status change: log it like
+          // every other move so the ticket's history (Timeline) sees it. A
+          // same-column reorder yields an empty diff and writes nothing.
+          if (Object.keys(moveDiff).length > 0) {
+            await container.ticketStore.saveActivity(TicketActivityEntity.create({
+              id: randomUUID(),
+              ticketId: ticket.id,
+              action: 'moved',
+              changes: moveDiff,
+              actorType: 'user',
+              source: 'web',
+            }));
+          }
           emit({ type: 'ticket.moved', ticketId: upd.id, fromStatus, toStatus: upd.status, occurredAt: new Date() });
         }
         return { ok: true };

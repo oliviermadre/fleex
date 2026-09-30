@@ -11,6 +11,7 @@ import { cn } from '../../lib/cn';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
 import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, RoutineIcon, type PrimitiveKind } from '../../lib/primitives';
+import { CommentIcon, DeliverableIcon } from '../ui/icons/ActivityIcons';
 
 // ── Type badge ──
 
@@ -298,23 +299,6 @@ function KeptIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-    </svg>
-  );
-}
-
-function CommentIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-      <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
-    </svg>
-  );
-}
-
-function DeliverableIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="3" y="1.5" width="10" height="13" rx="1.5" />
-      <path d="M5.5 5h5M5.5 8h5M5.5 11h3" />
     </svg>
   );
 }

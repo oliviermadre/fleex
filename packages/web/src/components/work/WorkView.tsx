@@ -6,7 +6,7 @@
  *
  * Layout (SPEC §1): the full-height QUEUE 300px, then a column holding the top
  * bar above CENTER minmax(0,1fr) · RIGHT PANEL (toggle) · TOOL STRIP 60px and
- * the shell drawer (⌘J). The status bar spans the whole width, underneath.
+ * the bottom drawer — shell (⌘J) or Timeline (⌥T), one at a time. The status bar spans the whole width, underneath.
  */
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
@@ -25,6 +25,7 @@ import { ToolStrip } from './panel/ToolStrip';
 import { RightPanel } from './panel/RightPanel';
 import { ShellSurface } from './shell/ShellSurface';
 import { ShellDrawer } from './shell/ShellDrawer';
+import { TimelineDrawer } from './timeline/TimelineDrawer';
 import { CodeEditor } from './panel/CodeEditor';
 import { useTicketDeliverables } from './panel/useTicketDeliverables';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
@@ -36,6 +37,7 @@ export function WorkView() {
   const queueCollapsed = useWorkStore((s) => s.queueCollapsed);
   const shellOpen = useWorkStore((s) => s.shellOpen);
   const shellMode = useWorkStore((s) => s.shellMode);
+  const timelineOpen = useWorkStore((s) => s.timelineOpen);
   const codeMode = useWorkStore((s) => s.codeMode);
   const workflowMode = useWorkStore((s) => s.workflowMode);
 
@@ -136,6 +138,10 @@ export function WorkView() {
           {/* Shell drawer (⌘J) — under the working area, beside the queue (SPEC §7). */}
           {view === 'task' && selectedTask && shellOpen && !shellMode && (
             <ShellDrawer key={selectedTask.id} ticketId={selectedTask.id} />
+          )}
+          {/* Timeline drawer (⌥T) — same slot; the store never lets both open. */}
+          {view === 'task' && selectedTask && timelineOpen && (
+            <TimelineDrawer key={selectedTask.id} task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
           )}
         </div>
       </div>

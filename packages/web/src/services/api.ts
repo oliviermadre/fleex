@@ -563,8 +563,10 @@ export async function removeTicketLink(id: string, linkId: string): Promise<void
   await request<void>(`/tickets/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}`, { method: 'DELETE' });
 }
 
-export async function fetchTicketActivity(id: string): Promise<import('@fleex/shared').TicketActivity[]> {
-  return request<import('@fleex/shared').TicketActivity[]>(`/tickets/${encodeURIComponent(id)}/activity`);
+/** Newest first. `limit` (server-clamped to 1..1000) defaults to the server's 50. */
+export async function fetchTicketActivity(id: string, opts?: { limit?: number }): Promise<import('@fleex/shared').TicketActivity[]> {
+  const qs = opts?.limit ? `?limit=${opts.limit}` : '';
+  return request<import('@fleex/shared').TicketActivity[]>(`/tickets/${encodeURIComponent(id)}/activity${qs}`);
 }
 
 export async function openSessionFromTicket(id: string): Promise<{ sessionId: string }> {
