@@ -5,7 +5,8 @@
  * shows a dot when the branch has changes. The bottom Shell button toggles the
  * drawer rather than a right panel, so it lives outside the panel-toggling group,
  * with the Timeline button right above it: both toggle the one bottom slot
- * (opening one closes the other — enforced in workStore).
+ * (opening one closes the other — enforced in workStore). A separator above
+ * Timeline marks that pair as "what shows at the bottom".
  */
 import { cn } from '../../../lib/cn';
 import { useWorkStore, type RightPanel } from '../../../stores/workStore';
@@ -90,7 +91,9 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
   const setTimelineOpen = useWorkStore((s) => s.setTimelineOpen);
   const codeMode = useWorkStore((s) => s.codeMode);
   const setCodeMode = useWorkStore((s) => s.setCodeMode);
-  const shellActive = shellOpen || shellMode;
+  // Lit only when shells actually show at the bottom: in shell mode they take the
+  // center and the drawer never renders, so the button is disabled instead.
+  const shellActive = shellOpen && !shellMode;
   const sessionCount = task?.sessionCount ?? 0;
   const sessionBadge = sessionCount > 0 ? (sessionCount > 99 ? '99+' : String(sessionCount)) : null;
 
@@ -129,6 +132,9 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
         );
       })}
 
+      {/* Separator: everything below it drives the bottom drawer, not the right panel. */}
+      <div role="separator" className="mt-auto mb-1 h-px w-9 bg-[var(--theme-border)]" />
+
       {/* Timeline toggles the bottom drawer's other occupant (⌥T) — pinned bottom,
           right above Shell. */}
       <button
@@ -138,7 +144,7 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
         title="Toggle timeline (⌥T)"
         aria-pressed={timelineOpen}
         className={cn(
-          'relative mt-auto flex w-[52px] flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] transition-colors disabled:opacity-40',
+          'relative flex w-[52px] flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] transition-colors disabled:opacity-40',
           timelineOpen
             ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
@@ -159,10 +165,13 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
           Its badge counts the ticket's tmux sessions. */}
       <button
         type="button"
-        disabled={!task}
+        disabled={!task || shellMode}
         onClick={() => setShellOpen(!shellOpen)}
+        aria-pressed={shellActive}
         title={
-          sessionCount > 0
+          shellMode
+            ? 'Shells already in the center (shell mode)'
+            : sessionCount > 0
             ? `Toggle shell drawer (⌘J) · ${sessionCount} tmux session${sessionCount > 1 ? 's' : ''}`
             : 'Toggle shell drawer (⌘J)'
         }

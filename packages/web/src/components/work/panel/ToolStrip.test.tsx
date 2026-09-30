@@ -34,4 +34,19 @@ describe('ToolStrip — bottom panels', () => {
     fireEvent.click(screen.getByRole('button', { name: /Shell/ }));
     expect([useWorkStore.getState().timelineOpen, useWorkStore.getState().shellOpen]).toEqual([false, true]);
   });
+
+  it('Shell is not lit by shell mode alone — disabled, since the drawer cannot show', () => {
+    useWorkStore.setState({ shellMode: true, timelineOpen: true });
+    render(<ToolStrip task={task} />);
+    const shell = screen.getByRole('button', { name: /Shell/ });
+    expect(shell.getAttribute('aria-pressed')).toBe('false');
+    expect(shell).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: /Timeline/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('puts a separator right above Timeline', () => {
+    render(<ToolStrip task={task} />);
+    const sep = screen.getByRole('separator');
+    expect(sep.nextElementSibling).toBe(screen.getByRole('button', { name: /Timeline/ }));
+  });
 });
