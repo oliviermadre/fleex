@@ -16,11 +16,20 @@ import { TimelineTooltip } from './TimelineTooltip';
 const PILL_MIN = 64;
 const PILL_EST = 150;
 
-export function TimelineZoneBands({ zones }: { zones: PlacedZone[] }) {
+/**
+ * `fadeFrom`: x (the now line) past which the last zone — the current status —
+ * fades out to the frieze's right edge instead of stopping flat.
+ */
+export function TimelineZoneBands({ zones, fadeFrom }: { zones: PlacedZone[]; fadeFrom: number }) {
   return (
     <>
       {zones.map((z, i) => {
         const hue = STATUS_HUES[z.status] ?? 'gray';
+        const last = i === zones.length - 1;
+        const solidUntil = Math.max(0, fadeFrom - z.x0);
+        const mask = last && solidUntil < z.x1 - z.x0
+          ? `linear-gradient(to right, black ${solidUntil}px, transparent 100%)`
+          : undefined;
         return (
           <div
             key={z.eventId}
@@ -34,6 +43,8 @@ export function TimelineZoneBands({ zones }: { zones: PlacedZone[] }) {
               opacity: 0.9,
               borderTop: `${GEOMETRY.zoneBar}px solid var(--tint-${hue}-solid)`,
               borderLeft: i > 0 ? `1px dashed var(--tint-${hue}-solid)` : undefined,
+              maskImage: mask,
+              WebkitMaskImage: mask,
             }}
           />
         );

@@ -145,11 +145,12 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
         )}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="3" y1="12" x2="19" y2="12" />
-          <circle cx="6" cy="12" r="2.2" />
-          <circle cx="11" cy="12" r="2.2" />
-          <circle cx="16" cy="12" r="2.2" />
-          <line x1="21" y1="7" x2="21" y2="17" strokeDasharray="2 2" />
+          {/* An axis with events above (what you do) and below (what agents do). */}
+          <path d="M3 12h18" />
+          <path d="M7 12V8.5M12 12v3.5M17 12V8.5" />
+          <circle cx="7" cy="6.5" r="2" />
+          <circle cx="12" cy="17.5" r="2" />
+          <circle cx="17" cy="6.5" r="2" />
         </svg>
         Timeline
       </button>

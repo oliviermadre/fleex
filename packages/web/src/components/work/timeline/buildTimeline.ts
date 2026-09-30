@@ -807,14 +807,14 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
     });
   }
 
-  // ── Comments (bottom lane) ──
+  // ── Comments: the user's above the spine, the agents' below (human on top, agentic below) ──
   for (const c of src.comments) {
     const at = clamp(ms(c.createdAt) ?? now);
     const exec = src.executions.find((e) => e.commentId === c.id);
     const parentId = (exec ? eventIdByExecution.get(exec.id) ?? null : null) ?? fromWorkflowAuthor(c.authorName, at);
     const human = c.authorType === 'user';
     drafts.push({
-      id: `comment:${c.id}`, kind: 'comment', at, lane: 'bottom', parentId,
+      id: `comment:${c.id}`, kind: 'comment', at, lane: human ? 'top' : 'bottom', parentId,
       glyph: { type: 'comment', human }, label: c.authorName, sub: null, state: 'ok', attempt: 1, note: null, gate: false,
       tooltip: {
         overline: human ? 'Commentaire' : 'Commentaire agent', title: c.authorName, chip: null,

@@ -53,8 +53,19 @@ export interface TicketTimelineProps {
 }
 
 export function TicketTimeline({ header, model, filters, onToggleFilter, onAction }: TicketTimelineProps) {
-  const layout = useMemo(() => (model ? layoutTimeline(model, filters) : null), [model, filters]);
   const viewport = useRef<HTMLDivElement>(null);
+  // Viewport width: a short frieze is stretched to fill it.
+  const [viewportW, setViewportW] = useState(0);
+  useLayoutEffect(() => {
+    const el = viewport.current;
+    if (!el) return;
+    setViewportW(el.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setViewportW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const layout = useMemo(() => (model ? layoutTimeline(model, filters, viewportW) : null), [model, filters, viewportW]);
   const pinnedRight = useRef(true);
   const [scrollLeft, setScrollLeft] = useState(0);
 
@@ -181,7 +192,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
           <div className="px-4 text-[12px] text-[var(--theme-text-faint)]">Chargement de la timeline…</div>
         ) : (
           <div className="relative shrink-0" style={{ width: layout.width, height: GEOMETRY.height }}>
-            <TimelineZoneBands zones={layout.zones} />
+            <TimelineZoneBands zones={layout.zones} fadeFrom={layout.nowX} />
 
             <svg className="pointer-events-none absolute inset-0" width={layout.width} height={GEOMETRY.height} aria-hidden>
               {layout.days.map((d) => (

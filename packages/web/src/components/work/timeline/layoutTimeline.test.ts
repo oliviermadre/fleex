@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildTimeline } from './buildTimeline';
-import { LANE_WIDTH, gap, layoutTimeline, type TimelineLayout } from './layoutTimeline';
+import { LANE_WIDTH, MAX_STRETCH, gap, layoutTimeline, type TimelineLayout } from './layoutTimeline';
 import { NOW, at, comment, emptySources, execution, fixture591 } from './timeline.fixture';
 
 const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true };
@@ -98,8 +98,9 @@ describe('layoutTimeline — stress cases (§7.4)', () => {
     const l = layoutTimeline(buildTimeline(src, NOW), ALL);
     expectNoOverlap(l);
     const xs = l.items.filter((i) => i.event.kind === 'comment').map((i) => i.x);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(20 * LANE_WIDTH.bottom);
-    expect(l.width).toBeLessThan(20 * LANE_WIDTH.bottom + 600);
+    // The user's comments sit in the top lane (human above, agentic below).
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(20 * LANE_WIDTH.top);
+    expect(l.width).toBeLessThan(20 * LANE_WIDTH.top + 600);
   });
 
   it('20 runs in the same minute: one spine slot each, no explosion', () => {
@@ -143,5 +144,46 @@ describe('layoutTimeline — stress cases (§7.4)', () => {
     expect(performance.now() - t0).toBeLessThan(100);
     expectNoOverlap(l);
     expectMonotonic(l);
+  });
+});
+
+describe('layoutTimeline — short frieze & now label', () => {
+  it('leaves room right of the now line for its "maintenant" label', () => {
+    const l = layoutTimeline(buildTimeline(fixture591(), NOW), ALL);
+    // ~60px of 10px mono text drawn at nowX + 4 must fit inside the frieze.
+    expect(l.width - l.nowX).toBeGreaterThanOrEqual(70);
+  });
+
+  it('stretches a short frieze to fill the viewport, keeping order and spacing', () => {
+    const src = emptySources();
+    src.executions = [execution({ id: 'x1', startedAt: at(9, 0) }), execution({ id: 'x2', startedAt: at(9, 5) })];
+    const natural = layoutTimeline(buildTimeline(src, NOW), ALL);
+    const viewport = natural.width * 2;
+    const l = layoutTimeline(buildTimeline(src, NOW), ALL, viewport);
+    expect(l.width).toBe(viewport);
+    expect(l.stretch).toBeGreaterThan(1);
+    expectNoOverlap(l);
+    const xs = l.items.map((i) => i.x);
+    expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+    // The frieze really spreads out (not just an empty tail) and the now label still fits.
+    expect(l.nowX).toBeGreaterThan(natural.nowX);
+    expect(l.width - l.nowX).toBeGreaterThanOrEqual(70);
+    // The current status zone runs to the right edge (it fades out there).
+    expect(l.zones[l.zones.length - 1]!.x1).toBe(viewport);
+  });
+
+  it('never stretches beyond MAX_STRETCH: a near-empty ticket keeps a sane layout', () => {
+    const natural = layoutTimeline(buildTimeline(emptySources(), NOW), ALL);
+    const l = layoutTimeline(buildTimeline(emptySources(), NOW), ALL, 5000);
+    expect(l.stretch).toBeLessThanOrEqual(MAX_STRETCH);
+    expect(l.width).toBe(5000);
+    expect(l.nowX).toBeLessThanOrEqual(natural.nowX * MAX_STRETCH);
+  });
+
+  it('does not touch a frieze already wider than the viewport', () => {
+    const natural = layoutTimeline(buildTimeline(fixture591(), NOW), ALL);
+    const l = layoutTimeline(buildTimeline(fixture591(), NOW), ALL, 300);
+    expect(l.stretch).toBe(1);
+    expect(l.width).toBe(natural.width);
   });
 });

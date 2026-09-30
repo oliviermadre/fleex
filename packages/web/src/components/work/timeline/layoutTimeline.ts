@@ -23,7 +23,10 @@ export const PR_CHIP_WIDTH = 58;
 export const PAD_LEFT = 24;
 /** Attached pictos sit at the right edge of their parent's spine slot (between two labels). */
 export const ATTACH_OFFSET = LANE_WIDTH.spine / 2;
-export const PAD_RIGHT = 40;
+/** Room right of the now line — wide enough for its "maintenant" label. */
+export const PAD_RIGHT = 80;
+/** A short frieze is stretched to fill the viewport, but never spread more than this. */
+export const MAX_STRETCH = 3;
 export const FORK_WIDTH = 320;
 export const BREAK_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const MAX_GAP = 180;
@@ -71,6 +74,8 @@ export interface TimelineLayout {
   items: PlacedEvent[];
   byId: Map<string, PlacedEvent>;
   zones: PlacedZone[];
+  /** Horizontal stretch applied so a short frieze fills the viewport (1 = none). */
+  stretch: number;
   breaks: { x: number; label: string }[];
   days: { x: number; label: string }[];
   spine: { x0: number; x1: number; active: { x0: number; x1: number; workflow: boolean } | null };
@@ -123,7 +128,12 @@ function dayLabel(t: number): string {
 
 // ── Sweep ─────────────────────────────────────────────────────────────────────
 
-export function layoutTimeline(model: TimelineModel, filters: TimelineFilters): TimelineLayout {
+/**
+ * `minWidth` = the viewport width: a frieze shorter than that is stretched
+ * (every x scaled away from the left pad, up to MAX_STRETCH — gaps only grow,
+ * so order and non-overlap hold) and the last status zone runs to the edge.
+ */
+export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, minWidth = 0): TimelineLayout {
   const visible = model.events.filter((e) => isVisible(e, filters));
   const items: PlacedEvent[] = [];
   const byId = new Map<string, PlacedEvent>();
@@ -168,9 +178,20 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters): 
   }
 
   const maxX = items.reduce((m, i) => Math.max(m, i.x), PAD_LEFT);
-  const nowX = maxX + Math.max(LANE_WIDTH.spine / 2 + 16, gap(model.now - lastPrimaryAt));
+  let nowX = maxX + Math.max(LANE_WIDTH.spine / 2 + 16, gap(model.now - lastPrimaryAt));
   const fork = model.pendingFork && byId.has(model.pendingFork.anchorId) ? model.pendingFork : null;
-  const width = nowX + PAD_RIGHT + (fork ? FORK_WIDTH : 0);
+  const tail = PAD_RIGHT + (fork ? FORK_WIDTH : 0);
+
+  // Short frieze → stretch it to fill the viewport.
+  let stretch = 1;
+  if (nowX + tail < minWidth && nowX > PAD_LEFT) {
+    stretch = Math.min(MAX_STRETCH, (minWidth - tail - PAD_LEFT) / (nowX - PAD_LEFT));
+    const sx = (v: number) => PAD_LEFT + (v - PAD_LEFT) * stretch;
+    for (const it of items) it.x = sx(it.x);
+    for (const b of breaks) b.x = sx(b.x);
+    nowX = sx(nowX);
+  }
+  const width = Math.max(minWidth, nowX + tail);
 
   // Text room: a note / priority label may run up to the next picto of its lane.
   const nextInLane = (idx: number, lane: Lane) => {
@@ -219,5 +240,5 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters): 
       : null,
   };
 
-  return { items, byId, zones, breaks, days, spine, nowX, width };
+  return { items, byId, zones, stretch, breaks, days, spine, nowX, width };
 }

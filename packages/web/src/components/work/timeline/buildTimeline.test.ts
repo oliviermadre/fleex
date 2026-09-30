@@ -152,6 +152,11 @@ describe('buildTimeline — attachments', () => {
     expect(byId(m.events, 'comment:c-last').parentId).toBeNull();
   });
 
+  it("puts the user's comments above the spine and the agents' below (human on top, agentic below)", () => {
+    expect(byId(m.events, 'comment:c-last').lane).toBe('top');
+    expect(byId(m.events, 'comment:c-gate').lane).toBe('bottom');
+  });
+
   it('attaches a comment a run produced (execution.commentId)', () => {
     const src = fixture591();
     src.executions = src.executions.map((e) => (e.id === 'x-impl-1' ? { ...e, commentId: 'c-last' } : e));
