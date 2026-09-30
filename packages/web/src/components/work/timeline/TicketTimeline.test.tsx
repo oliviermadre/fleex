@@ -30,6 +30,13 @@ describe('TicketTimeline', () => {
     expect(screen.getByText('Merger')).toBeTruthy();
   });
 
+  it('hangs every picto above or below the spine from it with a dotted connector', () => {
+    setup();
+    const lanePictos = buildTimeline(fixture591(), NOW).events.filter((e) => e.lane === 'top' || e.lane === 'bottom');
+    // Attached or not (user comments, CLI sessions, workflow starts…): one thread each to the life line.
+    expect(document.querySelectorAll('[data-testid="timeline-connector"]')).toHaveLength(lanePictos.length);
+  });
+
   it('opens a deliverable in the reader when its picto is clicked', () => {
     const { onAction } = setup();
     fireEvent.click(screen.getByRole('button', { name: /Livrable code/ }));

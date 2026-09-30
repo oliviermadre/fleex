@@ -223,17 +223,23 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
                 </g>
               ))}
 
-              {/* Dotted connectors: attached pictos ↔ spine, priority ↔ spine. */}
+              {/* Dotted connectors: every top / bottom picto hangs from the spine (thin, drawn
+                  under the labels so text always reads on top). */}
               {layout.items.map((it) => {
                 const e = it.event;
-                if (!(it.attached || e.kind === 'priority')) return null;
+                if (e.lane !== 'top' && e.lane !== 'bottom') return null;
                 const stroke = `var(--tint-${glyphHue(e.glyph)}-solid)`;
                 const [y1, y2] = e.lane === 'bottom'
-                  ? [GEOMETRY.spineY + 3, GEOMETRY.bottomY - 1]
-                  : e.kind === 'priority'
-                    ? [GEOMETRY.topY + 28, GEOMETRY.noteY - 2]
-                    : [GEOMETRY.topY + 29, GEOMETRY.spineY - 3];
-                return <line key={`link-${e.id}`} x1={it.x} y1={y1} x2={it.x} y2={y2} stroke={stroke} strokeWidth={1.5} strokeDasharray="2 3" strokeOpacity={0.9} />;
+                  ? [GEOMETRY.spineY + 2, GEOMETRY.bottomY + (e.kind === 'pr' ? 2 : 0)]
+                  : [GEOMETRY.topY + 28, GEOMETRY.spineY - 2];
+                return (
+                  <line
+                    key={`link-${e.id}`}
+                    data-testid="timeline-connector"
+                    x1={it.x} y1={y1} x2={it.x} y2={y2}
+                    stroke={stroke} strokeWidth={1} strokeDasharray="2 3" strokeOpacity={0.7}
+                  />
+                );
               })}
 
               {fork && <TimelineForkCurves fork={fork} fromX={forkFrom} nowX={layout.nowX} />}
