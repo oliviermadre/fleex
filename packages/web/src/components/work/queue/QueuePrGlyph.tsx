@@ -43,7 +43,7 @@ function stateColor(state: WorkPrState | null): string {
   return state ? tintText(HUE[state]) : 'text-[var(--theme-text-faint)]';
 }
 
-function PrIcon({ state }: { state: WorkPrState | null }) {
+export function PrIcon({ state }: { state: WorkPrState | null }) {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className="shrink-0">
       <path d={ICON_PATH[state ?? 'open']} />

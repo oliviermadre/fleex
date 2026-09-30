@@ -22,6 +22,9 @@ export type WorkMode = 'chat' | 'code' | 'shell' | 'workflow';
 export type DraftType = TicketType;
 /** How the queue groups its rows. 'activity' is the handoff default. */
 export type QueueGroupBy = 'activity' | 'repo' | 'type' | 'priority' | 'board' | 'status';
+/** Event categories the Timeline can hide (the spine — runs, steps — never is). */
+export type TimelineFilterKey = 'status' | 'cli' | 'pr' | 'deliverables' | 'comments';
+export type TimelineFilters = Record<TimelineFilterKey, boolean>;
 
 /**
  * The recognized source an import prefilled the draft from. Kept on the draft so
@@ -106,6 +109,15 @@ export interface WorkState {
   shellPaneIdsByTicket: Record<string, (string | null)[]>;
   /** Height in px of the bottom shell drawer, user-resizable. */
   shellHeight: number;
+  /**
+   * Bottom Timeline drawer. Only one bottom panel at a time: opening it closes
+   * the shell drawer and vice-versa (`shellOpen && timelineOpen` never holds).
+   */
+  timelineOpen: boolean;
+  /** Height in px of the Timeline drawer, user-resizable. */
+  timelineHeight: number;
+  /** Which event categories the Timeline shows. */
+  timelineFilters: TimelineFilters;
   /** Width in px of the right tool window (Context / Delivs), user-resizable. */
   rightPanelWidth: number;
   /** Width in px of the left queue, user-resizable. */
@@ -170,6 +182,10 @@ export interface WorkState {
   /** Drop everything remembered for a ticket (after it's deleted). */
   forgetTicket: (ticketId: string) => void;
   setShellHeight: (height: number) => void;
+  /** Open/close the Timeline drawer — opening it closes the shell drawer. */
+  setTimelineOpen: (open: boolean) => void;
+  setTimelineHeight: (height: number) => void;
+  toggleTimelineFilter: (key: TimelineFilterKey) => void;
   updateDraft: (patch: Partial<WorkDraft>) => void;
   /** Clear the draft after a task is created — keeping its board (default: the draft's) for the next one. */
   resetDraft: (boardId?: string | null) => void;
@@ -235,6 +251,9 @@ type PersistedWork = Pick<
   | 'shellLayoutByTicket'
   | 'shellPaneIdsByTicket'
   | 'shellHeight'
+  | 'timelineOpen'
+  | 'timelineHeight'
+  | 'timelineFilters'
   | 'rightPanelWidth'
   | 'queueWidth'
   | 'queueCollapsed'
@@ -260,6 +279,16 @@ export const SHELL_MIN_HEIGHT = 120;
 export const SHELL_MAX_HEIGHT = 720;
 const clampShellHeight = (h: number) =>
   Math.min(SHELL_MAX_HEIGHT, Math.max(SHELL_MIN_HEIGHT, Math.round(h)));
+
+/** Clamp the bottom Timeline drawer height — the frieze itself is ~196px tall. */
+export const TIMELINE_MIN_HEIGHT = 160;
+export const TIMELINE_MAX_HEIGHT = 360;
+const clampTimelineHeight = (h: number) =>
+  Math.min(TIMELINE_MAX_HEIGHT, Math.max(TIMELINE_MIN_HEIGHT, Math.round(h)));
+
+const DEFAULT_TIMELINE_FILTERS: TimelineFilters = {
+  status: true, cli: true, pr: true, deliverables: true, comments: true,
+};
 
 type ModeFlags = Pick<WorkState, 'shellMode' | 'codeMode' | 'workflowMode'>;
 
@@ -314,6 +343,9 @@ const DEFAULTS: PersistedWork = {
   shellLayoutByTicket: {},
   shellPaneIdsByTicket: {},
   shellHeight: 240,
+  timelineOpen: false,
+  timelineHeight: 212,
+  timelineFilters: DEFAULT_TIMELINE_FILTERS,
   rightPanelWidth: 296,
   queueWidth: 300,
   queueCollapsed: false,
@@ -328,7 +360,14 @@ function load(): PersistedWork {
     const parsed = JSON.parse(raw) as Partial<PersistedWork>;
     // Merge over defaults so a stored blob from an older shape stays valid, and
     // migrate the draft (old blobs had no explicit title/stage — see migrateDraft).
-    return { ...DEFAULTS, ...parsed, draft: migrateDraft(parsed.draft) };
+    const merged = { ...DEFAULTS, ...parsed, draft: migrateDraft(parsed.draft) };
+    return {
+      ...merged,
+      // One bottom panel at a time: a blob holding both open keeps the shell.
+      timelineOpen: merged.timelineOpen === true && !merged.shellOpen,
+      timelineHeight: clampTimelineHeight(Number(merged.timelineHeight) || DEFAULTS.timelineHeight),
+      timelineFilters: { ...DEFAULT_TIMELINE_FILTERS, ...(parsed.timelineFilters ?? {}) },
+    };
   } catch {
     return DEFAULTS;
   }
@@ -360,6 +399,9 @@ export const useWorkStore = create<WorkState>((set, get) => {
       shellLayoutByTicket: s.shellLayoutByTicket,
       shellPaneIdsByTicket: s.shellPaneIdsByTicket,
       shellHeight: s.shellHeight,
+      timelineOpen: s.timelineOpen,
+      timelineHeight: s.timelineHeight,
+      timelineFilters: s.timelineFilters,
       rightPanelWidth: s.rightPanelWidth,
       queueWidth: s.queueWidth,
       queueCollapsed: s.queueCollapsed,
@@ -431,7 +473,12 @@ export const useWorkStore = create<WorkState>((set, get) => {
       commit({ activeScratchTabByTicket: { ...get().activeScratchTabByTicket, [ticketId]: tabKey } }),
     setSelectedThread: (selectedThreadId) => commit({ selectedThreadId }),
     setThreadTab: (threadTab) => commit({ threadTab }),
-    setShellOpen: (shellOpen) => commit({ shellOpen }),
+    // The shell drawer and the Timeline share the bottom slot: opening one closes the other.
+    setShellOpen: (shellOpen) => commit({ shellOpen, ...(shellOpen ? { timelineOpen: false } : {}) }),
+    setTimelineOpen: (timelineOpen) => commit({ timelineOpen, ...(timelineOpen ? { shellOpen: false } : {}) }),
+    setTimelineHeight: (height) => commit({ timelineHeight: clampTimelineHeight(height) }),
+    toggleTimelineFilter: (key) =>
+      commit({ timelineFilters: { ...get().timelineFilters, [key]: !get().timelineFilters[key] } }),
     // Shell mode and Code mode both take over the center — entering one exits the other.
     setShellMode: (shellMode) => commitMode({ shellMode, ...(shellMode ? { codeMode: false, workflowMode: false } : {}) }),
     setCodeMode: (codeMode) => commitMode({ codeMode, ...(codeMode ? { shellMode: false, workflowMode: false } : {}) }),

@@ -3,7 +3,9 @@
  * right tool window (JetBrains model — clicking the active tool closes it). Ships
  * Context, Diff, Code and Deliverables; Threads (Phase 3) is still absent. Diff
  * shows a dot when the branch has changes. The bottom Shell button toggles the
- * drawer rather than a right panel, so it lives outside the panel-toggling group.
+ * drawer rather than a right panel, so it lives outside the panel-toggling group,
+ * with the Timeline button right above it: both toggle the one bottom slot
+ * (opening one closes the other — enforced in workStore).
  */
 import { cn } from '../../../lib/cn';
 import { useWorkStore, type RightPanel } from '../../../stores/workStore';
@@ -84,6 +86,8 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
   const shellOpen = useWorkStore((s) => s.shellOpen);
   const shellMode = useWorkStore((s) => s.shellMode);
   const setShellOpen = useWorkStore((s) => s.setShellOpen);
+  const timelineOpen = useWorkStore((s) => s.timelineOpen);
+  const setTimelineOpen = useWorkStore((s) => s.setTimelineOpen);
   const codeMode = useWorkStore((s) => s.codeMode);
   const setCodeMode = useWorkStore((s) => s.setCodeMode);
   const shellActive = shellOpen || shellMode;
@@ -125,6 +129,31 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
         );
       })}
 
+      {/* Timeline toggles the bottom drawer's other occupant (⌥T) — pinned bottom,
+          right above Shell. */}
+      <button
+        type="button"
+        disabled={!task}
+        onClick={() => setTimelineOpen(!timelineOpen)}
+        title="Toggle timeline (⌥T)"
+        aria-pressed={timelineOpen}
+        className={cn(
+          'relative mt-auto flex w-[52px] flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] transition-colors disabled:opacity-40',
+          timelineOpen
+            ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+            : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
+        )}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="3" y1="12" x2="19" y2="12" />
+          <circle cx="6" cy="12" r="2.2" />
+          <circle cx="11" cy="12" r="2.2" />
+          <circle cx="16" cy="12" r="2.2" />
+          <line x1="21" y1="7" x2="21" y2="17" strokeDasharray="2 2" />
+        </svg>
+        Timeline
+      </button>
+
       {/* Shell toggles the bottom drawer (⌘J), not a right panel — pinned bottom.
           Its badge counts the ticket's tmux sessions. */}
       <button
@@ -137,7 +166,7 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
             : 'Toggle shell drawer (⌘J)'
         }
         className={cn(
-          'relative mt-auto flex w-[52px] flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] transition-colors disabled:opacity-40',
+          'relative flex w-[52px] flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] transition-colors disabled:opacity-40',
           shellActive
             ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',

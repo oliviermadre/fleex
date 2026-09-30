@@ -12,7 +12,7 @@ export function StreamItem({ comment }: { comment: TicketComment }) {
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end" data-comment-id={comment.id}>
         <div className="min-w-0 max-w-[80%] overflow-hidden rounded-xl rounded-br-sm bg-[var(--theme-accent-muted)] px-3 py-2 text-[13px] text-[var(--theme-text-primary)]">
           <MessageMarkdown body={comment.body} />
         </div>
@@ -21,7 +21,7 @@ export function StreamItem({ comment }: { comment: TicketComment }) {
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-2" data-comment-id={comment.id}>
       <div
         className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--tint-purple-bg)] text-[12px] text-[var(--tint-purple-text)]"
         aria-hidden

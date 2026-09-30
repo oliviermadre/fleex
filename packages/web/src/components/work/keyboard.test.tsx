@@ -39,3 +39,30 @@ describe('useWorkKeyboard — Esc in the new-task view', () => {
     expect(useWorkStore.getState().view).toBe('task');
   });
 });
+
+describe('useWorkKeyboard — ⌥T toggles the Timeline drawer', () => {
+  function pressAltT(target: EventTarget = window) {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: '†', code: 'KeyT', altKey: true, bubbles: true }));
+  }
+
+  beforeEach(() => {
+    useWorkStore.setState({ view: 'task', shellOpen: true, timelineOpen: false });
+  });
+
+  it('opens the Timeline (closing the shell drawer) then closes it', () => {
+    render(<Harness />);
+    pressAltT();
+    expect([useWorkStore.getState().timelineOpen, useWorkStore.getState().shellOpen]).toEqual([true, false]);
+    pressAltT();
+    expect(useWorkStore.getState().timelineOpen).toBe(false);
+  });
+
+  it('does nothing while typing in a field (⌥T types a character on macOS)', () => {
+    render(<Harness />);
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    pressAltT(input);
+    expect(useWorkStore.getState().timelineOpen).toBe(false);
+    input.remove();
+  });
+});

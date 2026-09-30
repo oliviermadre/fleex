@@ -2,7 +2,7 @@
  * Work view keyboard map. Phase 1 handles ⌥N (new task), Esc (cancel new task),
  * and ⌘⇧↑/↓ to move between tasks in the queue's displayed order (wrapping, like
  * the Sessions view). Phase 2 adds ⌘J (toggle shell drawer) and ⌘⇧J (toggle shell
- * mode); ⌘1-4 (focus a pane) is owned by the mounted shell grid, not here.
+ * mode), ⌥T toggles the Timeline drawer; ⌘1-4 (focus a pane) is owned by the mounted shell grid, not here.
  * ⌃< / ⌃⇧< cycle the center mode (Chat → Shell → Code → Workflow when present).
  * Text-target shortcuts are ignored while typing in a field, except Esc; the meta
  * combos (⌘J/⌘⇧J and queue nav) fire regardless, like the app's other ⌘ shortcuts.
@@ -67,6 +67,15 @@ export function useWorkKeyboard(orderedIds: readonly string[]): void {
       if (meta && !e.shiftKey && (e.key.toLowerCase() === 'j' || e.code === 'KeyJ')) {
         e.preventDefault();
         useWorkStore.getState().setShellOpen(!useWorkStore.getState().shellOpen);
+        return;
+      }
+
+      // ⌥T — toggle the Timeline drawer (shares the bottom slot with the shell
+      // drawer: the store closes one when the other opens). Not while typing.
+      if (e.altKey && !meta && (e.key.toLowerCase() === 't' || e.code === 'KeyT') && !isTypingTarget(e.target)) {
+        e.preventDefault();
+        const store = useWorkStore.getState();
+        store.setTimelineOpen(!store.timelineOpen);
         return;
       }
 

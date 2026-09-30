@@ -250,3 +250,65 @@ describe('filtersRevealing', () => {
     ).toEqual({ boardFilters: [], priorityFilters: [], favoriteOnly: false, search: '' });
   });
 });
+
+// The shell drawer and the Timeline share the one bottom slot of the Work view:
+// showing both would stack two drawers and squash the center, so the store must
+// make that state unreachable — from the buttons, from ⌘J, and from a stale blob.
+describe('workStore — one bottom panel at a time', () => {
+  const s = () => useWorkStore.getState();
+
+  beforeEach(() => {
+    localStorage.clear();
+    useWorkStore.setState({ shellOpen: false, timelineOpen: false });
+  });
+
+  it('opening the Timeline closes the shell drawer', () => {
+    s().setShellOpen(true);
+    s().setTimelineOpen(true);
+    expect([s().shellOpen, s().timelineOpen]).toEqual([false, true]);
+  });
+
+  it('opening the shell drawer (button or ⌘J) closes the Timeline', () => {
+    s().setTimelineOpen(true);
+    s().setShellOpen(true);
+    expect([s().shellOpen, s().timelineOpen]).toEqual([true, false]);
+  });
+
+  it('closing one never reopens the other', () => {
+    s().setTimelineOpen(true);
+    s().setTimelineOpen(false);
+    expect([s().shellOpen, s().timelineOpen]).toEqual([false, false]);
+  });
+
+  it('shell mode (center takeover) is not a bottom panel and leaves the Timeline open', () => {
+    s().setTimelineOpen(true);
+    s().setShellMode(true);
+    expect(s().timelineOpen).toBe(true);
+    s().setShellMode(false);
+  });
+
+  it('clamps the Timeline height and persists it with the open state and filters', () => {
+    s().setTimelineHeight(10);
+    expect(s().timelineHeight).toBe(160);
+    s().setTimelineHeight(9999);
+    expect(s().timelineHeight).toBe(360);
+    s().setTimelineOpen(true);
+    s().toggleTimelineFilter('comments');
+    const stored = JSON.parse(localStorage.getItem('fleex_work')!);
+    expect(stored.timelineOpen).toBe(true);
+    expect(stored.timelineHeight).toBe(360);
+    expect(stored.timelineFilters.comments).toBe(false);
+    expect(stored.timelineFilters.status).toBe(true);
+    s().toggleTimelineFilter('comments');
+  });
+
+  it('repairs a stored blob that had both bottom panels open (the shell wins)', async () => {
+    localStorage.setItem('fleex_work', JSON.stringify({ shellOpen: true, timelineOpen: true, timelineHeight: 5 }));
+    vi.resetModules();
+    const { useWorkStore: fresh } = await import('./workStore');
+    const st = fresh.getState();
+    expect([st.shellOpen, st.timelineOpen]).toEqual([true, false]);
+    expect(st.timelineHeight).toBe(160);
+    expect(st.timelineFilters).toEqual({ status: true, cli: true, pr: true, deliverables: true, comments: true });
+  });
+});
