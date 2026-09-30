@@ -29,6 +29,11 @@ interface Props {
   error: string | null;
   onAnswer: (optionText: string) => void | Promise<void>;
   onOpenExecution: (executionId: string, title: string) => void;
+  /**
+   * Render the answerable cards (inline question options, HITL / workflow action
+   * cards). Off when the host already owns those actions, e.g. the Focus popup.
+   */
+  showActionCards?: boolean;
 }
 
 export function TaskStream({
@@ -43,6 +48,7 @@ export function TaskStream({
   error,
   onAnswer,
   onOpenExecution,
+  showActionCards = true,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +64,7 @@ export function TaskStream({
   // The pending question is the last agent comment when the task is waiting and
   // that comment offers a parseable choice.
   const questionCommentId = useMemo(() => {
-    if (activity !== 'waiting') return null;
+    if (!showActionCards || activity !== 'waiting') return null;
     for (let i = comments.length - 1; i >= 0; i--) {
       const c = comments[i]!;
       if (c.authorType === 'agent') {
@@ -66,7 +72,7 @@ export function TaskStream({
       }
     }
     return null;
-  }, [comments, activity]);
+  }, [comments, activity, showActionCards]);
 
   const hasContent = stream.length > 0 || (description && description.trim().length > 0);
 
@@ -116,14 +122,16 @@ export function TaskStream({
         {/* Actionable HITL / workflow cards (Human Gate approve-reject, waiting
             for input, ambiguous route, failed-step retry, crashed relaunch,
             running / waiting banners) — same surface as the ticket Comments tab. */}
-        <TicketActionCards
-          ticketId={ticketId}
-          deliverables={deliverables}
-          onOpenExecution={onOpenExecution}
-          // The stream already renders a RunCard per running execution, so the
-          // "…is working" banner would double-report it.
-          showRunningBanner={false}
-        />
+        {showActionCards && (
+          <TicketActionCards
+            ticketId={ticketId}
+            deliverables={deliverables}
+            onOpenExecution={onOpenExecution}
+            // The stream already renders a RunCard per running execution, so the
+            // "…is working" banner would double-report it.
+            showRunningBanner={false}
+          />
+        )}
 
         {loading && !hasContent && (
           <div className="py-8 text-center text-[12px] text-[var(--theme-text-faint)]">Loading conversation…</div>

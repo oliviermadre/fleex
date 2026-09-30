@@ -5,9 +5,10 @@
  * the conversation execution bar (mode / model / effort / fast), inline image
  * paste + paperclip upload, and the same @-mention autocomplete. Posts on Enter
  * (Shift+Enter inserts a newline); the value is controlled by the parent so a
- * suggestion chip can seed an @mention.
+ * suggestion chip can seed an @mention. Also embedded in the Focus popup
+ * (`bare`, ⌘⏎ submit), so an answer can be written there with the same tools.
  */
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, type RefObject } from 'react';
 import { usePanelStore } from '../../../stores/panelStore';
 import { useSkillStore } from '../../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../../stores/workflowTemplateStore';
@@ -26,10 +27,25 @@ interface Props {
   disabled?: boolean;
   posting?: boolean;
   onSend: (body: string) => void | Promise<void>;
+  placeholder?: string;
+  /**
+   * `enter` (default): Enter posts, Shift+Enter is a newline. `mod-enter`: ⌘/Ctrl+Enter posts.
+   * `none`: the keyboard never posts — the host submits the text itself (e.g. a gate decision note).
+   */
+  submitOn?: 'enter' | 'mod-enter' | 'none';
+  /** Show the Mode / Model / Effort / Fast bar (default true). */
+  showExecBar?: boolean;
+  /** Show the send button (default true). */
+  showSend?: boolean;
+  /** Drop the Work-stream framing (top border, padding) when embedded elsewhere, e.g. the Focus popup. */
+  bare?: boolean;
+  /** Lets the host focus the textarea. */
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
 }
 
-export function Composer({ ticketId, value, onChange, disabled, posting, onSend }: Props) {
-  const ref = useRef<HTMLTextAreaElement>(null);
+export function Composer({ ticketId, value, onChange, disabled, posting, onSend, placeholder, submitOn = 'enter', showExecBar = true, showSend = true, bare, textareaRef }: Props) {
+  const ownRef = useRef<HTMLTextAreaElement>(null);
+  const ref = textareaRef ?? ownRef;
 
   // Populate the mention stores so the @-menu isn't sparse (tickets, personas
   // and scratchpads are primed elsewhere in the app).
@@ -50,8 +66,12 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend 
   const send = useCallback(async () => {
     const body = value.trim();
     if (!body || disabled || posting) return;
-    await onSend(body);
     // Clear only after a successful post, so an error keeps the draft.
+    try {
+      await onSend(body);
+    } catch {
+      return; // the caller already surfaced the error
+    }
     onChange('');
     ref.current?.focus();
   }, [value, disabled, posting, onSend, onChange]);
@@ -59,19 +79,22 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend 
   const onKeyDown = (e: React.KeyboardEvent) => {
     // Let the mention menu consume Arrow/Tab/Enter/Escape first.
     if (mentionAc.onKeyDown(e)) return;
-    // Execution mode cycle: Shift+Tab (Talk→Plan→Edit→Talk), à la Claude Code.
-    if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
-      e.preventDefault();
-      exec.cycleMode();
-      return;
+    if (showExecBar) {
+      // Execution mode cycle: Shift+Tab (Talk→Plan→Edit→Talk), à la Claude Code.
+      if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        exec.cycleMode();
+        return;
+      }
+      // Execution mode toggle: Ctrl+1/2/3 (direct selection).
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        if (e.key === '1') { e.preventDefault(); exec.setExecutionMode('talk'); return; }
+        if (e.key === '2') { e.preventDefault(); exec.setExecutionMode('plan'); return; }
+        if (e.key === '3') { e.preventDefault(); exec.setExecutionMode('edit'); return; }
+      }
     }
-    // Execution mode toggle: Ctrl+1/2/3 (direct selection).
-    if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
-      if (e.key === '1') { e.preventDefault(); exec.setExecutionMode('talk'); return; }
-      if (e.key === '2') { e.preventDefault(); exec.setExecutionMode('plan'); return; }
-      if (e.key === '3') { e.preventDefault(); exec.setExecutionMode('edit'); return; }
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
+    const submit = submitOn === 'mod-enter' ? e.metaKey || e.ctrlKey : submitOn === 'enter' && !e.shiftKey;
+    if (e.key === 'Enter' && submit) {
       e.preventDefault();
       void send();
     }
@@ -79,7 +102,7 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend 
 
   return (
     <div
-      className="shrink-0 border-t border-[var(--theme-border)] p-3"
+      className={bare ? 'min-w-0' : 'shrink-0 border-t border-[var(--theme-border)] p-3'}
       {...fileUpload.dragProps}
     >
       <MarkdownEditor
@@ -91,7 +114,7 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend 
         // The drop target is the wrapper above, so the editor can't detect the
         // drag itself — it just mirrors the highlight.
         dragOver={fileUpload.isDragOver}
-        placeholder="Reply, or @ to bring in agents, skills, panels, workflows, tickets…"
+        placeholder={placeholder ?? 'Reply, or @ to bring in agents, skills, panels, workflows, tickets…'}
         textareaRef={ref}
         maxRows={10}
         textareaProps={{
@@ -122,23 +145,27 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend 
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
               </svg>
             </button>
-            <button
-              type="button"
-              className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-30"
-              onClick={() => void send()}
-              disabled={disabled || posting || !value.trim()}
-              title="Send (Enter)"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-              </svg>
-            </button>
+            {showSend && (
+              <button
+                type="button"
+                className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-30"
+                onClick={() => void send()}
+                disabled={disabled || posting || !value.trim()}
+                title={submitOn === 'mod-enter' ? 'Send (⌘⏎)' : 'Send (Enter)'}
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+              </button>
+            )}
           </>
         }
         actions={
           <>
-            <ComposerExecBar exec={exec} />
-            <span className="ml-auto text-[11px] text-[var(--theme-text-faint)]">⇧⏎ newline</span>
+            {showExecBar && <ComposerExecBar exec={exec} />}
+            {submitOn !== 'none' && (
+              <span className="ml-auto text-[11px] text-[var(--theme-text-faint)]">{submitOn === 'mod-enter' ? '⌘⏎ envoyer' : '⇧⏎ newline'}</span>
+            )}
           </>
         }
       />

@@ -41,6 +41,7 @@ export function MentionMenu({
   return (
     <div
       ref={listRef}
+      data-mention-menu
       className="absolute z-30 max-h-48 min-w-[200px] overflow-y-auto rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
       style={{ bottom: position.bottom, left: position.left }}
     >
