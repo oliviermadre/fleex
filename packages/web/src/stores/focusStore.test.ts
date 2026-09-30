@@ -16,7 +16,7 @@ function item(key: string, over: Partial<FocusItem> = {}): FocusItem {
   };
 }
 
-const PREFS = { zen: false, chain: true, showIdle: true, showRunning: false };
+const PREFS = { zen: false, chain: true, showIdle: true, showRunning: false, detailTab: 'thread' as const };
 
 describe('focusStore', () => {
   beforeEach(() => {

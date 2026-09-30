@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Board, FocusItem, Ticket, TicketDeliverable } from '@fleex/shared';
 import { Modal } from '../ui/Modal';
 import { cn } from '../../lib/cn';
@@ -10,12 +10,18 @@ import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { MessageMarkdown } from '../work/task/MessageMarkdown';
 import { useTicketDeliverables } from '../work/panel/useTicketDeliverables';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { Composer } from '../work/task/Composer';
+import { ComposerExecBar } from '../markdown/ComposerExecBar';
+import { useExecConfig } from '../../hooks/useExecConfig';
+import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
 import { executeSkill, fetchPRStates, postTicketComment } from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
+import { useFocusStore } from '../../stores/focusStore';
+import { FocusThread } from './FocusThread';
 import { KindIcon } from './FocusIcons';
 import { KIND_META, formatWait, waitedMs, type FocusAction } from './focusModel';
 
@@ -66,16 +72,32 @@ function isUrl(s: string): boolean {
   return /^https?:\/\/\S+$/.test(s.trim());
 }
 
+const CTA_BASE = 'inline-flex h-8 items-center gap-2 whitespace-nowrap rounded-lg border px-3 text-[12.5px] font-semibold transition-colors';
+const CTA_PRIMARY = 'border-transparent bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]';
+const CTA_SECONDARY = 'border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] hover:border-[var(--theme-text-muted)]';
+
 /**
- * The detail popup (blurred backdrop): just enough context to fire the next
- * agentic action with confidence — what is being asked, the choices and where
- * they lead, the agent's last message, the deliverables, the workflow position.
- * J/K move to the neighbouring item, 1–3 fire a choice, Esc closes.
+ * The detail popup (blurred backdrop): everything needed to fire the next agentic
+ * action from here. Three zones: the ticket's context on top (title, PRs, workflow
+ * position), its state in the middle (the conversation thread, or the deliverables),
+ * and the actions pinned at the bottom (what is asked, the composer, the choices,
+ * snooze). J/K move to the neighbouring item, 1–3 fire a choice, Esc closes.
  */
 export function FocusDetailModal(props: Props) {
   const { item, ticket, board, actions, now, position, chain, onChainChange, onClose, onPrev, onNext, onAction, onAnswer, onSnooze, onOpenTicket, onOpenLogs } = props;
   const meta = KIND_META[item.kind];
+  // Gate decision note: local, it travels with the decision. Answers and comments use the
+  // ticket's comment draft, shared with the Tasks composer.
   const [notes, setNotes] = useState('');
+  const { draft, setDraft } = useCommentDraft(ticket.id);
+  // The composer clears its value once onSend resolves; by then the popup may already show
+  // the next ticket, whose draft must survive. Each setter only writes its own ticket's draft.
+  const liveTicketId = useRef(ticket.id);
+  useLayoutEffect(() => { liveTicketId.current = ticket.id; }, [ticket.id]);
+  const draftSetter = (id: string) => (v: string) => { if (liveTicketId.current === id) setDraft(v); };
+  const exec = useExecConfig(ticket.id);
+  const tab = useFocusStore((s) => s.prefs.detailTab);
+  const setPref = useFocusStore((s) => s.setPref);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [commenting, setCommenting] = useState(false);
   const addToast = useToastStore((s) => s.addToast);
@@ -100,9 +122,10 @@ export function FocusDetailModal(props: Props) {
     return () => clearTimeout(t);
   }, [item.key, item.kind, item.question?.source]);
 
-  const send = () => {
-    const text = notes.trim();
+  const send = (body = draft) => {
+    const text = body.trim();
     if (!text) { answerRef.current?.focus(); return; }
+    setDraft('');
     onAnswer(text);
   };
 
@@ -146,73 +169,71 @@ export function FocusDetailModal(props: Props) {
       ticketId={ticket.id}
       onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
       launcher={{
-        className: 'grid h-full w-full gap-0.5 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2.5 text-left text-[var(--theme-text-primary)] hover:border-[var(--theme-text-muted)]',
-        content: (
-          <>
-            <span className="text-[13px] font-semibold">Lancer un run ▾</span>
-            <span className="text-[11.5px] opacity-75">workflow, skill, panel, agent ou session</span>
-          </>
-        ),
+        className: cn(CTA_BASE, CTA_SECONDARY),
+        content: <span title="workflow, skill, panel, agent ou session">Lancer un run ▾</span>,
       }}
     />
   );
 
-  const comment = async () => {
-    const text = notes.trim();
-    if (!text) { answerRef.current?.focus(); return; }
+  // Throws on failure so the composer keeps the draft (the API layer already toasted the error).
+  const comment = async (text: string) => {
     setCommenting(true);
     try {
       await postTicketComment(ticket.id, text);
-      setNotes('');
       addToast('success', `#${ticket.displayId} · commentaire ajouté`);
-    } catch {
-      /* the API layer already toasted the server message; keep the draft */
     } finally {
       setCommenting(false);
     }
   };
 
-  const optionButton = (a: FocusAction, i: number, withNotes: boolean) => (
+  // A choice: label on one line (its hint as tooltip, or inline for a gate route, where
+  // "→ step" is what the decision is about), keyboard digit on the right.
+  const optionButton = (a: FocusAction, i: number, isGate: boolean) => (
     <button
       key={a.id}
       ref={a.primary ? primaryRef : undefined}
       type="button"
-      onClick={() => onAction(a, withNotes ? notes.trim() : undefined)}
-      className={cn(
-        'grid gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors',
-        a.primary
-          ? 'border-transparent bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]'
-          : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] hover:border-[var(--theme-text-muted)]',
-      )}
+      title={a.hint}
+      onClick={() => onAction(a, isGate ? notes.trim() : undefined)}
+      className={cn(CTA_BASE, a.primary ? CTA_PRIMARY : CTA_SECONDARY)}
     >
-      <span className="flex items-center gap-2 text-[13px] font-semibold">
-        {a.label}
-        {i < 9 && <kbd className="ml-auto rounded border border-current px-1 font-mono text-[10px] opacity-60">{i + 1}</kbd>}
-      </span>
-      {a.hint && <span className="text-[11.5px] opacity-75">{a.hint}</span>}
+      {a.label}
+      {isGate && a.hint && <span className="font-normal opacity-75">{a.hint}</span>}
+      {i < 9 && <kbd className="rounded border border-current px-1 font-mono text-[10px] opacity-60">{i + 1}</kbd>}
     </button>
   );
 
-  let ask: React.ReactNode;
+  // What is being asked (read) vs. what can be done about it (act): the prompt sits on top
+  // of the action zone, the controls below it.
+  let prompt: React.ReactNode;
+  let controls: React.ReactNode;
   if (item.kind === 'gate' && item.gate) {
-    ask = (
+    prompt = (
       <>
-        <AskHeader hue={meta.hue}>Ce qui t’attend · {item.gate.stepName}{item.workflow ? ` · ${item.workflow.name}` : ''}</AskHeader>
-        <p className="mb-2.5 text-[13px] text-[var(--theme-text-primary)]">
+        <AskHeader hue={meta.hue}>Ce qui t’attend · {item.gate.stepName}{item.workflow ? ` · ${item.workflow.name}` : ''} · depuis {wait}</AskHeader>
+        <Clamp resetKey={item.key}>
           {item.gate.mode === 'route'
             ? 'Plusieurs chemins correspondent : choisis celui que le workflow doit prendre.'
-            : 'Le workflow est arrêté sur une étape humaine.'} En attente depuis {wait}.
-        </p>
-        {item.gate.context && <Quote hue={meta.hue}><MessageMarkdown body={item.gate.context} /></Quote>}
-        <textarea
+            : 'Le workflow est arrêté sur une étape humaine.'}
+          {item.gate.context && <MessageMarkdown body={item.gate.context} />}
+        </Clamp>
+      </>
+    );
+    controls = (
+      <>
+        <Composer
+          bare
+          ticketId={ticket.id}
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
+          onChange={setNotes}
+          onSend={() => {}}
+          submitOn="none"
+          showExecBar={false}
+          showSend={false}
           placeholder="Commentaire joint à la décision (facultatif), lu par l’étape suivante"
-          className="mb-2 w-full resize-y rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 py-2 text-[13px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
         />
         {actions.length > 0 ? (
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">{actions.map((a, i) => optionButton(a, i, true))}</div>
+          <div className="flex flex-wrap gap-2">{actions.map((a, i) => optionButton(a, i, true))}</div>
         ) : (
           <p className="text-xs text-[var(--theme-text-muted)]">Aucune issue configurée : résous cette gate depuis l’onglet Workflow du ticket.</p>
         )}
@@ -220,121 +241,119 @@ export function FocusDetailModal(props: Props) {
     );
   } else if (item.kind === 'question' && item.question?.source === 'session') {
     const q = item.question;
-    ask = (
+    prompt = (
       <>
         <AskHeader hue={meta.hue}>
           Ce qui t’attend · la session Claude du terminal {q.sessionWait === 'permission' ? 'attend ton autorisation' : 'te pose une question'} depuis {wait}
         </AskHeader>
-        {q.text && <Quote hue={meta.hue}><MessageMarkdown body={q.text} /></Quote>}
-        <p className="mb-2.5 text-[13px] text-[var(--theme-text-primary)]">La réponse se donne dans le terminal : ouvre la session.</p>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">{actions.map((a, i) => optionButton(a, i, false))}</div>
+        <Clamp resetKey={item.key}>
+          {q.text && <MessageMarkdown body={q.text} />}
+          <p>La réponse se donne dans le terminal : ouvre la session.</p>
+        </Clamp>
       </>
     );
+    controls = <div className="flex flex-wrap gap-2">{actions.map((a, i) => optionButton(a, i, false))}</div>;
   } else if (item.kind === 'question') {
-    ask = (
+    prompt = (
       <>
         <AskHeader hue={meta.hue}>Ce qui t’attend · {item.question?.askedBy ? `${item.question.askedBy} ` : ''}a une question depuis {wait}</AskHeader>
-        {item.question?.text
-          ? <Quote hue={meta.hue}><MessageMarkdown body={item.question.text} /></Quote>
-          : <p className="mb-2 text-xs text-[var(--theme-text-muted)]">Le texte de la question n’a pas été retrouvé : ouvre le ticket pour le lire.</p>}
-        <textarea
-          ref={answerRef}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
-          }}
-          rows={3}
-          placeholder="Ta réponse… (⌘⏎ pour envoyer)"
-          className="mb-2 w-full resize-y rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 py-2 text-[13px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
+        <Clamp resetKey={item.key}>
+          {item.question?.text
+            ? <MessageMarkdown body={item.question.text} />
+            : <p className="text-[var(--theme-text-muted)]">Le texte de la question n’a pas été retrouvé : ouvre le ticket pour le lire.</p>}
+        </Clamp>
+      </>
+    );
+    controls = (
+      <>
+        <Composer
+          bare
+          ticketId={ticket.id}
+          textareaRef={answerRef}
+          value={draft}
+          onChange={draftSetter(ticket.id)}
+          onSend={send}
+          submitOn="mod-enter"
+          showSend={false}
+          placeholder="Ta réponse… @ pour mentionner, colle une capture (⌘⏎ pour envoyer)"
         />
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
-          {actions.map((a, i) => optionButton(a, i, false))}
-          <button
-            type="button"
-            onClick={send}
-            className="grid gap-0.5 rounded-lg bg-[var(--theme-accent)] px-3 py-2.5 text-left text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]"
-          >
-            <span className="flex items-center gap-2 text-[13px] font-semibold">Envoyer la réponse <kbd className="ml-auto rounded border border-current px-1 font-mono text-[10px] opacity-60">⌘⏎</kbd></span>
-            <span className="text-[11.5px] opacity-75">l’agent repart aussitôt</span>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => send()} title="l’agent repart aussitôt" className={cn(CTA_BASE, CTA_PRIMARY)}>
+            Envoyer la réponse <kbd className="rounded border border-current px-1 font-mono text-[10px] opacity-60">⌘⏎</kbd>
           </button>
+          {actions.map((a, i) => optionButton(a, i, false))}
         </div>
       </>
     );
   } else if (item.kind === 'error' && item.error) {
     const e = item.error;
-    ask = (
+    prompt = (
       <>
         <AskHeader hue={meta.hue}>
           Ce qui t’attend · {e.source === 'step' ? `l’étape « ${e.label} » a échoué` : `la session de ${e.label} a crashé`} il y a {wait}
         </AskHeader>
-        <p className={cn('mb-2.5 text-[13px]', tintClasses('red').text)}>
+        <Clamp resetKey={item.key} className={tintClasses('red').text}>
           {e.message ?? (e.source === 'step'
             ? 'L’étape s’est arrêtée (crash, limite de tours ou redémarrage du serveur).'
             : 'La session s’est interrompue. Consulte les logs, puis relance.')}
-        </p>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
+        </Clamp>
+      </>
+    );
+    controls = (
+      <>
+        <div className="flex flex-wrap items-center gap-2 text-xs"><ComposerExecBar exec={exec} /></div>
+        <div className="flex flex-wrap gap-2">
           {actions.map((a, i) => optionButton(a, i, false))}
           {e.executionId && (
-            <button
-              type="button"
-              onClick={() => onOpenLogs(e.executionId!)}
-              className="grid gap-0.5 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2.5 text-left text-[var(--theme-text-primary)] hover:border-[var(--theme-text-muted)]"
-            >
-              <span className="text-[13px] font-semibold">Voir les logs</span>
-              <span className="text-[11.5px] opacity-75">l’exécution en échec</span>
+            <button type="button" onClick={() => onOpenLogs(e.executionId!)} title="l’exécution en échec" className={cn(CTA_BASE, CTA_SECONDARY)}>
+              Voir les logs
             </button>
           )}
           {launcherButton}
         </div>
-
       </>
     );
   } else {
-    ask = (
+    prompt = (
       <>
         <AskHeader hue={meta.hue}>Ce qui t’attend · inactif depuis {wait}</AskHeader>
-        <p className="mb-2.5 text-[13px] text-[var(--theme-text-primary)]">
+        <Clamp resetKey={item.key}>
           {item.idle?.cliRestAt
             ? 'La session Claude du terminal est au repos : elle attend ta prochaine instruction. Reprends-la, lance un run, fais avancer le ticket, ou laisse un commentaire.'
             : <>Personne ne travaille sur ce ticket{item.idle?.lastActivityAt ? '' : ' et aucun agent n’y a encore travaillé'}. Relance un agent, ou clos-le.</>}
-        </p>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
+        </Clamp>
+      </>
+    );
+    controls = (
+      <>
+        <Composer
+          bare
+          ticketId={ticket.id}
+          textareaRef={answerRef}
+          value={draft}
+          onChange={draftSetter(ticket.id)}
+          onSend={comment}
+          posting={commenting}
+          submitOn="mod-enter"
+          placeholder="Laisser un commentaire sur le ticket… @ pour mentionner (⌘⏎)"
+        />
+        <div className="flex flex-wrap gap-2">
           {actions.map((a, i) => optionButton(a, i, false))}
           {launcherButton}
         </div>
-        <textarea
-          ref={answerRef}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void comment(); }
-          }}
-          rows={2}
-          placeholder="Laisser un commentaire sur le ticket… (⌘⏎)"
-          className="mt-2.5 w-full resize-y rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 py-2 text-[13px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
-        />
-        {notes.trim() && (
-          <div className="mt-1.5 flex justify-end">
-            <button
-              type="button"
-              onClick={() => void comment()}
-              disabled={commenting}
-              className="h-7 rounded-md border border-[var(--theme-border-input)] px-2.5 text-xs font-semibold text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] disabled:opacity-50"
-            >
-              Commenter
-            </button>
-          </div>
-        )}
       </>
     );
   }
 
+  const unseen = deliverables.filter((d) => !seen?.has(d.id)).length;
+
   return (
     // Below the floating terminals (z 45+): a session opened from here must show on top of the popup.
-    <Modal open onClose={onClose} maxWidth="max-w-[860px]" className="max-h-[88vh] overflow-y-auto p-0" zIndexClass="z-40">
-      <div role="dialog" aria-modal="true" aria-labelledby="focus-detail-title">
-        <header className="group grid gap-2 border-b border-[var(--theme-border)] px-5 pb-3.5 pt-4">
+    // Fixed height, three zones: context on top, the ticket's state scrolling in the middle,
+    // the actions pinned at the bottom — always reachable whatever the volume above.
+    <Modal open onClose={onClose} maxWidth="max-w-[860px]" className="flex h-[88vh] flex-col overflow-hidden p-0" zIndexClass="z-40">
+      <div role="dialog" aria-modal="true" aria-labelledby="focus-detail-title" className="flex min-h-0 flex-1 flex-col">
+        <header className="group grid shrink-0 gap-2 border-b border-[var(--theme-border)] px-5 pb-3.5 pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn('inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold', tint(meta.hue))}>
               <KindIcon kind={item.kind} />{meta.label}
@@ -360,25 +379,68 @@ export function FocusDetailModal(props: Props) {
           <div className="flex items-start gap-1.5">
             <h2 id="focus-detail-title" className="text-lg font-bold leading-tight text-[var(--theme-text-primary)] [text-wrap:balance]">{ticket.title}</h2>
             <span className="mt-1"><FocusFavoriteStar ticket={ticket} /></span>
+            <span className="ml-auto mt-1 shrink-0 font-mono text-xs text-[var(--theme-text-muted)]" title="Coût cumulé du ticket">${item.costUsd.toFixed(2)}</span>
           </div>
+          {prLinks.length > 0 && (
+            <div className="flex min-w-0 flex-wrap gap-1">
+              {prLinks.map((l) => {
+                const pr = parseGithubPrRef(l.ref);
+                return pr ? (
+                  <PrBadge
+                    key={l.id}
+                    org={pr.org}
+                    name={pr.name}
+                    pr={{ number: pr.number, state: prStateFromGithub(prStates[l.ref]), title: l.label }}
+                    href={l.url ?? undefined}
+                  />
+                ) : (
+                  <a key={l.id} href={l.url ?? undefined} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)]">
+                    {l.label}
+                  </a>
+                );
+              })}
+            </div>
+          )}
+          {item.workflow && (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 text-[11px] text-[var(--theme-text-muted)]">{item.workflow.emoji ? `${item.workflow.emoji} ` : ''}{item.workflow.name}</span>
+              {item.workflow.steps.map((st, i) => (
+                <span key={st.id} className="inline-flex items-center gap-1">
+                  {i > 0 && <span className="text-[11px] text-[var(--theme-text-faint)]">›</span>}
+                  <span
+                    className={cn(
+                      'rounded-full border px-2 py-0.5 text-[11px]',
+                      st.state === 'current'
+                        ? cn(tint(meta.hue), 'font-semibold')
+                        : st.state === 'done'
+                          ? 'border-[var(--theme-border-input)] text-[var(--theme-text-secondary)]'
+                          : 'border-[var(--theme-border)] text-[var(--theme-text-faint)]',
+                    )}
+                  >
+                    {st.state === 'done' ? '✓ ' : ''}{st.name}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
         </header>
 
-        <section className={cn('mx-5 mt-4 rounded-xl border p-4', tintClasses(meta.hue).borderColor, tintClasses(meta.hue).bg)}>{ask}</section>
-
-        <div className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-          <div className="grid min-w-0 content-start gap-4">
-            {item.lastAgentComment && (item.kind !== 'question' || item.lastAgentComment.body !== item.question?.text) && (
-              <Section title={`Dernier message · ${item.lastAgentComment.authorName}`}>
-                <div className="max-h-56 overflow-y-auto rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-3 py-2 text-[12.5px] text-[var(--theme-text-secondary)]">
-                  <MessageMarkdown body={item.lastAgentComment.body} />
-                </div>
-              </Section>
-            )}
-            <Section title={`Livrables · ${deliverables.length}`}>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div role="tablist" className="flex shrink-0 gap-1 border-b border-[var(--theme-border)] px-5">
+            <TabButton active={tab === 'thread'} onClick={() => setPref('detailTab', 'thread')}>Fil</TabButton>
+            <TabButton active={tab === 'deliverables'} onClick={() => setPref('detailTab', 'deliverables')}>
+              Livrables · {deliverables.length}
+              {unseen > 0 && <span className={cn('ml-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle', tintClasses('pink').solid)} title={`${unseen} non lu${unseen > 1 ? 's' : ''}`} />}
+            </TabButton>
+          </div>
+          {tab === 'thread' ? (
+            <FocusThread ticket={ticket} deliverables={deliverables} onOpenLogs={onOpenLogs} />
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
               {deliverables.length === 0 ? (
                 <span className="text-xs text-[var(--theme-text-faint)]">aucun livrable</span>
               ) : (
-                <div className="grid gap-1">
+                <div className="flex flex-col gap-1">
                   {[...deliverables].reverse().map((d) => (
                     <button
                       key={d.id}
@@ -387,68 +449,23 @@ export function FocusDetailModal(props: Props) {
                       className="flex w-full items-center gap-2 rounded-md border border-[var(--theme-border)] px-2.5 py-1.5 text-left text-[12.5px] text-[var(--theme-text-primary)] hover:border-[var(--theme-border-input)]"
                     >
                       <DeliverableTypeBadge type={d.type} />
-                      <span className="min-w-0 truncate">{d.title}</span>
+                      <span className="min-w-0 flex-1 truncate">{d.title}</span>
                       {!seen?.has(d.id) && <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', tintClasses('pink').solid)} title="Non lu" />}
-                      <span className="ml-auto whitespace-nowrap text-[11px] text-[var(--theme-text-muted)]">{d.agentName} · {d.status}</span>
+                      <span className="max-w-[40%] shrink-0 truncate whitespace-nowrap text-[11px] text-[var(--theme-text-muted)]" title={`${d.agentName} · ${d.status}`}>{d.agentName} · {d.status}</span>
                     </button>
                   ))}
                 </div>
               )}
-            </Section>
-          </div>
-          <div className="grid min-w-0 content-start gap-4">
-            {item.workflow && (
-              <Section title={`${item.workflow.emoji ? `${item.workflow.emoji} ` : ''}${item.workflow.name}`}>
-                <div className="flex flex-wrap items-center gap-1">
-                  {item.workflow.steps.map((s, i) => (
-                    <span key={s.id} className="inline-flex items-center gap-1">
-                      {i > 0 && <span className="text-[11px] text-[var(--theme-text-faint)]">›</span>}
-                      <span
-                        className={cn(
-                          'rounded-full border px-2 py-0.5 text-[11px]',
-                          s.state === 'current'
-                            ? cn(tint(meta.hue), 'font-semibold')
-                            : s.state === 'done'
-                              ? 'border-[var(--theme-border-input)] text-[var(--theme-text-secondary)]'
-                              : 'border-[var(--theme-border)] text-[var(--theme-text-faint)]',
-                        )}
-                      >
-                        {s.state === 'done' ? '✓ ' : ''}{s.name}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </Section>
-            )}
-            <Section title="Contexte">
-              <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 text-[12.5px]">
-                <dt className="text-[var(--theme-text-muted)]">PR</dt>
-                <dd className="flex min-w-0 flex-wrap gap-1">
-                  {prLinks.length === 0 ? <span className="text-[var(--theme-text-faint)]">aucune</span> : prLinks.map((l) => {
-                    const pr = parseGithubPrRef(l.ref);
-                    return pr ? (
-                      <PrBadge
-                        key={l.id}
-                        org={pr.org}
-                        name={pr.name}
-                        pr={{ number: pr.number, state: prStateFromGithub(prStates[l.ref]), title: l.label }}
-                        href={l.url ?? undefined}
-                      />
-                    ) : (
-                      <a key={l.id} href={l.url ?? undefined} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)]">
-                        {l.label}
-                      </a>
-                    );
-                  })}
-                </dd>
-                <dt className="text-[var(--theme-text-muted)]">Coût</dt>
-                <dd className="font-mono">${item.costUsd.toFixed(2)}</dd>
-              </dl>
-            </Section>
-          </div>
+            </div>
+          )}
         </div>
 
-        <footer className="flex flex-wrap items-center gap-2.5 border-t border-[var(--theme-border)] px-5 py-3 text-xs text-[var(--theme-text-muted)]">
+        <section className={cn('grid shrink-0 gap-2.5 border-t px-5 py-3', tintClasses(meta.hue).borderColor, tintClasses(meta.hue).bg)}>
+          <div>{prompt}</div>
+          {controls}
+        </section>
+
+        <footer className="flex shrink-0 flex-wrap items-center gap-2.5 border-t border-[var(--theme-border)] px-5 py-2.5 text-xs text-[var(--theme-text-muted)]">
           <span className="relative">
             <button
               type="button"
@@ -484,20 +501,44 @@ function AskHeader({ hue, children }: { hue: Parameters<typeof tintClasses>[0]; 
   return <div className={cn('mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em]', tintClasses(hue).text)}>{children}</div>;
 }
 
-function Quote({ hue, children }: { hue: Parameters<typeof tintClasses>[0]; children: React.ReactNode }) {
+/** Collapsed to ~2 lines with a "voir tout" toggle — the full text is in the Fil above. */
+function Clamp({ resetKey, className, children }: { resetKey: string; className?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  useEffect(() => { setExpanded(false); }, [resetKey]);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && !expanded) setOverflows(el.scrollHeight > el.clientHeight + 1);
+  });
   return (
-    <div className={cn('mb-2.5 max-h-60 overflow-y-auto rounded-r-md border-l-[3px] bg-[var(--theme-bg-surface)] px-3 py-2 text-[13.5px] text-[var(--theme-text-primary)]', tintClasses(hue).borderColor)}>
-      {children}
+    <div className={cn('text-[13px] text-[var(--theme-text-primary)]', className)}>
+      <div ref={ref} className={cn('grid gap-1 [&_p]:m-0', expanded ? 'max-h-48 overflow-y-auto' : 'max-h-[2.9em] overflow-hidden')}>{children}</div>
+      {(overflows || expanded) && (
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="mt-0.5 text-[11.5px] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]">
+          {expanded ? 'réduire' : 'voir tout'}
+        </button>
+      )}
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <section className="min-w-0">
-      <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--theme-text-faint)]">{title}</h4>
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        '-mb-px border-b-2 px-2.5 py-2 text-xs font-semibold transition-colors',
+        active
+          ? 'border-[var(--theme-accent)] text-[var(--theme-text-primary)]'
+          : 'border-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]',
+      )}
+    >
       {children}
-    </section>
+    </button>
   );
 }
 

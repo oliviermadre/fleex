@@ -49,6 +49,8 @@ export interface FocusPrefs {
   showIdle: boolean;
   /** Expand the "en cours" recap under the list. */
   showRunning: boolean;
+  /** Which tab the detail popup opens on: the conversation thread or the deliverables list. */
+  detailTab: 'thread' | 'deliverables';
 }
 
 interface PendingAction {
@@ -108,7 +110,7 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-const DEFAULT_PREFS: FocusPrefs = { zen: false, chain: true, showIdle: true, showRunning: false };
+const DEFAULT_PREFS: FocusPrefs = { zen: false, chain: true, showIdle: true, showRunning: false, detailTab: 'thread' };
 
 function loadPersisted() {
   const now = Date.now();
@@ -120,7 +122,8 @@ function loadPersisted() {
     snoozed,
     log: (stored.log ?? []).filter((e) => now - e.at < LOG_TTL_MS),
     clearedAt: (stored.clearedAt ?? []).filter((t) => now - t < LOG_TTL_MS),
-    prefs: readJson<FocusPrefs>(PREFS_KEY, DEFAULT_PREFS),
+    // Merged over the defaults: stored prefs may predate a newer field.
+    prefs: { ...DEFAULT_PREFS, ...readJson<Partial<FocusPrefs>>(PREFS_KEY, {}) },
   };
 }
 

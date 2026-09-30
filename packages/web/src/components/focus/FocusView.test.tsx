@@ -83,7 +83,7 @@ beforeEach(() => {
   vi.mocked(api.fetchFocus).mockResolvedValue({ items: [GATE, QUESTION], running: [] });
   useFocusStore.setState({
     items: [GATE, QUESTION], running: [], loaded: true, pending: {}, settled: {}, snoozed: {},
-    log: [], clearedAt: [], prefs: { zen: false, chain: true, showIdle: true, showRunning: false },
+    log: [], clearedAt: [], prefs: { zen: false, chain: true, showIdle: true, showRunning: false, detailTab: 'thread' },
   });
 });
 afterEach(() => {

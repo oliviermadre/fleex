@@ -25,6 +25,8 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
       if (e.key === 'Escape') {
         // A floating terminal stacked over the modal keeps its Escape (Claude Code's interrupt).
         if ((e.target as HTMLElement | null)?.closest?.('[data-floating-panel]')) return;
+        // An open @-mention menu inside the modal takes Escape first: it closes the menu, not the modal.
+        if (backdropRef.current?.querySelector('[data-mention-menu]')) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         onClose();
