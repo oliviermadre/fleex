@@ -83,18 +83,20 @@ export class ApiClaudeUsageAdapter implements ClaudeUsagePort {
     const fromEnv = process.env['CLAUDE_CODE_OAUTH_TOKEN'];
     if (fromEnv?.trim()) return fromEnv.trim();
 
-    // macOS Keychain
-    try {
-      const { stdout } = await this.execFn('security', [
-        'find-generic-password',
-        '-s',
-        KEYCHAIN_SERVICE,
-        '-w',
-      ]);
-      const token = extractToken(stdout);
-      if (token) return token;
-    } catch {
-      // not macOS, or item absent — fall through
+    // macOS Keychain. Several "Claude Code-credentials" items can coexist (one
+    // per account, e.g. a stray `unknown` one holding only MCP tokens), and
+    // `security` without `-a` returns whichever comes first — so ask for the
+    // user's own account first, then fall back to any item.
+    const account = this.homedir.split('/').filter(Boolean).pop();
+    const lookups = [...(account ? [['-a', account]] : []), []];
+    for (const extra of lookups) {
+      try {
+        const { stdout } = await this.execFn('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, ...extra, '-w']);
+        const token = extractToken(stdout);
+        if (token) return token;
+      } catch {
+        // not macOS, or item absent — try the next lookup
+      }
     }
 
     // Linux / fallback credentials file
