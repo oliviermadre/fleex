@@ -175,6 +175,23 @@ html, body {
   }
 }
 
+/* Opened under its action button: drops down from it, like the bar's popovers. */
+.action-terminal-panel--anchored {
+  animation-name: action-terminal-drop;
+  transform-origin: top center;
+}
+
+@keyframes action-terminal-drop {
+  from {
+    transform: translateY(-6px) scale(0.98);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
 /* Textarea scrollbar inside scratchpad */
 .scratchpad-panel textarea::-webkit-scrollbar {
   width: 6px;

@@ -8,6 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
 import { Tooltip } from '../ui/Tooltip';
 import { renderIcon } from '../sidebar/PinnedIcons';
+import { setTerminalAnchor } from './terminalAnchor';
 import { STATUS_LABEL, compactBadge, formatAgo, runDuration, statusDotClass, statusTextClass, truncate } from './actionStatus';
 
 const ICON_BTN =
@@ -100,8 +101,11 @@ export function PinnedActionButton({
           )}
           // Stays hoverable while running (tooltip: live output, Stop). A click on a
           // terminal run in flight brings its panel to the front; otherwise it is a no-op.
-          onClick={() => {
-            if (!running || terminalTab) onRun();
+          onClick={(e) => {
+            if (running && !terminalTab) return;
+            // The terminal panel, if this click opens one, hangs under this button.
+            setTerminalAnchor(e.currentTarget);
+            onRun();
           }}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -187,6 +191,10 @@ export function ActionTooltipContent({
   const tooltip = tooltipOverride ?? snapshot?.tooltip;
   const target = resolveClickAction(action, status);
   const terminal = target.actionType === 'shell' && target.runMode === 'terminal';
+  // Minimized (or behind another tab): the click brings it back instead of running again.
+  const hiddenTerminal = usePinnedActionsStore(
+    (st) => st.terminals.some((t) => t.sourceId === action.id) && (st.terminalMinimized || st.activeTerminal !== action.id),
+  );
   const inFlight = useInFlightActions(action, inFlightRunId);
 
   return (
@@ -214,7 +222,7 @@ export function ActionTooltipContent({
         </div>
       )}
       <div className="rounded bg-[var(--theme-accent-muted)] px-2 py-1 text-[10.5px] text-[var(--theme-text-primary)]">
-        ▶ Click: {clickLabel(action, status)}{terminal && ' · ⧉ terminal'}
+        ▶ Click: {hiddenTerminal ? 'Show its terminal' : <>{clickLabel(action, status)}{terminal && ' · ⧉ terminal'}</>}
       </div>
       {inFlight && (
         <div className="flex items-center gap-1 text-[10.5px] text-[var(--theme-text-muted)]">

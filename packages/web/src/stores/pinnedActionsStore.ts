@@ -127,6 +127,11 @@ interface PinnedActionsState {
   activeTerminal: string | null;
   /** Bumped each time a tab must grab the keyboard (opened, brought to front). */
   terminalFocusNonce: number;
+  /**
+   * The panel is hidden but its tabs (and their tmux sessions) live on: clicking
+   * the action again brings it back where it was. Closing a tab is what ends a session.
+   */
+  terminalMinimized: boolean;
 
   loadStatuses: () => Promise<void>;
   loadCapabilities: () => Promise<void>;
@@ -137,6 +142,7 @@ interface PinnedActionsState {
   cancelRun: (runId: string) => Promise<void>;
   openTerminal: (tab: TerminalTab) => void;
   focusTerminal: (sourceId: string) => void;
+  minimizeTerminal: () => void;
   /** Remove a tab. A finished run's pane is released on the server; a running one must be cancelled first. */
   closeTerminal: (sourceId: string) => void;
   loadRuns: (sourceId: string) => Promise<void>;
@@ -219,6 +225,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
   terminals: [],
   activeTerminal: null,
   terminalFocusNonce: 0,
+  terminalMinimized: false,
 
   loadStatuses: async () => {
     try {
@@ -266,7 +273,8 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
           return { running, liveOutput, runs: { ...s.runs, [run.sourceId]: upsertRun(s.runs[run.sourceId], run) } };
         });
         // A terminal run with its panel tab open already shows its outcome there.
-        const shownInPanel = run.mode === 'terminal' && get().terminals.some((t) => t.runId === run.runId);
+        // A minimized panel shows nothing: the run gets its toast like any other.
+        const shownInPanel = run.mode === 'terminal' && !get().terminalMinimized && get().terminals.some((t) => t.runId === run.runId);
         if (!run.sourceId.startsWith(DRAFT_SOURCE_PREFIX) && !shownInPanel) {
           announceRun(run, get().openLogs, (r) => void get().rerunInTerminal(r));
         }
@@ -276,9 +284,17 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
   },
 
   run: async (request, meta = {}) => {
+    const { terminals, terminalMinimized, activeTerminal } = get();
+    const hasTab = terminals.some((t) => t.sourceId === request.sourceId);
     if (get().running[request.sourceId]) {
       // A second click on a terminal run in flight brings its panel to the front.
-      if (get().terminals.some((t) => t.sourceId === request.sourceId)) get().focusTerminal(request.sourceId);
+      if (hasTab) get().focusTerminal(request.sourceId);
+      return;
+    }
+    // Its terminal is open but out of sight (panel minimized, another tab in
+    // front): the click shows it as it was. Only a click on the visible tab re-runs.
+    if (hasTab && (terminalMinimized || activeTerminal !== request.sourceId)) {
+      get().focusTerminal(request.sourceId);
       return;
     }
     // Optimistic: the button shows its spinner before the WS echo arrives.
@@ -367,13 +383,20 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
         terminals: exists ? s.terminals.map((t) => (t.sourceId === tab.sourceId ? tab : t)) : [...s.terminals, tab],
         activeTerminal: tab.sourceId,
         terminalFocusNonce: s.terminalFocusNonce + 1,
+        terminalMinimized: false,
       };
     });
   },
 
   focusTerminal: (sourceId) => {
-    set((s) => (s.terminals.some((t) => t.sourceId === sourceId) ? { activeTerminal: sourceId, terminalFocusNonce: s.terminalFocusNonce + 1 } : s));
+    set((s) =>
+      s.terminals.some((t) => t.sourceId === sourceId)
+        ? { activeTerminal: sourceId, terminalFocusNonce: s.terminalFocusNonce + 1, terminalMinimized: false }
+        : s,
+    );
   },
+
+  minimizeTerminal: () => set({ terminalMinimized: true }),
 
   closeTerminal: (sourceId) => {
     const tab = get().terminals.find((t) => t.sourceId === sourceId);
@@ -383,7 +406,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
     set((s) => {
       const terminals = s.terminals.filter((t) => t.sourceId !== sourceId);
       const activeTerminal = s.activeTerminal === sourceId ? terminals.at(-1)?.sourceId ?? null : s.activeTerminal;
-      return { terminals, activeTerminal };
+      return { terminals, activeTerminal, ...(terminals.length === 0 ? { terminalMinimized: false } : {}) };
     });
   },
 
