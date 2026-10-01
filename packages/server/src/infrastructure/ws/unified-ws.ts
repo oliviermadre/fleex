@@ -211,6 +211,9 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     container.skillBroadcast = skillBroadcast;
     container.domainEventListener.setSkillBroadcast(skillBroadcast);
 
+    // Wire up pinned actions (status probes + action runs)
+    container.setPinnedStatusBroadcast((type, data) => channelBroadcast('pinned-status', type, data));
+
     // ─── Agent events batching (ported from agent-events-ws.ts) ───
     let batchBuffer: { client: UnifiedClient; payload: string }[] = [];
     let batchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -289,6 +292,11 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       };
       clients.set(ws, client);
       heartbeat.register(ws);
+
+      // Current probe states first, then wake the scheduler — the first client
+      // to connect triggers an immediate probe of every icon.
+      sendChannelJson(ws, 'pinned-status', { type: 'pinned-status:snapshot', data: container.pinnedStatus.getSnapshots() });
+      container.pinnedStatus.clientConnected();
 
       ws.on('error', (err) => {
         container.logger.error('WS error on /ws', { error: String(err) });
@@ -426,10 +434,12 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         client.ptyHandles.clear();
         clients.delete(ws);
         heartbeat.unregister(ws);
+        container.pinnedStatus.clientDisconnected();
       });
     });
 
     app.addHook('onClose', () => {
+      container.pinnedStatus.stop();
       clearInterval(dashboardInterval);
       clearInterval(diffStatsInterval);
       if (batchTimer) clearTimeout(batchTimer);

@@ -13,7 +13,7 @@ export const DEFAULT_ROWS = 30;
 export const WS_PATH = '/ws';
 
 // Channels multiplexed over the single WS connection
-export type WsChannel = 'dashboard' | 'repositories' | 'tickets' | 'personas' | 'skills' | 'agent-events';
+export type WsChannel = 'dashboard' | 'repositories' | 'tickets' | 'personas' | 'skills' | 'agent-events' | 'pinned-status';
 
 /** @deprecated Use WS_PATH — terminal is now multiplexed as binary frames */
 export const WS_TERMINAL_PATH = '/ws/terminal';

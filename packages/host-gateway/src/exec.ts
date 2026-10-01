@@ -17,6 +17,19 @@ interface ExecResponse {
   stdout: string;
   stderr: string;
   exitCode: number;
+  /** Set when the process was killed for exceeding `timeout`. */
+  timedOut?: boolean;
+}
+
+/** execFile kills on timeout without an exit code; surface that instead of a bare 1. */
+function failure(err: any): ExecResponse {
+  const timedOut = err.killed === true && err.signal != null && typeof err.code !== 'string';
+  return {
+    stdout: err.stdout ?? '',
+    stderr: err.stderr ?? err.message,
+    exitCode: typeof err.code === 'number' ? err.code : 1,
+    ...(timedOut ? { timedOut: true } : {}),
+  };
 }
 
 /** High-frequency polling commands logged only at -vv */
@@ -51,11 +64,7 @@ export async function handleExec(body: ExecRequest): Promise<ExecResponse> {
       });
       return { stdout, stderr, exitCode: 0 };
     } catch (err: any) {
-      return {
-        stdout: err.stdout ?? '',
-        stderr: err.stderr ?? err.message,
-        exitCode: err.code ?? 1,
-      };
+      return failure(err);
     }
   }
 
@@ -67,10 +76,6 @@ export async function handleExec(body: ExecRequest): Promise<ExecResponse> {
     });
     return { stdout, stderr, exitCode: 0 };
   } catch (err: any) {
-    return {
-      stdout: err.stdout ?? '',
-      stderr: err.stderr ?? err.message,
-      exitCode: err.code ?? 1,
-    };
+    return failure(err);
   }
 }

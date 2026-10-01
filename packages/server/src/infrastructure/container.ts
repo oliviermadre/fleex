@@ -131,6 +131,8 @@ import { CachedAgentEventStore } from './adapters/cached-agent-event-store.js';
 import { isRemoteCacheSync, type RemoteCacheSync } from '../application/ports/remote-cache-sync.port.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
+import { PinnedStatusService } from '../domain/services/pinned-status.service.js';
+import { ActionRunService } from '../domain/services/action-run.service.js';
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
 
@@ -734,9 +736,38 @@ export async function createContainer() {
     sessionStore_, eventBus, logger, ingestCliSession, generateCliSessionSummary, rememberCliSession,
   );
 
+  // Pinned actions: status probes + async runs. Both broadcast on the
+  // `pinned-status` WS channel, wired by the unified WS plugin once it starts.
+  let pinnedStatusBroadcast: (type: string, data: unknown) => void = () => {};
+  const runShell = (command: string, options: { cwd: string; timeoutMs: number }) =>
+    shellExecFn(command, { cwd: options.cwd, timeout: options.timeoutMs });
+  const pinnedStatus = new PinnedStatusService({
+    exec: runShell,
+    cwd: hostHomedir,
+    broadcast: (type, data) => pinnedStatusBroadcast(type, data),
+    logger,
+  });
+  pinnedStatus.configure(config.get().pinnedIcons);
+  const actionRuns = new ActionRunService({
+    exec: runShell,
+    defaultCwd: hostHomedir,
+    broadcast: (type, data) => pinnedStatusBroadcast(type, data),
+    // A finished run on an icon with a probe re-checks it at once, so the dot
+    // reflects what the click just did instead of waiting a full interval.
+    onFinished: (run) => {
+      if (run.sourceKind === 'pinned') pinnedStatus.refresh(run.sourceId);
+    },
+  });
+  const setPinnedStatusBroadcast = (fn: (type: string, data: unknown) => void) => {
+    pinnedStatusBroadcast = fn;
+  };
+
   return {
     logger,
     gatewayUrl,
+    pinnedStatus,
+    actionRuns,
+    setPinnedStatusBroadcast,
     execFn,
     shellExecFn,
     hostFs,

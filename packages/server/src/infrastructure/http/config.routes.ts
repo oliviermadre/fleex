@@ -20,6 +20,11 @@ export function configRoutes(container: Container) {
       const { basePath: _ignoredBasePath, workspace: _ignoredWorkspace, ...updatable } = request.body;
       await container.config.update(updatable);
 
+      // Settings › Actions saved: reprogramme the status probes without a restart.
+      if (Array.isArray(request.body.pinnedIcons)) {
+        container.pinnedStatus.configure(container.config.get().pinnedIcons);
+      }
+
       // Auto-resolve repository patterns when repositories change
       if (Array.isArray(request.body.repositories)) {
         const resolved = await container.repositoryResolver.resolve(request.body.repositories);
