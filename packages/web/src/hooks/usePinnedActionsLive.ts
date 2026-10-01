@@ -11,10 +11,14 @@ import { usePinnedActionsStore } from '../stores/pinnedActionsStore';
 export function usePinnedActionsLive() {
   const loadStatuses = usePinnedActionsStore((s) => s.loadStatuses);
   const handleWsMessage = usePinnedActionsStore((s) => s.handleWsMessage);
+  const reconcileRuns = usePinnedActionsStore((s) => s.reconcileRuns);
 
   useEffect(() => {
     void loadStatuses();
   }, [loadStatuses]);
+
+  // A run that finished while the socket was down never sends its `finished`.
+  useEffect(() => appWs.onOpen(() => void reconcileRuns()), [reconcileRuns]);
 
   useEffect(() => appWs.onChannel('pinned-status', (msg) => handleWsMessage(msg as PinnedStatusWsMessage)), [handleWsMessage]);
 }

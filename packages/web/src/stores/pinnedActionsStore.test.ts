@@ -96,3 +96,58 @@ describe('executePinnedAction', () => {
     expect(api.startActionRun).not.toHaveBeenCalled();
   });
 });
+
+describe('reconcileRuns (after a WS reconnect)', () => {
+  it('clears a spinner whose run finished while the socket was down, and records the run', async () => {
+    usePinnedActionsStore.setState({ running: { kp: 'r1' } });
+    vi.mocked(api.fetchActionRuns).mockResolvedValueOnce([run({ exitCode: 0 })]);
+    await usePinnedActionsStore.getState().reconcileRuns();
+    expect(usePinnedActionsStore.getState().running['kp']).toBeUndefined();
+    expect(usePinnedActionsStore.getState().runs['kp']?.[0]).toMatchObject({ runId: 'r1', exitCode: 0 });
+  });
+
+  it('clears a spinner the server no longer knows about (server restarted)', async () => {
+    usePinnedActionsStore.setState({ running: { kp: 'gone' } });
+    vi.mocked(api.fetchActionRuns).mockResolvedValueOnce([]);
+    await usePinnedActionsStore.getState().reconcileRuns();
+    expect(usePinnedActionsStore.getState().running['kp']).toBeUndefined();
+  });
+
+  it('keeps runs still in flight on the server, optimistic "pending" ones, and runs started during the fetch', async () => {
+    usePinnedActionsStore.setState({ running: { kp: 'r1', other: 'pending' } });
+    vi.mocked(api.fetchActionRuns).mockImplementationOnce(async () => {
+      usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:started', data: run({ runId: 'r9', sourceId: 'late', finishedAt: undefined }) });
+      return [run({ finishedAt: undefined })];
+    });
+    await usePinnedActionsStore.getState().reconcileRuns();
+    expect(usePinnedActionsStore.getState().running).toEqual({ kp: 'r1', other: 'pending', late: 'r9' });
+  });
+});
+
+describe('executeWorkspaceAction', () => {
+  const action = { id: 'w', icon: '', iconType: 'svg' as const, label: 'Open', actionType: 'shell' as const, actionValue: 'ls {{workspace_path}}' };
+  const context = { workspace_path: '/base/workspaces/abc123-x', workspace_name: 'abc123-x', ticket_id: 'abc123', ticket_slug: 'x', ticket_display_id: '1' };
+
+  it('runs in the ticket workspace once ensure-workspace succeeded', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await useSettingsStore.getState().executeWorkspaceAction(action, context);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/tickets/abc123/ensure-workspace');
+    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/base/workspaces/abc123-x' }));
+  });
+
+  it('omits cwd when ensure-workspace failed, so the server default applies', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
+    try {
+      await useSettingsStore.getState().executeWorkspaceAction(action, context);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(api.startActionRun).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.startActionRun).mock.calls[0]![0]).not.toHaveProperty('cwd');
+  });
+});

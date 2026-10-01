@@ -1663,6 +1663,20 @@ export async function startActionRun(
   return { runId, alreadyRunning: false };
 }
 
+/**
+ * The workspace folder is created lazily (on session/agent start), so it may
+ * not exist yet for tickets that never ran one (e.g. lead/meeting). Best-effort,
+ * silent: true only when the folder is there to run in.
+ */
+export async function ensureTicketWorkspace(ticketId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/tickets/${ticketId}/ensure-workspace`, { method: 'POST' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function fetchActionRuns(sourceId?: string): Promise<import('@fleex/shared').ActionRun[]> {
   return request(sourceId ? `/action-runs?sourceId=${encodeURIComponent(sourceId)}` : '/action-runs');
 }

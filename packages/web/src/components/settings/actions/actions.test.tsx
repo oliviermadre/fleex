@@ -6,6 +6,8 @@ import { usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
 import { useToastStore } from '../../../stores/toastStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { useActionsSettingsStore } from '../../../stores/actionsSettingsStore';
+import { useTicketStore } from '../../../stores/ticketStore';
+import { useWorkStore } from '../../../stores/workStore';
 import * as api from '../../../services/api';
 import { ActionList } from './ActionList';
 import { ActionDetail } from './ActionDetail';
@@ -16,6 +18,8 @@ vi.mock('../../../services/api', async (importOriginal) => ({
   updateConfig: vi.fn(async () => ({})),
   fetchActionRuns: vi.fn(async () => []),
   fetchActionsAiStatus: vi.fn(async () => ({ available: false })),
+  startActionRun: vi.fn(async () => ({ runId: 'r1', alreadyRunning: false })),
+  ensureTicketWorkspace: vi.fn(async () => true),
 }));
 
 const icon = (id: string, extra: Partial<PinnedIcon> = {}): PinnedIcon => ({
@@ -176,6 +180,82 @@ describe('ActionDetail', () => {
     });
     expect(screen.getByText('A name is required.')).toBeTruthy();
     expect(useSettingsStore.getState().settings.pinnedIcons[0]!.label).toBe('A');
+  });
+});
+
+describe('ActionDetail keyboard', () => {
+  const pressSave = async (target: Window | Element = window, extra: Partial<KeyboardEventInit> = {}) => {
+    await act(async () => {
+      fireEvent.keyDown(target, { key: 's', metaKey: true, ...extra });
+    });
+  };
+
+  it('leaves Esc and ⌘S to a floating terminal stacked over the screen', async () => {
+    useUIStore.setState({ actionsRoute: { scope: 'pinned', id: 'a' } });
+    render(
+      <>
+        <ActionDetail scope="pinned" id="a" />
+        <div data-floating-panel><textarea aria-label="xterm" /></div>
+      </>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Renamed' } });
+    const xterm = screen.getByLabelText('xterm');
+    xterm.focus();
+    fireEvent.keyDown(xterm, { key: 'Escape' });
+    expect(document.activeElement).toBe(xterm);
+    await pressSave(xterm);
+    expect(useSettingsStore.getState().settings.pinnedIcons[0]!.label).toBe('A');
+  });
+
+  it('ignores ⌘S and Esc while a modal is open on top', async () => {
+    useUIStore.setState({ actionsRoute: { scope: 'pinned', id: 'a' } });
+    const { rerender } = render(<><ActionDetail scope="pinned" id="a" /><div data-overlay-top /></>);
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Renamed' } });
+    await pressSave();
+    expect(useSettingsStore.getState().settings.pinnedIcons[0]!.label).toBe('A');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByText('Unsaved changes', { selector: 'h2' })).toBeNull();
+
+    rerender(<ActionDetail scope="pinned" id="a" />);
+    await pressSave();
+    expect(useSettingsStore.getState().settings.pinnedIcons[0]!.label).toBe('Renamed');
+  });
+
+  it('ignores auto-repeat of a held ⌘S', async () => {
+    render(<ActionDetail scope="pinned" id="a" />);
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Renamed' } });
+    await pressSave(window, { repeat: true });
+    expect(useSettingsStore.getState().settings.pinnedIcons[0]!.label).toBe('A');
+  });
+});
+
+describe('ActionDetail Try', () => {
+  const ticket = { id: 'abc123', title: 'Some ticket', displayId: 7 } as unknown as ReturnType<typeof useTicketStore.getState>['tickets'][number];
+
+  beforeEach(() => {
+    useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, basePath: '/base', workspaceActions: [{ id: 'w', icon: '', iconType: 'svg', label: 'Open', actionType: 'shell', actionValue: 'ls {{workspace_path}}' }] } });
+    useTicketStore.setState({ tickets: [ticket], selectedTicketId: 'abc123' });
+    useWorkStore.setState({ selectedTicketId: null });
+  });
+  afterEach(() => useTicketStore.setState({ tickets: [], selectedTicketId: null }));
+
+  it('materializes the ticket workspace before running a ticket action, like the real click', async () => {
+    render(<ActionDetail scope="ticket" id="w" />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '▶ Try' }));
+    });
+    expect(api.ensureTicketWorkspace).toHaveBeenCalledWith('abc123');
+    expect(vi.mocked(api.ensureTicketWorkspace).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.startActionRun).mock.invocationCallOrder[0]!);
+    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ cwd: expect.stringContaining('/base/workspaces/abc123') }));
+  });
+
+  it('omits cwd when the workspace could not be created', async () => {
+    vi.mocked(api.ensureTicketWorkspace).mockResolvedValueOnce(false);
+    render(<ActionDetail scope="ticket" id="w" />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '▶ Try' }));
+    });
+    expect(vi.mocked(api.startActionRun).mock.calls[0]![0]).not.toHaveProperty('cwd');
   });
 });
 

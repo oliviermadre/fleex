@@ -265,18 +265,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (action.actionType === 'url') {
       window.open(resolved, '_blank');
     } else if (action.actionType === 'shell') {
-      // The workspace folder is created lazily (on session/agent start), so it
-      // may not exist yet for tickets that never ran one (e.g. lead/meeting).
-      // Materialize it first so {{workspace_path}} points at a real directory.
-      try {
-        await fetch(`${API_URL}/tickets/${context.ticket_id}/ensure-workspace`, { method: 'POST' });
-      } catch { /* best-effort; still attempt the command below */ }
+      // Materialize the workspace first so {{workspace_path}} points at a real
+      // directory; if that failed, let the server's default cwd apply.
+      const hasWorkspace = await api.ensureTicketWorkspace(context.ticket_id);
       void usePinnedActionsStore.getState().run({
         sourceId: action.id,
         sourceKind: 'workspace',
         label: action.label,
         command: resolved,
-        cwd: context.workspace_path,
+        ...(hasWorkspace ? { cwd: context.workspace_path } : {}),
         ...(action.actionTimeoutSec ? { timeoutSec: action.actionTimeoutSec } : {}),
       });
     }

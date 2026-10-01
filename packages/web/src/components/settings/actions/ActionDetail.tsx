@@ -174,6 +174,10 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
   // ⌘S saves, Esc goes back (unless typing, or a modal owns Escape).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      // A floating terminal keeps its keys (Esc is Claude Code's interrupt); a modal on top owns them.
+      if ((e.target as HTMLElement | null)?.closest?.('[data-floating-panel]')) return;
+      if (document.querySelector('[data-overlay-top]')) return;
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         void doSave();
@@ -211,16 +215,19 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
   const tryResult = tryStartedAt ? tryRuns.find((r) => r.startedAt >= tryStartedAt) : undefined;
   const canTry = draft.actionType === 'shell' && !!draft.actionValue.trim() && (scope === 'pinned' || !!contextTicket);
 
-  const tryCommand = () => {
+  const tryCommand = async () => {
     if (!canTry) return;
-    const command = scope === 'ticket' && contextTicket ? resolveTemplate(draft.actionValue, contextTicket) : draft.actionValue;
+    const ticket = scope === 'ticket' ? contextTicket : null;
+    const command = ticket ? resolveTemplate(draft.actionValue, ticket) : draft.actionValue;
     setTryStartedAt(new Date(Date.now() - 1000).toISOString());
+    // Same as the real click: materialize the ticket's workspace before running in it.
+    const hasWorkspace = ticket ? await api.ensureTicketWorkspace(ticket.ticket_id) : false;
     void run({
       sourceId: `${DRAFT_SOURCE_PREFIX}${draft.id}`,
       sourceKind: scope === 'pinned' ? 'pinned' : 'workspace',
       label: `Try: ${draft.label || 'draft'}`,
       command,
-      ...(scope === 'ticket' && contextTicket ? { cwd: contextTicket.workspace_path } : {}),
+      ...(ticket && hasWorkspace ? { cwd: ticket.workspace_path } : {}),
       ...(draft.actionTimeoutSec ? { timeoutSec: draft.actionTimeoutSec } : {}),
     });
   };
@@ -450,7 +457,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                 <Chip>timeout {draft.actionTimeoutSec ?? ACTION_DEFAULT_TIMEOUT_SEC} s</Chip>
                 <span className="flex-1" />
                 <span title={!canTry && scope === 'ticket' && !contextTicket ? 'Open a ticket first: ticket actions run in its workspace.' : undefined}>
-                  <Button size="sm" variant="secondary" disabled={!canTry || tryRunning} onClick={tryCommand}>▶ Try</Button>
+                  <Button size="sm" variant="secondary" disabled={!canTry || tryRunning} onClick={() => void tryCommand()}>▶ Try</Button>
                 </span>
               </div>
             )}

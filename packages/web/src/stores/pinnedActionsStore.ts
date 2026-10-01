@@ -25,6 +25,8 @@ interface PinnedActionsState {
   handleWsMessage: (msg: PinnedStatusWsMessage) => void;
   run: (request: ActionRunRequest) => Promise<void>;
   loadRuns: (sourceId: string) => Promise<void>;
+  /** After a WS (re)connect: a missed `action-run:finished` must not leave a button spinning. */
+  reconcileRuns: () => Promise<void>;
   refresh: (iconId?: string) => Promise<void>;
   openLogs: (target: LogsTarget) => void;
   closeLogs: () => void;
@@ -132,6 +134,28 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
       const runs = await api.fetchActionRuns(sourceId);
       set((s) => ({ runs: { ...s.runs, [sourceId]: runs } }));
     } catch { /* toasted */ }
+  },
+
+  reconcileRuns: async () => {
+    // Only entries already in flight when we ask: a run started meanwhile is not in the answer yet.
+    const asked = get().running;
+    let serverRuns: ActionRun[];
+    try {
+      serverRuns = await api.fetchActionRuns();
+    } catch { return; /* toasted */ }
+    const byId = new Map(serverRuns.map((r) => [r.runId, r]));
+    set((s) => {
+      const running = { ...s.running };
+      for (const [sourceId, runId] of Object.entries(asked)) {
+        if (runId === 'pending' || running[sourceId] !== runId) continue;
+        const known = byId.get(runId);
+        // Finished, or unknown to the server (restarted): it will never report back.
+        if (!known || known.finishedAt) delete running[sourceId];
+      }
+      const runs = { ...s.runs };
+      for (const r of [...serverRuns].reverse()) runs[r.sourceId] = upsertRun(runs[r.sourceId], r);
+      return { running, runs };
+    });
   },
 
   refresh: async (iconId) => {

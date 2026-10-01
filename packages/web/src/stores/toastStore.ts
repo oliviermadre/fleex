@@ -44,8 +44,9 @@ export const useToastStore = create<ToastState>((set, get) => ({
     const now = Date.now();
     const { toasts } = get();
 
-    // Dedup: skip if same message exists within the last 10s
-    const isDuplicate = toasts.some(
+    // Dedup: skip if same message exists within the last 10s. A toast with an
+    // action (Undo, View logs) is never a duplicate: each one acts on its own event.
+    const isDuplicate = !options?.action && toasts.some(
       (t) => t.message === message && now - t.createdAt < DEDUP_WINDOW_MS,
     );
     if (isDuplicate) return;

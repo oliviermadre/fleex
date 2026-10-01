@@ -11,7 +11,7 @@
  * RouterSync handles programmatic store changes (e.g. the Work view landing on a task).
  */
 import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { isLeaveGuarded, pauseLeaveGuard, requestLeave, useUIStore, type SettingsTab, type AnalyticsTab, type ActionsRoute, type ActionsScope } from '../stores/uiStore';
 import { useWorkStore, type WorkMode } from '../stores/workStore';
 import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/ticketStore';
@@ -523,6 +523,7 @@ export function historyActionForNav(
 export function RouterSync() {
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
 
   // Store accessors
   const activePanel = useUIStore((s) => s.activePanel);
@@ -620,7 +621,9 @@ export function RouterSync() {
       const here = currentStoreUrl();
       if (here.pathname !== location.pathname || here.search !== location.search) {
         const target = { pathname: location.pathname, search: location.search };
-        navigate(here, { replace: true });
+        // After Back the browser already sits on the previous entry: replacing it
+        // would erase that entry, so a second Back could never reach it. Push instead.
+        navigate(here, { replace: navigationType !== 'POP' });
         requestLeave(() => {
           leaveApproved.current = true;
           navigate(target);
