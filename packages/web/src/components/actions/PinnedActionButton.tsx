@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { resolveClickAction } from '@fleex/shared';
-import type { ActionRun, ActionStatus, ConditionalAction, PinnedIcon, StatusSnapshot, WorkspaceAction } from '@fleex/shared';
+import type { ActionRun, ActionRunMode, ActionStatus, ConditionalAction, PinnedIcon, StatusSnapshot, WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { useNow } from '../../lib/useNow';
 import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
@@ -65,6 +65,8 @@ export function PinnedActionButton({
 }: PinnedActionButtonProps) {
   const snapshot = usePinnedActionsStore((s) => s.statuses[action.id]);
   const liveRunning = usePinnedActionsStore((s) => !!s.running[action.id]);
+  const inFlightRunId = usePinnedActionsStore((s) => s.running[action.id]);
+  const terminalTab = usePinnedActionsStore((s) => s.terminals.some((t) => t.sourceId === action.id));
   const lastRun = usePinnedActionsStore((s) => s.runs[action.id]?.[0]);
   const menu = useContextMenuPopover();
 
@@ -85,6 +87,7 @@ export function PinnedActionButton({
             snapshot={statusOverride === undefined ? snapshot : undefined}
             tooltipOverride={tooltipOverride}
             lastRun={lastRun}
+            inFlightRunId={runningOverride === undefined ? inFlightRunId : undefined}
           />
         }
       >
@@ -92,16 +95,19 @@ export function PinnedActionButton({
           type="button"
           className={cn(
             ICON_BTN,
-            running && 'pointer-events-none',
             highlight && 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]',
             dim && 'opacity-40',
           )}
-          onClick={onRun}
+          // Stays hoverable while running (tooltip: live output, Stop). A click on a
+          // terminal run in flight brings its panel to the front; otherwise it is a no-op.
+          onClick={() => {
+            if (!running || terminalTab) onRun();
+          }}
           onContextMenu={(e) => {
             e.preventDefault();
             menu.openAt(e.clientX, e.clientY);
           }}
-          disabled={running}
+          aria-disabled={(running && !terminalTab) || undefined}
           aria-busy={running || undefined}
           aria-label={status ? `${action.label} — ${STATUS_LABEL[status]}` : action.label}
         >
@@ -151,7 +157,7 @@ export function PinnedActionButton({
             {...menu.getFloatingProps()}
             className="z-[9999] min-w-[220px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
           >
-            <ActionMenuItems action={action} kind={kind} status={status} onRun={onRun} close={menu.close} />
+            <ActionMenuItems action={action} kind={kind} status={status} onRun={onRun} close={menu.close} inFlightRunId={runningOverride === undefined ? inFlightRunId : undefined} />
           </div>
         </FloatingPortal>
       )}
@@ -165,17 +171,23 @@ export function ActionTooltipContent({
   snapshot,
   tooltipOverride,
   lastRun,
+  inFlightRunId,
 }: {
   action: PinnedIcon | WorkspaceAction;
   status: ActionStatus | null;
   snapshot?: StatusSnapshot;
   tooltipOverride?: string;
   lastRun?: ActionRun;
+  /** The run in flight for this action ('pending' while the POST is out). */
+  inFlightRunId?: string;
 }) {
   const now = useNow();
   const refresh = usePinnedActionsStore((s) => s.refresh);
   const openLogs = usePinnedActionsStore((s) => s.openLogs);
   const tooltip = tooltipOverride ?? snapshot?.tooltip;
+  const target = resolveClickAction(action, status);
+  const terminal = target.actionType === 'shell' && target.runMode === 'terminal';
+  const inFlight = useInFlightActions(action, inFlightRunId);
 
   return (
     <div className="flex w-[280px] flex-col gap-1.5 whitespace-normal font-normal">
@@ -202,8 +214,15 @@ export function ActionTooltipContent({
         </div>
       )}
       <div className="rounded bg-[var(--theme-accent-muted)] px-2 py-1 text-[10.5px] text-[var(--theme-text-primary)]">
-        ▶ Click: {clickLabel(action, status)}
+        ▶ Click: {clickLabel(action, status)}{terminal && ' · ⧉ terminal'}
       </div>
+      {inFlight && (
+        <div className="flex items-center gap-1 text-[10.5px] text-[var(--theme-text-muted)]">
+          <span className="animate-pulse motion-reduce:animate-none">●</span> Running ·
+          <button type="button" className="text-[var(--theme-accent)] hover:underline" onClick={inFlight.view}>View live output</button>·
+          <button type="button" className="text-[var(--theme-accent)] hover:underline" onClick={inFlight.stop}>Stop</button>
+        </div>
+      )}
       {lastRun?.finishedAt && (
         <div className="flex items-center gap-1 text-[10.5px] text-[var(--theme-text-muted)]">
           <RunMark run={lastRun} /> Last run · {lastRun.timedOut ? 'timeout' : `exit ${lastRun.exitCode ?? '—'}`} · {runDuration(lastRun.startedAt, lastRun.finishedAt)} ·
@@ -220,6 +239,20 @@ export function ActionTooltipContent({
   );
 }
 
+/**
+ * "View live output" / "Stop" for the run in flight: a terminal run brings its
+ * panel to the front, a background one opens the logs on that run.
+ */
+function useInFlightActions(action: PinnedIcon | WorkspaceAction, runId: string | undefined): { view: () => void; stop: () => void } | null {
+  const hasTab = usePinnedActionsStore((s) => s.terminals.some((t) => t.sourceId === action.id));
+  if (!runId || runId === 'pending') return null;
+  const store = usePinnedActionsStore.getState;
+  return {
+    view: () => (hasTab ? store().focusTerminal(action.id) : store().openLogs({ sourceId: action.id, label: action.label, runId })),
+    stop: () => void store().cancelRun(runId),
+  };
+}
+
 export function RunMark({ run }: { run: ActionRun }) {
   const ok = run.exitCode === 0 && !run.timedOut;
   return <span className={ok ? statusTextClass('ok') : statusTextClass('ko')}>{ok ? '✓' : '✗'}</span>;
@@ -231,13 +264,16 @@ function ActionMenuItems({
   status,
   onRun,
   close,
+  inFlightRunId,
 }: {
   action: PinnedIcon | WorkspaceAction;
   kind: ActionButtonKind;
   status: ActionStatus | null;
   onRun: () => void;
   close: () => void;
+  inFlightRunId?: string;
 }) {
+  const inFlight = useInFlightActions(action, inFlightRunId);
   const run = usePinnedActionsStore((s) => s.run);
   const refresh = usePinnedActionsStore((s) => s.refresh);
   const openLogs = usePinnedActionsStore((s) => s.openLogs);
@@ -245,9 +281,16 @@ function ActionMenuItems({
   const resolved = resolveClickAction(action, status);
   const rules: ConditionalAction[] = hasProbe(action) ? action.conditionalActions ?? [] : [];
 
-  const runTarget = (target: { label: string; actionType: 'url' | 'shell'; actionValue: string; timeoutSec?: number }) => {
-    if (target.actionType === 'url') window.open(target.actionValue, '_blank');
-    else void run({ sourceId: action.id, sourceKind: 'pinned', label: target.label, command: target.actionValue, ...(target.timeoutSec ? { timeoutSec: target.timeoutSec } : {}) });
+  const runTarget = (target: { label: string; actionType: 'url' | 'shell'; actionValue: string; timeoutSec?: number; runMode?: ActionRunMode; ruleId?: string }) => {
+    if (target.actionType === 'url') {
+      window.open(target.actionValue, '_blank');
+      return;
+    }
+    const mode = target.runMode ?? 'background';
+    void run(
+      { sourceId: action.id, sourceKind: 'pinned', label: target.label, command: target.actionValue, mode, ...(target.timeoutSec && mode !== 'terminal' ? { timeoutSec: target.timeoutSec } : {}) },
+      { ...(target.ruleId ? { ruleId: target.ruleId } : {}), ...(action.closeTerminalOnSuccess ? { closeOnSuccess: true } : {}) },
+    );
   };
   const pick = (fn: () => void) => () => {
     fn();
@@ -260,7 +303,7 @@ function ActionMenuItems({
         <>
           <MenuItem
             primary={!resolved.rule}
-            onClick={pick(() => runTarget({ label: action.label, actionType: action.actionType, actionValue: action.actionValue, timeoutSec: action.actionTimeoutSec }))}
+            onClick={pick(() => runTarget({ label: action.label, actionType: action.actionType, actionValue: action.actionValue, timeoutSec: action.actionTimeoutSec, runMode: action.runMode }))}
             hint="default"
           >
             {action.label}
@@ -270,7 +313,7 @@ function ActionMenuItems({
               key={rule.id}
               primary={resolved.rule?.id === rule.id}
               dim={!(rule.when?.length ? status !== null && rule.when.includes(status) : true)}
-              onClick={pick(() => runTarget({ label: rule.label || action.label, actionType: rule.actionType, actionValue: rule.actionValue, timeoutSec: rule.timeoutSec }))}
+              onClick={pick(() => runTarget({ label: rule.label || action.label, actionType: rule.actionType, actionValue: rule.actionValue, timeoutSec: rule.timeoutSec, runMode: rule.runMode ?? action.runMode, ruleId: rule.id }))}
               hint={
                 <span className="flex gap-0.5">
                   {(rule.when ?? []).map((s) => <span key={s} className={cn('h-1.5 w-1.5 rounded-full', statusDotClass(s))} />)}
@@ -283,6 +326,13 @@ function ActionMenuItems({
         </>
       ) : (
         <MenuItem primary onClick={pick(onRun)}>Run {action.label}</MenuItem>
+      )}
+      {inFlight && (
+        <>
+          <div className="my-1 border-t border-[var(--theme-border)]" />
+          <MenuItem onClick={pick(inFlight.view)}>View live output</MenuItem>
+          <MenuItem onClick={pick(inFlight.stop)}>Stop</MenuItem>
+        </>
       )}
       <div className="my-1 border-t border-[var(--theme-border)]" />
       {status && <MenuItem onClick={pick(() => void refresh(action.id))}>Refresh status</MenuItem>}

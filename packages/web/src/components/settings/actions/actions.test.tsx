@@ -22,6 +22,7 @@ vi.mock('../../../services/api', async (importOriginal) => ({
   diagnoseBinary: vi.fn(async () => null),
   startActionRun: vi.fn(async () => ({ runId: 'r1', alreadyRunning: false })),
   ensureTicketWorkspace: vi.fn(async () => true),
+  suggestActionCommand: vi.fn(),
 }));
 
 const icon = (id: string, extra: Partial<PinnedIcon> = {}): PinnedIcon => ({
@@ -32,7 +33,7 @@ const pinnedIds = () => useSettingsStore.getState().settings.pinnedIcons.map((i)
 
 beforeEach(() => {
   useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, pinnedIcons: [icon('a'), icon('b'), icon('c')], workspaceActions: [] } });
-  usePinnedActionsStore.setState({ statuses: {}, runs: {}, running: {}, logs: null });
+  usePinnedActionsStore.setState({ statuses: {}, runs: {}, running: {}, logs: null, terminals: [], activeTerminal: null });
   useToastStore.setState({ toasts: [] });
   useActionsSettingsStore.setState({ aiAvailable: false, pendingNew: null, composeOpen: false });
   useUIStore.setState({ actionsRoute: { scope: 'pinned', id: null } });
@@ -289,5 +290,115 @@ describe('ActionDetail · Test the probe', () => {
     render(<ActionDetail scope="pinned" id="a" />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Test the probe' })); });
     expect(screen.getByRole('note', { name: 'Command not found: gcloudd' })).toBeTruthy();
+  });
+});
+
+describe('Settings › Actions — run mode', () => {
+  it('without tmux on the machine, Terminal cannot be picked and says why (it would only fail at run time)', () => {
+    usePinnedActionsStore.setState({ capabilities: { liveOutput: true, terminal: false } });
+    render(<ActionDetail scope="pinned" id="a" />);
+    const terminal = within(screen.getByRole('radiogroup', { name: 'Run mode' })).getByRole('radio', { name: 'Terminal' }) as HTMLButtonElement;
+    expect(terminal.disabled).toBe(true);
+    expect(terminal.title).toMatch(/needs tmux/);
+    usePinnedActionsStore.setState({ capabilities: null });
+  });
+
+  it('the Background | Terminal segmented sets runMode, swaps the environment line and hides the timeout', async () => {
+    render(<ActionDetail scope="pinned" id="a" />);
+    expect(screen.getByTestId('run-environment').textContent).toBe('zsh -l · no TTY · .zshrc not loaded · timeout 300 s');
+    expect(screen.getByLabelText('Action timeout (s)')).toBeTruthy();
+
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Run mode' })).getByRole('radio', { name: 'Terminal' }));
+    expect(screen.getByTestId('run-environment').textContent).toBe('zsh -l -i · TTY · .zshrc loaded · no timeout');
+    expect(screen.queryByLabelText('Action timeout (s)')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Close automatically on success/ }));
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 's', metaKey: true });
+    });
+    expect(useSettingsStore.getState().settings.pinnedIcons[0]).toMatchObject({ id: 'a', runMode: 'terminal', closeTerminalOnSuccess: true });
+  });
+
+  it('only offers the run mode for a command, not a URL', () => {
+    render(<ActionDetail scope="pinned" id="a" />);
+    fireEvent.click(screen.getByRole('radio', { name: 'URL' }));
+    expect(screen.queryByRole('radiogroup', { name: 'Run mode' })).toBeNull();
+  });
+
+  it('"Try" in terminal mode runs the draft in a terminal and opens the panel', async () => {
+    vi.mocked(api.startActionRun).mockResolvedValueOnce({ runId: 'd1', alreadyRunning: false });
+    render(<ActionDetail scope="pinned" id="a" />);
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Run mode' })).getByRole('radio', { name: 'Terminal' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '▶ Try' }));
+    });
+    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ sourceId: 'draft:a', mode: 'terminal', command: 'echo a' }));
+    expect(usePinnedActionsStore.getState().terminals).toMatchObject([{ sourceId: 'draft:a', runId: 'd1' }]);
+  });
+
+  it('a rule gets its own segmented, inheriting the action mode until set', async () => {
+    useSettingsStore.setState({
+      settings: {
+        ...useSettingsStore.getState().settings,
+        pinnedIcons: [icon('kp', {
+          status: { command: 'true', intervalSec: 60 },
+          conditionalActions: [{ id: 'r', label: 'Log out', when: ['ok'], actionType: 'shell', actionValue: 'platool logout' }],
+        })],
+      },
+    });
+    render(<ActionDetail scope="pinned" id="kp" />);
+    const ruleMode = within(screen.getByRole('radiogroup', { name: 'Rule 1 run mode' }));
+    expect(ruleMode.getByRole('radio', { name: 'Background' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(ruleMode.getByRole('radio', { name: 'Terminal' }));
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 's', metaKey: true });
+    });
+    const saved = useSettingsStore.getState().settings.pinnedIcons[0]!;
+    expect(saved.conditionalActions![0]!.runMode).toBe('terminal');
+    expect(saved.runMode).toBeUndefined();
+  });
+
+  it('applying an AI suggestion for an interactive command also switches the action to Terminal', async () => {
+    useActionsSettingsStore.setState({ aiAvailable: true });
+    vi.mocked(api.suggestActionCommand).mockResolvedValueOnce({ command: 'docker run -it alpine sh', explanation: 'A shell.', risk: 'safe', binaries: [], runMode: 'terminal' });
+    render(<ActionDetail scope="pinned" id="a" />);
+    const input = screen.getByLabelText(/Describe what the command should do/);
+    fireEvent.change(input, { target: { value: 'open a shell in alpine' } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    expect(screen.getByText(/Run it in a terminal/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(within(screen.getByRole('radiogroup', { name: 'Run mode' })).getByRole('radio', { name: 'Terminal' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('the preview tooltip and the list row say the action runs in a terminal', () => {
+    useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, pinnedIcons: [icon('a', { runMode: 'terminal' }), icon('b')] } });
+    const { unmount } = render(<ActionDetail scope="pinned" id="a" />);
+    expect(screen.getByRole('complementary', { name: 'Preview' }).textContent).toContain('Click: echo a · ⧉ terminal');
+    unmount();
+    render(<ActionList scope="pinned" />);
+    expect(within(screen.getByRole('listitem', { name: 'A' })).getByText('⧉ terminal')).toBeTruthy();
+    expect(within(screen.getByRole('listitem', { name: 'B' })).queryByText('⧉ terminal')).toBeNull();
+  });
+
+  it('the alias warning under the command offers to switch the action to Terminal', async () => {
+    vi.mocked(api.diagnoseBinary).mockResolvedValue({ binary: 'platool', login: 'missing', interactive: 'alias', aliasDefinition: 'docker run -it platool' });
+    useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, pinnedIcons: [icon('a', { actionValue: 'platool login' })] } });
+    render(<ActionDetail scope="pinned" id="a" />);
+    const button = await screen.findByRole('button', { name: 'Run in terminal mode' }, { timeout: 2000 });
+    fireEvent.click(button);
+    expect(within(screen.getByRole('radiogroup', { name: 'Run mode' })).getByRole('radio', { name: 'Terminal' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('button', { name: 'Run in terminal mode' })).toBeNull();
+  });
+
+  it('normalise keeps runMode / closeTerminalOnSuccess for a terminal command and drops them otherwise', () => {
+    const terminal = { ...icon('t'), runMode: 'terminal' as const, closeTerminalOnSuccess: true };
+    expect(normaliseDraft(terminal, 'pinned')).toMatchObject({ runMode: 'terminal', closeTerminalOnSuccess: true });
+    expect(normaliseDraft(terminal, 'ticket')).toMatchObject({ runMode: 'terminal', closeTerminalOnSuccess: true });
+    const url = normaliseDraft({ ...terminal, actionType: 'url', actionValue: 'https://x.dev' }, 'pinned');
+    expect(url).not.toHaveProperty('runMode');
+    expect(url).not.toHaveProperty('closeTerminalOnSuccess');
+    expect(normaliseDraft({ ...icon('b'), runMode: 'background', closeTerminalOnSuccess: true }, 'pinned')).not.toHaveProperty('closeTerminalOnSuccess');
   });
 });

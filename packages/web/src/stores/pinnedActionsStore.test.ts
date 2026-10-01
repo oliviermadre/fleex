@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { ActionRun, PinnedIcon } from '@fleex/shared';
-import { usePinnedActionsStore } from './pinnedActionsStore';
+import { appendLiveOutput, resetPinnedActionsTransient, usePinnedActionsStore, START_TOAST_DELAY_MS } from './pinnedActionsStore';
 import { useToastStore } from './toastStore';
 import { useSettingsStore } from './settingsStore';
 import * as api from '../services/api';
@@ -9,6 +9,10 @@ vi.mock('../services/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../services/api')>()),
   startActionRun: vi.fn(async () => ({ runId: 'r1', alreadyRunning: false })),
   fetchActionRuns: vi.fn(async () => []),
+  cancelActionRun: vi.fn(async () => true),
+  closeActionTerminal: vi.fn(async () => true),
+  fetchActionRunCapabilities: vi.fn(async () => ({ liveOutput: true, terminal: true })),
+  updateConfig: vi.fn(async () => ({})),
 }));
 
 const run = (extra: Partial<ActionRun>): ActionRun => ({
@@ -25,9 +29,13 @@ const run = (extra: Partial<ActionRun>): ActionRun => ({
 });
 
 beforeEach(() => {
-  usePinnedActionsStore.setState({ statuses: {}, runs: {}, running: {}, logs: null });
+  resetPinnedActionsTransient();
+  usePinnedActionsStore.setState({ statuses: {}, runs: {}, running: {}, logs: null, liveOutput: {}, terminals: [], activeTerminal: null, terminalFocusNonce: 0, capabilities: null });
   useToastStore.setState({ toasts: [] });
   vi.clearAllMocks();
+});
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('run feedback', () => {
@@ -159,5 +167,224 @@ describe('executeWorkspaceAction', () => {
     }
     expect(api.startActionRun).toHaveBeenCalledTimes(1);
     expect(vi.mocked(api.startActionRun).mock.calls[0]![0]).not.toHaveProperty('cwd');
+  });
+});
+
+const chunk = (seq: number, text: string, extra: { dropped?: number; stream?: 'stdout' | 'stderr' } = {}) => ({
+  type: 'action-run:output' as const,
+  data: { runId: 'r1', sourceId: 'kp', stream: extra.stream ?? ('stdout' as const), chunk: text, seq, ...(extra.dropped ? { dropped: extra.dropped } : {}) },
+});
+
+describe('live output', () => {
+  it('orders stdout and stderr chunks by seq, whatever order they arrive in', () => {
+    const { handleWsMessage } = usePinnedActionsStore.getState();
+    handleWsMessage({ type: 'action-run:started', data: run({ finishedAt: undefined }) });
+    handleWsMessage(chunk(2, 'three\n'));
+    handleWsMessage(chunk(0, 'one\n'));
+    handleWsMessage(chunk(1, 'two\n', { stream: 'stderr' }));
+    handleWsMessage(chunk(1, 'two\n', { stream: 'stderr' })); // a duplicate is ignored
+    expect(usePinnedActionsStore.getState().liveOutput['r1']!.text).toBe('one\ntwo\nthree\n');
+  });
+
+  it('keeps only the tail past the client cap and counts what was cut, plus what the server dropped', () => {
+    let live = appendLiveOutput(undefined, chunk(0, 'aaaaa').data, 8);
+    live = appendLiveOutput(live, chunk(1, 'bbbbb', { dropped: 100 }).data, 8);
+    expect(live.text).toBe('aaabbbbb');
+    expect(live.dropped).toBe(102);
+    // A late chunk older than what was cut does not come back: it only adds to the count.
+    live = appendLiveOutput(live, chunk(-1, 'zz').data, 8);
+    expect(live.text).toBe('aaabbbbb');
+    expect(live.dropped).toBe(104);
+  });
+
+  it('is dropped once the final log arrives, and a late chunk does not bring it back', () => {
+    const { handleWsMessage } = usePinnedActionsStore.getState();
+    handleWsMessage({ type: 'action-run:started', data: run({ finishedAt: undefined }) });
+    handleWsMessage(chunk(0, 'one'));
+    handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 0, stdout: 'one' }) });
+    handleWsMessage(chunk(1, 'late'));
+    expect(usePinnedActionsStore.getState().liveOutput['r1']).toBeUndefined();
+  });
+});
+
+describe('start toast', () => {
+  it('appears only once a run has lasted 3 s, and the final toast replaces it', () => {
+    vi.useFakeTimers();
+    const { handleWsMessage } = usePinnedActionsStore.getState();
+    handleWsMessage({ type: 'action-run:started', data: run({ finishedAt: undefined }) });
+    vi.advanceTimersByTime(START_TOAST_DELAY_MS - 1);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    const toast = useToastStore.getState().toasts[0]!;
+    expect(toast).toMatchObject({ type: 'info', message: 'K8s prod running…' });
+    expect(toast.action?.label).toBe('View output');
+    toast.action!.onClick();
+    expect(usePinnedActionsStore.getState().logs).toMatchObject({ sourceId: 'kp', runId: 'r1' });
+
+    handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 0 }) });
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toEqual(['✓ K8s prod (3.2 s)']);
+  });
+
+  it('never shows for a run that finishes quickly', () => {
+    vi.useFakeTimers();
+    const { handleWsMessage } = usePinnedActionsStore.getState();
+    handleWsMessage({ type: 'action-run:started', data: run({ finishedAt: undefined }) });
+    vi.advanceTimersByTime(1000);
+    handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 0, finishedAt: '2026-10-01T10:00:01.000Z' }) });
+    vi.advanceTimersByTime(START_TOAST_DELAY_MS + 500);
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toEqual(['✓ K8s prod (1.0 s)']);
+  });
+
+  it('is not shown for a terminal run (its panel says it all)', () => {
+    vi.useFakeTimers();
+    usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:started', data: run({ finishedAt: undefined, mode: 'terminal' }) });
+    vi.advanceTimersByTime(10_000);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+});
+
+describe('failures that need a terminal', () => {
+  it('a no-tty failure toast offers "Run in a terminal", which re-runs the same command in terminal mode', async () => {
+    usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 1, stderr: 'the input device is not a TTY' }) });
+    const toast = useToastStore.getState().toasts[0]!;
+    expect(toast.action?.label).toBe('Run in a terminal');
+    vi.mocked(api.startActionRun).mockResolvedValueOnce({ runId: 'r2', alreadyRunning: false });
+    toast.action!.onClick();
+    await vi.waitFor(() => expect(api.startActionRun).toHaveBeenCalled());
+    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ sourceId: 'kp', command: 'platool login prod', mode: 'terminal' }));
+    await vi.waitFor(() => expect(usePinnedActionsStore.getState().terminals).toMatchObject([{ sourceId: 'kp', runId: 'r2' }]));
+  });
+
+  it('keeps "View logs" for an ordinary failure', () => {
+    usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 3, stderr: 'boom' }) });
+    expect(useToastStore.getState().toasts[0]!.action?.label).toBe('View logs');
+  });
+
+  it('says "stopped" for a cancelled run', () => {
+    usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ cancelled: true, exitCode: 130 }) });
+    expect(useToastStore.getState().toasts[0]).toMatchObject({ type: 'info', message: 'K8s prod — stopped' });
+  });
+});
+
+describe('run modes', () => {
+  const base: PinnedIcon = {
+    id: 'kp',
+    icon: '',
+    iconType: 'svg',
+    label: 'K8s prod',
+    actionType: 'shell',
+    actionValue: 'platool login prod',
+    actionTimeoutSec: 60,
+    runMode: 'terminal',
+    status: { command: 'kubectl --context prod cluster-info', intervalSec: 60 },
+    conditionalActions: [{ id: 'r', label: 'Disconnect from prod', when: ['ok'], actionType: 'shell', actionValue: 'platool logout prod', runMode: 'background' }],
+  };
+
+  it('executePinnedAction passes the resolved run mode: the rule wins over the action', async () => {
+    usePinnedActionsStore.setState({ statuses: { kp: { iconId: 'kp', status: 'ok', probing: false } } });
+    useSettingsStore.getState().executePinnedAction(base);
+    await Promise.resolve();
+    expect(api.startActionRun).toHaveBeenLastCalledWith(expect.objectContaining({ command: 'platool logout prod', mode: 'background' }));
+
+    usePinnedActionsStore.setState({ running: {}, statuses: { kp: { iconId: 'kp', status: 'ko', probing: false } } });
+    useSettingsStore.getState().executePinnedAction(base);
+    await Promise.resolve();
+    const last = vi.mocked(api.startActionRun).mock.calls.at(-1)![0];
+    expect(last).toMatchObject({ command: 'platool login prod', mode: 'terminal' });
+    // A terminal has no timeout.
+    expect(last).not.toHaveProperty('timeoutSec');
+  });
+
+  it('executeWorkspaceAction passes the action run mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })));
+    try {
+      await useSettingsStore.getState().executeWorkspaceAction(
+        { id: 'w', icon: '', iconType: 'svg', label: 'Shell', actionType: 'shell', actionValue: 'ls', runMode: 'terminal' },
+        { workspace_path: '/w', workspace_name: 'w', ticket_id: 't', ticket_slug: 's', ticket_display_id: '1' },
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ mode: 'terminal', cwd: '/w' }));
+  });
+
+  it('opens the terminal panel when a terminal run starts from this tab, one tab per source', async () => {
+    const { run: start } = usePinnedActionsStore.getState();
+    vi.mocked(api.startActionRun).mockResolvedValueOnce({ runId: 't1', alreadyRunning: false, run: run({ runId: 't1', finishedAt: undefined, mode: 'terminal' }) });
+    await start({ sourceId: 'kp', sourceKind: 'pinned', label: 'K8s prod', command: 'platool login prod', mode: 'terminal' });
+    vi.mocked(api.startActionRun).mockResolvedValueOnce({ runId: 't2', alreadyRunning: false });
+    await start({ sourceId: 'gh', sourceKind: 'pinned', label: 'GitHub', command: 'gh auth login', mode: 'terminal' });
+    const s = usePinnedActionsStore.getState();
+    expect(s.terminals.map((t) => [t.sourceId, t.runId])).toEqual([['kp', 't1'], ['gh', 't2']]);
+    expect(s.activeTerminal).toBe('gh');
+  });
+
+  it('a second click on a source whose terminal run is in flight brings its panel to the front', async () => {
+    usePinnedActionsStore.setState({
+      running: { kp: 't1' },
+      terminals: [
+        { sourceId: 'kp', sourceKind: 'pinned', runId: 't1', label: 'K8s prod', command: 'platool login prod' },
+        { sourceId: 'gh', sourceKind: 'pinned', runId: 't2', label: 'GitHub', command: 'gh auth login' },
+      ],
+      activeTerminal: 'gh',
+    });
+    useSettingsStore.getState().executePinnedAction({ ...base, status: undefined });
+    await Promise.resolve();
+    expect(api.startActionRun).not.toHaveBeenCalled();
+    expect(usePinnedActionsStore.getState().activeTerminal).toBe('kp');
+    expect(usePinnedActionsStore.getState().terminalFocusNonce).toBe(1);
+  });
+
+  it('a 409 on a terminal run (started from another tab) opens its panel instead of erroring', async () => {
+    vi.mocked(api.startActionRun).mockResolvedValueOnce({ runId: 't9', alreadyRunning: true });
+    await usePinnedActionsStore.getState().run({ sourceId: 'kp', sourceKind: 'pinned', label: 'K8s prod', command: 'platool login prod', mode: 'terminal' });
+    expect(usePinnedActionsStore.getState().terminals).toMatchObject([{ sourceId: 'kp', runId: 't9' }]);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
+  it('cancelRun calls the cancel API', async () => {
+    await usePinnedActionsStore.getState().cancelRun('r1');
+    expect(api.cancelActionRun).toHaveBeenCalledWith('r1');
+  });
+});
+
+describe('alwaysRunInTerminal', () => {
+  const icon: PinnedIcon = {
+    id: 'kp', icon: '', iconType: 'svg', label: 'K8s prod', actionType: 'shell', actionValue: 'platool login prod',
+    status: { command: 'kubectl cluster-info', intervalSec: 60 },
+    conditionalActions: [{ id: 'r', label: 'Disconnect from prod', when: ['ok'], actionType: 'shell', actionValue: 'platool logout prod' }],
+  };
+  const stored = () => useSettingsStore.getState().settings.pinnedIcons.find((i) => i.id === 'kp')!;
+
+  beforeEach(() => {
+    useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, pinnedIcons: [icon] } });
+  });
+
+  it('persists runMode terminal on the action, re-runs it in a terminal, and Undo restores it', async () => {
+    await useSettingsStore.getState().alwaysRunInTerminal(run({ exitCode: 1, stderr: 'not a tty' }));
+    expect(stored().runMode).toBe('terminal');
+    expect(stored().conditionalActions![0]!.runMode).toBeUndefined();
+    expect(api.updateConfig).toHaveBeenCalledWith({ pinnedIcons: [expect.objectContaining({ id: 'kp', runMode: 'terminal' })] });
+    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ command: 'platool login prod', mode: 'terminal' }));
+
+    const toast = useToastStore.getState().toasts.find((t) => t.action?.label === 'Undo')!;
+    toast.action!.onClick();
+    expect(stored()).not.toHaveProperty('runMode');
+  });
+
+  it('persists it on the rule the run came from', async () => {
+    usePinnedActionsStore.setState({ statuses: { kp: { iconId: 'kp', status: 'ok', probing: false } } });
+    useSettingsStore.getState().executePinnedAction(icon);
+    await vi.waitFor(() => expect(api.startActionRun).toHaveBeenCalled());
+    usePinnedActionsStore.setState({ running: {} });
+
+    await useSettingsStore.getState().alwaysRunInTerminal(run({ command: 'platool logout prod', label: 'Disconnect from prod', exitCode: 1, stderr: 'not a tty' }));
+    expect(stored().conditionalActions![0]!.runMode).toBe('terminal');
+    expect(stored().runMode).toBeUndefined();
+  });
+
+  it('finds the rule by its command after a reload (no remembered origin)', async () => {
+    await useSettingsStore.getState().alwaysRunInTerminal(run({ runId: 'old', command: 'platool logout prod', exitCode: 1 }));
+    expect(stored().conditionalActions![0]!.runMode).toBe('terminal');
   });
 });

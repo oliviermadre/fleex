@@ -93,7 +93,10 @@ describe('WorkTopBarActions status', () => {
     usePinnedActionsStore.setState({ running: { gc: 'run-1' } });
     render(<WorkTopBarActions ticketId={null} />);
     const button = screen.getByRole('button', { name: /GCloud/ });
-    expect(button.hasAttribute('disabled')).toBe(true);
+    // Not `disabled`: the button must stay hoverable (tooltip: live output, Stop).
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(button);
+    expect(executePinnedAction).not.toHaveBeenCalled();
     expect(screen.getByRole('status', { name: 'Running' })).toBeTruthy();
   });
 

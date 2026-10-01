@@ -317,6 +317,7 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
                 </div>
                 <div className="flex gap-1">
                   <Chip>{a.actionType === 'url' ? 'URL' : 'Shell'}</Chip>
+                  {a.actionType === 'shell' && a.runMode === 'terminal' && <Chip>⧉ terminal</Chip>}
                   {probed && <Chip>probe {intervalLabel((a as PinnedIcon).status!.intervalSec)}</Chip>}
                   {rules > 0 && <Chip>{rules} rule{rules > 1 ? 's' : ''}</Chip>}
                 </div>

@@ -1639,11 +1639,12 @@ export function testPinnedProbe(command: string, timeoutSec?: number): Promise<i
 
 /**
  * Start a run. A 409 is not an error to toast: it means this action is already
- * running, and the answer names that run so the caller can follow it.
+ * running, and the answer names that run so the caller can follow it (a
+ * terminal run brings its panel to the front).
  */
 export async function startActionRun(
   body: import('@fleex/shared').ActionRunRequest,
-): Promise<{ runId: string; alreadyRunning: boolean }> {
+): Promise<{ runId: string; alreadyRunning: boolean; run?: import('@fleex/shared').ActionRun }> {
   const res = await fetch(`${API_URL}/action-runs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1659,8 +1660,51 @@ export async function startActionRun(
     useToastStore.getState().addToast('error', message);
     throw new Error(message);
   }
-  const { runId } = (await res.json()) as { runId: string };
-  return { runId, alreadyRunning: false };
+  const { runId, run } = (await res.json()) as { runId: string; run?: import('@fleex/shared').ActionRun };
+  return { runId, alreadyRunning: false, ...(run ? { run } : {}) };
+}
+
+/**
+ * Stop a run in flight. False when the server no longer knows it (404: already
+ * finished) — not worth a toast, the `finished` message is on its way.
+ */
+export async function cancelActionRun(runId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/action-runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+    if (res.ok) return true;
+    if (res.status !== 404) {
+      const message = extractErrorMessage(await res.text().catch(() => ''), res.statusText);
+      useToastStore.getState().addToast('error', message);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A finished terminal run keeps its pane readable until the panel tab closes:
+ * tell the server it can drop it. Best-effort and silent (404: not a terminal run).
+ */
+export async function closeActionTerminal(runId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/action-runs/${encodeURIComponent(runId)}/terminal/close`, { method: 'POST' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** What the running gateway supports. A server without the endpoint supports neither. Silent. */
+export async function fetchActionRunCapabilities(): Promise<import('@fleex/shared').ActionRunCapabilities> {
+  try {
+    const res = await fetch(`${API_URL}/action-runs/capabilities`);
+    if (!res.ok) return { liveOutput: false, terminal: false };
+    const body = (await res.json()) as Partial<import('@fleex/shared').ActionRunCapabilities>;
+    return { liveOutput: !!body.liveOutput, terminal: !!body.terminal };
+  } catch {
+    return { liveOutput: false, terminal: false };
+  }
 }
 
 /**

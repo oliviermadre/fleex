@@ -31,7 +31,8 @@ const DEDUP_WINDOW_MS = 10_000;
 
 interface ToastState {
   toasts: Toast[];
-  addToast: (type: ToastType, message: string, options?: ToastOptions) => void;
+  /** Returns the toast id (undefined when deduplicated), so a caller can dismiss it early. */
+  addToast: (type: ToastType, message: string, options?: ToastOptions) => string | undefined;
   removeToast: (id: string) => void;
 }
 
@@ -49,7 +50,7 @@ export const useToastStore = create<ToastState>((set, get) => ({
     const isDuplicate = !options?.action && toasts.some(
       (t) => t.message === message && now - t.createdAt < DEDUP_WINDOW_MS,
     );
-    if (isDuplicate) return;
+    if (isDuplicate) return undefined;
 
     const id = String(++nextId);
     const toast: Toast = {
@@ -69,6 +70,7 @@ export const useToastStore = create<ToastState>((set, get) => ({
     setTimeout(() => {
       get().removeToast(id);
     }, options?.durationMs ?? AUTO_DISMISS_MS);
+    return id;
   },
 
   removeToast: (id) => {

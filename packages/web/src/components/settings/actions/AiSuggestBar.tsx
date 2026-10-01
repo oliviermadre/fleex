@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ActionsAiCommandKind, ActionsAiCommandRequest, ActionsAiCommandSuggestion, CommandRisk } from '@fleex/shared';
+import type { ActionRunMode, ActionsAiCommandKind, ActionsAiCommandRequest, ActionsAiCommandSuggestion, CommandRisk } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { tint } from '../../../lib/tints';
 import * as api from '../../../services/api';
@@ -18,8 +18,11 @@ interface AiSuggestBarProps {
   scope: ActionsScope;
   context: ActionsAiCommandRequest['context'];
   placeholder: string;
-  /** Receives the command and the intent (used as a rule label when it has none). */
-  onApply: (command: string, intent: string) => void;
+  /**
+   * Receives the command, the intent (used as a rule label when it has none) and,
+   * for an interactive command, the run mode it needs ('terminal').
+   */
+  onApply: (command: string, intent: string, runMode?: ActionRunMode) => void;
   autoFocus?: boolean;
 }
 
@@ -91,6 +94,9 @@ export function AiSuggestBar({ kind, scope, context, placeholder, onApply, autoF
           </div>
           <pre className="whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-xs leading-relaxed text-[var(--theme-text-primary)]">{result.command}</pre>
           {result.explanation && <p className="px-3 pb-2.5 text-xs text-[var(--theme-text-secondary)]">{result.explanation}</p>}
+          {result.runMode === 'terminal' && kind !== 'probe' && (
+            <p className={cn('mx-3 mb-2.5 rounded px-2 py-1 text-[11.5px]', tint('blue'))}>⧉ Run it in a terminal — it is interactive. Apply also switches it to Terminal.</p>
+          )}
           <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--tint-purple-border)] px-3 py-2">
             <span className={cn('inline-flex h-5 items-center rounded px-1.5 text-[11px] font-medium', RISK[result.risk].className)}>{RISK[result.risk].label}</span>
             {result.binaries.map((b) => (
@@ -104,7 +110,7 @@ export function AiSuggestBar({ kind, scope, context, placeholder, onApply, autoF
               variant="primary"
               size="sm"
               onClick={() => {
-                onApply(result.command, intent.trim());
+                onApply(result.command, intent.trim(), kind !== 'probe' && result.runMode === 'terminal' ? 'terminal' : undefined);
                 setResult(null);
               }}
             >

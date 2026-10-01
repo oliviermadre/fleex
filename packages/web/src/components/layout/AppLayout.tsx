@@ -13,6 +13,7 @@ import { useSkills } from '../../hooks/useSkills';
 import { useFocusFeed } from '../../hooks/useFocusFeed';
 import { usePinnedActionsLive } from '../../hooks/usePinnedActionsLive';
 import { ActionLogsModal } from '../actions/ActionLogsModal';
+import { ActionTerminalPanel } from '../actions/ActionTerminalPanel';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
@@ -128,6 +129,7 @@ export function AppLayout() {
       <FloatingDeliverableOverlay />
       <DeliverableReadingOverlay />
       <ActionLogsModal />
+      <ActionTerminalPanel />
     </div>
   );
 }

@@ -1,11 +1,13 @@
 import { useMemo, type ReactNode } from 'react';
-import type { PinnedIcon, WorkspaceAction } from '@fleex/shared';
+import { ACTION_DEFAULT_TIMEOUT_SEC } from '@fleex/shared';
+import type { ActionRunMode, PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { tint, tintClasses, tintText } from '../../../lib/tints';
 import { buildWorkspaceContext, type WorkspaceContext } from '../../../lib/templateUtils';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useWorkStore } from '../../../stores/workStore';
+import { usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
 import { usePopover, FloatingPortal } from '../../../hooks/usePopover';
 import { useToastStore } from '../../../stores/toastStore';
 import type { ActionsScope } from '../../../stores/uiStore';
@@ -65,6 +67,37 @@ export function Switch({ on, onToggle, label }: { on: boolean; onToggle: () => v
       <span className={cn('absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-[var(--theme-bg-surface)] shadow transition-transform', on && 'translate-x-3')} />
     </button>
   );
+}
+
+/** "Background | Terminal": where a shell command runs. */
+export function RunModeToggle({ value, onChange, label = 'Run mode', small }: { value: ActionRunMode; onChange: (mode: ActionRunMode) => void; label?: string; small?: boolean }) {
+  // Without tmux there is no terminal to run in: say so instead of failing at run time.
+  const noTerminal = usePinnedActionsStore((s) => s.capabilities?.terminal === false);
+  return (
+    <div className="inline-flex gap-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-0.5" role="radiogroup" aria-label={label}>
+      {(['background', 'terminal'] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="radio"
+          aria-checked={value === m}
+          disabled={m === 'terminal' && noTerminal && value !== 'terminal'}
+          title={m === 'background' ? 'Runs without a terminal; output in the logs' : noTerminal ? 'Terminal mode needs tmux, which is not available on this machine' : 'Runs in a floating terminal you can type into'}
+          className={cn('rounded-md font-medium', small ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs', value === m ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]', 'disabled:cursor-not-allowed disabled:opacity-50')}
+          onClick={() => onChange(m)}
+        >
+          {m === 'background' ? 'Background' : 'Terminal'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The shell a command gets, in one line — it explains most "works in my terminal" surprises. */
+export function environmentLine(mode: ActionRunMode, timeoutSec?: number): string {
+  return mode === 'terminal'
+    ? 'zsh -l -i · TTY · .zshrc loaded · no timeout'
+    : `zsh -l · no TTY · .zshrc not loaded · timeout ${timeoutSec ?? ACTION_DEFAULT_TIMEOUT_SEC} s`;
 }
 
 export const SECTION = 'rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-5';

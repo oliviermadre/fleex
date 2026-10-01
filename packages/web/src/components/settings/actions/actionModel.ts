@@ -1,5 +1,5 @@
 import { ACTION_DEFAULT_TIMEOUT_SEC, PROBE_DEFAULT_INTERVAL_SEC, PROBE_DEFAULT_TIMEOUT_SEC } from '@fleex/shared';
-import type { ActionIconType, PinnedIcon, WorkspaceAction } from '@fleex/shared';
+import type { ActionIconType, ActionRunMode, ConditionalAction, PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import type { ActionsScope } from '../../../stores/uiStore';
 
 /**
@@ -59,9 +59,26 @@ export function draftWarnings(draft: ActionDraft, scope: ActionsScope): string[]
   return [];
 }
 
+/**
+ * Run mode fields only mean something for a shell command: absent = background,
+ * and "close on success" only applies to a terminal.
+ */
+function normaliseRunMode<T extends { actionType: 'url' | 'shell'; runMode?: ActionRunMode; closeTerminalOnSuccess?: boolean }>(item: T): T {
+  const { runMode, closeTerminalOnSuccess, ...rest } = item;
+  if (item.actionType !== 'shell' || runMode !== 'terminal') return rest as T;
+  return { ...rest, runMode, ...(closeTerminalOnSuccess ? { closeTerminalOnSuccess } : {}) } as T;
+}
+
+/** A rule's runMode overrides the action's: keep it whenever it is set on a shell rule. */
+function normaliseRule(rule: ConditionalAction): ConditionalAction {
+  const { runMode, ...rest } = rule;
+  return rule.actionType === 'shell' && runMode ? { ...rest, runMode } : rest;
+}
+
 /** What gets persisted: trimmed, ticket scope stripped of probe/rules, rules dropped when the probe is off. */
 export function normaliseDraft(draft: ActionDraft, scope: ActionsScope): PinnedIcon | WorkspaceAction {
-  const base: ActionDraft = { ...draft, label: draft.label.trim(), actionValue: draft.actionValue.trim() };
+  const base: ActionDraft = normaliseRunMode({ ...draft, label: draft.label.trim(), actionValue: draft.actionValue.trim() });
+  if (base.conditionalActions) base.conditionalActions = base.conditionalActions.map(normaliseRule);
   if (scope === 'ticket') return toWorkspaceAction(base);
   if (!base.status) {
     const { conditionalActions: _rules, ...rest } = base;

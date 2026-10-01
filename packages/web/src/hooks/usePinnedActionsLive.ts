@@ -12,13 +12,19 @@ export function usePinnedActionsLive() {
   const loadStatuses = usePinnedActionsStore((s) => s.loadStatuses);
   const handleWsMessage = usePinnedActionsStore((s) => s.handleWsMessage);
   const reconcileRuns = usePinnedActionsStore((s) => s.reconcileRuns);
+  const loadCapabilities = usePinnedActionsStore((s) => s.loadCapabilities);
 
   useEffect(() => {
     void loadStatuses();
-  }, [loadStatuses]);
+    void loadCapabilities();
+  }, [loadStatuses, loadCapabilities]);
 
-  // A run that finished while the socket was down never sends its `finished`.
-  useEffect(() => appWs.onOpen(() => void reconcileRuns()), [reconcileRuns]);
+  // A run that finished while the socket was down never sends its `finished`;
+  // a reopen may also mean the gateway restarted on a build with new capabilities.
+  useEffect(() => appWs.onOpen(() => {
+    void reconcileRuns();
+    void loadCapabilities();
+  }), [reconcileRuns, loadCapabilities]);
 
   useEffect(() => appWs.onChannel('pinned-status', (msg) => handleWsMessage(msg as PinnedStatusWsMessage)), [handleWsMessage]);
 }

@@ -38,7 +38,7 @@ import {
   type ActionDraft,
   type AiField,
 } from './actionModel';
-import { AI_BUTTON, CODE_INPUT, Chip, Kbd, SECTION, SparkIcon, SuggestedMark, Switch, TEXT_INPUT, useContextTicket } from './shared';
+import { AI_BUTTON, CODE_INPUT, Chip, Kbd, RunModeToggle, SECTION, SparkIcon, SuggestedMark, Switch, TEXT_INPUT, environmentLine, useContextTicket } from './shared';
 
 const EMPTY_RUNS: ActionRun[] = [];
 
@@ -222,6 +222,14 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
     ? diagnoseRun({ exitCode: probeTest.exitCode, stdout: probeTest.stdout, stderr: probeTest.stderr, command: draft.status?.command })
     : null;
   const canTry = draft.actionType === 'shell' && !!draft.actionValue.trim() && (scope === 'pinned' || !!contextTicket);
+  const runMode = draft.runMode ?? 'background';
+  const terminalMode = draft.actionType === 'shell' && runMode === 'terminal';
+  const setRunMode = (mode: 'background' | 'terminal') => {
+    setDraft((d) => {
+      const { runMode: _m, closeTerminalOnSuccess: _c, ...rest } = d;
+      return mode === 'terminal' ? { ...rest, runMode: 'terminal', ...(d.closeTerminalOnSuccess ? { closeTerminalOnSuccess: true } : {}) } : rest;
+    });
+  };
 
   const tryCommand = async () => {
     if (!canTry) return;
@@ -235,9 +243,11 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
       sourceKind: scope === 'pinned' ? 'pinned' : 'workspace',
       label: `Try: ${draft.label || 'draft'}`,
       command,
+      // Terminal mode: the floating terminal opens on the draft run.
+      mode: runMode,
       ...(ticket && hasWorkspace ? { cwd: ticket.workspace_path } : {}),
-      ...(draft.actionTimeoutSec ? { timeoutSec: draft.actionTimeoutSec } : {}),
-    });
+      ...(draft.actionTimeoutSec && runMode !== 'terminal' ? { timeoutSec: draft.actionTimeoutSec } : {}),
+    }, draft.closeTerminalOnSuccess && runMode === 'terminal' ? { closeOnSuccess: true } : {});
   };
 
   const testProbe = async () => {
@@ -398,6 +408,8 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
               title="On click"
               hint={pinned && draft.status ? 'Default action, used when no status rule applies.' : 'What happens when you click.'}
               right={
+                <>
+                {draft.actionType === 'shell' && <RunModeToggle value={runMode} onChange={setRunMode} />}
                 <div className="inline-flex gap-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-0.5" role="radiogroup" aria-label="Action type">
                   {(['shell', 'url'] as const).map((t) => (
                     <button
@@ -412,6 +424,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                     </button>
                   ))}
                 </div>
+                </>
               }
             />
             {aiAvailable && (
@@ -420,8 +433,9 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                 scope={scope}
                 context={{ label: draft.label || undefined, currentCommand: draft.actionValue || undefined, probeCommand: draft.status?.command || undefined }}
                 placeholder={draft.actionType === 'url' ? 'Describe the page to open… e.g. “the Datadog APM dashboard”' : 'Describe what the command should do… e.g. “log me into gcloud and refresh the ADC”'}
-                onApply={(command) => {
+                onApply={(command, _intent, suggestedMode) => {
                   update({ actionValue: command, ...(/^https?:\/\//.test(command) ? { actionType: 'url' as const } : {}) });
+                  if (suggestedMode === 'terminal') setRunMode('terminal');
                   setAiFields((f) => [...f.filter((x) => x !== 'actionValue'), 'actionValue']);
                 }}
               />
@@ -440,7 +454,9 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
               onChange={(e) => update({ actionValue: e.target.value }, 'actionValue')}
             />
             <FieldError text={showErrors ? errors.actionValue : undefined} />
-            {draft.actionType === 'shell' && <CommandBinaryWarning command={draft.actionValue} />}
+            {draft.actionType === 'shell' && (
+              <CommandBinaryWarning command={draft.actionValue} onRunInTerminal={terminalMode ? undefined : () => setRunMode('terminal')} />
+            )}
             {warnings.map((w) => <p key={w} className={cn('mt-1 text-[11px]', tintText('yellow'))}>{w}</p>)}
             {!pinned && (
               <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -461,9 +477,8 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
             )}
             {draft.actionType === 'shell' && (
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <Chip>zsh -l · no TTY</Chip>
+                <Chip><span className="font-mono" data-testid="run-environment">{environmentLine(runMode, draft.actionTimeoutSec)}</span></Chip>
                 <Chip>cwd {pinned ? '~' : '{{workspace_path}}'}</Chip>
-                <Chip>timeout {draft.actionTimeoutSec ?? ACTION_DEFAULT_TIMEOUT_SEC} s</Chip>
                 <span className="flex-1" />
                 <span title={!canTry && scope === 'ticket' && !contextTicket ? 'Open a ticket first: ticket actions run in its workspace.' : undefined}>
                   <Button size="sm" variant="secondary" disabled={!canTry || tryRunning} onClick={() => void tryCommand()}>▶ Try</Button>
@@ -613,6 +628,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                 label={draft.label}
                 aiAvailable={aiAvailable}
                 errors={ruleErrors}
+                actionRunMode={draft.actionType === 'shell' ? runMode : 'background'}
               />
             </section>
           )}
@@ -622,6 +638,20 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
             <details>
               <summary className="cursor-pointer text-xs text-[var(--theme-text-secondary)]">Advanced <span className="text-[var(--theme-text-muted)]">— timeouts, environment</span></summary>
               <div className="mt-3.5 grid grid-cols-2 gap-3">
+                {terminalMode ? (
+                  <label className="col-span-2 flex items-center gap-2 text-[11.5px] text-[var(--theme-text-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={!!draft.closeTerminalOnSuccess}
+                      onChange={(e) => setDraft((d) => {
+                        const { closeTerminalOnSuccess: _c, ...rest } = d;
+                        return e.target.checked ? { ...rest, closeTerminalOnSuccess: true } : rest;
+                      })}
+                    />
+                    Close automatically on success
+                    <span className="text-[var(--theme-text-muted)]">— 2 s after exit 0; a failure always stays open.</span>
+                  </label>
+                ) : (
                 <div>
                   <label className="mb-1.5 block text-[11.5px] font-medium text-[var(--theme-text-secondary)]" htmlFor="action-timeout">Action timeout (s)</label>
                   <input
@@ -635,6 +665,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                   />
                   <p className="mt-1 text-[11px] text-[var(--theme-text-muted)]">Default {ACTION_DEFAULT_TIMEOUT_SEC} · max {ACTION_MAX_TIMEOUT_SEC}. A browser login waits for you.</p>
                 </div>
+                )}
                 {pinned && draft.status && (
                   <div>
                     <label className="mb-1.5 block text-[11.5px] font-medium text-[var(--theme-text-secondary)]" htmlFor="probe-timeout">Probe timeout (s)</label>
@@ -652,7 +683,11 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                 )}
               </div>
               <p className="mt-3 text-[11px] text-[var(--theme-text-muted)]">
-                Runs in a non-interactive zsh login shell without a TTY: no prompt, no <code className="font-mono">read</code>. PATH comes from your <code className="font-mono">.zprofile</code>.
+                {terminalMode ? (
+                  <>Runs in an interactive zsh login shell with a TTY, in a floating terminal: your <code className="font-mono">.zshrc</code> (aliases, functions, PATH) is loaded and you can answer prompts. No timeout.</>
+                ) : (
+                  <>Runs in a non-interactive zsh login shell without a TTY: no prompt, no <code className="font-mono">read</code>. PATH comes from your <code className="font-mono">.zprofile</code>.</>
+                )}
               </p>
             </details>
           </section>
