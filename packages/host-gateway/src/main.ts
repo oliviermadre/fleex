@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { handleExec } from './exec';
+import { killExec, streamExecResponse } from './exec-stream';
 import { handleFs } from './fs';
 import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
 import { logAlways, getVerbosity } from './logger';
@@ -46,6 +47,29 @@ Bun.serve<PtyWsData>({
         const body = await req.json();
         const result = await handleExec(body);
         return Response.json(result);
+      } catch (err: any) {
+        return Response.json({ error: err.message }, { status: 500 });
+      }
+    }
+
+    // Streaming exec for actions: live output, stoppable (whole process group).
+    if (url.pathname === '/exec/stream' && req.method === 'POST') {
+      server.timeout(req, 0);
+      try {
+        const body = await req.json();
+        if (!body?.command || typeof body.command !== 'string') {
+          return Response.json({ error: 'command is required' }, { status: 400 });
+        }
+        return streamExecResponse({ command: body.command, cwd: body.cwd, timeout: body.timeout });
+      } catch (err: any) {
+        return Response.json({ error: err.message }, { status: 500 });
+      }
+    }
+
+    if (url.pathname === '/exec/kill' && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        return Response.json({ killed: killExec(String(body?.execId ?? '')) });
       } catch (err: any) {
         return Response.json({ error: err.message }, { status: 500 });
       }
