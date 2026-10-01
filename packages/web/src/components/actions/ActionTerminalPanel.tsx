@@ -2,13 +2,13 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { diagnoseRun, type ActionRun, type PinnedIcon, type WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { tint, tintText } from '../../lib/tints';
 import { useFloatingResize, type ResizeDirection } from '../../hooks/useFloatingResize';
 import { useTerminal } from '../../hooks/useTerminal';
 import { terminalManager } from '../../services/terminalManager';
 import { DRAFT_SOURCE_PREFIX, usePinnedActionsStore, type TerminalTab } from '../../stores/pinnedActionsStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Button } from '../ui/Button';
+import { Tooltip } from '../ui/Tooltip';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { RunningBadge } from './ActionLogsModal';
 import { RunHintCard } from './RunHintCard';
@@ -105,29 +105,31 @@ function fullScreenStyle(): CSSProperties {
   return { top: titleBarBottom() + 16, left: 16, right: 16, bottom: 16 };
 }
 
-/**
- * Two clicks to kill: the first arms the button ("Confirm"), the second ends the
- * session. No modal over the terminal; disarms by itself if not confirmed.
- */
-export const KILL_CONFIRM_MS = 3000;
-function KillButton({ onKill }: { onKill: () => void }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const timer = setTimeout(() => setArmed(false), KILL_CONFIRM_MS);
-    return () => clearTimeout(timer);
-  }, [armed]);
+const WINDOW_ICONS = {
+  minimize: <path d="M5 12h14" />,
+  maximize: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+  kill: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+} as const;
+
+/** One of the panel's window controls: a small square button, its icon, a tooltip. */
+function WindowButton({ kind, label, onClick }: { kind: keyof typeof WINDOW_ICONS; label: string; onClick: () => void }) {
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className={cn('px-2 py-0', armed && cn(tint('red'), tintText('red')))}
-      title={armed ? 'Click again to end the session' : 'Kill — ends the tmux session and closes the terminal'}
-      onClick={() => (armed ? onKill() : setArmed(true))}
-      onBlur={() => setArmed(false)}
-    >
-      {armed ? 'Confirm' : 'Kill'}
-    </Button>
+    <Tooltip label={label}>
+      <button
+        type="button"
+        aria-label={label}
+        data-window-button={kind}
+        onClick={onClick}
+        className={cn(
+          'flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]',
+          kind === 'kill' && 'hover:border-[var(--theme-danger)] hover:text-[var(--theme-danger)]',
+        )}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          {WINDOW_ICONS[kind]}
+        </svg>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -220,9 +222,11 @@ function ActiveTab({
           <span className="text-[var(--theme-text-faint)]">—</span>
           <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--theme-text-muted)]" title={tab.command}>{tab.command}</code>
           {running && run && <RunningBadge startedAt={run.startedAt} format={clock} />}
-          <Button variant="ghost" size="sm" className="px-1.5 py-0" aria-label={fullScreen ? 'Exit full screen' : 'Full screen'} title={fullScreen ? 'Exit full screen' : 'Full screen'} onClick={onToggleFullScreen}>⤢</Button>
-          <KillButton key={tab.runId} onKill={kill} />
-          <Button variant="ghost" size="sm" className="px-1.5 py-0" aria-label="Minimize" title="Minimize (⌘W) — the session keeps running; click the action to bring it back" onClick={minimizeTerminal}>×</Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <WindowButton kind="minimize" label="Minimize (⌘W) — keeps running; click the action to bring it back" onClick={minimizeTerminal} />
+            <WindowButton kind="maximize" label={fullScreen ? 'Restore size' : 'Maximize'} onClick={onToggleFullScreen} />
+            <WindowButton kind="kill" label="Kill — ends the session and closes the terminal" onClick={kill} />
+          </div>
         </div>
         <TerminalView key={tab.runId} sessionId={actionTerminalSessionId(tab.runId)} focusNonce={focusNonce} />
         {running ? (

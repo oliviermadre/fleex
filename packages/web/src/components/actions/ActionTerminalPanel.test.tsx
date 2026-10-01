@@ -4,7 +4,7 @@ import type { ActionRun } from '@fleex/shared';
 import * as api from '../../services/api';
 import { useTerminal } from '../../hooks/useTerminal';
 import { resetPinnedActionsTransient, usePinnedActionsStore, type TerminalTab } from '../../stores/pinnedActionsStore';
-import { ActionTerminalPanel, KILL_CONFIRM_MS, TERMINAL_AUTO_CLOSE_MS } from './ActionTerminalPanel';
+import { ActionTerminalPanel, TERMINAL_AUTO_CLOSE_MS } from './ActionTerminalPanel';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { anchoredBox, setTerminalAnchor } from './terminalAnchor';
 
@@ -103,26 +103,13 @@ describe('ActionTerminalPanel', () => {
     expect(screen.queryByRole('dialog')).not.toBeNull();
   });
 
-  it('Kill asks for a second click on the same button — no modal over the terminal — then ends the session and closes the tab', () => {
+  it('× kills at once — no confirm, no modal — ending the session and closing the tab', () => {
     usePinnedActionsStore.setState({ runs: { kp: [run()] }, running: { kp: 't1' }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
-    fireEvent.click(screen.getByRole('button', { name: 'Kill' }));
-    expect(screen.queryByRole('dialog', { name: /Stop/ })).toBeNull();
-    expect(api.closeActionTerminal).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Kill/ }));
     expect(api.closeActionTerminal).toHaveBeenCalledWith('t1');
     expect(usePinnedActionsStore.getState().terminals).toEqual([]);
     expect(screen.queryByRole('dialog')).toBeNull();
-  });
-
-  it('an armed Kill disarms by itself if not confirmed', () => {
-    vi.useFakeTimers();
-    usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
-    render(<ActionTerminalPanel />);
-    fireEvent.click(screen.getByRole('button', { name: 'Kill' }));
-    act(() => { vi.advanceTimersByTime(KILL_CONFIRM_MS); });
-    expect(screen.getByRole('button', { name: 'Kill' })).toBeTruthy();
-    expect(api.closeActionTerminal).not.toHaveBeenCalled();
   });
 
   it('Kill re-reads the action state (probe), so its dot is right at once', () => {
@@ -131,8 +118,7 @@ describe('ActionTerminalPanel', () => {
     usePinnedActionsStore.setState({ refresh });
     useSettingsStore.setState((st) => ({ settings: { ...st.settings, pinnedIcons: [{ id: 'kp', label: 'K8s', icon: '', iconType: 'svg', actionType: 'shell', actionValue: 'k9s', status: { command: 'true', intervalSec: 60 } }] } }));
     render(<ActionTerminalPanel />);
-    fireEvent.click(screen.getByRole('button', { name: 'Kill' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Kill/ }));
     expect(refresh).toHaveBeenCalledWith('kp');
   });
 
@@ -157,7 +143,7 @@ describe('ActionTerminalPanel · minimize (k9s stays open, out of the way)', () 
     vi.mocked(api.startActionRun).mockResolvedValue({ runId: 't1', alreadyRunning: false, run: run() });
     render(<ActionTerminalPanel />);
     await act(async () => { await usePinnedActionsStore.getState().run(K9S); });
-    fireEvent.click(screen.getByRole('button', { name: 'Minimize' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Minimize/ }));
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(api.cancelActionRun).not.toHaveBeenCalled();
@@ -183,10 +169,15 @@ describe('ActionTerminalPanel · minimize (k9s stays open, out of the way)', () 
     expect(api.startActionRun).toHaveBeenCalledTimes(1);
   });
 
-  it('× is Minimize', () => {
+  it('top right: −, +, × — Minimize, Maximize, Kill, in that order, each with its tooltip label', () => {
     usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
-    expect(screen.getByRole('button', { name: 'Minimize' }).textContent).toBe('×');
+    const order = [...document.querySelectorAll('[data-window-button]')].map((b) => b.getAttribute('data-window-button'));
+    expect(order).toEqual(['minimize', 'maximize', 'kill']);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /^Kill/ }));
+    expect(screen.getByRole('tooltip').textContent).toMatch(/ends the session/);
+    fireEvent.click(screen.getByRole('button', { name: 'Maximize' }));
+    expect(screen.getByRole('button', { name: 'Restore size' })).toBeTruthy();
   });
 
   it('a run ending while its panel is minimized gets its toast (nothing on screen shows it)', async () => {
@@ -230,7 +221,7 @@ describe('ActionTerminalPanel · placement', () => {
     document.body.appendChild(bar);
     usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
-    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Maximize' }));
     const panel = screen.getByRole('dialog');
     expect(panel.getAttribute('data-placement')).toBe('full-screen');
     expect(panel.style.top).toBe('54px');
@@ -283,7 +274,7 @@ describe('ActionTerminalPanel · resize', () => {
   it('full screen has no grips', () => {
     usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
-    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Maximize' }));
     expect(document.querySelectorAll('[data-resize]')).toHaveLength(0);
   });
 });
