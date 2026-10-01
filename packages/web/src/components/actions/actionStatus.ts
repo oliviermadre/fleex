@@ -45,3 +45,19 @@ export function runDuration(startedAt: string, finishedAt?: string): string {
 export function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
+
+/**
+ * Shorten a numeric badge so it stays a corner tag, not a label: 4932 → "4.9k",
+ * 5000 → "5k", 1250000 → "1.3M". Anything that is not a plain integer
+ * ("✓", "2/2", "warn") is shown as the probe sent it.
+ */
+export function compactBadge(badge: string): string {
+  const raw = badge.trim();
+  if (!/^-?\d+$/.test(raw)) return raw;
+  const n = Number(raw);
+  const abs = Math.abs(n);
+  const fmt = (v: number, unit: string) => `${(v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toString()}${unit}`;
+  if (abs >= 1_000_000) return `${n < 0 ? '-' : ''}${fmt(abs / 1_000_000, 'M')}`;
+  if (abs >= 1_000) return `${n < 0 ? '-' : ''}${fmt(abs / 1_000, 'k')}`;
+  return raw;
+}

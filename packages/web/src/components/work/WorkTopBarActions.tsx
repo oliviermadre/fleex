@@ -54,7 +54,7 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
       {hasPinned && (
         <>
           <span className={GROUP_LABEL}>PINNED</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             {pinnedIcons.map((icon) => (
               <PinnedActionButton key={icon.id} action={icon} kind="pinned" onRun={() => executePinnedAction(icon)} />
             ))}
@@ -67,7 +67,7 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
       {workspaceContext && (
         <>
           <span className={GROUP_LABEL}>TICKET</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             {workspaceActions.map((action) => (
               <PinnedActionButton
                 key={action.id}

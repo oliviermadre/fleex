@@ -8,7 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
 import { Tooltip } from '../ui/Tooltip';
 import { renderIcon } from '../sidebar/PinnedIcons';
-import { STATUS_LABEL, formatAgo, runDuration, statusDotClass, statusTextClass, truncate } from './actionStatus';
+import { STATUS_LABEL, compactBadge, formatAgo, runDuration, statusDotClass, statusTextClass, truncate } from './actionStatus';
 
 const ICON_BTN =
   'relative flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]';
@@ -126,8 +126,12 @@ export function PinnedActionButton({
             />
           )}
           {badge && (
-            <span className="absolute -right-1.5 -top-1.5 rounded bg-[var(--theme-border-input)] px-[3px] py-px text-[8px] font-semibold leading-none text-[var(--theme-text-primary)] ring-1 ring-[var(--theme-bg-surface)]">
-              {badge}
+            // Anchored on the right edge: a wider badge grows over its own icon, never into the next button.
+            <span
+              title={badge}
+              className="absolute -right-1 -top-1.5 whitespace-nowrap rounded bg-[var(--theme-border-input)] px-[3px] py-px text-[8px] font-semibold leading-none tabular-nums text-[var(--theme-text-primary)] ring-1 ring-[var(--theme-bg-surface)]"
+            >
+              {compactBadge(badge)}
             </span>
           )}
           {running && (

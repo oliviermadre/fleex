@@ -60,7 +60,7 @@ export function ActionPreview({
     <aside className="sticky top-0 flex flex-col gap-3" aria-label="Preview">
       <div className={CARD}>
         <div className={HEAD}>Preview <span className="ml-auto normal-case tracking-normal text-[var(--theme-text-faint)]">live</span></div>
-        <div className="flex items-center justify-center gap-1 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-2 py-3.5">
+        <div className="flex items-center justify-center gap-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-2 py-3.5">
           <span className="mr-1 text-[9.5px] font-semibold tracking-wider text-[var(--theme-text-faint)]">{scope === 'pinned' ? 'PINNED' : 'TICKET'}</span>
           {bar.map((a) =>
             a.id === draft.id ? (

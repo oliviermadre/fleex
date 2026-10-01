@@ -59,7 +59,7 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
             it for worktrees. The repo props are only used for the no-ticket case. */}
         <OverlaySyncButton ticket={ticket} worktree={null} repoOrg="" repoName="" />
         {hasActions && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             {pinnedIcons.map((icon) => (
               <PinnedActionButton key={icon.id} action={icon} kind="pinned" onRun={() => executePinnedAction(icon)} />
             ))}

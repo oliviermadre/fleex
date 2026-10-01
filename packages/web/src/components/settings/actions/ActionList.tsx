@@ -260,7 +260,7 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
 
       <div className="flex items-center gap-3 rounded-xl border border-dashed border-[var(--theme-border-input)] px-4 py-2.5">
         <span className="text-[11px] text-[var(--theme-text-muted)]">Preview</span>
-        <div className="flex items-center gap-1 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1.5">
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1.5">
           {enabledActions.length === 0 && <span className="px-1 text-[11px] text-[var(--theme-text-faint)]">empty</span>}
           {enabledActions.map((a) => (
             <PinnedActionButton key={a.id} action={a} kind={scope === 'pinned' ? 'pinned' : 'workspace'} onRun={() => runFromSettings(a)} />
