@@ -10,7 +10,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import * as api from '../../services/api';
-import { answerQuestion, focusActions, formatWait, questionOptions, relaunchComment, sortFocusItems } from './focusModel';
+import { answerQuestion, focusActions, formatWait, questionOptions, sortFocusItems } from './focusModel';
 
 const base: FocusItem = {
   key: 'k', kind: 'gate', ticketId: 'T1', since: null, workflow: null, gate: null, question: null,
@@ -80,13 +80,11 @@ describe('focusActions', () => {
     expect(api.runMention).toHaveBeenCalledWith('m');
   });
 
-  it('idle tickets relaunch their last agent or move one step forward', async () => {
+  it('idle tickets move one step forward, never relaunch their agent without a comment', async () => {
     const item: FocusItem = { ...base, kind: 'idle', idle: { lastActivityAt: null, lastAgentName: 'dev', lastAgentDisplayName: 'Dev' } };
-    const [relaunch, advance] = focusActions(item, ctx);
-    expect(relaunch!.label).toBe('Relancer Dev');
-    await relaunch!.run();
-    expect(api.postTicketComment).toHaveBeenCalledWith('T1', relaunchComment('dev'));
-    expect(relaunchComment('dev')).toMatch(/^@agent:dev /);
+    const [advance, ...rest] = focusActions(item, ctx);
+    expect(rest).toEqual([]);
+    expect(advance!.label).toBe('Passer en Reviewing');
     await advance!.run();
     expect(ctx.moveTicket).toHaveBeenCalledWith('T1', 'reviewing');
 

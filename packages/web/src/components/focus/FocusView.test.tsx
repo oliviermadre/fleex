@@ -152,6 +152,74 @@ describe('FocusView', () => {
     expect(useWorkStore.getState().revealTicketId).toBe('t1');
   });
 
+  it('unstacks to the next item: the one left stays on screen, frozen, while the pile rises', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderView();
+    fireEvent.click(screen.getByText('Timeout configurable'));
+    const pile = () => [...document.querySelectorAll<HTMLElement>('[data-focus-stack-card]')];
+    // One item waits behind the open one: one card peeks under the popup.
+    expect(pile().map((c) => c.style.getPropertyValue('--slot'))).toEqual(['1']);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Suivant (J)' }));
+    const leaving = screen.getByRole('dialog');
+    expect(within(leaving).getByText(/Dev a une question/)).toBeTruthy();
+    expect(leaving.hasAttribute('inert')).toBe(true);
+    expect(leaving.parentElement!.className).toContain('focus-card-out-left');
+    expect(pile().map((c) => c.style.getPropertyValue('--slot'))).toEqual(['0', '1']);
+    expect(pile().every((c) => c.classList.contains('focus-stack-card-rise'))).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    const entering = screen.getByRole('dialog');
+    expect(within(entering).getByText(/Ce qui t’attend · Validate plan/)).toBeTruthy();
+    expect(entering.hasAttribute('inert')).toBe(false);
+    expect(entering.parentElement!.className).toContain('focus-card-reveal');
+    expect(pile().map((c) => c.style.getPropertyValue('--slot'))).toEqual(['1']);
+    fireEvent.click(within(entering).getByRole('button', { name: 'Précédent (K)' }));
+    expect(screen.getByRole('dialog').parentElement!.className).toContain('focus-card-sink');
+    expect(pile().map((c) => c.style.getPropertyValue('--slot'))).toEqual(['1']);
+  });
+
+  it('navigates the popup with ←/→ and N; digits no longer fire a choice', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderView();
+    fireEvent.click(screen.getByText('Timeout configurable'));
+    const title = () => screen.getByRole('dialog').querySelector('#focus-detail-title')!.textContent;
+    fireEvent.keyDown(window, { key: '1' });
+    expect(useFocusStore.getState().pending).toEqual({});
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(title()).toBe('Refonte du flux New task');
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(title()).toBe('Timeout configurable');
+    fireEvent.keyDown(window, { key: 'n' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(title()).toBe('Refonte du flux New task');
+  });
+
+  it('an idle ticket offers Commenter first; sending the comment handles it and moves on', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const IDLE: FocusItem = {
+      key: 'idle:t1:doing', kind: 'idle', ticketId: 't1', since: minutesAgo(400),
+      workflow: null, gate: null, question: null, error: null, lastAgentComment: null, costUsd: 0,
+      idle: { lastActivityAt: minutesAgo(400), lastAgentName: 'dev', lastAgentDisplayName: 'Dev' },
+    };
+    useFocusStore.setState({ items: [IDLE, QUESTION] });
+    renderView();
+    fireEvent.click(screen.getByText('Refonte du flux New task'));
+    const dialog = screen.getByRole('dialog');
+    const choices = within(dialog).getAllByRole('button').map((b) => b.textContent);
+    expect(choices).toContain('Commenter');
+    expect(choices).toContain('Passer en Reviewing');
+    expect(choices.some((c) => c?.startsWith('Relancer'))).toBe(false);
+    expect(within(dialog).queryByPlaceholderText(/Ton commentaire/)).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Commenter' }));
+    fireEvent.change(within(dialog).getByPlaceholderText(/Ton commentaire/), { target: { value: '@agent:dev corrige le hover' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Envoyer le commentaire/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(within(screen.getByRole('dialog')).getByText(/Dev a une question/)).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_MS); });
+    expect(api.postTicketComment).toHaveBeenCalledWith('t1', '@agent:dev corrige le hover');
+  });
+
   it('shows the empty state when nothing waits', () => {
     useFocusStore.setState({ items: [] });
     renderView();

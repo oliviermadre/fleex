@@ -108,12 +108,12 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
         </div>
         {options.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1" onClick={stop}>
-            {actions.map((a, i) => (
+            {actions.map((a) => (
               <button
                 key={a.id}
                 type="button"
                 onClick={() => onAction(a)}
-                title={`Répondre « ${a.label} » (${i + 1})`}
+                title={`Répondre « ${a.label} »`}
                 className="h-6 rounded-full border border-dashed border-[var(--theme-border-input)] px-2 text-[11.5px] text-[var(--theme-text-secondary)] hover:border-solid hover:text-[var(--theme-text-primary)]"
               >
                 {a.label}
@@ -156,12 +156,12 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
           </div>
         ) : (
           <>
-            {actions.slice(0, 2).map((a, i) => (
+            {actions.slice(0, 2).map((a) => (
               <button
                 key={a.id}
                 type="button"
                 onClick={() => onAction(a)}
-                title={a.hint ? `${a.label} ${a.hint} (${i + 1})` : `${a.label} (${i + 1})`}
+                title={a.hint ? `${a.label} ${a.hint}` : a.label}
                 className={cn(
                   'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium',
                   a.primary
@@ -170,7 +170,6 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
                 )}
               >
                 {a.label}
-                <span className="font-mono text-[9.5px] opacity-70">{i + 1}</span>
               </button>
             ))}
             {actions.length > 2 && (

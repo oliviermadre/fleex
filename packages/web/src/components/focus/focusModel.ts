@@ -124,11 +124,6 @@ const NEXT_STATUS: Partial<Record<TicketStatus, { status: TicketStatus; label: s
   reviewing: { status: 'done', label: 'Done', hint: 'le ticket sort de Focus' },
 };
 
-/** Relaunch message posted for an idle ticket — the mention wakes the agent. */
-export function relaunchComment(agentName: string): string {
-  return `@agent:${agentName} Reprends ce ticket là où tu t’es arrêté.`;
-}
-
 /**
  * Answer an agent. A plain comment wakes every agent waiting on the ticket
  * (server auto-wake); a paused workflow step additionally needs its retry, with
@@ -172,7 +167,7 @@ export function focusActions(item: FocusItem, ctx: FocusActionContext): FocusAct
         const open = ctx.openSession;
         if (!sessionId || !open) return [];
         return [{
-          id: 'open-session', label: 'Ouvrir la session', hint: 'réponds dans le terminal', primary: true, immediate: true,
+          id: 'open-session', label: 'Ouvrir CLI', hint: 'réponds dans le terminal', primary: true, immediate: true,
           toast: `${ref} · session ouverte`,
           run: async () => open(sessionId),
         }];
@@ -213,20 +208,13 @@ export function focusActions(item: FocusItem, ctx: FocusActionContext): FocusAct
       const open = ctx.openSession;
       if (cliSession && open) {
         out.push({
-          id: 'open-session', label: 'Ouvrir la session', hint: 'reprendre la conversation', primary: true, immediate: true,
+          id: 'open-session', label: 'Ouvrir CLI', hint: 'reprendre la conversation', primary: true, immediate: true,
           toast: `${ref} · session ouverte`,
           run: async () => open(cliSession),
         });
       }
-      const agent = item.idle?.lastAgentName;
-      if (agent) {
-        const name = item.idle?.lastAgentDisplayName ?? agent;
-        out.push({
-          id: 'relaunch', label: `Relancer ${name}`, hint: 'reprend là où il s’est arrêté', primary: out.length === 0,
-          toast: `${ref} · ${name} relancé`,
-          run: () => api.postTicketComment(item.ticketId, relaunchComment(agent)),
-        });
-      }
+      // No bare "relaunch the agent": without a comment it wouldn't know what to do next.
+      // Waking it goes through a comment; a crashed run is an error item, with its own retry.
       const next = NEXT_STATUS[ctx.ticket.status];
       if (next) {
         out.push({

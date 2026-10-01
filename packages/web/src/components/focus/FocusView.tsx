@@ -13,6 +13,7 @@ import {
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
+import { postTicketComment } from '../../services/api';
 import { FocusIcon } from '../sidebar/icons';
 import { Tooltip } from '../ui/Tooltip';
 import { KindIcon } from './FocusIcons';
@@ -85,6 +86,8 @@ export function FocusView() {
   const [sort, setSort] = useState<FocusSort>('age');
   const [cursor, setCursor] = useState(0);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Which way the popup last moved through the queue — its card slides that way.
+  const [openDir, setOpenDir] = useState<1 | -1>(1);
   const [logs, setLogs] = useState<{ executionId: string; title: string } | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
 
@@ -137,6 +140,7 @@ export function FocusView() {
       if (openKey !== key) return;
       const idx = list.findIndex((i) => i.key === key);
       const next = list.filter((i) => i.key !== key)[Math.max(0, idx)] ?? null;
+      setOpenDir(1);
       setOpenKey(prefs.chain && next ? next.key : null);
     },
     [openKey, list, prefs.chain],
@@ -156,6 +160,15 @@ export function FocusView() {
       const t = ticketById.get(item.ticketId);
       advanceFrom(item.key);
       commit(item, `#${t?.displayId ?? ''} · réponse envoyée à ${item.question?.askedBy ?? 'l’agent'}`, () => answerQuestion(item, text));
+    },
+    [advanceFrom, commit, ticketById],
+  );
+  // A comment handles the item: the popup moves on, with the usual undo window before it posts.
+  const commentOn = useCallback(
+    (item: FocusItem, text: string) => {
+      const t = ticketById.get(item.ticketId);
+      advanceFrom(item.key);
+      commit(item, `#${t?.displayId ?? ''} · commentaire ajouté`, () => postTicketComment(item.ticketId, text));
     },
     [advanceFrom, commit, ticketById],
   );
@@ -193,9 +206,6 @@ export function FocusView() {
       } else if (e.key === 'Enter' && !(e.target as HTMLElement | null)?.closest?.('button,a')) {
         e.preventDefault();
         setOpenKey(item.key);
-      } else if (/^[1-9]$/.test(e.key)) {
-        const a = actionsOf(item)[Number(e.key) - 1];
-        if (a) { e.preventDefault(); act(item, a); }
       } else if (e.key === 'r' && item.kind === 'question') {
         e.preventDefault();
         rowRefs.current.get(item.key)?.querySelector<HTMLInputElement>('[data-focus-reply]')?.focus();
@@ -212,7 +222,7 @@ export function FocusView() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [openKey, list, cursor, actionsOf, act, snoozeItem, openTicket]);
+  }, [openKey, list, cursor, snoozeItem, openTicket]);
 
   useEffect(() => {
     const item = list[cursor];
@@ -385,7 +395,6 @@ export function FocusView() {
       <div className="hidden flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-[var(--theme-border)] px-7 py-2 text-[11px] text-[var(--theme-text-faint)] md:flex">
         <span><Kbd>J</Kbd><Kbd>K</Kbd> naviguer</span>
         <span><Kbd>⏎</Kbd> détails</span>
-        <span><Kbd>1</Kbd><Kbd>2</Kbd><Kbd>3</Kbd> action directe</span>
         <span><Kbd>R</Kbd> répondre</span>
         <span><Kbd>L</Kbd> lancer un agent</span>
         <span><Kbd>S</Kbd> plus tard (1 h)</span>
@@ -412,10 +421,13 @@ export function FocusView() {
           chain={prefs.chain}
           onChainChange={(v) => setPref('chain', v)}
           onClose={() => setOpenKey(null)}
-          onPrev={() => { const i = (openIndex - 1 + list.length) % list.length; setCursor(i); setOpenKey(list[i]!.key); }}
-          onNext={() => { const i = (openIndex + 1) % list.length; setCursor(i); setOpenKey(list[i]!.key); }}
+          direction={openDir}
+          remaining={list.length - 1}
+          onPrev={() => { const i = (openIndex - 1 + list.length) % list.length; setCursor(i); setOpenDir(-1); setOpenKey(list[i]!.key); }}
+          onNext={() => { const i = (openIndex + 1) % list.length; setCursor(i); setOpenDir(1); setOpenKey(list[i]!.key); }}
           onAction={(a, notes) => act(openItem, a, notes)}
           onAnswer={(text) => answer(openItem, text)}
+          onComment={(text) => commentOn(openItem, text)}
           onSnooze={(until) => snoozeItem(openItem, until)}
           onOpenTicket={() => openTicket(openItem)}
           onOpenLogs={(executionId) => setLogs({ executionId, title: ticketById.get(openItem.ticketId)!.title })}
