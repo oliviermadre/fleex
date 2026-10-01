@@ -133,6 +133,9 @@ import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 import { PinnedStatusService } from '../domain/services/pinned-status.service.js';
 import { ActionRunService } from '../domain/services/action-run.service.js';
+import { SuggestActionUseCase } from '../application/use-cases/suggest-action.js';
+import { ClaudeJsonModel, ShellBinaryLookup, createAiAvailability } from './adapters/actions-ai.adapters.js';
+import { IconifyClient } from './adapters/iconify.client.js';
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
 
@@ -762,12 +765,23 @@ export async function createContainer() {
     pinnedStatusBroadcast = fn;
   };
 
+  // Settings › Actions AI assistants (Haiku via the SDK, Iconify for icons).
+  const suggestAction = new SuggestActionUseCase(
+    new ClaudeJsonModel(sdkLimiter),
+    new ShellBinaryLookup(shellExecFn),
+    new IconifyClient(),
+    logger,
+  );
+  const isActionsAiAvailable = createAiAvailability(() => claudeUsageAdapter.hasCredentials());
+
   return {
     logger,
     gatewayUrl,
     pinnedStatus,
     actionRuns,
     setPinnedStatusBroadcast,
+    suggestAction,
+    isActionsAiAvailable,
     execFn,
     shellExecFn,
     hostFs,

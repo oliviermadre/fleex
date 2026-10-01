@@ -19,6 +19,7 @@ import { configRoutes } from './infrastructure/http/config.routes.js';
 import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
 import { pinnedActionsRoutes } from './infrastructure/http/pinned-actions.routes.js';
+import { actionsAiRoutes } from './infrastructure/http/actions-ai.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
@@ -117,6 +118,7 @@ async function main() {
   await app.register(deliverableTypesRoutes(container));
   await app.register(execRoutes(container));
   await app.register(pinnedActionsRoutes(container));
+  await app.register(actionsAiRoutes({ suggestAction: container.suggestAction, isAvailable: container.isActionsAiAvailable, logger: container.logger }));
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));
   await app.register(claudeUsageRoutes(container));

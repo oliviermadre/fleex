@@ -74,6 +74,11 @@ export class ApiClaudeUsageAdapter implements ClaudeUsagePort {
     return result as unknown as ClaudeUsage;
   }
 
+  /** Whether Claude Code credentials exist locally (used to gate the AI helpers in Settings). */
+  async hasCredentials(): Promise<boolean> {
+    return (await this.resolveToken()) !== null;
+  }
+
   private async resolveToken(): Promise<string | null> {
     const fromEnv = process.env['CLAUDE_CODE_OAUTH_TOKEN'];
     if (fromEnv?.trim()) return fromEnv.trim();
