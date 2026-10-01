@@ -133,6 +133,7 @@ import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 import { PinnedStatusService } from '../domain/services/pinned-status.service.js';
 import { ActionRunService } from '../domain/services/action-run.service.js';
+import { BinaryDiagnosisService, BINARY_DIAGNOSIS_TIMEOUT_MS } from '../domain/services/binary-diagnosis.service.js';
 import { SuggestActionUseCase } from '../application/use-cases/suggest-action.js';
 import { ClaudeJsonModel, ShellBinaryLookup, createAiAvailability } from './adapters/actions-ai.adapters.js';
 import { IconifyClient } from './adapters/iconify.client.js';
@@ -765,11 +766,15 @@ export async function createContainer() {
     pinnedStatusBroadcast = fn;
   };
 
+  const binaryDiagnosis = new BinaryDiagnosisService((command) =>
+    shellExecFn(command, { cwd: hostHomedir, timeout: BINARY_DIAGNOSIS_TIMEOUT_MS }),
+  );
+
   // Settings › Actions AI assistants (Haiku via the SDK, Iconify for icons).
   const iconSearch = new IconifyClient();
   const suggestAction = new SuggestActionUseCase(
     new ClaudeJsonModel(sdkLimiter),
-    new ShellBinaryLookup(shellExecFn),
+    new ShellBinaryLookup(binaryDiagnosis),
     iconSearch,
     logger,
   );
@@ -780,6 +785,7 @@ export async function createContainer() {
     gatewayUrl,
     pinnedStatus,
     actionRuns,
+    binaryDiagnosis,
     setPinnedStatusBroadcast,
     suggestAction,
     iconSearch,

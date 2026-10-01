@@ -45,35 +45,8 @@ export function enforceRisk(command: string, modelRisk: CommandRisk | undefined)
   return modelRisk === 'destructive' || modelRisk === 'mutating' || modelRisk === 'safe' ? modelRisk : 'mutating';
 }
 
-const SHELL_KEYWORDS = new Set([
-  'if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until', 'do', 'done', 'case', 'esac', 'in', 'function',
-  'time', 'sudo', 'env', 'exec', 'command', 'builtin', 'nohup', '!', '{', '}', '[', '[[', ']]', 'test',
-  'echo', 'printf', 'true', 'false', 'cd', 'export', 'local', 'return', 'exit', 'read', 'set', 'unset', 'source', '.',
-]);
-
 /**
- * The executables a shell command depends on: the first word of each pipeline
- * segment (`&&`, `||`, `;`, `|`, newlines, `$(…)`), minus shell keywords,
- * builtins and variable assignments. Used to tell the user "gh not found" before
- * they save an action that can never work on this machine.
+ * The executables a shell command depends on — shared with the web (the editor
+ * warns about .zshrc aliases) and the run diagnosis, so all three agree.
  */
-export function extractBinaries(command: string): string[] {
-  const found: string[] = [];
-  const withoutQuotes = command
-    .replace(/'[^']*'/g, "''")
-    .replace(/"(?:[^"\\$]|\\.)*"/g, '""');
-  const segments = withoutQuotes.split(/&&|\|\||[;|\n]|\$\(|`|\bthen\b|\bdo\b|\belse\b/);
-  for (const segment of segments) {
-    const words = segment.trim().replace(/^[({\s!]+/, '').split(/\s+/);
-    let i = 0;
-    // Skip `VAR=value` prefixes and wrapper words like sudo/env.
-    while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]!) || ['sudo', 'env', 'nohup', 'time', 'exec', 'command'].includes(words[i]!))) i += 1;
-    const word = words[i];
-    if (!word) continue;
-    const name = word.replace(/[)}"']+$/, '');
-    if (!/^[A-Za-z0-9_][\w.+-]*$/.test(name)) continue;
-    if (SHELL_KEYWORDS.has(name)) continue;
-    if (!found.includes(name)) found.push(name);
-  }
-  return found;
-}
+export { extractBinaries } from '@fleex/shared';

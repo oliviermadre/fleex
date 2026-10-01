@@ -571,6 +571,9 @@ export type {
   ActionSourceKind,
   ActionRunRequest,
   ActionRun,
+  ActionRunMode,
+  ActionRunOutputChunk,
+  ActionRunCapabilities,
   PinnedStatusWsMessage,
   ActionsAiCommandKind,
   ActionScope,
@@ -599,3 +602,5 @@ export {
   ACTION_MAX_TIMEOUT_SEC,
   resolveClickAction,
 } from './types/pinned-actions.js';
+export type { RunHint, RunHintCode, RunHintSuggestion, DiagnosableRun, BinaryDiagnosis, BinaryKind } from './run-diagnosis.js';
+export { diagnoseRun, extractBinaries, BINARY_NAME, aliasUsesTty, scriptFromAlias } from './run-diagnosis.js';

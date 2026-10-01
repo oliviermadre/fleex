@@ -6,6 +6,7 @@ import {
   PROBE_DEFAULT_TIMEOUT_SEC,
   PROBE_INTERVALS_SEC,
   PROBE_MAX_TIMEOUT_SEC,
+  diagnoseRun,
 } from '@fleex/shared';
 import type { ActionRun, ConditionalAction, ProbeTestResult } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
@@ -25,6 +26,7 @@ import { readScopeList, saveScope, useScopeList } from './ActionList';
 import { AiSuggestBar } from './AiSuggestBar';
 import { IconPicker } from './IconPicker';
 import { RuleList } from './RuleList';
+import { CommandBinaryWarning, RunHintCard } from '../../actions/RunHintCard';
 import {
   PIPE_FUNCTIONS,
   TEMPLATE_VARIABLES,
@@ -213,6 +215,12 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
   const tryRuns = usePinnedActionsStore((s) => s.runs[`${DRAFT_SOURCE_PREFIX}${draft.id}`] ?? EMPTY_RUNS);
   const tryRunning = usePinnedActionsStore((s) => !!s.running[`${DRAFT_SOURCE_PREFIX}${draft.id}`]);
   const tryResult = tryStartedAt ? tryRuns.find((r) => r.startedAt >= tryStartedAt) : undefined;
+  const tryHint = tryResult?.finishedAt ? diagnoseRun(tryResult) : null;
+  // A probe that cannot even find its program is a broken probe, not a broken tool:
+  // say so instead of letting the red dot blame gcloud.
+  const probeHint = probeTest && probeTest !== 'loading' && probeTest.source === 'exit-code' && probeTest.exitCode === 127
+    ? diagnoseRun({ exitCode: probeTest.exitCode, stdout: probeTest.stdout, stderr: probeTest.stderr, command: draft.status?.command })
+    : null;
   const canTry = draft.actionType === 'shell' && !!draft.actionValue.trim() && (scope === 'pinned' || !!contextTicket);
 
   const tryCommand = async () => {
@@ -432,6 +440,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
               onChange={(e) => update({ actionValue: e.target.value }, 'actionValue')}
             />
             <FieldError text={showErrors ? errors.actionValue : undefined} />
+            {draft.actionType === 'shell' && <CommandBinaryWarning command={draft.actionValue} />}
             {warnings.map((w) => <p key={w} className={cn('mt-1 text-[11px]', tintText('yellow'))}>{w}</p>)}
             {!pinned && (
               <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -471,6 +480,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                 onClose={() => setTryStartedAt(null)}
               />
             ) : null)}
+            {tryResult?.finishedAt && tryHint && <RunHintCard hint={tryHint} className="mt-2" />}
           </section>
 
           {/* 3. Status */}
@@ -515,6 +525,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                     value={draft.status.command}
                     onChange={(e) => update({ status: { ...draft.status!, command: e.target.value } }, 'status')}
                   />
+                  <CommandBinaryWarning command={draft.status.command} />
                   <FieldError text={showErrors ? errors.probe : undefined} />
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <span className="mr-1 text-[11px] text-[var(--theme-text-muted)]">Check every</span>
@@ -547,6 +558,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                       onClose={() => setProbeTest(null)}
                     />
                   )}
+                  {probeHint && <RunHintCard hint={probeHint} className="mt-2" />}
                 </>
               ) : (
                 <div className="flex items-center gap-3.5 rounded-lg border border-dashed border-[var(--theme-border-input)] p-4">

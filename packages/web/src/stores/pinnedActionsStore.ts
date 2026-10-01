@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ActionRun, ActionRunRequest, PinnedStatusWsMessage, StatusSnapshot } from '@fleex/shared';
+import { diagnoseRun, type ActionRun, type ActionRunRequest, type PinnedStatusWsMessage, type StatusSnapshot } from '@fleex/shared';
 import * as api from '../services/api';
 import { useToastStore } from './toastStore';
 
@@ -47,16 +47,29 @@ function upsertRun(list: ActionRun[] | undefined, run: ActionRun): ActionRun[] {
   return [run, ...rest].slice(0, RUNS_KEPT);
 }
 
-/** Toast at the end of a run: ✓ with its duration, ✗ with the exit code and first stderr line, or a timeout. */
+/**
+ * Toast at the end of a run: ✓ with its duration; on failure, the diagnosed
+ * reason when there is one ("Command not found: platool", "needs a terminal"…),
+ * else the exit code and first stderr line as before.
+ */
 export function announceRun(run: ActionRun, openLogs: (t: LogsTarget) => void): void {
   const { addToast } = useToastStore.getState();
   const action = { label: 'View logs', onClick: () => openLogs({ sourceId: run.sourceId, label: run.label, runId: run.runId }) };
+  const hint = diagnoseRun(run);
+  if (hint?.code === 'cancelled') {
+    addToast('info', `${run.label} — stopped`);
+    return;
+  }
   if (run.timedOut) {
-    addToast('warning', `${run.label} timed out`, { action, durationMs: 8000 });
+    addToast('warning', `${run.label} — ${hint?.title ?? 'timed out'}`, { action, durationMs: 8000 });
     return;
   }
   if (run.exitCode === 0) {
     addToast('success', `✓ ${run.label} (${durationSec(run)})`);
+    return;
+  }
+  if (hint) {
+    addToast('error', `✗ ${run.label} — ${hint.title}`, { action, durationMs: 8000 });
     return;
   }
   const code = run.exitCode === undefined ? 'failed' : `exit ${run.exitCode}`;

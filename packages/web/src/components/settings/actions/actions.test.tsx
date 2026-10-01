@@ -18,6 +18,8 @@ vi.mock('../../../services/api', async (importOriginal) => ({
   updateConfig: vi.fn(async () => ({})),
   fetchActionRuns: vi.fn(async () => []),
   fetchActionsAiStatus: vi.fn(async () => ({ available: false })),
+  testPinnedProbe: vi.fn(),
+  diagnoseBinary: vi.fn(async () => null),
   startActionRun: vi.fn(async () => ({ runId: 'r1', alreadyRunning: false })),
   ensureTicketWorkspace: vi.fn(async () => true),
 }));
@@ -275,5 +277,17 @@ describe('actionModel', () => {
 
   it('moveItem ignores moves past either end', () => {
     expect(moveItem([icon('a'), icon('b')], 'a', -1).map((i) => i.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('ActionDetail · Test the probe', () => {
+  it('blames the probe, not the tool, when its own program is not found (exit 127)', async () => {
+    useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, pinnedIcons: [icon('a', { status: { command: 'gcloudd auth print-access-token', intervalSec: 60 } })] } });
+    vi.mocked(api.testPinnedProbe).mockResolvedValue({
+      snapshot: { iconId: 'a', status: 'ko', probing: false }, source: 'exit-code', stdout: '', stderr: 'zsh:1: command not found: gcloudd', exitCode: 127,
+    });
+    render(<ActionDetail scope="pinned" id="a" />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Test the probe' })); });
+    expect(screen.getByRole('note', { name: 'Command not found: gcloudd' })).toBeTruthy();
   });
 });

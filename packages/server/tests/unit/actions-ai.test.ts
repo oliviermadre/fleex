@@ -45,6 +45,19 @@ describe('SuggestActionUseCase.command', () => {
     expect(s).toMatchObject({ command: 'gcloud auth login --update-adc', risk: 'mutating', binaries: [{ name: 'gcloud', found: true }] });
   });
 
+  it('marks an interactive command for the terminal — a -it never works in the background — but never a probe', async () => {
+    const model = scriptedModel([() => '{"command":"docker run --rm -it alpine sh","explanation":"x","risk":"safe","runMode":"background"}']);
+    const uc = new SuggestActionUseCase(model, binaries, icons([]), logger);
+    expect((await uc.command({ intent: 'shell alpine', kind: 'action', scope: 'pinned' })).runMode).toBe('terminal');
+    expect((await uc.command({ intent: 'shell alpine', kind: 'probe', scope: 'pinned' })).runMode).toBeUndefined();
+  });
+
+  it('tells the model aliases are not loaded, so it proposes real programs', async () => {
+    const model = scriptedModel([() => '{"command":"gh auth status","risk":"safe"}']);
+    await new SuggestActionUseCase(model, binaries, icons([]), logger).command({ intent: 'gh ok?', kind: 'action', scope: 'pinned' });
+    expect((model.complete as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toContain('never rely on an alias');
+  });
+
   it('forces destructive on a dangerous command whatever the model says', async () => {
     const model = scriptedModel([() => '{"command":"docker system prune -af","explanation":"x","risk":"safe"}']);
     const uc = new SuggestActionUseCase(model, binaries, icons([]), logger);

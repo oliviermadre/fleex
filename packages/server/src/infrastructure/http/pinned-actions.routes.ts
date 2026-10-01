@@ -2,10 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import type { ActionRunRequest, ActionSourceKind } from '@fleex/shared';
 import type { ActionRunService } from '../../domain/services/action-run.service.js';
 import type { PinnedStatusService } from '../../domain/services/pinned-status.service.js';
+import { InvalidBinaryNameError, type BinaryDiagnosisService } from '../../domain/services/binary-diagnosis.service.js';
 
 export interface PinnedActionsRouteDeps {
   pinnedStatus: PinnedStatusService;
   actionRuns: ActionRunService;
+  binaryDiagnosis?: BinaryDiagnosisService;
   logger: { info: (msg: string, meta?: Record<string, unknown>) => void };
 }
 
@@ -61,6 +63,17 @@ export function pinnedActionsRoutes(deps: PinnedActionsRouteDeps) {
       });
       if (!result.ok) return reply.code(409).send({ runId: result.runningRunId });
       return reply.code(202).send({ runId: result.run.runId, run: result.run });
+    });
+
+    // "Command not found": what a background action sees vs what the user's terminal sees.
+    app.post<{ Body: { binary?: unknown } }>('/api/action-runs/diagnose', async (request, reply) => {
+      if (!deps.binaryDiagnosis) return reply.code(501).send({ error: 'Diagnosis unavailable' });
+      try {
+        return await deps.binaryDiagnosis.diagnose(request.body?.binary as string);
+      } catch (err) {
+        if (err instanceof InvalidBinaryNameError) return reply.code(400).send({ error: err.message });
+        throw err;
+      }
     });
 
     app.get<{ Querystring: { sourceId?: string } }>('/api/action-runs', async (request) =>

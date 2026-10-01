@@ -1765,3 +1765,17 @@ export async function searchIconLibrary(q: string): Promise<import('@fleex/share
 export function sanitizeIconSvg(svg: string): Promise<{ svg: string }> {
   return aiRequest('/actions-ai/icons/sanitize', { svg });
 }
+
+/** What a background action vs your terminal sees for a program (alias of .zshrc?). Null on failure, no toast. */
+export async function diagnoseBinary(binary: string): Promise<import('@fleex/shared').BinaryDiagnosis | null> {
+  try {
+    const res = await fetch(`${API_URL}/action-runs/diagnose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ binary }),
+    });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}

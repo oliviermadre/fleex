@@ -54,7 +54,17 @@ describe('run feedback', () => {
 
   it('says "timed out" instead of a bare exit code', () => {
     usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 1, timedOut: true }) });
-    expect(useToastStore.getState().toasts[0]).toMatchObject({ type: 'warning', message: 'K8s prod timed out' });
+    expect(useToastStore.getState().toasts[0]).toMatchObject({ type: 'warning', message: 'K8s prod — Timed out' });
+  });
+
+  it('says why when it can: a command not found names the program instead of "exit 127"', () => {
+    usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 127, stderr: 'zsh:1: command not found: platool' }) });
+    expect(useToastStore.getState().toasts[0]).toMatchObject({ type: 'error', message: '✗ K8s prod — Command not found: platool' });
+  });
+
+  it('says "needs a terminal" for a docker run -it without TTY', () => {
+    usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 1, stderr: 'the input device is not a TTY' }) });
+    expect(useToastStore.getState().toasts[0]!.message).toBe('✗ K8s prod — This command needs a terminal');
   });
 
   it('stays silent for a Settings "Try" run — its result is shown inline there', () => {

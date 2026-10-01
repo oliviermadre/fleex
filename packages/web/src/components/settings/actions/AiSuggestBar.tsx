@@ -95,7 +95,7 @@ export function AiSuggestBar({ kind, scope, context, placeholder, onApply, autoF
             <span className={cn('inline-flex h-5 items-center rounded px-1.5 text-[11px] font-medium', RISK[result.risk].className)}>{RISK[result.risk].label}</span>
             {result.binaries.map((b) => (
               <Chip key={b.name} className={b.found ? undefined : tint('yellow')}>
-                <span className="font-mono">{b.name}</span> {b.found ? '✓ found' : 'not found'}
+                <span className="font-mono">{b.name}</span> {b.found ? '✓ found' : b.kind ? `${b.kind} of .zshrc — not found in the background` : 'not found'}
               </Chip>
             ))}
             <span className="flex-1" />

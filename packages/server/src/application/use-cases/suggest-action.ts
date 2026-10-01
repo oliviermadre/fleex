@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { ACTION_STATUSES, PROBE_DEFAULT_INTERVAL_SEC } from '@fleex/shared';
+import { ACTION_STATUSES, PROBE_DEFAULT_INTERVAL_SEC, aliasUsesTty } from '@fleex/shared';
 import type {
+  ActionRunMode,
   ActionScope,
   ActionStatus,
   ActionsAiCommandRequest,
@@ -43,6 +44,9 @@ Execution environment of every command (non-negotiable):
 - No TTY and no stdin: nothing may prompt or wait for keyboard input (no \`read\`, no interactive menus,
   no pager — pass flags like --quiet, --no-pager, --web, --yes only when they avoid a prompt).
 - Opening a browser is fine (e.g. \`gh auth login --web\`, \`gcloud auth login\`, \`open <url>\`).
+- .zshrc is NOT loaded: never rely on an alias or a shell function — use the real program.
+- A command that truly needs a terminal (a TTY like \`docker run -it\`, a prompt to answer) can run in a
+  terminal the user sees: set "runMode": "terminal" for it, "background" otherwise.
 - Working directory: the user's home for top-bar actions; the ticket workspace for ticket actions.
 `.trim();
 
@@ -52,7 +56,7 @@ You write a single shell command for a one-click button in Fleex, a developer to
 ${ENVIRONMENT}
 
 Reply with ONE JSON object and nothing else:
-{"command": string, "explanation": string, "risk": "safe" | "mutating" | "destructive", "alternatives": string[]}
+{"command": string, "explanation": string, "risk": "safe" | "mutating" | "destructive", "alternatives": string[], "runMode": "background" | "terminal"}
 
 - "explanation": 1–2 sentences, in the language of the user's request.
 - "risk": "safe" = read-only; "mutating" = changes local state or logs in/out; "destructive" = deletes or overwrites.
@@ -151,15 +155,17 @@ const strList = (v: unknown, max: number): string[] =>
   Array.isArray(v) ? v.map(str).filter((x): x is string => x !== null).slice(0, max) : [];
 const isStatus = (v: unknown): v is ActionStatus => typeof v === 'string' && (ACTION_STATUSES as readonly string[]).includes(v);
 
-export function validateCommand(o: Record<string, unknown>): { command: string; explanation: string; risk?: CommandRisk; alternatives: string[] } | null {
+export function validateCommand(o: Record<string, unknown>): { command: string; explanation: string; risk?: CommandRisk; alternatives: string[]; runMode?: ActionRunMode } | null {
   const command = str(o['command']);
   if (!command) return null;
   const risk = o['risk'];
+  const runMode = o['runMode'];
   return {
     command,
     explanation: str(o['explanation']) ?? '',
     ...(risk === 'safe' || risk === 'mutating' || risk === 'destructive' ? { risk } : {}),
     alternatives: strList(o['alternatives'], 2).filter((a) => a !== command),
+    ...(runMode === 'terminal' || runMode === 'background' ? { runMode } : {}),
   };
 }
 
@@ -254,6 +260,8 @@ export class SuggestActionUseCase {
       risk: enforceRisk(parsed.command, parsed.risk),
       binaries,
       ...(parsed.alternatives.length ? { alternatives: parsed.alternatives } : {}),
+      // A probe never runs in a terminal; a `-it` command always needs one, whatever the model said.
+      ...(request.kind !== 'probe' && (parsed.runMode === 'terminal' || aliasUsesTty(parsed.command)) ? { runMode: 'terminal' as const } : {}),
     };
   }
 

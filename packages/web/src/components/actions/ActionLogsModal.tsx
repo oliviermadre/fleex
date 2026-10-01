@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import type { ActionRun } from '@fleex/shared';
+import { diagnoseRun, type ActionRun } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { RunMark } from './PinnedActionButton';
 import { runDuration } from './actionStatus';
+import { RunHintCard } from './RunHintCard';
 
 const EMPTY: ActionRun[] = [];
 
@@ -63,6 +64,7 @@ export function ActionLogsModal() {
 }
 
 function RunDetail({ run }: { run: ActionRun }) {
+  const hint = run.finishedAt ? diagnoseRun(run) : null;
   return (
     <div className="flex flex-col gap-3 text-xs">
       <dl className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1">
@@ -79,6 +81,7 @@ function RunDetail({ run }: { run: ActionRun }) {
           </>
         )}
       </dl>
+      {hint && <RunHintCard hint={hint} />}
       <OutputBlock title="stdout" text={run.stdout} />
       <OutputBlock title="stderr" text={run.stderr} />
     </div>

@@ -7,6 +7,7 @@ import { STATUS_LABEL, statusDotClass, truncate } from '../../actions/actionStat
 import { AiSuggestBar } from './AiSuggestBar';
 import { useReorderableList } from './useReorderableList';
 import { AI_TEXT, CODE_INPUT, SparkIcon, TEXT_INPUT } from './shared';
+import { CommandBinaryWarning } from '../../actions/RunHintCard';
 
 interface RuleListProps {
   rules: ConditionalAction[];
@@ -68,6 +69,7 @@ export function RuleList({ rules, onChange, defaultCommand, probeCommand, label,
             <div className="flex flex-col gap-1.5">
               <input className={cn(TEXT_INPUT, 'h-7 text-xs')} placeholder="Label (shown in the tooltip)" aria-label={`Rule ${i + 1} label`} value={rule.label} onChange={(e) => patch(rule.id, { label: e.target.value })} />
               <textarea className={cn(CODE_INPUT, 'min-h-[34px] py-1.5')} rows={1} spellCheck={false} placeholder="command" aria-label={`Rule ${i + 1} command`} value={rule.actionValue} onChange={(e) => patch(rule.id, { actionValue: e.target.value })} />
+              {rule.actionType === 'shell' && <CommandBinaryWarning command={rule.actionValue} />}
               {errors[i] && <p className={cn('text-[11px]', tintText('red'))}>{errors[i]}</p>}
               {aiAvailable && !aiOpen[rule.id] && (
                 <button type="button" className={cn('self-start text-[11px] hover:underline', AI_TEXT)} onClick={() => setAiOpen((o) => ({ ...o, [rule.id]: true }))}>
