@@ -25,6 +25,10 @@ export const CRASH_REASON_LABELS: Record<string, string> = {
   subprocess: 'Session interrompue',
   startup_error: 'Échec du démarrage',
   unknown: 'Session interrompue',
+  timeout: 'Délai maximal dépassé',
+  cancelled: 'Run arrêté',
+  server_restart: 'Serveur redémarré pendant le run',
+  empty_result: 'Run terminé sans rien produire',
 };
 
 /** Generic remediation shown when the live crash reason is no longer available. */

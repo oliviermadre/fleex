@@ -17,7 +17,7 @@ import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
-import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
+import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult, isEmptyRun } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { PromptComposer, buildExecutionContextData, promptTextLength } from '../utils/prompt-composer.js';
 import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
@@ -283,8 +283,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   }
 
   /**
-   * Startup recovery: mark orphaned executions as interrupted,
-   * reset their mentions to pending, and reload SDK session history.
+   * Startup recovery: mark orphaned executions as interrupted, fail their
+   * mentions (Relancer resumes them), and reload SDK session history.
    */
   async init(): Promise<void> {
     // 1. Mark all 'running' executions as 'interrupted' (orphaned from previous process)
@@ -294,20 +294,19 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         mentionIds: interruptedMentionIds,
       });
 
-      // 2. Reset acknowledged mentions back to pending so they can be re-executed
+      // 2. Their runs stopped before the end: fail the mentions, like any other interruption.
       for (const mentionId of interruptedMentionIds) {
         try {
           const mention = await this.mentionStore.getById(mentionId);
           if (mention) {
-            mention.resetToPending();
-            await this.mentionStore.save(mention);
-            this.logger.info('Reset mention to pending after interrupted execution', {
+            await this.failInterruptedMention(mention, 'server_restart');
+            this.logger.info('Failed mention after interrupted execution', {
               mentionId,
               ticketId: mention.ticketId,
             });
           }
         } catch (err) {
-          this.logger.warn('Failed to reset mention after interrupted execution', {
+          this.logger.warn('Failed to fail mention after interrupted execution', {
             mentionId,
             error: err instanceof Error ? err.message : String(err),
           });
@@ -490,6 +489,26 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   }
 
   /**
+   * A run that stopped before completing (timeout, Terminate, server restart) fails its
+   * mention — never `pending`: nothing would pick it up again, since the queue only
+   * fills on new mentions, wake-ups and startup, and it would show as queued forever.
+   * `failed` surfaces it as a crash card / Focus error, whose Relancer resumes it.
+   */
+  private async failInterruptedMention(mention: TicketMentionEntity, reason: 'timeout' | 'cancelled' | 'server_restart'): Promise<void> {
+    mention.markFailed();
+    await this.mentionStore.save(mention);
+    this.eventBus?.emit({
+      type: 'mention.execution_failed',
+      mentionId: mention.id,
+      ticketId: mention.ticketId,
+      targetAgent: mention.targetAgent,
+      reason,
+      message: CRASH_MESSAGES[reason]!,
+      occurredAt: new Date(),
+    });
+  }
+
+  /**
    * Cancel a running execution by executionId.
    * Immediately marks execution as interrupted in DB and notifies frontend,
    * then aborts the SDK query loop (which may be hung).
@@ -525,13 +544,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     exec.status = 'failed';
     this.onExecutionComplete?.(exec.personaId, 'failed', mentionId);
 
-    // 3. Reset mention to pending
+    // 3. Fail the mention: stopped before the end, it waits for a relaunch
     try {
       const mention = await this.mentionStore.getById(mentionId);
-      if (mention) {
-        mention.resetToPending();
-        await this.mentionStore.save(mention);
-      }
+      if (mention) await this.failInterruptedMention(mention, 'cancelled');
     } catch {
       // Best-effort
     }
@@ -1024,6 +1040,17 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           }
         }
 
+        // A resumed session can end before reading the new prompt (see isEmptyRun): retry once, fresh.
+        if (!abortController.signal.aborted && queryOptions['resume'] && isEmptyRun(streamResult)) {
+          this.logger.warn('Resumed SDK session ended without doing anything, retrying without resume', {
+            executionId, persona: persona.name, resumedSessionId: previousSessionId,
+          });
+          this.sessionHistory.delete(sessionKey);
+          delete queryOptions['resume'];
+          await emitEvent('execution_retry', { reason: 'empty_resumed_session', staleSessionId: previousSessionId });
+          streamResult = await runStream('');
+        }
+
         sdkSessionId = streamResult.sessionId;
         resultText = streamResult.resultText;
         structuredOutput = streamResult.structuredOutput as AgentStructuredOutput | null;
@@ -1078,8 +1105,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
-        mention.resetToPending();
-        await this.mentionStore.save(mention);
+        await this.failInterruptedMention(mention, reason);
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
         this.logger.info(`Agent execution ${reason}`, { executionId, persona: persona.name });
         return;
@@ -1118,6 +1144,29 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           targetAgent: mention.targetAgent,
           reason: 'subprocess',
           message: CRASH_MESSAGES.subprocess!,
+          occurredAt: new Date(),
+        });
+        this.onExecutionComplete?.(persona.id, 'failed', mention.id);
+        return;
+      }
+
+      // 11a-ter. A session that ran but did nothing (0 turn, empty result) is not a
+      // completion either — even after the fresh retry above. Fail the mention.
+      if (resultText.trim() === '' && !structuredOutput && !sdkNumTurns) {
+        this.logger.error('SDK session ended without doing anything', { executionId, persona: persona.name, sdkSessionId });
+        await emitEvent('error', { error: CRASH_MESSAGES.empty_result!, ticketId: mention.ticketId });
+        await emitEvent('execution_end', { status: 'failed', reason: 'empty_result', ticketId: mention.ticketId, model: resolved.model, effectiveMode });
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
+        mention.markFailed();
+        await this.mentionStore.save(mention);
+        this.eventBus?.emit({
+          type: 'mention.execution_failed',
+          mentionId: mention.id,
+          ticketId: mention.ticketId,
+          targetAgent: mention.targetAgent,
+          reason: 'empty_result',
+          message: CRASH_MESSAGES.empty_result!,
           occurredAt: new Date(),
         });
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
@@ -1734,13 +1783,23 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         ? skillPromptBlocks
         : skillPromptBlocks.map((b) => (b as { text: string }).text).join('');
 
-      const streamResult = await streamSdkQuery({
+      const runSkillStream = (options: Record<string, unknown>, fallbackSessionId: string) => streamSdkQuery({
         prompt: skillPrompt,
-        queryOptions: queryOptions as Record<string, unknown>,
+        queryOptions: options,
         emitEvent,
         abortSignal: abortController.signal,
-        fallbackSessionId: previousSessionId ?? '',
+        fallbackSessionId,
       });
+      let streamResult = await runSkillStream(queryOptions as Record<string, unknown>, previousSessionId ?? '');
+      // A resumed session can end before reading the new prompt (see isEmptyRun): retry once, fresh.
+      if (!abortController.signal.aborted && previousSessionId && isEmptyRun(streamResult)) {
+        this.logger.warn('Resumed skill session ended without doing anything, retrying without resume', {
+          executionId, skill: skill.commandName, resumedSessionId: previousSessionId,
+        });
+        this.sessionHistory.delete(sessionKey);
+        await emitEvent('execution_retry', { reason: 'empty_resumed_session', staleSessionId: previousSessionId });
+        streamResult = await runSkillStream({ ...queryOptions, resume: undefined }, '');
+      }
 
       const sdkSessionId = streamResult.sessionId;
       const resultText = streamResult.resultText;
@@ -1766,6 +1825,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: persona.model, effectiveMode });
         return;
+      }
+
+      // A run that did nothing is not a completion: fail it (a workflow step then fails
+      // and can be relaunched, instead of routing on a fallback `ko`).
+      if (isEmptyRun(streamResult)) {
+        throw new Error(CRASH_MESSAGES.empty_result!);
       }
 
       // 8. Store session for potential resume
@@ -2250,6 +2315,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       if (abortController.signal.aborted) {
         finalStatus = 'failed';
         throw new ExecutionCancelledError(executionId);
+      }
+
+      // A run that did nothing is not a completion: fail the step instead of routing on a fallback `ko`.
+      if (!resultText.trim() && !structuredOutput && !sdkNumTurns) {
+        await emitEvent('error', { error: CRASH_MESSAGES.empty_result! });
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
+        finalStatus = 'failed';
+        throw new Error(CRASH_MESSAGES.empty_result!);
       }
 
       // Persist the SDK session id so this workflow step is linked to its

@@ -24,6 +24,11 @@ export const CRASH_MESSAGES: Record<string, string> = {
   max_turns: 'Limite de tours atteinte. Relancez pour continuer (reprise de session).',
   subprocess: "La session s'est interrompue. Consultez les logs, puis relancez.",
   startup_error: 'Agent failed to start',
+  // A run stopped before completing — it resumes from its SDK session on relaunch.
+  timeout: 'Le run a dépassé le délai maximal et a été arrêté. Relancez pour reprendre (reprise de session).',
+  cancelled: 'Le run a été arrêté avant la fin. Relancez pour reprendre (reprise de session).',
+  server_restart: 'Le serveur a redémarré pendant le run. Relancez pour reprendre (reprise de session).',
+  empty_result: "Le run s'est terminé sans rien produire (0 tour, réponse vide). Relancez.",
   unknown: "La session s'est interrompue. Consultez les logs, puis relancez.",
 };
 

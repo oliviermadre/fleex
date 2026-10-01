@@ -48,8 +48,8 @@ export class TicketMentionEntity {
   }
 
   resetToPending(): void {
-    // `acknowledged` → the run was interrupted (startup recovery, timeout/cancel);
-    // `failed` → the user asked to relaunch a crashed run from the crash card.
+    // `failed` → the user asked to relaunch a crashed or interrupted run (Relancer).
+    // `acknowledged` → legacy path; interrupted runs now end `failed` (markFailed).
     // Both return to `pending` so the scheduler can (re-)dispatch the mention.
     if (this.status === 'acknowledged' || this.status === 'failed') {
       this.status = 'pending';

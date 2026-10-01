@@ -53,6 +53,16 @@ async function withDeadline(p: Promise<unknown>, ms: number): Promise<void> {
   }
 }
 
+/**
+ * A query that ended without doing anything: no turn, no text, no structured output.
+ * Never a completed run. Resuming a session whose previous run left background agents
+ * behind does this: the CLI answers its own "agents didn't finish" notification and
+ * ends the turn before the new prompt is read.
+ */
+export function isEmptyRun(r: Pick<StreamSdkQueryResult, 'resultText' | 'structuredOutput' | 'metrics'>): boolean {
+  return !r.resultText.trim() && !r.structuredOutput && !r.metrics.numTurns;
+}
+
 export interface StreamSdkQueryResult {
   /** Session id captured from the SDK `init` message, if any. */
   sessionId?: string;
