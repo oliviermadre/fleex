@@ -33,12 +33,16 @@ export function useFloatingResize(options: {
   defaultWidth: number;
   defaultHeight: number;
   initialOffset?: number;
+  /** Where to open instead of centred (e.g. under the button that opened the panel). */
+  initialPosition?: { x: number; y: number };
   onResizeMove?: () => void;
   onResizeEnd?: () => void;
 }) {
-  const { minWidth, minHeight, defaultWidth, defaultHeight, initialOffset = 0, onResizeMove, onResizeEnd } = options;
+  const { minWidth, minHeight, defaultWidth, defaultHeight, initialOffset = 0, initialPosition, onResizeMove, onResizeEnd } = options;
 
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(
+    initialPosition ? clampPosition(initialPosition.x, initialPosition.y, defaultWidth, defaultHeight) : null,
+  );
   const [size, setSize] = useState({ width: defaultWidth, height: defaultHeight });
   const resizeRef = useRef({
     resizing: false,

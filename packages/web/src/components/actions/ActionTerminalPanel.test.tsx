@@ -4,7 +4,8 @@ import type { ActionRun } from '@fleex/shared';
 import * as api from '../../services/api';
 import { useTerminal } from '../../hooks/useTerminal';
 import { resetPinnedActionsTransient, usePinnedActionsStore, type TerminalTab } from '../../stores/pinnedActionsStore';
-import { ActionTerminalPanel, TERMINAL_AUTO_CLOSE_MS } from './ActionTerminalPanel';
+import { ActionTerminalPanel, KILL_CONFIRM_MS, TERMINAL_AUTO_CLOSE_MS } from './ActionTerminalPanel';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { anchoredBox, setTerminalAnchor } from './terminalAnchor';
 
 vi.mock('../../hooks/useTerminal', () => ({ useTerminal: vi.fn() }));
@@ -30,7 +31,7 @@ const tab = (extra: Partial<TerminalTab> = {}): TerminalTab => ({
 
 beforeEach(() => {
   resetPinnedActionsTransient();
-  usePinnedActionsStore.setState({ runs: {}, running: {}, logs: null, liveOutput: {}, terminals: [], activeTerminal: null, terminalFocusNonce: 0, terminalMinimized: false });
+  usePinnedActionsStore.setState({ runs: {}, running: {}, logs: null, liveOutput: {}, terminals: [], activeTerminal: null, terminalFocusNonce: 0, terminalMinimized: false, terminalGeometry: null });
   setTerminalAnchor(null);
   document.getElementById('fleex-desktop-titlebar')?.remove();
   vi.clearAllMocks();
@@ -102,19 +103,41 @@ describe('ActionTerminalPanel', () => {
     expect(screen.queryByRole('dialog')).not.toBeNull();
   });
 
-  it('× while running asks before stopping, then cancels the run and closes the tab', () => {
+  it('Kill asks for a second click on the same button — no modal over the terminal — then ends the session and closes the tab', () => {
     usePinnedActionsStore.setState({ runs: { kp: [run()] }, running: { kp: 't1' }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
-    fireEvent.click(screen.getByRole('button', { name: 'Close terminal' }));
-    expect(screen.getByText('Stop K8s login?')).toBeTruthy();
-    expect(api.cancelActionRun).not.toHaveBeenCalled();
-    fireEvent.click(within(screen.getByText('Stop K8s login?').parentElement!).getByRole('button', { name: 'Stop' }));
-    expect(api.cancelActionRun).toHaveBeenCalledWith('t1');
+    fireEvent.click(screen.getByRole('button', { name: 'Kill' }));
+    expect(screen.queryByRole('dialog', { name: /Stop/ })).toBeNull();
+    expect(api.closeActionTerminal).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(api.closeActionTerminal).toHaveBeenCalledWith('t1');
     expect(usePinnedActionsStore.getState().terminals).toEqual([]);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('⌘W closes a finished tab; Escape is left to the terminal', () => {
+  it('an armed Kill disarms by itself if not confirmed', () => {
+    vi.useFakeTimers();
+    usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
+    render(<ActionTerminalPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Kill' }));
+    act(() => { vi.advanceTimersByTime(KILL_CONFIRM_MS); });
+    expect(screen.getByRole('button', { name: 'Kill' })).toBeTruthy();
+    expect(api.closeActionTerminal).not.toHaveBeenCalled();
+  });
+
+  it('Kill re-reads the action state (probe), so its dot is right at once', () => {
     usePinnedActionsStore.setState({ runs: { kp: [run({ finishedAt: new Date().toISOString(), exitCode: 0 })] }, terminals: [tab()], activeTerminal: 'kp' });
+    const refresh = vi.fn(async () => {});
+    usePinnedActionsStore.setState({ refresh });
+    useSettingsStore.setState((st) => ({ settings: { ...st.settings, pinnedIcons: [{ id: 'kp', label: 'K8s', icon: '', iconType: 'svg', actionType: 'shell', actionValue: 'k9s', status: { command: 'true', intervalSec: 60 } }] } }));
+    render(<ActionTerminalPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Kill' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(refresh).toHaveBeenCalledWith('kp');
+  });
+
+  it('⌘W minimizes like × (the session lives on); Escape is left to the terminal', () => {
+    usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
     const term = screen.getByTestId('action-terminal');
     const escape = fireEvent.keyDown(term, { key: 'Escape' });
@@ -122,7 +145,8 @@ describe('ActionTerminalPanel', () => {
     expect(screen.queryByRole('dialog')).not.toBeNull();
     fireEvent.keyDown(term, { key: 'w', metaKey: true });
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(api.closeActionTerminal).toHaveBeenCalledWith('t1');
+    expect(usePinnedActionsStore.getState().terminals).toHaveLength(1);
+    expect(api.closeActionTerminal).not.toHaveBeenCalled();
   });
 });
 
@@ -159,12 +183,10 @@ describe('ActionTerminalPanel · minimize (k9s stays open, out of the way)', () 
     expect(api.startActionRun).toHaveBeenCalledTimes(1);
   });
 
-  it('Close still ends the session (confirm, then stop) — unlike Minimize', () => {
+  it('× is Minimize', () => {
     usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
-    expect(screen.getByRole('button', { name: 'Close terminal' }).getAttribute('title')).toMatch(/ends the session/);
-    fireEvent.click(screen.getByRole('button', { name: 'Close terminal' }));
-    expect(screen.getByText('Stop K8s login?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Minimize' }).textContent).toBe('×');
   });
 
   it('a run ending while its panel is minimized gets its toast (nothing on screen shows it)', async () => {
@@ -187,15 +209,18 @@ describe('ActionTerminalPanel · placement', () => {
     usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
     const panel = screen.getByRole('dialog');
-    expect(panel.getAttribute('data-placement')).toBe('anchored');
     expect(panel.style.top).toBe('46px');
+    // centred under the button, kept inside the viewport
+    expect(panel.style.left).toBe(`${Math.min(914 - 320, window.innerWidth - 640 - 8)}px`);
     button.remove();
   });
 
   it('falls back to the bottom-right corner when the button is gone', () => {
     usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
     render(<ActionTerminalPanel />);
-    expect(screen.getByRole('dialog').getAttribute('data-placement')).toBe('corner');
+    const panel = screen.getByRole('dialog');
+    expect(panel.style.top).toBe(`${window.innerHeight - 360 - 16}px`);
+    expect(panel.style.left).toBe(`${window.innerWidth - 640 - 16}px`);
   });
 
   it('full screen stays below the desktop title bar, so its buttons remain clickable', () => {
@@ -221,5 +246,44 @@ describe('anchoredBox', () => {
   });
   it('gives up (corner) when there is no room left under the button', () => {
     expect(anchoredBox(rect(500, 700), { width: 1440, height: 900 })).toBeNull();
+  });
+});
+
+describe('ActionTerminalPanel · resize', () => {
+  it('has grips on every edge and corner; a resize sticks across Minimize and back', () => {
+    usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
+    vi.useFakeTimers();
+    render(<ActionTerminalPanel />);
+    const grips = document.querySelectorAll('[data-resize]');
+    expect([...grips].map((g) => g.getAttribute('data-resize')).sort()).toEqual(['e', 'n', 'ne', 'nw', 's', 'se', 'sw', 'w']);
+
+    const se = document.querySelector('[data-resize="se"]')!;
+    fireEvent.mouseDown(se, { button: 0, clientX: 500, clientY: 500 });
+    fireEvent.mouseMove(window, { clientX: 600, clientY: 540 });
+    fireEvent.mouseUp(window);
+    act(() => { vi.advanceTimersByTime(10); });
+    expect(screen.getByRole('dialog').style.width).toBe('740px');
+    expect(screen.getByRole('dialog').style.height).toBe('400px');
+
+    act(() => usePinnedActionsStore.getState().minimizeTerminal());
+    act(() => usePinnedActionsStore.getState().focusTerminal('kp'));
+    expect(screen.getByRole('dialog').style.width).toBe('740px');
+  });
+
+  it('cannot be shrunk below a usable terminal', () => {
+    usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
+    render(<ActionTerminalPanel />);
+    fireEvent.mouseDown(document.querySelector('[data-resize="se"]')!, { button: 0, clientX: 500, clientY: 500 });
+    fireEvent.mouseMove(window, { clientX: 0, clientY: 0 });
+    fireEvent.mouseUp(window);
+    expect(screen.getByRole('dialog').style.width).toBe('420px');
+    expect(screen.getByRole('dialog').style.height).toBe('220px');
+  });
+
+  it('full screen has no grips', () => {
+    usePinnedActionsStore.setState({ runs: { kp: [run()] }, terminals: [tab()], activeTerminal: 'kp' });
+    render(<ActionTerminalPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }));
+    expect(document.querySelectorAll('[data-resize]')).toHaveLength(0);
   });
 });

@@ -38,6 +38,13 @@ export interface LiveOutput {
 }
 
 /** One tab of the floating "Action terminal" panel — one per source. */
+export interface TerminalGeometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface TerminalTab {
   sourceId: string;
   sourceKind: ActionSourceKind;
@@ -132,6 +139,8 @@ interface PinnedActionsState {
    * the action again brings it back where it was. Closing a tab is what ends a session.
    */
   terminalMinimized: boolean;
+  /** Where the user resized the panel to; kept while any terminal is open. */
+  terminalGeometry: TerminalGeometry | null;
 
   loadStatuses: () => Promise<void>;
   loadCapabilities: () => Promise<void>;
@@ -143,7 +152,8 @@ interface PinnedActionsState {
   openTerminal: (tab: TerminalTab) => void;
   focusTerminal: (sourceId: string) => void;
   minimizeTerminal: () => void;
-  /** Remove a tab. A finished run's pane is released on the server; a running one must be cancelled first. */
+  setTerminalGeometry: (geometry: TerminalGeometry) => void;
+  /** Remove a tab and end its tmux session (a running command is stopped). */
   closeTerminal: (sourceId: string) => void;
   loadRuns: (sourceId: string) => Promise<void>;
   /** After a WS (re)connect: a missed `action-run:finished` must not leave a button spinning. */
@@ -226,6 +236,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
   activeTerminal: null,
   terminalFocusNonce: 0,
   terminalMinimized: false,
+  terminalGeometry: null,
 
   loadStatuses: async () => {
     try {
@@ -398,15 +409,17 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
 
   minimizeTerminal: () => set({ terminalMinimized: true }),
 
+  setTerminalGeometry: (terminalGeometry) => set({ terminalGeometry }),
+
   closeTerminal: (sourceId) => {
     const tab = get().terminals.find((t) => t.sourceId === sourceId);
     if (!tab) return;
-    const finished = get().runs[sourceId]?.some((r) => r.runId === tab.runId && r.finishedAt);
-    if (finished) void api.closeActionTerminal(tab.runId);
+    // Ends the tmux session: a running command is stopped (the run ends cancelled), a finished pane is released.
+    void api.closeActionTerminal(tab.runId);
     set((s) => {
       const terminals = s.terminals.filter((t) => t.sourceId !== sourceId);
       const activeTerminal = s.activeTerminal === sourceId ? terminals.at(-1)?.sourceId ?? null : s.activeTerminal;
-      return { terminals, activeTerminal, ...(terminals.length === 0 ? { terminalMinimized: false } : {}) };
+      return { terminals, activeTerminal, ...(terminals.length === 0 ? { terminalMinimized: false, terminalGeometry: null } : {}) };
     });
   },
 

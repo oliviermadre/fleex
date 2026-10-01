@@ -1,18 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { diagnoseRun, type ActionRun, type PinnedIcon, type WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tint, tintText } from '../../lib/tints';
+import { useFloatingResize, type ResizeDirection } from '../../hooks/useFloatingResize';
 import { useTerminal } from '../../hooks/useTerminal';
 import { terminalManager } from '../../services/terminalManager';
 import { DRAFT_SOURCE_PREFIX, usePinnedActionsStore, type TerminalTab } from '../../stores/pinnedActionsStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Button } from '../ui/Button';
-import { ConfirmModal } from '../ui/ConfirmModal';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { RunningBadge } from './ActionLogsModal';
 import { RunHintCard } from './RunHintCard';
 import { runDuration, statusTextClass } from './actionStatus';
-import { anchoredBox, terminalAnchorRect, titleBarBottom, type PanelBox } from './terminalAnchor';
+import { PANEL_HEIGHT, PANEL_WIDTH, anchoredBox, terminalAnchorRect, titleBarBottom } from './terminalAnchor';
 
 /** A terminal run that exits 0 closes its tab after this, when its action asks for it. */
 export const TERMINAL_AUTO_CLOSE_MS = 2000;
@@ -58,7 +59,6 @@ export function ActionTerminalPanel() {
   const focusNonce = usePinnedActionsStore((s) => s.terminalFocusNonce);
   const minimized = usePinnedActionsStore((s) => s.terminalMinimized);
   const [fullScreen, setFullScreen] = useState(false);
-  const [confirm, setConfirm] = useState<{ tab: TerminalTab; close: boolean } | null>(null);
 
   if (terminals.length === 0) return null;
   const tab = terminals.find((t) => t.sourceId === active) ?? terminals[terminals.length - 1]!;
@@ -67,28 +67,8 @@ export function ActionTerminalPanel() {
     <>
       {terminals.map((t) => <AutoClose key={t.runId} tab={t} />)}
       {!minimized && (
-      <ActiveTab
-        tab={tab}
-        tabs={terminals}
-        focusNonce={focusNonce}
-        fullScreen={fullScreen}
-        onToggleFullScreen={() => setFullScreen((f) => !f)}
-        onRequestStop={(t, close) => setConfirm({ tab: t, close })}
-      />
+        <ActiveTab tab={tab} tabs={terminals} focusNonce={focusNonce} fullScreen={fullScreen} onToggleFullScreen={() => setFullScreen((f) => !f)} />
       )}
-      <ConfirmModal
-        open={!!confirm}
-        title={`Stop ${confirm?.tab.label ?? ''}?`}
-        message="The command is still running in the terminal. Stopping it ends the session."
-        confirmLabel="Stop"
-        onCancel={() => setConfirm(null)}
-        onConfirm={() => {
-          if (!confirm) return;
-          void usePinnedActionsStore.getState().cancelRun(confirm.tab.runId);
-          if (confirm.close) closeTab(confirm.tab);
-          setConfirm(null);
-        }}
-      />
     </>,
     document.body,
   );
@@ -106,28 +86,49 @@ function AutoClose({ tab }: { tab: TerminalTab }) {
   return null;
 }
 
-/**
- * Under the button that opened it, like the top bar's other popovers; in the
- * bottom-right corner when there is no button to hang from or no room under it.
- * Re-measured when a tab is brought to front and on window resize.
- */
-function usePanelBox(sourceId: string, focusNonce: number): PanelBox {
-  const [box, setBox] = useState<PanelBox>(null);
-  useLayoutEffect(() => {
-    const update = () => {
-      const rect = terminalAnchorRect();
-      setBox(rect ? anchoredBox(rect, { width: window.innerWidth, height: window.innerHeight }) : null);
-    };
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, [sourceId, focusNonce]);
-  return box;
+export const PANEL_MIN_WIDTH = 420;
+export const PANEL_MIN_HEIGHT = 220;
+const CORNER_MARGIN = 16;
+
+/** Under the button that opened it (like the bar's popovers), else the bottom-right corner. */
+function initialBox(): { x: number; y: number; width: number; height: number } {
+  const rect = terminalAnchorRect();
+  const box = rect ? anchoredBox(rect, { width: window.innerWidth, height: window.innerHeight }) : null;
+  if (box) return { x: box.left, y: box.top, width: box.width, height: box.height };
+  const width = Math.min(PANEL_WIDTH, window.innerWidth - 2 * CORNER_MARGIN);
+  const height = PANEL_HEIGHT;
+  return { x: window.innerWidth - width - CORNER_MARGIN, y: window.innerHeight - height - CORNER_MARGIN, width, height };
 }
 
 /** Full screen stops below the desktop title bar, which is drawn over the page and swallows clicks. */
 function fullScreenStyle(): CSSProperties {
   return { top: titleBarBottom() + 16, left: 16, right: 16, bottom: 16 };
+}
+
+/**
+ * Two clicks to kill: the first arms the button ("Confirm"), the second ends the
+ * session. No modal over the terminal; disarms by itself if not confirmed.
+ */
+export const KILL_CONFIRM_MS = 3000;
+function KillButton({ onKill }: { onKill: () => void }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), KILL_CONFIRM_MS);
+    return () => clearTimeout(timer);
+  }, [armed]);
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className={cn('px-2 py-0', armed && cn(tint('red'), tintText('red')))}
+      title={armed ? 'Click again to end the session' : 'Kill — ends the tmux session and closes the terminal'}
+      onClick={() => (armed ? onKill() : setArmed(true))}
+      onBlur={() => setArmed(false)}
+    >
+      {armed ? 'Confirm' : 'Kill'}
+    </Button>
+  );
 }
 
 function ActiveTab({
@@ -136,71 +137,123 @@ function ActiveTab({
   focusNonce,
   fullScreen,
   onToggleFullScreen,
-  onRequestStop,
 }: {
   tab: TerminalTab;
   tabs: TerminalTab[];
   focusNonce: number;
   fullScreen: boolean;
   onToggleFullScreen: () => void;
-  onRequestStop: (tab: TerminalTab, close: boolean) => void;
 }) {
   const run = useTabRun(tab);
   const action = useSourceAction(tab.sourceId);
   const running = !run?.finishedAt;
-  const { focusTerminal, openLogs, minimizeTerminal } = usePinnedActionsStore.getState();
-  const box = usePanelBox(tab.sourceId, focusNonce);
+  const { focusTerminal, openLogs, minimizeTerminal, setTerminalGeometry, refresh } = usePinnedActionsStore.getState();
 
-  const requestClose = () => (running ? onRequestStop(tab, true) : closeTab(tab));
+  // The user's size and place survive Minimize and tab switches; until they resize, the panel follows its button.
+  const saved = usePinnedActionsStore((s) => s.terminalGeometry);
+  const [start] = useState(() => saved ?? initialBox());
+  const { size, setSize, effectivePos, setPosition, handleResizeMouseDown } = useFloatingResize({
+    minWidth: PANEL_MIN_WIDTH,
+    minHeight: PANEL_MIN_HEIGHT,
+    defaultWidth: start.width,
+    defaultHeight: start.height,
+    initialPosition: { x: start.x, y: start.y },
+  });
+  const geometry = useRef({ x: start.x, y: start.y, width: start.width, height: start.height });
+  geometry.current = { ...effectivePos, ...size };
+  const firstFocus = useRef(focusNonce);
+  useEffect(() => {
+    if (focusNonce === firstFocus.current || usePinnedActionsStore.getState().terminalGeometry) return;
+    const next = initialBox();
+    setSize({ width: next.width, height: next.height });
+    setPosition({ x: next.x, y: next.y });
+  }, [focusNonce, setPosition, setSize]);
+  const onResizeStart = (dir: ResizeDirection) => (e: React.MouseEvent) => {
+    handleResizeMouseDown(dir)(e);
+    const remember = () => {
+      window.removeEventListener('mouseup', remember);
+      // After the hook's own mouseup has applied the last size.
+      setTimeout(() => setTerminalGeometry({ ...geometry.current }), 0);
+    };
+    window.addEventListener('mouseup', remember);
+  };
+
+  /** Kill: the session ends (running or not), the tab goes away and the action's state is re-read. */
+  const kill = () => {
+    closeTab(tab);
+    const probed = !!action && 'status' in action && !!action.status;
+    if (tab.sourceKind === 'pinned' && probed && !tab.sourceId.startsWith(DRAFT_SOURCE_PREFIX)) void refresh(tab.sourceId);
+  };
+
+  const boxStyle: CSSProperties = fullScreen
+    ? fullScreenStyle()
+    : { left: effectivePos.x, top: effectivePos.y, width: size.width, height: size.height };
 
   return (
-    <div
-      data-floating-panel
-      role="dialog"
-      aria-label={`Action terminal — ${tab.label}`}
-      data-placement={fullScreen ? 'full-screen' : box ? 'anchored' : 'corner'}
-      className={cn(
-        'action-terminal-panel fixed z-40 flex flex-col overflow-hidden rounded-xl',
-        box && !fullScreen && 'action-terminal-panel--anchored',
-        !fullScreen && !box && 'bottom-4 right-4 h-[360px] w-[640px] max-w-[calc(100vw-2rem)]',
-      )}
-      style={fullScreen ? fullScreenStyle() : box ?? undefined}
-      onKeyDownCapture={(e) => {
-        // ⌘W closes the tab; Escape and everything else go to the terminal.
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'w') {
-          e.preventDefault();
-          e.stopPropagation();
-          requestClose();
-        }
-      }}
-    >
-      {tabs.length > 1 && (
-        <div role="tablist" aria-label="Action terminals" className="flex shrink-0 gap-0.5 border-b border-[var(--theme-border-subtle)] px-2 pt-1.5">
-          {tabs.map((t) => (
-            <TabButton key={t.sourceId} tab={t} active={t.sourceId === tab.sourceId} onSelect={() => focusTerminal(t.sourceId)} />
-          ))}
+    <>
+      <div
+        data-floating-panel
+        role="dialog"
+        aria-label={`Action terminal — ${tab.label}`}
+        data-placement={fullScreen ? 'full-screen' : 'floating'}
+        className={cn('action-terminal-panel fixed z-40 flex flex-col overflow-hidden rounded-xl', !fullScreen && 'action-terminal-panel--anchored')}
+        style={boxStyle}
+        onKeyDownCapture={(e) => {
+          // ⌘W minimizes, like ×; Escape and everything else go to the terminal.
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'w') {
+            e.preventDefault();
+            e.stopPropagation();
+            minimizeTerminal();
+          }
+        }}
+      >
+        {tabs.length > 1 && (
+          <div role="tablist" aria-label="Action terminals" className="flex shrink-0 gap-0.5 border-b border-[var(--theme-border-subtle)] px-2 pt-1.5">
+            {tabs.map((t) => (
+              <TabButton key={t.sourceId} tab={t} active={t.sourceId === tab.sourceId} onSelect={() => focusTerminal(t.sourceId)} />
+            ))}
+          </div>
+        )}
+        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-3 text-xs">
+          {action?.icon && <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[var(--theme-text-primary)]">{renderIcon(action, 14)}</span>}
+          <span className="shrink-0 font-semibold text-[var(--theme-text-primary)]">{tab.label}</span>
+          <span className="text-[var(--theme-text-faint)]">—</span>
+          <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--theme-text-muted)]" title={tab.command}>{tab.command}</code>
+          {running && run && <RunningBadge startedAt={run.startedAt} format={clock} />}
+          <Button variant="ghost" size="sm" className="px-1.5 py-0" aria-label={fullScreen ? 'Exit full screen' : 'Full screen'} title={fullScreen ? 'Exit full screen' : 'Full screen'} onClick={onToggleFullScreen}>⤢</Button>
+          <KillButton key={tab.runId} onKill={kill} />
+          <Button variant="ghost" size="sm" className="px-1.5 py-0" aria-label="Minimize" title="Minimize (⌘W) — the session keeps running; click the action to bring it back" onClick={minimizeTerminal}>×</Button>
         </div>
-      )}
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-3 text-xs">
-        {action?.icon && <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[var(--theme-text-primary)]">{renderIcon(action, 14)}</span>}
-        <span className="shrink-0 font-semibold text-[var(--theme-text-primary)]">{tab.label}</span>
-        <span className="text-[var(--theme-text-faint)]">—</span>
-        <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--theme-text-muted)]" title={tab.command}>{tab.command}</code>
-        {running && run && <RunningBadge startedAt={run.startedAt} format={clock} />}
-        <Button variant="ghost" size="sm" className="px-1.5 py-0" aria-label="Minimize" title="Minimize — the session keeps running; click the action to bring it back" onClick={minimizeTerminal}>–</Button>
-        <Button variant="ghost" size="sm" className="px-1.5 py-0" aria-label={fullScreen ? 'Exit full screen' : 'Full screen'} title={fullScreen ? 'Exit full screen' : 'Full screen'} onClick={onToggleFullScreen}>⤢</Button>
-        {running && <Button variant="ghost" size="sm" className="px-2 py-0" onClick={() => onRequestStop(tab, false)}>Stop</Button>}
-        <Button variant="ghost" size="sm" className="px-1.5 py-0" aria-label="Close terminal" title="Close (⌘W) — ends the session" onClick={requestClose}>×</Button>
+        <TerminalView key={tab.runId} sessionId={actionTerminalSessionId(tab.runId)} focusNonce={focusNonce} />
+        {running ? (
+          <div className="shrink-0 border-t border-[var(--theme-border-subtle)] px-3 py-1.5 font-mono text-[10.5px] text-[var(--theme-text-muted)]">
+            zsh -l -i · cwd {tab.cwd ? homeRelative(tab.cwd) : '~'} · stdout+stderr mixed
+          </div>
+        ) : (
+          <FinishedFooter tab={tab} run={run!} onViewLogs={() => openLogs({ sourceId: tab.sourceId, label: tab.label, runId: tab.runId })} />
+        )}
       </div>
-      <TerminalView key={tab.runId} sessionId={actionTerminalSessionId(tab.runId)} focusNonce={focusNonce} />
-      {running ? (
-        <div className="shrink-0 border-t border-[var(--theme-border-subtle)] px-3 py-1.5 font-mono text-[10.5px] text-[var(--theme-text-muted)]">
-          zsh -l -i · cwd {tab.cwd ? homeRelative(tab.cwd) : '~'} · stdout+stderr mixed
-        </div>
-      ) : (
-        <FinishedFooter tab={tab} run={run!} onClose={() => closeTab(tab)} onViewLogs={() => openLogs({ sourceId: tab.sourceId, label: tab.label, runId: tab.runId })} />
-      )}
-    </div>
+      {!fullScreen && <ResizeHandles x={effectivePos.x} y={effectivePos.y} width={size.width} height={size.height} onStart={onResizeStart} />}
+    </>
+  );
+}
+
+/** Edge and corner grips, the same as Fleex's other floating panels. */
+function ResizeHandles({ x, y, width, height, onStart }: { x: number; y: number; width: number; height: number; onStart: (dir: ResizeDirection) => (e: React.MouseEvent) => void }) {
+  const grip = (dir: ResizeDirection, style: CSSProperties) => (
+    <div key={dir} data-resize={dir} className="fixed z-40" style={{ ...style, cursor: `${dir}-resize` }} onMouseDown={onStart(dir)} />
+  );
+  return (
+    <>
+      {grip('n', { top: y - 3, left: x + 8, width: width - 16, height: 6 })}
+      {grip('s', { top: y + height - 3, left: x + 8, width: width - 16, height: 6 })}
+      {grip('w', { top: y + 8, left: x - 3, width: 6, height: height - 16 })}
+      {grip('e', { top: y + 8, left: x + width - 3, width: 6, height: height - 16 })}
+      {grip('nw', { top: y - 4, left: x - 4, width: 12, height: 12 })}
+      {grip('ne', { top: y - 4, left: x + width - 8, width: 12, height: 12 })}
+      {grip('sw', { top: y + height - 8, left: x - 4, width: 12, height: 12 })}
+      {grip('se', { top: y + height - 8, left: x + width - 8, width: 12, height: 12 })}
+    </>
   );
 }
 
@@ -224,7 +277,7 @@ function TabButton({ tab, active, onSelect }: { tab: TerminalTab; active: boolea
   );
 }
 
-function FinishedFooter({ tab, run, onClose, onViewLogs }: { tab: TerminalTab; run: ActionRun; onClose: () => void; onViewLogs: () => void }) {
+function FinishedFooter({ tab, run, onViewLogs }: { tab: TerminalTab; run: ActionRun; onViewLogs: () => void }) {
   const ok = run.exitCode === 0 && !run.cancelled && !run.timedOut;
   const hint = diagnoseRun({ ...run, mode: 'terminal' });
   return (
@@ -236,7 +289,6 @@ function FinishedFooter({ tab, run, onClose, onViewLogs }: { tab: TerminalTab; r
         {ok && tab.closeOnSuccess && <span className="text-[var(--theme-text-muted)]">closing…</span>}
         <span className="flex-1" />
         <Button variant="ghost" size="sm" className="px-2 py-0" onClick={onViewLogs}>View logs</Button>
-        <Button variant="secondary" size="sm" className="px-2 py-0" onClick={onClose}>Close</Button>
       </div>
       {hint && hint.code !== 'cancelled' && <RunHintCard hint={hint} />}
     </div>
