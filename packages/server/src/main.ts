@@ -90,6 +90,9 @@ async function main() {
   // Discover existing fleex_ tmux sessions
   await container.discoverSessions.execute();
 
+  // Action terminals of a previous run of this instance: nothing tracks them any more.
+  void container.actionTerminals.killOrphans().catch(() => {});
+
   const app = Fastify({ logger: false, serverFactory: fleexServerFactory });
   await app.register(cors, { origin: true, credentials: true });
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });

@@ -134,6 +134,9 @@ import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 import { PinnedStatusService } from '../domain/services/pinned-status.service.js';
 import { ActionRunService } from '../domain/services/action-run.service.js';
 import { BinaryDiagnosisService, BINARY_DIAGNOSIS_TIMEOUT_MS } from '../domain/services/binary-diagnosis.service.js';
+import { TmuxTerminalRunner } from './adapters/tmux-terminal-runner.js';
+import { remoteStreamShellExec, gatewayStreamsExec, StreamExecUnavailableError } from './host/stream-exec.js';
+import type { ActionRunCapabilities } from '@fleex/shared';
 import { SuggestActionUseCase } from '../application/use-cases/suggest-action.js';
 import { ClaudeJsonModel, ShellBinaryLookup, createAiAvailability } from './adapters/actions-ai.adapters.js';
 import { IconifyClient } from './adapters/iconify.client.js';
@@ -752,8 +755,21 @@ export async function createContainer() {
     logger,
   });
   pinnedStatus.configure(config.get().pinnedIcons);
+  // Terminal-mode actions run in their own tmux sessions; background ones stream
+  // through the gateway (falling back to buffered exec on a gateway not restarted).
+  const actionTerminals = new TmuxTerminalRunner(execFn, hostFs, '/tmp', logger, { instanceTag: process.env['PORT'] ?? '3000' });
+  const streamShell = remoteStreamShellExec(gatewayUrl);
   const actionRuns = new ActionRunService({
     exec: runShell,
+    streamExec: async (command, options) => {
+      try {
+        return await streamShell(command, options);
+      } catch (err) {
+        if (err instanceof StreamExecUnavailableError) return null;
+        throw err;
+      }
+    },
+    terminal: actionTerminals,
     defaultCwd: hostHomedir,
     broadcast: (type, data) => pinnedStatusBroadcast(type, data),
     // A finished run on an icon with a probe re-checks it at once, so the dot
@@ -762,6 +778,13 @@ export async function createContainer() {
       if (run.sourceKind === 'pinned') pinnedStatus.refresh(run.sourceId);
     },
   });
+  let capabilitiesCache: { at: number; value: ActionRunCapabilities } | null = null;
+  const actionRunCapabilities = async (): Promise<ActionRunCapabilities> => {
+    if (capabilitiesCache && Date.now() - capabilitiesCache.at < 60_000) return capabilitiesCache.value;
+    const [liveOutput, terminal] = await Promise.all([gatewayStreamsExec(gatewayUrl), tmux.isAvailable()]);
+    capabilitiesCache = { at: Date.now(), value: { liveOutput, terminal } };
+    return capabilitiesCache.value;
+  };
   const setPinnedStatusBroadcast = (fn: (type: string, data: unknown) => void) => {
     pinnedStatusBroadcast = fn;
   };
@@ -785,6 +808,8 @@ export async function createContainer() {
     gatewayUrl,
     pinnedStatus,
     actionRuns,
+    actionTerminals,
+    actionRunCapabilities,
     binaryDiagnosis,
     setPinnedStatusBroadcast,
     suggestAction,

@@ -65,3 +65,24 @@ describe('pinned actions routes', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('pinned actions routes · lot 2', () => {
+  it('cancels a running run (202) and 404s otherwise; exposes capabilities', async () => {
+    let finish: () => void = () => {};
+    const actionRuns = new ActionRunService({
+      exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      streamExec: async () => ({ done: new Promise((r) => { finish = () => r({ exitCode: 143, timedOut: false, cancelled: true }); }), cancel: async () => finish() }),
+      defaultCwd: '/', broadcast: () => {},
+    });
+    const pinnedStatus = new PinnedStatusService({ exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }), cwd: '/', broadcast: () => {} });
+    const app = Fastify();
+    await app.register(pinnedActionsRoutes({ actionRuns, pinnedStatus, logger: { info: () => {} }, actionRunCapabilities: async () => ({ liveOutput: true, terminal: true }) }));
+    const { runId } = (await app.inject({ method: 'POST', url: '/api/action-runs', payload: { sourceId: 's', command: 'sleep 9' } })).json();
+    await new Promise((r) => setTimeout(r, 0));
+    expect((await app.inject({ method: 'POST', url: `/api/action-runs/${runId}/cancel` })).statusCode).toBe(202);
+    await new Promise((r) => setTimeout(r, 0));
+    expect((await app.inject({ method: 'POST', url: `/api/action-runs/${runId}/cancel` })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/api/action-runs/capabilities' })).json()).toEqual({ liveOutput: true, terminal: true });
+    await app.close();
+  });
+});

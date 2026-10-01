@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { ActionRunRequest, ActionSourceKind } from '@fleex/shared';
+import type { ActionRunCapabilities, ActionRunRequest, ActionSourceKind } from '@fleex/shared';
 import type { ActionRunService } from '../../domain/services/action-run.service.js';
 import type { PinnedStatusService } from '../../domain/services/pinned-status.service.js';
 import { InvalidBinaryNameError, type BinaryDiagnosisService } from '../../domain/services/binary-diagnosis.service.js';
@@ -8,6 +8,8 @@ export interface PinnedActionsRouteDeps {
   pinnedStatus: PinnedStatusService;
   actionRuns: ActionRunService;
   binaryDiagnosis?: BinaryDiagnosisService;
+  /** What the running gateway supports (live output needs a restarted gateway). */
+  actionRunCapabilities?: () => Promise<ActionRunCapabilities>;
   logger: { info: (msg: string, meta?: Record<string, unknown>) => void };
 }
 
@@ -60,6 +62,7 @@ export function pinnedActionsRoutes(deps: PinnedActionsRouteDeps) {
         command: body.command,
         ...(typeof body.cwd === 'string' && body.cwd ? { cwd: body.cwd } : {}),
         ...(typeof body.timeoutSec === 'number' ? { timeoutSec: body.timeoutSec } : {}),
+        ...(body.mode === 'terminal' ? { mode: 'terminal' as const } : {}),
       });
       if (!result.ok) return reply.code(409).send({ runId: result.runningRunId });
       return reply.code(202).send({ runId: result.run.runId, run: result.run });
@@ -74,6 +77,24 @@ export function pinnedActionsRoutes(deps: PinnedActionsRouteDeps) {
         if (err instanceof InvalidBinaryNameError) return reply.code(400).send({ error: err.message });
         throw err;
       }
+    });
+
+    app.get('/api/action-runs/capabilities', async () =>
+      deps.actionRunCapabilities ? deps.actionRunCapabilities() : { liveOutput: false, terminal: false },
+    );
+
+    app.post<{ Params: { runId: string } }>('/api/action-runs/:runId/cancel', async (request, reply) => {
+      if (!(await deps.actionRuns.cancel(request.params.runId))) {
+        return reply.code(404).send({ error: 'No running run with this id' });
+      }
+      return reply.code(202).send({ ok: true });
+    });
+
+    app.post<{ Params: { runId: string } }>('/api/action-runs/:runId/terminal/close', async (request, reply) => {
+      if (!(await deps.actionRuns.closeTerminal(request.params.runId))) {
+        return reply.code(404).send({ error: 'Not a terminal run' });
+      }
+      return reply.code(202).send({ ok: true });
     });
 
     app.get<{ Querystring: { sourceId?: string } }>('/api/action-runs', async (request) =>
