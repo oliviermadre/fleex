@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ACTION_DEFAULT_TIMEOUT_SEC, ACTION_MAX_TIMEOUT_SEC } from '@fleex/shared';
+import { ACTION_DEFAULT_TIMEOUT_SEC, ACTION_MAX_TIMEOUT_SEC, isSlotOf, runSlotKey } from '@fleex/shared';
 import type { ActionRun, ActionRunOutputChunk, ActionRunRequest } from '@fleex/shared';
 
 export const RUNS_PER_SOURCE = 20;
@@ -134,13 +134,15 @@ export class ActionRunService {
   constructor(private readonly deps: ActionRunDeps) {}
 
   start(request: ActionRunRequest): StartRunResult {
-    const runningRunId = this.running.get(request.sourceId);
+    const key = runSlotKey(request.sourceId, request.slot);
+    const runningRunId = this.running.get(key);
     if (runningRunId) return { ok: false, runningRunId };
 
     const terminal = request.mode === 'terminal' && !!this.deps.terminal;
     const run: ActionRun = {
       runId: randomUUID(),
       sourceId: request.sourceId,
+      ...(request.slot ? { slot: request.slot } : {}),
       sourceKind: request.sourceKind,
       label: request.label,
       command: request.command,
@@ -148,9 +150,9 @@ export class ActionRunService {
       stdout: '',
       stderr: '',
       mode: terminal ? 'terminal' : 'background',
-      ...(terminal ? { tmuxSession: this.deps.terminal!.sessionNameFor(request.sourceId) } : {}),
+      ...(terminal ? { tmuxSession: this.deps.terminal!.sessionNameFor(key) } : {}),
     };
-    this.running.set(request.sourceId, run.runId);
+    this.running.set(key, run.runId);
     this.remember(run);
     const live: LiveRun = { run, stdout: new OutputTail(), stderr: new OutputTail(), pending: { stdout: '', stderr: '' }, carried: { stdout: 0, stderr: 0 }, seq: 0, timer: null, cancelRequested: false };
     this.live.set(run.runId, live);
@@ -184,7 +186,7 @@ export class ActionRunService {
     if (!run?.tmuxSession || !this.deps.terminal) return false;
     if (!run.finishedAt) return this.cancel(runId);
     // A newer run of the same source reuses the session name: never close it from an old run.
-    if (this.running.has(run.sourceId)) return true;
+    if (this.running.has(runSlotKey(run.sourceId, run.slot))) return true;
     await this.deps.terminal.close(run.tmuxSession);
     return true;
   }
@@ -210,8 +212,9 @@ export class ActionRunService {
     return run ? { ...run } : undefined;
   }
 
+  /** Any of the source's commands in flight. */
   isRunning(sourceId: string): boolean {
-    return this.running.has(sourceId);
+    return [...this.running.keys()].some((key) => isSlotOf(key, sourceId));
   }
 
   private async execute(live: LiveRun, cwd: string, timeoutMs: number): Promise<void> {
@@ -312,7 +315,7 @@ export class ActionRunService {
     }
     this.flush(live);
     run.finishedAt = this.now().toISOString();
-    this.running.delete(run.sourceId);
+    this.running.delete(runSlotKey(run.sourceId, run.slot));
     this.live.delete(run.runId);
     this.deps.broadcast('action-run:finished', { ...run });
     this.deps.onFinished?.({ ...run });

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { diagnoseRun, type ActionRun } from '@fleex/shared';
+import { diagnoseRun, runSlotKey, type ActionRun } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { tint, tintText } from '../../lib/tints';
 import { useNow } from '../../lib/useNow';
@@ -78,13 +78,13 @@ function RunDetail({ run }: { run: ActionRun }) {
   const hint = running ? null : diagnoseRun(run);
   const live = usePinnedActionsStore((s) => s.liveOutput[run.runId]);
   const liveCapable = usePinnedActionsStore((s) => s.capabilities?.liveOutput);
-  const hasTab = usePinnedActionsStore((s) => s.terminals.some((t) => t.runId === run.runId));
+  const tabKey = usePinnedActionsStore((s) => s.terminals.find((t) => t.runId === run.runId)?.key);
   const { cancelRun, rerunInTerminal, closeLogs, focusTerminal, openTerminal } = usePinnedActionsStore.getState();
   const terminal = run.mode === 'terminal';
 
   const showTerminal = () => {
-    if (hasTab) focusTerminal(run.sourceId);
-    else openTerminal({ sourceId: run.sourceId, sourceKind: run.sourceKind, runId: run.runId, label: run.label, command: run.command });
+    if (tabKey) focusTerminal(tabKey);
+    else openTerminal({ key: runSlotKey(run.sourceId, run.slot), sourceId: run.sourceId, sourceKind: run.sourceKind, runId: run.runId, label: run.label, command: run.command });
     closeLogs();
   };
 

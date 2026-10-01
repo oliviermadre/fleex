@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { ActionRun, PinnedIcon } from '@fleex/shared';
-import { appendLiveOutput, resetPinnedActionsTransient, usePinnedActionsStore, START_TOAST_DELAY_MS } from './pinnedActionsStore';
+import { appendLiveOutput, resetPinnedActionsTransient, runningRunOf, usePinnedActionsStore, START_TOAST_DELAY_MS } from './pinnedActionsStore';
 import { useToastStore } from './toastStore';
 import { useSettingsStore } from './settingsStore';
 import * as api from '../services/api';
@@ -323,8 +323,8 @@ describe('run modes', () => {
     usePinnedActionsStore.setState({
       running: { kp: 't1' },
       terminals: [
-        { sourceId: 'kp', sourceKind: 'pinned', runId: 't1', label: 'K8s prod', command: 'platool login prod' },
-        { sourceId: 'gh', sourceKind: 'pinned', runId: 't2', label: 'GitHub', command: 'gh auth login' },
+        { key: 'kp', sourceId: 'kp', sourceKind: 'pinned', runId: 't1', label: 'K8s prod', command: 'platool login prod' },
+        { key: 'gh', sourceId: 'gh', sourceKind: 'pinned', runId: 't2', label: 'GitHub', command: 'gh auth login' },
       ],
       activeTerminal: 'gh',
     });
@@ -386,5 +386,32 @@ describe('alwaysRunInTerminal', () => {
   it('finds the rule by its command after a reload (no remembered origin)', async () => {
     await useSettingsStore.getState().alwaysRunInTerminal(run({ runId: 'old', command: 'platool logout prod', exitCode: 1 }));
     expect(stored().conditionalActions![0]!.runMode).toBe('terminal');
+  });
+});
+
+describe('one action, several terminal commands (rules)', () => {
+  it('opens one terminal per rule, and a click on an open one brings it back instead of starting it again', async () => {
+    usePinnedActionsStore.setState({ running: {}, terminals: [], activeTerminal: null, terminalMinimized: false });
+    vi.mocked(api.startActionRun)
+      .mockResolvedValueOnce({ runId: 'ra', alreadyRunning: false, run: { runId: 'ra', sourceId: 'k9', slot: 'a', sourceKind: 'pinned', label: 'k9s A', command: 'k9s --context A', startedAt: new Date().toISOString(), stdout: '', stderr: '', mode: 'terminal' } })
+      .mockResolvedValueOnce({ runId: 'rb', alreadyRunning: false, run: { runId: 'rb', sourceId: 'k9', slot: 'b', sourceKind: 'pinned', label: 'k9s B', command: 'k9s --context B', startedAt: new Date().toISOString(), stdout: '', stderr: '', mode: 'terminal' } });
+    const { run } = usePinnedActionsStore.getState();
+    await run({ sourceId: 'k9', sourceKind: 'pinned', label: 'k9s A', command: 'k9s --context A', mode: 'terminal', slot: 'a' });
+    await run({ sourceId: 'k9', sourceKind: 'pinned', label: 'k9s B', command: 'k9s --context B', mode: 'terminal', slot: 'b' });
+
+    const st = usePinnedActionsStore.getState();
+    expect(st.terminals.map((t) => [t.key, t.runId])).toEqual([['k9::a', 'ra'], ['k9::b', 'rb']]);
+    expect(st.activeTerminal).toBe('k9::b');
+    expect(runningRunOf(st.running, 'k9')).toBeDefined();
+
+    await run({ sourceId: 'k9', sourceKind: 'pinned', label: 'k9s A', command: 'k9s --context A', mode: 'terminal', slot: 'a' });
+    expect(api.startActionRun).toHaveBeenCalledTimes(2);
+    expect(usePinnedActionsStore.getState().activeTerminal).toBe('k9::a');
+  });
+
+  it('the end of one rule run leaves the other one running', () => {
+    usePinnedActionsStore.setState({ running: { 'k9::a': 'ra', 'k9::b': 'rb' }, runs: {} });
+    usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: { runId: 'ra', sourceId: 'k9', slot: 'a', sourceKind: 'pinned', label: 'k9s A', command: 'k9s', startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), exitCode: 0, stdout: '', stderr: '', mode: 'terminal' } } as never);
+    expect(usePinnedActionsStore.getState().running).toEqual({ 'k9::b': 'rb' });
   });
 });

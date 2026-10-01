@@ -601,6 +601,8 @@ export {
   ACTION_DEFAULT_TIMEOUT_SEC,
   ACTION_MAX_TIMEOUT_SEC,
   resolveClickAction,
+  runSlotKey,
+  isSlotOf,
 } from './types/pinned-actions.js';
 export type { RunHint, RunHintCode, RunHintSuggestion, DiagnosableRun, BinaryDiagnosis, BinaryKind } from './run-diagnosis.js';
 export { diagnoseRun, extractBinaries, BINARY_NAME, aliasUsesTty, scriptFromAlias } from './run-diagnosis.js';

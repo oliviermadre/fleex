@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'reac
 import type { PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
+import { runningRunOf, usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
 import { useToastStore } from '../../../stores/toastStore';
 import { useUIStore, type ActionsScope } from '../../../stores/uiStore';
 import { useActionsSettingsStore } from '../../../stores/actionsSettingsStore';
@@ -276,7 +276,7 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
             const snap = statuses[a.id];
             const status = probed ? snap?.status ?? 'unknown' : null;
             const rules = scope === 'pinned' ? (a as PinnedIcon).conditionalActions?.length ?? 0 : 0;
-            const isRunning = !!running[a.id];
+            const isRunning = !!runningRunOf(running, a.id);
             const last = lastRuns[a.id]?.[0];
             const edge = dropIndicator(a.id);
             return (

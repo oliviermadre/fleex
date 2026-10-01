@@ -39,8 +39,8 @@ describe('PinnedActionButton while a run is in flight', () => {
     usePinnedActionsStore.setState({
       running: { kp: 't1' },
       terminals: [
-        { sourceId: 'kp', sourceKind: 'pinned', runId: 't1', label: 'Deploy', command: 'make deploy' },
-        { sourceId: 'gh', sourceKind: 'pinned', runId: 't2', label: 'GitHub', command: 'gh auth login' },
+        { key: 'kp', sourceId: 'kp', sourceKind: 'pinned', runId: 't1', label: 'Deploy', command: 'make deploy' },
+        { key: 'gh', sourceId: 'gh', sourceKind: 'pinned', runId: 't2', label: 'GitHub', command: 'gh auth login' },
       ],
       activeTerminal: 'gh',
     });

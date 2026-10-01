@@ -129,11 +129,29 @@ export interface ActionRunRequest {
   timeoutSec?: number;
   /** Resolved client-side (rule > action). Absent = background. */
   mode?: ActionRunMode;
+  /**
+   * Which of the action's commands this is: the rule id, absent for the
+   * default one. Each command of an action runs on its own (its own terminal,
+   * its own "already running"), so `k9s --context A` and `--context B` coexist.
+   */
+  slot?: string;
+}
+
+/** What "already running" and the terminal session are keyed by: one per action command. */
+export function runSlotKey(sourceId: string, slot?: string): string {
+  return slot ? `${sourceId}::${slot}` : sourceId;
+}
+
+/** True when `key` (from `runSlotKey`) is one of `sourceId`'s commands. */
+export function isSlotOf(key: string, sourceId: string): boolean {
+  return key === sourceId || key.startsWith(`${sourceId}::`);
 }
 
 export interface ActionRun {
   runId: string;
   sourceId: string;
+  /** See `ActionRunRequest.slot`. */
+  slot?: string;
   sourceKind: ActionSourceKind;
   label: string;
   command: string;

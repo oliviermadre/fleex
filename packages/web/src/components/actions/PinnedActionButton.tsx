@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { resolveClickAction } from '@fleex/shared';
+import { resolveClickAction, runSlotKey } from '@fleex/shared';
 import type { ActionRun, ActionRunMode, ActionStatus, ConditionalAction, PinnedIcon, StatusSnapshot, WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { useNow } from '../../lib/useNow';
-import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
+import { runningRunOf, usePinnedActionsStore } from '../../stores/pinnedActionsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
 import { Tooltip } from '../ui/Tooltip';
@@ -65,9 +65,14 @@ export function PinnedActionButton({
   dim,
 }: PinnedActionButtonProps) {
   const snapshot = usePinnedActionsStore((s) => s.statuses[action.id]);
-  const liveRunning = usePinnedActionsStore((s) => !!s.running[action.id]);
-  const inFlightRunId = usePinnedActionsStore((s) => s.running[action.id]);
+  // Any of its commands (default or a rule) in flight.
+  const inFlightRunId = usePinnedActionsStore((s) => runningRunOf(s.running, action.id));
+  const liveRunning = !!inFlightRunId;
   const terminalTab = usePinnedActionsStore((s) => s.terminals.some((t) => t.sourceId === action.id));
+  const statusForClick: ActionStatus | null = statusOverride !== undefined ? statusOverride : hasProbe(action) ? snapshot?.status ?? 'unknown' : null;
+  // The command this click resolves to (default or a rule): only *that* one being in flight blocks it.
+  const clickKey = runSlotKey(action.id, resolveClickAction(action, statusForClick).rule?.id);
+  const clickBlocked = usePinnedActionsStore((s) => !!s.running[clickKey] && !s.terminals.some((t) => t.key === clickKey));
   const lastRun = usePinnedActionsStore((s) => s.runs[action.id]?.[0]);
   const menu = useContextMenuPopover();
 
@@ -102,7 +107,9 @@ export function PinnedActionButton({
           // Stays hoverable while running (tooltip: live output, Stop). A click on a
           // terminal run in flight brings its panel to the front; otherwise it is a no-op.
           onClick={(e) => {
-            if (running && !terminalTab) return;
+            // That command already in flight (in the background) is a no-op; another command of
+            // this action (a rule) may well start, and a terminal one brings its panel back.
+            if (runningOverride === undefined && clickBlocked) return;
             // The terminal panel, if this click opens one, hangs under this button.
             setTerminalAnchor(e.currentTarget);
             onRun();
@@ -111,7 +118,7 @@ export function PinnedActionButton({
             e.preventDefault();
             menu.openAt(e.clientX, e.clientY);
           }}
-          aria-disabled={(running && !terminalTab) || undefined}
+          aria-disabled={(runningOverride === undefined ? clickBlocked : running && !terminalTab) || undefined}
           aria-busy={running || undefined}
           aria-label={status ? `${action.label} — ${STATUS_LABEL[status]}` : action.label}
         >
@@ -193,7 +200,9 @@ export function ActionTooltipContent({
   const terminal = target.actionType === 'shell' && target.runMode === 'terminal';
   // Minimized (or behind another tab): the click brings it back instead of running again.
   const hiddenTerminal = usePinnedActionsStore(
-    (st) => st.terminals.some((t) => t.sourceId === action.id) && (st.terminalMinimized || st.activeTerminal !== action.id),
+    (st) =>
+      st.terminals.some((t) => t.sourceId === action.id) &&
+      (st.terminalMinimized || !st.terminals.some((t) => t.key === st.activeTerminal && t.sourceId === action.id)),
   );
   const inFlight = useInFlightActions(action, inFlightRunId);
 
@@ -296,7 +305,7 @@ function ActionMenuItems({
     }
     const mode = target.runMode ?? 'background';
     void run(
-      { sourceId: action.id, sourceKind: 'pinned', label: target.label, command: target.actionValue, mode, ...(target.timeoutSec && mode !== 'terminal' ? { timeoutSec: target.timeoutSec } : {}) },
+      { sourceId: action.id, sourceKind: 'pinned', label: target.label, command: target.actionValue, mode, ...(target.ruleId ? { slot: target.ruleId } : {}), ...(target.timeoutSec && mode !== 'terminal' ? { timeoutSec: target.timeoutSec } : {}) },
       { ...(target.ruleId ? { ruleId: target.ruleId } : {}), ...(action.closeTerminalOnSuccess ? { closeOnSuccess: true } : {}) },
     );
   };

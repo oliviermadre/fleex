@@ -161,3 +161,38 @@ describe('ActionRunService · terminal mode', () => {
     expect(t.svc.start(req({ mode: 'terminal' }))).toEqual({ ok: false, runningRunId: first.run.runId });
   });
 });
+
+describe('ActionRunService · one action, several commands (rules)', () => {
+  function terminalSvc() {
+    const started: string[] = [];
+    const terminal: TerminalRunPort = {
+      sessionNameFor: (key) => `fxact_3000_${key.replace(/[^A-Za-z0-9_-]/g, '_')}`,
+      start: vi.fn(async (req) => {
+        started.push(req.sessionName);
+        return { done: new Promise<never>(() => {}), cancel: vi.fn(async () => {}) };
+      }),
+      close: vi.fn(async () => {}),
+    };
+    const svc = new ActionRunService({ exec: vi.fn(), terminal, defaultCwd: '/home', broadcast: () => {} });
+    return { svc, started };
+  }
+
+  it('k9s --context A and --context B of the same action run side by side, each in its own terminal', async () => {
+    const { svc, started } = terminalSvc();
+    const a = svc.start(req({ mode: 'terminal', slot: 'ctx-a', command: 'k9s --context A' })) as { ok: true; run: ActionRun };
+    const b = svc.start(req({ mode: 'terminal', slot: 'ctx-b', command: 'k9s --context B' })) as { ok: true; run: ActionRun };
+    expect(a.ok && b.ok).toBe(true);
+    expect(a.run.tmuxSession).not.toBe(b.run.tmuxSession);
+    expect(b.run).toMatchObject({ sourceId: 'kp', slot: 'ctx-b' });
+    await flushAll();
+    expect(started).toHaveLength(2);
+    expect(svc.isRunning('kp')).toBe(true);
+  });
+
+  it('the same command twice is still refused (409 path), whatever the other commands do', () => {
+    const { svc } = terminalSvc();
+    const a = svc.start(req({ mode: 'terminal', slot: 'ctx-a' })) as { run: ActionRun };
+    svc.start(req({ mode: 'terminal' }));
+    expect(svc.start(req({ mode: 'terminal', slot: 'ctx-a' }))).toEqual({ ok: false, runningRunId: a.run.runId });
+  });
+});

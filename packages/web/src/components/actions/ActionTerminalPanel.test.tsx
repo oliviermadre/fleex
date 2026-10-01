@@ -27,6 +27,7 @@ const run = (extra: Partial<ActionRun> = {}): ActionRun => ({
 });
 const tab = (extra: Partial<TerminalTab> = {}): TerminalTab => ({
   sourceId: 'kp', sourceKind: 'pinned', runId: 't1', label: 'K8s login', command: 'platool login prod', ...extra,
+  key: extra.key ?? extra.sourceId ?? 'kp',
 });
 
 beforeEach(() => {

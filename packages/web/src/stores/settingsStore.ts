@@ -270,6 +270,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       label: target.rule ? target.rule.label || icon.label : icon.label,
       command: target.actionValue,
       mode: target.runMode,
+      // Each rule is its own command: its own terminal, its own "already running".
+      ...(target.rule ? { slot: target.rule.id } : {}),
       // A terminal has no timeout: the user is in front of it.
       ...(target.timeoutSec && target.runMode !== 'terminal' ? { timeoutSec: target.timeoutSec } : {}),
     }, {

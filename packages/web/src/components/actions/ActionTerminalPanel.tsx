@@ -44,7 +44,7 @@ function useSourceAction(sourceId: string): PinnedIcon | WorkspaceAction | undef
 
 /** Remove a tab and its xterm instance (the server pane is released by the store). */
 function closeTab(tab: TerminalTab): void {
-  usePinnedActionsStore.getState().closeTerminal(tab.sourceId);
+  usePinnedActionsStore.getState().closeTerminal(tab.key);
   terminalManager.dispose(actionTerminalSessionId(tab.runId));
 }
 
@@ -61,7 +61,7 @@ export function ActionTerminalPanel() {
   const [fullScreen, setFullScreen] = useState(false);
 
   if (terminals.length === 0) return null;
-  const tab = terminals.find((t) => t.sourceId === active) ?? terminals[terminals.length - 1]!;
+  const tab = terminals.find((t) => t.key === active) ?? terminals[terminals.length - 1]!;
 
   return createPortal(
     <>
@@ -212,7 +212,7 @@ function ActiveTab({
         {tabs.length > 1 && (
           <div role="tablist" aria-label="Action terminals" className="flex shrink-0 gap-0.5 border-b border-[var(--theme-border-subtle)] px-2 pt-1.5">
             {tabs.map((t) => (
-              <TabButton key={t.sourceId} tab={t} active={t.sourceId === tab.sourceId} onSelect={() => focusTerminal(t.sourceId)} />
+              <TabButton key={t.key} tab={t} active={t.key === tab.key} onSelect={() => focusTerminal(t.key)} />
             ))}
           </div>
         )}
@@ -269,6 +269,7 @@ function TabButton({ tab, active, onSelect }: { tab: TerminalTab; active: boolea
       type="button"
       role="tab"
       aria-selected={active}
+      title={tab.command}
       onClick={onSelect}
       className={cn(
         'flex max-w-[180px] items-center gap-1.5 rounded-t-md px-2.5 py-1 text-[11px]',

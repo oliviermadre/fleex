@@ -63,6 +63,7 @@ export function pinnedActionsRoutes(deps: PinnedActionsRouteDeps) {
         ...(typeof body.cwd === 'string' && body.cwd ? { cwd: body.cwd } : {}),
         ...(typeof body.timeoutSec === 'number' ? { timeoutSec: body.timeoutSec } : {}),
         ...(body.mode === 'terminal' ? { mode: 'terminal' as const } : {}),
+        ...(typeof body.slot === 'string' && body.slot ? { slot: body.slot.slice(0, 128) } : {}),
       });
       if (!result.ok) return reply.code(409).send({ runId: result.runningRunId });
       return reply.code(202).send({ runId: result.run.runId, run: result.run });

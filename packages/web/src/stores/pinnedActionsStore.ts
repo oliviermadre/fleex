@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import {
+  isSlotOf,
+  runSlotKey,
   ACTION_MAX_TIMEOUT_SEC,
   diagnoseRun,
   type ActionRun,
@@ -46,6 +48,8 @@ export interface TerminalGeometry {
 }
 
 export interface TerminalTab {
+  /** `runSlotKey(sourceId, slot)`: one tab per action command, so two rules of one action get two terminals. */
+  key: string;
   sourceId: string;
   sourceKind: ActionSourceKind;
   runId: string;
@@ -61,6 +65,12 @@ export interface RunMeta {
   /** The conditional action the click resolved to, if any. */
   ruleId?: string;
   closeOnSuccess?: boolean;
+}
+
+/** The run in flight for any of `sourceId`'s commands (default or a rule), if one is. */
+export function runningRunOf(running: Record<string, string>, sourceId: string): string | undefined {
+  for (const [key, runId] of Object.entries(running)) if (isSlotOf(key, sourceId)) return runId;
+  return undefined;
 }
 
 const runRequests = new Map<string, { request: ActionRunRequest; meta: RunMeta }>();
@@ -122,7 +132,7 @@ interface PinnedActionsState {
   statuses: Record<string, StatusSnapshot>;
   /** Newest first, per source id. */
   runs: Record<string, ActionRun[]>;
-  /** Source ids with a run in flight. */
+  /** Runs in flight, by `runSlotKey(sourceId, slot)` — one per action command. Use `runningRunOf` for "any of this action". */
   running: Record<string, string>;
   logs: LogsTarget | null;
   /** Live output of runs in flight, by run id. Dropped once the final log arrives. */
@@ -150,11 +160,12 @@ interface PinnedActionsState {
   rerunInTerminal: (run: ActionRun) => Promise<void>;
   cancelRun: (runId: string) => Promise<void>;
   openTerminal: (tab: TerminalTab) => void;
-  focusTerminal: (sourceId: string) => void;
+  /** A tab key, or an action id (its most recent terminal). */
+  focusTerminal: (keyOrSource: string) => void;
   minimizeTerminal: () => void;
   setTerminalGeometry: (geometry: TerminalGeometry) => void;
   /** Remove a tab and end its tmux session (a running command is stopped). */
-  closeTerminal: (sourceId: string) => void;
+  closeTerminal: (key: string) => void;
   loadRuns: (sourceId: string) => Promise<void>;
   /** After a WS (re)connect: a missed `action-run:finished` must not leave a button spinning. */
   reconcileRuns: () => Promise<void>;
@@ -259,7 +270,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
         break;
       case 'action-run:started':
         set((s) => ({
-          running: { ...s.running, [msg.data.sourceId]: msg.data.runId },
+          running: { ...s.running, [runSlotKey(msg.data.sourceId, msg.data.slot)]: msg.data.runId },
           runs: { ...s.runs, [msg.data.sourceId]: upsertRun(s.runs[msg.data.sourceId], msg.data) },
         }));
         scheduleStartToast(msg.data);
@@ -278,7 +289,9 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
         clearStartToast(run.runId);
         set((s) => {
           const running = { ...s.running };
-          delete running[run.sourceId];
+          const key = runSlotKey(run.sourceId, run.slot);
+          // Only this run's entry: a newer run of the same command may already be in flight.
+          if (running[key] === run.runId) delete running[key];
           const liveOutput = { ...s.liveOutput };
           delete liveOutput[run.runId];
           return { running, liveOutput, runs: { ...s.runs, [run.sourceId]: upsertRun(s.runs[run.sourceId], run) } };
@@ -295,32 +308,35 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
   },
 
   run: async (request, meta = {}) => {
+    // Each command of an action (default, each rule) runs on its own.
+    const key = runSlotKey(request.sourceId, request.slot);
     const { terminals, terminalMinimized, activeTerminal } = get();
-    const hasTab = terminals.some((t) => t.sourceId === request.sourceId);
-    if (get().running[request.sourceId]) {
+    const hasTab = terminals.some((t) => t.key === key);
+    if (get().running[key]) {
       // A second click on a terminal run in flight brings its panel to the front.
-      if (hasTab) get().focusTerminal(request.sourceId);
+      if (hasTab) get().focusTerminal(key);
       return;
     }
     // Its terminal is open but out of sight (panel minimized, another tab in
     // front): the click shows it as it was. Only a click on the visible tab re-runs.
-    if (hasTab && (terminalMinimized || activeTerminal !== request.sourceId)) {
-      get().focusTerminal(request.sourceId);
+    if (hasTab && (terminalMinimized || activeTerminal !== key)) {
+      get().focusTerminal(key);
       return;
     }
     // Optimistic: the button shows its spinner before the WS echo arrives.
-    set((s) => ({ running: { ...s.running, [request.sourceId]: 'pending' } }));
+    set((s) => ({ running: { ...s.running, [key]: 'pending' } }));
     try {
       const { runId, alreadyRunning, run } = await api.startActionRun(request);
       runRequests.set(runId, { request, meta });
       set((s) => ({
-        ...(s.running[request.sourceId] === 'pending' ? { running: { ...s.running, [request.sourceId]: runId } } : {}),
+        ...(s.running[key] === 'pending' ? { running: { ...s.running, [key]: runId } } : {}),
         ...(run ? { runs: { ...s.runs, [request.sourceId]: upsertRun(s.runs[request.sourceId], run) } } : {}),
       }));
       const terminal = (run?.mode ?? request.mode) === 'terminal';
       if (terminal) {
         // Started (or already running, 409) in a terminal: open its tab, or bring it to the front.
         get().openTerminal({
+          key,
           sourceId: request.sourceId,
           sourceKind: request.sourceKind,
           runId,
@@ -335,7 +351,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
     } catch {
       set((s) => {
         const running = { ...s.running };
-        delete running[request.sourceId];
+        delete running[key];
         return { running };
       });
     }
@@ -358,11 +374,11 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
     const byId = new Map(serverRuns.map((r) => [r.runId, r]));
     set((s) => {
       const running = { ...s.running };
-      for (const [sourceId, runId] of Object.entries(asked)) {
-        if (runId === 'pending' || running[sourceId] !== runId) continue;
+      for (const [key, runId] of Object.entries(asked)) {
+        if (runId === 'pending' || running[key] !== runId) continue;
         const known = byId.get(runId);
         // Finished, or unknown to the server (restarted): it will never report back.
-        if (!known || known.finishedAt) delete running[sourceId];
+        if (!known || known.finishedAt) delete running[key];
       }
       const runs = { ...s.runs };
       for (const r of [...serverRuns].reverse()) runs[r.sourceId] = upsertRun(runs[r.sourceId], r);
@@ -389,36 +405,36 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
 
   openTerminal: (tab) => {
     set((s) => {
-      const exists = s.terminals.some((t) => t.sourceId === tab.sourceId);
+      const exists = s.terminals.some((t) => t.key === tab.key);
       return {
-        terminals: exists ? s.terminals.map((t) => (t.sourceId === tab.sourceId ? tab : t)) : [...s.terminals, tab],
-        activeTerminal: tab.sourceId,
+        terminals: exists ? s.terminals.map((t) => (t.key === tab.key ? tab : t)) : [...s.terminals, tab],
+        activeTerminal: tab.key,
         terminalFocusNonce: s.terminalFocusNonce + 1,
         terminalMinimized: false,
       };
     });
   },
 
-  focusTerminal: (sourceId) => {
-    set((s) =>
-      s.terminals.some((t) => t.sourceId === sourceId)
-        ? { activeTerminal: sourceId, terminalFocusNonce: s.terminalFocusNonce + 1, terminalMinimized: false }
-        : s,
-    );
+  focusTerminal: (keyOrSource) => {
+    set((s) => {
+      // A tab key, or an action id (its most recent terminal, e.g. "View live output" on its button).
+      const tab = s.terminals.find((t) => t.key === keyOrSource) ?? s.terminals.findLast((t) => t.sourceId === keyOrSource);
+      return tab ? { activeTerminal: tab.key, terminalFocusNonce: s.terminalFocusNonce + 1, terminalMinimized: false } : s;
+    });
   },
 
   minimizeTerminal: () => set({ terminalMinimized: true }),
 
   setTerminalGeometry: (terminalGeometry) => set({ terminalGeometry }),
 
-  closeTerminal: (sourceId) => {
-    const tab = get().terminals.find((t) => t.sourceId === sourceId);
+  closeTerminal: (key) => {
+    const tab = get().terminals.find((t) => t.key === key);
     if (!tab) return;
     // Ends the tmux session: a running command is stopped (the run ends cancelled), a finished pane is released.
     void api.closeActionTerminal(tab.runId);
     set((s) => {
-      const terminals = s.terminals.filter((t) => t.sourceId !== sourceId);
-      const activeTerminal = s.activeTerminal === sourceId ? terminals.at(-1)?.sourceId ?? null : s.activeTerminal;
+      const terminals = s.terminals.filter((t) => t.key !== key);
+      const activeTerminal = s.activeTerminal === key ? terminals.at(-1)?.key ?? null : s.activeTerminal;
       return { terminals, activeTerminal, ...(terminals.length === 0 ? { terminalMinimized: false, terminalGeometry: null } : {}) };
     });
   },
@@ -443,7 +459,7 @@ function scheduleStartToast(run: ActionRun): void {
     entry.timer = undefined;
     const state = usePinnedActionsStore.getState();
     const current = state.runs[run.sourceId]?.find((r) => r.runId === run.runId);
-    if (current?.finishedAt || state.running[run.sourceId] !== run.runId) {
+    if (current?.finishedAt || state.running[runSlotKey(run.sourceId, run.slot)] !== run.runId) {
       startToasts.delete(run.runId);
       return;
     }
