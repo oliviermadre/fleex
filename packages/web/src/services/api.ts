@@ -1622,3 +1622,132 @@ export async function fetchMemoryStatus(): Promise<MemoryStatus> {
 export async function reindexMemory(): Promise<void> {
   await request<{ started: boolean }>('/memory/reindex', { method: 'POST' });
 }
+
+// ─── Pinned / workspace actions: status probes, runs, AI assistants ─────────
+
+export function fetchPinnedStatuses(): Promise<import('@fleex/shared').StatusSnapshot[]> {
+  return request('/pinned-status');
+}
+
+export function refreshPinnedStatus(iconId?: string): Promise<{ ok: true }> {
+  return request(iconId ? `/pinned-status/${encodeURIComponent(iconId)}/refresh` : '/pinned-status/refresh', { method: 'POST' });
+}
+
+export function testPinnedProbe(command: string, timeoutSec?: number): Promise<import('@fleex/shared').ProbeTestResult> {
+  return request('/pinned-status/test', { method: 'POST', body: JSON.stringify({ command, timeoutSec }) });
+}
+
+/**
+ * Start a run. A 409 is not an error to toast: it means this action is already
+ * running, and the answer names that run so the caller can follow it.
+ */
+export async function startActionRun(
+  body: import('@fleex/shared').ActionRunRequest,
+): Promise<{ runId: string; alreadyRunning: boolean }> {
+  const res = await fetch(`${API_URL}/action-runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 409) {
+    const { runId } = (await res.json()) as { runId: string };
+    return { runId, alreadyRunning: true };
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const message = extractErrorMessage(text, res.statusText);
+    useToastStore.getState().addToast('error', message);
+    throw new Error(message);
+  }
+  const { runId } = (await res.json()) as { runId: string };
+  return { runId, alreadyRunning: false };
+}
+
+export function fetchActionRuns(sourceId?: string): Promise<import('@fleex/shared').ActionRun[]> {
+  return request(sourceId ? `/action-runs?sourceId=${encodeURIComponent(sourceId)}` : '/action-runs');
+}
+
+/** AI calls do not toast: the suggestion card shows the failure in place. */
+async function aiRequest<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(text, res.statusText));
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function fetchActionsAiStatus(): Promise<{ available: boolean }> {
+  try {
+    const res = await fetch(`${API_URL}/actions-ai/status`);
+    return res.ok ? ((await res.json()) as { available: boolean }) : { available: false };
+  } catch {
+    return { available: false };
+  }
+}
+
+export function suggestActionCommand(
+  body: import('@fleex/shared').ActionsAiCommandRequest,
+): Promise<import('@fleex/shared').ActionsAiCommandSuggestion> {
+  return aiRequest('/actions-ai/command', body);
+}
+
+export function suggestActionIcons(
+  body: import('@fleex/shared').ActionsAiIconsRequest,
+): Promise<import('@fleex/shared').ActionsAiIconsResponse> {
+  return aiRequest('/actions-ai/icons', body);
+}
+
+/** NDJSON stream: `onStage` per step, resolves with the draft. */
+export async function draftActionWithAi(
+  body: import('@fleex/shared').ActionsAiDraftRequest,
+  onStage: (stage: import('@fleex/shared').ActionsAiDraftStage) => void,
+): Promise<import('@fleex/shared').ActionsAiDraftResult> {
+  const res = await fetch(`${API_URL}/actions-ai/draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(text, res.statusText));
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: import('@fleex/shared').ActionsAiDraftResult | null = null;
+  const handle = (line: string) => {
+    if (!line.trim()) return;
+    const payload = JSON.parse(line) as import('@fleex/shared').ActionsAiDraftEvent;
+    if ('error' in payload) throw new Error(payload.error);
+    if ('stage' in payload) onStage(payload.stage);
+    else result = payload;
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) handle(line);
+  }
+  handle(buffer);
+  if (!result) throw new Error('The draft stream ended before a draft arrived.');
+  return result;
+}
+
+/** Iconify search without the model — the picker's Library tab. */
+export async function searchIconLibrary(q: string): Promise<import('@fleex/shared').ActionsAiIconsResponse> {
+  const res = await fetch(`${API_URL}/actions-ai/icons/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error(extractErrorMessage(await res.text().catch(() => ''), res.statusText));
+  return res.json() as Promise<import('@fleex/shared').ActionsAiIconsResponse>;
+}
+
+/** Run a pasted / dropped SVG through the server allow-list before storing it. */
+export function sanitizeIconSvg(svg: string): Promise<{ svg: string }> {
+  return aiRequest('/actions-ai/icons/sanitize', { svg });
+}

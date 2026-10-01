@@ -10,13 +10,9 @@ import { useMemo } from 'react';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
-import { renderIcon } from '../sidebar/PinnedIcons';
 import { OverlaySyncButton } from '../overlay-sync/OverlaySyncButton';
-import { Tooltip } from '../ui/Tooltip';
+import { PinnedActionButton } from '../actions/PinnedActionButton';
 import { GROUP_LABEL } from './topBarStyles';
-
-const ICON_BTN =
-  'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
 
 /** First repository link "org/name" of a ticket, split for the overlay button. */
 function firstRepo(refs: string[]): { org: string; name: string } {
@@ -29,8 +25,11 @@ function firstRepo(refs: string[]): { org: string; name: string } {
 export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
   const ticket = useTicketStore((s) => (ticketId ? s.tickets.find((t) => t.id === ticketId) ?? null : null));
   const basePath = useSettingsStore((s) => s.settings.basePath);
-  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
-  const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
+  const allPinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
+  const allWorkspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
+  // Hidden actions (Settings › Actions "Visible" off) stay configured but out of the bar.
+  const pinnedIcons = useMemo(() => allPinnedIcons.filter((i) => i.enabled !== false), [allPinnedIcons]);
+  const workspaceActions = useMemo(() => (allWorkspaceActions ?? []).filter((a) => a.enabled !== false), [allWorkspaceActions]);
   const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
   const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
 
@@ -57,13 +56,7 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
           <span className={GROUP_LABEL}>PINNED</span>
           <div className="flex items-center gap-1">
             {pinnedIcons.map((icon) => (
-              <Tooltip key={icon.id} label={icon.label}>
-                <button type="button" className={ICON_BTN} onClick={() => executePinnedAction(icon)} aria-label={icon.label}>
-                  <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
-                    {renderIcon(icon, 14)}
-                  </span>
-                </button>
-              </Tooltip>
+              <PinnedActionButton key={icon.id} action={icon} kind="pinned" onRun={() => executePinnedAction(icon)} />
             ))}
           </div>
         </>
@@ -76,24 +69,12 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
           <span className={GROUP_LABEL}>TICKET</span>
           <div className="flex items-center gap-1">
             {workspaceActions.map((action) => (
-              <Tooltip key={action.id} label={action.label}>
-                <button
-                  type="button"
-                  className={ICON_BTN}
-                  onClick={() => executeWorkspaceAction(action, workspaceContext)}
-                  aria-label={action.label}
-                >
-                  {action.icon ? (
-                    <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
-                      {renderIcon(action, 14)}
-                    </span>
-                  ) : (
-                    <span className="text-[9px] font-semibold leading-none text-[var(--theme-text-secondary)]">
-                      {action.label.charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                </button>
-              </Tooltip>
+              <PinnedActionButton
+                key={action.id}
+                action={action}
+                kind="workspace"
+                onRun={() => executeWorkspaceAction(action, workspaceContext)}
+              />
             ))}
             <OverlaySyncButton ticket={ticket} worktree={null} repoOrg={repo.org} repoName={repo.name} />
           </div>

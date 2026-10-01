@@ -118,7 +118,7 @@ async function main() {
   await app.register(deliverableTypesRoutes(container));
   await app.register(execRoutes(container));
   await app.register(pinnedActionsRoutes(container));
-  await app.register(actionsAiRoutes({ suggestAction: container.suggestAction, isAvailable: container.isActionsAiAvailable, logger: container.logger }));
+  await app.register(actionsAiRoutes({ suggestAction: container.suggestAction, iconSearch: container.iconSearch, isAvailable: container.isActionsAiAvailable, logger: container.logger }));
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));
   await app.register(claudeUsageRoutes(container));

@@ -136,7 +136,7 @@ describe('parseUrl', () => {
     // parser does not know is a menu entry that does nothing when clicked, with no
     // error to notice. That shipped once, for `memory`.
     const navigable = [
-      'general', 'appearance', 'pinned-icons', 'workspace-actions',
+      'general', 'appearance',
       'agent-tokens', 'deliverable-types', 'memory',
     ];
     for (const tab of navigable) {
@@ -153,6 +153,27 @@ describe('parseUrl', () => {
       const url = storeToUrl({ activePanel: 'settings', settingsTab: tab });
       expect(parseUrl(url.pathname, url.search).settingsTab).toBe(tab);
     }
+  });
+
+  it('routes Settings › Actions to a scope list and to one action detail', () => {
+    // The nav links to /settings/actions/<scope>; a detail is /settings/actions/<scope>/<id>,
+    // which is what the button context menu's "Edit…" opens.
+    expect(parseUrl('/settings/actions/pinned', '')).toMatchObject({ settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: null } });
+    expect(parseUrl('/settings/actions/ticket/abc-1', '')).toMatchObject({ settingsTab: 'actions', actionsRoute: { scope: 'ticket', id: 'abc-1' } });
+    expect(parseUrl('/settings/actions', '').redirect).toBe('/settings/actions/pinned');
+
+    const url = storeToUrl({ activePanel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: 'gh' } });
+    expect(url.pathname).toBe('/settings/actions/pinned/gh');
+    expect(parseUrl(url.pathname, '').actionsRoute).toEqual({ scope: 'pinned', id: 'gh' });
+  });
+
+  it('redirects the two retired tabs to their Actions scope, so old links keep working', () => {
+    expect(parseUrl('/settings/pinned-icons', '').redirect).toBe('/settings/actions/pinned');
+    expect(parseUrl('/settings/workspace-actions', '').redirect).toBe('/settings/actions/ticket');
+  });
+
+  it('treats opening another action detail as a navigation (Back returns to the list)', () => {
+    expect(historyActionForNav('/settings/actions/pinned', '', '/settings/actions/pinned/gh', '')).toBe('push');
   });
 
   it('redirects unknown /settings/:tab to /settings', () => {

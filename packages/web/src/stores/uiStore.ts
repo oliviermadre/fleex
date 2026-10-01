@@ -2,7 +2,13 @@ import { create } from 'zustand';
 import type { TicketDeliverable } from '@fleex/shared';
 
 type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
-export type SettingsTab = 'general' | 'appearance' | 'pinned-icons' | 'workspace-actions' | 'agent-tokens' | 'deliverable-types' | 'memory' | 'connectors';
+export type SettingsTab = 'general' | 'appearance' | 'actions' | 'agent-tokens' | 'deliverable-types' | 'memory' | 'connectors';
+/** Settings › Actions: which scope's list, and which action's detail (`'new'` = unsaved draft). */
+export type ActionsScope = 'pinned' | 'ticket';
+export interface ActionsRoute {
+  scope: ActionsScope;
+  id: string | null;
+}
 export type AnalyticsTab = 'audit-trail' | 'statistics';
 
 interface UIState {
@@ -21,6 +27,12 @@ interface UIState {
   // Settings tab selection
   settingsTab: SettingsTab;
   setSettingsTab: (tab: SettingsTab) => void;
+
+  // Settings › Actions sub-route (list vs detail)
+  actionsRoute: ActionsRoute;
+  setActionsRoute: (route: ActionsRoute) => void;
+  /** Jump to Settings › Actions, on a scope list or straight into one action's detail. */
+  openActionSettings: (scope: ActionsScope, id?: string | null) => void;
 
   // Analytics tab selection
   analyticsTab: AnalyticsTab;
@@ -109,6 +121,7 @@ export const useUIStore = create<UIState>((set) => ({
   contentPanelWidth: 320,
   activePanel: 'tickets',
   settingsTab: 'general',
+  actionsRoute: { scope: 'pinned', id: null },
   analyticsTab: 'audit-trail',
   altHeld: false,
   createModalOpen: false,
@@ -148,6 +161,11 @@ export const useUIStore = create<UIState>((set) => ({
   setAltHeld: (held) => set({ altHeld: held }),
 
   setSettingsTab: (tab) => set({ settingsTab: tab }),
+
+  setActionsRoute: (route) => set({ actionsRoute: route }),
+
+  openActionSettings: (scope, id = null) =>
+    set({ activePanel: 'settings', settingsTab: 'actions', actionsRoute: { scope, id } }),
 
   setAnalyticsTab: (tab) => set({ analyticsTab: tab }),
 

@@ -766,10 +766,11 @@ export async function createContainer() {
   };
 
   // Settings › Actions AI assistants (Haiku via the SDK, Iconify for icons).
+  const iconSearch = new IconifyClient();
   const suggestAction = new SuggestActionUseCase(
     new ClaudeJsonModel(sdkLimiter),
     new ShellBinaryLookup(shellExecFn),
-    new IconifyClient(),
+    iconSearch,
     logger,
   );
   const isActionsAiAvailable = createAiAvailability(() => claudeUsageAdapter.hasCredentials());
@@ -781,6 +782,7 @@ export async function createContainer() {
     actionRuns,
     setPinnedStatusBroadcast,
     suggestAction,
+    iconSearch,
     isActionsAiAvailable,
     execFn,
     shellExecFn,

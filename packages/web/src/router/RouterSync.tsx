@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useUIStore, type SettingsTab, type AnalyticsTab } from '../stores/uiStore';
+import { useUIStore, type SettingsTab, type AnalyticsTab, type ActionsRoute, type ActionsScope } from '../stores/uiStore';
 import { useWorkStore, type WorkMode } from '../stores/workStore';
 import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/ticketStore';
 import { useTicketGroupStore, VALID_EPIC_DETAIL_TABS, type EpicDetailTab } from '../stores/ticketGroupStore';
@@ -29,8 +29,7 @@ const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 const VALID_SETTINGS_TABS = [
   'general',
   'appearance',
-  'pinned-icons',
-  'workspace-actions',
+  'actions',
   'agent-tokens',
   'deliverable-types',
   'memory',
@@ -89,6 +88,8 @@ interface ParsedUrl {
   panelId: string | null;
   workflowId: string | null;
   settingsTab: SettingsTab | null;
+  /** Settings › Actions sub-route; set only when settingsTab is 'actions'. */
+  actionsRoute?: ActionsRoute;
   analyticsTab: AnalyticsTab | null;
   redirect?: string;
 }
@@ -269,6 +270,21 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   if (pathname === '/settings') {
     return { ...base, panel: 'settings' };
   }
+  // Settings › Actions: /settings/actions[/:scope[/:id]]
+  const actionsMatch = pathname.match(/^\/settings\/actions(?:\/(pinned|ticket)(?:\/([^/]+))?)?\/?$/);
+  if (actionsMatch) {
+    if (!actionsMatch[1]) return { ...base, panel: 'settings', settingsTab: 'actions', redirect: '/settings/actions/pinned' };
+    const scope = actionsMatch[1] as ActionsScope;
+    const id = actionsMatch[2] ? decodeURIComponent(actionsMatch[2]) : null;
+    return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope, id } };
+  }
+  // The two tabs Actions replaced — kept so old deep links and bookmarks still land.
+  if (pathname === '/settings/pinned-icons') {
+    return { ...base, panel: 'settings', settingsTab: 'actions', redirect: '/settings/actions/pinned' };
+  }
+  if (pathname === '/settings/workspace-actions') {
+    return { ...base, panel: 'settings', settingsTab: 'actions', redirect: '/settings/actions/ticket' };
+  }
   const settingsMatch = pathname.match(/^\/settings\/([^/]+)$/);
   if (settingsMatch) {
     if ((settingsMatch[1] as string) === 'repositories') {
@@ -300,6 +316,7 @@ export interface UrlState {
   selectedSkillId?: string | null;
   personaTab?: PersonaTab;
   settingsTab?: SettingsTab;
+  actionsRoute?: ActionsRoute;
   analyticsTab?: AnalyticsTab;
   ticketTab?: TicketTab;
   selectedPanelId?: string | null;
@@ -323,6 +340,7 @@ export function storeToUrl({
   selectedSkillId = null,
   personaTab = 'config',
   settingsTab = 'general',
+  actionsRoute,
   analyticsTab,
   ticketTab,
   selectedPanelId,
@@ -416,6 +434,11 @@ export function storeToUrl({
       return { pathname: `/analytics/${analyticsTab ?? 'audit-trail'}`, search: '' };
     }
     case 'settings': {
+      if (settingsTab === 'actions') {
+        const scope = actionsRoute?.scope ?? 'pinned';
+        const id = actionsRoute?.id;
+        return { pathname: id ? `/settings/actions/${scope}/${encodeURIComponent(id)}` : `/settings/actions/${scope}`, search: '' };
+      }
       return { pathname: `/settings/${settingsTab}`, search: '' };
     }
   }
@@ -461,6 +484,7 @@ export function navIdentity(parsed: ParsedUrl): string {
     parsed.panelId ?? '',
     parsed.workflowId ?? '',
     parsed.settingsTab ?? 'general',
+    parsed.actionsRoute ? `${parsed.actionsRoute.scope}/${parsed.actionsRoute.id ?? ''}` : '',
     parsed.analyticsTab ?? '',
   ].join('|');
 }
@@ -502,6 +526,8 @@ export function RouterSync() {
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const settingsTab = useUIStore((s) => s.settingsTab);
   const setSettingsTab = useUIStore((s) => s.setSettingsTab);
+  const actionsRoute = useUIStore((s) => s.actionsRoute);
+  const setActionsRoute = useUIStore((s) => s.setActionsRoute);
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectRepo = useUIStore((s) => s.selectRepo);
   const analyticsTab = useUIStore((s) => s.analyticsTab);
@@ -690,6 +716,12 @@ export function RouterSync() {
     if (parsed.panel === 'settings' && parsed.settingsTab && parsed.settingsTab !== settingsTab) {
       setSettingsTab(parsed.settingsTab);
     }
+    if (
+      parsed.actionsRoute &&
+      (parsed.actionsRoute.scope !== actionsRoute.scope || parsed.actionsRoute.id !== actionsRoute.id)
+    ) {
+      setActionsRoute(parsed.actionsRoute);
+    }
 
     // Schedule flag reset after this tick
     setTimeout(() => {
@@ -712,6 +744,7 @@ export function RouterSync() {
       selectedSkillId,
       personaTab,
       settingsTab,
+      actionsRoute,
       analyticsTab,
       ticketTab,
       selectedPanelId,
@@ -749,6 +782,7 @@ export function RouterSync() {
     selectedSkillId,
     personaTab,
     settingsTab,
+    actionsRoute,
     analyticsTab,
     ticketTab,
     selectedPanelId,

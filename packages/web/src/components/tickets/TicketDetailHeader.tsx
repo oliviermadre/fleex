@@ -6,16 +6,16 @@ import { getStatusBadgeClass } from '../../lib/statusColors';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
-import { renderIcon } from '../sidebar/PinnedIcons';
 import { OverlaySyncButton } from '../overlay-sync/OverlaySyncButton';
-
-const ICON_BTN = 'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
+import { PinnedActionButton } from '../actions/PinnedActionButton';
 
 export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const basePath = useSettingsStore((s) => s.settings.basePath);
-  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
-  const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
+  const allPinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
+  const allWorkspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
+  const pinnedIcons = useMemo(() => allPinnedIcons.filter((i) => i.enabled !== false), [allPinnedIcons]);
+  const workspaceActions = useMemo(() => (allWorkspaceActions ?? []).filter((a) => a.enabled !== false), [allWorkspaceActions]);
   const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
   const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
 
@@ -61,37 +61,18 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
         {hasActions && (
           <div className="flex items-center gap-1">
             {pinnedIcons.map((icon) => (
-              <button
-                key={icon.id}
-                className={ICON_BTN}
-                onClick={() => executePinnedAction(icon)}
-                title={icon.label}
-              >
-                <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
-                  {renderIcon(icon, 14)}
-                </span>
-              </button>
+              <PinnedActionButton key={icon.id} action={icon} kind="pinned" onRun={() => executePinnedAction(icon)} />
             ))}
             {pinnedIcons.length > 0 && hasWorkspaceActions && (
               <div className="mx-0.5 h-4 w-px bg-[var(--theme-border)]" />
             )}
-            {workspaceActions?.map((action) => (
-              <button
+            {workspaceActions.map((action) => (
+              <PinnedActionButton
                 key={action.id}
-                className={ICON_BTN}
-                onClick={() => executeWorkspaceAction(action, workspaceContext)}
-                title={action.label}
-              >
-                {action.icon ? (
-                  <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
-                    {renderIcon(action, 14)}
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-semibold leading-none text-[var(--theme-text-secondary)]">
-                    {action.label.charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </button>
+                action={action}
+                kind="workspace"
+                onRun={() => executeWorkspaceAction(action, workspaceContext)}
+              />
             ))}
           </div>
         )}

@@ -153,7 +153,7 @@ describe('validation helpers', () => {
 describe('actions AI routes', () => {
   const build = async (available: boolean, suggestAction: Partial<SuggestActionUseCase>) => {
     const app = Fastify();
-    await app.register(actionsAiRoutes({ suggestAction: suggestAction as SuggestActionUseCase, isAvailable: async () => available, logger }));
+    await app.register(actionsAiRoutes({ suggestAction: suggestAction as SuggestActionUseCase, iconSearch: icons([GH_ICON]), isAvailable: async () => available, logger }));
     await app.ready();
     return app;
   };
@@ -162,6 +162,16 @@ describe('actions AI routes', () => {
     const app = await build(false, {});
     expect((await app.inject({ method: 'GET', url: '/api/actions-ai/status' })).json()).toEqual({ available: false });
     expect((await app.inject({ method: 'POST', url: '/api/actions-ai/command', payload: { intent: 'x' } })).statusCode).toBe(503);
+    await app.close();
+  });
+
+  it('keeps the icon library and SVG import working without AI, and sanitises imports', async () => {
+    const app = await build(false, {});
+    const search = await app.inject({ method: 'GET', url: '/api/actions-ai/icons/search?q=github' });
+    expect(search.json().suggestions[0].id).toBe('simple-icons:github');
+    const clean = await app.inject({ method: 'POST', url: '/api/actions-ai/icons/sanitize', payload: { svg: '<svg viewBox="0 0 24 24" onload="x()"><script>1</script><path d="M1 1"/></svg>' } });
+    expect(clean.json().svg).not.toMatch(/script|onload/);
+    expect((await app.inject({ method: 'POST', url: '/api/actions-ai/icons/sanitize', payload: { svg: '<div/>' } })).statusCode).toBe(422);
     await app.close();
   });
 

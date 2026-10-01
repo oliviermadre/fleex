@@ -1,28 +1,16 @@
 import { create } from 'zustand';
-import { DEFAULT_AGENT_MAX_TURNS } from '@fleex/shared';
+import { DEFAULT_AGENT_MAX_TURNS, resolveClickAction } from '@fleex/shared';
+import type { PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, STORAGE_KEY_SETTINGS } from '../lib/constants';
 import { resolveTemplate, type WorkspaceContext } from '../lib/templateUtils';
 import type { Theme } from '../lib/themes';
 import * as api from '../services/api';
 import { useRepositoryStore } from './repositoryStore';
+import { usePinnedActionsStore } from './pinnedActionsStore';
 
-export interface PinnedIcon {
-  id: string;
-  icon: string;
-  iconType: 'svg' | 'base64' | 'path' | 'url';
-  label: string;
-  actionType: 'url' | 'shell';
-  actionValue: string;
-}
-
-export interface WorkspaceAction {
-  id: string;
-  icon: string;
-  iconType: 'svg' | 'base64' | 'path' | 'url';
-  label: string;
-  actionType: 'url' | 'shell';
-  actionValue: string;
-}
+// Shape owned by @fleex/shared so the server can read the probes; re-exported
+// here because every web caller already imports them from this store.
+export type { PinnedIcon, WorkspaceAction };
 
 export interface RepoConfig {
   postCheckoutHook?: string; // multiline shell script, empty = disabled
@@ -115,6 +103,9 @@ interface SettingsState {
   getSessionDisplayName: (sessionId: string) => string | undefined;
   executePinnedAction: (icon: PinnedIcon) => void;
   executeWorkspaceAction: (action: WorkspaceAction, context: WorkspaceContext) => void;
+  /** Settings › Actions list operations persist at once, one scope at a time. */
+  savePinnedIcons: (icons: PinnedIcon[]) => Promise<void>;
+  saveWorkspaceActions: (actions: WorkspaceAction[]) => Promise<void>;
   getRepoConfig: (org: string, name: string) => RepoConfig;
   setRepoConfig: (org: string, name: string, config: RepoConfig) => void;
   addRepositories: (repos: string[]) => Promise<void>;
@@ -253,15 +244,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   executePinnedAction: (icon: PinnedIcon) => {
-    if (icon.actionType === 'url') {
-      window.open(icon.actionValue, '_blank');
-    } else if (icon.actionType === 'shell') {
-      fetch(`${API_URL}/exec`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: icon.actionValue }),
-      }).catch(() => { /* ignore */ });
+    // The click target depends on the live status (e.g. ok → log out, else log in).
+    const status = icon.status ? usePinnedActionsStore.getState().statuses[icon.id]?.status ?? 'unknown' : null;
+    const target = resolveClickAction(icon, status);
+    if (target.actionType === 'url') {
+      window.open(target.actionValue, '_blank');
+      return;
     }
+    void usePinnedActionsStore.getState().run({
+      sourceId: icon.id,
+      sourceKind: 'pinned',
+      label: target.rule ? target.rule.label || icon.label : icon.label,
+      command: target.actionValue,
+      ...(target.timeoutSec ? { timeoutSec: target.timeoutSec } : {}),
+    });
   },
 
   executeWorkspaceAction: async (action: WorkspaceAction, context: WorkspaceContext) => {
@@ -275,12 +271,29 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       try {
         await fetch(`${API_URL}/tickets/${context.ticket_id}/ensure-workspace`, { method: 'POST' });
       } catch { /* best-effort; still attempt the command below */ }
-      fetch(`${API_URL}/exec`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: resolved }),
-      }).catch(() => { /* ignore */ });
+      void usePinnedActionsStore.getState().run({
+        sourceId: action.id,
+        sourceKind: 'workspace',
+        label: action.label,
+        command: resolved,
+        cwd: context.workspace_path,
+        ...(action.actionTimeoutSec ? { timeoutSec: action.actionTimeoutSec } : {}),
+      });
     }
+  },
+
+  savePinnedIcons: async (icons) => {
+    const updated = { ...get().settings, pinnedIcons: icons };
+    set({ settings: updated });
+    saveToStorage(updated);
+    await api.updateConfig({ pinnedIcons: icons }).catch(() => { /* toasted by request() */ });
+  },
+
+  saveWorkspaceActions: async (actions) => {
+    const updated = { ...get().settings, workspaceActions: actions };
+    set({ settings: updated });
+    saveToStorage(updated);
+    await api.updateConfig({ workspaceActions: actions }).catch(() => { /* toasted by request() */ });
   },
 
   getRepoConfig: (org, name) => {

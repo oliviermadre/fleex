@@ -1,9 +1,12 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ActionsAiCommandRequest, ActionsAiDraftRequest, ActionsAiIconsRequest } from '@fleex/shared';
-import { ActionsAiError, type SuggestActionUseCase } from '../../application/use-cases/suggest-action.js';
+import { ActionsAiError, type IconSearchPort, type SuggestActionUseCase } from '../../application/use-cases/suggest-action.js';
+import { sanitizeSvg } from '../../domain/services/svg-sanitizer.js';
 
 export interface ActionsAiRouteDeps {
   suggestAction: SuggestActionUseCase;
+  /** Plain icon search, no model involved — the picker's Library tab works without AI. */
+  iconSearch: IconSearchPort;
   isAvailable: () => Promise<boolean>;
   logger: { error: (msg: string, meta?: Record<string, unknown>) => void };
 }
@@ -21,6 +24,23 @@ function fail(reply: FastifyReply, error: unknown, logger: ActionsAiRouteDeps['l
 export function actionsAiRoutes(deps: ActionsAiRouteDeps) {
   return async function (app: FastifyInstance) {
     app.get('/api/actions-ai/status', async () => ({ available: await deps.isAvailable() }));
+
+    app.get<{ Querystring: { q?: string } }>('/api/actions-ai/icons/search', async (request, reply) => {
+      const q = request.query.q?.trim();
+      if (!q) return { keywords: [], suggestions: [] };
+      try {
+        return { keywords: [q], suggestions: await deps.iconSearch.search([q], { brandFirst: false, limit: 30 }) };
+      } catch {
+        return reply.code(502).send({ error: 'Icon library unreachable' });
+      }
+    });
+
+    /** Manual SVG import goes through the same allow-list as AI and Iconify icons. */
+    app.post<{ Body: { svg?: string } }>('/api/actions-ai/icons/sanitize', async (request, reply) => {
+      const svg = typeof request.body?.svg === 'string' ? sanitizeSvg(request.body.svg) : null;
+      if (!svg) return reply.code(422).send({ error: 'Not a usable SVG (no geometry, or larger than 8 KB).' });
+      return { svg };
+    });
 
     const requireAi = async (reply: FastifyReply): Promise<boolean> => {
       if (await deps.isAvailable()) return true;
