@@ -287,7 +287,8 @@ export class SuggestActionUseCase {
     const conditionalActions: ConditionalAction[] = pinned && plan.probe
       ? plan.rules.map((r) => ({ id: randomUUID(), label: r.label, when: r.when, actionType: 'shell' as const, actionValue: r.command }))
       : [];
-    const risky = [plan.actionValue, ...conditionalActions.map((r) => r.actionValue)].filter((c) => enforceRisk(c, undefined) === 'destructive');
+    // The probe runs on its own every interval once saved: it is checked like the rest.
+    const risky = [plan.actionValue, ...conditionalActions.map((r) => r.actionValue), ...(pinned && plan.probe ? [plan.probe] : [])].filter((c) => enforceRisk(c, undefined) === 'destructive');
 
     let status: ActionsAiDraftResult['draft']['status'];
     if (pinned && plan.probe) {

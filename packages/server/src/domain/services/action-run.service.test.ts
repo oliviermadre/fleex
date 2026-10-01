@@ -57,6 +57,8 @@ describe('ActionRunService', () => {
     expect(exec).toHaveBeenNthCalledWith(1, 'true', { cwd: '/home', timeoutMs: 300_000 });
     expect(exec).toHaveBeenNthCalledWith(2, 'true', { cwd: '/ws', timeoutMs: 1_800_000 });
     expect(clampActionTimeout(undefined)).toBe(300);
+    // A sub-second timeout must not round to 0, which the gateway reads as "never kill".
+    expect(clampActionTimeout(0.4)).toBe(1);
   });
 
   it('flags a timeout so the UI can say so instead of showing a bare exit 1', async () => {

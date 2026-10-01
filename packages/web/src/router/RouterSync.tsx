@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useUIStore, type SettingsTab, type AnalyticsTab, type ActionsRoute, type ActionsScope } from '../stores/uiStore';
+import { isLeaveGuarded, pauseLeaveGuard, requestLeave, useUIStore, type SettingsTab, type AnalyticsTab, type ActionsRoute, type ActionsScope } from '../stores/uiStore';
 import { useWorkStore, type WorkMode } from '../stores/workStore';
 import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/ticketStore';
 import { useTicketGroupStore, VALID_EPIC_DETAIL_TABS, type EpicDetailTab } from '../stores/ticketGroupStore';
@@ -576,6 +576,32 @@ export function RouterSync() {
 
   // Track whether we're currently syncing from URL to prevent circular updates
   const syncingFromUrl = useRef(false);
+  /** Set when the user approved leaving an unsaved screen: the next URL → store sync must not ask again. */
+  const leaveApproved = useRef(false);
+
+  const currentStoreUrl = () =>
+    storeToUrl({
+      activePanel,
+      selectedRepoKey,
+      selectedBoardId,
+      selectedTicketId,
+      selectedScratchpadKey,
+      selectedPersonaId,
+      selectedSkillId,
+      personaTab,
+      settingsTab,
+      actionsRoute,
+      analyticsTab,
+      ticketTab,
+      selectedPanelId,
+      activeView,
+      epicDetailId,
+      epicDetailTab,
+      selectedWorkflowId,
+      workView,
+      workTicketId,
+      workMode,
+    });
 
   // ── URL → Store ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -585,6 +611,25 @@ export function RouterSync() {
       navigate(parsed.redirect, { replace: true });
       return;
     }
+
+    // Back / Forward away from a screen with unsaved changes: put the address
+    // back on what is shown, and only follow it once the user chose Save or Discard.
+    if (leaveApproved.current) {
+      leaveApproved.current = false;
+    } else if (isLeaveGuarded()) {
+      const here = currentStoreUrl();
+      if (here.pathname !== location.pathname || here.search !== location.search) {
+        const target = { pathname: location.pathname, search: location.search };
+        navigate(here, { replace: true });
+        requestLeave(() => {
+          leaveApproved.current = true;
+          navigate(target);
+        });
+        return;
+      }
+    }
+    // The URL is the source of truth from here on: these updates are not the user leaving.
+    const resumeLeaveGuard = pauseLeaveGuard();
 
     syncingFromUrl.current = true;
 
@@ -726,6 +771,8 @@ export function RouterSync() {
       setActionsRoute(parsed.actionsRoute);
     }
 
+    resumeLeaveGuard();
+
     // Schedule flag reset after this tick
     setTimeout(() => {
       syncingFromUrl.current = false;
@@ -737,28 +784,7 @@ export function RouterSync() {
   useEffect(() => {
     if (syncingFromUrl.current) return;
 
-    const expected = storeToUrl({
-      activePanel,
-      selectedRepoKey,
-      selectedBoardId,
-      selectedTicketId,
-      selectedScratchpadKey,
-      selectedPersonaId,
-      selectedSkillId,
-      personaTab,
-      settingsTab,
-      actionsRoute,
-      analyticsTab,
-      ticketTab,
-      selectedPanelId,
-      activeView,
-      epicDetailId,
-      epicDetailTab,
-      selectedWorkflowId,
-      workView,
-      workTicketId,
-      workMode,
-    });
+    const expected = currentStoreUrl();
 
     const currentPath = location.pathname;
     const currentSearch = location.search;

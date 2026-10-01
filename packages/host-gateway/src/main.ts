@@ -38,6 +38,10 @@ Bun.serve<PtyWsData>({
 
     // Command execution
     if (url.pathname === '/exec' && req.method === 'POST') {
+      // The response only comes once the command exits — an action may wait
+      // minutes on a browser login. Bun's default 10 s idle timeout would drop
+      // the connection first; the command's own `timeout` bounds it instead.
+      server.timeout(req, 0);
       try {
         const body = await req.json();
         const result = await handleExec(body);

@@ -15,7 +15,7 @@ import * as api from '../../../services/api';
 import { useActionsSettingsStore } from '../../../stores/actionsSettingsStore';
 import { DRAFT_SOURCE_PREFIX, usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
 import { useToastStore } from '../../../stores/toastStore';
-import { useUIStore, type ActionsScope } from '../../../stores/uiStore';
+import { requestLeave, setLeaveGuard, useUIStore, withoutLeaveGuard, type ActionsScope } from '../../../stores/uiStore';
 import { STATUS_LABEL, runDuration, statusDotClass, statusTextClass } from '../../actions/actionStatus';
 import { renderIcon } from '../../sidebar/PinnedIcons';
 import { Button } from '../../ui/Button';
@@ -118,22 +118,34 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
     if (field) setAiFields((f) => f.filter((x) => x !== field));
   }, []);
 
-  /** Run `go` now, or after Save / Discard when there are unsaved changes. */
-  const guarded = useCallback((go: () => void) => {
-    if (dirty) setGuard(() => go);
-    else go();
+  // While there are unsaved changes, every way out of this screen — Esc, the
+  // breadcrumb, ‹ ›, another Settings tab, another panel, the browser's Back —
+  // goes through the store's leave guard, which opens the Save / Discard / Stay dialog.
+  useEffect(() => {
+    if (!dirty) return;
+    return setLeaveGuard((proceed) => setGuard(() => proceed));
   }, [dirty]);
 
-  const back = useCallback(() => guarded(() => openActionSettings(scope)), [guarded, openActionSettings, scope]);
+  const back = useCallback(() => openActionSettings(scope), [openActionSettings, scope]);
 
+  const saving = useRef(false);
   const doSave = useCallback(async (): Promise<boolean> => {
     if (hasErrors) {
       setShowErrors(true);
       return false;
     }
+    // ⌘S twice (or ⌘S then Save) while the first PUT is in flight would append the new action twice.
+    if (saving.current) return false;
+    saving.current = true;
     const value = normaliseDraft(draft, scope);
-    const next = index >= 0 ? list.map((a) => (a.id === value.id ? value : a)) : [...list, value];
-    await save(next);
+    // Match on the draft's id, not the route's: a `new` draft is already in the
+    // list once the store took the optimistic update.
+    const next = list.some((a) => a.id === value.id) ? list.map((a) => (a.id === value.id ? value : a)) : [...list, value];
+    try {
+      await save(next);
+    } finally {
+      saving.current = false;
+    }
     const savedDraft = structuredClone(value) as ActionDraft;
     setDraft(savedDraft);
     setBaseline(JSON.stringify(savedDraft));
@@ -142,15 +154,16 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
     addToast('success', 'Saved', scope === 'pinned' && 'status' in value && value.status ? { detail: 'Probe scheduled — first check now' } : undefined);
     if (isNew) {
       setPendingNew(null);
-      openActionSettings(scope, value.id);
+      // Saved: moving from `new` to the action's own route is not leaving.
+      withoutLeaveGuard(() => openActionSettings(scope, value.id));
     }
     return true;
-  }, [hasErrors, draft, scope, index, list, save, addToast, isNew, setPendingNew, openActionSettings]);
+  }, [hasErrors, draft, scope, list, save, addToast, isNew, setPendingNew, openActionSettings]);
 
   const discard = () => {
     if (isNew) {
       setPendingNew(null);
-      openActionSettings(scope);
+      withoutLeaveGuard(() => openActionSettings(scope));
       return;
     }
     const restored = JSON.parse(baseline) as ActionDraft;
@@ -241,7 +254,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
   };
 
   const duplicate = () =>
-    guarded(() => {
+    requestLeave(() => {
       const copy = { ...structuredClone(draft), id: newId(), label: `${draft.label} (copy)` };
       setPendingNew({ draft: copy, aiFields: [], fromAi: false });
       openActionSettings(scope, 'new');
@@ -255,7 +268,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
     const removed = list[index];
     if (!removed) return;
     void save(list.filter((a) => a.id !== id));
-    openActionSettings(scope);
+    withoutLeaveGuard(() => openActionSettings(scope));
     addToast('info', `“${removed.label || 'Untitled'}” deleted`, {
       durationMs: 8000,
       action: {
@@ -296,8 +309,8 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
         {!isNew && index >= 0 && (
           <>
             <span className="text-[11px] text-[var(--theme-text-muted)]">{index + 1} / {list.length}</span>
-            <Button variant="ghost" size="sm" aria-label="Previous action" onClick={() => guarded(() => openActionSettings(scope, list[(index - 1 + list.length) % list.length]!.id))}>‹</Button>
-            <Button variant="ghost" size="sm" aria-label="Next action" onClick={() => guarded(() => openActionSettings(scope, list[(index + 1) % list.length]!.id))}>›</Button>
+            <Button variant="ghost" size="sm" aria-label="Previous action" onClick={() => openActionSettings(scope, list[(index - 1 + list.length) % list.length]!.id)}>‹</Button>
+            <Button variant="ghost" size="sm" aria-label="Next action" onClick={() => openActionSettings(scope, list[(index + 1) % list.length]!.id)}>›</Button>
             <Button variant="ghost" size="sm" onClick={duplicate}>Duplicate</Button>
           </>
         )}

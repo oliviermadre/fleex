@@ -101,6 +101,50 @@ describe('ActionDetail', () => {
     expect(useSettingsStore.getState().settings.pinnedIcons[0]!.label).toBe('A');
   });
 
+  it('guards every way out — another Settings tab, another panel — not only its own buttons', async () => {
+    useUIStore.setState({ activePanel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: 'a' } });
+    render(<ActionDetail scope="pinned" id="a" />);
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Renamed' } });
+
+    // Clicking another Settings tab used to drop the draft silently.
+    act(() => useUIStore.getState().setSettingsTab('general'));
+    expect(screen.getByText('Unsaved changes', { selector: 'h2' })).toBeTruthy();
+    expect(useUIStore.getState().settingsTab).toBe('actions');
+    fireEvent.click(screen.getByRole('button', { name: 'Stay' }));
+    expect(useUIStore.getState().settingsTab).toBe('actions');
+    expect(screen.getByLabelText<HTMLInputElement>(/^Name/).value).toBe('Renamed');
+
+    // Same for another panel of the app; Save then follows the navigation.
+    act(() => useUIStore.getState().setActivePanel('tickets'));
+    expect(useUIStore.getState().activePanel).toBe('settings');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    });
+    expect(useSettingsStore.getState().settings.pinnedIcons[0]!.label).toBe('Renamed');
+    expect(useUIStore.getState().activePanel).toBe('tickets');
+  });
+
+  it('lets navigation through untouched when nothing is unsaved', () => {
+    useUIStore.setState({ activePanel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: 'a' } });
+    render(<ActionDetail scope="pinned" id="a" />);
+    act(() => useUIStore.getState().setSettingsTab('general'));
+    expect(useUIStore.getState().settingsTab).toBe('general');
+    expect(screen.queryByText('Unsaved changes', { selector: 'h2' })).toBeNull();
+  });
+
+  it('saving a new action moves to its own route without asking, and a double ⌘S adds it once', async () => {
+    useActionsSettingsStore.setState({ pendingNew: { draft: { ...blankDraft(), id: 'n1', label: 'New one', actionValue: 'true' }, aiFields: [], fromAi: false } });
+    useUIStore.setState({ activePanel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: 'new' } });
+    render(<ActionDetail scope="pinned" id="new" />);
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 's', metaKey: true });
+      fireEvent.keyDown(window, { key: 's', metaKey: true });
+    });
+    expect(pinnedIds()).toEqual(['a', 'b', 'c', 'n1']);
+    expect(useUIStore.getState().actionsRoute).toEqual({ scope: 'pinned', id: 'n1' });
+    expect(screen.queryByText('Unsaved changes', { selector: 'h2' })).toBeNull();
+  });
+
   it('the simulator changes what the preview says the click will do, without persisting', () => {
     useSettingsStore.setState({
       settings: {

@@ -153,6 +153,12 @@ describe('SuggestActionUseCase.draft', () => {
     const result = await new SuggestActionUseCase(model, binaries, icons([]), logger).draft({ prompt: 'clean docker', scope: 'pinned' });
     expect(result.notes).toContain('Destructive');
   });
+
+  it('also warns when only the probe is destructive — it would run by itself every interval', async () => {
+    const model = scriptedModel([() => JSON.stringify({ ...plan, rules: [], actionValue: 'platool login prod', probe: 'kubectl --context prod delete pod -l app=x' })]);
+    const result = await new SuggestActionUseCase(model, binaries, icons([]), logger).draft({ prompt: 'k8s prod', scope: 'pinned' });
+    expect(result.notes).toContain('kubectl --context prod delete');
+  });
 });
 
 describe('validation helpers', () => {

@@ -25,7 +25,8 @@ export type StartRunResult = { ok: true; run: ActionRun } | { ok: false; running
 
 export function clampActionTimeout(sec: number | undefined): number {
   if (!Number.isFinite(sec) || !sec || sec <= 0) return ACTION_DEFAULT_TIMEOUT_SEC;
-  return Math.min(ACTION_MAX_TIMEOUT_SEC, Math.round(sec));
+  // At least 1 s: a 0 would reach execFile as "no timeout" and lock the source forever.
+  return Math.min(ACTION_MAX_TIMEOUT_SEC, Math.max(1, Math.round(sec)));
 }
 
 export function truncateOutput(text: string): string {
