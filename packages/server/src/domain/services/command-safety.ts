@@ -22,6 +22,17 @@ const DESTRUCTIVE_PATTERNS: RegExp[] = [
   /\bhelm\s+(?:uninstall|delete)\b/,
   /\bterraform\s+destroy\b/,
   /\bgcloud\b[^|;&]*\bdelete\b/,
+  /\brm\b[^|;&]*\s--recursive\b/,
+  /\bgit\s+branch\b[^|;&]*\s-D\b/,
+  /\bgit\s+push\b[^|;&]*\s(?:--delete\b|-d\b|\+|:[^\s/]+)/, // push --delete, push origin :branch, push origin +ref
+  /\bdelete\s+from\b/i,
+  /\btruncate\b/i,
+  /\bfind\b[^|;&]*\s-delete\b/,
+  /\baws\s+s3\s+(?:rm|rb)\b/,
+  /\bgh\s+repo\s+delete\b/,
+  />\s*(?:~|\$HOME|\$\{HOME\})\/\./, // overwrite a home dotfile (~/.zshrc, ~/.ssh/…)
+  /\bkubectl\b[^|;&]*\bdrain\b/,
+  /\bkubectl\b[^|;&]*\bscale\b[^|;&]*--replicas[=\s]+0\b/,
 ];
 
 export function isDestructiveCommand(command: string): boolean {

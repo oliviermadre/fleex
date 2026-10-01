@@ -167,6 +167,19 @@ describe('validation helpers', () => {
     expect(parseJsonObject('[1,2]')).toBeNull();
   });
 
+  it('stops at the brace closing the object, not at braces in trailing prose', () => {
+    const reply = '{"command":"cd \\"{{workspace_path}}\\" && git status","risk":"safe"}\nNote: this uses {{workspace_path}} as the cwd.';
+    expect(parseJsonObject(reply)).toEqual({ command: 'cd "{{workspace_path}}" && git status', risk: 'safe' });
+  });
+
+  it('ignores braces inside JSON strings, including after escaped quotes', () => {
+    expect(parseJsonObject('{"a":"} \\" {","b":{"c":1}} trailing }')).toEqual({ a: '} " {', b: { c: 1 } });
+  });
+
+  it('skips a non-JSON brace in prose before the object', () => {
+    expect(parseJsonObject('Using {{ticket_id}}:\n```json\n{"a":1}\n```\n{x}')).toEqual({ a: 1 });
+  });
+
   it('rejects a url plan without an http(s) url and drops rules without a valid status', () => {
     expect(validateDraftPlan({ label: 'x', actionType: 'url', actionValue: 'ftp://x' })).toBeNull();
     expect(validateDraftPlan({ label: 'x', actionType: 'shell', actionValue: 'true', rules: [{ label: 'a', when: ['green'], command: 'b' }] })!.rules).toEqual([]);

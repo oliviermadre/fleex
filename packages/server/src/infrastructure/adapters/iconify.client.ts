@@ -6,6 +6,8 @@ const API = 'https://api.iconify.design';
 const SETS: IconSource[] = ['simple-icons', 'lucide', 'tabler'];
 const LICENSES: Record<string, string> = { 'simple-icons': 'CC0-1.0', lucide: 'ISC', tabler: 'MIT' };
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/** Keys carry the user's raw search text: bound the cache so typing can't grow it forever. */
+export const CACHE_MAX_ENTRIES = 200;
 const TIMEOUT_MS = 4_000;
 
 type Fetch = typeof fetch;
@@ -27,30 +29,46 @@ export class IconifyClient implements IconSearchPort {
     { brandFirst, limit, exclude = [], includeBrands = true }: { brandFirst: boolean; limit: number; exclude?: string[]; includeBrands?: boolean },
   ): Promise<IconSuggestion[]> {
     const sets = includeBrands ? SETS : SETS.filter((set) => set !== 'simple-icons');
-    const key = `${brandFirst}|${sets.join(',')}|${keywords.join(',')}`;
-    const cached = this.cache.get(key);
-    let all: IconSuggestion[];
-    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-      all = cached.value;
-    } else {
-      all = await this.fetchAll(keywords, brandFirst, sets);
-      this.cache.set(key, { at: Date.now(), value: all });
+    // Fetch enough that excluded ids don't leave the caller short of `limit`.
+    const max = Math.min(limit + exclude.length, 64);
+    const key = `${brandFirst}|${sets.join(',')}|${max}|${keywords.join(',')}`;
+    let all = this.cacheGet(key);
+    if (!all) {
+      all = await this.fetchAll(keywords, brandFirst, sets, max);
+      this.cacheSet(key, all);
     }
     const skip = new Set(exclude);
     return all.filter((s) => !skip.has(s.id)).slice(0, limit);
   }
 
-  private async fetchAll(keywords: string[], brandFirst: boolean, sets: IconSource[]): Promise<IconSuggestion[]> {
+  /** LRU over Map insertion order: a hit moves to the end, expired entries go on access. */
+  private cacheGet(key: string): IconSuggestion[] | null {
+    const hit = this.cache.get(key);
+    if (!hit) return null;
+    this.cache.delete(key);
+    if (Date.now() - hit.at >= CACHE_TTL_MS) return null;
+    this.cache.set(key, hit);
+    return hit.value;
+  }
+
+  private cacheSet(key: string, value: IconSuggestion[]): void {
+    this.cache.delete(key);
+    this.cache.set(key, { at: Date.now(), value });
+    while (this.cache.size > CACHE_MAX_ENTRIES) this.cache.delete(this.cache.keys().next().value!);
+  }
+
+  private async fetchAll(keywords: string[], brandFirst: boolean, sets: IconSource[], max: number): Promise<IconSuggestion[]> {
     const ids: string[] = [];
     for (const keyword of keywords) {
-      const url = `${API}/search?query=${encodeURIComponent(keyword)}&prefixes=${sets.join(',')}&limit=12`;
+      const url = `${API}/search?query=${encodeURIComponent(keyword)}&prefixes=${sets.join(',')}&limit=${Math.max(12, max)}`;
       const data = (await this.getJson(url)) as { icons?: string[] };
       for (const id of data.icons ?? []) if (!ids.includes(id)) ids.push(id);
     }
     if (brandFirst) ids.sort((a, b) => Number(!a.startsWith('simple-icons:')) - Number(!b.startsWith('simple-icons:')));
 
     const byPrefix = new Map<string, string[]>();
-    for (const id of ids.slice(0, 18)) {
+    // A few spare ids: some SVGs fail sanitising and are dropped below.
+    for (const id of ids.slice(0, Math.max(18, max))) {
       const [prefix, name] = id.split(':');
       if (!prefix || !name || !sets.includes(prefix as IconSource)) continue;
       byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), name]);

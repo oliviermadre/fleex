@@ -148,6 +148,86 @@ describe('PinnedStatusService', () => {
     expect(svc.getSnapshots()[0]!.status).not.toBe('ko');
   });
 
+  it('re-probes once the in-flight probe lands when a refresh was asked meanwhile (e.g. right after an action ran)', async () => {
+    const { exec, pending } = controllableExec();
+    const svc = new PinnedStatusService({ exec, cwd: '/home', broadcast: vi.fn() });
+    svc.configure([icon('gh', 'gh auth status')]);
+    svc.clientConnected();
+    // The action (e.g. `gh auth logout`) finishes while the probe started before it still runs.
+    expect(svc.refresh('gh')).toBe(true);
+    expect(exec).toHaveBeenCalledTimes(1);
+
+    pending[0]!.resolve(0); // pre-action result
+    await flush();
+    // Without a re-run, the dot would stay on the pre-action status for a whole interval.
+    expect(exec).toHaveBeenCalledTimes(2);
+    pending[1]!.resolve(1);
+    await flush();
+    expect(svc.getSnapshots()[0]!.status).toBe('ko');
+    expect(exec).toHaveBeenCalledTimes(2); // and only once
+  });
+
+  it('runs the new probe once the stale one lands when the command changed while it ran', async () => {
+    const { exec, pending } = controllableExec();
+    const svc = new PinnedStatusService({ exec, cwd: '/home', broadcast: vi.fn() });
+    svc.configure([icon('a', 'old')]);
+    svc.clientConnected();
+    svc.configure([icon('a', 'new')]);
+    expect(exec).toHaveBeenCalledTimes(1);
+
+    pending[0]!.resolve(1);
+    await flush();
+    expect(exec).toHaveBeenCalledTimes(2);
+    expect(exec).toHaveBeenLastCalledWith('new', expect.anything());
+  });
+
+  it('drops the in-flight result of an icon deleted then re-added under the same id', async () => {
+    const { exec, pending } = controllableExec();
+    const svc = new PinnedStatusService({ exec, cwd: '/home', broadcast: vi.fn() });
+    svc.configure([icon('a', 'probe')]);
+    svc.clientConnected();
+    svc.configure([]);
+    svc.configure([icon('a', 'probe')]);
+
+    pending[0]!.resolve(1); // belongs to the deleted icon
+    await flush();
+    expect(svc.getSnapshots()[0]!.status).not.toBe('ko');
+  });
+
+  it('never writes a snapshot for an icon deleted while its probe ran', async () => {
+    const { exec, pending } = controllableExec();
+    const broadcast = vi.fn();
+    const svc = new PinnedStatusService({ exec, cwd: '/home', broadcast });
+    svc.configure([icon('a', 'probe')]);
+    svc.clientConnected();
+    svc.configure([]);
+    broadcast.mockClear();
+
+    pending[0]!.resolve(0);
+    await flush();
+    expect(svc.getSnapshots()).toEqual([]);
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconfiguring while a probe runs keeps exactly one timer per icon', async () => {
+    const { exec, pending } = controllableExec();
+    const svc = new PinnedStatusService({ exec, cwd: '/home', broadcast: vi.fn() });
+    svc.configure([icon('a', 'old')]);
+    svc.clientConnected();
+    svc.configure([icon('a', 'new')]);
+    svc.configure([icon('a', 'newer')]);
+    pending[0]!.resolve(0);
+    await flush();
+    pending[1]!.resolve(0); // the re-run for 'newer'
+    await flush();
+    const before = exec.mock.calls.length;
+    expect(vi.getTimerCount()).toBe(1); // one interval, no leftover probe guard
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(exec.mock.calls.length - before).toBe(1);
+  });
+
   it('runs probes in the home directory with the configured timeout', async () => {
     const exec: ProbeExecFn = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
     const svc = new PinnedStatusService({ exec, cwd: '/Users/me', broadcast: vi.fn() });

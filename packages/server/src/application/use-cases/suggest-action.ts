@@ -107,17 +107,43 @@ for the state that needs fixing (e.g. log in) and a rule for the other one (e.g.
 Never invent flags you are unsure of.
 `.trim();
 
-/** Extract and parse the first JSON object of a completion (models sometimes fence it). */
+/**
+ * Extract and parse the first JSON object of a completion (models sometimes
+ * fence it, or add a sentence after it). The object ends at the `}` matching
+ * its opening `{` — not the last `}` of the text, which may belong to trailing
+ * prose like "uses {{workspace_path}}". Braces inside JSON strings don't count.
+ */
 export function parseJsonObject(text: string): Record<string, unknown> | null {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    const value: unknown = JSON.parse(text.slice(start, end + 1));
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-  } catch {
-    return null;
+  for (let start = text.indexOf('{'); start >= 0; start = text.indexOf('{', start + 1)) {
+    const end = matchingBrace(text, start);
+    if (end < 0) continue;
+    try {
+      const value: unknown = JSON.parse(text.slice(start, end + 1));
+      if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+    } catch {
+      // not JSON (e.g. a `{{var}}` in prose before the object): try the next `{`
+    }
   }
+  return null;
+}
+
+/** Index of the `}` closing the `{` at `start`, skipping braces inside strings; -1 if unbalanced. */
+function matchingBrace(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < text.length; i += 1) {
+    const c = text[i];
+    if (inString) {
+      if (c === '\\') i += 1;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === '{') depth += 1;
+    else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);

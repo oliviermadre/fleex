@@ -126,3 +126,20 @@ function sanitizeAttributes(element: string, raw: string, options: SanitizeOptio
 export function iconifyBodyToSvg(body: string, width = 24, height = 24): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }
+
+/**
+ * Sanitise the inline SVG icons of actions about to be persisted.
+ *
+ * The picker already routes every import through `sanitizeSvg`, but the config
+ * is saved by the client: the server must not trust it to have done so (a
+ * direct `PUT /api/config`, an older client, icons saved before the sanitiser
+ * existed). Colours are kept — they were the user's choice — and an icon with
+ * nothing usable left becomes empty rather than unsafe.
+ */
+export function sanitizeActionIcons<T extends { icon: string; iconType: string }>(actions: T[]): T[] {
+  return actions.map((action) =>
+    action && action.iconType === 'svg' && typeof action.icon === 'string' && action.icon
+      ? { ...action, icon: sanitizeSvg(action.icon, { keepColors: true }) ?? '' }
+      : action,
+  );
+}

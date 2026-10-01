@@ -68,6 +68,13 @@ function probedIcons(icons: readonly PinnedIcon[] | undefined): Map<string, Requ
 export class PinnedStatusService {
   private readonly entries = new Map<string, Entry>();
   private readonly inFlight = new Set<string>();
+  /** Icons asked for a fresh probe while one was already running: re-probed once it lands. */
+  private readonly rerun = new Set<string>();
+  /**
+   * Service-wide, never reset: an icon deleted and re-added under the same id
+   * gets a new generation, so the old entry's in-flight result is still dropped.
+   */
+  private generationSeq = 0;
   private readonly queue: string[] = [];
   private clients = 0;
   private readonly maxConcurrent: number;
@@ -86,6 +93,7 @@ export class PinnedStatusService {
         this.clearTimer(entry);
         this.entries.delete(id);
         this.dequeue(id);
+        this.rerun.delete(id);
         changed = true;
       }
     }
@@ -98,14 +106,14 @@ export class PinnedStatusService {
       const entry: Entry = {
         probe,
         timer: null,
-        generation: (existing?.generation ?? 0) + 1,
+        generation: ++this.generationSeq,
         snapshot: { iconId: id, status: 'unknown', probing: false },
       };
       this.entries.set(id, entry);
       this.dequeue(id);
       if (this.active) {
         this.startTimer(id, entry);
-        this.request(id);
+        this.request(id, true);
       }
     }
 
@@ -117,7 +125,7 @@ export class PinnedStatusService {
     if (this.clients !== 1) return;
     for (const [id, entry] of this.entries) {
       this.startTimer(id, entry);
-      this.request(id);
+      this.request(id, true);
     }
   }
 
@@ -139,12 +147,12 @@ export class PinnedStatusService {
   /** Probe now, out of band (manual refresh, or right after an action ran). */
   refresh(iconId: string): boolean {
     if (!this.entries.has(iconId)) return false;
-    this.request(iconId);
+    this.request(iconId, true);
     return true;
   }
 
   refreshAll(): void {
-    for (const id of this.entries.keys()) this.request(id);
+    for (const id of this.entries.keys()) this.request(id, true);
   }
 
   /** Run a probe command once without persisting or broadcasting anything — the Settings "Test" button. */
@@ -174,6 +182,7 @@ export class PinnedStatusService {
     for (const entry of this.entries.values()) this.clearTimer(entry);
     this.entries.clear();
     this.queue.length = 0;
+    this.rerun.clear();
   }
 
   // ─── internals ────────────────────────────────────────────────────────────
@@ -203,10 +212,20 @@ export class PinnedStatusService {
     if (i >= 0) this.queue.splice(i, 1);
   }
 
-  /** At most one probe per icon at a time: a tick that lands while one runs is skipped, not stacked. */
-  private request(id: string): void {
+  /**
+   * At most one probe per icon at a time: a tick that lands while one runs is
+   * skipped, not stacked. An explicit request (`rerunIfBusy`: config change,
+   * refresh after an action, client connecting) is remembered instead, and
+   * re-probes as soon as the running one lands — its result may predate what
+   * the caller just changed.
+   */
+  private request(id: string, rerunIfBusy = false): void {
     if (!this.entries.has(id)) return;
-    if (this.inFlight.has(id) || this.queue.includes(id)) return;
+    if (this.inFlight.has(id)) {
+      if (rerunIfBusy) this.rerun.add(id);
+      return;
+    }
+    if (this.queue.includes(id)) return;
     if (this.inFlight.size >= this.maxConcurrent) {
       this.queue.push(id);
       return;
@@ -229,6 +248,7 @@ export class PinnedStatusService {
     } finally {
       this.inFlight.delete(id);
     }
+    const rerunRequested = this.rerun.delete(id);
 
     const current = this.entries.get(id);
     if (current && current.generation === generation) {
@@ -247,6 +267,10 @@ export class PinnedStatusService {
     }
 
     this.drain();
+    // Probe again when someone asked while this one ran, or when the icon was
+    // reconfigured / re-added meanwhile (its result was just dropped).
+    const latest = this.entries.get(id);
+    if (latest && (rerunRequested || (latest.generation !== generation && this.active))) this.request(id);
   }
 
   private drain(): void {

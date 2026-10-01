@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeSvg, iconifyBodyToSvg, SVG_MAX_BYTES } from './svg-sanitizer.js';
+import { sanitizeSvg, sanitizeActionIcons, iconifyBodyToSvg, SVG_MAX_BYTES } from './svg-sanitizer.js';
 
 describe('sanitizeSvg', () => {
   it('keeps plain icon geometry and forces currentColor so the icon follows the theme', () => {
@@ -44,5 +44,19 @@ describe('sanitizeSvg', () => {
   it('builds a standalone svg from an Iconify body', () => {
     const svg = sanitizeSvg(iconifyBodyToSvg('<path fill="currentColor" d="M12 0"/>', 24, 24));
     expect(svg).toContain('viewBox="0 0 24 24"');
+  });
+});
+
+describe('sanitizeActionIcons', () => {
+  it('sanitises inline SVG icons before they are stored, keeping colours, leaving other icon types alone', () => {
+    const [svg, url, empty] = sanitizeActionIcons([
+      { id: 'a', iconType: 'svg', icon: '<svg viewBox="0 0 24 24" onload="alert(1)"><script>alert(1)</script><path fill="#f00" d="M1 1h2"/></svg>' },
+      { id: 'b', iconType: 'url', icon: 'https://example.com/i.png' },
+      { id: 'c', iconType: 'svg', icon: '<img src=x onerror=alert(1)>' },
+    ]);
+    expect(svg!.icon).not.toMatch(/script|onload|alert/);
+    expect(svg!.icon).toContain('fill="#f00"');
+    expect(url!.icon).toBe('https://example.com/i.png');
+    expect(empty!.icon).toBe('');
   });
 });
