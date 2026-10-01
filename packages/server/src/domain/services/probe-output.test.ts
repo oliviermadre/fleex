@@ -9,6 +9,14 @@ describe('parseProbeOutput', () => {
     expect(parsed).toEqual({ status: 'warn', tooltip: 'a\nb', badge: '42', source: 'json' });
   });
 
+  it('accepts JSON whose string holds a raw newline — what zsh echo prints for "a\\nb"', () => {
+    expect(parseProbeOutput(out('{"status":"warn","tooltip":"a\nb","badge":"42"}\n'))).toEqual({ status: 'warn', tooltip: 'a\nb', badge: '42', source: 'json' });
+  });
+
+  it('still reads pretty-printed JSON spread over several lines', () => {
+    expect(parseProbeOutput(out('{\n  "status": "ko",\n  "tooltip": "x"\n}')).status).toBe('ko');
+  });
+
   it('trusts the JSON status even when the command exited non-zero', () => {
     expect(parseProbeOutput(out('{"status":"ok"}', 1)).status).toBe('ok');
   });

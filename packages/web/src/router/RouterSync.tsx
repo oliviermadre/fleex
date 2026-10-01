@@ -273,17 +273,20 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // Settings › Actions: /settings/actions[/:scope[/:id]]
   const actionsMatch = pathname.match(/^\/settings\/actions(?:\/(pinned|ticket)(?:\/([^/]+))?)?\/?$/);
   if (actionsMatch) {
-    if (!actionsMatch[1]) return { ...base, panel: 'settings', settingsTab: 'actions', redirect: '/settings/actions/pinned' };
+    // No redirect here: on a cold load a redirect returns before the store syncs and
+    // the store's default panel wins. Parsing straight into the route lets the
+    // store→URL normalisation rewrite the URL instead (same view → replace).
+    if (!actionsMatch[1]) return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: null } };
     const scope = actionsMatch[1] as ActionsScope;
     const id = actionsMatch[2] ? decodeURIComponent(actionsMatch[2]) : null;
     return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope, id } };
   }
   // The two tabs Actions replaced — kept so old deep links and bookmarks still land.
   if (pathname === '/settings/pinned-icons') {
-    return { ...base, panel: 'settings', settingsTab: 'actions', redirect: '/settings/actions/pinned' };
+    return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: null } };
   }
   if (pathname === '/settings/workspace-actions') {
-    return { ...base, panel: 'settings', settingsTab: 'actions', redirect: '/settings/actions/ticket' };
+    return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'ticket', id: null } };
   }
   const settingsMatch = pathname.match(/^\/settings\/([^/]+)$/);
   if (settingsMatch) {

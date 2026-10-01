@@ -115,7 +115,7 @@ export function ActionPreview({
           </>
         )}
         <div className="mt-3 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-2.5 py-2 text-[11px] text-[var(--theme-text-primary)]">
-          <ActionTooltipContent action={draft} status={status} snapshot={forced ? undefined : snapshot} tooltipOverride={tooltipOverride} lastRun={runs[0]} />
+          <ActionTooltipContent action={draft} status={status} snapshot={tooltipOverride ? undefined : snapshot} tooltipOverride={tooltipOverride} lastRun={runs[0]} />
         </div>
       </div>
 

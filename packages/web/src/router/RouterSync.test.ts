@@ -160,16 +160,23 @@ describe('parseUrl', () => {
     // which is what the button context menu's "Edit…" opens.
     expect(parseUrl('/settings/actions/pinned', '')).toMatchObject({ settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: null } });
     expect(parseUrl('/settings/actions/ticket/abc-1', '')).toMatchObject({ settingsTab: 'actions', actionsRoute: { scope: 'ticket', id: 'abc-1' } });
-    expect(parseUrl('/settings/actions', '').redirect).toBe('/settings/actions/pinned');
+    expect(parseUrl('/settings/actions', '').actionsRoute).toEqual({ scope: 'pinned', id: null });
 
     const url = storeToUrl({ activePanel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: 'gh' } });
     expect(url.pathname).toBe('/settings/actions/pinned/gh');
     expect(parseUrl(url.pathname, '').actionsRoute).toEqual({ scope: 'pinned', id: 'gh' });
   });
 
-  it('redirects the two retired tabs to their Actions scope, so old links keep working', () => {
-    expect(parseUrl('/settings/pinned-icons', '').redirect).toBe('/settings/actions/pinned');
-    expect(parseUrl('/settings/workspace-actions', '').redirect).toBe('/settings/actions/ticket');
+  it('lands the two retired tabs on their Actions scope, so old links keep working', () => {
+    // Parsed, not redirected: a redirect on a cold load lost to the store's
+    // default panel and sent the user to the board.
+    for (const [legacy, scope] of [['/settings/pinned-icons', 'pinned'], ['/settings/workspace-actions', 'ticket']] as const) {
+      const parsed = parseUrl(legacy, '');
+      expect(parsed).toMatchObject({ panel: 'settings', settingsTab: 'actions', actionsRoute: { scope, id: null } });
+      expect(parsed.redirect).toBeUndefined();
+      // …and the store then rewrites the URL in place rather than adding a history entry.
+      expect(historyActionForNav(legacy, '', `/settings/actions/${scope}`, '')).toBe('replace');
+    }
   });
 
   it('treats opening another action detail as a navigation (Back returns to the list)', () => {

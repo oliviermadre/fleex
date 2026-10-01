@@ -4,7 +4,7 @@ import type { IconSuggestion } from '@fleex/shared';
 import {
   SuggestActionUseCase,
   parseJsonObject,
-  validatePlan,
+  validateDraftPlan,
   type JsonModelPort,
   type IconSearchPort,
 } from '../../src/application/use-cases/suggest-action.js';
@@ -84,7 +84,7 @@ describe('SuggestActionUseCase.iconSuggestions', () => {
     const [keywords, options] = (search.search as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(keywords).toEqual(['github', 'git', 'octocat']);
     expect(JSON.stringify(keywords)).not.toContain('secret');
-    expect(options).toMatchObject({ brandFirst: true, limit: 6 });
+    expect(options).toMatchObject({ brandFirst: true, includeBrands: true, limit: 6 });
   });
 
   it('still offers a generated icon when Iconify is down', async () => {
@@ -102,39 +102,56 @@ describe('SuggestActionUseCase.iconSuggestions', () => {
 });
 
 describe('SuggestActionUseCase.draft', () => {
-  it('turns "toggle cluster staging avec platool" into an action, a probe and an ok → logout rule', async () => {
-    const model = scriptedModel([
-      (system) => system.includes('plan of a Fleex button')
-        ? JSON.stringify({ label: 'K8s staging', actionType: 'shell', actionIntent: 'log in to staging with platool', probeIntent: 'is the staging context loaded', rules: [{ label: 'Se déconnecter de staging', when: ['ok'], intent: 'log out of staging with platool' }] })
-        : undefined,
-      (system, prompt) => system.includes('STATUS PROBE') ? '{"command":"kubectl --context staging cluster-info --request-timeout=5s","risk":"safe"}' : undefined,
-      (_s, prompt) => prompt.includes('log out of staging') ? '{"command":"platool logout staging","risk":"mutating"}' : undefined,
-      (_s, prompt) => prompt.includes('log in to staging') ? '{"command":"platool login staging","risk":"mutating"}' : undefined,
-      (system) => system.includes('icon search keywords') ? '{"keywords":["kubernetes"],"brand":"kubernetes","generate":false}' : undefined,
-    ]);
+  const plan = {
+    label: 'K8s staging',
+    actionType: 'shell',
+    actionValue: 'platool login staging',
+    probe: 'kubectl --context staging cluster-info --request-timeout=5s',
+    rules: [{ label: 'Disconnect from staging', when: ['ok'], command: 'platool logout staging' }],
+    iconKeywords: ['kubernetes', 'cluster'],
+    brand: 'kubernetes',
+    notes: null,
+  };
+
+  it('turns "toggle cluster staging avec platool" into an action, a probe and an ok → logout rule in ONE model call', async () => {
+    const model = scriptedModel([(system) => (system.includes('design a one-click button') ? JSON.stringify(plan) : undefined)]);
+    const search = icons([{ ...GH_ICON, id: 'simple-icons:kubernetes', name: 'kubernetes' }]);
     const stages: string[] = [];
-    const uc = new SuggestActionUseCase(model, binaries, icons([{ ...GH_ICON, id: 'simple-icons:kubernetes', name: 'kubernetes' }]), logger);
+    const uc = new SuggestActionUseCase(model, binaries, search, logger);
     const result = await uc.draft({ prompt: 'toggle cluster staging avec platool', scope: 'pinned', onStage: (s) => stages.push(s) });
 
+    // Each SDK call spawns a Claude Code process: one call, not one per field.
+    expect(model.complete).toHaveBeenCalledTimes(1);
     expect(stages).toEqual(['intent', 'command', 'probe', 'icon']);
     expect(result.draft).toMatchObject({
       label: 'K8s staging',
       actionValue: 'platool login staging',
       status: { command: expect.stringContaining('kubectl --context staging') },
-      conditionalActions: [{ label: 'Se déconnecter de staging', when: ['ok'], actionValue: 'platool logout staging' }],
+      conditionalActions: [{ label: 'Disconnect from staging', when: ['ok'], actionValue: 'platool logout staging' }],
     });
     expect(result.icon?.name).toBe('kubernetes');
+    expect((search.search as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toEqual(['kubernetes', 'cluster']);
   });
 
-  it('never adds a probe to a ticket action', async () => {
-    const model = scriptedModel([
-      (system) => system.includes('plan of a Fleex button') ? JSON.stringify({ label: 'Cursor', actionType: 'shell', actionIntent: 'open in cursor', probeIntent: 'is cursor open', rules: [] }) : undefined,
-      (system) => system.includes('icon search keywords') ? '{"keywords":["code"]}' : undefined,
-      () => '{"command":"cursor \\"{{workspace_path}}\\""}',
-    ]);
+  it('keeps brand logos out of the icon search when the action is not about a brand', async () => {
+    const model = scriptedModel([() => JSON.stringify({ ...plan, brand: null, iconKeywords: ['toggle', 'server'] })]);
+    const search = icons([]);
+    await new SuggestActionUseCase(model, binaries, search, logger).draft({ prompt: 'toggle staging', scope: 'pinned' });
+    expect((search.search as ReturnType<typeof vi.fn>).mock.calls[0]![1]).toMatchObject({ includeBrands: false });
+  });
+
+  it('never adds a probe or rules to a ticket action, even if the model proposes one', async () => {
+    const model = scriptedModel([() => JSON.stringify({ ...plan, actionValue: 'cursor "{{workspace_path}}"' })]);
     const uc = new SuggestActionUseCase(model, binaries, icons([]), logger);
     const result = await uc.draft({ prompt: 'ouvrir dans cursor', scope: 'ticket' });
     expect(result.draft.status).toBeUndefined();
+    expect(result.draft.conditionalActions).toBeUndefined();
+  });
+
+  it('warns in the notes when the drafted command is destructive', async () => {
+    const model = scriptedModel([() => JSON.stringify({ ...plan, probe: null, rules: [], actionValue: 'docker system prune -af' })]);
+    const result = await new SuggestActionUseCase(model, binaries, icons([]), logger).draft({ prompt: 'clean docker', scope: 'pinned' });
+    expect(result.notes).toContain('Destructive');
   });
 });
 
@@ -144,9 +161,9 @@ describe('validation helpers', () => {
     expect(parseJsonObject('[1,2]')).toBeNull();
   });
 
-  it('rejects a url plan without an http(s) url and drops rules without a status', () => {
-    expect(validatePlan({ label: 'x', actionType: 'url', url: 'ftp://x' })).toBeNull();
-    expect(validatePlan({ label: 'x', actionType: 'shell', rules: [{ label: 'a', when: ['green'], intent: 'b' }] })!.rules).toEqual([]);
+  it('rejects a url plan without an http(s) url and drops rules without a valid status', () => {
+    expect(validateDraftPlan({ label: 'x', actionType: 'url', actionValue: 'ftp://x' })).toBeNull();
+    expect(validateDraftPlan({ label: 'x', actionType: 'shell', actionValue: 'true', rules: [{ label: 'a', when: ['green'], command: 'b' }] })!.rules).toEqual([]);
   });
 });
 

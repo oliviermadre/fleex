@@ -67,12 +67,19 @@ export function parseProbeOutput(outcome: ProbeOutcome): ParsedProbe {
 function parseJsonObject(stdout: string): Record<string, unknown> | null {
   const trimmed = stdout.trim();
   if (!trimmed.startsWith('{')) return null;
-  try {
-    const value: unknown = JSON.parse(trimmed);
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-  } catch {
-    return null;
+  // zsh's `echo` expands `\n` into a real newline, so `echo '{"tooltip":"a\nb"}'`
+  // — the natural way to write a probe — prints a raw line break inside a JSON
+  // string, which JSON.parse rejects. Retry with control characters escaped
+  // before giving up and falling back to the exit code.
+  for (const candidate of [trimmed, trimmed.replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t')]) {
+    try {
+      const value: unknown = JSON.parse(candidate);
+      if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+    } catch {
+      // try the next candidate
+    }
   }
+  return null;
 }
 
 export function clampTooltip(text: string): string {

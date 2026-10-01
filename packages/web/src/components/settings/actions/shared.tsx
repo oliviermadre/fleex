@@ -44,7 +44,8 @@ export function Chip({ children, className }: { children: ReactNode; className?:
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="ml-1 rounded border border-[var(--theme-border-input)] px-1 font-mono text-[10px] text-[var(--theme-text-muted)]">{children}</kbd>
+    // Inherits the button's text colour, so it stays legible on accent and tinted buttons alike.
+    <kbd className="ml-1 rounded border border-current px-1 font-mono text-[10px] opacity-60">{children}</kbd>
   );
 }
 

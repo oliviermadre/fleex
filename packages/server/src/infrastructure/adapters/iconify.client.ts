@@ -24,25 +24,26 @@ export class IconifyClient implements IconSearchPort {
 
   async search(
     keywords: string[],
-    { brandFirst, limit, exclude = [] }: { brandFirst: boolean; limit: number; exclude?: string[] },
+    { brandFirst, limit, exclude = [], includeBrands = true }: { brandFirst: boolean; limit: number; exclude?: string[]; includeBrands?: boolean },
   ): Promise<IconSuggestion[]> {
-    const key = `${brandFirst}|${keywords.join(',')}`;
+    const sets = includeBrands ? SETS : SETS.filter((set) => set !== 'simple-icons');
+    const key = `${brandFirst}|${sets.join(',')}|${keywords.join(',')}`;
     const cached = this.cache.get(key);
     let all: IconSuggestion[];
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
       all = cached.value;
     } else {
-      all = await this.fetchAll(keywords, brandFirst);
+      all = await this.fetchAll(keywords, brandFirst, sets);
       this.cache.set(key, { at: Date.now(), value: all });
     }
     const skip = new Set(exclude);
     return all.filter((s) => !skip.has(s.id)).slice(0, limit);
   }
 
-  private async fetchAll(keywords: string[], brandFirst: boolean): Promise<IconSuggestion[]> {
+  private async fetchAll(keywords: string[], brandFirst: boolean, sets: IconSource[]): Promise<IconSuggestion[]> {
     const ids: string[] = [];
     for (const keyword of keywords) {
-      const url = `${API}/search?query=${encodeURIComponent(keyword)}&prefixes=${SETS.join(',')}&limit=12`;
+      const url = `${API}/search?query=${encodeURIComponent(keyword)}&prefixes=${sets.join(',')}&limit=12`;
       const data = (await this.getJson(url)) as { icons?: string[] };
       for (const id of data.icons ?? []) if (!ids.includes(id)) ids.push(id);
     }
@@ -51,7 +52,7 @@ export class IconifyClient implements IconSearchPort {
     const byPrefix = new Map<string, string[]>();
     for (const id of ids.slice(0, 18)) {
       const [prefix, name] = id.split(':');
-      if (!prefix || !name || !SETS.includes(prefix as IconSource)) continue;
+      if (!prefix || !name || !sets.includes(prefix as IconSource)) continue;
       byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), name]);
     }
 

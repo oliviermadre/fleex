@@ -32,7 +32,7 @@ export interface BinaryLookupPort {
 
 export interface IconSearchPort {
   /** Throws when the icon source is unreachable, so the caller can fall back to generated icons. */
-  search(keywords: string[], options: { brandFirst: boolean; limit: number; exclude?: string[] }): Promise<IconSuggestion[]>;
+  search(keywords: string[], options: { brandFirst: boolean; limit: number; exclude?: string[]; includeBrands?: boolean }): Promise<IconSuggestion[]>;
 }
 
 export class ActionsAiError extends Error {}
@@ -85,19 +85,26 @@ Constraints: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 at most 6 primitives among path/circle/rect/line/polyline/polygon, no text, no style, no script, no colours.
 `.trim();
 
-const PLAN_SYSTEM = `
-You turn a user's description into the plan of a Fleex button. A button has a default click action,
-optionally (top-bar buttons only) a status probe that colours a dot, and optionally rules that change the
-click action depending on the status (e.g. "if ok → log out", default → log in).
+const DRAFT_SYSTEM = `
+You design a one-click button for Fleex, a developer tool, from the user's description — in ONE answer.
+A button has a default click action, optionally (top-bar buttons only) a status probe that colours a dot,
+and optionally rules that change the click action depending on the status (e.g. "if ok → log out",
+default → log in).
+
+${ENVIRONMENT}
+
 Reply with ONE JSON object and nothing else:
 {"label": string (2–4 words, Title Case, in the user's language),
  "actionType": "shell" | "url",
- "url": string | null (only for actionType "url"),
- "actionIntent": string (what the default click must do, one sentence, for a shell action),
- "probeIntent": string | null (how to know the status is OK; null if no status makes sense),
- "rules": [{"label": string, "when": ("ok"|"warn"|"ko"|"unknown")[], "intent": string}],
- "notes": string | null}
-Rules only make sense with a probe. Keep rules to the minimum (usually 0 or 1).
+ "actionValue": string (the default command, or an http(s) URL for "url"),
+ "probe": string | null (the status probe command; null when no status makes sense),
+ "rules": [{"label": string, "when": ("ok"|"warn"|"ko"|"unknown")[], "command": string}],
+ "iconKeywords": string[] (3 to 5 English icon search keywords, most specific first),
+ "brand": string | null (lowercase product/brand name the button is about, if any),
+ "notes": string | null (one short caveat for the user, e.g. an assumed sub-command)}
+Rules only make sense with a probe; keep them to the minimum (usually 0 or 1). Prefer the default action
+for the state that needs fixing (e.g. log in) and a rule for the other one (e.g. ok → log out).
+Never invent flags you are unsure of.
 `.trim();
 
 /** Extract and parse the first JSON object of a completion (models sometimes fence it). */
@@ -139,20 +146,20 @@ export function validateIconPlan(o: Record<string, unknown>): { keywords: string
 export interface DraftPlan {
   label: string;
   actionType: 'shell' | 'url';
-  url: string | null;
-  actionIntent: string;
-  probeIntent: string | null;
-  rules: { label: string; when: ActionStatus[]; intent: string }[];
+  actionValue: string;
+  probe: string | null;
+  rules: { label: string; when: ActionStatus[]; command: string }[];
+  iconKeywords: string[];
+  brand: string | null;
   notes: string | null;
 }
 
-export function validatePlan(o: Record<string, unknown>): DraftPlan | null {
+export function validateDraftPlan(o: Record<string, unknown>): DraftPlan | null {
   const label = str(o['label']);
-  if (!label) return null;
+  const actionValue = str(o['actionValue']);
+  if (!label || !actionValue) return null;
   const actionType = o['actionType'] === 'url' ? 'url' : 'shell';
-  const url = str(o['url']);
-  if (actionType === 'url' && !(url && /^https?:\/\//.test(url))) return null;
-  const actionIntent = str(o['actionIntent']) ?? label;
+  if (actionType === 'url' && !/^https?:\/\//.test(actionValue)) return null;
   const rules = Array.isArray(o['rules'])
     ? o['rules']
         .map((r) => (r && typeof r === 'object' ? (r as Record<string, unknown>) : null))
@@ -160,12 +167,21 @@ export function validatePlan(o: Record<string, unknown>): DraftPlan | null {
         .map((r) => ({
           label: str(r['label']) ?? '',
           when: Array.isArray(r['when']) ? (r['when'] as unknown[]).filter(isStatus) : [],
-          intent: str(r['intent']) ?? '',
+          command: str(r['command']) ?? '',
         }))
-        .filter((r) => r.label && r.intent && r.when.length > 0)
+        .filter((r) => r.label && r.command && r.when.length > 0)
         .slice(0, 3)
     : [];
-  return { label, actionType, url: actionType === 'url' ? url : null, actionIntent, probeIntent: str(o['probeIntent']), rules, notes: str(o['notes']) };
+  return {
+    label,
+    actionType,
+    actionValue,
+    probe: str(o['probe']),
+    rules,
+    iconKeywords: strList(o['iconKeywords'], 5),
+    brand: str(o['brand'])?.toLowerCase() ?? null,
+    notes: str(o['notes']),
+  };
 }
 
 /**
@@ -194,6 +210,7 @@ export class SuggestActionUseCase {
     const context = request.context ?? {};
     const prompt = [
       `Request: ${intent}`,
+      'Write the explanation in the language of the request above.',
       `Kind: ${request.kind === 'probe' ? 'status probe' : request.kind === 'rule' ? 'click action used when a status rule matches' : 'default click action'}`,
       context.label ? `Button label: ${context.label}` : null,
       context.currentCommand ? `Current command: ${context.currentCommand}` : null,
@@ -226,71 +243,72 @@ export class SuggestActionUseCase {
       validateIconPlan,
     );
 
+    return this.findIcons(plan.keywords, plan.brand, plan.generate, label ?? request.command ?? 'action', request.exclude);
+  }
+
+  /** Iconify first (brand first when there is one); a generated SVG when asked, when nothing fits, or when Iconify is down. */
+  private async findIcons(keywords: string[], brand: string | null, generate: boolean, label: string, exclude?: string[]): Promise<ActionsAiIconsResponse> {
     let suggestions: IconSuggestion[] = [];
     let iconifyUnavailable = false;
     try {
-      const keywords = plan.brand && !plan.keywords.includes(plan.brand) ? [plan.brand, ...plan.keywords] : plan.keywords;
-      suggestions = await this.icons.search(keywords, { brandFirst: !!plan.brand, limit: 6, exclude: request.exclude });
+      const terms = brand && !keywords.includes(brand) ? [brand, ...keywords] : keywords;
+      // Brand logos only when the action is about a brand: otherwise a keyword like
+      // "toggle" matches arbitrary logos (a staging toggle got the Deno Deploy one).
+      suggestions = await this.icons.search(terms, { brandFirst: !!brand, includeBrands: !!brand, limit: 6, exclude });
     } catch (error) {
       iconifyUnavailable = true;
       this.logger.warn('Iconify unreachable, generating icon only', { error: error instanceof Error ? error.message : String(error) });
     }
-
-    if (plan.generate || suggestions.length === 0 || iconifyUnavailable) {
-      const generated = await this.generateIcon(label ?? request.command ?? 'action', plan.keywords).catch(() => null);
+    if (generate || suggestions.length === 0 || iconifyUnavailable) {
+      const generated = await this.generateIcon(label, keywords).catch(() => null);
       if (generated) suggestions = [...suggestions, generated];
     }
-    return { keywords: plan.keywords, suggestions, ...(iconifyUnavailable ? { iconifyUnavailable: true } : {}) };
+    return { keywords, suggestions, ...(iconifyUnavailable ? { iconifyUnavailable: true } : {}) };
   }
 
+  /**
+   * A whole button from one sentence, in ONE model call: every extra SDK call
+   * spawns a Claude Code process, and six of them in a row made "one click" take
+   * two minutes. The same environment and probe rules as the per-field assistant
+   * go into that call, and the same code-side checks (risk floor, binaries,
+   * Iconify) run on what comes back.
+   */
   async draft(params: { prompt: string; scope: ActionScope; onStage?: (stage: ActionsAiDraftStage) => void }): Promise<ActionsAiDraftResult> {
     const prompt = params.prompt?.trim();
     if (!prompt) throw new ActionsAiError('prompt is required');
     const pinned = params.scope === 'pinned';
 
     params.onStage?.('intent');
-    const plan = await this.ask(
-      PLAN_SYSTEM + (pinned ? '' : '\nThis is a TICKET button: no probe and no rules (set probeIntent null and rules []).'),
-      `User description: ${prompt}`,
-      validatePlan,
-    );
+    const system = [DRAFT_SYSTEM, PROBE_RULES.replace('This command', 'The "probe" command')];
+    if (!pinned) system.push(TICKET_RULES, 'This is a TICKET button: set "probe" to null and "rules" to [].');
+    const plan = await this.ask(system.join('\n\n'), `User description: ${prompt}`, validateDraftPlan);
 
     params.onStage?.('command');
-    let actionValue = plan.url ?? '';
-    const conditionalActions: ConditionalAction[] = [];
-    if (plan.actionType === 'shell') {
-      actionValue = (await this.command({ intent: plan.actionIntent, kind: 'action', scope: params.scope, context: { label: plan.label } })).command;
-    }
+    const conditionalActions: ConditionalAction[] = pinned && plan.probe
+      ? plan.rules.map((r) => ({ id: randomUUID(), label: r.label, when: r.when, actionType: 'shell' as const, actionValue: r.command }))
+      : [];
+    const risky = [plan.actionValue, ...conditionalActions.map((r) => r.actionValue)].filter((c) => enforceRisk(c, undefined) === 'destructive');
 
     let status: ActionsAiDraftResult['draft']['status'];
-    if (pinned && plan.probeIntent) {
+    if (pinned && plan.probe) {
       params.onStage?.('probe');
-      const probe = await this.command({ intent: plan.probeIntent, kind: 'probe', scope: 'pinned', context: { label: plan.label, defaultCommand: actionValue } });
-      status = { command: probe.command, intervalSec: PROBE_DEFAULT_INTERVAL_SEC };
-      for (const rule of plan.rules) {
-        const suggestion = await this.command({
-          intent: rule.intent,
-          kind: 'rule',
-          scope: 'pinned',
-          context: { label: plan.label, defaultCommand: actionValue, probeCommand: probe.command },
-        });
-        conditionalActions.push({ id: randomUUID(), label: rule.label, when: rule.when, actionType: 'shell', actionValue: suggestion.command });
-      }
+      status = { command: plan.probe, intervalSec: PROBE_DEFAULT_INTERVAL_SEC };
     }
 
     params.onStage?.('icon');
-    const icons = await this.iconSuggestions({ label: plan.label, command: actionValue, probeCommand: status?.command }).catch(() => null);
+    const icons = await this.findIcons(plan.iconKeywords.length ? plan.iconKeywords : [plan.label], plan.brand, false, plan.label).catch(() => null);
 
+    const notes = [plan.notes, risky.length ? `Destructive command — review before saving: ${risky.join(' | ')}` : null].filter(Boolean).join(' ');
     return {
       draft: {
         label: plan.label,
         actionType: plan.actionType,
-        actionValue,
+        actionValue: plan.actionValue,
         ...(status ? { status } : {}),
         ...(conditionalActions.length ? { conditionalActions } : {}),
       },
       icon: icons?.suggestions[0] ?? null,
-      ...(plan.notes ? { notes: plan.notes } : {}),
+      ...(notes ? { notes } : {}),
     };
   }
 
