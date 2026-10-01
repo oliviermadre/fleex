@@ -11,8 +11,8 @@
  * RouterSync handles programmatic store changes (e.g. the Work view landing on a task).
  */
 import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useUIStore, type SettingsTab, type AnalyticsTab } from '../stores/uiStore';
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
+import { isLeaveGuarded, pauseLeaveGuard, requestLeave, useUIStore, type SettingsTab, type AnalyticsTab, type ActionsRoute, type ActionsScope } from '../stores/uiStore';
 import { useWorkStore, type WorkMode } from '../stores/workStore';
 import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/ticketStore';
 import { useTicketGroupStore, VALID_EPIC_DETAIL_TABS, type EpicDetailTab } from '../stores/ticketGroupStore';
@@ -29,8 +29,7 @@ const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 const VALID_SETTINGS_TABS = [
   'general',
   'appearance',
-  'pinned-icons',
-  'workspace-actions',
+  'actions',
   'agent-tokens',
   'deliverable-types',
   'memory',
@@ -89,6 +88,8 @@ interface ParsedUrl {
   panelId: string | null;
   workflowId: string | null;
   settingsTab: SettingsTab | null;
+  /** Settings › Actions sub-route; set only when settingsTab is 'actions'. */
+  actionsRoute?: ActionsRoute;
   analyticsTab: AnalyticsTab | null;
   redirect?: string;
 }
@@ -269,6 +270,24 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   if (pathname === '/settings') {
     return { ...base, panel: 'settings' };
   }
+  // Settings › Actions: /settings/actions[/:scope[/:id]]
+  const actionsMatch = pathname.match(/^\/settings\/actions(?:\/(pinned|ticket)(?:\/([^/]+))?)?\/?$/);
+  if (actionsMatch) {
+    // No redirect here: on a cold load a redirect returns before the store syncs and
+    // the store's default panel wins. Parsing straight into the route lets the
+    // store→URL normalisation rewrite the URL instead (same view → replace).
+    if (!actionsMatch[1]) return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: null } };
+    const scope = actionsMatch[1] as ActionsScope;
+    const id = actionsMatch[2] ? decodeURIComponent(actionsMatch[2]) : null;
+    return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope, id } };
+  }
+  // The two tabs Actions replaced — kept so old deep links and bookmarks still land.
+  if (pathname === '/settings/pinned-icons') {
+    return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'pinned', id: null } };
+  }
+  if (pathname === '/settings/workspace-actions') {
+    return { ...base, panel: 'settings', settingsTab: 'actions', actionsRoute: { scope: 'ticket', id: null } };
+  }
   const settingsMatch = pathname.match(/^\/settings\/([^/]+)$/);
   if (settingsMatch) {
     if ((settingsMatch[1] as string) === 'repositories') {
@@ -300,6 +319,7 @@ export interface UrlState {
   selectedSkillId?: string | null;
   personaTab?: PersonaTab;
   settingsTab?: SettingsTab;
+  actionsRoute?: ActionsRoute;
   analyticsTab?: AnalyticsTab;
   ticketTab?: TicketTab;
   selectedPanelId?: string | null;
@@ -323,6 +343,7 @@ export function storeToUrl({
   selectedSkillId = null,
   personaTab = 'config',
   settingsTab = 'general',
+  actionsRoute,
   analyticsTab,
   ticketTab,
   selectedPanelId,
@@ -416,6 +437,11 @@ export function storeToUrl({
       return { pathname: `/analytics/${analyticsTab ?? 'audit-trail'}`, search: '' };
     }
     case 'settings': {
+      if (settingsTab === 'actions') {
+        const scope = actionsRoute?.scope ?? 'pinned';
+        const id = actionsRoute?.id;
+        return { pathname: id ? `/settings/actions/${scope}/${encodeURIComponent(id)}` : `/settings/actions/${scope}`, search: '' };
+      }
       return { pathname: `/settings/${settingsTab}`, search: '' };
     }
   }
@@ -461,6 +487,7 @@ export function navIdentity(parsed: ParsedUrl): string {
     parsed.panelId ?? '',
     parsed.workflowId ?? '',
     parsed.settingsTab ?? 'general',
+    parsed.actionsRoute ? `${parsed.actionsRoute.scope}/${parsed.actionsRoute.id ?? ''}` : '',
     parsed.analyticsTab ?? '',
   ].join('|');
 }
@@ -496,12 +523,15 @@ export function historyActionForNav(
 export function RouterSync() {
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
 
   // Store accessors
   const activePanel = useUIStore((s) => s.activePanel);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const settingsTab = useUIStore((s) => s.settingsTab);
   const setSettingsTab = useUIStore((s) => s.setSettingsTab);
+  const actionsRoute = useUIStore((s) => s.actionsRoute);
+  const setActionsRoute = useUIStore((s) => s.setActionsRoute);
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectRepo = useUIStore((s) => s.selectRepo);
   const analyticsTab = useUIStore((s) => s.analyticsTab);
@@ -547,6 +577,32 @@ export function RouterSync() {
 
   // Track whether we're currently syncing from URL to prevent circular updates
   const syncingFromUrl = useRef(false);
+  /** Set when the user approved leaving an unsaved screen: the next URL → store sync must not ask again. */
+  const leaveApproved = useRef(false);
+
+  const currentStoreUrl = () =>
+    storeToUrl({
+      activePanel,
+      selectedRepoKey,
+      selectedBoardId,
+      selectedTicketId,
+      selectedScratchpadKey,
+      selectedPersonaId,
+      selectedSkillId,
+      personaTab,
+      settingsTab,
+      actionsRoute,
+      analyticsTab,
+      ticketTab,
+      selectedPanelId,
+      activeView,
+      epicDetailId,
+      epicDetailTab,
+      selectedWorkflowId,
+      workView,
+      workTicketId,
+      workMode,
+    });
 
   // ── URL → Store ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -556,6 +612,27 @@ export function RouterSync() {
       navigate(parsed.redirect, { replace: true });
       return;
     }
+
+    // Back / Forward away from a screen with unsaved changes: put the address
+    // back on what is shown, and only follow it once the user chose Save or Discard.
+    if (leaveApproved.current) {
+      leaveApproved.current = false;
+    } else if (isLeaveGuarded()) {
+      const here = currentStoreUrl();
+      if (here.pathname !== location.pathname || here.search !== location.search) {
+        const target = { pathname: location.pathname, search: location.search };
+        // After Back the browser already sits on the previous entry: replacing it
+        // would erase that entry, so a second Back could never reach it. Push instead.
+        navigate(here, { replace: navigationType !== 'POP' });
+        requestLeave(() => {
+          leaveApproved.current = true;
+          navigate(target);
+        });
+        return;
+      }
+    }
+    // The URL is the source of truth from here on: these updates are not the user leaving.
+    const resumeLeaveGuard = pauseLeaveGuard();
 
     syncingFromUrl.current = true;
 
@@ -690,6 +767,14 @@ export function RouterSync() {
     if (parsed.panel === 'settings' && parsed.settingsTab && parsed.settingsTab !== settingsTab) {
       setSettingsTab(parsed.settingsTab);
     }
+    if (
+      parsed.actionsRoute &&
+      (parsed.actionsRoute.scope !== actionsRoute.scope || parsed.actionsRoute.id !== actionsRoute.id)
+    ) {
+      setActionsRoute(parsed.actionsRoute);
+    }
+
+    resumeLeaveGuard();
 
     // Schedule flag reset after this tick
     setTimeout(() => {
@@ -702,27 +787,7 @@ export function RouterSync() {
   useEffect(() => {
     if (syncingFromUrl.current) return;
 
-    const expected = storeToUrl({
-      activePanel,
-      selectedRepoKey,
-      selectedBoardId,
-      selectedTicketId,
-      selectedScratchpadKey,
-      selectedPersonaId,
-      selectedSkillId,
-      personaTab,
-      settingsTab,
-      analyticsTab,
-      ticketTab,
-      selectedPanelId,
-      activeView,
-      epicDetailId,
-      epicDetailTab,
-      selectedWorkflowId,
-      workView,
-      workTicketId,
-      workMode,
-    });
+    const expected = currentStoreUrl();
 
     const currentPath = location.pathname;
     const currentSearch = location.search;
@@ -749,6 +814,7 @@ export function RouterSync() {
     selectedSkillId,
     personaTab,
     settingsTab,
+    actionsRoute,
     analyticsTab,
     ticketTab,
     selectedPanelId,

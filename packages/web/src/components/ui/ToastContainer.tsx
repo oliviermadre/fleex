@@ -37,7 +37,24 @@ export function ToastContainer() {
             typeAccent[toast.type],
           )}
         >
-          <span className="flex-1 break-words">{toast.message}</span>
+          <span className="flex-1 break-words">
+            {toast.message}
+            {toast.detail && (
+              <span className="mt-0.5 block truncate font-mono text-[10.5px] text-[var(--theme-text-muted)]">{toast.detail}</span>
+            )}
+          </span>
+          {toast.action && (
+            <button
+              type="button"
+              className="flex-shrink-0 font-medium text-[var(--theme-accent)] hover:underline"
+              onClick={() => {
+                toast.action!.onClick();
+                removeToast(toast.id);
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
           <button
             className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
             onClick={() => removeToast(toast.id)}

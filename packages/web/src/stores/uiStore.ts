@@ -2,8 +2,67 @@ import { create } from 'zustand';
 import type { TicketDeliverable } from '@fleex/shared';
 
 type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
-export type SettingsTab = 'general' | 'appearance' | 'pinned-icons' | 'workspace-actions' | 'agent-tokens' | 'deliverable-types' | 'memory' | 'connectors';
+export type SettingsTab = 'general' | 'appearance' | 'actions' | 'agent-tokens' | 'deliverable-types' | 'memory' | 'connectors';
+/** Settings › Actions: which scope's list, and which action's detail (`'new'` = unsaved draft). */
+export type ActionsScope = 'pinned' | 'ticket';
+export interface ActionsRoute {
+  scope: ActionsScope;
+  id: string | null;
+}
 export type AnalyticsTab = 'audit-trail' | 'statistics';
+
+/**
+ * A screen with unsaved work (Settings › Actions detail) registers a leave
+ * guard. Every navigation through this store (panel, Settings tab, Actions
+ * route) — and the router on Back/Forward — then asks it first: the guard gets
+ * a `proceed` callback to call once the user chose Save or Discard, or drops it
+ * to stay. Kept outside the store state: it is a callback, not something to render.
+ */
+export type LeaveGuard = (proceed: () => void) => void;
+let leaveGuard: LeaveGuard | null = null;
+let leaveGuardPaused = 0;
+
+/** Register the guard; returns the unregister function (for an effect cleanup). */
+export function setLeaveGuard(guard: LeaveGuard): () => void {
+  leaveGuard = guard;
+  return () => {
+    if (leaveGuard === guard) leaveGuard = null;
+  };
+}
+
+export function isLeaveGuarded(): boolean {
+  return leaveGuard !== null && leaveGuardPaused === 0;
+}
+
+/** Suspend the guard until the returned `resume` is called (the router's URL → store sync). */
+export function pauseLeaveGuard(): () => void {
+  leaveGuardPaused++;
+  let resumed = false;
+  return () => {
+    if (resumed) return;
+    resumed = true;
+    leaveGuardPaused--;
+  };
+}
+
+/** Run a navigation the user already approved (or that must not ask: save, delete, discard). */
+export function withoutLeaveGuard(navigate: () => void): void {
+  const resume = pauseLeaveGuard();
+  try {
+    navigate();
+  } finally {
+    resume();
+  }
+}
+
+/** Navigate now, or hand the navigation to the guard. */
+export function requestLeave(navigate: () => void): void {
+  if (!isLeaveGuarded()) {
+    navigate();
+    return;
+  }
+  leaveGuard!(() => withoutLeaveGuard(navigate));
+}
 
 interface UIState {
   // Nav sidebar (left icon bar)
@@ -21,6 +80,12 @@ interface UIState {
   // Settings tab selection
   settingsTab: SettingsTab;
   setSettingsTab: (tab: SettingsTab) => void;
+
+  // Settings › Actions sub-route (list vs detail)
+  actionsRoute: ActionsRoute;
+  setActionsRoute: (route: ActionsRoute) => void;
+  /** Jump to Settings › Actions, on a scope list or straight into one action's detail. */
+  openActionSettings: (scope: ActionsScope, id?: string | null) => void;
 
   // Analytics tab selection
   analyticsTab: AnalyticsTab;
@@ -104,11 +169,12 @@ interface UIState {
   clearFloatingDeliverableFocus: () => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>((set, get) => ({
   navCollapsed: true,
   contentPanelWidth: 320,
   activePanel: 'tickets',
   settingsTab: 'general',
+  actionsRoute: { scope: 'pinned', id: null },
   analyticsTab: 'audit-trail',
   altHeld: false,
   createModalOpen: false,
@@ -143,11 +209,29 @@ export const useUIStore = create<UIState>((set) => ({
   toggleNav: () =>
     set((state) => ({ navCollapsed: !state.navCollapsed })),
 
-  setActivePanel: (panel) => set({ activePanel: panel }),
+  setActivePanel: (panel) => {
+    if (panel === get().activePanel) return;
+    requestLeave(() => set({ activePanel: panel }));
+  },
 
   setAltHeld: (held) => set({ altHeld: held }),
 
-  setSettingsTab: (tab) => set({ settingsTab: tab }),
+  setSettingsTab: (tab) => {
+    if (tab === get().settingsTab) return;
+    requestLeave(() => set({ settingsTab: tab }));
+  },
+
+  setActionsRoute: (route) => {
+    const current = get().actionsRoute;
+    if (route.scope === current.scope && route.id === current.id) return;
+    requestLeave(() => set({ actionsRoute: route }));
+  },
+
+  openActionSettings: (scope, id = null) => {
+    const s = get();
+    if (s.activePanel === 'settings' && s.settingsTab === 'actions' && s.actionsRoute.scope === scope && s.actionsRoute.id === id) return;
+    requestLeave(() => set({ activePanel: 'settings', settingsTab: 'actions', actionsRoute: { scope, id } }));
+  },
 
   setAnalyticsTab: (tab) => set({ analyticsTab: tab }),
 

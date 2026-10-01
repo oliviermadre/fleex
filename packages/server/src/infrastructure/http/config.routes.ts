@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { AppConfig } from '../../application/ports/config.port.js';
 import type { Container } from '../container.js';
+import { sanitizeActionIcons } from '../../domain/services/svg-sanitizer.js';
 
 export function configRoutes(container: Container) {
   return async function (app: FastifyInstance) {
@@ -18,7 +19,15 @@ export function configRoutes(container: Container) {
       // startup), not the DB — ignore any attempt to change it through the API.
       // workspace is likewise env-derived and echoed back on GET, never stored.
       const { basePath: _ignoredBasePath, workspace: _ignoredWorkspace, ...updatable } = request.body;
+      // Icons are rendered as raw markup: sanitise them here too, whatever the client did.
+      if (Array.isArray(updatable.pinnedIcons)) updatable.pinnedIcons = sanitizeActionIcons(updatable.pinnedIcons);
+      if (Array.isArray(updatable.workspaceActions)) updatable.workspaceActions = sanitizeActionIcons(updatable.workspaceActions);
       await container.config.update(updatable);
+
+      // Settings › Actions saved: reprogramme the status probes without a restart.
+      if (Array.isArray(request.body.pinnedIcons)) {
+        container.pinnedStatus.configure(container.config.get().pinnedIcons);
+      }
 
       // Auto-resolve repository patterns when repositories change
       if (Array.isArray(request.body.repositories)) {

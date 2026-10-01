@@ -1,5 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
+import { tintSolid, tintText } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
 const COLLAPSE_BTN = 'flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]';
@@ -23,17 +26,10 @@ const tabIcons: Record<SettingsTab, React.ReactNode> = {
       <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
     </svg>
   ),
-  'pinned-icons': (
-    // Pin icon
+  actions: (
+    // Bolt — one-click actions (top bar + ticket header)
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="17" x2="12" y2="22" />
-      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
-    </svg>
-  ),
-  'workspace-actions': (
-    // Wrench icon
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
     </svg>
   ),
   'agent-tokens': (
@@ -71,8 +67,7 @@ const tabIcons: Record<SettingsTab, React.ReactNode> = {
 const tabs: { key: SettingsTab; label: string }[] = [
   { key: 'general', label: 'General' },
   { key: 'appearance', label: 'Appearance' },
-  { key: 'pinned-icons', label: 'Pinned Icons' },
-  { key: 'workspace-actions', label: 'Workspace Actions' },
+  { key: 'actions', label: 'Actions' },
   { key: 'agent-tokens', label: 'Agent Tokens' },
   { key: 'deliverable-types', label: 'Deliverable Types' },
   { key: 'memory', label: 'Memory' },
@@ -116,20 +111,26 @@ export function SettingsNav() {
       {/* Category list */}
       <nav className="flex flex-col py-2">
         {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            className={cn(
-              'flex items-center gap-3 border-l-2 py-2.5 pl-5 pr-3 text-left text-sm transition-colors',
-              settingsTab === tab.key
-                ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] font-semibold text-[var(--theme-text-primary)]'
-                : 'border-transparent text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]'
-            )}
-            onClick={() => navigate(`/settings/${tab.key}`, { replace: true })}
-          >
-            <span className="shrink-0 text-[var(--theme-text-muted)]">{tabIcons[tab.key]}</span>
-            {tab.label}
-          </button>
+          <div key={tab.key}>
+            <button
+              className={cn(
+                'flex w-full items-center gap-3 border-l-2 py-2.5 pl-5 pr-3 text-left text-sm transition-colors',
+                // Actions carries its own sub-rows: the active highlight sits on the scope row, the parent just reads bold.
+                tab.key === 'actions'
+                  ? cn('border-transparent hover:bg-[var(--theme-bg-hover)]', settingsTab === 'actions' ? 'font-semibold text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]')
+                  : settingsTab === tab.key
+                    ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] font-semibold text-[var(--theme-text-primary)]'
+                    : 'border-transparent text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]'
+              )}
+              onClick={() => navigate(tab.key === 'actions' ? '/settings/actions/pinned' : `/settings/${tab.key}`, { replace: true })}
+            >
+              <span className="shrink-0 text-[var(--theme-text-muted)]">{tabIcons[tab.key]}</span>
+              {tab.label}
+            </button>
+            {tab.key === 'actions' && <ActionsScopeLinks active={settingsTab === 'actions'} />}
+          </div>
         ))}
+
 
         {/* Claude Config — opens its dedicated two-panel editor */}
         <div className="my-1 mx-5 border-t border-[var(--theme-border-subtle)]" />
@@ -144,6 +145,80 @@ export function SettingsNav() {
           Claude Config
         </button>
       </nav>
+    </div>
+  );
+}
+
+/** Number of visible top-bar actions whose probe currently says KO — a nudge from anywhere in Settings. */
+function ActionsKoBadge() {
+  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
+  const statuses = usePinnedActionsStore((s) => s.statuses);
+  const ko = pinnedIcons.filter((i) => i.enabled !== false && i.status && statuses[i.id]?.status === 'ko').length;
+  if (ko === 0) return null;
+  return (
+    <span className={cn('flex items-center gap-1 text-[10.5px] font-medium tabular-nums', tintText('red'))} aria-label={`${ko} action(s) KO`} title={`${ko} action(s) KO`}>
+      <span className={cn('h-1.5 w-1.5 rounded-full', tintSolid('red'))} />
+      {ko}
+    </span>
+  );
+}
+
+const SCOPE_ICONS = {
+  pinned: (
+    // Pin — the top bar
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 17v5" />
+      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+    </svg>
+  ),
+  ticket: (
+    // Ticket — the ticket header
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+      <path d="M13 5v2M13 17v2M13 11v2" />
+    </svg>
+  ),
+} as const;
+
+/**
+ * Always shown under "Actions", whatever the current Settings tab: both scopes
+ * are one click away, with their count and the KO nudge on the top bar.
+ * Rows line up on the label column of the tabs above (pl = 20 + 16 + 12 px).
+ */
+function ActionsScopeLinks({ active }: { active: boolean }) {
+  const navigate = useNavigate();
+  const scope = useUIStore((s) => s.actionsRoute.scope);
+  const pinnedCount = useSettingsStore((s) => s.settings.pinnedIcons.length);
+  const ticketCount = useSettingsStore((s) => s.settings.workspaceActions.length);
+  const rows = [
+    { key: 'pinned' as const, label: 'Top bar', count: pinnedCount },
+    { key: 'ticket' as const, label: 'Ticket', count: ticketCount },
+  ];
+  return (
+    <div className="flex flex-col pb-1">
+      {rows.map((row) => {
+        const current = active && scope === row.key;
+        return (
+          <button
+            key={row.key}
+            aria-current={current ? 'page' : undefined}
+            className={cn(
+              'flex items-center gap-2 border-l-2 py-1.5 pl-[46px] pr-3 text-left text-[13px] transition-colors',
+              current
+                ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] font-medium text-[var(--theme-text-primary)]'
+                : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]',
+            )}
+            onClick={() => navigate(`/settings/actions/${row.key}`, { replace: true })}
+          >
+            <span className={cn('shrink-0', current ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]')}>{SCOPE_ICONS[row.key]}</span>
+            <span className="truncate">{row.label}</span>
+            <span className="ml-auto flex items-center gap-2">
+              {row.key === 'pinned' && <ActionsKoBadge />}
+              <span className="min-w-[1.25rem] rounded bg-[var(--theme-bg-overlay)] px-1.5 text-center text-[10.5px] tabular-nums text-[var(--theme-text-muted)]">{row.count}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -5,6 +5,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { renderIcon } from '../sidebar/PinnedIcons';
+import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
+import { STATUS_LABEL } from '../actions/actionStatus';
 import { ClaudeIcon, TerminalIcon, PlusIcon } from '../sidebar/icons';
 import { useWorkStore } from '../../stores/workStore';
 import { openSessionInWork, ticketIdForSession } from '../work/openInWork';
@@ -26,6 +28,7 @@ export function useCommandItems(query: string): CommandItem[] {
   const workTicketId = useWorkStore((s) => s.selectedTicketId);
 
   const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
+  const pinnedStatuses = usePinnedActionsStore((s) => s.statuses);
   const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
@@ -107,9 +110,12 @@ export function useCommandItems(query: string): CommandItem[] {
 
     // ── Pinned actions ──
     for (const icon of pinnedIcons) {
+      if (icon.enabled === false) continue;
+      const status = icon.status ? pinnedStatuses[icon.id]?.status ?? 'unknown' : null;
       items.push({
         id: `pinned:${icon.id}`,
         label: icon.label,
+        ...(status ? { description: `● ${STATUS_LABEL[status]}` } : {}),
         category: 'pinned',
         categoryLabel: 'Pinned Actions',
         icon: renderIcon(icon, 16),
@@ -128,6 +134,7 @@ export function useCommandItems(query: string): CommandItem[] {
       if (ticket) {
         const context = buildWorkspaceContext(ticket, basePath);
         for (const action of workspaceActions) {
+          if (action.enabled === false) continue;
           items.push({
             id: `workspace:${action.id}`,
             label: action.label,
@@ -191,7 +198,7 @@ export function useCommandItems(query: string): CommandItem[] {
     sessions, sessionGroups, sessionDisplayNames,
     setActivePanel, openCreateModal, closeCommandPalette, addFloatingSession,
     activePanel, focusedFloatingPanelId, workTicketId,
-    toggleScratchpad, pinnedIcons, workspaceActions, basePath,
+    toggleScratchpad, pinnedIcons, pinnedStatuses, workspaceActions, basePath,
     executePinnedAction, executeWorkspaceAction,
     ticketItems, selectTicket,
   ]);

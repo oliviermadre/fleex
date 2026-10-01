@@ -692,15 +692,9 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ReactNode }[
       <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
     </svg>
   )},
-  { key: 'pinned-icons', label: 'Pinned Icons', icon: (
+  { key: 'actions', label: 'Actions', icon: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="17" x2="12" y2="22" />
-      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
-    </svg>
-  )},
-  { key: 'workspace-actions', label: 'Workspace Actions', icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
     </svg>
   )},
   { key: 'agent-tokens', label: 'Agent Tokens', icon: (
@@ -735,7 +729,7 @@ function CollapsedSettingsPanel() {
             <CollapsedRow
               key={tab.key}
               isSelected={isSelected}
-              onClick={() => navigate(`/settings/${tab.key}`, { replace: true })}
+              onClick={() => navigate(tab.key === 'actions' ? '/settings/actions/pinned' : `/settings/${tab.key}`, { replace: true })}
               onMouseEnter={(e) => showTooltip(e, tab.label, 'Settings')}
               onMouseLeave={hideTooltip}
               icon={

@@ -11,6 +11,9 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
 import { useSkills } from '../../hooks/useSkills';
 import { useFocusFeed } from '../../hooks/useFocusFeed';
+import { usePinnedActionsLive } from '../../hooks/usePinnedActionsLive';
+import { ActionLogsModal } from '../actions/ActionLogsModal';
+import { ActionTerminalPanel } from '../actions/ActionTerminalPanel';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
@@ -45,6 +48,7 @@ export function AppLayout() {
   useAgentPersonas();
   useSkills();
   useFocusFeed();
+  usePinnedActionsLive();
 
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const activePanel = useUIStore((s) => s.activePanel);
@@ -124,6 +128,8 @@ export function AppLayout() {
       <FloatingSessionOverlay />
       <FloatingDeliverableOverlay />
       <DeliverableReadingOverlay />
+      <ActionLogsModal />
+      <ActionTerminalPanel />
     </div>
   );
 }

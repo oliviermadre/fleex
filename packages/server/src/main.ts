@@ -18,6 +18,8 @@ import { memoryRoutes } from './infrastructure/http/memory.routes.js';
 import { configRoutes } from './infrastructure/http/config.routes.js';
 import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
+import { pinnedActionsRoutes } from './infrastructure/http/pinned-actions.routes.js';
+import { actionsAiRoutes } from './infrastructure/http/actions-ai.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
@@ -88,6 +90,9 @@ async function main() {
   // Discover existing fleex_ tmux sessions
   await container.discoverSessions.execute();
 
+  // Action terminals of a previous run of this instance: nothing tracks them any more.
+  void container.actionTerminals.killOrphans().catch(() => {});
+
   const app = Fastify({ logger: false, serverFactory: fleexServerFactory });
   await app.register(cors, { origin: true, credentials: true });
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
@@ -115,6 +120,8 @@ async function main() {
   await app.register(configRoutes(container));
   await app.register(deliverableTypesRoutes(container));
   await app.register(execRoutes(container));
+  await app.register(pinnedActionsRoutes(container));
+  await app.register(actionsAiRoutes({ suggestAction: container.suggestAction, iconSearch: container.iconSearch, isAvailable: container.isActionsAiAvailable, logger: container.logger }));
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));
   await app.register(claudeUsageRoutes(container));

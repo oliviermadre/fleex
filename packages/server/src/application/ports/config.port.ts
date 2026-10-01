@@ -1,4 +1,4 @@
-import type { DeliverableTypeDef } from '@fleex/shared';
+import type { DeliverableTypeDef, PinnedIcon, WorkspaceAction } from '@fleex/shared';
 
 export interface RepoConfig {
   postCheckoutHook?: string; // multiline shell script, empty = disabled
@@ -80,6 +80,13 @@ export interface AppConfig {
    * opt in twice.
    */
   memoryFeatures?: MemoryFeatureFlags;
+  /**
+   * Top-bar actions. Owned by the web UI (Settings › Actions); declared here so
+   * the server can schedule their status probes.
+   */
+  pinnedIcons?: PinnedIcon[];
+  /** Ticket-header actions — run with the ticket's workspace as cwd. */
+  workspaceActions?: WorkspaceAction[];
 }
 
 /**

@@ -6,10 +6,17 @@ export type ExecFn = (
   options?: { cwd?: string; timeout?: number; maxBuffer?: number },
 ) => Promise<ExecResult>;
 
+/**
+ * A shell command's outcome. Never throws on a non-zero exit — callers read
+ * `exitCode` (and `timedOut`) when they care, and the older callers that only
+ * look at stdout/stderr keep working unchanged.
+ */
+export type ShellExecResult = ExecResult & { exitCode: number; timedOut?: boolean };
+
 export type ShellExecFn = (
   command: string,
   options?: { cwd?: string; timeout?: number },
-) => Promise<ExecResult>;
+) => Promise<ShellExecResult>;
 
 export interface HostFs {
   readFile(path: string): Promise<string>;

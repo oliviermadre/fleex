@@ -14,6 +14,9 @@ import type { WsHeartbeat } from './ws-heartbeat.js';
 import { encodePath } from '../../domain/services/claude-path-encoding.js';
 import { DiffStatsCache } from '../../domain/services/diff-stats-cache.js';
 
+/** Terminal ATTACH ids of terminal-mode actions: `action:<runId>`. */
+const ACTION_TERMINAL_PREFIX = 'action:';
+
 // Binary protocol constants (match shared ClientMessageType / ServerMessageType)
 const CLIENT_ATTACH = 0x01;
 const CLIENT_INPUT = 0x02;
@@ -211,6 +214,9 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     container.skillBroadcast = skillBroadcast;
     container.domainEventListener.setSkillBroadcast(skillBroadcast);
 
+    // Wire up pinned actions (status probes + action runs)
+    container.setPinnedStatusBroadcast((type, data) => channelBroadcast('pinned-status', type, data));
+
     // ─── Agent events batching (ported from agent-events-ws.ts) ───
     let batchBuffer: { client: UnifiedClient; payload: string }[] = [];
     let batchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -290,6 +296,11 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       clients.set(ws, client);
       heartbeat.register(ws);
 
+      // Current probe states first, then wake the scheduler — the first client
+      // to connect triggers an immediate probe of every icon.
+      sendChannelJson(ws, 'pinned-status', { type: 'pinned-status:snapshot', data: container.pinnedStatus.getSnapshots() });
+      container.pinnedStatus.clientConnected();
+
       ws.on('error', (err) => {
         container.logger.error('WS error on /ws', { error: String(err) });
         ws.terminate();
@@ -319,20 +330,35 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
               try {
                 container.logger.info('Terminal ATTACH request', { sessionId, cols, rows });
 
-                const session = await container.sessionStore.getById(sessionId);
-                if (!session) {
+                // A terminal-mode action: not a Fleex session (never listed nor
+                // persisted) — the run tells which tmux session to attach to.
+                const actionRunId = sessionId.startsWith(ACTION_TERMINAL_PREFIX) ? sessionId.slice(ACTION_TERMINAL_PREFIX.length) : null;
+                const actionTmux = actionRunId ? await container.actionRuns.terminalSession(actionRunId) : null;
+                if (actionRunId && !actionTmux) {
+                  // Finished: its pane may still be readable until the panel closes it.
+                  const finished = container.actionRuns.get(actionRunId);
+                  if (!finished?.tmuxSession || !(await container.tmux.hasSession(finished.tmuxSession))) {
+                    sendTerminalError(ws, sessionId, 'Action terminal not found');
+                    return;
+                  }
+                }
+                const session = actionRunId ? null : await container.sessionStore.getById(sessionId);
+                const tmuxName = actionRunId ? (actionTmux ?? container.actionRuns.get(actionRunId)!.tmuxSession!) : session?.tmuxName;
+                if (!actionRunId && !session) {
                   container.logger.warn('Session not found for attach', { sessionId });
                   sendTerminalError(ws, sessionId, `Session not found: ${sessionId}`);
                   return;
                 }
 
-                session.markAttached();
-                await container.sessionStore.save(session);
+                if (session) {
+                  session.markAttached();
+                  await container.sessionStore.save(session);
+                }
 
                 const sidBuf = Buffer.from(sessionId, 'utf-8');
 
-                container.logger.info('Spawning PTY for tmux attach', { tmuxName: session.tmuxName });
-                const handle = container.pty.spawnAttach(session.tmuxName, { cols, rows });
+                container.logger.info('Spawning PTY for tmux attach', { tmuxName });
+                const handle = container.pty.spawnAttach(tmuxName!, { cols, rows });
                 client.ptyHandles.set(sessionId, handle);
 
                 handle.onData((chunk: Buffer) => {
@@ -346,7 +372,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
                 });
 
                 handle.onExit((exitCode: number) => {
-                  container.logger.info('PTY exited', { exitCode, tmuxName: session.tmuxName });
+                  container.logger.info('PTY exited', { exitCode, tmuxName });
                   if (client.ptyHandles.get(sessionId) !== handle) return;
                   const msg = Buffer.allocUnsafe(1 + 1 + sidBuf.length + 1);
                   msg[0] = SERVER_EXIT;
@@ -426,10 +452,12 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         client.ptyHandles.clear();
         clients.delete(ws);
         heartbeat.unregister(ws);
+        container.pinnedStatus.clientDisconnected();
       });
     });
 
     app.addHook('onClose', () => {
+      container.pinnedStatus.stop();
       clearInterval(dashboardInterval);
       clearInterval(diffStatsInterval);
       if (batchTimer) clearTimeout(batchTimer);

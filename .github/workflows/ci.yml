@@ -21,6 +21,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The host gateway runs actions in `/bin/zsh -l -c` (macOS default shell);
+      # its streaming-exec tests spawn the real shell, absent from ubuntu-latest.
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
       - name: Type check
         run: bun run lint
 

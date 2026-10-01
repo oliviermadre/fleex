@@ -1,4 +1,46 @@
+import http from 'node:http';
+import https from 'node:https';
 import type { ExecFn, ShellExecFn, HostFs } from './types.js';
+
+/**
+ * POST JSON and parse the JSON answer, with no headers/body timeout of its own.
+ *
+ * The gateway only answers `/exec` once the command exits, and actions may run
+ * up to ACTION_MAX_TIMEOUT_SEC (30 min). Global `fetch` (undici under Node)
+ * aborts when response headers take more than 300 s, so a long action would
+ * fail although it still runs. `node:http` has no such default (Bun's
+ * implementation doesn't either); the command's own `timeout`, enforced by the
+ * gateway, bounds the wait instead.
+ */
+export function postJsonNoTimeout(url: string, body: unknown): Promise<unknown> {
+  const target = new URL(url);
+  const payload = JSON.stringify(body);
+  const request = target.protocol === 'https:' ? https.request : http.request;
+  return new Promise((resolve, reject) => {
+    const req = request(
+      target,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+        timeout: 0,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('error', reject);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+          } catch (err) {
+            reject(err);
+          }
+        });
+      },
+    );
+    req.on('error', reject);
+    req.end(payload);
+  });
+}
 
 export function remoteExec(gatewayUrl: string): ExecFn {
   return async (command, args, options) => {
@@ -28,21 +70,22 @@ export function remoteExec(gatewayUrl: string): ExecFn {
 
 export function remoteShellExec(gatewayUrl: string): ShellExecFn {
   return async (command, options) => {
-    const res = await fetch(`${gatewayUrl}/exec`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        command,
-        args: [],
-        shell: true,
-        cwd: options?.cwd,
-        timeout: options?.timeout,
-      }),
-    });
-    const data = await res.json() as { stdout: string; stderr: string; exitCode: number; error?: string };
+    // Not `fetch`: see postJsonNoTimeout — an action may legitimately run for 30 min.
+    const data = await postJsonNoTimeout(`${gatewayUrl}/exec`, {
+      command,
+      args: [],
+      shell: true,
+      cwd: options?.cwd,
+      timeout: options?.timeout,
+    }) as { stdout: string; stderr: string; exitCode: number; timedOut?: boolean; error?: string };
     if (data.error) throw new Error(data.error);
-    // Shell exec: don't throw on non-zero exit — callers handle stderr
-    return { stdout: data.stdout, stderr: data.stderr };
+    // Shell exec: don't throw on non-zero exit — callers read exitCode / stderr
+    return {
+      stdout: data.stdout,
+      stderr: data.stderr,
+      exitCode: typeof data.exitCode === 'number' ? data.exitCode : 0,
+      ...(data.timedOut ? { timedOut: true } : {}),
+    };
   };
 }
 

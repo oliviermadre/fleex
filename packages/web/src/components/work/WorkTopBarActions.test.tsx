@@ -3,6 +3,7 @@ import { render, cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Ticket } from '@fleex/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTicketStore } from '../../stores/ticketStore';
+import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
 import { WorkTopBarActions } from './WorkTopBarActions';
 
 const SVG = '<svg viewBox="0 0 8 8"></svg>';
@@ -21,6 +22,7 @@ beforeEach(() => {
     executeWorkspaceAction,
   });
   useTicketStore.setState({ tickets: [ticket] });
+  usePinnedActionsStore.setState({ statuses: {}, running: {}, runs: {} });
 });
 
 afterEach(() => {
@@ -47,7 +49,10 @@ describe('WorkTopBarActions tooltips', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
 
     fireEvent.mouseEnter(button);
-    expect(screen.getByRole('tooltip').textContent).toBe(label);
+    // The tooltip now also says what the click will do (and the status, when probed).
+    const tooltip = screen.getByRole('tooltip').textContent ?? '';
+    expect(tooltip).toContain(label);
+    expect(tooltip).toContain('Click:');
   });
 
   it('still runs the pinned action when clicked', () => {
@@ -62,5 +67,41 @@ describe('WorkTopBarActions tooltips', () => {
     expect(executeWorkspaceAction).toHaveBeenCalledTimes(1);
     expect(executeWorkspaceAction.mock.calls[0]![0]).toBe(workspaceAction);
     expect(executeWorkspaceAction.mock.calls[0]![1]).toMatchObject({ ticket_id: ticket.id });
+  });
+});
+
+describe('WorkTopBarActions status', () => {
+  const probed = { ...pinned, id: 'gc', label: 'GCloud', actionType: 'shell', actionValue: 'gcloud auth login', status: { command: 'gcloud auth print-access-token', intervalSec: 60 } } as const;
+
+  beforeEach(() => {
+    useSettingsStore.setState({
+      settings: { ...useSettingsStore.getState().settings, pinnedIcons: [probed, { ...pinned, id: 'hidden', label: 'Hidden', enabled: false }], workspaceActions: [] },
+    });
+  });
+
+  it('shows the probed state on the icon, so a KO login is visible before clicking', () => {
+    usePinnedActionsStore.setState({ statuses: { gc: { iconId: 'gc', status: 'ko', tooltip: 'no credential', probing: false } } });
+    render(<WorkTopBarActions ticketId={null} />);
+    const button = screen.getByRole('button', { name: 'GCloud — KO' });
+    expect(button.querySelector('[data-status="ko"]')).not.toBeNull();
+
+    fireEvent.mouseEnter(button);
+    expect(screen.getByRole('tooltip').textContent).toContain('no credential');
+  });
+
+  it('shows a spinner and blocks a second click while the action runs', () => {
+    usePinnedActionsStore.setState({ running: { gc: 'run-1' } });
+    render(<WorkTopBarActions ticketId={null} />);
+    const button = screen.getByRole('button', { name: /GCloud/ });
+    // Not `disabled`: the button must stay hoverable (tooltip: live output, Stop).
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(button);
+    expect(executePinnedAction).not.toHaveBeenCalled();
+    expect(screen.getByRole('status', { name: 'Running' })).toBeTruthy();
+  });
+
+  it('keeps a hidden action out of the bar', () => {
+    render(<WorkTopBarActions ticketId={null} />);
+    expect(screen.queryByRole('button', { name: /Hidden/ })).toBeNull();
   });
 });

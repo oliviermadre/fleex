@@ -131,6 +131,15 @@ import { CachedAgentEventStore } from './adapters/cached-agent-event-store.js';
 import { isRemoteCacheSync, type RemoteCacheSync } from '../application/ports/remote-cache-sync.port.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
+import { PinnedStatusService } from '../domain/services/pinned-status.service.js';
+import { ActionRunService } from '../domain/services/action-run.service.js';
+import { BinaryDiagnosisService, BINARY_DIAGNOSIS_TIMEOUT_MS } from '../domain/services/binary-diagnosis.service.js';
+import { TmuxTerminalRunner } from './adapters/tmux-terminal-runner.js';
+import { remoteStreamShellExec, gatewayStreamsExec, StreamExecUnavailableError } from './host/stream-exec.js';
+import type { ActionRunCapabilities } from '@fleex/shared';
+import { SuggestActionUseCase } from '../application/use-cases/suggest-action.js';
+import { ClaudeJsonModel, ShellBinaryLookup, createAiAvailability } from './adapters/actions-ai.adapters.js';
+import { IconifyClient } from './adapters/iconify.client.js';
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
 
@@ -734,9 +743,78 @@ export async function createContainer() {
     sessionStore_, eventBus, logger, ingestCliSession, generateCliSessionSummary, rememberCliSession,
   );
 
+  // Pinned actions: status probes + async runs. Both broadcast on the
+  // `pinned-status` WS channel, wired by the unified WS plugin once it starts.
+  let pinnedStatusBroadcast: (type: string, data: unknown) => void = () => {};
+  const runShell = (command: string, options: { cwd: string; timeoutMs: number }) =>
+    shellExecFn(command, { cwd: options.cwd, timeout: options.timeoutMs });
+  const pinnedStatus = new PinnedStatusService({
+    exec: runShell,
+    cwd: hostHomedir,
+    broadcast: (type, data) => pinnedStatusBroadcast(type, data),
+    logger,
+  });
+  pinnedStatus.configure(config.get().pinnedIcons);
+  // Terminal-mode actions run in their own tmux sessions; background ones stream
+  // through the gateway (falling back to buffered exec on a gateway not restarted).
+  const actionTerminals = new TmuxTerminalRunner(execFn, hostFs, '/tmp', logger, { instanceTag: process.env['PORT'] ?? '3000' });
+  const streamShell = remoteStreamShellExec(gatewayUrl);
+  const actionRuns = new ActionRunService({
+    exec: runShell,
+    streamExec: async (command, options) => {
+      try {
+        return await streamShell(command, options);
+      } catch (err) {
+        if (err instanceof StreamExecUnavailableError) return null;
+        throw err;
+      }
+    },
+    terminal: actionTerminals,
+    defaultCwd: hostHomedir,
+    broadcast: (type, data) => pinnedStatusBroadcast(type, data),
+    // A finished run on an icon with a probe re-checks it at once, so the dot
+    // reflects what the click just did instead of waiting a full interval.
+    onFinished: (run) => {
+      if (run.sourceKind === 'pinned') pinnedStatus.refresh(run.sourceId);
+    },
+  });
+  let capabilitiesCache: { at: number; value: ActionRunCapabilities } | null = null;
+  const actionRunCapabilities = async (): Promise<ActionRunCapabilities> => {
+    if (capabilitiesCache && Date.now() - capabilitiesCache.at < 60_000) return capabilitiesCache.value;
+    const [liveOutput, terminal] = await Promise.all([gatewayStreamsExec(gatewayUrl), tmux.isAvailable()]);
+    capabilitiesCache = { at: Date.now(), value: { liveOutput, terminal } };
+    return capabilitiesCache.value;
+  };
+  const setPinnedStatusBroadcast = (fn: (type: string, data: unknown) => void) => {
+    pinnedStatusBroadcast = fn;
+  };
+
+  const binaryDiagnosis = new BinaryDiagnosisService((command) =>
+    shellExecFn(command, { cwd: hostHomedir, timeout: BINARY_DIAGNOSIS_TIMEOUT_MS }),
+  );
+
+  // Settings › Actions AI assistants (Haiku via the SDK, Iconify for icons).
+  const iconSearch = new IconifyClient();
+  const suggestAction = new SuggestActionUseCase(
+    new ClaudeJsonModel(sdkLimiter),
+    new ShellBinaryLookup(binaryDiagnosis),
+    iconSearch,
+    logger,
+  );
+  const isActionsAiAvailable = createAiAvailability(() => claudeUsageAdapter.hasCredentials());
+
   return {
     logger,
     gatewayUrl,
+    pinnedStatus,
+    actionRuns,
+    actionTerminals,
+    actionRunCapabilities,
+    binaryDiagnosis,
+    setPinnedStatusBroadcast,
+    suggestAction,
+    iconSearch,
+    isActionsAiAvailable,
     execFn,
     shellExecFn,
     hostFs,
