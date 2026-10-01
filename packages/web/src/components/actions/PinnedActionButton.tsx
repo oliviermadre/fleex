@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { resolveClickAction, runSlotKey } from '@fleex/shared';
+import { inMenuFor, resolveClickAction, runSlotKey } from '@fleex/shared';
 import type { ActionRun, ActionRunMode, ActionStatus, ConditionalAction, PinnedIcon, StatusSnapshot, WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { useNow } from '../../lib/useNow';
@@ -37,6 +37,7 @@ function hasProbe(action: PinnedIcon | WorkspaceAction): action is PinnedIcon {
 /** What the tooltip says the click will do. */
 export function clickLabel(action: PinnedIcon | WorkspaceAction, status: ActionStatus | null): string {
   const target = resolveClickAction(action, status);
+  if (target.openMenu) return 'Open the menu';
   if (target.rule) return target.rule.label || truncate(target.actionValue, 48);
   if (target.actionType === 'url') {
     try {
@@ -71,8 +72,9 @@ export function PinnedActionButton({
   const terminalTab = usePinnedActionsStore((s) => s.terminals.some((t) => t.sourceId === action.id));
   const statusForClick: ActionStatus | null = statusOverride !== undefined ? statusOverride : hasProbe(action) ? snapshot?.status ?? 'unknown' : null;
   // The command this click resolves to (default or a rule): only *that* one being in flight blocks it.
-  const clickKey = runSlotKey(action.id, resolveClickAction(action, statusForClick).rule?.id);
-  const clickBlocked = usePinnedActionsStore((s) => !!s.running[clickKey] && !s.terminals.some((t) => t.key === clickKey));
+  const clickTarget = resolveClickAction(action, statusForClick);
+  const clickKey = runSlotKey(action.id, clickTarget.rule?.id);
+  const clickBlocked = usePinnedActionsStore((s) => !clickTarget.openMenu && !!s.running[clickKey] && !s.terminals.some((t) => t.key === clickKey));
   const lastRun = usePinnedActionsStore((s) => s.runs[action.id]?.[0]);
   const menu = useContextMenuPopover();
 
@@ -110,6 +112,12 @@ export function PinnedActionButton({
             // That command already in flight (in the background) is a no-op; another command of
             // this action (a rule) may well start, and a terminal one brings its panel back.
             if (runningOverride === undefined && clickBlocked) return;
+            // This status' left click is "open the menu": the same menu as a right click, under the button.
+            if (clickTarget.openMenu) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              menu.openAt(rect.left, rect.bottom + 4);
+              return;
+            }
             // The terminal panel, if this click opens one, hangs under this button.
             setTerminalAnchor(e.currentTarget);
             onRun();
@@ -197,7 +205,7 @@ export function ActionTooltipContent({
   const openLogs = usePinnedActionsStore((s) => s.openLogs);
   const tooltip = tooltipOverride ?? snapshot?.tooltip;
   const target = resolveClickAction(action, status);
-  const terminal = target.actionType === 'shell' && target.runMode === 'terminal';
+  const terminal = !target.openMenu && target.actionType === 'shell' && target.runMode === 'terminal';
   // Minimized (or behind another tab): the click brings it back instead of running again.
   const hiddenTerminal = usePinnedActionsStore(
     (st) =>
@@ -296,7 +304,8 @@ function ActionMenuItems({
   const openLogs = usePinnedActionsStore((s) => s.openLogs);
   const openActionSettings = useUIStore((s) => s.openActionSettings);
   const resolved = resolveClickAction(action, status);
-  const rules: ConditionalAction[] = hasProbe(action) ? action.conditionalActions ?? [] : [];
+  // Every command of the action is in the menu; one not meant for this status is dimmed, still clickable.
+  const rules: ConditionalAction[] = 'conditionalActions' in action ? action.conditionalActions ?? [] : [];
 
   const runTarget = (target: { label: string; actionType: 'url' | 'shell'; actionValue: string; timeoutSec?: number; runMode?: ActionRunMode; ruleId?: string }) => {
     if (target.actionType === 'url') {
@@ -319,9 +328,9 @@ function ActionMenuItems({
       {kind === 'pinned' && rules.length > 0 ? (
         <>
           <MenuItem
-            primary={!resolved.rule}
+            primary={!resolved.rule && !resolved.openMenu}
             onClick={pick(() => runTarget({ label: action.label, actionType: action.actionType, actionValue: action.actionValue, timeoutSec: action.actionTimeoutSec, runMode: action.runMode }))}
-            hint="default"
+            hint="main"
           >
             {action.label}
           </MenuItem>
@@ -329,7 +338,7 @@ function ActionMenuItems({
             <MenuItem
               key={rule.id}
               primary={resolved.rule?.id === rule.id}
-              dim={!(rule.when?.length ? status !== null && rule.when.includes(status) : true)}
+              dim={!inMenuFor(rule, status)}
               onClick={pick(() => runTarget({ label: rule.label || action.label, actionType: rule.actionType, actionValue: rule.actionValue, timeoutSec: rule.timeoutSec, runMode: rule.runMode ?? action.runMode, ruleId: rule.id }))}
               hint={
                 <span className="flex gap-0.5">

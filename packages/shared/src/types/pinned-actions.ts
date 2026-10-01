@@ -36,12 +36,20 @@ export interface StatusProbe {
   timeoutSec?: number;
 }
 
-/** A click target chosen by the current status, evaluated before the default action. */
+/**
+ * One more command of the action, besides the main one: listed in the
+ * right-click menu, and pickable as the left click of a status (`clickByStatus`).
+ */
 export interface ConditionalAction {
   id: string;
   /** Shown in the context menu and in the tooltip's "Click: …" line. */
   label: string;
-  /** Statuses this rule applies to. Absent/empty = always eligible. */
+  /**
+   * Statuses for which the command is offered in the right-click menu (it is
+   * dimmed otherwise). Absent/empty = always. Says nothing about the left click
+   * once `clickByStatus` is set; before that (legacy config) the first rule
+   * whose `when` matches was also the left click.
+   */
   when?: ActionStatus[];
   actionType: ActionKind;
   actionValue: string;
@@ -65,6 +73,13 @@ export interface PinnedIcon {
   actionTimeoutSec?: number;
   status?: StatusProbe;
   conditionalActions?: ConditionalAction[];
+  /**
+   * What the left click does in each status: `'main'` (the default action), a
+   * rule id, or `'menu'` (open the right-click menu). Missing status / unknown
+   * rule id = main. Absent altogether = legacy "first matching rule wins",
+   * see `legacyClickByStatus`.
+   */
+  clickByStatus?: Partial<Record<ActionStatus, ClickChoice>>;
   /** Absent = true. A hidden action is neither shown nor probed. */
   enabled?: boolean;
   runMode?: ActionRunMode;
@@ -196,22 +211,58 @@ export type PinnedStatusWsMessage =
   | { type: 'action-run:finished'; data: ActionRun }
   | { type: 'action-run:output'; data: ActionRunOutputChunk };
 
+/** `'main'` = the action's own command, `'menu'` = open the right-click menu, else a rule id. */
+export type ClickChoice = string;
+export const CLICK_MAIN = 'main';
+export const CLICK_MENU = 'menu';
+
+type ClickIcon = Pick<PinnedIcon, 'label' | 'actionType' | 'actionValue' | 'actionTimeoutSec' | 'conditionalActions' | 'status' | 'runMode' | 'clickByStatus'>;
+
+/** The pre-`clickByStatus` behaviour: the first rule whose `when` contains the status (or has none) wins. */
+function legacyChoice(icon: ClickIcon, status: ActionStatus | null): ClickChoice {
+  const rule = (icon.conditionalActions ?? []).find(
+    (r) => !r.when || r.when.length === 0 || (status !== null && r.when.includes(status)),
+  );
+  return rule ? rule.id : CLICK_MAIN;
+}
+
 /**
- * The first rule whose `when` contains the status (or that has no `when`) wins;
- * none matching → the default action. Shared so the tooltip announces exactly
- * what the click will do.
+ * The left click of every status for a config written before `clickByStatus`
+ * existed — what the Settings editor starts from, so saving changes nothing.
+ */
+export function legacyClickByStatus(icon: ClickIcon): Record<ActionStatus, ClickChoice> {
+  return Object.fromEntries(ACTION_STATUSES.map((s) => [s, legacyChoice(icon, s)])) as Record<ActionStatus, ClickChoice>;
+}
+
+/** What the left click does in `status`: main, a rule id, or the menu. No probe = main. */
+export function clickChoiceFor(icon: ClickIcon, status: ActionStatus | null): ClickChoice {
+  if (!icon.status) return CLICK_MAIN;
+  if (!icon.clickByStatus) return legacyChoice(icon, status);
+  const choice = status ? icon.clickByStatus[status] : undefined;
+  if (choice === CLICK_MENU) return CLICK_MENU;
+  if (choice && icon.conditionalActions?.some((r) => r.id === choice)) return choice;
+  return CLICK_MAIN;
+}
+
+/** True when the command is offered (not dimmed) in the right-click menu for `status`. */
+export function inMenuFor(rule: Pick<ConditionalAction, 'when'>, status: ActionStatus | null): boolean {
+  return !rule.when?.length || status === null || rule.when.includes(status);
+}
+
+/**
+ * The command the left click runs in `status` (see `clickChoiceFor`). `openMenu`
+ * means the click opens the right-click menu instead; the main command is then
+ * returned for callers that cannot show a menu (command palette). Shared so the
+ * tooltip announces exactly what the click will do.
  */
 export function resolveClickAction(
-  icon: Pick<PinnedIcon, 'label' | 'actionType' | 'actionValue' | 'actionTimeoutSec' | 'conditionalActions' | 'status' | 'runMode'>,
+  icon: ClickIcon,
   status: ActionStatus | null,
-): { label: string; actionType: ActionKind; actionValue: string; timeoutSec?: number; runMode: ActionRunMode; rule: ConditionalAction | null } {
-  if (icon.status && icon.conditionalActions?.length) {
-    const rule = icon.conditionalActions.find(
-      (r) => !r.when || r.when.length === 0 || (status !== null && r.when.includes(status)),
-    );
-    if (rule) {
-      return { label: rule.label || rule.actionValue, actionType: rule.actionType, actionValue: rule.actionValue, timeoutSec: rule.timeoutSec, runMode: rule.runMode ?? icon.runMode ?? 'background', rule };
-    }
+): { label: string; actionType: ActionKind; actionValue: string; timeoutSec?: number; runMode: ActionRunMode; rule: ConditionalAction | null; openMenu: boolean } {
+  const choice = clickChoiceFor(icon, status);
+  const rule = choice === CLICK_MAIN || choice === CLICK_MENU ? undefined : icon.conditionalActions?.find((r) => r.id === choice);
+  if (rule) {
+    return { label: rule.label || rule.actionValue, actionType: rule.actionType, actionValue: rule.actionValue, timeoutSec: rule.timeoutSec, runMode: rule.runMode ?? icon.runMode ?? 'background', rule, openMenu: false };
   }
   return {
     label: icon.label,
@@ -220,6 +271,7 @@ export function resolveClickAction(
     timeoutSec: icon.actionTimeoutSec,
     runMode: icon.runMode ?? 'background',
     rule: null,
+    openMenu: choice === CLICK_MENU,
   };
 }
 

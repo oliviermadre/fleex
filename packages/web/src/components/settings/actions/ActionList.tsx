@@ -319,7 +319,7 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
                   <Chip>{a.actionType === 'url' ? 'URL' : 'Shell'}</Chip>
                   {a.actionType === 'shell' && a.runMode === 'terminal' && <Chip>⧉ terminal</Chip>}
                   {probed && <Chip>probe {intervalLabel((a as PinnedIcon).status!.intervalSec)}</Chip>}
-                  {rules > 0 && <Chip>{rules} rule{rules > 1 ? 's' : ''}</Chip>}
+                  {rules > 0 && <Chip>+{rules} command{rules > 1 ? 's' : ''}</Chip>}
                 </div>
                 <div className="flex min-w-0 flex-col text-[11px]">
                   {isRunning ? (

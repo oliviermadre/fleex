@@ -26,6 +26,7 @@ import { readScopeList, saveScope, useScopeList } from './ActionList';
 import { AiSuggestBar } from './AiSuggestBar';
 import { IconPicker } from './IconPicker';
 import { RuleList } from './RuleList';
+import { ClickByStatus, effectiveClickByStatus } from './ClickByStatus';
 import { CommandBinaryWarning, RunHintCard } from '../../actions/RunHintCard';
 import {
   PIPE_FUNCTIONS,
@@ -318,6 +319,13 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
 
   const pinned = scope === 'pinned';
   const rules = draft.conditionalActions ?? [];
+  // A new command is offered in every status; the left click keeps its current choice
+  // (a legacy config is pinned to what it does today, so the new command changes nothing).
+  const addCommand = () =>
+    update({
+      conditionalActions: [...rules, { id: newId(), label: '', actionType: 'shell', actionValue: '' } satisfies ConditionalAction],
+      ...(draft.status ? { clickByStatus: effectiveClickByStatus(draft) } : {}),
+    }, 'conditionalActions');
   const ruleErrors = Object.fromEntries(rules.map((_, i) => [i, showErrors ? errors[`rule:${i}`] : undefined]));
 
   return (
@@ -405,8 +413,8 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
           <section className={SECTION} aria-labelledby="sec-click">
             <SectionHead
               n={2}
-              title="On click"
-              hint={pinned && draft.status ? 'Default action, used when no status rule applies.' : 'What happens when you click.'}
+              title={pinned ? 'Main command' : 'On click'}
+              hint={pinned ? 'Always in the right-click menu, and the left click unless a status picks another command.' : 'What happens when you click.'}
               right={
                 <>
                 {draft.actionType === 'shell' && <RunModeToggle value={runMode} onChange={setRunMode} />}
@@ -600,31 +608,33 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
             </section>
           )}
 
-          {/* 4. Depending on the status */}
-          {pinned && draft.status && (
+          {/* 4. Other commands (right-click menu) */}
+          {pinned && (
             <section className={SECTION} aria-labelledby="sec-rules">
               <SectionHead
                 n={4}
-                title="Depending on the status"
-                hint="The click changes with the dot. First matching rule wins, top to bottom."
+                title="Other commands"
+                hint={draft.status ? 'Listed in the right-click menu, in this order; dimmed in the statuses they are not meant for.' : 'Listed in the right-click menu, in this order.'}
                 right={
                   <>
                     {aiFields.includes('conditionalActions') && <SuggestedMark />}
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => update({ conditionalActions: [...rules, { id: newId(), label: '', when: ['ok'], actionType: 'shell', actionValue: '' } satisfies ConditionalAction] }, 'conditionalActions')}
+                      onClick={() => addCommand()}
                     >
-                      + Rule
+                      + Command
                     </Button>
                   </>
                 }
               />
               <RuleList
                 rules={rules}
-                onChange={(next) => update({ conditionalActions: next }, 'conditionalActions')}
+                // Editing a legacy config's menu filters must not move its left click: pin it first.
+                onChange={(next) => update({ conditionalActions: next, ...(draft.status && !draft.clickByStatus ? { clickByStatus: effectiveClickByStatus(draft) } : {}) }, 'conditionalActions')}
                 defaultCommand={draft.actionValue}
-                probeCommand={draft.status.command}
+                probeCommand={draft.status?.command ?? ''}
+                probed={!!draft.status}
                 label={draft.label}
                 aiAvailable={aiAvailable}
                 errors={ruleErrors}
@@ -633,7 +643,15 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
             </section>
           )}
 
-          {/* 5. Advanced */}
+          {/* 5. Left click by status */}
+          {pinned && draft.status && (
+            <section className={SECTION} aria-labelledby="sec-click">
+              <SectionHead n={5} title="Left click" hint="What a click on the button does in each status." />
+              <ClickByStatus draft={draft} onChange={(clickByStatus) => update({ clickByStatus })} />
+            </section>
+          )}
+
+          {/* Advanced */}
           <section className={SECTION}>
             <details>
               <summary className="cursor-pointer text-xs text-[var(--theme-text-secondary)]">Advanced <span className="text-[var(--theme-text-muted)]">— timeouts, environment</span></summary>

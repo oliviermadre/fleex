@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ACTION_STATUSES, resolveClickAction } from '@fleex/shared';
+import { ACTION_STATUSES, inMenuFor, resolveClickAction } from '@fleex/shared';
 import type { ActionRun, ActionStatus, PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
@@ -119,14 +119,14 @@ export function ActionPreview({
         </div>
       </div>
 
-      {probed && (
+      {scope === 'pinned' && (probed || !!draft.conditionalActions?.length) && (
         <div className={CARD}>
           <div className={HEAD}>Right-click</div>
           <div className="flex flex-col text-xs">
-            <MenuLine primary={!resolved.rule}>{draft.label || 'Default action'} <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">default</span></MenuLine>
+            <MenuLine primary={!resolved.rule && !resolved.openMenu}>{draft.label || 'Main command'} <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">main</span></MenuLine>
             {(draft.conditionalActions ?? []).map((r) => (
-              <MenuLine key={r.id} primary={resolved.rule?.id === r.id} dim={!(status && r.when?.includes(status))}>
-                {r.label || 'Untitled rule'}
+              <MenuLine key={r.id} primary={resolved.rule?.id === r.id} dim={!inMenuFor(r, status)}>
+                {r.label || r.actionValue || 'Untitled command'}
                 <span className="ml-auto flex gap-0.5">{(r.when ?? []).map((s) => <span key={s} className={cn('h-1.5 w-1.5 rounded-full', statusDotClass(s))} />)}</span>
               </MenuLine>
             ))}

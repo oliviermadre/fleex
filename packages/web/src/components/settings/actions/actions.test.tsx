@@ -186,6 +186,51 @@ describe('ActionDetail', () => {
   });
 });
 
+describe('ActionDetail · menu commands vs left click', () => {
+  const k9s = (extra: Partial<PinnedIcon> = {}) => icon('k9s', {
+    actionValue: 'k9s',
+    status: { command: 'true', intervalSec: 60 },
+    conditionalActions: [
+      { id: 'stg', label: 'k9s staging', when: ['ok'], actionType: 'shell', actionValue: 'k9s --context staging' },
+      { id: 'prd', label: 'k9s production', when: ['ok'], actionType: 'shell', actionValue: 'k9s --context production' },
+    ],
+    ...extra,
+  });
+  const save = async () => act(async () => { fireEvent.keyDown(window, { key: 's', metaKey: true }); });
+  const stored = () => useSettingsStore.getState().settings.pinnedIcons[0]!;
+
+  it('a legacy action shows its current left click per status, and picking one saves it apart from the menu filters', async () => {
+    useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, pinnedIcons: [k9s()] } });
+    render(<ActionDetail scope="pinned" id="k9s" />);
+    // Today: OK → the first rule offered in OK.
+    expect((screen.getByLabelText('Left click when OK') as HTMLSelectElement).value).toBe('stg');
+    expect((screen.getByLabelText('Left click when KO') as HTMLSelectElement).value).toBe('main');
+
+    fireEvent.change(screen.getByLabelText('Left click when OK'), { target: { value: 'main' } });
+    fireEvent.change(screen.getByLabelText('Left click when Unknown'), { target: { value: 'menu' } });
+    await save();
+    expect(stored().clickByStatus).toEqual({ ok: 'main', warn: 'main', ko: 'main', unknown: 'menu' });
+    // The menu filters are untouched.
+    expect(stored().conditionalActions!.map((r) => r.when)).toEqual([['ok'], ['ok']]);
+  });
+
+  it('changing a legacy menu filter does not move the left click', async () => {
+    useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, pinnedIcons: [k9s()] } });
+    render(<ActionDetail scope="pinned" id="k9s" />);
+    // Offer "k9s staging" in KO too: before, that would also have made it the KO left click.
+    fireEvent.click(screen.getAllByRole('button', { name: /KO/, pressed: false })[0]!);
+    await save();
+    expect(stored().conditionalActions![0]!.when).toEqual(['ok', 'ko']);
+    expect(stored().clickByStatus).toMatchObject({ ok: 'stg', ko: 'main' });
+  });
+
+  it('other commands are available without a probe (menu only, no per-status click)', () => {
+    render(<ActionDetail scope="pinned" id="a" />);
+    expect(screen.getByRole('button', { name: '+ Command' })).toBeTruthy();
+    expect(screen.queryByLabelText('Left click when OK')).toBeNull();
+  });
+});
+
 describe('ActionDetail keyboard', () => {
   const pressSave = async (target: Window | Element = window, extra: Partial<KeyboardEventInit> = {}) => {
     await act(async () => {
@@ -263,16 +308,23 @@ describe('ActionDetail Try', () => {
 });
 
 describe('actionModel', () => {
-  it('drops probe and rules from a ticket action, and rules when the probe is off', () => {
+  it('drops probe and commands from a ticket action; without a probe keeps the menu commands but no per-status click', () => {
     const d = { ...blankDraft(), label: 'x', actionValue: 'y', status: { command: 'true', intervalSec: 60 }, conditionalActions: [] };
     expect(normaliseDraft(d, 'ticket')).not.toHaveProperty('status');
-    expect(normaliseDraft({ ...d, status: undefined, conditionalActions: [{ id: 'r', label: '', when: ['ok'], actionType: 'shell', actionValue: 'z' }] }, 'pinned'))
-      .not.toHaveProperty('conditionalActions');
+    const noProbe = normaliseDraft({ ...d, status: undefined, clickByStatus: { ok: 'r' }, conditionalActions: [{ id: 'r', label: '', when: ['ok'], actionType: 'shell', actionValue: 'z' }] }, 'pinned') as PinnedIcon;
+    expect(noProbe.conditionalActions).toHaveLength(1);
+    expect(noProbe).not.toHaveProperty('clickByStatus');
   });
 
-  it('requires a status and a command on each rule, and an http(s) URL', () => {
+  it('forgets a per-status click that points at a deleted command', () => {
+    const d = { ...blankDraft(), label: 'x', actionValue: 'y', status: { command: 'true', intervalSec: 60 }, clickByStatus: { ok: 'gone', ko: 'menu', warn: 'main' } };
+    expect((normaliseDraft(d, 'pinned') as PinnedIcon).clickByStatus).toEqual({ ko: 'menu', warn: 'main' });
+  });
+
+  it('requires a command on each other command (a menu filter is optional), and an http(s) URL', () => {
     const d = { ...blankDraft(), label: 'x', actionValue: 'y', status: { command: 'true', intervalSec: 60 }, conditionalActions: [{ id: 'r', label: '', when: [], actionType: 'shell' as const, actionValue: '' }] };
     expect(validateDraft(d, 'pinned')).toHaveProperty('rule:0');
+    expect(validateDraft({ ...d, conditionalActions: [{ id: 'r', label: '', when: [], actionType: 'shell' as const, actionValue: 'k9s' }] }, 'pinned')).not.toHaveProperty('rule:0');
     expect(validateDraft({ ...blankDraft(), label: 'x', actionType: 'url', actionValue: 'ftp://x' }, 'pinned')).toHaveProperty('actionValue');
   });
 

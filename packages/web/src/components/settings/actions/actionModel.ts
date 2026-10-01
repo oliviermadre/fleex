@@ -1,4 +1,4 @@
-import { ACTION_DEFAULT_TIMEOUT_SEC, PROBE_DEFAULT_INTERVAL_SEC, PROBE_DEFAULT_TIMEOUT_SEC } from '@fleex/shared';
+import { ACTION_DEFAULT_TIMEOUT_SEC, CLICK_MAIN, CLICK_MENU, PROBE_DEFAULT_INTERVAL_SEC, PROBE_DEFAULT_TIMEOUT_SEC } from '@fleex/shared';
 import type { ActionIconType, ActionRunMode, ConditionalAction, PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import type { ActionsScope } from '../../../stores/uiStore';
 
@@ -23,7 +23,7 @@ export function blankDraft(): ActionDraft {
 }
 
 export function toWorkspaceAction(draft: ActionDraft): WorkspaceAction {
-  const { status: _status, conditionalActions: _rules, ...rest } = draft;
+  const { status: _status, conditionalActions: _rules, clickByStatus: _click, ...rest } = draft;
   return rest;
 }
 
@@ -42,11 +42,10 @@ export function validateDraft(draft: ActionDraft, scope: ActionsScope): DraftErr
   else if (draft.actionType === 'url' && !/^https?:\/\//.test(draft.actionValue.trim()) && !draft.actionValue.includes('{{')) {
     errors.actionValue = 'A URL must start with http:// or https://.';
   }
-  if (scope === 'pinned' && draft.status) {
-    if (!draft.status.command.trim()) errors.probe = 'The probe needs a command (or turn the status off).';
+  if (scope === 'pinned') {
+    if (draft.status && !draft.status.command.trim()) errors.probe = 'The probe needs a command (or turn the status off).';
     (draft.conditionalActions ?? []).forEach((rule, i) => {
-      if (!rule.when?.length) errors[`rule:${i}`] = 'Pick at least one status.';
-      else if (!rule.actionValue.trim()) errors[`rule:${i}`] = 'The rule needs a command.';
+      if (!rule.actionValue.trim()) errors[`rule:${i}`] = 'A command is required.';
     });
   }
   return errors;
@@ -75,14 +74,25 @@ function normaliseRule(rule: ConditionalAction): ConditionalAction {
   return rule.actionType === 'shell' && runMode ? { ...rest, runMode } : rest;
 }
 
-/** What gets persisted: trimmed, ticket scope stripped of probe/rules, rules dropped when the probe is off. */
+/**
+ * What gets persisted: trimmed, ticket scope stripped of probe/commands. Other
+ * commands stay without a probe (right-click menu); the per-status left click
+ * only exists with a probe, and only points at commands that still exist.
+ */
 export function normaliseDraft(draft: ActionDraft, scope: ActionsScope): PinnedIcon | WorkspaceAction {
   const base: ActionDraft = normaliseRunMode({ ...draft, label: draft.label.trim(), actionValue: draft.actionValue.trim() });
   if (base.conditionalActions) base.conditionalActions = base.conditionalActions.map(normaliseRule);
+  if (!base.conditionalActions?.length) delete base.conditionalActions;
   if (scope === 'ticket') return toWorkspaceAction(base);
   if (!base.status) {
-    const { conditionalActions: _rules, ...rest } = base;
+    const { clickByStatus: _click, ...rest } = base;
     return rest;
+  }
+  if (base.clickByStatus) {
+    const ids = new Set((base.conditionalActions ?? []).map((r) => r.id));
+    base.clickByStatus = Object.fromEntries(
+      Object.entries(base.clickByStatus).filter(([, c]) => c === CLICK_MAIN || c === CLICK_MENU || (c !== undefined && ids.has(c))),
+    );
   }
   return base;
 }

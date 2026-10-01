@@ -59,3 +59,37 @@ describe('PinnedActionButton while a run is in flight', () => {
     expect(screen.queryByRole('menuitem', { name: 'Stop' })).toBeNull();
   });
 });
+
+describe('PinnedActionButton: menu commands vs left click', () => {
+  const k9s: PinnedIcon = {
+    id: 'k9s', icon: '', iconType: 'svg', label: 'k9s', actionType: 'shell', actionValue: 'k9s',
+    status: { command: 'true', intervalSec: 60 },
+    conditionalActions: [{ id: 'stg', label: 'k9s staging', when: ['ok'], actionType: 'shell', actionValue: 'k9s --context staging' }],
+    clickByStatus: { ok: 'main', unknown: 'menu' },
+  };
+
+  it('the menu always lists the main command and dims a command not meant for this status (still clickable)', () => {
+    usePinnedActionsStore.setState({ statuses: { k9s: { iconId: 'k9s', status: 'ko', probing: false } } });
+    render(<PinnedActionButton action={k9s} kind="pinned" onRun={() => {}} />);
+    fireEvent.contextMenu(screen.getByRole('button', { name: /k9s/ }));
+    expect(screen.getByRole('menuitem', { name: /^k9s main/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'k9s staging' }).className).toContain('text-faint');
+  });
+
+  it('a status whose left click is "open the menu" opens it instead of running anything', () => {
+    const onRun = vi.fn();
+    usePinnedActionsStore.setState({ statuses: { k9s: { iconId: 'k9s', status: 'unknown', probing: false } } });
+    render(<PinnedActionButton action={k9s} kind="pinned" onRun={onRun} />);
+    fireEvent.click(screen.getByRole('button', { name: /k9s/ }));
+    expect(onRun).not.toHaveBeenCalled();
+    expect(screen.getByRole('menuitem', { name: 'k9s staging' })).toBeTruthy();
+  });
+
+  it('in OK the left click runs the main command even though "k9s staging" is offered in OK', () => {
+    const onRun = vi.fn();
+    usePinnedActionsStore.setState({ statuses: { k9s: { iconId: 'k9s', status: 'ok', probing: false } } });
+    render(<PinnedActionButton action={k9s} kind="pinned" onRun={onRun} />);
+    fireEvent.click(screen.getByRole('button', { name: /k9s/ }));
+    expect(onRun).toHaveBeenCalled();
+  });
+});
