@@ -12,6 +12,7 @@ import { useFocusCount } from '../stores/focusStore';
 import { FocusIcon, TasksIcon } from '../components/sidebar/icons';
 import { cn } from '../lib/cn';
 import { useLockViewport } from './useLockViewport';
+import { SHEET_EASING, SHEET_MS, useSheetDrag } from './useSheetDrag';
 import { MobileBoard } from './MobileBoard';
 import { MobileFocus } from './MobileFocus';
 import { MobileTasks } from './MobileTasks';
@@ -143,24 +144,9 @@ export function MobileApp() {
 
       {moreSheetOpen && <MobileMoreSheet />}
 
-      {/* Assistant sheet: mounted once, hidden (not unmounted) when closed so the
-          conversation survives. */}
-      <div className={cn('fixed inset-0 z-50 bg-black/50', !assistantOpen && 'hidden')} onClick={() => setAssistantOpen(false)}>
-        <div
-          className="absolute inset-x-0 bottom-0 top-[60px] flex flex-col overflow-hidden rounded-t-[20px] bg-[var(--theme-bg-base)] shadow-[0_-20px_60px_rgba(0,0,0,.5)]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => setAssistantOpen(false)}
-            aria-label="Fermer l’assistant"
-            className="mx-auto flex h-6 w-16 shrink-0 items-center justify-center"
-          >
-            <span className="h-[5px] w-9 rounded-full bg-[var(--theme-border-input)]" />
-          </button>
-          <MobileAssistant ticket={ticket} />
-        </div>
-      </div>
+      {/* Assistant sheet: mounted once, slid off-screen (not unmounted) when
+          closed so the conversation survives. */}
+      <AssistantSheet open={assistantOpen} onClose={() => setAssistantOpen(false)} ticket={ticket} />
     </div>
   );
 }
@@ -199,5 +185,56 @@ function BarItem({
       </span>
       <span className="text-[10px] font-medium">{label}</span>
     </button>
+  );
+}
+
+function AssistantSheet({
+  open,
+  onClose,
+  ticket,
+}: {
+  open: boolean;
+  onClose: () => void;
+  ticket: Parameters<typeof MobileAssistant>[0]['ticket'];
+}) {
+  const { dy, dragging, touchProps } = useSheetDrag(onClose);
+  const transition = dragging ? 'none' : `transform ${SHEET_MS}ms ${SHEET_EASING}`;
+  return (
+    <div
+      className={cn('fixed inset-0 z-50', !open && 'pointer-events-none')}
+      // Keep it painted while sliding out, then hide it from the a11y tree.
+      style={{
+        visibility: open ? 'visible' : 'hidden',
+        transition: `visibility 0s linear ${open ? 0 : SHEET_MS}ms`,
+      }}
+    >
+      <div
+        className="absolute inset-0"
+        onClick={onClose}
+        style={{
+          background: 'rgba(0,0,0,.5)',
+          opacity: open ? Math.max(0, 1 - dy / 600) : 0,
+          transition: dragging ? 'none' : `opacity ${SHEET_MS}ms ${SHEET_EASING}`,
+        }}
+      />
+      <div
+        className="absolute inset-x-0 bottom-0 top-[60px] flex flex-col overflow-hidden rounded-t-[20px] bg-[var(--theme-bg-base)] shadow-[0_-20px_60px_rgba(0,0,0,.5)]"
+        style={{ transform: open ? `translateY(${dy}px)` : 'translateY(100%)', transition }}
+      >
+        {/* Drag zone: swipe down to close (tap works too). touch-action: none so
+            the browser doesn't claim the gesture as a scroll. */}
+        <div
+          {...touchProps}
+          onClick={onClose}
+          role="button"
+          aria-label="Fermer l’assistant"
+          className="flex h-10 w-full shrink-0 items-center justify-center"
+          style={{ touchAction: 'none' }}
+        >
+          <span className="h-[5px] w-9 rounded-full bg-[var(--theme-border-input)]" />
+        </div>
+        <MobileAssistant ticket={ticket} />
+      </div>
+    </div>
   );
 }
