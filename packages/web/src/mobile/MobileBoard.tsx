@@ -1,9 +1,8 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { MobileTicketCard } from './MobileTicketCard';
-import { setMobileOverride } from './useMobileMode';
 import { tintSolid } from '../lib/tints';
 
 const STATUS_DOT: Record<TicketStatus, string> = {
@@ -39,35 +38,27 @@ export function MobileBoard() {
   );
 
   const [activeIdx, setActiveIdx] = useState(DEFAULT_COLUMN_INDEX);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const programmaticScrollRef = useRef(false);
+  const touchStartX = useRef<number | null>(null);
+  const lastIdx = TICKET_STATUSES.length - 1;
 
-  // Position the scroller on the initial column before first paint.
-  useLayoutEffect(() => {
-    const el = scrollerRef.current;
-    if (el) el.scrollLeft = DEFAULT_COLUMN_INDEX * el.clientWidth;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const goToColumn = useCallback(
+    (idx: number) => setActiveIdx(Math.max(0, Math.min(lastIdx, idx))),
+    [lastIdx],
+  );
 
-  const goToColumn = useCallback((idx: number) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    setActiveIdx(idx);
-    programmaticScrollRef.current = true;
-    el.scrollTo({ left: idx * el.clientWidth, behavior: 'smooth' });
-    // Release the lock once the smooth scroll has settled
-    setTimeout(() => {
-      programmaticScrollRef.current = false;
-    }, 400);
-  }, []);
-
-  const handleScroll = useCallback(() => {
-    if (programmaticScrollRef.current) return;
-    const el = scrollerRef.current;
-    if (!el) return;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    setActiveIdx((prev) => (prev === idx ? prev : idx));
-  }, []);
+  // Swipe pages the track: |dx| > 50px moves one column. (Native scroll-snap
+  // fought re-renders from WS updates.)
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartX.current;
+    touchStartX.current = null;
+    const end = e.changedTouches[0]?.clientX;
+    if (start === null || end === undefined) return;
+    const dx = end - start;
+    if (Math.abs(dx) > 50) goToColumn(activeIdx + (dx < 0 ? 1 : -1));
+  };
 
   // ── Quick add ──
   const [adding, setAdding] = useState(false);
@@ -92,7 +83,7 @@ export function MobileBoard() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Header: board picker + desktop switch */}
+      {/* Header: board picker (the desktop switch lives in the Plus sheet) */}
       <header className="flex shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2">
         <select
           value={selectedBoardId ?? '__all__'}
@@ -106,13 +97,6 @@ export function MobileBoard() {
             </option>
           ))}
         </select>
-        <button
-          onClick={() => setMobileOverride('desktop')}
-          className="shrink-0 rounded-md px-2 py-2 text-xs text-[var(--theme-text-muted)]"
-          title="Passer en vue desktop"
-        >
-          Desktop
-        </button>
       </header>
 
       {/* Status chips */}
@@ -124,7 +108,7 @@ export function MobileBoard() {
             <button
               key={status}
               onClick={() => goToColumn(idx)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 active
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                   : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
@@ -138,53 +122,57 @@ export function MobileBoard() {
         })}
       </nav>
 
-      {/* Swipeable columns */}
-      <div
-        ref={scrollerRef}
-        onScroll={handleScroll}
-        className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
-      >
-        {(TICKET_STATUSES as readonly TicketStatus[]).map((status) => {
-          const tickets = columns[status] ?? [];
-          return (
-            <div
-              key={status}
-              className="flex h-full w-full flex-none snap-center flex-col overflow-y-auto px-3 pb-20"
-            >
-              {tickets.length === 0 ? (
-                <p className="py-10 text-center text-sm text-[var(--theme-text-faint)]">
-                  Aucun ticket
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2 py-1">
-                  {tickets.map((t) => (
-                    <MobileTicketCard
-                      key={t.id}
-                      ticket={t}
-                      boardName={isAllBoards ? boardNameById[t.boardId] : undefined}
-                      onOpen={() => selectTicket(t.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      {/* Swipeable columns: a 500%-wide track moved with a transform */}
+      <div className="min-h-0 flex-1 overflow-hidden" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div
+          className="flex h-full"
+          style={{
+            width: `${TICKET_STATUSES.length * 100}%`,
+            transform: `translateX(-${(activeIdx * 100) / TICKET_STATUSES.length}%)`,
+            transition: 'transform 250ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
+          {(TICKET_STATUSES as readonly TicketStatus[]).map((status) => {
+            const tickets = columns[status] ?? [];
+            return (
+              <div
+                key={status}
+                className="flex h-full flex-none flex-col overflow-y-auto px-3"
+                style={{ width: `${100 / TICKET_STATUSES.length}%`, paddingBottom: 'calc(env(safe-area-inset-bottom) + 120px)' }}
+              >
+                {tickets.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-[var(--theme-text-faint)]">Aucun ticket</p>
+                ) : (
+                  <div className="flex flex-col gap-2 py-1">
+                    {tickets.map((t) => (
+                      <MobileTicketCard
+                        key={t.id}
+                        ticket={t}
+                        boardName={isAllBoards ? boardNameById[t.boardId] : undefined}
+                        onOpen={() => selectTicket(t.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Quick add */}
       {canAdd && !adding && (
         <button
           onClick={() => setAdding(true)}
-          className="fixed bottom-5 right-4 z-30 flex h-13 w-13 items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-[var(--theme-accent-fg)] shadow-lg"
-          style={{ width: 52, height: 52, marginBottom: 'env(safe-area-inset-bottom)' }}
+          className="fixed right-4 z-20 flex items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-[var(--theme-accent-fg)] shadow-lg"
+          style={{ width: 52, height: 52, bottom: 104 }}
           aria-label="Nouveau ticket"
         >
           +
         </button>
       )}
       {adding && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/50" onClick={() => setAdding(false)}>
+        <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => setAdding(false)}>
           <div
             className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}

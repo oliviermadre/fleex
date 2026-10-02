@@ -73,9 +73,9 @@ export function MobileTicketRepos({ ticket }: { ticket: Ticket }) {
       ))}
       <button
         onClick={() => setPicking(true)}
-        className="rounded-full border border-[var(--theme-border)] px-2.5 py-1 text-[11px] font-medium text-[var(--theme-accent)]"
+        className="min-h-9 rounded-full border border-dashed border-[var(--theme-border-input)] px-3 py-1 text-[11px] font-medium text-[var(--theme-accent)]"
       >
-        + Repo
+        + Lier un repo
       </button>
 
       {picking && (

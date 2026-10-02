@@ -60,7 +60,7 @@ export function MobileExecutions({ ticketId }: { ticketId: string }) {
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
       {sorted.length === 0 ? (
         <p className="py-8 text-center text-sm text-[var(--theme-text-faint)]">
           Aucune exécution — mentionne un agent dans la conversation pour en lancer une.

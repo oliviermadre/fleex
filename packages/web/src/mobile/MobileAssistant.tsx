@@ -32,7 +32,10 @@ function toolStatusBadge(status: AssistantToolStatus): { label: string; classNam
   }
 }
 
-export function MobileAssistant() {
+/** The ticket open behind the sheet, passed to the companion as context. */
+export type AssistantTicketContext = { id: string; displayId: number | string; title: string } | null;
+
+export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketContext }) {
   const connected = useAssistantStore((s) => s.connected);
   const sessions = useAssistantStore((s) => s.sessions);
   const workspaces = useAssistantStore((s) => s.workspaces);
@@ -82,10 +85,11 @@ export function MobileAssistant() {
   const handleSend = useCallback(() => {
     const text = draft.trim();
     if (!text || !activeId || busy) return;
-    sendUser(text);
+    // The companion has no notion of the open screen: prefix the message.
+    sendUser(ticket ? `[Contexte : ticket #${ticket.displayId} « ${ticket.title} » (id ${ticket.id})]\n${text}` : text);
     setDraft('');
     scrollToBottom();
-  }, [draft, activeId, busy, sendUser, scrollToBottom]);
+  }, [draft, activeId, busy, sendUser, scrollToBottom, ticket]);
 
   // ── Disconnected: setup hint ──
   if (!connected) {
@@ -140,6 +144,14 @@ export function MobileAssistant() {
           +
         </button>
       </header>
+
+      {ticket && (
+        <div className="flex shrink-0 px-3 pt-2">
+          <span className="max-w-full truncate rounded-full bg-[var(--theme-accent-muted)] px-2.5 py-1 text-[11.5px] text-[var(--theme-accent)]">
+            Contexte : #{ticket.displayId} · {ticket.title}
+          </span>
+        </div>
+      )}
 
       {/* Transcript */}
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -234,7 +246,7 @@ export function MobileAssistant() {
 
       {/* Confirmation of a mutating fleex command */}
       {confirmReq && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/60">
+        <div className="fixed inset-0 z-[60] flex items-end bg-black/60">
           <div
             className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
@@ -274,7 +286,7 @@ export function MobileAssistant() {
 
       {/* Session picker sheet */}
       {showSessions && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/50" onClick={() => setShowSessions(false)}>
+        <div className="fixed inset-0 z-[55] flex items-end bg-black/50" onClick={() => setShowSessions(false)}>
           <div
             className="max-h-[75dvh] w-full overflow-y-auto rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
