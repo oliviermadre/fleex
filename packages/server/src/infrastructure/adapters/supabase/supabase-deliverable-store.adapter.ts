@@ -3,6 +3,7 @@ import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliver
 import type {
   DeliverableStorePort,
   DeliverableFacetCounts,
+  DeliverableRef,
   DeliverableQueryFilters,
   DeliverableQueryOptions,
   DeliverableQueryResult,
@@ -92,6 +93,29 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
       }
     }
     return rows.map(rowToEntity);
+  }
+
+  async getRefsByTicketIds(ticketIds: string[]): Promise<DeliverableRef[]> {
+    // Same chunking + pagination as getByTicketIds, but only `id, ticket_id`:
+    // the `select('*')` it replaces for counting pulled every markdown body and
+    // hit the statement timeout on the Kanban.
+    const rows: { id: string; ticket_id: string }[] = [];
+    for (const chunk of chunkIds(ticketIds)) {
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await this.conn.client
+          .from('deliverables')
+          .select('id, ticket_id')
+          .in('ticket_id', chunk)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(`SupabaseDeliverableStore.getRefsByTicketIds failed: ${error.message}`);
+        const page = data as { id: string; ticket_id: string }[];
+        rows.push(...page);
+        if (page.length < PAGE) break;
+      }
+    }
+    return rows.map((r) => ({ id: r.id, ticketId: r.ticket_id }));
   }
 
   async getById(id: string): Promise<TicketDeliverableEntity | null> {

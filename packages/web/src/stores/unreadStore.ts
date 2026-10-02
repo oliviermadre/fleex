@@ -15,8 +15,19 @@ interface UnreadState {
   /** Total unread across all tickets */
   totalUnread: number;
 
-  /** Load bulk unread counts for given tickets (or all tracked if omitted) */
+  /**
+   * Make sure these tickets have counts: only the ids not loaded yet (nor in
+   * flight) are fetched, and merged into the map. Views pass what they DISPLAY,
+   * so switching board / widening a filter only completes the missing ones.
+   * Omitted → reload every tracked ticket, replacing the map.
+   */
   loadUnreadCounts: (ticketIds?: string[]) => Promise<void>;
+
+  /**
+   * Re-fetch these tickets even if already loaded (a deliverable / comment came
+   * or went). Calls within a short window are batched into one request.
+   */
+  refreshUnreadCounts: (ticketIds: string[]) => void;
 
   /** Load comment read cursors for a specific ticket */
   loadCursors: (ticketId: string) => Promise<TicketReadCursors>;
@@ -42,6 +53,45 @@ interface UnreadState {
 
 const EMPTY_UNREAD: TicketUnreadCounts = { ticketId: '', totalComments: 0, totalDeliverables: 0, unreadComments: 0, unreadDeliverables: 0 };
 
+/** Ids requested and not answered yet — so two renders don't fetch them twice. */
+const inFlight = new Set<string>();
+/** Ids waiting for the batched refresh. */
+const pendingRefresh = new Set<string>();
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+const REFRESH_DEBOUNCE_MS = 300;
+
+function totalOf(map: Record<string, TicketUnreadCounts>): number {
+  return Object.values(map).reduce((sum, c) => sum + c.unreadComments + c.unreadDeliverables, 0);
+}
+
+/** Fetch counts for these ids and merge them into the map. */
+async function fetchAndMerge(
+  ids: string[],
+  set: (fn: (s: UnreadState) => Partial<UnreadState>) => void,
+): Promise<void> {
+  for (const id of ids) inFlight.add(id);
+  try {
+    const counts = await api.fetchUnreadCounts(ids);
+    set((state) => {
+      const map = { ...state.unreadByTicket };
+      for (const c of counts) map[c.ticketId] = c;
+      return { unreadByTicket: map, totalUnread: totalOf(map) };
+    });
+  } catch {
+    // Silently fail — the ids stay missing, so the next load retries them.
+  } finally {
+    for (const id of ids) inFlight.delete(id);
+  }
+}
+
+/** Test hook: forget in-flight / pending ids between tests. */
+export function __resetUnreadLoaderForTests(): void {
+  inFlight.clear();
+  pendingRefresh.clear();
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = null;
+}
+
 export const useUnreadStore = create<UnreadState>((set, get) => ({
   unreadByTicket: {},
   cursorsByTicket: {},
@@ -51,22 +101,34 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
   loadUnreadCounts: async (ticketIds?: string[]) => {
     // An explicitly-empty list means "nothing visible yet" (views fire before
     // the ticket store loads): skip entirely. Falling through would degrade to
-    // the no-param request, whose server-side scope is "tracked tickets only" —
-    // that smaller response can resolve AFTER a full-ids one and replace the
-    // map, zeroing badges for every never-read ticket (cockpit bug, #400).
+    // the no-param request, whose server-side scope is "tracked tickets only".
     if (ticketIds && ticketIds.length === 0) return;
-    try {
-      const counts = await api.fetchUnreadCounts(ticketIds);
-      const map: Record<string, TicketUnreadCounts> = {};
-      let total = 0;
-      for (const c of counts) {
-        map[c.ticketId] = c;
-        total += c.unreadComments + c.unreadDeliverables;
+    if (!ticketIds) {
+      try {
+        const counts = await api.fetchUnreadCounts(undefined);
+        const map: Record<string, TicketUnreadCounts> = {};
+        for (const c of counts) map[c.ticketId] = c;
+        set({ unreadByTicket: map, totalUnread: totalOf(map) });
+      } catch {
+        // Silently fail
       }
-      set({ unreadByTicket: map, totalUnread: total });
-    } catch {
-      // Silently fail
+      return;
     }
+    const loaded = get().unreadByTicket;
+    const missing = [...new Set(ticketIds)].filter((id) => !(id in loaded) && !inFlight.has(id));
+    if (missing.length === 0) return;
+    await fetchAndMerge(missing, set);
+  },
+
+  refreshUnreadCounts: (ticketIds: string[]) => {
+    for (const id of ticketIds) pendingRefresh.add(id);
+    if (refreshTimer || pendingRefresh.size === 0) return;
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      const ids = [...pendingRefresh];
+      pendingRefresh.clear();
+      void fetchAndMerge(ids, set);
+    }, REFRESH_DEBOUNCE_MS);
   },
 
   loadCursors: async (ticketId: string) => {

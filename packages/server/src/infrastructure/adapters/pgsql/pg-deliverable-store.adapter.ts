@@ -3,6 +3,7 @@ import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliver
 import type {
   DeliverableStorePort,
   DeliverableFacetCounts,
+  DeliverableRef,
   DeliverableQueryFilters,
   DeliverableQueryOptions,
   DeliverableQueryResult,
@@ -72,6 +73,15 @@ export class PgDeliverableStore implements DeliverableStorePort {
       [ticketIds],
     );
     return rows.map(rowToDeliverable);
+  }
+
+  async getRefsByTicketIds(ticketIds: string[]): Promise<DeliverableRef[]> {
+    if (ticketIds.length === 0) return [];
+    const { rows } = await this.db.query(
+      'SELECT id, ticket_id FROM deliverables WHERE ticket_id = ANY($1::text[])',
+      [ticketIds],
+    );
+    return rows.map((r) => ({ id: r.id as string, ticketId: r.ticket_id as string }));
   }
 
   async getById(id: string): Promise<TicketDeliverableEntity | null> {

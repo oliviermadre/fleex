@@ -130,6 +130,32 @@ export class SupabaseCommentStore implements CommentStorePort {
     }));
   }
 
+  async getSummariesByTicketIds(ticketIds: string[]): Promise<CommentSummary[]> {
+    // getByTicketIds' chunking + pagination, without the comment bodies.
+    type Row = { ticket_id: string; created_at: string; author_type: string };
+    const rows: Row[] = [];
+    for (const chunk of chunkIds(ticketIds)) {
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await this.conn.client
+          .from('comments')
+          .select('ticket_id, created_at, author_type')
+          .in('ticket_id', chunk)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(`SupabaseCommentStore.getSummariesByTicketIds failed: ${error.message}`);
+        const page = data as Row[];
+        rows.push(...page);
+        if (page.length < PAGE) break;
+      }
+    }
+    return rows.map((r) => ({
+      ticketId: r.ticket_id,
+      createdAt: new Date(r.created_at).toISOString(),
+      authorType: r.author_type as 'user' | 'agent',
+    }));
+  }
+
   async save(comment: TicketCommentEntity): Promise<void> {
     const { error } = await this.conn.client.from('comments').upsert({
       id: comment.id,

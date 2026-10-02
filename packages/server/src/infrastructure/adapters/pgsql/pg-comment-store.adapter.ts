@@ -42,6 +42,19 @@ export class PgCommentStore implements CommentStorePort {
     }));
   }
 
+  async getSummariesByTicketIds(ticketIds: string[]): Promise<CommentSummary[]> {
+    if (ticketIds.length === 0) return [];
+    const { rows } = await this.db.query(
+      'SELECT ticket_id, created_at, author_type FROM comments WHERE ticket_id = ANY($1::text[]) ORDER BY created_at ASC',
+      [ticketIds],
+    );
+    return rows.map((r) => ({
+      ticketId: r.ticket_id as string,
+      createdAt: new Date(r.created_at as string | Date).toISOString(),
+      authorType: r.author_type as 'user' | 'agent',
+    }));
+  }
+
   async save(comment: TicketCommentEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO comments (

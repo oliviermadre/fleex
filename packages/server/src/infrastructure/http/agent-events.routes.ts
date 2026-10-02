@@ -93,14 +93,14 @@ export function agentEventsRoutes(container: Container) {
             })
           : Promise.resolve([]),
         ticketIdArr.length > 0
-          ? container.commentStore.getByTicketIds(ticketIdArr).catch((err: unknown) => {
-              request.log.error({ err }, 'executions: commentStore.getByTicketIds failed');
+          ? container.commentStore.getSummariesByTicketIds(ticketIdArr).catch((err: unknown) => {
+              request.log.error({ err }, 'executions: commentStore.getSummariesByTicketIds failed');
               return [];
             })
           : Promise.resolve([]),
         ticketIdArr.length > 0
-          ? container.deliverableStore.getByTicketIds(ticketIdArr).catch((err: unknown) => {
-              request.log.error({ err }, 'executions: deliverableStore.getByTicketIds failed');
+          ? container.deliverableStore.getRefsByTicketIds(ticketIdArr).catch((err: unknown) => {
+              request.log.error({ err }, 'executions: deliverableStore.getRefsByTicketIds failed');
               return [];
             })
           : Promise.resolve([]),

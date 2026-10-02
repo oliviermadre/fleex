@@ -50,9 +50,22 @@ export interface DeliverableFacetCounts {
   total: number;
 }
 
+/** A deliverable reduced to what counting needs — no title, no `content`. */
+export interface DeliverableRef {
+  readonly id: string;
+  readonly ticketId: string;
+}
+
 export interface DeliverableStorePort {
   getByTicket(ticketId: string): Promise<TicketDeliverableEntity[]>;
   getByTicketIds(ticketIds: string[]): Promise<TicketDeliverableEntity[]>;
+  /**
+   * Id + ticket of every deliverable on these tickets. Unread counts and the
+   * Logs badges only count them (and match ids against the "seen" set):
+   * selecting `*` dragged every markdown body along and hit Supabase's
+   * statement timeout on the Kanban.
+   */
+  getRefsByTicketIds(ticketIds: string[]): Promise<DeliverableRef[]>;
   getById(id: string): Promise<TicketDeliverableEntity | null>;
   getAll(): Promise<TicketDeliverableEntity[]>;
   /**

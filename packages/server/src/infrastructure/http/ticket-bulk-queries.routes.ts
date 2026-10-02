@@ -80,40 +80,42 @@ export async function computeUnreadCounts(
 
   if (ticketIds.length === 0) return [];
 
-  // Batch fetch: 2 queries instead of N×2
+  // Batch fetch: 2 queries instead of N×2, and only the columns we count on —
+  // no comment body, no deliverable markdown (select * timed out on Supabase).
   const [allComments, allDeliverables] = await Promise.all([
-    deps.commentStore.getByTicketIds(ticketIds),
-    deps.deliverableStore.getByTicketIds(ticketIds),
+    deps.commentStore.getSummariesByTicketIds(ticketIds),
+    deps.deliverableStore.getRefsByTicketIds(ticketIds),
   ]);
 
   // Group by ticketId
-  const commentsByTicket = new Map<string, typeof allComments>();
+  const commentDatesByTicket = new Map<string, number[]>();
   for (const c of allComments) {
-    let arr = commentsByTicket.get(c.ticketId);
-    if (!arr) { arr = []; commentsByTicket.set(c.ticketId, arr); }
-    arr.push(c);
+    let arr = commentDatesByTicket.get(c.ticketId);
+    if (!arr) { arr = []; commentDatesByTicket.set(c.ticketId, arr); }
+    arr.push(new Date(c.createdAt).getTime());
   }
-  const deliverablesByTicket = new Map<string, typeof allDeliverables>();
+  const deliverableIdsByTicket = new Map<string, string[]>();
   for (const d of allDeliverables) {
     if (!d.ticketId) continue;
-    let arr = deliverablesByTicket.get(d.ticketId);
-    if (!arr) { arr = []; deliverablesByTicket.set(d.ticketId, arr); }
-    arr.push(d);
+    let arr = deliverableIdsByTicket.get(d.ticketId);
+    if (!arr) { arr = []; deliverableIdsByTicket.set(d.ticketId, arr); }
+    arr.push(d.id);
   }
 
   const results: TicketUnreadCounts[] = [];
   for (const ticketId of ticketIds) {
     const commentCursor = commentMap.get(ticketId) ?? null;
     const seenSet = seenDeliverableMap.get(ticketId) ?? new Set<string>();
-    const comments = commentsByTicket.get(ticketId) ?? [];
-    const deliverables = deliverablesByTicket.get(ticketId) ?? [];
+    const commentDates = commentDatesByTicket.get(ticketId) ?? [];
+    const deliverableIds = deliverableIdsByTicket.get(ticketId) ?? [];
 
-    const unreadComments = commentCursor
-      ? comments.filter((c) => c.createdAt > new Date(commentCursor)).length
-      : comments.length;
-    const unreadDeliverables = deliverables.filter((d) => !seenSet.has(d.id)).length;
+    const cursorTime = commentCursor ? new Date(commentCursor).getTime() : null;
+    const unreadComments = cursorTime !== null
+      ? commentDates.filter((t) => t > cursorTime).length
+      : commentDates.length;
+    const unreadDeliverables = deliverableIds.filter((id) => !seenSet.has(id)).length;
 
-    results.push({ ticketId, totalComments: comments.length, totalDeliverables: deliverables.length, unreadComments, unreadDeliverables });
+    results.push({ ticketId, totalComments: commentDates.length, totalDeliverables: deliverableIds.length, unreadComments, unreadDeliverables });
   }
 
   return results;

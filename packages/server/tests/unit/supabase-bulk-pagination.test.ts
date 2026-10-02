@@ -221,3 +221,50 @@ describe('SupabaseDeliverableStore.getCreatedAtBetween pagination', () => {
     expect(result[1894]).toBe(rows[1894]!.created_at);
   });
 });
+
+describe('slim per-ticket reads (unread counts / Logs badges)', () => {
+  /** Same fake, recording the select() columns so we can assert no body is read. */
+  function recordingClient(rowsByTable: Record<string, Record<string, unknown>[]>) {
+    const selects: string[] = [];
+    const inner = makeFakeClient(rowsByTable);
+    return {
+      selects,
+      client: {
+        from(table: string) {
+          const b = inner.from(table);
+          const select = b.select;
+          b.select = (cols?: string) => { selects.push(cols ?? '*'); return select(); };
+          return b;
+        },
+      },
+    };
+  }
+
+  it('getRefsByTicketIds pages past the cap and reads only id, ticket_id', async () => {
+    const rows = Array.from({ length: 1895 }, (_, i) => deliverableRow(i, 'ticket-a'));
+    const { client, selects } = recordingClient({ deliverables: rows });
+    const store = new SupabaseDeliverableStore({ client } as unknown as SupabaseConnection);
+    const result = await store.getRefsByTicketIds(['ticket-a']);
+    expect(result).toHaveLength(1895);
+    expect(result[1894]).toEqual({ id: 'deliverable-1894', ticketId: 'ticket-a' });
+    expect(new Set(selects)).toEqual(new Set(['id, ticket_id']));
+  });
+
+  it('getSummariesByTicketIds pages past the cap and reads no body', async () => {
+    const rows = Array.from({ length: 3013 }, (_, i) => commentRow(i, 'ticket-a'));
+    const { client, selects } = recordingClient({ comments: rows });
+    const store = new SupabaseCommentStore({ client } as unknown as SupabaseConnection);
+    const result = await store.getSummariesByTicketIds(['ticket-a']);
+    expect(result).toHaveLength(3013);
+    expect(result[3012]).toEqual({ ticketId: 'ticket-a', createdAt: rows[3012]!.created_at, authorType: 'agent' });
+    expect(new Set(selects)).toEqual(new Set(['ticket_id, created_at, author_type']));
+  });
+
+  it('both return [] without querying when no ticket is asked', async () => {
+    const { client, selects } = recordingClient({});
+    const conn = { client } as unknown as SupabaseConnection;
+    expect(await new SupabaseDeliverableStore(conn).getRefsByTicketIds([])).toEqual([]);
+    expect(await new SupabaseCommentStore(conn).getSummariesByTicketIds([])).toEqual([]);
+    expect(selects).toEqual([]);
+  });
+});

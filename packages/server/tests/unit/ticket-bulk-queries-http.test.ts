@@ -20,8 +20,8 @@ function makeDeps() {
     kvStore: {
       listByPrefix: async () => [] as { key: string; value: string }[],
     },
-    commentStore: { getByTicketIds: async () => [] },
-    deliverableStore: { getByTicketIds: async () => [] },
+    commentStore: { getSummariesByTicketIds: async () => [] },
+    deliverableStore: { getRefsByTicketIds: async () => [] },
     agentEventStore: { getAllExecutions: async () => [] },
     mentionStore: { getAll: async () => [] },
     workflowRunStore: { getByStatus: async () => [] },

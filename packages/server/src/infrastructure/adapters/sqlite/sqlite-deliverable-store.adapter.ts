@@ -3,6 +3,7 @@ import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliver
 import type {
   DeliverableStorePort,
   DeliverableFacetCounts,
+  DeliverableRef,
   DeliverableQueryFilters,
   DeliverableQueryOptions,
   DeliverableQueryResult,
@@ -90,6 +91,15 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
       .prepare(`SELECT * FROM deliverables WHERE ticket_id IN (${placeholders}) ORDER BY created_at ASC`)
       .all(...ticketIds) as DeliverableRow[];
     return rows.map((r) => this.toEntity(r));
+  }
+
+  async getRefsByTicketIds(ticketIds: string[]): Promise<DeliverableRef[]> {
+    if (ticketIds.length === 0) return [];
+    const placeholders = ticketIds.map(() => '?').join(',');
+    const rows = this.conn.db
+      .prepare(`SELECT id, ticket_id FROM deliverables WHERE ticket_id IN (${placeholders})`)
+      .all(...ticketIds) as { id: string; ticket_id: string }[];
+    return rows.map((r) => ({ id: r.id, ticketId: r.ticket_id }));
   }
 
   async getById(id: string): Promise<TicketDeliverableEntity | null> {

@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
 import { TICKET_STATUSES } from '@fleex/shared';
-import type { TicketStatus, Ticket } from '@fleex/shared';
+import type { TicketStatus, Ticket, TicketWsMessage } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { fetchBulkPRStates } from '../../services/api';
@@ -13,6 +13,7 @@ import { RoadmapView } from './RoadmapView';
 import { EpicDetailView } from './EpicDetailView';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
+import { appWs } from '../../services/websocket';
 
 export function KanbanBoard() {
   const rawBoards = useTicketStore((s) => s.boards);
@@ -23,6 +24,7 @@ export function KanbanBoard() {
   const filters = useTicketStore((s) => s.filters);
   const searchQuery = useTicketStore((s) => s.searchQuery);
   const loadUnreadCounts = useUnreadStore((s) => s.loadUnreadCounts);
+  const refreshUnreadCounts = useUnreadStore((s) => s.refreshUnreadCounts);
   const loadActivity = useTicketActivityStore((s) => s.loadActivity);
 
   // Epic stores
@@ -31,9 +33,8 @@ export function KanbanBoard() {
   const selectedEpicIds = useTicketGroupStore((s) => s.selectedEpicIds);
   const groupTicketIds = useTicketGroupStore((s) => s.groupTicketIds);
 
-  // Load unread counts + agentic activity on mount and when tickets change
+  // Load agentic activity on mount and when tickets change
   const ticketIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
-  useEffect(() => { loadUnreadCounts(ticketIds); }, [ticketIds, loadUnreadCounts]);
   useEffect(() => { loadActivity(ticketIds); }, [ticketIds, loadActivity]);
 
   const [prStates, setPrStates] = useState<Record<string, string>>({});
@@ -74,6 +75,40 @@ export function KanbanBoard() {
   }, []);
 
   const [showArchived, setShowArchived] = useState(false);
+
+  // Comment / deliverable counters: only for the cards on screen (board,
+  // filters, epics, expanded columns). The store fetches the ids it doesn't
+  // have yet, so a board switch or a wider filter completes the map with one
+  // small request — asking for the whole instance (500+ tickets) on every
+  // ticket WS update timed out on Supabase. Keyed by a string so a WS update
+  // that changes no visibility doesn't re-run the effect.
+  const boardShown = activeView !== 'roadmap' && !selectedEpicDetailId;
+  const visibleIdsKey = boardShown
+    ? (() => {
+        const shown = filterColumnsByEpics(ticketsByColumn(selectedBoardId), selectedEpicIds, groupTicketIds);
+        return (TICKET_STATUSES as readonly TicketStatus[])
+          .filter((status) => !collapsedColumns.has(status))
+          .flatMap((status) => (shown[status] ?? []).map((t) => t.id))
+          .join(',');
+      })()
+    : '';
+  useEffect(() => {
+    if (visibleIdsKey) void loadUnreadCounts(visibleIdsKey.split(','));
+  }, [visibleIdsKey, loadUnreadCounts]);
+
+  // Keep loaded counters live: a deliverable / comment created or deleted
+  // re-fetches that ticket's counts alone (batched by the store).
+  useEffect(() => appWs.onChannel('tickets', (raw) => {
+    const msg = raw as TicketWsMessage;
+    if (
+      msg.type !== 'deliverable:created' && msg.type !== 'deliverable:deleted' &&
+      msg.type !== 'comment:created' && msg.type !== 'comment:deleted'
+    ) return;
+    const ticketId = (msg.data as { ticketId?: string | null } | null)?.ticketId;
+    if (ticketId && ticketId in useUnreadStore.getState().unreadByTicket) {
+      refreshUnreadCounts([ticketId]);
+    }
+  }), [refreshUnreadCounts]);
 
   const isAllBoards = selectedBoardId === null && boards.length > 1;
   const board = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) ?? null : null;
