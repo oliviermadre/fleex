@@ -5,10 +5,11 @@ import type { WorkTask } from '../components/work/types';
 import { useWorkQueue } from '../components/work/useWorkQueue';
 import { useWorkStore, type QueueGroupBy } from '../stores/workStore';
 import { useTicketStore } from '../stores/ticketStore';
+import { QuickAddFab, QuickAddSheet } from './MobileQuickAdd';
 import { TasksIcon } from '../components/sidebar/icons';
 import { PRIORITY_LABELS } from '../components/tickets/PriorityIndicator';
 import { formatAge } from '../lib/formatAge';
-import { useNow } from '../lib/useNow';
+import { useClock } from './useClock';
 import { cn } from '../lib/cn';
 import { tintClasses } from '../lib/tints';
 import { PRIORITY_COLOR } from './MobileTicketCard';
@@ -31,7 +32,7 @@ type SheetKind = 'boards' | 'priority' | 'status' | 'group' | 'new' | null;
 export function MobileTasks() {
   const { groups, boards, counts } = useWorkQueue();
   const openTicket = useMobileNavStore((s) => s.openTicket);
-  const now = useNow();
+  const now = useClock();
 
   const boardFilters = useWorkStore((s) => s.boardFilters);
   const priorityFilters = useWorkStore((s) => s.priorityFilters);
@@ -42,6 +43,7 @@ export function MobileTasks() {
   const { setBoardFilters, setPriorityFilters, setStatusFilters, setGroupBy, setFavoriteOnly, setSearch } =
     useWorkStore.getState();
 
+  const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const [sheet, setSheet] = useState<SheetKind>(null);
   const sortedBoards = useMemo(() => [...boards].sort((a, b) => a.name.localeCompare(b.name)), [boards]);
 
@@ -52,14 +54,6 @@ export function MobileTasks() {
           <TasksIcon size={22} className="text-[var(--theme-accent)]" />
           <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
           <span className="text-[15px] tabular-nums text-[var(--theme-text-faint)]">{counts.total}</span>
-          <span className="flex-1" />
-          <button
-            type="button"
-            onClick={() => setSheet('new')}
-            className="h-11 rounded-[10px] bg-[var(--theme-accent)] px-3.5 text-sm font-semibold text-[var(--theme-accent-fg)]"
-          >
-            + New
-          </button>
         </div>
         <div className="relative">
           <svg
@@ -133,13 +127,6 @@ export function MobileTasks() {
             ))}
           </section>
         ))}
-        <button
-          type="button"
-          onClick={() => setSheet('new')}
-          className="min-h-11 w-full px-4 py-3 text-left text-sm text-[var(--theme-text-muted)]"
-        >
-          + New Task
-        </button>
       </div>
 
       {sheet === 'boards' && (
@@ -193,7 +180,15 @@ export function MobileTasks() {
           ))}
         </MobileSheet>
       )}
-      {sheet === 'new' && <NewTaskSheet onClose={() => setSheet(null)} />}
+      {sheet !== 'new' && <QuickAddFab onClick={() => setSheet('new')} />}
+      {sheet === 'new' && (
+        <QuickAddSheet
+          status="doing"
+          defaultBoardId={boardFilters.length === 1 ? boardFilters[0]! : selectedBoardId}
+          onClose={() => setSheet(null)}
+          onCreated={(tk) => openTicket(tk.id, 'conversation')}
+        />
+      )}
     </div>
   );
 }
@@ -265,63 +260,5 @@ function TaskRow({ task, now, onOpen }: { task: WorkTask; now: number; onOpen: (
         </span>
       )}
     </button>
-  );
-}
-
-function NewTaskSheet({ onClose }: { onClose: () => void }) {
-  const boards = useTicketStore((s) => s.boards);
-  const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
-  const createTicket = useTicketStore((s) => s.createTicket);
-  const openTicket = useMobileNavStore((s) => s.openTicket);
-  const sorted = useMemo(() => [...boards].sort((a, b) => a.name.localeCompare(b.name)), [boards]);
-  const [boardId, setBoardId] = useState<string | null>(selectedBoardId ?? sorted[0]?.id ?? null);
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    const lines = text.trim().split('\n');
-    const title = lines[0]?.trim();
-    if (!title || !boardId || busy) return;
-    setBusy(true);
-    try {
-      const t = await createTicket({
-        boardId,
-        title,
-        description: lines.slice(1).join('\n').trim() || undefined,
-        status: 'doing',
-      });
-      onClose();
-      openTicket(t.id, 'conversation');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <MobileSheet title="New task" onClose={onClose}>
-      <textarea
-        autoFocus
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Titre (1re ligne), puis description…"
-        rows={4}
-        className="w-full resize-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-base text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
-      />
-      <div className="mt-3 flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
-        {sorted.map((b) => (
-          <FilterChip key={b.id} active={b.id === boardId} onClick={() => setBoardId(b.id)}>
-            {b.emoji} {b.name}
-          </FilterChip>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!text.trim() || !boardId || busy}
-        className="mt-4 h-11 w-full rounded-lg bg-[var(--theme-accent)] text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
-      >
-        Créer et ouvrir
-      </button>
-    </MobileSheet>
   );
 }

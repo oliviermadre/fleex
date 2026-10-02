@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { NOOP } from './noop';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import {
@@ -180,7 +181,7 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
               if (item.kind === 'assistant') {
                 return (
                   <div key={i} className="overflow-x-auto text-[13px]">
-                    <MarkdownRenderer content={item.text} onToggleCheckbox={() => {}} />
+                    <MarkdownRenderer content={item.text} onToggleCheckbox={NOOP} />
                   </div>
                 );
               }

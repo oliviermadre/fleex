@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { NOOP } from './noop';
 import type { PulseLevel } from '../notifications/types';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useTicketStore } from '../stores/ticketStore';
@@ -296,7 +297,7 @@ function NoteEditor({ noteKey, onClose }: { noteKey: string; onClose: () => void
         />
       ) : (
         <div className="px-4 py-3 text-sm">
-          <MarkdownRenderer content={entry?.content ?? ''} onToggleCheckbox={() => {}} />
+          <MarkdownRenderer content={entry?.content ?? ''} onToggleCheckbox={NOOP} />
         </div>
       )}
       <button
@@ -389,7 +390,7 @@ export function MobileDocumentsPage() {
       {open && (
         <FullScreen title={open.title} onClose={() => setOpenId(null)}>
           <div className="px-4 py-3 text-sm">
-            <MarkdownRenderer content={open.content} onToggleCheckbox={() => {}} />
+            <MarkdownRenderer content={open.content} onToggleCheckbox={NOOP} />
           </div>
         </FullScreen>
       )}

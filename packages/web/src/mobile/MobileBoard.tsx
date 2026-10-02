@@ -3,6 +3,7 @@ import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { MobileTicketCard } from './MobileTicketCard';
+import { QuickAddFab, QuickAddSheet } from './MobileQuickAdd';
 import { tintSolid } from '../lib/tints';
 
 const STATUS_DOT: Record<TicketStatus, string> = {
@@ -26,7 +27,6 @@ export function MobileBoard() {
   const selectBoard = useTicketStore((s) => s.selectBoard);
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
-  const createTicket = useTicketStore((s) => s.createTicket);
   // Subscribe to tickets so the derived ticketsByColumn re-renders on WS updates
   useTicketStore((s) => s.tickets);
 
@@ -62,24 +62,8 @@ export function MobileBoard() {
 
   // ── Quick add ──
   const [adding, setAdding] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const activeStatus = TICKET_STATUSES[activeIdx] ?? 'todo';
   const canAdd = !!(selectedBoardId ?? boards[0]?.id);
-
-  const handleCreate = useCallback(async () => {
-    const title = newTitle.trim();
-    const boardId = selectedBoardId ?? boards[0]?.id;
-    if (!title || !boardId || submitting) return;
-    setSubmitting(true);
-    try {
-      await createTicket({ boardId, title, status: activeStatus });
-      setNewTitle('');
-      setAdding(false);
-    } finally {
-      setSubmitting(false);
-    }
-  }, [newTitle, selectedBoardId, boards, activeStatus, submitting, createTicket]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -160,58 +144,14 @@ export function MobileBoard() {
         </div>
       </div>
 
-      {/* Quick add */}
-      {canAdd && !adding && (
-        <button
-          onClick={() => setAdding(true)}
-          className="fixed right-4 z-20 flex items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-[var(--theme-accent-fg)] shadow-lg"
-          style={{ width: 52, height: 52, bottom: 104 }}
-          aria-label="Nouveau ticket"
-        >
-          +
-        </button>
-      )}
+      {/* Quick add (same sheet and button as Tasks) */}
+      {canAdd && !adding && <QuickAddFab onClick={() => setAdding(true)} />}
       {adding && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => setAdding(false)}>
-          <div
-            className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
-            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
-              Nouveau ticket · {TICKET_STATUS_LABELS[activeStatus]}
-            </p>
-            <textarea
-              autoFocus
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleCreate();
-                }
-              }}
-              placeholder="Titre du ticket…"
-              rows={2}
-              className="w-full resize-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-base text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                onClick={() => setAdding(false)}
-                className="rounded-lg px-4 py-2 text-sm text-[var(--theme-text-muted)]"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={!newTitle.trim() || submitting}
-                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)] disabled:opacity-50"
-              >
-                Créer
-              </button>
-            </div>
-          </div>
-        </div>
+        <QuickAddSheet
+          status={activeStatus}
+          defaultBoardId={selectedBoardId ?? boards[0]?.id ?? null}
+          onClose={() => setAdding(false)}
+        />
       )}
     </div>
   );

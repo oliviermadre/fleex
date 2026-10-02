@@ -31,18 +31,9 @@ import {
 import { PRIORITY_COLOR } from './MobileTicketCard';
 import { BellIcon } from './MobileMore';
 import { useMobileNavStore } from './mobileNavStore';
+import { useClock } from './useClock';
 
 const KINDS: FocusItemKind[] = ['gate', 'question', 'error', 'idle'];
-const TICK_MS = 30_000;
-
-function useClock(intervalMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(t);
-  }, [intervalMs]);
-  return now;
-}
 
 /**
  * Focus on the phone — the human-attention queue, one card per item with its
@@ -51,7 +42,7 @@ function useClock(intervalMs: number): number {
  * tapping a card opens the ticket full-screen on the tab that matters.
  */
 export function MobileFocus() {
-  const now = useClock(TICK_MS);
+  const now = useClock();
   const tickets = useTicketStore((s) => s.tickets);
   const boards = useTicketStore((s) => s.boards);
   const moveTicket = useTicketStore((s) => s.moveTicket);

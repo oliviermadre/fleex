@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { NOOP } from './noop';
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import type {
   ConversationMode,
@@ -501,11 +502,12 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     [conflict, doPost],
   );
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* Comments */}
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {comments.length === 0 && deliverablesByComment.orphans.length === 0 ? (
+  // The transcript only depends on server data. Keeping it out of the render
+  // path of `body` means a keystroke in the composer doesn't rebuild every
+  // comment (dates, markdown, chips) — that was the typing latency.
+  const transcript = useMemo(
+    () => (
+        comments.length === 0 && deliverablesByComment.orphans.length === 0 ? (
           <p className="py-8 text-center text-sm text-[var(--theme-text-faint)]">
             Aucun commentaire — mentionne un agent pour lancer une session.
           </p>
@@ -537,7 +539,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                     </span>
                   </div>
                   <div className="overflow-x-auto text-[13px]">
-                    <MarkdownRenderer content={c.body} onToggleCheckbox={() => {}} />
+                    <MarkdownRenderer content={c.body} onToggleCheckbox={NOOP} />
                   </div>
                   {commentMentions.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -576,7 +578,17 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               </div>
             )}
           </div>
-        )}
+        )
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [comments, mentionsByComment, deliverablesByComment, seenDeliverables, handleOpenDeliverable],
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Comments */}
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        {transcript}
       </div>
 
       {/* Conflict banner */}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { NOOP } from './noop';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { Ticket, TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
@@ -285,7 +286,7 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
               </div>
               <h2 className="pb-1.5 text-[10.5px] font-semibold tracking-[0.06em] text-[var(--theme-text-muted)]">DESCRIPTION</h2>
               {ticket.description ? (
-                <MarkdownRenderer content={ticket.description} onToggleCheckbox={() => {}} />
+                <MarkdownRenderer content={ticket.description} onToggleCheckbox={NOOP} />
               ) : (
                 <p className="py-8 text-center text-sm text-[var(--theme-text-faint)]">
                   Pas de description
