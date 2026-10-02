@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NOOP } from './noop';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
@@ -10,6 +10,7 @@ import {
 } from '../stores/assistantStore';
 import { tint, tintText } from '../lib/tints';
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
+import { useFileUpload } from '../hooks/useFileUpload';
 
 /**
  * Mobile client for the Fleex assistant — same companion host as the Chrome
@@ -54,6 +55,9 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
 
   const [showSessions, setShowSessions] = useState(false);
   const [draft, setDraft] = useState('');
+  const draftRef = useRef<HTMLTextAreaElement>(null);
+  // Same upload engine as the desktop assistant composer: paste or pick an image/file
+  const fileUpload = useFileUpload({ textareaRef: draftRef, value: draft, onChange: setDraft });
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
 
   useEffect(() => {
@@ -230,14 +234,29 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
             value={draft}
             onChange={setDraft}
             minRows={2}
+            textareaRef={draftRef}
             placeholder={busy ? 'Assistant au travail…' : 'Demande quelque chose…'}
             textareaProps={{
+              onPaste: fileUpload.pasteHandler,
               className: 'rounded-xl bg-[var(--theme-bg-secondary)] p-3 text-base text-[var(--theme-text-primary)]',
             }}
           />
           <button
+            type="button"
+            onClick={fileUpload.openFilePicker}
+            disabled={fileUpload.isUploading}
+            aria-label="Joindre une image ou un fichier"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--theme-text-muted)] disabled:opacity-50"
+          >
+            {fileUpload.isUploading ? '…' : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+            )}
+          </button>
+          <button
             onClick={handleSend}
-            disabled={!draft.trim() || busy}
+            disabled={!draft.trim() || busy || fileUpload.isUploading}
             className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             ➤

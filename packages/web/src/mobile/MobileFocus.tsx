@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FocusItem, FocusItemKind } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -32,6 +32,7 @@ import { PRIORITY_COLOR } from './MobileTicketCard';
 import { BellIcon } from './MobileMore';
 import { useMobileNavStore } from './mobileNavStore';
 import { useClock } from './useClock';
+import { useFileUpload } from '../hooks/useFileUpload';
 
 const KINDS: FocusItemKind[] = ['gate', 'question', 'error', 'idle'];
 
@@ -268,6 +269,9 @@ function FocusCard({
   const wait = waitedMs(item, now);
   const stale = wait !== null && wait > STALE_MS;
   const [text, setText] = useState('');
+  const replyRef = useRef<HTMLTextAreaElement>(null);
+  // Attach an image/file to the answer (paste or picker), like the desktop detail composer
+  const fileUpload = useFileUpload({ textareaRef: replyRef, value: text, onChange: setText });
   const reply = item.kind === 'question' && item.question?.source !== 'session';
   const options = reply ? questionOptions(item) : [];
   const who =
@@ -342,9 +346,12 @@ function FocusCard({
         )}
         {reply ? (
           <div className="flex items-center gap-1.5">
-            <input
+            <textarea
+              ref={replyRef}
+              rows={1}
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onPaste={fileUpload.pasteHandler}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -353,14 +360,27 @@ function FocusCard({
               }}
               placeholder={`Répondre${item.question?.askedBy ? ` à @${item.question.askedBy}` : ''}…`}
               aria-label="Réponse"
-              className="h-[38px] min-w-0 flex-1 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2.5 text-base text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
+              className="max-h-32 min-h-[38px] min-w-0 flex-1 resize-none rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2.5 py-[7px] text-base leading-6 text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] [field-sizing:content] focus:border-[var(--theme-accent)] focus:outline-none"
             />
             <button
               type="button"
+              onClick={fileUpload.openFilePicker}
+              disabled={fileUpload.isUploading}
+              aria-label="Joindre une image ou un fichier"
+              className="flex h-[38px] w-10 shrink-0 items-center justify-center rounded-lg text-[var(--theme-text-muted)] disabled:opacity-50"
+            >
+              {fileUpload.isUploading ? '…' : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={send}
-              disabled={!text.trim()}
+              disabled={!text.trim() || fileUpload.isUploading}
               aria-label="Envoyer"
-              className="h-[38px] w-11 rounded-lg bg-[var(--theme-accent)] text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-40"
+              className="h-[38px] w-11 shrink-0 rounded-lg bg-[var(--theme-accent)] text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-40"
             >
               ↵
             </button>
