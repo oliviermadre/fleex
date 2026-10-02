@@ -319,6 +319,7 @@ export function MobileDocumentsPage() {
   const filterTypes = useDocumentsStore((s) => s.filterTypes);
   const loading = useDocumentsStore((s) => s.loading);
   const total = useDocumentsStore((s) => s.total);
+  const search = useDocumentsStore((s) => s.search);
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -330,6 +331,16 @@ export function MobileDocumentsPage() {
 
   return (
     <div>
+      <div className="px-3 pt-3">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => useDocumentsStore.getState().setSearch(e.target.value)}
+          placeholder="Rechercher un document…"
+          aria-label="Rechercher un document"
+          className="h-[38px] w-full rounded-[10px] border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 text-base text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
+        />
+      </div>
       <nav className="flex gap-1.5 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
         <Chip active={filterTypes.size === 0} onClick={() => useDocumentsStore.getState().clearFilters()}>
           Tous
