@@ -25,7 +25,14 @@ import { SourceChip } from './SourceChip';
  * source's links + tags), joins epics, attaches repos (with a base branch or a
  * direct checkout), and, for a GitHub issue, syncs its metadata after the fact.
  */
-export function NewTaskCompose({ onStartOver }: { onStartOver: () => void }) {
+export function NewTaskCompose({
+  onStartOver,
+  enterStarts = true,
+}: {
+  onStartOver: () => void;
+  /** ⏎ in the description starts the task. Off on a phone, where ⏎ is the only way to add a line. */
+  enterStarts?: boolean;
+}) {
   const boards = useTicketStore((s) => s.boards);
   const tickets = useTicketStore((s) => s.tickets);
   const createTicket = useTicketStore((s) => s.createTicket);
@@ -150,7 +157,7 @@ export function NewTaskCompose({ onStartOver }: { onStartOver: () => void }) {
   }
 
   function onDescKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && enterStarts) {
       e.preventDefault();
       void start();
     } else if (e.key === 'Escape') {
@@ -330,7 +337,7 @@ export function NewTaskCompose({ onStartOver }: { onStartOver: () => void }) {
             <BusyLine label={progress} />
           ) : (
             <span className="text-[11px] text-[var(--theme-text-faint)]">
-              ⏎ starts{effectiveBoardId ? ` · on ${boards.find((b) => b.id === effectiveBoardId)?.name}` : ''}
+              {enterStarts ? '⏎ starts' : 'Start to create'}{effectiveBoardId ? ` · on ${boards.find((b) => b.id === effectiveBoardId)?.name}` : ''}
             </span>
           )}
           <button

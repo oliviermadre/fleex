@@ -30,7 +30,10 @@ beforeAll(() => {
   vi.stubGlobal('IntersectionObserver', Obs);
   Element.prototype.scrollIntoView = vi.fn();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 const ticket = {
   id: 't1', boardId: 'b1', displayId: 1, title: 'T', description: '', status: 'doing', priority: 'none', type: null,
@@ -55,5 +58,21 @@ describe('MobileConversation', () => {
     // Typing is a composer concern: the (potentially long) transcript must not
     // be rebuilt on every keystroke — that was the ~300 ms input latency.
     expect(renders.mock.calls.length).toBe(before);
+  });
+
+  it('keeps the comment draft per ticket, across a remount', async () => {
+    vi.mocked(api.fetchTicketComments).mockResolvedValue([]);
+    const first = render(<MobileConversation ticket={ticket} />);
+    fireEvent.change(screen.getByPlaceholderText(/Message/), { target: { value: 'brouillon en cours' } });
+    first.unmount();
+
+    // Same ticket, fresh mount (tab switch / reload): the draft is back.
+    const second = render(<MobileConversation ticket={ticket} />);
+    expect((screen.getByPlaceholderText(/Message/) as HTMLTextAreaElement).value).toBe('brouillon en cours');
+    second.unmount();
+
+    // Another ticket must not inherit it.
+    render(<MobileConversation ticket={{ ...ticket, id: 't2' }} />);
+    expect((screen.getByPlaceholderText(/Message/) as HTMLTextAreaElement).value).toBe('');
   });
 });

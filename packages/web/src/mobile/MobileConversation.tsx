@@ -21,6 +21,8 @@ import { useTicketStore } from '../stores/ticketStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { useAgentEventStore } from '../stores/agentEventStore';
 import { useModels } from '../hooks/useModels';
+import { useCommentDraft } from '../hooks/useCommentDraft';
+import { useFileUpload } from '../hooks/useFileUpload';
 import { useToastStore } from '../stores/toastStore';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
@@ -130,10 +132,13 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   const [mentions, setMentions] = useState<TicketMention[]>([]);
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
   const [openDeliverable, setOpenDeliverable] = useState<TicketDeliverable | null>(null);
-  const [body, setBody] = useState('');
+  // Per-ticket draft in localStorage (same key as desktop), survives tab switches and reloads
+  const { draft: body, setDraft: setBody, clearDraft } = useCommentDraft(ticketId);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Paste an image/file from the clipboard, or attach one with the paperclip (photo library on iOS)
+  const fileUpload = useFileUpload({ textareaRef, value: body, onChange: setBody });
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
 
   // Seen-state drives the unread dot on each deliverable chip
@@ -453,14 +458,14 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
         );
         setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
         markCommentsRead(ticketId, comment.createdAt).catch(() => {});
-        setBody('');
+        clearDraft();
         setConflict(null);
         scrollToBottom();
       } finally {
         setSubmitting(false);
       }
     },
-    [body, ticketId, markCommentsRead, scrollToBottom],
+    [body, ticketId, markCommentsRead, scrollToBottom, clearDraft],
   );
 
   // Same disambiguation as desktop: re-mentioning an agent that is waiting for
@@ -720,10 +725,24 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
             placeholder="Message… (@ pour mentionner)"
             textareaProps={{
               onChange: handleMentionScan,
+              onPaste: fileUpload.pasteHandler,
               onBlur: () => setTimeout(closeMentionAc, 200),
               className: 'rounded-xl bg-[var(--theme-bg-secondary)] p-3 text-base text-[var(--theme-text-primary)]',
             }}
           />
+          <button
+            type="button"
+            onClick={fileUpload.openFilePicker}
+            disabled={fileUpload.isUploading}
+            aria-label="Joindre une image ou un fichier"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--theme-text-muted)] disabled:opacity-50"
+          >
+            {fileUpload.isUploading ? '…' : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+            )}
+          </button>
           <button
             onClick={handleSubmit}
             disabled={!body.trim() || submitting}

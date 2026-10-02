@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { TicketPriority, TicketStatus } from '@fleex/shared';
 import type { WorkTask } from '../components/work/types';
 import { useWorkQueue } from '../components/work/useWorkQueue';
 import { useWorkStore, type QueueGroupBy } from '../stores/workStore';
-import { useTicketStore } from '../stores/ticketStore';
-import { QuickAddFab, QuickAddSheet } from './MobileQuickAdd';
+import { QuickAddFab } from './MobileQuickAdd';
+import { MobileNewTask } from './MobileNewTask';
 import { TasksIcon } from '../components/sidebar/icons';
 import { PRIORITY_LABELS } from '../components/tickets/PriorityIndicator';
 import { formatAge } from '../lib/formatAge';
@@ -43,8 +43,8 @@ export function MobileTasks() {
   const { setBoardFilters, setPriorityFilters, setStatusFilters, setGroupBy, setFavoriteOnly, setSearch } =
     useWorkStore.getState();
 
-  const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const [sheet, setSheet] = useState<SheetKind>(null);
+  const closeNew = useCallback(() => setSheet(null), []);
   const sortedBoards = useMemo(() => [...boards].sort((a, b) => a.name.localeCompare(b.name)), [boards]);
 
   return (
@@ -181,14 +181,7 @@ export function MobileTasks() {
         </MobileSheet>
       )}
       {sheet !== 'new' && <QuickAddFab onClick={() => setSheet('new')} />}
-      {sheet === 'new' && (
-        <QuickAddSheet
-          status="doing"
-          defaultBoardId={boardFilters.length === 1 ? boardFilters[0]! : selectedBoardId}
-          onClose={() => setSheet(null)}
-          onCreated={(tk) => openTicket(tk.id, 'conversation')}
-        />
-      )}
+      {sheet === 'new' && <MobileNewTask onClose={closeNew} />}
     </div>
   );
 }
