@@ -11,6 +11,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useFocusCount } from '../stores/focusStore';
 import { FocusIcon, TasksIcon } from '../components/sidebar/icons';
 import { cn } from '../lib/cn';
+import { useLockViewport } from './useLockViewport';
 import { MobileBoard } from './MobileBoard';
 import { MobileFocus } from './MobileFocus';
 import { MobileTasks } from './MobileTasks';
@@ -41,6 +42,7 @@ const AssistantIcon = ({ size = 24 }: { size?: number }) => (
  * survive a tab switch.
  */
 export function MobileApp() {
+  useLockViewport();
   useWebSocket();
   useTickets();
   useAgentPersonas();
