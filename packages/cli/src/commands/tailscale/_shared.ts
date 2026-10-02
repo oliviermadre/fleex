@@ -218,8 +218,16 @@ export function hostPortListeners(port: number): number[] {
     .filter((n) => Number.isFinite(n));
 }
 
-/** Resolve when a TCP connection to localhost:port succeeds within `timeoutMs`. */
-export function isLocalPortOpen(port: number, timeoutMs = 800): Promise<boolean> {
+/**
+ * Resolve when a TCP connection to localhost:port succeeds within `timeoutMs`.
+ * Probes both loopbacks: Vite binds `localhost` to `::1` only on recent Node.
+ */
+export async function isLocalPortOpen(port: number, timeoutMs = 800): Promise<boolean> {
+  const results = await Promise.all(['127.0.0.1', '::1'].map((host) => isPortOpenOn(host, port, timeoutMs)));
+  return results.some(Boolean);
+}
+
+function isPortOpenOn(host: string, port: number, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     const done = (result: boolean) => {
@@ -230,7 +238,7 @@ export function isLocalPortOpen(port: number, timeoutMs = 800): Promise<boolean>
     socket.once('connect', () => done(true));
     socket.once('timeout', () => done(false));
     socket.once('error', () => done(false));
-    socket.connect(port, '127.0.0.1');
+    socket.connect(port, host);
   });
 }
 
