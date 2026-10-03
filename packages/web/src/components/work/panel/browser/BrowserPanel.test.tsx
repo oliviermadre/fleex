@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 import { BrowserPanel } from './BrowserPanel';
@@ -93,5 +94,11 @@ describe('BrowserPanel', () => {
     fireEvent.change(input, { target: { value: 'example.com' } });
     fireEvent.submit(input.closest('form')!);
     expect(webview().getAttribute('src')).toBe('https://example.com');
+  });
+
+  it('opens exactly one tab for a ticket that has none, even under StrictMode', () => {
+    useBrowserStore.setState({ byTicket: {} });
+    render(<StrictMode><BrowserPanel ticketId="T2" /></StrictMode>);
+    expect(useBrowserStore.getState().byTicket.T2?.tabs).toHaveLength(1);
   });
 });

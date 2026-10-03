@@ -65,9 +65,10 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
   const [address, setAddress] = useState(active?.url ?? '');
   const addressFocused = useRef(false);
 
-  // Always at least one tab.
+  // Always at least one tab. Read the store, not this render's state: StrictMode
+  // runs the effect twice before re-rendering, and both runs would see 0 tabs.
   useEffect(() => {
-    if (state.tabs.length === 0) openTab(ticketId, '');
+    if ((useBrowserStore.getState().byTicket[ticketId]?.tabs.length ?? 0) === 0) openTab(ticketId, '');
   }, [state.tabs.length, ticketId, openTab]);
 
   // Pop-ups from any page open as a new tab of this ticket.
