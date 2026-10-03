@@ -12,7 +12,11 @@ import { paneCount } from '../components/work/shell/shellLayout';
  */
 
 export type WorkView = 'task' | 'new';
-export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'scratch' | null;
+export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'scratch' | 'browser' | null;
+/** A remembered `browser` panel means nothing outside the desktop shell. */
+export function effectiveRightPanel(panel: RightPanel, desktop: boolean): RightPanel {
+  return panel === 'browser' && !desktop ? null : panel;
+}
 export type ThreadTab = 'conv' | 'stream';
 /** Shell pane arrangement — mirrors the prototype's layout presets. */
 export type ShellLayout = '1' | 'cols' | 'rows' | 'three' | 'grid';
