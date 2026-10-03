@@ -9,7 +9,7 @@
  * Timeline marks that pair as "what shows at the bottom".
  */
 import { cn } from '../../../lib/cn';
-import { useWorkStore, effectiveRightPanel, type RightPanel } from '../../../stores/workStore';
+import { useWorkStore, useEffectiveRightPanel, type RightPanel } from '../../../stores/workStore';
 import { hasDesktop } from './browser/webview';
 import type { WorkTask } from '../types';
 
@@ -94,7 +94,7 @@ const TOOLS: Tool[] = [
 ];
 
 export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; delivCount?: number }) {
-  const rightPanel = effectiveRightPanel(useWorkStore((s) => s.rightPanel), hasDesktop());
+  const rightPanel = useEffectiveRightPanel();
   const tools = hasDesktop() ? TOOLS : TOOLS.filter((t) => t.key !== 'browser');
   const toggleRightPanel = useWorkStore((s) => s.toggleRightPanel);
   const shellOpen = useWorkStore((s) => s.shellOpen);

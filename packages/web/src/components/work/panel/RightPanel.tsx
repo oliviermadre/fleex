@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
-import { useWorkStore, effectiveRightPanel, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from '../../../stores/workStore';
+import { useWorkStore, useEffectiveRightPanel, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from '../../../stores/workStore';
 import { useBrowserStore } from '../../../stores/browserStore';
 import type { WorkTask } from '../types';
 import { ContextPanel } from './ContextPanel';
@@ -14,7 +14,6 @@ import { DelivsPanel } from './DelivsPanel';
 import { DiffPanel } from './DiffPanel';
 import { ScratchpadTabsPanel } from './ScratchpadTabsPanel';
 import { BrowserPanel } from './browser/BrowserPanel';
-import { hasDesktop } from './browser/webview';
 
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
@@ -42,7 +41,7 @@ export function RightPanel({
   deliverables: TicketDeliverable[];
   onDeleteTask: (id: string) => void;
 }) {
-  const rightPanel = effectiveRightPanel(useWorkStore((s) => s.rightPanel), hasDesktop());
+  const rightPanel = useEffectiveRightPanel();
   const browserExpanded = useBrowserStore((s) => s.expanded);
   const expanded = rightPanel === 'browser' && browserExpanded;
   const width = useWorkStore((s) => s.rightPanelWidth);

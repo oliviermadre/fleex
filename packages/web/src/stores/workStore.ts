@@ -536,3 +536,8 @@ export const useWorkStore = create<WorkState>((set, get) => {
     resetDraft: (boardId = get().draft.boardId) => commit({ draft: { ...EMPTY_DRAFT, boardId } }),
   };
 });
+
+/** The right panel to actually show: a remembered `browser` is nothing outside the desktop shell. */
+export function useEffectiveRightPanel(): RightPanel {
+  return effectiveRightPanel(useWorkStore((s) => s.rightPanel), typeof window !== 'undefined' && !!window.fleexDesktop);
+}

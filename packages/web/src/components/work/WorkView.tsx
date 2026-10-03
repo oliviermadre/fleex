@@ -11,7 +11,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
 import { useWorkKeyboard } from './keyboard';
-import { useWorkStore } from '../../stores/workStore';
+import { useWorkStore, useEffectiveRightPanel } from '../../stores/workStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
@@ -33,7 +33,7 @@ import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 export function WorkView() {
   const queue = useWorkQueue();
   const view = useWorkStore((s) => s.view);
-  const rightPanel = useWorkStore((s) => s.rightPanel);
+  const rightPanel = useEffectiveRightPanel();
   const queueCollapsed = useWorkStore((s) => s.queueCollapsed);
   const shellOpen = useWorkStore((s) => s.shellOpen);
   const shellMode = useWorkStore((s) => s.shellMode);

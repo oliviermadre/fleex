@@ -77,7 +77,9 @@ const ALL_MENTIONS = new RegExp(
   // `[see [1] @olivier](url)`, stops being protected and the mention inside it
   // is encoded again — rare, and CommonMark's own nested-bracket grammar is
   // itself ambiguous there.
-  '(```[\\s\\S]*?```|`[^`]*`|\\[[^[\\]]*\\]\\([^)\\n]*\\))' +
+  // Longer fences first: a ````block```` may hold ``` inside (the picked-element
+  // JSON does), and the 3-backtick arm alone would end the protection there.
+  '(`````[\\s\\S]*?`````|````[\\s\\S]*?````|```[\\s\\S]*?```|`[^`]*`|\\[[^[\\]]*\\]\\([^)\\n]*\\))' +
     // struck variants — 2 agent · 3 panel · 4 skill · 5 workflow · 6 routine · 7 ticket · 8 note · 9 human
     '|~~(@agent:[a-zA-Z0-9_-]+)~~' +
     '|~~(@panel:[a-zA-Z0-9_-]+)~~' +

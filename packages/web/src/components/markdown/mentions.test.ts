@@ -179,3 +179,10 @@ describe('preprocessMentions — note references', () => {
     );
   });
 });
+
+describe('preprocessMentions — longer code fences', () => {
+  it('leaves @words inside a 4-backtick fence that contains ``` untouched', () => {
+    const md = '````fleex-element\n{"html":"<pre>```js\\nping @olivier\\n```</pre>"}\n````';
+    expect(preprocessMentions(md)).toBe(md);
+  });
+});

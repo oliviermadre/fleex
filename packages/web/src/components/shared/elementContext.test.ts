@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   type ElementContext, type PendingElement,
-  isElementContextCode, parseElementContext, serializeElement, composeBody, canSend, elementLabel,
+  isElementContextCode, parseElementContext, normalizeElementContext, serializeElement, composeBody, canSend, elementLabel,
 } from './elementContext';
 
 const ctx: ElementContext = {
@@ -72,5 +72,31 @@ describe('elementLabel', () => {
   it('prefers the React component and clips the text', () => {
     expect(elementLabel(ctx)).toBe('<ToastContainer /> SupabaseDeliverableStor…');
     expect(elementLabel({ ...ctx, react: undefined, text: undefined })).toBe('<div>');
+  });
+});
+
+describe('parseElementContext — normalization', () => {
+  const minimal = { v: 1, tag: 'a', selector: 'a', page: { url: 'x' } };
+
+  it('fills the optional collections so the card can always render', () => {
+    const c = parseElementContext(JSON.stringify(minimal))!;
+    expect(c.attributes).toEqual({});
+    expect(c.styles).toEqual({});
+    expect(c.siblings).toEqual([]);
+    expect(c.html).toBe('');
+    expect(c.xpath).toBe('');
+    expect(c.page.viewport).toEqual({ w: 0, h: 0, dpr: 1 });
+    expect(c.rect).toEqual({ x: 0, y: 0, w: 0, h: 0 });
+  });
+
+  it('defaults react owners and drops a react section without a component', () => {
+    expect(parseElementContext(JSON.stringify({ ...minimal, react: { component: 'X' } }))!.react).toEqual({ component: 'X', owners: [] });
+    expect(parseElementContext(JSON.stringify({ ...minimal, react: { owners: ['A'] } }))!.react).toBeUndefined();
+  });
+
+  it('normalizes an object payload (from the picker IPC) the same way', () => {
+    expect(normalizeElementContext({ ...minimal, styles: 'nope', siblings: 3 })!.styles).toEqual({});
+    expect(normalizeElementContext('nope')).toBeNull();
+    expect(normalizeElementContext(null)).toBeNull();
   });
 });

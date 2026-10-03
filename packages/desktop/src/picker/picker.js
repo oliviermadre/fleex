@@ -1,11 +1,13 @@
 // Fleex element picker — runs in the guest page's main world (React fibers are
-// only visible there). Injected by picker-preload.js after core.js; talks to the
-// preload through window.postMessage, tagged with a per-load nonce.
+// only visible there). Injected once by picker-preload.js after core.js, inside a
+// closure that declares __fleexPickerNonce; talks to the preload through
+// window.postMessage. The page can see those messages, so the preload — not the
+// nonce — is the trust boundary (it only relays during a pick the user started).
+/* global __fleexPickerNonce */
 (function () {
   'use strict';
-  if (window.__fleexPicker) return;
   var core = window.__fleexPickerCore;
-  var nonce = null;
+  var nonce = typeof __fleexPickerNonce === 'string' ? __fleexPickerNonce : null;
   var active = false;
   var box = null;
   var label = null;
@@ -120,7 +122,14 @@
   }
 
   function pick(el) {
-    var built = core.buildContext(el, { defaultsFor: defaultsFor });
+    var built;
+    try {
+      built = core.buildContext(el, { defaultsFor: defaultsFor });
+    } catch (e) {
+      stop();
+      post('cancelled');
+      return;
+    }
     stop();
     var source = built.react
       ? core.resolveSource(built.react, function (u) { return fetch(u).then(function (r) { return r.text(); }); })
@@ -137,6 +146,4 @@
     if (d.cmd === 'start') start();
     else if (d.cmd === 'stop') stop();
   });
-
-  window.__fleexPicker = { boot: function (n) { nonce = n; } };
 })();

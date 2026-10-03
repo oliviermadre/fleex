@@ -37,16 +37,65 @@ export function isElementContextCode(className: string | undefined): boolean {
   return !!className && /\blanguage-fleex-element\b/.test(className);
 }
 
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+const strMap = (v: unknown): Record<string, string> =>
+  isObj(v) ? Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => typeof e[1] === 'string')) : {};
+
+/**
+ * Accept anything that looks like an ElementContext and fill in what the card
+ * and the capture need. Both the thread (any comment author or agent can write a
+ * fleex-element block) and the picker IPC (a guest page could forge a payload)
+ * go through here, so a partial object never crashes a render.
+ */
+export function normalizeElementContext(raw: unknown): ElementContext | null {
+  if (!isObj(raw) || raw.v !== 1 || typeof raw.tag !== 'string' || typeof raw.selector !== 'string') return null;
+  const page = isObj(raw.page) ? raw.page : null;
+  if (!page || typeof page.url !== 'string') return null;
+  const vp = isObj(page.viewport) ? page.viewport : {};
+  const rect = isObj(raw.rect) ? raw.rect : {};
+  const ctx: ElementContext = {
+    v: 1,
+    page: { url: page.url, title: str(page.title) ?? '', viewport: { w: num(vp.w), h: num(vp.h), dpr: num(vp.dpr, 1) } },
+    tag: raw.tag,
+    rect: { x: num(rect.x), y: num(rect.y), w: num(rect.w), h: num(rect.h) },
+    selector: raw.selector,
+    xpath: str(raw.xpath) ?? '',
+    attributes: strMap(raw.attributes),
+    styles: strMap(raw.styles),
+    html: str(raw.html) ?? '',
+    siblings: Array.isArray(raw.siblings)
+      ? raw.siblings.filter(isObj).filter((s) => typeof s.tag === 'string').map((s) => ({
+          tag: s.tag as string,
+          ...(str(s.classes) ? { classes: str(s.classes) } : {}),
+          ...(str(s.text) ? { text: str(s.text) } : {}),
+          ...(s.selected === true ? { selected: true as const } : {}),
+        }))
+      : [],
+  };
+  const text = str(raw.text);
+  if (text) ctx.text = text;
+  const react = isObj(raw.react) ? raw.react : null;
+  if (react && typeof react.component === 'string') {
+    const owners = Array.isArray(react.owners) ? react.owners.filter((o): o is string => typeof o === 'string') : [];
+    const src = isObj(react.source) && typeof react.source.file === 'string' ? react.source : null;
+    ctx.react = { component: react.component, owners };
+    if (src) {
+      ctx.react.source = { file: src.file as string };
+      if (typeof src.line === 'number') ctx.react.source.line = src.line;
+      if (typeof src.column === 'number') ctx.react.source.column = src.column;
+    }
+  }
+  return ctx;
+}
+
 export function parseElementContext(raw: string): ElementContext | null {
   try {
-    const v = JSON.parse(raw) as Partial<ElementContext> | null;
-    if (v && v.v === 1 && typeof v.tag === 'string' && typeof v.selector === 'string' && typeof v.page?.url === 'string') {
-      return v as ElementContext;
-    }
+    return normalizeElementContext(JSON.parse(raw));
   } catch {
-    // fall through
+    return null;
   }
-  return null;
 }
 
 /** A fence one backtick longer than the longest run inside, never shorter than 3. */

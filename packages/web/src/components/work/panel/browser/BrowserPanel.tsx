@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../../../lib/cn';
 import { useBrowserStore, type BrowserTab, type TicketBrowser } from '../../../../stores/browserStore';
 import { useWorkStore } from '../../../../stores/workStore';
-import type { ElementContext } from '../../../shared/elementContext';
+import { normalizeElementContext } from '../../../shared/elementContext';
 import { BrowserTabView } from './BrowserTabView';
 import { NewTabPage } from './NewTabPage';
 import { captureElement } from './capture';
@@ -15,6 +15,26 @@ import { normalizeUrl } from './url';
 import type { ElectronWebview } from './webview';
 
 const EMPTY: TicketBrowser = { tabs: [], activeId: null };
+
+/**
+ * Webview methods throw until the guest is attached (a slow first load). Navigation
+ * then falls back to the `src` attribute; the other calls are simply skipped.
+ */
+function loadInto(wv: ElectronWebview, url: string) {
+  try {
+    void wv.loadURL(url).catch(() => {}); // load failures surface through did-fail-load
+  } catch {
+    wv.setAttribute('src', url);
+  }
+}
+
+function safely(fn: () => void) {
+  try {
+    fn();
+  } catch {
+    // not attached yet
+  }
+}
 
 function IconButton({ title, onClick, active, children }: { title: string; onClick: () => void; active?: boolean; children: React.ReactNode }) {
   return (
@@ -61,6 +81,8 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
 
   const pickingRef = useRef(false);
   pickingRef.current = picking;
+  const activeIdRef = useRef(state.activeId);
+  activeIdRef.current = state.activeId;
 
   // Switching tabs (or closing the panel) cancels a pick in progress in the tab we leave.
   useEffect(() => {
@@ -75,20 +97,27 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
     const url = normalizeUrl(raw);
     if (!url || !active) return;
     const wv = views.current.get(active.id);
-    if (active.url && wv) void wv.loadURL(url);
+    if (active.url && wv) loadInto(wv, url);
     else updateTab(ticketId, active.id, { url }); // new-tab page → mounts a webview on this URL
   };
 
   const togglePicker = () => {
     const wv = activeView();
     if (!wv) return;
-    if (picking) { void wv.send('picker:stop'); setPicking(false); return; }
+    if (picking) { void wv.send('picker:stop').catch(() => {}); setPicking(false); return; }
     setPicking(true);
-    void wv.send('picker:start');
+    // The page needs the keyboard focus for Esc to cancel the pick.
+    wv.focus();
+    void wv.send('picker:start').catch(() => setPicking(false));
   };
 
-  const onPicked = async (wv: ElectronWebview, context: ElementContext) => {
+  const onPicked = async (tabId: string, wv: ElectronWebview, payload: unknown) => {
+    // Only a pick the user started, from the tab they are looking at: a page can
+    // post a forged picker:picked whenever it likes.
+    if (!pickingRef.current || tabId !== activeIdRef.current) return;
     setPicking(false);
+    const context = normalizeElementContext(payload);
+    if (!context) return;
     const id = Math.random().toString(36).slice(2, 10);
     let screenshotUrl: string | undefined;
     try {
@@ -134,9 +163,9 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
 
       {/* Navigation */}
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-[var(--theme-border)] px-2">
-        <IconButton title="Back" onClick={() => activeView()?.goBack()}><svg {...svg}><path d="M19 12H5M12 19l-7-7 7-7" /></svg></IconButton>
-        <IconButton title="Forward" onClick={() => activeView()?.goForward()}><svg {...svg}><path d="M5 12h14M12 5l7 7-7 7" /></svg></IconButton>
-        <IconButton title="Reload" onClick={() => activeView()?.reload()}><svg {...svg}><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5" /></svg></IconButton>
+        <IconButton title="Back" onClick={() => safely(() => activeView()?.goBack())}><svg {...svg}><path d="M19 12H5M12 19l-7-7 7-7" /></svg></IconButton>
+        <IconButton title="Forward" onClick={() => safely(() => activeView()?.goForward())}><svg {...svg}><path d="M5 12h14M12 5l7 7-7 7" /></svg></IconButton>
+        <IconButton title="Reload" onClick={() => safely(() => activeView()?.reload())}><svg {...svg}><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5" /></svg></IconButton>
         <form className="min-w-0 flex-1" onSubmit={(e) => { e.preventDefault(); navigate(address); }}>
           <input
             value={address}
@@ -162,8 +191,9 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
               active={t.id === state.activeId}
               onReady={(tabId, wv) => views.current.set(tabId, wv)}
               onUpdate={(patch) => updateTab(ticketId, t.id, patch)}
-              onPicked={(wv, ctx) => void onPicked(wv, ctx)}
+              onPicked={(wv, payload) => void onPicked(t.id, wv, payload)}
               onPickCancelled={() => setPicking(false)}
+              onNavigateStart={() => { if (t.id === activeIdRef.current) setPicking(false); }}
             />
           ) : (
             t.id === state.activeId && <NewTabPage key={t.id} />

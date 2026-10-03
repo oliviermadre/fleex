@@ -49,3 +49,12 @@ describe('MarkdownRenderer + fleex-element', () => {
     expect(screen.getByText('Show details')).toBeTruthy();
   });
 });
+
+describe('MarkdownRenderer + malformed fleex-element', () => {
+  it('renders a block whose react section lacks owners without crashing', () => {
+    const body = '```fleex-element\n{"v":1,"tag":"a","selector":"a","page":{"url":"x"},"react":{"component":"X"}}\n```';
+    render(<MarkdownRenderer content={body} onToggleCheckbox={() => {}} />);
+    expect(screen.getByText('<X />')).toBeTruthy();
+    fireEvent.click(screen.getByText('Show details'));
+  });
+});

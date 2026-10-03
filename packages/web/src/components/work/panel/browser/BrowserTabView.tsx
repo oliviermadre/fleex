@@ -4,17 +4,20 @@
  * because changing the attribute would reload the page.
  */
 import { useEffect, useRef, useState } from 'react';
-import type { ElementContext } from '../../../shared/elementContext';
 import type { BrowserTab } from '../../../../stores/browserStore';
 import type { ElectronWebview } from './webview';
 
 interface Props {
   tab: BrowserTab;
   active: boolean;
+  /** The webview exists (it may not be attached yet — see BrowserPanel.navigate). */
   onReady: (tabId: string, wv: ElectronWebview) => void;
   onUpdate: (patch: Partial<Omit<BrowserTab, 'id'>>) => void;
-  onPicked: (wv: ElectronWebview, ctx: ElementContext) => void;
+  /** Raw IPC payload, untrusted: the guest page can post anything. */
+  onPicked: (wv: ElectronWebview, payload: unknown) => void;
   onPickCancelled: () => void;
+  /** A main-frame document navigation started (a pick in progress is gone with the old page). */
+  onNavigateStart: () => void;
 }
 
 export function BrowserTabView({ tab, active, ...handlers }: Props) {
@@ -34,8 +37,12 @@ export function BrowserTabView({ tab, active, ...handlers }: Props) {
       return;
     }
     const h = () => latest.current;
+    h().onReady(tab.id, wv);
     const on: Record<string, (e: Event) => void> = {
-      'dom-ready': () => h().onReady(tab.id, wv),
+      'did-start-navigation': (e) => {
+        const ev = e as unknown as { isMainFrame: boolean; isInPlace: boolean };
+        if (ev.isMainFrame && !ev.isInPlace) h().onNavigateStart();
+      },
       'did-start-loading': () => setError(null),
       'did-navigate': (e) => h().onUpdate({ url: (e as unknown as { url: string }).url }),
       'did-navigate-in-page': (e) => {
@@ -51,7 +58,7 @@ export function BrowserTabView({ tab, active, ...handlers }: Props) {
       },
       'ipc-message': (e) => {
         const ev = e as unknown as { channel: string; args: unknown[] };
-        if (ev.channel === 'picker:picked') h().onPicked(wv, ev.args[0] as ElementContext);
+        if (ev.channel === 'picker:picked') h().onPicked(wv, ev.args[0]);
         else if (ev.channel === 'picker:cancelled') h().onPickCancelled();
       },
     };
@@ -64,7 +71,14 @@ export function BrowserTabView({ tab, active, ...handlers }: Props) {
   return (
     // Inactive tabs stay mounted but hidden; never display:none (it breaks webviews).
     <div className={active ? 'absolute inset-0 z-10' : 'invisible pointer-events-none absolute inset-0'}>
-      <webview ref={ref as React.Ref<HTMLWebViewElement>} src={initialUrl} partition="persist:fleex-browser" className="h-full w-full" />
+      <webview
+        ref={ref as React.Ref<HTMLWebViewElement>}
+        src={initialUrl} partition="persist:fleex-browser"
+        // Lets window.open / target=_blank reach main.js, which turns them into Fleex tabs.
+        // A string: React drops a boolean `true` on this non-standard attribute.
+        {...({ allowpopups: 'true' } as Record<string, string>)}
+        className="h-full w-full"
+      />
       {unsupported && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--theme-bg-base)] p-6 text-center text-sm text-[var(--theme-text-secondary)]">
           <p>Restart the Fleex desktop app to enable the browser.</p>

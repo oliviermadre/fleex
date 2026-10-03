@@ -16,6 +16,7 @@ describe('BrowserTabView', () => {
         onUpdate={vi.fn()}
         onPicked={vi.fn()}
         onPickCancelled={vi.fn()}
+        onNavigateStart={vi.fn()}
       />,
     );
     expect(screen.getByText('Restart the Fleex desktop app to enable the browser.')).toBeTruthy();

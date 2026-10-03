@@ -83,6 +83,12 @@ describe('reactInfo', () => {
     expect(info.owners).toEqual(['Toolbar', 'App']);
     expect(info.stack).toContain('Save.tsx?t=1:9:2');
   });
+  it('ignores production React (no debug fields), whose names are minified', () => {
+    const el = document.createElement('div');
+    function t() {}
+    (el as any)['__reactFiber$xyz'] = { type: 'div', return: { type: t, return: null } };
+    expect(core.reactInfo(el)).toBeNull();
+  });
 });
 
 describe('source maps', () => {

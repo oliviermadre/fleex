@@ -139,6 +139,9 @@
   function reactInfo(el) {
     var host = fiberOf(el);
     if (!host) return null;
+    // Production builds keep the fiber expandos but no debug fields, and their
+    // component names are minified (`t`, `Xe`): report nothing rather than noise.
+    if (!('_debugOwner' in host) && !host._debugStack && !host._debugSource) return null;
     var names = [];
     var first = null;
     for (var f = host.return; f && names.length < OWNERS_MAX + 1; f = f.return) {

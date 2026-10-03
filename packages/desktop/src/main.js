@@ -216,9 +216,10 @@ ipcMain.handle('fleex:picker-source', () =>
   PICKER_FILES.map((f) => fs.readFileSync(path.join(__dirname, f), 'utf8')).join('\n;\n'),
 );
 
-ipcMain.handle('fleex:browser-capture', async (_e, webContentsId, rect) => {
+ipcMain.handle('fleex:browser-capture', async (e, webContentsId, rect) => {
   const wc = webContents.fromId(webContentsId);
-  if (!wc || wc.getType() !== 'webview') throw new Error('No such webview');
+  // Only a webview hosted by the window asking for it.
+  if (!wc || wc.getType() !== 'webview' || wc.hostWebContents !== e.sender) throw new Error('No such webview');
   const image = await wc.capturePage(rect);
   return image.toDataURL();
 });
@@ -293,7 +294,8 @@ function createWindow() {
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
     webPreferences.sandbox = true;
-    params.partition = 'persist:fleex-browser';
+    // webPreferences, not params: Electron builds the partition from it before this event.
+    webPreferences.partition = 'persist:fleex-browser';
     if (params.src && !/^(https?:|about:blank)/i.test(params.src)) event.preventDefault();
   });
 
