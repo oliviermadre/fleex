@@ -116,6 +116,7 @@ export function MobileBoard() {
             >
               <span aria-hidden className="text-base leading-none">‹</span>
               <span className="truncate">{TICKET_STATUS_LABELS[prevStatus]}</span>
+              <span className="shrink-0 tabular-nums text-[var(--theme-text-faint)]">{columns[prevStatus]?.length ?? 0}</span>
             </button>
           ) : <span />}
           <p aria-live="polite" className="flex items-center gap-2 px-2 text-[15px] font-semibold text-[var(--theme-text-primary)]">
@@ -129,6 +130,7 @@ export function MobileBoard() {
               className="flex h-11 min-w-0 items-center gap-1 justify-self-end px-2 text-[13px] text-[var(--theme-text-muted)]"
             >
               <span className="truncate">{TICKET_STATUS_LABELS[nextStatus]}</span>
+              <span className="shrink-0 tabular-nums text-[var(--theme-text-faint)]">{columns[nextStatus]?.length ?? 0}</span>
               <span aria-hidden className="text-base leading-none">›</span>
             </button>
           ) : <span />}
