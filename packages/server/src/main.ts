@@ -19,6 +19,7 @@ import { configRoutes } from './infrastructure/http/config.routes.js';
 import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
 import { pinnedActionsRoutes } from './infrastructure/http/pinned-actions.routes.js';
+import { prCiRoutes } from './infrastructure/http/pr-ci.routes.js';
 import { actionsAiRoutes } from './infrastructure/http/actions-ai.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
@@ -127,6 +128,7 @@ async function main() {
   await app.register(claudeUsageRoutes(container));
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
+  await app.register(prCiRoutes({ github: container.githubGraphql, emit: (e) => container.eventBus.emit(e) }));
   await app.register(personaRoutes(container));
   await app.register(skillRoutes(container));
   await app.register(panelRoutes(container));

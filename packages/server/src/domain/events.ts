@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind, PrMergeMethod } from '@fleex/shared';
 
 // ── Base ──
 
@@ -83,6 +83,14 @@ export interface TicketTagsChangedEvent extends DomainEvent {
 export interface TicketSyncedFromGithubEvent extends DomainEvent {
   type: 'ticket.syncedFromGithub';
   ticketId: string;
+}
+
+/** A PR merged from Fleex (the PR chip's menu). No consumer yet. */
+export interface PrMergedEvent extends DomainEvent {
+  type: 'pr.merged';
+  /** "org/name#123", lowercase. */
+  ref: string;
+  method: PrMergeMethod;
 }
 
 // ── Board events ──
@@ -600,6 +608,7 @@ export type AnyDomainEvent =
   | TicketUnblockedEvent
   | TicketTagsChangedEvent
   | TicketSyncedFromGithubEvent
+  | PrMergedEvent
   | BoardUpdatedEvent
   | BoardDeletedEvent
   | CommentPostedEvent
