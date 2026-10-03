@@ -24,6 +24,8 @@ const TITLES: Record<string, string> = {
 
 /** The tool strip is 60px; the panel's right edge sits at that offset. */
 const TOOL_STRIP_WIDTH = 60;
+/** What the center keeps however wide the panel is dragged. */
+const CENTER_MIN_WIDTH = 280;
 
 export function RightPanel({
   task,
@@ -68,15 +70,14 @@ export function RightPanel({
 
   if (!rightPanel) return null;
 
-  // Keep at least ~360px for the queue + center even at the widest drag.
-  const viewportCap =
-    typeof window !== 'undefined' ? Math.max(RIGHT_PANEL_MIN, window.innerWidth - 360) : RIGHT_PANEL_MAX;
-  const effectiveWidth = Math.min(RIGHT_PANEL_MAX, viewportCap, Math.max(RIGHT_PANEL_MIN, width));
+  const effectiveWidth = Math.min(RIGHT_PANEL_MAX, Math.max(RIGHT_PANEL_MIN, width));
 
   return (
     <section
       className="relative flex shrink-0 flex-col border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
-      style={{ width: effectiveWidth }}
+      // The cap is relative to the row it shares with the center and the tool
+      // strip, not to the window: the nav and queue already take their share.
+      style={{ width: effectiveWidth, maxWidth: `calc(100% - ${TOOL_STRIP_WIDTH + CENTER_MIN_WIDTH}px)` }}
     >
       {/* Drag handle on the left edge */}
       <div

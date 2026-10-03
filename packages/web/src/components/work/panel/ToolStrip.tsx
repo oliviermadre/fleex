@@ -98,7 +98,7 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
   const sessionBadge = sessionCount > 0 ? (sessionCount > 99 ? '99+' : String(sessionCount)) : null;
 
   return (
-    <nav className="flex w-[60px] shrink-0 flex-col items-center gap-1 border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-2">
+    <nav className="flex min-h-0 w-[60px] shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none] border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-2">
       {TOOLS.map((tool) => {
         // Code is a center-takeover mode, not a right panel.
         const isCode = tool.key === 'code';

@@ -21,7 +21,7 @@ export function WorkTopBar({ queue }: Props) {
 
   return (
     <header
-      className="flex shrink-0 items-center gap-3 border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3"
+      className="flex min-w-0 shrink-0 items-center gap-3 overflow-x-auto [scrollbar-width:none] border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3"
       style={{ height: 'var(--header-height)' }}
     >
       {view === 'task' && selectedTaskId && <ModeSwitcher ticketId={selectedTaskId} />}

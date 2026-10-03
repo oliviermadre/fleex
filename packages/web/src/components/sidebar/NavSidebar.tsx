@@ -50,202 +50,205 @@ export function NavSidebar() {
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
-      <div className="flex flex-1 flex-col gap-1 pt-2">
-        {/* === Pulse notifications (first position) === */}
-        <NotificationNavItem collapsed={navCollapsed} />
-        <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
+      {/* Nav items scroll on short windows; logo and collapse toggle stay put. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-width:none]">
+        <div className="flex flex-1 flex-col gap-1 pt-2">
+          {/* === Pulse notifications (first position) === */}
+          <NotificationNavItem collapsed={navCollapsed} />
+          <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
 
-        {/* === Assistant === */}
-        {/* Assistant (companion-backed LLM chat) */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
-              <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
-            </svg>
-          }
-          label="Assistant"
-          shortLabel="Assistant"
-          active={activePanel === 'assistant'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/assistant')}
-        />
+          {/* === Assistant === */}
+          {/* Assistant (companion-backed LLM chat) */}
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
+                <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
+              </svg>
+            }
+            label="Assistant"
+            shortLabel="Assistant"
+            active={activePanel === 'assistant'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/assistant')}
+          />
 
-        {/* === Operational === */}
-        <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
+          {/* === Operational === */}
+          <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
 
-        {/* Focus — Doing/Reviewing tickets waiting on a human (gate, question,
-            error, idle). The badge is the job: keep it at zero. */}
-        <NavItem
-          icon={<FocusIcon size={20} />}
-          label="Focus"
-          shortLabel="Focus"
-          active={activePanel === 'focus'}
-          collapsed={navCollapsed}
-          badge={focusCount > 0 ? (focusCount > 99 ? '99+' : String(focusCount)) : undefined}
-          onClick={() => navigate('/focus')}
-        />
+          {/* Focus — Doing/Reviewing tickets waiting on a human (gate, question,
+              error, idle). The badge is the job: keep it at zero. */}
+          <NavItem
+            icon={<FocusIcon size={20} />}
+            label="Focus"
+            shortLabel="Focus"
+            active={activePanel === 'focus'}
+            collapsed={navCollapsed}
+            badge={focusCount > 0 ? (focusCount > 99 ? '99+' : String(focusCount)) : undefined}
+            onClick={() => navigate('/focus')}
+          />
 
-        {/* Tasks (single-screen ergonomics — queue · conversation · context) */}
-        <NavItem
-          icon={<TasksIcon size={20} />}
-          label="Tasks"
-          shortLabel="Tasks"
-          active={activePanel === 'work'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/work')}
-        />
+          {/* Tasks (single-screen ergonomics — queue · conversation · context) */}
+          <NavItem
+            icon={<TasksIcon size={20} />}
+            label="Tasks"
+            shortLabel="Tasks"
+            active={activePanel === 'work'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/work')}
+          />
 
-        {/* Kanban (was Backlog / Tickets) */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-              <rect x="1" y="2" width="22" height="20" rx="1.5" stroke="currentColor" fill="none" />
-              <line x1="8.5" y1="2" x2="8.5" y2="22" />
-              <line x1="15.5" y1="2" x2="15.5" y2="22" />
-              <line x1="3" y1="4" x2="7" y2="4" stroke="currentColor" strokeWidth="0.5" />
-              <rect x="3" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
-              <rect x="3" y="10" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
-              <line x1="10" y1="4" x2="14" y2="4" stroke="currentColor" strokeWidth="0.5" />
-              <rect x="10" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
-              <line x1="17" y1="4" x2="21" y2="4" stroke="currentColor" strokeWidth="0.5" />
-              <rect x="17" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
-              <rect x="17" y="10" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
-              <rect x="17" y="14" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
-            </svg>
-          }
-          label="Kanban"
-          shortLabel="Kanban"
-          active={activePanel === 'tickets'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/tickets')}
-        />
+          {/* Kanban (was Backlog / Tickets) */}
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                <rect x="1" y="2" width="22" height="20" rx="1.5" stroke="currentColor" fill="none" />
+                <line x1="8.5" y1="2" x2="8.5" y2="22" />
+                <line x1="15.5" y1="2" x2="15.5" y2="22" />
+                <line x1="3" y1="4" x2="7" y2="4" stroke="currentColor" strokeWidth="0.5" />
+                <rect x="3" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+                <rect x="3" y="10" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+                <line x1="10" y1="4" x2="14" y2="4" stroke="currentColor" strokeWidth="0.5" />
+                <rect x="10" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+                <line x1="17" y1="4" x2="21" y2="4" stroke="currentColor" strokeWidth="0.5" />
+                <rect x="17" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+                <rect x="17" y="10" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+                <rect x="17" y="14" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+              </svg>
+            }
+            label="Kanban"
+            shortLabel="Kanban"
+            active={activePanel === 'tickets'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/tickets')}
+          />
 
-        {/* Execution Log */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="5,3 19,12 5,21" fill={activePanel === 'execution-log' ? 'currentColor' : 'none'} />
-            </svg>
-          }
-          label="Execution Log"
-          shortLabel="Logs"
-          active={activePanel === 'execution-log'}
-          collapsed={navCollapsed}
-          badge={liveExecutionCount > 0 ? (liveExecutionCount > 9 ? '9+' : String(liveExecutionCount)) : undefined}
-          onClick={() => navigate('/execution-log')}
-        />
+          {/* Execution Log */}
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="5,3 19,12 5,21" fill={activePanel === 'execution-log' ? 'currentColor' : 'none'} />
+              </svg>
+            }
+            label="Execution Log"
+            shortLabel="Logs"
+            active={activePanel === 'execution-log'}
+            collapsed={navCollapsed}
+            badge={liveExecutionCount > 0 ? (liveExecutionCount > 9 ? '9+' : String(liveExecutionCount)) : undefined}
+            onClick={() => navigate('/execution-log')}
+          />
 
-        {/* Routines — workflow runs with no ticket. The badge counts routines
-            whose active run is blocked on a gate or waiting for an answer:
-            those runs have no ticket, so nothing else in the nav surfaces them. */}
-        <NavItem
-          icon={<RoutineIcon size={20} strokeWidth={1.5} tinted={false} />}
-          label="Routines"
-          shortLabel="Routines"
-          active={activePanel === 'routines'}
-          collapsed={navCollapsed}
-          badge={routinesAwaiting > 0 ? String(routinesAwaiting) : undefined}
-          onClick={() => navigate('/routines')}
-        />
+          {/* Routines — workflow runs with no ticket. The badge counts routines
+              whose active run is blocked on a gate or waiting for an answer:
+              those runs have no ticket, so nothing else in the nav surfaces them. */}
+          <NavItem
+            icon={<RoutineIcon size={20} strokeWidth={1.5} tinted={false} />}
+            label="Routines"
+            shortLabel="Routines"
+            active={activePanel === 'routines'}
+            collapsed={navCollapsed}
+            badge={routinesAwaiting > 0 ? String(routinesAwaiting) : undefined}
+            onClick={() => navigate('/routines')}
+          />
 
-        {/* === Content === */}
-        <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
+          {/* === Content === */}
+          <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
 
-        {/* Notes (was Scratchpads) */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11z"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-              <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-            </svg>
-          }
-          label="Notes"
-          shortLabel="Notes"
-          active={activePanel === 'scratchpads'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/scratchpads')}
-        />
+          {/* Notes (was Scratchpads) */}
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+              </svg>
+            }
+            label="Notes"
+            shortLabel="Notes"
+            active={activePanel === 'scratchpads'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/scratchpads')}
+          />
 
-        {/* Documents */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-              stroke="currentColor" strokeWidth="1.5"
-              strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="5" width="14" height="12" rx="1.5" />
-              <path d="M6 2h8" />
-              <path d="M7 9h6M7 12h4" />
-            </svg>
-          }
-          label="Documents"
-          shortLabel="Docs"
-          active={activePanel === 'documents'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/documents')}
-        />
+          {/* Documents */}
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                stroke="currentColor" strokeWidth="1.5"
+                strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="5" width="14" height="12" rx="1.5" />
+                <path d="M6 2h8" />
+                <path d="M7 9h6M7 12h4" />
+              </svg>
+            }
+            label="Documents"
+            shortLabel="Docs"
+            active={activePanel === 'documents'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/documents')}
+          />
 
-        {/* Cluster - hidden for now */}
-      </div>
+          {/* Cluster - hidden for now */}
+        </div>
 
-      {/* Config & meta - bottom of sidebar */}
-      <div className="flex flex-col gap-1 border-t border-[var(--theme-border-subtle)] pt-1">
-        {/* Agentic catalog (Personas / Skills / Panels / Workflows) — four
-            geometric shapes (square, circle, triangle, diamond), one per
-            primitive family. */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <circle cx="17.5" cy="6.5" r="3.5" />
-              <path d="M6.5 14 10 21 3 21 Z" />
-              <path d="M17.5 14 21 17.5 17.5 21 14 17.5 Z" />
-            </svg>
-          }
-          label="Agentic"
-          shortLabel="Agentic"
-          active={activePanel === 'agents'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/agents')}
-        />
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
-            </svg>
-          }
-          label="Analytics"
-          shortLabel="Stats"
-          active={activePanel === 'analytics'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/analytics')}
-        />
-        {/* Repositories */}
-        <NavItem
-          icon={<RepositoriesIcon size={20} />}
-          label="Repositories"
-          shortLabel="Repos"
-          active={activePanel === 'repositories'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/repositories')}
-        />
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          }
-          label="Settings"
-          shortLabel="Config"
-          active={activePanel === 'settings'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/settings')}
-        />
+        {/* Config & meta - bottom of sidebar */}
+        <div className="flex flex-col gap-1 border-t border-[var(--theme-border-subtle)] pt-1">
+          {/* Agentic catalog (Personas / Skills / Panels / Workflows) — four
+              geometric shapes (square, circle, triangle, diamond), one per
+              primitive family. */}
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <circle cx="17.5" cy="6.5" r="3.5" />
+                <path d="M6.5 14 10 21 3 21 Z" />
+                <path d="M17.5 14 21 17.5 17.5 21 14 17.5 Z" />
+              </svg>
+            }
+            label="Agentic"
+            shortLabel="Agentic"
+            active={activePanel === 'agents'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/agents')}
+          />
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
+              </svg>
+            }
+            label="Analytics"
+            shortLabel="Stats"
+            active={activePanel === 'analytics'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/analytics')}
+          />
+          {/* Repositories */}
+          <NavItem
+            icon={<RepositoriesIcon size={20} />}
+            label="Repositories"
+            shortLabel="Repos"
+            active={activePanel === 'repositories'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/repositories')}
+          />
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            }
+            label="Settings"
+            shortLabel="Config"
+            active={activePanel === 'settings'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/settings')}
+          />
+        </div>
       </div>
 
       {/* Collapse/expand toggle */}

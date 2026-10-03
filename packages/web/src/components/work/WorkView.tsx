@@ -98,10 +98,10 @@ export function WorkView() {
   const openExecution = (id: string, title: string) => setExecLog({ id, title });
 
   return (
-    <div
-      className="flex h-full min-h-0 w-full flex-col overflow-auto bg-[var(--theme-bg-base)] text-[var(--theme-text-primary)]"
-      style={{ minWidth: 1180, minHeight: 560 }}
-    >
+    // No size floor: the app shell clips (overflow-hidden), so a min width/height
+    // here cut the tool strip and the bottom of every column off on small
+    // windows. The center shrinks instead; the side columns scroll on their own.
+    <div className="flex h-full min-h-0 w-full flex-col bg-[var(--theme-bg-base)] text-[var(--theme-text-primary)]">
       <div className="flex min-h-0 flex-1">
         {/* The queue runs the full height, so the top bar starts to its right. */}
         {queueCollapsed ? (
@@ -110,7 +110,7 @@ export function WorkView() {
           <WorkQueue queue={queue} onOpenExecution={openExecution} />
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <WorkTopBar queue={queue} />
 
           <div className="flex min-h-0 flex-1">
