@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { NOOP } from './noop';
 import type { TicketDeliverable } from '@fleex/shared';
 import { useUnreadStore } from '../stores/unreadStore';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
@@ -58,7 +59,7 @@ export function MobileDeliverableReader({
         className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
       >
-        <MarkdownRenderer content={deliverable.content} onToggleCheckbox={() => {}} />
+        <MarkdownRenderer content={deliverable.content} onToggleCheckbox={NOOP} />
       </div>
     </div>
   );

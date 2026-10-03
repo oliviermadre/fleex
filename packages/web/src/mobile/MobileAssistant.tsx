@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { NOOP } from './noop';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import {
@@ -9,6 +10,9 @@ import {
 } from '../stores/assistantStore';
 import { tint, tintText } from '../lib/tints';
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
+import { useFileUpload } from '../hooks/useFileUpload';
+import { MobilePageHeader } from './MobilePageHeader';
+import { AssistantIcon } from './MobileIcons';
 
 /**
  * Mobile client for the Fleex assistant — same companion host as the Chrome
@@ -32,7 +36,10 @@ function toolStatusBadge(status: AssistantToolStatus): { label: string; classNam
   }
 }
 
-export function MobileAssistant() {
+/** The ticket open behind the sheet, passed to the companion as context. */
+export type AssistantTicketContext = { id: string; displayId: number | string; title: string } | null;
+
+export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketContext }) {
   const connected = useAssistantStore((s) => s.connected);
   const sessions = useAssistantStore((s) => s.sessions);
   const workspaces = useAssistantStore((s) => s.workspaces);
@@ -50,6 +57,9 @@ export function MobileAssistant() {
 
   const [showSessions, setShowSessions] = useState(false);
   const [draft, setDraft] = useState('');
+  const draftRef = useRef<HTMLTextAreaElement>(null);
+  // Same upload engine as the desktop assistant composer: paste or pick an image/file
+  const fileUpload = useFileUpload({ textareaRef: draftRef, value: draft, onChange: setDraft });
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
 
   useEffect(() => {
@@ -82,10 +92,11 @@ export function MobileAssistant() {
   const handleSend = useCallback(() => {
     const text = draft.trim();
     if (!text || !activeId || busy) return;
-    sendUser(text);
+    // The companion has no notion of the open screen: prefix the message.
+    sendUser(ticket ? `[Contexte : ticket #${ticket.displayId} « ${ticket.title} » (id ${ticket.id})]\n${text}` : text);
     setDraft('');
     scrollToBottom();
-  }, [draft, activeId, busy, sendUser, scrollToBottom]);
+  }, [draft, activeId, busy, sendUser, scrollToBottom, ticket]);
 
   // ── Disconnected: setup hint ──
   if (!connected) {
@@ -106,40 +117,56 @@ export function MobileAssistant() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Header: session switcher */}
-      <header className="flex shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2">
-        <button
-          onClick={() => setShowSessions(true)}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-[var(--theme-bg-secondary)] px-3 py-2 text-left"
-        >
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--theme-text-primary)]">
-            {activeSession ? activeSession.title : 'Conversations'}
-          </span>
-          {activeSession?.workspace && (
-            <span className="shrink-0 rounded-full bg-[var(--theme-bg-hover)] px-2 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
-              {activeSession.workspace}
-            </span>
-          )}
-          <span className="shrink-0 text-xs text-[var(--theme-text-faint)]">▾</span>
-        </button>
-        {/* Standing approvals — visible while armed, tap to revoke them all */}
-        {activeSession?.autoApprove && (activeSession.autoApprove.all || activeSession.autoApprove.tools.length > 0) && (
+      {/* Header: same layout as every screen; the session switcher sits on the second line */}
+      <MobilePageHeader
+        title="Assistant"
+        icon={<AssistantIcon size={24} />}
+        trailing={
+          <>
+            {/* Standing approvals — visible while armed, tap to revoke them all */}
+            {activeSession?.autoApprove && (activeSession.autoApprove.all || activeSession.autoApprove.tools.length > 0) && (
+              <button
+                onClick={() => setAutoApprove(activeSession.id, { all: false, tools: [] })}
+                className={`flex h-11 shrink-0 items-center rounded-full px-3 text-xs font-medium ${tint('yellow')}`}
+                title="Auto-approbation active — appuyer pour désactiver"
+              >
+                ⚡ {activeSession.autoApprove.all ? 'tout' : activeSession.autoApprove.tools.length}
+              </button>
+            )}
+            <button
+              onClick={() => createSession()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-accent)] text-2xl font-semibold leading-none text-[var(--theme-accent-fg)]"
+              aria-label="Nouvelle conversation"
+            >
+              +
+            </button>
+          </>
+        }
+        sub={
           <button
-            onClick={() => setAutoApprove(activeSession.id, { all: false, tools: [] })}
-            className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium ${tint('yellow')}`}
-            title="Auto-approbation active — appuyer pour désactiver"
+            onClick={() => setShowSessions(true)}
+            className="flex h-11 min-w-0 items-center gap-2 rounded-[10px] bg-[var(--theme-bg-surface)] px-3 text-left"
           >
-            ⚡ {activeSession.autoApprove.all ? 'tout' : activeSession.autoApprove.tools.length}
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+              {activeSession ? activeSession.title : 'Conversations'}
+            </span>
+            {activeSession?.workspace && (
+              <span className="shrink-0 rounded-full bg-[var(--theme-bg-hover)] px-2 py-0.5 text-[11px] text-[var(--theme-text-muted)]">
+                {activeSession.workspace}
+              </span>
+            )}
+            <span className="shrink-0 text-xs text-[var(--theme-text-faint)]">▾</span>
           </button>
-        )}
-        <button
-          onClick={() => createSession()}
-          className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-[var(--theme-accent-fg)]"
-          aria-label="Nouvelle conversation"
-        >
-          +
-        </button>
-      </header>
+        }
+      />
+
+      {ticket && (
+        <div className="flex shrink-0 px-3 pt-2">
+          <span className="max-w-full truncate rounded-full bg-[var(--theme-accent-muted)] px-2.5 py-1 text-[11.5px] text-[var(--theme-accent)]">
+            Contexte : #{ticket.displayId} · {ticket.title}
+          </span>
+        </div>
+      )}
 
       {/* Transcript */}
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -168,7 +195,7 @@ export function MobileAssistant() {
               if (item.kind === 'assistant') {
                 return (
                   <div key={i} className="overflow-x-auto text-[13px]">
-                    <MarkdownRenderer content={item.text} onToggleCheckbox={() => {}} />
+                    <MarkdownRenderer content={item.text} onToggleCheckbox={NOOP} />
                   </div>
                 );
               }
@@ -217,15 +244,30 @@ export function MobileAssistant() {
             value={draft}
             onChange={setDraft}
             minRows={2}
+            textareaRef={draftRef}
             placeholder={busy ? 'Assistant au travail…' : 'Demande quelque chose…'}
             textareaProps={{
+              onPaste: fileUpload.pasteHandler,
               className: 'rounded-xl bg-[var(--theme-bg-secondary)] p-3 text-base text-[var(--theme-text-primary)]',
             }}
           />
           <button
+            type="button"
+            onClick={fileUpload.openFilePicker}
+            disabled={fileUpload.isUploading}
+            aria-label="Joindre une image ou un fichier"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--theme-text-muted)] disabled:opacity-50"
+          >
+            {fileUpload.isUploading ? '…' : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+            )}
+          </button>
+          <button
             onClick={handleSend}
-            disabled={!draft.trim() || busy}
-            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+            disabled={!draft.trim() || busy || fileUpload.isUploading}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-accent)] text-base font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             ➤
           </button>
@@ -234,7 +276,7 @@ export function MobileAssistant() {
 
       {/* Confirmation of a mutating fleex command */}
       {confirmReq && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/60">
+        <div className="fixed inset-0 z-[60] flex items-end bg-black/60">
           <div
             className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
@@ -274,7 +316,7 @@ export function MobileAssistant() {
 
       {/* Session picker sheet */}
       {showSessions && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/50" onClick={() => setShowSessions(false)}>
+        <div className="fixed inset-0 z-[55] flex items-end bg-black/50" onClick={() => setShowSessions(false)}>
           <div
             className="max-h-[75dvh] w-full overflow-y-auto rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}

@@ -42,33 +42,54 @@ tailnet. Seuls tes appareils Tailscale peuvent atteindre le serveur.
 activer l'auth SSO de Fleex (`GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` +
 `DATABASE_URL`).
 
-## Ce que couvre la vue mobile (v1)
+## Ce que couvre la vue mobile
 
-- **Kanban** : swipe entre les colonnes, sélecteur de board, création rapide de
-  ticket, temps réel via WebSocket.
-- **Ticket** : titre et description **éditables**, changement de statut,
-  détails (priorité, type, tags, échéance, favori, bloqué, changement de
-  board, archivage, suppression), **repos liés** (ajout/suppression —
-  indispensable pour les worktrees et le contexte des agents).
+Navigation : une **barre flottante** (verre dépoli) en bas — Focus · Tasks · ✦
+(Assistant) · Kanban · Plus. L'écran d'accueil est **Focus**. Les onglets
+restent montés : un flux ou un scroll survit à un changement d'onglet.
+
+- **Focus** (accueil) : la file « ce qui attend ton intervention » — gates,
+  questions, erreurs, idle — avec les mêmes actions que le desktop
+  (`focusActions()`), champ de réponse pour les questions, « Plus tard »
+  (snooze par `FocusItem.key`), fenêtre d'annulation de 5 s (envoi immédiat si
+  la page se ferme), section « Pendant ce temps… » et pastille sur l'onglet.
+  Un tap ouvre le ticket sur **Workflow** (gate) ou **Conversation**, « Logs »
+  ouvre **Runs**. « Ouvrir CLI » (terminal flottant) n'existe pas sur mobile.
+- **Tasks** : la file Work du desktop (`useWorkQueue`, mêmes filtres :
+  boards, priorité, statut, favoris, groupement) + recherche et création.
+- **Kanban** : colonnes paginées par transform + swipe, sélecteur de board,
+  création rapide de ticket, temps réel via WebSocket.
+- **Ticket** (plein écran, barre masquée) : onglets Conversation · Contexte ·
+  Deliverables · Runs · Workflow. Titre éditable, statut, favori ; Contexte =
+  détails (priorité, type, tags, favori, bloqué, board, archivage, suppression),
+  **repos liés**, description éditable.
 - **Conversation** : autocomplete `@` (agents, panels, skills, workflows,
   tickets) pour lancer une session SDK, modes talk/plan/edit + overrides
-  modèle/effort/fast (config de conversation, comme desktop), actions sur les
-  mentions (relancer ▶, marquer résolu, supprimer), deliverables liés à chaque
-  commentaire.
-- **Deliverables** (onglet) : liste avec état lu/non-lu, lecture plein écran,
-  création (titre, type, draft/final, markdown) et suppression.
-- **Runs** : historique des exécutions du ticket, flux d'événements live
-  (thinking, tool calls, résultat), bouton stop.
-- **Workflow** : étapes du run, résolution des human gates, réponses aux
-  questions d'agents, retry, annulation.
-- **Assistant** (onglet dédié) : le même assistant LLM que la Chrome extension.
+  modèle/effort/fast, actions sur les mentions, deliverables liés.
+- **Deliverables** : liste lu/non-lu, lecture plein écran, création, suppression.
+- **Runs** : historique des exécutions, flux live, bouton stop.
+- **Diff** (si le ticket a un repo lié) : le même diff de branche que le panneau desktop, fichiers repliés, filtre, rafraîchi toutes les 5 s.
+- **Workflow** : étapes du run, human gates, questions d'agents, retry, annulation.
+- **Assistant** : le centre de la barre ouvre l'assistant en **sheet** au-dessus
+  de l'écran courant. Fermer la sheet ne le démonte pas : la conversation
+  continue. Quand un ticket est ouvert, il est passé en contexte.
+- **Plus** (sheet, grille 3 colonnes) : Notifications, Routines (activer,
+  approuver une gate, lancer), Notes, Documents, Repositories, Settings (thème
+  parmi les thèmes intégrés, persisté comme sur desktop) et bascule vers la vue
+  desktop.
+
+Mise en veille : au réveil, l'app rouvre l'écran où tu étais (onglet, ticket
+ouvert et son onglet, page Plus), y compris si iOS l'a déchargée ; les
+brouillons de commentaire sont gardés par ticket. Avec le serveur de dev
+(Vite), le rechargement automatique au retour de veille est désactivé sur
+mobile : Plus › Settings › « Recharger l'app » récupère le nouveau code.
 
 Principe : **parité des actions métier** avec le desktop — seule l'UX
-purement desktop (fenêtres flottantes, DAG, terminaux xterm) n'est pas portée.
+purement desktop (fenêtres flottantes, DAG, terminaux xterm, Monaco) n'est pas portée.
 
 ## Assistant LLM
 
-L'onglet Assistant parle au **companion** (`packages/sidepanel-host`) — le même
+L'Assistant (sheet du bouton ✦) parle au **companion** (`packages/sidepanel-host`) — le même
 backend que l'extension Chrome : même prompt engine conscient de Fleex (outils
 générés depuis le CLI, `fleex documentation` disponible comme outil), chaque
 conversation est épinglée à un **workspace** (le companion injecte

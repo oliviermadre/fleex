@@ -60,7 +60,7 @@ export function MobileExecutions({ ticketId }: { ticketId: string }) {
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
       {sorted.length === 0 ? (
         <p className="py-8 text-center text-sm text-[var(--theme-text-faint)]">
           Aucune exécution — mentionne un agent dans la conversation pour en lancer une.
@@ -109,7 +109,7 @@ export function MobileExecutions({ ticketId }: { ticketId: string }) {
           >
             <button
               onClick={() => setOpenExecId(null)}
-              className="shrink-0 rounded-md px-2 py-1.5 text-xl leading-none text-[var(--theme-text-muted)]"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[28px] leading-none text-[var(--theme-text-muted)]"
               aria-label="Fermer"
             >
               ‹
@@ -125,7 +125,7 @@ export function MobileExecutions({ ticketId }: { ticketId: string }) {
             {openExec.status === 'running' && (
               <button
                 onClick={handleKill}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-semibold ${
                   confirmKill ? `${tintSolid('red')} ${tintClasses('red').onSolid}` : tint('red')
                 }`}
               >

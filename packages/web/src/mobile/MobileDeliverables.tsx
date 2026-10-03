@@ -73,7 +73,7 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
         {sorted.length === 0 ? (
           <p className="py-8 text-center text-sm text-[var(--theme-text-faint)]">
             Aucun deliverable sur ce ticket.
@@ -114,7 +114,7 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
                   </button>
                   <button
                     onClick={() => handleDelete(d.id)}
-                    className={`shrink-0 rounded-lg px-2.5 py-3 text-xs ${
+                    className={`shrink-0 flex min-h-11 min-w-11 items-center justify-center rounded-lg px-3 text-sm ${
                       confirmDeleteId === d.id
                         ? `font-semibold ${tintText('red')}`
                         : 'text-[var(--theme-text-faint)]'
@@ -220,7 +220,7 @@ function CreateDeliverableSheet({
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="min-w-0 flex-1 appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]"
+            className="min-w-0 flex-1 appearance-none h-11 rounded-lg bg-[var(--theme-bg-secondary)] px-3 text-base text-[var(--theme-text-primary)]"
           >
             {types.map((t) => (
               <option key={t} value={t}>{t}</option>
@@ -231,7 +231,7 @@ function CreateDeliverableSheet({
               <button
                 key={s}
                 onClick={() => setStatus(s)}
-                className={`px-3 py-2 text-xs font-medium ${
+                className={`min-h-11 px-4 text-sm font-medium ${
                   status === s
                     ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                     : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
@@ -253,13 +253,13 @@ function CreateDeliverableSheet({
           />
         </div>
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm text-[var(--theme-text-muted)]">
+          <button onClick={onClose} className="min-h-11 rounded-lg px-4 text-sm text-[var(--theme-text-muted)]">
             Annuler
           </button>
           <button
             onClick={submit}
             disabled={!title.trim() || saving}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-[var(--theme-accent)] px-4 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             Créer
           </button>

@@ -20,7 +20,7 @@ import { NewTaskCompose } from './NewTaskCompose';
  * The import never creates the ticket — it prefills the draft, and `Start`
  * (in COMPOSE) creates it by the normal path.
  */
-export function NewTask() {
+export function NewTask({ enterStarts = true }: { enterStarts?: boolean } = {}) {
   const draft = useWorkStore((s) => s.draft);
   const updateDraft = useWorkStore((s) => s.updateDraft);
   const resetDraft = useWorkStore((s) => s.resetDraft);
@@ -122,7 +122,7 @@ export function NewTask() {
   }
 
   if (draft.stage === 'compose') {
-    return <NewTaskCompose onStartOver={() => resetDraft()} />;
+    return <NewTaskCompose onStartOver={() => resetDraft()} enterStarts={enterStarts} />;
   }
 
   return screen;

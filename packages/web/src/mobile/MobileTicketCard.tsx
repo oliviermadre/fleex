@@ -2,7 +2,7 @@ import { memo } from 'react';
 import type { Ticket, TicketPriority } from '@fleex/shared';
 import { tintSolid, tintText } from '../lib/tints';
 
-const PRIORITY_COLOR: Record<TicketPriority, string> = {
+export const PRIORITY_COLOR: Record<TicketPriority, string> = {
   none: 'bg-transparent',
   low: tintSolid('blue'),
   medium: tintSolid('yellow'),
