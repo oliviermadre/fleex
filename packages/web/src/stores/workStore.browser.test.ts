@@ -21,3 +21,25 @@ describe('useEffectiveRightPanel', () => {
     delete (window as { fleexDesktop?: unknown }).fleexDesktop;
   });
 });
+
+describe('useBrowserTakesCenter', () => {
+  it('is true only for an expanded browser panel in the desktop shell', async () => {
+    const { renderHook } = await import('@testing-library/react');
+    const { useWorkStore, useBrowserTakesCenter } = await import('./workStore');
+    const { useBrowserStore } = await import('./browserStore');
+    const run = () => renderHook(() => useBrowserTakesCenter()).result.current;
+    (window as { fleexDesktop?: unknown }).fleexDesktop = {};
+    useWorkStore.getState().setRightPanel('browser');
+    useBrowserStore.setState({ expanded: true });
+    expect(run()).toBe(true);
+    useBrowserStore.setState({ expanded: false });
+    expect(run()).toBe(false);
+    useBrowserStore.setState({ expanded: true });
+    useWorkStore.getState().setRightPanel('diff');
+    expect(run()).toBe(false);
+    useWorkStore.getState().setRightPanel('browser');
+    delete (window as { fleexDesktop?: unknown }).fleexDesktop;
+    expect(run()).toBe(false);
+    useBrowserStore.setState({ expanded: false });
+  });
+});

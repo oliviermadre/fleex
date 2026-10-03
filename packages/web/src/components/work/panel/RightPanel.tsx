@@ -6,8 +6,8 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
-import { useWorkStore, useEffectiveRightPanel, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from '../../../stores/workStore';
-import { useBrowserStore } from '../../../stores/browserStore';
+import { useWorkStore, useEffectiveRightPanel, useBrowserTakesCenter, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from '../../../stores/workStore';
+import { cn } from '../../../lib/cn';
 import type { WorkTask } from '../types';
 import { ContextPanel } from './ContextPanel';
 import { DelivsPanel } from './DelivsPanel';
@@ -29,8 +29,6 @@ const TITLES: Record<string, string> = {
 const TOOL_STRIP_WIDTH = 60;
 /** What the center keeps however wide the panel is dragged. */
 const CENTER_MIN_WIDTH = 280;
-/** What the center keeps when the browser is expanded (the composer stays usable). */
-const EXPANDED_CENTER_WIDTH = 360;
 
 export function RightPanel({
   task,
@@ -42,8 +40,8 @@ export function RightPanel({
   onDeleteTask: (id: string) => void;
 }) {
   const rightPanel = useEffectiveRightPanel();
-  const browserExpanded = useBrowserStore((s) => s.expanded);
-  const expanded = rightPanel === 'browser' && browserExpanded;
+  // Expanded browser: WorkView drops the center and the panel fills the row.
+  const expanded = useBrowserTakesCenter();
   const width = useWorkStore((s) => s.rightPanelWidth);
   const setRightPanelWidth = useWorkStore((s) => s.setRightPanelWidth);
   const dragging = useRef(false);
@@ -81,14 +79,13 @@ export function RightPanel({
 
   return (
     <section
-      className="relative flex shrink-0 flex-col border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
+      className={cn(
+        'relative flex flex-col border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]',
+        expanded ? 'min-w-0 flex-1' : 'shrink-0',
+      )}
       // The cap is relative to the row it shares with the center and the tool
       // strip, not to the window: the nav and queue already take their share.
-      style={
-        expanded
-          ? { width: `calc(100% - ${TOOL_STRIP_WIDTH + EXPANDED_CENTER_WIDTH}px)` }
-          : { width: effectiveWidth, maxWidth: `calc(100% - ${TOOL_STRIP_WIDTH + CENTER_MIN_WIDTH}px)` }
-      }
+      style={expanded ? undefined : { width: effectiveWidth, maxWidth: `calc(100% - ${TOOL_STRIP_WIDTH + CENTER_MIN_WIDTH}px)` }}
     >
       {/* Drag handle on the left edge */}
       {!expanded && (

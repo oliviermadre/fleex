@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../../../lib/cn';
 import { useBrowserStore, type BrowserTab, type TicketBrowser } from '../../../../stores/browserStore';
 import { useWorkStore } from '../../../../stores/workStore';
-import { normalizeElementContext } from '../../../shared/elementContext';
+import { elementName, normalizeElementContext } from '../../../shared/elementContext';
+import { useToastStore } from '../../../../stores/toastStore';
 import { BrowserTabView } from './BrowserTabView';
 import { NewTabPage } from './NewTabPage';
 import { captureElement } from './capture';
@@ -127,7 +128,15 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
       screenshotUrl = undefined;
     }
     addElement(ticketId, { id, context, screenshotUrl, captureFailed: !screenshotUrl });
-    requestComposerFocus();
+    if (useBrowserStore.getState().expanded) {
+      // The composer (and its chips) is hidden behind the expanded browser.
+      // The label is in the message so two quick picks aren't deduplicated.
+      useToastStore.getState().addToast('success', `${elementName(context)} added to your comment`, {
+        action: { label: 'Show', onClick: () => setExpanded(false) },
+      });
+    } else {
+      requestComposerFocus();
+    }
   };
 
   return (

@@ -121,8 +121,13 @@ export function canSend(text: string, elementCount: number): boolean {
 
 const LABEL_TEXT_MAX = 24;
 
+/** `<Component />` when React told us, else `<tag>`. */
+export function elementName(ctx: ElementContext): string {
+  return ctx.react?.component ? `<${ctx.react.component} />` : `<${ctx.tag}>`;
+}
+
 export function elementLabel(ctx: ElementContext): string {
-  const name = ctx.react?.component ? `<${ctx.react.component} />` : `<${ctx.tag}>`;
+  const name = elementName(ctx);
   if (!ctx.text) return name;
   const clipped = ctx.text.length > LABEL_TEXT_MAX ? `${ctx.text.slice(0, LABEL_TEXT_MAX - 1)}…` : ctx.text;
   return `${name} ${clipped}`;
