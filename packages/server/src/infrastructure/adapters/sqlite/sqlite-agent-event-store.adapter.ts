@@ -6,6 +6,8 @@ import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
+import { sdkBaselineFromRows } from '../sdk-totals-row.js';
 import type { SqliteConnection } from './connection.js';
 
 interface ExecutionRow {
@@ -85,8 +87,9 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string;
+    commentId?: string; deliverableId?: string; sdkTotals?: SdkUsageTotals; cliVersion?: string; costBasis?: CostBasis;
   }): Promise<void> {
+    const t = metrics?.sdkTotals;
     this.conn.db.prepare(
       `UPDATE agent_event_executions SET status = ?, completed_at = ?,
        model = COALESCE(?, model),
@@ -100,7 +103,14 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
        cache_read_tokens = COALESCE(?, cache_read_tokens),
        cache_creation_tokens = COALESCE(?, cache_creation_tokens),
        comment_id = COALESCE(?, comment_id),
-       deliverable_id = COALESCE(?, deliverable_id)
+       deliverable_id = COALESCE(?, deliverable_id),
+       sdk_total_cost_usd = COALESCE(?, sdk_total_cost_usd),
+       sdk_total_input_tokens = COALESCE(?, sdk_total_input_tokens),
+       sdk_total_output_tokens = COALESCE(?, sdk_total_output_tokens),
+       sdk_total_cache_read_tokens = COALESCE(?, sdk_total_cache_read_tokens),
+       sdk_total_cache_creation_tokens = COALESCE(?, sdk_total_cache_creation_tokens),
+       cli_version = COALESCE(?, cli_version),
+       cost_basis = COALESCE(?, cost_basis)
        WHERE execution_id = ?`
     ).run(
       status, new Date().toISOString(),
@@ -116,8 +126,26 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       metrics?.cacheCreationTokens ?? null,
       metrics?.commentId ?? null,
       metrics?.deliverableId ?? null,
+      t?.costUsd ?? null,
+      t?.inputTokens ?? null,
+      t?.outputTokens ?? null,
+      t?.cacheReadTokens ?? null,
+      t?.cacheCreationTokens ?? null,
+      metrics?.cliVersion ?? null,
+      metrics?.costBasis ?? null,
       executionId,
     );
+  }
+
+  async getSdkSessionBaseline(sdkSessionId: string, executionId: string): Promise<SdkSessionBaseline> {
+    const rows = this.conn.db.prepare(
+      `SELECT cost_usd, sdk_total_cost_usd, sdk_total_input_tokens, sdk_total_output_tokens,
+              sdk_total_cache_read_tokens, sdk_total_cache_creation_tokens, cli_version
+       FROM agent_event_executions
+       WHERE sdk_session_id = ? AND execution_id <> ?
+       ORDER BY started_at DESC`
+    ).all(sdkSessionId, executionId) as Record<string, number | string | null>[];
+    return sdkBaselineFromRows(rows);
   }
 
   async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
