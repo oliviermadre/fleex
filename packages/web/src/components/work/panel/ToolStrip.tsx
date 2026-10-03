@@ -24,7 +24,7 @@ const TOOLS: Tool[] = [
     label: 'Context',
     // A sheet with an "i": the ticket's info. Not the split-pane glyph it used to
     // be — that one now means collapse/expand everywhere else (SidePanelIcon).
-    // The folded corner keeps it apart from the ruled pages of Delivs and Notes.
+    // The folded corner keeps it apart from the ruled pages of Docs and Notes.
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
@@ -57,7 +57,7 @@ const TOOLS: Tool[] = [
   },
   {
     key: 'deliv',
-    label: 'Delivs',
+    label: 'Docs',
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="4" y="3" width="16" height="18" rx="2" />
