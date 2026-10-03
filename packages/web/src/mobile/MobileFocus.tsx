@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FocusItem, FocusItemKind } from '@fleex/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { FocusItem, FocusItemKind, Ticket } from '@fleex/shared';
+import { postTicketComment } from '../services/api';
 import { useTicketStore } from '../stores/ticketStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useNotificationStore } from '../stores/notificationStore';
@@ -11,10 +12,10 @@ import {
   visibleFocusItems,
 } from '../stores/focusStore';
 import { cn } from '../lib/cn';
-import { tint, tintClasses } from '../lib/tints';
+import { tint, tintClasses, type TintHue } from '../lib/tints';
 import { FocusIcon } from '../components/sidebar/icons';
 import { KindIcon } from '../components/focus/FocusIcons';
-import { FocusStatusBadge } from '../components/focus/FocusTicketLead';
+import { SNOOZE_CHOICES } from '../components/focus/FocusDetailModal';
 import { applyCliSessions } from '../components/focus/focusSessions';
 import {
   KIND_META,
@@ -23,7 +24,6 @@ import {
   focusActions,
   focusSummary,
   formatWait,
-  questionOptions,
   sortFocusItems,
   waitedMs,
   type FocusAction,
@@ -33,15 +33,18 @@ import { BellIcon } from './MobileMore';
 import { useMobileNavStore } from './mobileNavStore';
 import { useClock } from './useClock';
 import { MobilePageHeader } from './MobilePageHeader';
-import { useFileUpload } from '../hooks/useFileUpload';
+import { MobileFocusSheet } from './MobileFocusSheet';
+import { COLUMN_EASING, COLUMN_MS } from './useColumnSwipe';
+import { ROW_ACTION_WIDTH, useRowSwipe, type RowSide } from './useRowSwipe';
 
 const KINDS: FocusItemKind[] = ['gate', 'question', 'error', 'idle'];
 
 /**
- * Focus on the phone — the human-attention queue, one card per item with its
- * direct actions. Same model as the desktop page: `focusActions()` for the
- * buttons, the focusStore undo window / snooze / log. No shortcut, no popup:
- * tapping a card opens the ticket full-screen on the tab that matters.
+ * Focus on the phone — the human-attention queue, as a list first: one compact
+ * row per item, swiped sideways to snooze it. A tap opens the full-screen sheet
+ * (the desktop popup's counterpart) where the item is acted on. Same model as
+ * the desktop page: `focusActions()` for the choices, the focusStore undo
+ * window / snooze / log.
  */
 export function MobileFocus() {
   const now = useClock();
@@ -109,15 +112,23 @@ export function MobileFocus() {
     },
     [commit],
   );
+  // A question gets its answer; an idle ticket a comment (which wakes the agents it mentions).
   const answer = useCallback(
     (item: FocusItem, text: string) => {
-      const t = ticketById.get(item.ticketId);
-      commit(item, `#${t?.displayId ?? ''} · réponse envoyée à ${item.question?.askedBy ?? 'l’agent'}`, () =>
-        answerQuestion(item, text),
-      );
+      const ref = `#${ticketById.get(item.ticketId)?.displayId ?? ''}`;
+      if (item.kind === 'idle') {
+        commit(item, `${ref} · commentaire ajouté`, () => postTicketComment(item.ticketId, text));
+        return;
+      }
+      commit(item, `${ref} · réponse envoyée à ${item.question?.askedBy ?? 'l’agent'}`, () => answerQuestion(item, text));
     },
     [commit, ticketById],
   );
+
+  // One row swiped open at a time; the sheet shows one item of the list.
+  const [openRow, setOpenRow] = useState<{ key: string; side: RowSide } | null>(null);
+  const [sheetKey, setSheetKey] = useState<string | null>(null);
+  const closeSheet = useCallback(() => setSheetKey(null), []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -173,21 +184,21 @@ export function MobileFocus() {
         ) : (
           <div className="flex flex-col gap-2.5">
             {list.map((item) => (
-              <FocusCard
+              <FocusRow
                 key={item.key}
                 item={item}
                 ticket={ticketById.get(item.ticketId)!}
-                boardLabel={(() => {
-                  const b = boardById.get(ticketById.get(item.ticketId)!.boardId);
-                  return b ? `${b.emoji} ${b.name}` : undefined;
-                })()}
-                actions={actionsOf(item)}
                 now={now}
-                onOpen={() => openTicket(item.ticketId, item.kind === 'gate' ? 'workflow' : 'conversation')}
-                onOpenLogs={() => openTicket(item.ticketId, 'runs')}
-                onAction={(a) => act(item, a)}
-                onAnswer={(text) => answer(item, text)}
-                onSnooze={() => snooze(item.key, Date.now() + 3600_000)}
+                open={openRow?.key === item.key ? openRow.side : null}
+                onOpenChange={(side) => setOpenRow(side ? { key: item.key, side } : null)}
+                onOpen={() => {
+                  setOpenRow(null);
+                  setSheetKey(item.key);
+                }}
+                onSnooze={(until) => {
+                  setOpenRow(null);
+                  snooze(item.key, until);
+                }}
               />
             ))}
           </div>
@@ -213,9 +224,38 @@ export function MobileFocus() {
         )}
       </div>
 
-      {/* Undo window — just above the floating bar */}
+      {sheetKey && (
+        <MobileFocusSheet
+          list={list}
+          currentKey={sheetKey}
+          onCurrentChange={setSheetKey}
+          ticketById={ticketById}
+          boardById={boardById}
+          actionsOf={actionsOf}
+          now={now}
+          onAction={act}
+          onAnswer={answer}
+          onSnooze={(item, until) => snooze(item.key, until)}
+          onOpenTicket={(item) => {
+            closeSheet();
+            openTicket(item.ticketId, item.kind === 'gate' ? 'workflow' : 'conversation');
+          }}
+          onOpenLogs={(item) => {
+            closeSheet();
+            openTicket(item.ticketId, 'runs');
+          }}
+          onClose={closeSheet}
+        />
+      )}
+
+      {/* Undo window — just above the floating bar, or over the sheet's header while it is open */}
       {pendingList.length > 0 && (
-        <div className="pointer-events-none absolute inset-x-3 bottom-[104px] z-30 grid gap-1.5">
+        <div
+          className={cn(
+            'pointer-events-none inset-x-3 grid gap-1.5',
+            sheetKey ? 'fixed top-[calc(env(safe-area-inset-top)+40px)] z-[60]' : 'absolute bottom-[104px] z-30',
+          )}
+        >
           {pendingList.slice(-3).map(([key, p]) => (
             <UndoToast key={key} label={p.label} onUndo={() => undo(key)} />
           ))}
@@ -242,189 +282,118 @@ function KindChip({ active, onClick, children }: { active: boolean; onClick: () 
   );
 }
 
-function FocusCard({
+/** The two snoozes a row offers on a swipe: the short one on the right, the long one on the left. */
+const SWIPE_SNOOZE: Record<RowSide, { label: string; hue: TintHue; until: () => number }> = {
+  right: { label: SNOOZE_CHOICES[0]!.short, hue: 'orange', until: SNOOZE_CHOICES[0]!.until },
+  left: { label: SNOOZE_CHOICES[2]!.short, hue: 'indigo', until: SNOOZE_CHOICES[2]!.until },
+};
+
+/**
+ * One item of the queue: what it is, which ticket, how long it has waited and
+ * one line of context — no buttons. A tap opens the sheet; a swipe uncovers a
+ * snooze, which a tap on it confirms.
+ */
+function FocusRow({
   item,
   ticket,
-  boardLabel,
-  actions,
   now,
+  open,
+  onOpenChange,
   onOpen,
-  onOpenLogs,
-  onAction,
-  onAnswer,
   onSnooze,
 }: {
   item: FocusItem;
-  ticket: NonNullable<ReturnType<typeof useTicketStore.getState>['tickets'][number]>;
-  boardLabel?: string;
-  actions: FocusAction[];
+  ticket: Ticket;
   now: number;
+  open: RowSide | null;
+  onOpenChange: (side: RowSide | null) => void;
   onOpen: () => void;
-  onOpenLogs: () => void;
-  onAction: (a: FocusAction) => void;
-  onAnswer: (text: string) => void;
-  onSnooze: () => void;
+  onSnooze: (until: number) => void;
 }) {
   const meta = KIND_META[item.kind];
   const wait = waitedMs(item, now);
   const stale = wait !== null && wait > STALE_MS;
-  const [text, setText] = useState('');
-  const replyRef = useRef<HTMLTextAreaElement>(null);
-  // Attach an image/file to the answer (paste or picker), like the desktop detail composer
-  const fileUpload = useFileUpload({ textareaRef: replyRef, value: text, onChange: setText });
-  const reply = item.kind === 'question' && item.question?.source !== 'session';
-  const options = reply ? questionOptions(item) : [];
   const who =
     item.kind === 'question' ? item.question?.askedBy : item.kind === 'gate' ? item.gate?.stepName : null;
-  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
-  const send = () => {
-    const v = text.trim();
-    if (!v) return;
-    onAnswer(v);
-    setText('');
+  const { offset, dragging, swiped, touchProps } = useRowSwipe({ open, onOpenChange });
+  const side: RowSide | null = offset > 0 ? 'left' : offset < 0 ? 'right' : null;
+  const action = side ? SWIPE_SNOOZE[side] : null;
+
+  const tap = () => {
+    // The click that ends a swipe is not a tap.
+    if (swiped.current) {
+      swiped.current = false;
+      return;
+    }
+    if (open) onOpenChange(null);
+    else onOpen();
   };
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => e.key === 'Enter' && onOpen()}
-      className="relative flex flex-col gap-2 overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-3 pl-[15px] pr-3"
-    >
-      <span aria-hidden className={cn('absolute inset-y-0 left-0 w-[3px]', tintClasses(meta.hue).solid)} />
-
-      <div className="flex items-center gap-2">
-        <span className={cn('inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold', tint(meta.hue))}>
-          <KindIcon kind={item.kind} />
-          {meta.label}
-        </span>
-        <FocusStatusBadge ticket={ticket} />
-        <span className="flex-1" />
-        <span
-          className={cn('font-mono text-[11.5px] tabular-nums', stale ? tintClasses('orange').text : 'text-[var(--theme-text-muted)]')}
-        >
-          {formatWait(wait)}
-        </span>
-      </div>
-
-      <div className="flex items-start gap-1.5">
-        {ticket.priority !== 'none' && (
-          <span className={cn('mt-[7px] h-[7px] w-[7px] shrink-0 rounded-full', PRIORITY_COLOR[ticket.priority])} />
-        )}
-        <span className="mt-0.5 shrink-0 font-mono text-[11.5px] text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
-        <span className="text-sm font-semibold leading-[1.35] text-[var(--theme-text-primary)]">{ticket.title}</span>
-      </div>
-
-      <p className="text-[13px] leading-[1.45] text-[var(--theme-text-secondary)]">
-        {who && (
-          <span className={cn('mr-1.5', tintClasses('purple').text)}>{item.kind === 'question' ? `@${who}` : who}</span>
-        )}
-        <span className={item.kind === 'error' ? tintClasses('red').text : undefined}>{focusSummary(item)}</span>
-      </p>
-
-      {boardLabel && (
-        <span className="w-fit whitespace-nowrap rounded bg-[var(--theme-bg-overlay)] px-1.5 py-px text-[10.5px] text-[var(--theme-text-muted)]">
-          {boardLabel}
-        </span>
-      )}
-
-      <div className="flex flex-col gap-2" onClick={stop}>
-        {options.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {actions.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => onAction(a)}
-                className="h-11 whitespace-nowrap rounded-full border border-dashed border-[var(--theme-border-input)] px-4 text-[13px] text-[var(--theme-text-secondary)] active:bg-[var(--theme-bg-overlay)]"
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
-        )}
-        {reply ? (
-          <div className="flex items-center gap-1.5">
-            <textarea
-              ref={replyRef}
-              rows={1}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onPaste={fileUpload.pasteHandler}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              placeholder={`Répondre${item.question?.askedBy ? ` à @${item.question.askedBy}` : ''}…`}
-              aria-label="Réponse"
-              className="max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 py-2.5 text-base leading-6 text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] [field-sizing:content] focus:border-[var(--theme-accent)] focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={fileUpload.openFilePicker}
-              disabled={fileUpload.isUploading}
-              aria-label="Joindre une image ou un fichier"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--theme-text-muted)] disabled:opacity-50"
-            >
-              {fileUpload.isUploading ? '…' : (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-              </svg>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={send}
-              disabled={!text.trim() || fileUpload.isUploading}
-              aria-label="Envoyer"
-              className="h-11 w-11 shrink-0 rounded-xl bg-[var(--theme-accent)] text-base font-semibold text-[var(--theme-accent-fg)] disabled:opacity-40"
-            >
-              ↵
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {actions
-              .filter((a) => !a.immediate)
-              .slice(0, 2)
-              .map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => onAction(a)}
-                  className={cn(
-                    'h-11 whitespace-nowrap rounded-xl px-4 text-sm',
-                    a.primary
-                      ? 'bg-[var(--theme-accent)] font-semibold text-[var(--theme-accent-fg)]'
-                      : 'border border-[var(--theme-border-input)] font-medium text-[var(--theme-text-primary)]',
-                  )}
-                >
-                  {a.label}
-                </button>
-              ))}
-            {item.kind === 'error' && item.error?.executionId && (
-              <button
-                type="button"
-                onClick={onOpenLogs}
-                className="h-11 rounded-xl border border-[var(--theme-border-input)] px-4 text-sm font-medium text-[var(--theme-text-primary)]"
-              >
-                Logs
-              </button>
-            )}
-          </div>
-        )}
+    <div className="relative overflow-hidden rounded-xl" {...touchProps}>
+      {side && action && (
         <button
           type="button"
-          onClick={onSnooze}
-          className="-mb-1 -mr-1 min-h-11 self-end px-3 text-[13px] text-[var(--theme-text-muted)]"
+          onClick={() => onSnooze(action.until())}
+          aria-label={`Plus tard : ${action.label}`}
+          className={cn(
+            'absolute inset-y-0 flex flex-col items-center justify-center gap-1 text-[12px] font-semibold text-white',
+            side === 'left' ? 'left-0' : 'right-0',
+            tintClasses(action.hue).solid,
+          )}
+          style={{ width: Math.max(ROW_ACTION_WIDTH, Math.abs(offset)) }}
         >
-          Plus tard
+          <ClockIcon />
+          {action.label}
         </button>
+      )}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={tap}
+        onKeyDown={(e) => e.key === 'Enter' && onOpen()}
+        className="relative flex flex-col gap-1 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-2.5 pl-[15px] pr-3"
+        style={{
+          transform: `translateX(${offset}px)`,
+          transition: dragging ? 'none' : `transform ${COLUMN_MS}ms ${COLUMN_EASING}`,
+        }}
+      >
+        <span aria-hidden className={cn('absolute inset-y-0 left-0 w-[3px]', tintClasses(meta.hue).solid)} />
+        <div className="flex items-start gap-2">
+          <span
+            className={cn('mt-px flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full', tint(meta.hue))}
+            title={meta.label}
+          >
+            <KindIcon kind={item.kind} />
+          </span>
+          <span className="min-w-0 flex-1 text-sm font-semibold leading-[1.35] text-[var(--theme-text-primary)] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box] overflow-hidden">
+            {ticket.priority !== 'none' && (
+              <span className={cn('mb-px mr-1.5 inline-block h-[7px] w-[7px] rounded-full', PRIORITY_COLOR[ticket.priority])} />
+            )}
+            <span className="mr-1.5 font-mono text-[11.5px] font-normal text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
+            {ticket.title}
+          </span>
+          <span
+            className={cn('mt-0.5 shrink-0 font-mono text-[11.5px] tabular-nums', stale ? tintClasses('orange').text : 'text-[var(--theme-text-muted)]')}
+          >
+            {formatWait(wait)}
+          </span>
+        </div>
+        <p className="truncate pl-7 text-[12.5px] text-[var(--theme-text-secondary)]">
+          {who && <span className={cn('mr-1.5', tintClasses('purple').text)}>{item.kind === 'question' ? `@${who}` : who}</span>}
+          <span className={item.kind === 'error' ? tintClasses('red').text : undefined}>{focusSummary(item)}</span>
+        </p>
       </div>
     </div>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12,7 12,12 15,14" />
+    </svg>
   );
 }
 
