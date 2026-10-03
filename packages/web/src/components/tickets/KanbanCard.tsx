@@ -62,11 +62,9 @@ function formatTimeAgo(dateStr: string, fromMs?: number): string {
 export function KanbanCard({
   ticket,
   board,
-  prStates,
 }: {
   ticket: Ticket;
   board?: BoardWithCounts | null;
-  prStates?: Record<string, string>;
 }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const setTicketTab = useTicketStore((s) => s.setTicketTab);
@@ -299,14 +297,14 @@ export function KanbanCard({
           {prLinks.map((pr: TicketLink) => {
             const parsed = parseGithubPrRef(pr.ref);
             if (!parsed) return null;
-            const state = (prStates?.[pr.ref]?.toLowerCase() ?? 'open') as 'open' | 'merged' | 'closed';
             return (
               <PrBadge
                 key={pr.id}
                 org={parsed.org}
                 name={parsed.name}
-                pr={{ number: parsed.number, state, title: pr.ref }}
+                pr={{ number: parsed.number, state: 'open', title: pr.ref }}
                 href={pr.url ?? undefined}
+                variant="compact"
               />
             );
           })}

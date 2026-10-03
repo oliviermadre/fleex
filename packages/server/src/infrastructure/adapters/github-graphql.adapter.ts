@@ -1,5 +1,9 @@
-import type { PullRequest, GitHubIssue, GitHubIssueDetail } from '@fleex/shared';
+import type { PullRequest, GitHubIssue, GitHubIssueDetail, PrCheck, PrCiDetail, PrCiSummary, PrMergeMethod } from '@fleex/shared';
+import { PR_MERGE_METHODS } from '@fleex/shared';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import {
+  aggregateCiStatus, allowedMergeMethods, checkRunBucket, countsFromStates, sortChecks, toCiBucket,
+} from '../../domain/services/pr-ci.js';
 import type { ExecFn } from '../host/types.js';
 
 interface GraphQLPRNode {
@@ -126,6 +130,90 @@ export interface RateLimitInfo {
 }
 
 const BATCH_SIZE = 8;
+
+/** PRs per aliased GraphQL call when fetching CI summaries. */
+const CI_SUMMARY_BATCH = 50;
+const HEAD_SHA_RE = /^[0-9a-f]{40}$/;
+
+type StateCount = { state: string; count: number };
+
+interface GraphQLCiContexts {
+  totalCount?: number;
+  checkRunCountsByState?: StateCount[] | null;
+  statusContextCountsByState?: StateCount[] | null;
+  nodes?: GraphQLCiContextNode[];
+}
+
+type GraphQLCiContextNode =
+  | {
+    __typename: 'CheckRun';
+    name: string;
+    status: string;
+    conclusion: string | null;
+    detailsUrl: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    checkSuite: { workflowRun: { workflow: { name: string } | null } | null } | null;
+  }
+  | { __typename: 'StatusContext'; context: string; state: string; targetUrl: string | null; createdAt: string | null }
+  | { __typename: string };
+
+interface GraphQLCiSummaryNode {
+  state: PrCiSummary['state'];
+  isDraft: boolean;
+  commits: { nodes: { commit: { statusCheckRollup: { contexts: GraphQLCiContexts } | null } }[] };
+}
+
+interface GraphQLCiDetailNode extends GraphQLCiSummaryNode {
+  title: string;
+  url: string;
+  baseRefName: string;
+  headRefOid: string;
+  mergeable: PrCiDetail['mergeable'];
+  mergeStateStatus: PrCiDetail['mergeStateStatus'];
+}
+
+interface GraphQLCiRepoNode {
+  mergeCommitAllowed: boolean;
+  squashMergeAllowed: boolean;
+  rebaseMergeAllowed: boolean;
+  viewerDefaultMergeMethod: string | null;
+  pullRequest: GraphQLCiDetailNode | null;
+}
+
+/** The chip's store key: GitHub names are case-insensitive, links are stored lowercase. */
+function prCiRef(pr: { org: string; name: string; number: number }): string {
+  return `${pr.org}/${pr.name}#${pr.number}`.toLowerCase();
+}
+
+function toCiSummary(ref: string, node: GraphQLCiSummaryNode, contexts: GraphQLCiContexts | undefined): PrCiSummary {
+  const counts = countsFromStates(contexts?.checkRunCountsByState ?? []);
+  countsFromStates(contexts?.statusContextCountsByState ?? [], counts);
+  return { ref, state: node.state, isDraft: node.isDraft, ciStatus: aggregateCiStatus(counts), counts };
+}
+
+function toCheck(node: GraphQLCiContextNode): PrCheck | null {
+  if (node.__typename === 'CheckRun' && 'status' in node) {
+    const workflow = node.checkSuite?.workflowRun?.workflow?.name;
+    return {
+      name: workflow ? `${workflow} / ${node.name}` : node.name,
+      bucket: checkRunBucket(node.status, node.conclusion),
+      detailsUrl: node.detailsUrl,
+      startedAt: node.startedAt,
+      completedAt: node.completedAt,
+    };
+  }
+  if (node.__typename === 'StatusContext' && 'context' in node) {
+    return {
+      name: node.context,
+      bucket: toCiBucket(node.state),
+      detailsUrl: node.targetUrl,
+      startedAt: node.createdAt,
+      completedAt: null,
+    };
+  }
+  return null;
+}
 
 export class GitHubGraphQLAdapter {
   private cachedUser: string | null = null;
@@ -350,6 +438,144 @@ export class GitHubGraphQLAdapter {
     }
 
     return result;
+  }
+
+  /**
+   * CI status and check counts for many PRs, without the list of checks — what
+   * every PR chip on screen needs. One aliased GraphQL call per
+   * {@link CI_SUMMARY_BATCH} PRs; a batch that fails is logged and skipped, so
+   * the result can be partial. Keys are lowercase `org/name#number`.
+   */
+  async fetchPRCiSummaries(prs: { org: string; name: string; number: number }[]): Promise<Map<string, PrCiSummary>> {
+    const result = new Map<string, PrCiSummary>();
+    const safe = prs.filter((pr) => GITHUB_NAME_RE.test(pr.org) && GITHUB_NAME_RE.test(pr.name));
+
+    for (let start = 0; start < safe.length; start += CI_SUMMARY_BATCH) {
+      const batch = safe.slice(start, start + CI_SUMMARY_BATCH);
+      const prQueries = batch.map((pr, idx) => `pr${idx}: repository(owner: "${pr.org}", name: "${pr.name}") {
+      pullRequest(number: ${pr.number}) {
+        state isDraft
+        commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 1) {
+          checkRunCountsByState { state count }
+          statusContextCountsByState { state count }
+        } } } } }
+      }
+    }`);
+
+      try {
+        const data = await this.graphql<Record<string, { pullRequest: GraphQLCiSummaryNode | null } | null>>(
+          `{ ${prQueries.join('\n')} }`,
+        );
+        batch.forEach((pr, idx) => {
+          const node = data[`pr${idx}`]?.pullRequest;
+          if (!node) return;
+          const ref = prCiRef(pr);
+          result.set(ref, toCiSummary(ref, node, node.commits.nodes[0]?.commit.statusCheckRollup?.contexts));
+        });
+      } catch (err) {
+        this.logger.warn('Failed to fetch PR CI summaries', { error: String(err), count: batch.length });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * One PR's checks (up to 100), mergeability and the repository's allowed
+   * merge methods — fetched when its chip's menu opens. Returns null when
+   * GitHub has no such PR; throws when the call itself fails.
+   */
+  async fetchPRCiDetail(pr: { org: string; name: string; number: number }): Promise<PrCiDetail | null> {
+    if (!GITHUB_NAME_RE.test(pr.org) || !GITHUB_NAME_RE.test(pr.name)) {
+      throw new Error(`Invalid GitHub repository: ${pr.org}/${pr.name}`);
+    }
+
+    const query = `{
+      repository(owner: "${pr.org}", name: "${pr.name}") {
+        mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod
+        pullRequest(number: ${pr.number}) {
+          state isDraft title url baseRefName headRefOid mergeable mergeStateStatus
+          commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
+            totalCount
+            checkRunCountsByState { state count }
+            statusContextCountsByState { state count }
+            nodes {
+              __typename
+              ... on CheckRun { name status conclusion detailsUrl startedAt completedAt
+                                checkSuite { workflowRun { workflow { name } } } }
+              ... on StatusContext { context state targetUrl createdAt }
+            }
+          } } } } }
+        }
+      }
+    }`;
+
+    const data = await this.graphql<{ repository: GraphQLCiRepoNode | null }>(query);
+    const repo = data.repository;
+    const node = repo?.pullRequest;
+    if (!repo || !node) return null;
+
+    const ref = prCiRef(pr);
+    const contexts = node.commits.nodes[0]?.commit.statusCheckRollup?.contexts;
+    const checks = (contexts?.nodes ?? []).map(toCheck).filter((c): c is PrCheck => c !== null);
+
+    return {
+      ...toCiSummary(ref, node, contexts),
+      url: node.url,
+      title: node.title,
+      baseRefName: node.baseRefName,
+      headSha: node.headRefOid,
+      checks: sortChecks(checks),
+      totalChecks: contexts?.totalCount ?? 0,
+      mergeable: node.mergeable,
+      mergeStateStatus: node.mergeStateStatus,
+      allowedMergeMethods: allowedMergeMethods(repo),
+    };
+  }
+
+  /**
+   * Merge a PR with `gh pr merge`. `--match-head-commit` makes GitHub refuse
+   * when the branch moved since the caller looked at it. No `--delete-branch`:
+   * gh would try to delete a local branch a Fleex worktree may have checked
+   * out. Throws (gh's stderr as message) when gh refuses.
+   */
+  async mergePR(input: { org: string; name: string; number: number; method: PrMergeMethod; headSha: string }): Promise<void> {
+    const { org, name, number, method, headSha } = input;
+    if (!GITHUB_NAME_RE.test(org) || !GITHUB_NAME_RE.test(name)) {
+      throw new Error(`Invalid GitHub repository: ${org}/${name}`);
+    }
+    if (!PR_MERGE_METHODS.includes(method)) throw new Error(`Invalid merge method: ${method}`);
+    if (!HEAD_SHA_RE.test(headSha)) throw new Error(`Invalid head commit: ${headSha}`);
+    if (!Number.isInteger(number) || number <= 0) throw new Error(`Invalid PR number: ${number}`);
+
+    await this.execFn('gh', [
+      'pr', 'merge', String(number),
+      '--repo', `${org}/${name}`,
+      `--${method}`,
+      '--match-head-commit', headSha,
+    ], { timeout: 60_000 });
+  }
+
+  /**
+   * Runs a GraphQL query and returns `.data`. `gh api graphql` exits non-zero
+   * when the response carries any error — a single deleted PR in an aliased
+   * batch is enough — while stdout still holds the data GitHub did resolve, so
+   * that data is used when present.
+   */
+  private async graphql<T>(query: string): Promise<T> {
+    const args = ['api', 'graphql', '-f', `query=${query}`, '--jq', '.data'];
+    try {
+      const { stdout } = await this.execFn('gh', args, { timeout: 15_000 });
+      return JSON.parse(stdout) as T;
+    } catch (err) {
+      const stdout = (err as { stdout?: unknown }).stdout;
+      if (typeof stdout === 'string' && stdout.trim() && stdout.trim() !== 'null') {
+        try {
+          return JSON.parse(stdout) as T;
+        } catch { /* fall through to the original error */ }
+      }
+      throw err;
+    }
   }
 
   async getRateLimit(): Promise<RateLimitInfo> {

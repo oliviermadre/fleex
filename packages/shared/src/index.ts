@@ -115,6 +115,19 @@ export type {
 } from './types/worktree-diff.js';
 
 export type {
+  PrCiBucket,
+  PrCiStatus,
+  PrMergeMethod,
+  PrCiSummary,
+  PrCheck,
+  PrMergeable,
+  PrMergeStateStatus,
+  PrCiDetail,
+  MergePrRequest,
+} from './types/pr-ci.js';
+export { PR_MERGE_METHODS } from './types/pr-ci.js';
+
+export type {
   RepositorySummary,
   RepositoryDashboardData,
   WorktreeTicketRef,

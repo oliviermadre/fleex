@@ -15,10 +15,3 @@ export function parseGithubPrRef(ref: string): { org: string; name: string; numb
   if (slash <= 0) return { org: '', name: repo, number };
   return { org: repo.slice(0, slash), name: repo.slice(slash + 1), number };
 }
-
-/** Normalize GitHub's uppercase PR state ("OPEN"|"MERGED"|"CLOSED") to the PrBadge palette. */
-export function prStateFromGithub(raw: string | undefined): 'open' | 'merged' | 'closed' {
-  if (raw === 'MERGED') return 'merged';
-  if (raw === 'CLOSED') return 'closed';
-  return 'open';
-}

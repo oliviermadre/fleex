@@ -25,7 +25,6 @@ export function KanbanColumn({
   boards,
   collapsed,
   onToggleCollapse,
-  prStates,
 }: {
   status: TicketStatus;
   tickets: Ticket[];
@@ -34,7 +33,6 @@ export function KanbanColumn({
   boards?: BoardWithCounts[];
   collapsed?: boolean;
   onToggleCollapse?: () => void;
-  prStates?: Record<string, string>;
 }) {
   const [dragOver, setDragOver] = useState(false);
   // Index where the drop indicator should appear (-1 = none, 0..tickets.length)
@@ -208,7 +206,6 @@ export function KanbanColumn({
             <KanbanCard
               ticket={ticket}
               board={isAllBoards ? boards?.find((b) => b.id === ticket.boardId) : undefined}
-              prStates={prStates}
             />
           </div>
         ))}

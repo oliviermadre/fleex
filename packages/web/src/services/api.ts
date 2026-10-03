@@ -605,17 +605,36 @@ export async function syncGithubIssue(ticketId: string): Promise<import('@fleex/
   });
 }
 
-export async function fetchPRStates(ticketId: string): Promise<Record<string, string>> {
-  return request<Record<string, string>>(`/tickets/${encodeURIComponent(ticketId)}/pr-states`);
+/**
+ * PR chip CI calls. Like the browse calls these never toast: the chip polls in
+ * the background and shows its own `CI ?` state, and the merge dialog shows
+ * gh's refusal inline.
+ */
+async function quietRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(extractErrorMessage(body, res.statusText));
+  }
+  return res.json() as Promise<T>;
 }
 
-export async function fetchBulkPRStates(refs: string[]): Promise<Record<string, string>> {
-  if (refs.length === 0) return {};
-  return request<Record<string, string>>('/pr-states', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refs }),
-  });
+/** CI status + counts for many PRs, keyed by lowercase "org/name#123"; PRs GitHub didn't answer are absent. */
+export function fetchPRCiSummaries(refs: string[]): Promise<Record<string, import('@fleex/shared').PrCiSummary>> {
+  return quietRequest('/pr-ci', { method: 'POST', body: JSON.stringify({ refs }) });
+}
+
+/** One PR's checks, mergeability and allowed merge methods. */
+export function fetchPRCiDetail(ref: string): Promise<import('@fleex/shared').PrCiDetail> {
+  return quietRequest(`/pr-ci/detail?ref=${encodeURIComponent(ref)}`);
+}
+
+/** Merge through `gh pr merge`; rejects with gh's message when GitHub refuses. */
+export function mergePR(req: import('@fleex/shared').MergePrRequest): Promise<{ ok: true }> {
+  return quietRequest('/prs/merge', { method: 'POST', body: JSON.stringify(req) });
 }
 
 /** A pull request's live details, as returned by `fetchBulkPRDetails` (state is GitHub's OPEN / MERGED / CLOSED). */
