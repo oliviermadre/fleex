@@ -68,6 +68,7 @@ restent montés : un flux ou un scroll survit à un changement d'onglet.
   modèle/effort/fast, actions sur les mentions, deliverables liés.
 - **Deliverables** : liste lu/non-lu, lecture plein écran, création, suppression.
 - **Runs** : historique des exécutions, flux live, bouton stop.
+- **Diff** (si le ticket a un repo lié) : le même diff de branche que le panneau desktop, fichiers repliés, filtre, rafraîchi toutes les 5 s.
 - **Workflow** : étapes du run, human gates, questions d'agents, retry, annulation.
 - **Assistant** : le centre de la barre ouvre l'assistant en **sheet** au-dessus
   de l'écran courant. Fermer la sheet ne le démonte pas : la conversation

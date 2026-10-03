@@ -19,6 +19,7 @@ import { MobileConversation } from './MobileConversation';
 import { MobileExecutions } from './MobileExecutions';
 import { MobileTicketRepos } from './MobileTicketRepos';
 import { MobileWorkflow } from './MobileWorkflow';
+import { DiffPanel } from '../components/work/panel/DiffPanel';
 import { MobileDeliverables } from './MobileDeliverables';
 import { MobileTicketMeta } from './MobileTicketMeta';
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
@@ -118,17 +119,19 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
     return unsub;
   }, [ticket.id, loadWorkflowRuns]);
 
+  const repoChips = ticket.links.filter((l) => l.type === 'repository' || l.type === 'worktree');
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'conversation', label: 'Conversation' },
     { id: 'context', label: 'Contexte' },
     { id: 'deliverables', label: deliverableCount ? `Deliverables ${deliverableCount}` : 'Deliverables' },
     { id: 'runs', label: runningCount > 0 ? `Runs ●` : 'Runs' },
+    ...(repoChips.length > 0 ? [{ id: 'diff' as const, label: 'Diff' }] : []),
     ...(workflowRuns && workflowRuns.length > 0
       ? [{ id: 'workflow' as const, label: workflowNeedsHuman ? 'Workflow ✋' : 'Workflow' }]
       : []),
   ];
 
-  const repoChips = ticket.links.filter((l) => l.type === 'repository' || l.type === 'worktree');
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -308,6 +311,11 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
       {tab === 'deliverables' && <MobileDeliverables ticketId={ticket.id} />}
       {tab === 'runs' && <MobileExecutions ticketId={ticket.id} />}
       {tab === 'workflow' && <MobileWorkflow ticketId={ticket.id} />}
+      {tab === 'diff' && (
+        <div className="flex min-h-0 flex-1 flex-col" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <DiffPanel ticketId={ticket.id} touch />
+        </div>
+      )}
 
       {showMeta && <MobileTicketMeta ticket={ticket} onClose={() => setShowMeta(false)} />}
       {showStatus && (

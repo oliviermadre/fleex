@@ -3,7 +3,7 @@ import { useTicketStore } from '../stores/ticketStore';
 
 export type MobileView = 'focus' | 'tasks' | 'board';
 export type MobileMorePage = 'pulse' | 'routines' | 'notes' | 'documents' | 'repos' | 'settings';
-export type MobileDetailTab = 'conversation' | 'context' | 'deliverables' | 'runs' | 'workflow';
+export type MobileDetailTab = 'conversation' | 'context' | 'deliverables' | 'runs' | 'diff' | 'workflow';
 
 /**
  * Navigation state of the mobile shell. Lives in a store (not in MobileApp's
