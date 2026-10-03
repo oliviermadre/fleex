@@ -21,7 +21,7 @@ const METRICS = {
   cacheCreationTokens: 1_110_000,
 };
 
-function makeUseCase(baseline: Record<string, number> | null = null) {
+function makeUseCase(baseline: { priorRuns: number; latest: { totals: Record<string, number>; cliVersion: string | null } | null } = { priorRuns: 0, latest: null }) {
   // executionMode 'message' → effectiveMode 'talk' → skips worktree creation.
   const persona = { id: 'p1', name: 'Builder', executionMode: 'message', model: 'claude-opus-4-8' } as never;
 
@@ -32,7 +32,7 @@ function makeUseCase(baseline: Record<string, number> | null = null) {
     appendEvent: vi.fn(async () => {}),
     updateSessionId,
     completeExecution,
-    getSdkSessionTotals: vi.fn(async () => baseline),
+    getSdkSessionBaseline: vi.fn(async () => baseline),
   } as never;
 
   const personaStore = { getByName: async () => persona } as never;
@@ -86,6 +86,7 @@ describe('ExecuteAgentUseCase.executeForWorkflowStep — cost/token attribution'
     mockedStream.mockReset();
     mockedStream.mockResolvedValue({
       sessionId: 'sess-abc-123',
+      cliVersion: '2.1.284',
       resultText: 'done',
       structuredOutput: { mentionStatus: 'resolved' },
       resultSubtype: undefined,
@@ -133,7 +134,7 @@ describe('ExecuteAgentUseCase.executeForWorkflowStep — cost/token attribution'
       cacheReadTokens: 28_000_000,
       cacheCreationTokens: 1_000_000,
     };
-    const { useCase, completeExecution } = makeUseCase(previousRun);
+    const { useCase, completeExecution } = makeUseCase({ priorRuns: 1, latest: { totals: previousRun, cliVersion: '2.1.284' } });
 
     await useCase.executeForWorkflowStep({
       personaName: 'Builder',
@@ -151,6 +152,18 @@ describe('ExecuteAgentUseCase.executeForWorkflowStep — cost/token attribution'
     expect(metrics['cacheCreationTokens']).toBe(110_000);
     // Raw totals are kept as the baseline for the next resumed run.
     expect(metrics['sdkTotals']).toEqual(METRICS_TOTALS);
+    expect(metrics['cliVersion']).toBe('2.1.284');
+    expect(metrics['costBasis']).toBe('per_run');
+  });
+
+  it('keeps the raw value, flagged unverified, when the baseline comes from another CLI regime', async () => {
+    const { useCase, completeExecution } = makeUseCase({ priorRuns: 1, latest: { totals: { costUsd: 10 }, cliVersion: '2.1.270' } });
+    await useCase.executeForWorkflowStep({
+      personaName: 'Builder', ticketId: 'T1', outputFormat: {} as never, workflowContextPrompt: 'context', mode: 'edit',
+    });
+    const metrics = (completeExecution.mock.calls[0] as unknown[])[2] as Record<string, unknown>;
+    expect(metrics['costUsd']).toBe(METRICS.costUsd);
+    expect(metrics['costBasis']).toBe('unverified');
   });
 });
 

@@ -6,8 +6,8 @@ import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
-import type { SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
-import { sdkTotalsFromRow } from '../sdk-totals-row.js';
+import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
+import { sdkBaselineFromRows } from '../sdk-totals-row.js';
 import type { SupabaseConnection } from './connection.js';
 
 /** PostgREST's max-rows cap (Supabase default) — the page size we paginate on. */
@@ -102,7 +102,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string; sdkTotals?: SdkUsageTotals;
+    commentId?: string; deliverableId?: string; sdkTotals?: SdkUsageTotals; cliVersion?: string; costBasis?: CostBasis;
   }): Promise<void> {
     const update: Record<string, unknown> = { status, completed_at: new Date().toISOString() };
     if (metrics?.model) update.model = metrics.model;
@@ -123,6 +123,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (t?.outputTokens != null) update.sdk_total_output_tokens = t.outputTokens;
     if (t?.cacheReadTokens != null) update.sdk_total_cache_read_tokens = t.cacheReadTokens;
     if (t?.cacheCreationTokens != null) update.sdk_total_cache_creation_tokens = t.cacheCreationTokens;
+    if (metrics?.cliVersion != null) update.cli_version = metrics.cliVersion;
+    if (metrics?.costBasis != null) update.cost_basis = metrics.costBasis;
     const { error } = await this.conn.client
       .from('agent_event_executions')
       .update(update)
@@ -130,17 +132,15 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (error) throw new Error(`SupabaseAgentEventStore.completeExecution failed: ${error.message}`);
   }
 
-  async getSdkSessionTotals(sdkSessionId: string): Promise<SdkUsageTotals | null> {
+  async getSdkSessionBaseline(sdkSessionId: string, executionId: string): Promise<SdkSessionBaseline> {
     const { data, error } = await this.conn.client
       .from('agent_event_executions')
-      .select('sdk_total_cost_usd, sdk_total_input_tokens, sdk_total_output_tokens, sdk_total_cache_read_tokens, sdk_total_cache_creation_tokens')
+      .select('cost_usd, sdk_total_cost_usd, sdk_total_input_tokens, sdk_total_output_tokens, sdk_total_cache_read_tokens, sdk_total_cache_creation_tokens, cli_version')
       .eq('sdk_session_id', sdkSessionId)
-      .gt('sdk_total_cost_usd', 0)
-      .order('started_at', { ascending: false })
-      .limit(1);
-    if (error) throw new Error(`SupabaseAgentEventStore.getSdkSessionTotals failed: ${error.message}`);
-    const row = (data as Record<string, number | string | null>[] | null)?.[0];
-    return row ? sdkTotalsFromRow(row) : null;
+      .neq('execution_id', executionId)
+      .order('started_at', { ascending: false });
+    if (error) throw new Error(`SupabaseAgentEventStore.getSdkSessionBaseline failed: ${error.message}`);
+    return sdkBaselineFromRows((data ?? []) as Record<string, number | string | null>[]);
   }
 
   async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {

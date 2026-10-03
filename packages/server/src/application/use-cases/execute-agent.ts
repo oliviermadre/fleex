@@ -18,7 +18,10 @@ import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult, isEmptyRun } from '../utils/stream-sdk-query.js';
-import { perRunUsage, isUsableBaseline, type SdkUsageTotals } from '../utils/sdk-run-usage.js';
+import { meterSdkRun, type CostBasis, type SdkSessionBaseline, type SdkUsageTotals } from '../utils/sdk-run-usage.js';
+
+/** Usage bookkeeping persisted with a completed SDK run (raw totals, CLI version, cost basis). */
+interface SdkMeterPersist { sdkTotals: SdkUsageTotals; cliVersion?: string; costBasis: CostBasis }
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { PromptComposer, buildExecutionContextData, promptTextLength } from '../utils/prompt-composer.js';
 import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
@@ -333,26 +336,37 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   }
 
   /**
-   * Split an SDK result's usage into this run's share and the raw session
-   * totals. The SDK reports totals that carry every earlier run of a resumed
-   * session (see `SdkUsageTotals`), so this run's share is the difference with
-   * the totals the previous run of the same session recorded.
+   * Split an SDK result's usage into this run's share and what to persist
+   * alongside it. On a CLI that carries session totals over a resume, the run's
+   * share is the difference with the previous run of the same session — but only
+   * when that previous run is from the same proven regime (see `meterSdkRun`).
    */
-  private async meterRun(r: StreamSdkQueryResult): Promise<{ run: SdkUsageTotals; totals: SdkUsageTotals }> {
+  private async meterRun(r: StreamSdkQueryResult, executionId: string): Promise<{
+    run: SdkUsageTotals;
+    persist: SdkMeterPersist;
+  }> {
     const { costUsd, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens } = r.metrics;
     const totals: SdkUsageTotals = { costUsd, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens };
-    if (!r.sessionId) return { run: { ...totals }, totals };
-    let baseline: SdkUsageTotals | null = null;
-    try {
-      baseline = await this.agentEventStore.getSdkSessionTotals(r.sessionId);
-    } catch (err) {
-      // Never fail a finished run over bookkeeping — but say the cost is a session total.
-      this.logger.warn('Could not read SDK session baseline; run cost will include earlier runs of the session', {
-        sessionId: r.sessionId,
-        error: err instanceof Error ? err.message : String(err),
+    let baseline: SdkSessionBaseline = { priorRuns: 0, latest: null };
+    if (r.sessionId) {
+      try {
+        baseline = await this.agentEventStore.getSdkSessionBaseline(r.sessionId, executionId);
+      } catch (err) {
+        // Never fail a finished run over bookkeeping: keep the raw value, flagged unverified.
+        this.logger.warn('Could not read SDK session baseline; storing raw usage as unverified', {
+          sessionId: r.sessionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return { run: { ...totals }, persist: { sdkTotals: totals, cliVersion: r.cliVersion, costBasis: 'unverified' } };
+      }
+    }
+    const metered = meterSdkRun(totals, r.cliVersion, baseline);
+    if (metered.basis === 'unverified') {
+      this.logger.warn('SDK run cost stored raw and flagged unverified', {
+        executionId, sessionId: r.sessionId, cliVersion: r.cliVersion, reason: metered.reason,
       });
     }
-    return { run: perRunUsage(totals, isUsableBaseline(baseline) ? baseline : null), totals };
+    return { run: metered.run, persist: { sdkTotals: totals, cliVersion: r.cliVersion, costBasis: metered.basis } };
   }
 
   async execute(personaId: string): Promise<AgentExecutionResult> {
@@ -1002,7 +1016,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let sdkOutputTokens: number | undefined;
       let sdkCacheReadTokens: number | undefined;
       let sdkCacheCreationTokens: number | undefined;
-      let sdkTotals: SdkUsageTotals | undefined;
+      let sdkMeter: SdkMeterPersist | undefined;
       let sdkNumTurns: number | undefined;
       let cliStderr = '';
       let resultSubtype: string | undefined;
@@ -1080,8 +1094,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         resultText = streamResult.resultText;
         structuredOutput = streamResult.structuredOutput as AgentStructuredOutput | null;
         sdkDurationMs = streamResult.metrics.durationMs;
-        const metered = await this.meterRun(streamResult);
-        sdkTotals = metered.totals;
+        const metered = await this.meterRun(streamResult, executionId);
+        sdkMeter = metered.persist;
         sdkCostUsd = metered.run.costUsd;
         sdkInputTokens = metered.run.inputTokens;
         sdkOutputTokens = metered.run.outputTokens;
@@ -1476,7 +1490,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputTokens: sdkOutputTokens,
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
-        sdkTotals,
+        ...sdkMeter,
         commentId: resultCommentId,
         deliverableId: resultDeliverableId,
       });
@@ -1833,7 +1847,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const resultText = streamResult.resultText;
       const structuredOutput = streamResult.structuredOutput as AgentStructuredOutput | null;
       const sdkDurationMs = streamResult.metrics.durationMs;
-      const { run: sdkRun, totals: sdkTotals } = await this.meterRun(streamResult);
+      const { run: sdkRun, persist: sdkMeter } = await this.meterRun(streamResult, executionId);
       const sdkCostUsd = sdkRun.costUsd;
       const sdkInputTokens = sdkRun.inputTokens;
       const sdkOutputTokens = sdkRun.outputTokens;
@@ -1900,7 +1914,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           outputTokens: sdkOutputTokens,
           cacheReadTokens: sdkCacheReadTokens,
           cacheCreationTokens: sdkCacheCreationTokens,
-          sdkTotals,
+          ...sdkMeter,
         });
         this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
         this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
@@ -2028,7 +2042,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputTokens: sdkOutputTokens,
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
-        sdkTotals,
+        ...sdkMeter,
         commentId: resultCommentId,
         deliverableId: resultDeliverableId,
       });
@@ -2300,7 +2314,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let sdkOutputTokens: number | undefined;
       let sdkCacheReadTokens: number | undefined;
       let sdkCacheCreationTokens: number | undefined;
-      let sdkTotals: SdkUsageTotals | undefined;
+      let sdkMeter: SdkMeterPersist | undefined;
       let sdkNumTurns: number | undefined;
       try {
         const streamResult = await streamSdkQuery({
@@ -2313,8 +2327,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         resultText = streamResult.resultText;
         sdkSessionId = streamResult.sessionId;
         sdkDurationMs = streamResult.metrics.durationMs;
-        const metered = await this.meterRun(streamResult);
-        sdkTotals = metered.totals;
+        const metered = await this.meterRun(streamResult, executionId);
+        sdkMeter = metered.persist;
         sdkCostUsd = metered.run.costUsd;
         sdkInputTokens = metered.run.inputTokens;
         sdkOutputTokens = metered.run.outputTokens;
@@ -2387,7 +2401,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputTokens: sdkOutputTokens,
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
-        sdkTotals,
+        ...sdkMeter,
       });
 
       return { structuredOutput, rawText: resultText, executionId };
