@@ -33,7 +33,7 @@ describe('serializeElement / parseElementContext', () => {
   it('round-trips through the fenced block', () => {
     const md = serializeElement(el);
     expect(md.startsWith('![element](/api/files/abc.png)\n\n```fleex-element\n')).toBe(true);
-    const json = md.split('```fleex-element\n')[1].replace(/\n```$/, '');
+    const json = md.split('```fleex-element\n')[1]!.replace(/\n```$/, '');
     expect(parseElementContext(json)).toEqual(ctx);
   });
 
