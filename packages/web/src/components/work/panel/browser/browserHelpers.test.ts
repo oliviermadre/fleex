@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeUrl } from './url';
-import { parseLaunchConfig } from './launchConfig';
 import { captureRect, dataUrlToFile } from './capture';
 import type { ElementContext } from '../../../shared/elementContext';
 
@@ -21,29 +20,6 @@ describe('normalizeUrl', () => {
     expect(normalizeUrl('hello world')).toBeNull();
     expect(normalizeUrl('file:///etc/passwd')).toBeNull();
     expect(normalizeUrl('javascript:alert(1)')).toBeNull();
-  });
-});
-
-describe('parseLaunchConfig', () => {
-  it('maps configurations to shortcuts, url first, port default 3000', () => {
-    const raw = JSON.stringify({
-      version: '0.0.1',
-      configurations: [
-        { name: 'web', runtimeExecutable: 'bun', port: 5173 },
-        { name: 'docs', url: 'http://localhost:4000' },
-        { name: 'api' },
-        { port: 1 },
-      ],
-    });
-    expect(parseLaunchConfig(raw)).toEqual([
-      { name: 'web', url: 'http://localhost:5173' },
-      { name: 'docs', url: 'http://localhost:4000' },
-      { name: 'api', url: 'http://localhost:3000' },
-    ]);
-  });
-  it('returns nothing for invalid JSON or a missing list', () => {
-    expect(parseLaunchConfig('{oops')).toEqual([]);
-    expect(parseLaunchConfig('{}')).toEqual([]);
   });
 });
 

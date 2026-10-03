@@ -166,7 +166,7 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
               onPickCancelled={() => setPicking(false)}
             />
           ) : (
-            t.id === state.activeId && <NewTabPage key={t.id} ticketId={ticketId} onOpen={(url) => updateTab(ticketId, t.id, { url })} />
+            t.id === state.activeId && <NewTabPage key={t.id} />
           ),
         )}
       </div>
