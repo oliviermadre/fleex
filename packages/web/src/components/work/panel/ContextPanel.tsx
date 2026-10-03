@@ -14,7 +14,6 @@ import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { cn } from '../../../lib/cn';
 import { tintClasses, tintText } from '../../../lib/tints';
 import { PrBadge } from '../../ui/PrBadge';
-import { prStateFromGithub } from '../../../lib/prRef';
 import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from '../../tickets/RepoBaseBranchSelect';
 import { Spinner, BusyLine } from '../../ui/Spinner';
 import { DueDatePickerPopover } from '../../tickets/DueDatePickerPopover';
@@ -183,7 +182,6 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
   const tickets = useTicketStore((s) => s.tickets);
   const [prUrl, setPrUrl] = useState('');
   const [addingPr, setAddingPr] = useState(false);
-  const [prStates, setPrStates] = useState<Record<string, string>>({});
   // Staged repo for "+ attach repo…": chosen but not linked yet, so a base
   // branch can be picked first.
   const [pendingRepos, setPendingRepos] = useState<string[]>([]);
@@ -200,13 +198,6 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
 
   const repoLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'repository'), [ticket]);
   const prLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'github_pr'), [ticket]);
-
-  // Fetch live PR states from GitHub on mount / ticket change, so the badge
-  // reflects merged/closed instead of always claiming "open".
-  useEffect(() => {
-    if (!ticket || prLinks.length === 0) return;
-    api.fetchPRStates(ticket.id).then(setPrStates).catch(() => {});
-  }, [ticket?.id, prLinks.length]);
 
   // Each PR's own size, from GitHub. Never `task.pr`: that one carries the
   // worktree diff summed over every repo of the workspace, so showing it on a
@@ -420,7 +411,7 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
                   <PrBadge
                     org={parsed.org}
                     name={parsed.name}
-                    pr={{ number: parsed.number, state: prStateFromGithub(prStates[l.ref]), title: l.label }}
+                    pr={{ number: parsed.number, state: 'open', title: l.label }}
                     href={l.url ?? undefined}
                   />
                 ) : (

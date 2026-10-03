@@ -3,7 +3,7 @@ import type { Board, FocusItem, Ticket, TicketDeliverable } from '@fleex/shared'
 import { Modal } from '../ui/Modal';
 import { cn } from '../../lib/cn';
 import { tint, tintClasses } from '../../lib/tints';
-import { parseGithubPrRef, prStateFromGithub } from '../../lib/prRef';
+import { parseGithubPrRef } from '../../lib/prRef';
 import { PrBadge } from '../ui/PrBadge';
 import { FocusFavoriteStar, FocusStatusBadge, FocusTicketLead } from './FocusTicketLead';
 import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
@@ -18,7 +18,7 @@ import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
-import { executeSkill, fetchPRStates } from '../../services/api';
+import { executeSkill } from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
 import { useFocusStore } from '../../stores/focusStore';
 import { FocusThread } from './FocusThread';
@@ -256,15 +256,6 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
 
   const wait = formatWait(waitedMs(item, now));
   const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
-  // Live PR states from GitHub, as in the Tasks context panel: the badge shows merged/closed, not always "open".
-  const [prStates, setPrStates] = useState<Record<string, string>>({});
-  useEffect(() => {
-    setPrStates({});
-    if (prLinks.length === 0) return;
-    let live = true;
-    fetchPRStates(ticket.id).then((s) => { if (live) setPrStates(s); }).catch(() => {});
-    return () => { live = false; };
-  }, [ticket.id, prLinks.length]);
   // Any agentic run (workflow, skill, panel, agent, new session) — the SmartSessionButton menu, styled as a choice.
   const launcherButton = (
     <SmartSessionButton
@@ -513,7 +504,7 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
                   key={l.id}
                   org={pr.org}
                   name={pr.name}
-                  pr={{ number: pr.number, state: prStateFromGithub(prStates[l.ref]), title: l.label }}
+                  pr={{ number: pr.number, state: 'open', title: l.label }}
                   href={l.url ?? undefined}
                 />
               ) : (

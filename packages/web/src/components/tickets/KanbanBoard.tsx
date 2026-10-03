@@ -4,7 +4,6 @@ import { TICKET_STATUSES } from '@fleex/shared';
 import type { TicketStatus, Ticket, TicketWsMessage } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
-import { fetchBulkPRStates } from '../../services/api';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanHeader } from './KanbanHeader';
 import { ArchivedTicketsModal } from './ArchivedTicketsModal';
@@ -36,20 +35,6 @@ export function KanbanBoard() {
   // Load agentic activity on mount and when tickets change
   const ticketIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
   useEffect(() => { loadActivity(ticketIds); }, [ticketIds, loadActivity]);
-
-  const [prStates, setPrStates] = useState<Record<string, string>>({});
-
-  // Fetch live PR states for all visible tickets with github_pr links
-  useEffect(() => {
-    const prRefs = new Set<string>();
-    for (const ticket of tickets) {
-      for (const link of ticket.links) {
-        if (link.type === 'github_pr') prRefs.add(link.ref);
-      }
-    }
-    if (prRefs.size === 0) return;
-    fetchBulkPRStates([...prRefs]).then(setPrStates).catch(() => {});
-  }, [tickets]);
 
   // Collapsed columns state with localStorage persistence
   const COLLAPSED_STORAGE_KEY = 'fleex:collapsedColumns';
@@ -194,7 +179,6 @@ export function KanbanBoard() {
             boards={isAllBoards ? boards : undefined}
             collapsed={collapsedColumns.has(status)}
             onToggleCollapse={() => toggleCollapse(status)}
-            prStates={prStates}
           />
         ))}
       </div>

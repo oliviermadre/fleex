@@ -10,7 +10,7 @@ import type { WorkPrLink, WorkTask } from '../types';
 
 vi.mock('../../../services/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../services/api')>()),
-  fetchPRStates: vi.fn(async () => ({})),
+  fetchPRCiSummaries: vi.fn(async () => ({})),
   fetchTicketGroups: vi.fn(async () => []),
 }));
 

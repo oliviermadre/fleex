@@ -14,10 +14,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { TicketType } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
-import { getPrBadgeClasses } from '../../../lib/prBadgeStyle';
+import { PrBadge } from '../../ui/PrBadge';
+import { parseGithubPrRef } from '../../../lib/prRef';
 import type { TimelineFilterKey } from '../../../stores/workStore';
 import { TicketTypeIcon } from '../../tickets/TicketTypeBadge';
-import { PrIcon } from '../queue/QueuePrGlyph';
 import type { TimelineAction, TimelineEvent, TimelineModel } from './buildTimeline';
 import { GEOMETRY, layoutTimeline, type TimelineFilters } from './layoutTimeline';
 import { LanePicto, SpineNode } from './TimelineNode';
@@ -163,18 +163,24 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
         </div>
         {filters.pr && model && model.undatedPrs.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1" title="PR sans date connue">
-            {model.undatedPrs.map((pr) => (
-              <a
-                key={pr.ref}
-                href={pr.url || undefined}
-                target="_blank"
-                rel="noreferrer"
-                className={cn('inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-mono text-[11px]', getPrBadgeClasses({ state: pr.state === 'draft' || !pr.state ? 'open' : pr.state, isDraft: pr.state === 'draft' }))}
-              >
-                <PrIcon state={pr.state} />
-                {pr.label}
-              </a>
-            ))}
+            {model.undatedPrs.map((pr) => {
+              const parsed = parseGithubPrRef(pr.ref);
+              if (!parsed) return null;
+              return (
+                <PrBadge
+                  key={pr.ref}
+                  org={parsed.org}
+                  name={parsed.name}
+                  pr={{
+                    number: parsed.number,
+                    state: pr.state === 'draft' || !pr.state ? 'open' : pr.state,
+                    isDraft: pr.state === 'draft',
+                    title: pr.title ?? undefined,
+                  }}
+                  href={pr.url || undefined}
+                />
+              );
+            })}
           </div>
         )}
       </aside>

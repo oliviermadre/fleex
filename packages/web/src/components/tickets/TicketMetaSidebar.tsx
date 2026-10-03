@@ -20,6 +20,8 @@ import { STATUS_COLORS } from '../../lib/statusColors';
 import { topReposForBoard } from '../../lib/repoStatus';
 import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from './RepoBaseBranchSelect';
 import { Spinner, BusyLine } from '../ui/Spinner';
+import { PrBadge } from '../ui/PrBadge';
+import { parseGithubPrRef } from '../../lib/prRef';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
 
@@ -446,14 +448,6 @@ function ExpandedTicketMetaSidebar({
   const syncGithubIssue = useTicketStore((s) => s.syncGithubIssue);
   const boards = useTicketStore((s) => s.boards);
 
-  // Fetch live PR states from GitHub on mount / ticket change
-  const [prStates, setPrStates] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
-    if (prLinks.length === 0) return;
-    api.fetchPRStates(ticket.id).then(setPrStates).catch(() => {});
-  }, [ticket.id]);
-
   const handleStatusChange = (status: TicketStatus) => {
     updateTicket(ticket.id, { status });
   };
@@ -631,7 +625,6 @@ function ExpandedTicketMetaSidebar({
       {/* Pull Requests */}
       <PRLinkPicker
         ticket={ticket}
-        prStates={prStates}
         onAddLink={(link) => addLink(ticket.id, link)}
         onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
       />
@@ -1232,12 +1225,10 @@ const GITHUB_PR_RE = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$
 
 function PRLinkPicker({
   ticket,
-  prStates,
   onAddLink,
   onRemoveLink,
 }: {
   ticket: Ticket;
-  prStates: Record<string, string>;
   onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   onRemoveLink: (linkId: string) => Promise<void>;
 }) {
@@ -1296,29 +1287,22 @@ function PRLinkPicker({
       </label>
       <div className="flex flex-col gap-1.5">
         {prLinks.map((pr: TicketLink) => {
-          const state = prStates[pr.ref];
-          const isMerged = state === 'MERGED';
-          const isClosed = state === 'CLOSED';
-          const colorClass = isMerged
-            ? cn(tintClasses('purple').borderColor, tintClasses('purple').bg, tintClasses('purple').hoverBg)
-            : isClosed
-              ? cn(tintClasses('red').borderColor, tintClasses('red').bg, tintClasses('red').hoverBg)
-              : cn(tintClasses('green').borderColor, tintClasses('green').bg, tintClasses('green').hoverBg);
-          const textClass = isMerged ? tintText('purple') : isClosed ? tintText('red') : tintText('green');
+          const parsed = parseGithubPrRef(pr.ref);
           return (
-            <div key={pr.id} className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors ${colorClass}`}>
-              <a
-                href={pr.url ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-w-0 flex-1 items-center gap-2"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className={`flex-shrink-0 ${textClass}`}>
-                  <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
-                </svg>
-                <span className={`font-medium ${textClass}`}>{pr.label}</span>
-                <span className="truncate text-[10px] text-[var(--theme-text-faint)]">{pr.ref}</span>
-              </a>
+            <div key={pr.id} className="flex min-w-0 items-center gap-2 text-xs">
+              {parsed ? (
+                <PrBadge
+                  org={parsed.org}
+                  name={parsed.name}
+                  pr={{ number: parsed.number, state: 'open', title: pr.ref }}
+                  href={pr.url ?? undefined}
+                />
+              ) : (
+                <a href={pr.url ?? undefined} target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--theme-text-primary)]">
+                  {pr.label}
+                </a>
+              )}
+              <span className="min-w-0 flex-1 truncate text-[10px] text-[var(--theme-text-faint)]">{pr.ref}</span>
               <button
                 className="flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
                 onClick={() => onRemoveLink(pr.id)}
