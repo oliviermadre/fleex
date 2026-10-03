@@ -13,6 +13,7 @@ import { FocusIcon, TasksIcon } from '../components/sidebar/icons';
 import { cn } from '../lib/cn';
 import { useLockViewport } from './useLockViewport';
 import { SHEET_EASING, SHEET_MS, useSheetDrag } from './useSheetDrag';
+import { KanbanIcon, AssistantIcon } from './MobileIcons';
 import { MobileBoard } from './MobileBoard';
 import { MobileFocus } from './MobileFocus';
 import { MobileTasks } from './MobileTasks';
@@ -20,20 +21,6 @@ import { MobileTicketDetail } from './MobileTicketDetail';
 import { MobileAssistant } from './MobileAssistant';
 import { MobileMoreSheet, MobileMorePageHost, MoreDotsIcon } from './MobileMore';
 import { useMobileNavStore, type MobileView } from './mobileNavStore';
-
-const KanbanIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-    <rect x="3" y="3" width="5.5" height="18" rx="1" />
-    <rect x="9.25" y="3" width="5.5" height="12" rx="1" />
-    <rect x="15.5" y="3" width="5.5" height="8" rx="1" />
-  </svg>
-);
-const AssistantIcon = ({ size = 24 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
-    <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
-  </svg>
-);
 
 /**
  * Mobile shell — the phone is a remote control: Focus (home), Tasks, Kanban,
@@ -131,7 +118,7 @@ export function MobileApp() {
             label="Kanban"
             active={view === 'board' && !morePage}
             onClick={() => setView('board')}
-            icon={<KanbanIcon />}
+            icon={<KanbanIcon size={22} />}
           />
           <BarItem
             label="Plus"

@@ -12,6 +12,8 @@ import { tintClasses } from '../lib/tints';
 import { MobileSheet, SheetOption } from './MobileSheet';
 import { useMobileNavStore, type MobileDetailTab } from './mobileNavStore';
 import { PRIORITY_COLOR } from './MobileTicketCard';
+import { MobilePageHeader, HeaderIconButton } from './MobilePageHeader';
+import { AssistantIcon, StarIcon } from './MobileIcons';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { MobileConversation } from './MobileConversation';
 import { MobileExecutions } from './MobileExecutions';
@@ -129,40 +131,28 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Header */}
-      <header className="flex shrink-0 items-center gap-1 border-b border-[var(--theme-border)] px-2 py-1.5">
-        <button
-          onClick={() => selectTicket(null)}
-          className="flex h-11 w-11 shrink-0 items-center justify-center text-[26px] leading-none text-[var(--theme-text-muted)]"
-          aria-label="Retour"
-        >
-          ‹
-        </button>
-        <span className="shrink-0 font-mono text-xs text-[var(--theme-text-faint)]">#{ticket.displayId}</span>
-        <button
-          onClick={() => updateTicket(ticket.id, { favorite: !ticket.favorite }).catch(() => {})}
-          aria-label={ticket.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-          aria-pressed={ticket.favorite}
-          className={cn('flex h-11 w-11 shrink-0 items-center justify-center text-base', ticket.favorite ? tintClasses('yellow').solidText : 'text-[var(--theme-text-faint)]')}
-        >
-          {ticket.favorite ? '★' : '☆'}
-        </button>
-        <div className="min-w-0 flex-1" />
-        <button
-          onClick={() => setShowStatus(true)}
-          className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--theme-bg-surface)] px-3 text-xs font-medium"
-        >
-          <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT[ticket.status])} />
-          {TICKET_STATUS_LABELS[ticket.status]} ▾
-        </button>
-        <button
-          onClick={() => setAssistantOpen(true)}
-          aria-label="Ouvrir l’assistant sur ce ticket"
-          className="flex h-11 w-11 shrink-0 items-center justify-center text-[var(--theme-accent)]"
-        >
-          ✦
-        </button>
-      </header>
+      {/* Header: same layout as every screen */}
+      <MobilePageHeader
+        title="Ticket"
+        count={<span className="font-mono">#{ticket.displayId}</span>}
+        onBack={() => selectTicket(null)}
+        trailing={
+          <>
+            <HeaderIconButton
+              label={ticket.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+              active={ticket.favorite}
+              onClick={() => updateTicket(ticket.id, { favorite: !ticket.favorite }).catch(() => {})}
+            >
+              <span className={ticket.favorite ? tintClasses('yellow').solidText : undefined}>
+                <StarIcon filled={ticket.favorite} />
+              </span>
+            </HeaderIconButton>
+            <HeaderIconButton label="Ouvrir l’assistant sur ce ticket" onClick={() => setAssistantOpen(true)} active>
+              <AssistantIcon size={22} />
+            </HeaderIconButton>
+          </>
+        }
+      />
 
       {/* Title (tap to edit) */}
       <div className="shrink-0 px-4 pb-1 pt-3">
@@ -199,15 +189,20 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
             {ticket.title}
           </h1>
         )}
-        {repoChips.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-[var(--theme-text-muted)]">
-            {repoChips.map((l) => (
-              <span key={l.id} className="truncate">
-                {l.type === 'worktree' ? `${l.ref.split(':')[0]} ⎇ ${l.ref.split(':')[1] ?? ''}` : l.ref}
-              </span>
-            ))}
-          </div>
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <button
+            onClick={() => setShowStatus(true)}
+            className="flex h-11 shrink-0 items-center gap-2 rounded-[10px] bg-[var(--theme-bg-surface)] px-3.5 text-sm font-medium"
+          >
+            <span className={cn('h-2 w-2 rounded-full', STATUS_DOT[ticket.status])} />
+            {TICKET_STATUS_LABELS[ticket.status]} <span className="text-xs text-[var(--theme-text-muted)]">▾</span>
+          </button>
+          {repoChips.map((l) => (
+            <span key={l.id} className="truncate font-mono text-[11px] text-[var(--theme-text-muted)]">
+              {l.type === 'worktree' ? `${l.ref.split(':')[0]} ⎇ ${l.ref.split(':')[1] ?? ''}` : l.ref}
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -254,13 +249,13 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
                     setDescDraft(ticket.description);
                     setEditingDesc(false);
                   }}
-                  className="rounded-lg px-4 py-2 text-sm text-[var(--theme-text-muted)]"
+                  className="min-h-11 rounded-lg px-4 text-sm text-[var(--theme-text-muted)]"
                 >
                   Annuler
                 </button>
                 <button
                   onClick={saveDescription}
-                  className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-accent-fg)]"
+                  className="min-h-11 rounded-lg bg-[var(--theme-accent)] px-4 text-sm font-semibold text-[var(--theme-accent-fg)]"
                 >
                   Enregistrer
                 </button>

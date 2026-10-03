@@ -5,6 +5,7 @@ import type { WorkTask } from '../components/work/types';
 import { useWorkQueue } from '../components/work/useWorkQueue';
 import { useWorkStore, type QueueGroupBy } from '../stores/workStore';
 import { QuickAddFab } from './MobileQuickAdd';
+import { MobilePageHeader } from './MobilePageHeader';
 import { MobileNewTask } from './MobileNewTask';
 import { TasksIcon } from '../components/sidebar/icons';
 import { PRIORITY_LABELS } from '../components/tickets/PriorityIndicator';
@@ -49,22 +50,21 @@ export function MobileTasks() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex shrink-0 flex-col gap-2 border-b border-[var(--theme-border)] px-4 pb-2.5 pt-1.5">
-        <div className="flex items-center gap-2">
-          <TasksIcon size={22} className="text-[var(--theme-accent)]" />
-          <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
-          <span className="text-[15px] tabular-nums text-[var(--theme-text-faint)]">{counts.total}</span>
-        </div>
-        <div className="relative">
+      <MobilePageHeader
+        title="Tasks"
+        icon={<TasksIcon size={24} />}
+        count={counts.total}
+        sub={
+          <div className="relative">
           <svg
-            width="16"
-            height="16"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
             strokeLinecap="round"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]"
             aria-hidden
           >
             <circle cx="11" cy="11" r="7" />
@@ -75,10 +75,11 @@ export function MobileTasks() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search tasks…"
             aria-label="Search tasks"
-            className="h-[38px] w-full rounded-[10px] border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] pl-8 pr-3 text-base text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
+            className="h-11 w-full rounded-[10px] border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] pl-9 pr-3 text-base text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
           />
         </div>
-      </header>
+        }
+      />
 
       <nav className="flex shrink-0 gap-1.5 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
         <FilterChip active={boardFilters.length > 0} onClick={() => setSheet('boards')}>
@@ -96,7 +97,7 @@ export function MobileTasks() {
           aria-label="Favoris"
           onClick={() => setFavoriteOnly(!favoriteOnly)}
           className={cn(
-            'min-h-9 shrink-0 rounded-full px-3 py-1.5 text-xs font-medium',
+            'min-h-11 min-w-11 shrink-0 rounded-full px-3 text-base font-medium',
             favoriteOnly
               ? cn('bg-[var(--theme-accent-muted)]', tintClasses('yellow').text)
               : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]',
@@ -196,7 +197,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       type="button"
       onClick={onClick}
       className={cn(
-        'min-h-9 shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium',
+        'min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-[13px] font-medium',
         active ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]',
       )}
     >

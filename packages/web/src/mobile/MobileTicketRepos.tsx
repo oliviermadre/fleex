@@ -42,7 +42,7 @@ export function MobileTicketRepos({ ticket }: { ticket: Ticket }) {
       {repoLinks.map((link) => (
         <span
           key={link.id}
-          className="flex items-center gap-1 rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] py-1 pl-2.5 pr-1 text-[11px] text-[var(--theme-text-secondary)]"
+          className="flex min-h-11 items-center gap-1 rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] pl-3 pr-1 text-xs text-[var(--theme-text-secondary)]"
         >
           {link.ref}
           {link.baseBranch && (
@@ -55,7 +55,7 @@ export function MobileTicketRepos({ ticket }: { ticket: Ticket }) {
           )}
           <button
             onClick={() => removeLink(ticket.id, link.id)}
-            className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--theme-text-faint)] active:text-[var(--theme-danger)]"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--theme-text-faint)] active:text-[var(--theme-danger)]"
             aria-label={`Retirer ${link.ref}`}
           >
             ✕
@@ -73,7 +73,7 @@ export function MobileTicketRepos({ ticket }: { ticket: Ticket }) {
       ))}
       <button
         onClick={() => setPicking(true)}
-        className="min-h-9 rounded-full border border-dashed border-[var(--theme-border-input)] px-3 py-1 text-[11px] font-medium text-[var(--theme-accent)]"
+        className="min-h-11 rounded-full border border-dashed border-[var(--theme-border-input)] px-4 text-xs font-medium text-[var(--theme-accent)]"
       >
         + Lier un repo
       </button>

@@ -4,6 +4,8 @@ import type { TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { MobileTicketCard } from './MobileTicketCard';
 import { QuickAddFab, QuickAddSheet } from './MobileQuickAdd';
+import { MobilePageHeader } from './MobilePageHeader';
+import { KanbanIcon } from './MobileIcons';
 import { tintSolid } from '../lib/tints';
 
 const STATUS_DOT: Record<TicketStatus, string> = {
@@ -67,21 +69,29 @@ export function MobileBoard() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Header: board picker (the desktop switch lives in the Plus sheet) */}
-      <header className="flex shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2">
-        <select
-          value={selectedBoardId ?? '__all__'}
-          onChange={(e) => selectBoard(e.target.value === '__all__' ? null : e.target.value)}
-          className="min-w-0 flex-1 appearance-none rounded-md bg-[var(--theme-bg-secondary)] px-3 py-2 text-sm font-semibold text-[var(--theme-text-primary)]"
-        >
-          {boards.length > 1 && <option value="__all__">Tous les boards</option>}
-          {boards.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.emoji ? `${b.emoji} ` : ''}{b.name}
-            </option>
-          ))}
-        </select>
-      </header>
+      {/* Header: same layout as every screen, the board picker sits on the title line */}
+      <MobilePageHeader
+        title="Kanban"
+        icon={<KanbanIcon size={24} />}
+        trailing={
+          <div className="relative min-w-0 max-w-[58vw]">
+            <select
+              value={selectedBoardId ?? '__all__'}
+              onChange={(e) => selectBoard(e.target.value === '__all__' ? null : e.target.value)}
+              aria-label="Board"
+              className="h-11 w-full min-w-0 appearance-none truncate rounded-[10px] bg-[var(--theme-bg-surface)] pl-3 pr-8 text-sm font-semibold text-[var(--theme-text-primary)]"
+            >
+              {boards.length > 1 && <option value="__all__">Tous les boards</option>}
+              {boards.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.emoji ? `${b.emoji} ` : ''}{b.name}
+                </option>
+              ))}
+            </select>
+            <span aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--theme-text-muted)]">▾</span>
+          </div>
+        }
+      />
 
       {/* Status chips */}
       <nav className="flex shrink-0 gap-1.5 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
@@ -92,7 +102,7 @@ export function MobileBoard() {
             <button
               key={status}
               onClick={() => goToColumn(idx)}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 min-h-11 whitespace-nowrap rounded-full px-4 text-[13px] font-medium transition-colors ${
                 active
                   ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                   : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'

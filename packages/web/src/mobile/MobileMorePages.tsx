@@ -37,7 +37,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       onClick={onClick}
       className={cn(
-        'min-h-9 shrink-0 rounded-full px-3 py-1.5 text-xs font-medium',
+        'min-h-11 shrink-0 rounded-full px-4 text-[13px] font-medium',
         active ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]' : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]',
       )}
     >
@@ -88,7 +88,7 @@ export function MobileNotificationsPage() {
   if (notifications.length === 0) return <Empty>Aucune notification</Empty>;
   return (
     <div className="flex flex-col gap-2 p-3">
-      <button type="button" onClick={clear} className="min-h-9 self-end px-1 text-[12.5px] text-[var(--theme-accent)]">
+      <button type="button" onClick={clear} className="min-h-11 self-end px-2 text-sm text-[var(--theme-accent)]">
         Tout effacer
       </button>
       {notifications.map((n) => {
@@ -339,7 +339,7 @@ export function MobileDocumentsPage() {
           onChange={(e) => useDocumentsStore.getState().setSearch(e.target.value)}
           placeholder="Rechercher un document…"
           aria-label="Rechercher un document"
-          className="h-[38px] w-full rounded-[10px] border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 text-base text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
+          className="h-11 w-full rounded-[10px] border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 text-base text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
         />
       </div>
       <nav className="flex gap-1.5 overflow-x-auto px-3 py-2 [scrollbar-width:none]">

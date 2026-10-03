@@ -88,7 +88,7 @@ function DeliverableChip({
   return (
     <button
       onClick={() => onOpen(deliverable)}
-      className="flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-hover)] px-2.5 py-1.5 text-left"
+      className="flex max-w-full items-center gap-1.5 min-h-11 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-hover)] px-3 py-1.5 text-left"
     >
       {!seen && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--theme-accent)]" />}
       <span className="shrink-0 text-xs">📄</span>
@@ -552,7 +552,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                         <button
                           key={m.id}
                           onClick={() => setMentionSheet(m)}
-                          className="rounded-full bg-[var(--theme-bg-hover)] px-2 py-0.5 text-[10px] text-[var(--theme-text-muted)]"
+                          className="inline-flex min-h-11 items-center rounded-full bg-[var(--theme-bg-hover)] px-3 text-xs text-[var(--theme-text-muted)]"
                         >
                           @{m.targetAgent} · {MENTION_STATUS_LABEL[m.status]}
                         </button>
@@ -610,13 +610,13 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               <>
                 <button
                   onClick={() => resolveConflict('answer')}
-                  className="flex-1 rounded-lg bg-[var(--theme-accent)] px-3 py-2 text-xs font-medium text-[var(--theme-accent-fg)]"
+                  className="flex-1 min-h-11 rounded-xl bg-[var(--theme-accent)] px-3 text-sm font-medium text-[var(--theme-accent-fg)]"
                 >
                   Répond à sa question
                 </button>
                 <button
                   onClick={() => resolveConflict('new_subject')}
-                  className="flex-1 rounded-lg bg-[var(--theme-bg-hover)] px-3 py-2 text-xs font-medium text-[var(--theme-text-primary)]"
+                  className="flex-1 min-h-11 rounded-xl bg-[var(--theme-bg-hover)] px-3 text-sm font-medium text-[var(--theme-text-primary)]"
                 >
                   Nouveau sujet
                 </button>
@@ -625,13 +625,13 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               <>
                 <button
                   onClick={() => resolveConflict('queue')}
-                  className="flex-1 rounded-lg bg-[var(--theme-accent)] px-3 py-2 text-xs font-medium text-[var(--theme-accent-fg)]"
+                  className="flex-1 min-h-11 rounded-xl bg-[var(--theme-accent)] px-3 text-sm font-medium text-[var(--theme-accent-fg)]"
                 >
                   Mettre en file
                 </button>
                 <button
                   onClick={() => resolveConflict('supersede')}
-                  className="flex-1 rounded-lg bg-[var(--theme-bg-hover)] px-3 py-2 text-xs font-medium text-[var(--theme-text-primary)]"
+                  className="flex-1 min-h-11 rounded-xl bg-[var(--theme-bg-hover)] px-3 text-sm font-medium text-[var(--theme-text-primary)]"
                 >
                   Remplacer le run
                 </button>
@@ -639,7 +639,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
             )}
             <button
               onClick={() => setConflict(null)}
-              className="shrink-0 rounded-lg px-2 py-2 text-xs text-[var(--theme-text-muted)]"
+              className="min-h-11 min-w-11 shrink-0 rounded-lg px-2 text-sm text-[var(--theme-text-muted)]"
             >
               ✕
             </button>
@@ -658,7 +658,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                   e.preventDefault();
                   acceptMention(opt);
                 }}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left active:bg-[var(--theme-bg-hover)]"
+                className="flex min-h-11 w-full items-center gap-2.5 px-3 py-2.5 text-left active:bg-[var(--theme-bg-hover)]"
               >
                 <MentionTypeIcon type={opt.type} size="lg" />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--theme-text-primary)]">
@@ -677,13 +677,13 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
       >
         {/* Mode + mention trigger */}
-        <div className="mb-2 flex items-center gap-1.5">
-          <div className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--theme-border)]">
+        <div className="mb-2 flex items-center gap-2">
+          <div className="flex shrink-0 overflow-hidden rounded-xl border border-[var(--theme-border)]">
             {MODES.map((m) => (
               <button
                 key={m.id}
                 onClick={() => setMode(m.id)}
-                className={`px-2.5 py-1 text-[11px] font-medium ${
+                className={`min-h-11 px-3 text-[13px] font-medium ${
                   ticket.conversationMode === m.id
                     ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                     : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
@@ -696,7 +696,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           <div className="flex-1" />
           <button
             onClick={() => setShowConfig(true)}
-            className={`shrink-0 rounded-lg border px-3 py-1 text-sm ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-xl ${
               hasOverrides
                 ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
                 : 'border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
@@ -707,7 +707,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           </button>
           <button
             onClick={openMentionPicker}
-            className="shrink-0 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-1 text-sm font-semibold text-[var(--theme-text-muted)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-lg font-semibold text-[var(--theme-text-muted)]"
             aria-label="Mentionner un agent, skill, panel ou workflow"
           >
             @
@@ -746,7 +746,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           <button
             onClick={handleSubmit}
             disabled={!body.trim() || submitting}
-            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-accent)] text-base font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             {submitting ? '…' : '➤'}
           </button>

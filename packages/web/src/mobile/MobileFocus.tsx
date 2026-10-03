@@ -32,6 +32,7 @@ import { PRIORITY_COLOR } from './MobileTicketCard';
 import { BellIcon } from './MobileMore';
 import { useMobileNavStore } from './mobileNavStore';
 import { useClock } from './useClock';
+import { MobilePageHeader } from './MobilePageHeader';
 import { useFileUpload } from '../hooks/useFileUpload';
 
 const KINDS: FocusItemKind[] = ['gate', 'question', 'error', 'idle'];
@@ -120,36 +121,35 @@ export function MobileFocus() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex shrink-0 flex-col gap-2 border-b border-[var(--theme-border)] px-4 pb-2.5 pt-1.5">
-        <div className="flex items-center gap-2">
-          <FocusIcon size={22} className="text-[var(--theme-accent)]" />
-          <h1 className="text-2xl font-bold tracking-tight">Focus</h1>
-          <span className="rounded-full bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--theme-text-secondary)]">
-            {base.length}
-          </span>
-          <span className="flex-1" />
+      <MobilePageHeader
+        title="Focus"
+        icon={<FocusIcon size={24} />}
+        count={base.length}
+        trailing={
           <button
             type="button"
             onClick={() => openMorePage('pulse')}
             aria-label="Notifications"
             className="relative flex h-11 w-11 items-center justify-center rounded-[10px] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)]"
           >
-            <BellIcon />
+            <BellIcon size={22} />
             {unseen > 0 && (
               <span className="absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-[var(--theme-accent-active)] px-1 text-[9.5px] font-bold text-[var(--theme-accent-fg)]">
                 {unseen}
               </span>
             )}
           </button>
-        </div>
-        {!prefs.zen && (
-          <p className="text-[11.5px] text-[var(--theme-text-muted)]">
-            {stats.handledToday} traités aujourd’hui · réaction médiane{' '}
-            {stats.medianTodayMs === null ? '—' : formatWait(stats.medianTodayMs)} · plus ancien{' '}
-            {base.length ? formatWait(oldest) : '—'}
-          </p>
-        )}
-      </header>
+        }
+        sub={
+          !prefs.zen ? (
+            <p className="text-[11.5px] text-[var(--theme-text-muted)]">
+              {stats.handledToday} traités aujourd’hui · réaction médiane{' '}
+              {stats.medianTodayMs === null ? '—' : formatWait(stats.medianTodayMs)} · plus ancien{' '}
+              {base.length ? formatWait(oldest) : '—'}
+            </p>
+          ) : undefined
+        }
+      />
 
       <nav className="flex shrink-0 gap-1.5 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
         <KindChip active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>
@@ -231,7 +231,7 @@ function KindChip({ active, onClick, children }: { active: boolean; onClick: () 
       type="button"
       onClick={onClick}
       className={cn(
-        'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium',
+        'flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium',
         active
           ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
           : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]',
@@ -337,7 +337,7 @@ function FocusCard({
                 key={a.id}
                 type="button"
                 onClick={() => onAction(a)}
-                className="h-8 whitespace-nowrap rounded-full border border-dashed border-[var(--theme-border-input)] px-3 text-[12.5px] text-[var(--theme-text-secondary)] active:bg-[var(--theme-bg-overlay)]"
+                className="h-11 whitespace-nowrap rounded-full border border-dashed border-[var(--theme-border-input)] px-4 text-[13px] text-[var(--theme-text-secondary)] active:bg-[var(--theme-bg-overlay)]"
               >
                 {a.label}
               </button>
@@ -360,14 +360,14 @@ function FocusCard({
               }}
               placeholder={`Répondre${item.question?.askedBy ? ` à @${item.question.askedBy}` : ''}…`}
               aria-label="Réponse"
-              className="max-h-32 min-h-[38px] min-w-0 flex-1 resize-none rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2.5 py-[7px] text-base leading-6 text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] [field-sizing:content] focus:border-[var(--theme-accent)] focus:outline-none"
+              className="max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 py-2.5 text-base leading-6 text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] [field-sizing:content] focus:border-[var(--theme-accent)] focus:outline-none"
             />
             <button
               type="button"
               onClick={fileUpload.openFilePicker}
               disabled={fileUpload.isUploading}
               aria-label="Joindre une image ou un fichier"
-              className="flex h-[38px] w-10 shrink-0 items-center justify-center rounded-lg text-[var(--theme-text-muted)] disabled:opacity-50"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--theme-text-muted)] disabled:opacity-50"
             >
               {fileUpload.isUploading ? '…' : (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -380,7 +380,7 @@ function FocusCard({
               onClick={send}
               disabled={!text.trim() || fileUpload.isUploading}
               aria-label="Envoyer"
-              className="h-[38px] w-11 shrink-0 rounded-lg bg-[var(--theme-accent)] text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-40"
+              className="h-11 w-11 shrink-0 rounded-xl bg-[var(--theme-accent)] text-base font-semibold text-[var(--theme-accent-fg)] disabled:opacity-40"
             >
               ↵
             </button>
@@ -396,7 +396,7 @@ function FocusCard({
                   type="button"
                   onClick={() => onAction(a)}
                   className={cn(
-                    'h-9 whitespace-nowrap rounded-lg px-3.5 text-[13px]',
+                    'h-11 whitespace-nowrap rounded-xl px-4 text-sm',
                     a.primary
                       ? 'bg-[var(--theme-accent)] font-semibold text-[var(--theme-accent-fg)]'
                       : 'border border-[var(--theme-border-input)] font-medium text-[var(--theme-text-primary)]',
@@ -409,7 +409,7 @@ function FocusCard({
               <button
                 type="button"
                 onClick={onOpenLogs}
-                className="h-9 rounded-lg border border-[var(--theme-border-input)] px-3.5 text-[13px] font-medium text-[var(--theme-text-primary)]"
+                className="h-11 rounded-xl border border-[var(--theme-border-input)] px-4 text-sm font-medium text-[var(--theme-text-primary)]"
               >
                 Logs
               </button>
@@ -419,7 +419,7 @@ function FocusCard({
         <button
           type="button"
           onClick={onSnooze}
-          className="-mb-1 -mr-1 min-h-9 self-end px-2 text-[12.5px] text-[var(--theme-text-muted)]"
+          className="-mb-1 -mr-1 min-h-11 self-end px-3 text-[13px] text-[var(--theme-text-muted)]"
         >
           Plus tard
         </button>
@@ -509,7 +509,7 @@ function UndoToast({ label, onUndo }: { label: string; onUndo: () => void }) {
       className="pointer-events-auto relative flex items-center gap-3 overflow-hidden rounded-xl border border-[var(--theme-border-input)] bg-[var(--theme-bg-overlay)] py-2 pl-3.5 pr-2 text-[13px] text-[var(--theme-text-primary)] shadow-[0_10px_30px_rgba(0,0,0,.4)]"
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <button type="button" onClick={onUndo} className="min-h-9 px-2 text-[13px] font-semibold text-[var(--theme-accent)]">
+      <button type="button" onClick={onUndo} className="min-h-11 px-3 text-sm font-semibold text-[var(--theme-accent)]">
         Annuler
       </button>
       <span

@@ -11,6 +11,8 @@ import {
 import { tint, tintText } from '../lib/tints';
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 import { useFileUpload } from '../hooks/useFileUpload';
+import { MobilePageHeader } from './MobilePageHeader';
+import { AssistantIcon } from './MobileIcons';
 
 /**
  * Mobile client for the Fleex assistant — same companion host as the Chrome
@@ -115,40 +117,48 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Header: session switcher */}
-      <header className="flex shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2">
-        <button
-          onClick={() => setShowSessions(true)}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-[var(--theme-bg-secondary)] px-3 py-2 text-left"
-        >
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--theme-text-primary)]">
-            {activeSession ? activeSession.title : 'Conversations'}
-          </span>
-          {activeSession?.workspace && (
-            <span className="shrink-0 rounded-full bg-[var(--theme-bg-hover)] px-2 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
-              {activeSession.workspace}
-            </span>
-          )}
-          <span className="shrink-0 text-xs text-[var(--theme-text-faint)]">▾</span>
-        </button>
-        {/* Standing approvals — visible while armed, tap to revoke them all */}
-        {activeSession?.autoApprove && (activeSession.autoApprove.all || activeSession.autoApprove.tools.length > 0) && (
+      {/* Header: same layout as every screen; the session switcher sits on the second line */}
+      <MobilePageHeader
+        title="Assistant"
+        icon={<AssistantIcon size={24} />}
+        trailing={
+          <>
+            {/* Standing approvals — visible while armed, tap to revoke them all */}
+            {activeSession?.autoApprove && (activeSession.autoApprove.all || activeSession.autoApprove.tools.length > 0) && (
+              <button
+                onClick={() => setAutoApprove(activeSession.id, { all: false, tools: [] })}
+                className={`flex h-11 shrink-0 items-center rounded-full px-3 text-xs font-medium ${tint('yellow')}`}
+                title="Auto-approbation active — appuyer pour désactiver"
+              >
+                ⚡ {activeSession.autoApprove.all ? 'tout' : activeSession.autoApprove.tools.length}
+              </button>
+            )}
+            <button
+              onClick={() => createSession()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-accent)] text-2xl font-semibold leading-none text-[var(--theme-accent-fg)]"
+              aria-label="Nouvelle conversation"
+            >
+              +
+            </button>
+          </>
+        }
+        sub={
           <button
-            onClick={() => setAutoApprove(activeSession.id, { all: false, tools: [] })}
-            className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium ${tint('yellow')}`}
-            title="Auto-approbation active — appuyer pour désactiver"
+            onClick={() => setShowSessions(true)}
+            className="flex h-11 min-w-0 items-center gap-2 rounded-[10px] bg-[var(--theme-bg-surface)] px-3 text-left"
           >
-            ⚡ {activeSession.autoApprove.all ? 'tout' : activeSession.autoApprove.tools.length}
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+              {activeSession ? activeSession.title : 'Conversations'}
+            </span>
+            {activeSession?.workspace && (
+              <span className="shrink-0 rounded-full bg-[var(--theme-bg-hover)] px-2 py-0.5 text-[11px] text-[var(--theme-text-muted)]">
+                {activeSession.workspace}
+              </span>
+            )}
+            <span className="shrink-0 text-xs text-[var(--theme-text-faint)]">▾</span>
           </button>
-        )}
-        <button
-          onClick={() => createSession()}
-          className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-[var(--theme-accent-fg)]"
-          aria-label="Nouvelle conversation"
-        >
-          +
-        </button>
-      </header>
+        }
+      />
 
       {ticket && (
         <div className="flex shrink-0 px-3 pt-2">
@@ -257,7 +267,7 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
           <button
             onClick={handleSend}
             disabled={!draft.trim() || busy || fileUpload.isUploading}
-            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-accent)] text-base font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             ➤
           </button>

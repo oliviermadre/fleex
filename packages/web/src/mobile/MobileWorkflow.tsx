@@ -83,7 +83,7 @@ export function MobileWorkflow({ ticketId }: { ticketId: string }) {
         <select
           value={currentRunId ?? ''}
           onChange={(e) => setSelectedRunId(e.target.value)}
-          className="mb-3 w-full appearance-none rounded-md bg-[var(--theme-bg-secondary)] px-3 py-2 text-xs text-[var(--theme-text-primary)]"
+          className="mb-3 w-full appearance-none h-11 rounded-md bg-[var(--theme-bg-secondary)] px-3 text-sm text-[var(--theme-text-primary)]"
         >
           {history.map((r) => (
             <option key={r.id} value={r.id}>
@@ -175,7 +175,7 @@ function MobileRunView({
         {isActive && (
           <button
             onClick={onCancel}
-            className="shrink-0 rounded-md border border-[var(--theme-border)] px-2 py-1 text-[11px] text-[var(--theme-text-muted)]"
+            className="shrink-0 min-h-11 rounded-md border border-[var(--theme-border)] px-3 text-xs text-[var(--theme-text-muted)]"
           >
             Annuler
           </button>
@@ -199,7 +199,7 @@ function MobileRunView({
             >
               <button
                 onClick={() => setExpandedId(isOpen ? 'none' : step.id)}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
+                className="flex min-h-11 w-full items-center gap-2.5 px-3 py-2.5 text-left"
               >
                 <span className={`w-5 shrink-0 text-center text-sm ${badge.className}`}>{badge.icon}</span>
                 <span className="min-w-0 flex-1 truncate text-sm text-[var(--theme-text-primary)]">
@@ -304,7 +304,7 @@ function MobileStepDetail({
                 key={o}
                 disabled={busy}
                 onClick={() => act(() => onResolveGate(stepRun.id, o, notes.trim() || undefined))}
-                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+                className="min-h-11 rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
               >
                 {o}
               </button>
@@ -327,7 +327,7 @@ function MobileStepDetail({
           <button
             disabled={busy || !notes.trim()}
             onClick={() => act(() => onRespondReview(notes.trim(), stepRun.id))}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             Répondre et relancer
           </button>
@@ -353,7 +353,7 @@ function MobileStepDetail({
                   key={e.id}
                   disabled={busy}
                   onClick={() => act(() => onResolveRoute(stepRun.id, e.id, notes.trim() || undefined))}
-                  className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-left text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+                  className="min-h-11 rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-left text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
                 >
                   {describeEdge(e, snapshot.steps)}
                 </button>
@@ -373,7 +373,7 @@ function MobileStepDetail({
           <button
             disabled={busy}
             onClick={() => act(() => onRetry(stepRun.id))}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             {stepRun.status === 'failed' ? 'Réessayer' : 'Relancer'}
           </button>

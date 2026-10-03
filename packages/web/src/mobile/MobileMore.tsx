@@ -5,6 +5,7 @@ import { RepositoriesIcon } from '../components/sidebar/icons';
 import { RoutineIcon } from '../lib/primitives';
 import { cn } from '../lib/cn';
 import { MobileSheet } from './MobileSheet';
+import { MobilePageHeader } from './MobilePageHeader';
 import { setMobileOverride } from './useMobileMode';
 import { useMobileNavStore, type MobileMorePage } from './mobileNavStore';
 import {
@@ -119,7 +120,7 @@ export function MobileMoreSheet() {
         <button
           type="button"
           onClick={() => setMobileOverride('desktop')}
-          className="min-h-11 shrink-0 px-2 text-xs font-medium text-[var(--theme-accent)]"
+          className="min-h-11 shrink-0 px-3 text-sm font-medium text-[var(--theme-accent)]"
         >
           Desktop
         </button>
@@ -135,18 +136,7 @@ export function MobileMorePageHost() {
   if (!page) return null;
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--theme-bg-base)]" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-      <header className="relative flex h-12 shrink-0 items-center border-b border-[var(--theme-border)] px-2">
-        <button
-          type="button"
-          onClick={() => open(null)}
-          className="flex min-h-11 items-center gap-1 px-2 text-[15px] text-[var(--theme-accent)]"
-        >
-          ‹ Retour
-        </button>
-        <h1 className="pointer-events-none absolute inset-x-0 text-center text-base font-semibold">
-          {PAGE_TITLES[page]}
-        </h1>
-      </header>
+      <MobilePageHeader title={PAGE_TITLES[page]} onBack={() => open(null)} />
       <div className={cn('min-h-0 flex-1 overflow-y-auto')} style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 120px)' }}>
         {page === 'pulse' && <MobileNotificationsPage />}
         {page === 'routines' && <MobileRoutinesPage />}
