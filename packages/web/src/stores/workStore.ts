@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { TicketType, TicketPriority, TicketLink, ImportSourceId } from '@fleex/shared';
 import { EMPTY_DRAFT, migrateDraft } from '../components/work/new/draftMigration';
 import { paneCount } from '../components/work/shell/shellLayout';
+import { useBrowserStore } from './browserStore';
 
 /**
  * Client-only UI state for the Work view. The ticket is the source of truth for
@@ -12,7 +13,11 @@ import { paneCount } from '../components/work/shell/shellLayout';
  */
 
 export type WorkView = 'task' | 'new';
-export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'scratch' | null;
+export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'scratch' | 'browser' | null;
+/** A remembered `browser` panel means nothing outside the desktop shell. */
+export function effectiveRightPanel(panel: RightPanel, desktop: boolean): RightPanel {
+  return panel === 'browser' && !desktop ? null : panel;
+}
 export type ThreadTab = 'conv' | 'stream';
 /** Shell pane arrangement — mirrors the prototype's layout presets. */
 export type ShellLayout = '1' | 'cols' | 'rows' | 'three' | 'grid';
@@ -532,3 +537,15 @@ export const useWorkStore = create<WorkState>((set, get) => {
     resetDraft: (boardId = get().draft.boardId) => commit({ draft: { ...EMPTY_DRAFT, boardId } }),
   };
 });
+
+/** The right panel to actually show: a remembered `browser` is nothing outside the desktop shell. */
+export function useEffectiveRightPanel(): RightPanel {
+  return effectiveRightPanel(useWorkStore((s) => s.rightPanel), typeof window !== 'undefined' && !!window.fleexDesktop);
+}
+
+/** An expanded browser panel takes the whole center: chat / shell / code / workflow step aside. */
+export function useBrowserTakesCenter(): boolean {
+  const panel = useEffectiveRightPanel();
+  const expanded = useBrowserStore((s) => s.expanded);
+  return panel === 'browser' && expanded;
+}

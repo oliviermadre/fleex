@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage, webContents } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -209,6 +209,32 @@ ipcMain.on('fleex:navigate', (_e, dir) => {
 // keep the native traffic lights centered in the zoom-scaled titlebar.
 ipcMain.on('fleex:zoom-changed', () => recenterWindowButtons());
 
+// ── Ticket browser (<webview>) ───────────────────────────────────────────────
+// The picker source is re-read on every request so editing it needs no restart.
+const PICKER_FILES = ['picker/core.js', 'picker/picker.js'];
+ipcMain.handle('fleex:picker-source', () =>
+  PICKER_FILES.map((f) => fs.readFileSync(path.join(__dirname, f), 'utf8')).join('\n;\n'),
+);
+
+ipcMain.handle('fleex:browser-capture', async (e, webContentsId, rect) => {
+  const wc = webContents.fromId(webContentsId);
+  // Only a webview hosted by the window asking for it.
+  if (!wc || wc.getType() !== 'webview' || wc.hostWebContents !== e.sender) throw new Error('No such webview');
+  const image = await wc.capturePage(rect);
+  return image.toDataURL();
+});
+
+// Pop-ups from a ticket browser open as a Fleex tab, never as a native window.
+app.on('web-contents-created', (_e, contents) => {
+  if (contents.getType() !== 'webview') return;
+  contents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url) && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('fleex:browser-open-tab', url);
+    }
+    return { action: 'deny' };
+  });
+});
+
 // Recompute the native traffic-light position for the current page zoom. macOS
 // only; a no-op elsewhere or before the API exists.
 function recenterWindowButtons() {
@@ -254,10 +280,24 @@ function createWindow() {
       contextIsolation: true,
       sandbox: false,
       preload: path.join(__dirname, 'preload.js'),
+      webviewTag: true,
     },
   });
 
   mainWindow.loadURL(serverUrl);
+
+  // Whatever the SPA asks for, a ticket-browser webview gets our hardened prefs
+  // and the picker preload.
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    delete webPreferences.preloadURL;
+    webPreferences.preload = path.join(__dirname, 'picker-preload.js');
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+    // webPreferences, not params: Electron builds the partition from it before this event.
+    webPreferences.partition = 'persist:fleex-browser';
+    if (params.src && !/^(https?:|about:blank)/i.test(params.src)) event.preventDefault();
+  });
 
   wireBrowserParity(mainWindow);
 

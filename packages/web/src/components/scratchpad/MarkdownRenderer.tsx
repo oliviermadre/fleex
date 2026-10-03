@@ -6,6 +6,8 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Components } from 'react-markdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+import { ElementContextCard } from '../shared/ElementContextCard';
+import { isElementContextCode, parseElementContext } from '../shared/elementContext';
 import { useColorMode } from '../../hooks/useActiveTheme';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
@@ -451,6 +453,16 @@ function MarkdownSection({
       if (isMermaidCode(className)) {
         return <MermaidDiagram code={codeNodeToString(children)} colorMode={colorMode} />;
       }
+      if (isElementContextCode(className)) {
+        const ctx = parseElementContext(codeNodeToString(children));
+        if (ctx) return <ElementContextCard context={ctx} />;
+        // Malformed block: show it as plain code, inside our own <pre> (pre is bypassed below).
+        return (
+          <pre className="my-2 overflow-x-auto rounded-md bg-[var(--theme-bg-overlay)] p-3 font-mono text-xs leading-relaxed">
+            <code>{children}</code>
+          </pre>
+        );
+      }
       if (className?.includes('hljs')) {
         // Block code — `pre` handles the container styling
         return <code className={className}>{children}</code>;
@@ -469,7 +481,8 @@ function MarkdownSection({
       const firstChild = node?.children?.[0];
       const codeClass =
         firstChild?.type === 'element' ? firstChild.properties?.className : undefined;
-      if (isMermaidCode(Array.isArray(codeClass) ? codeClass.join(' ') : String(codeClass ?? ''))) {
+      const cls = Array.isArray(codeClass) ? codeClass.join(' ') : String(codeClass ?? '');
+      if (isMermaidCode(cls) || isElementContextCode(cls)) {
         return <>{children}</>;
       }
       return (

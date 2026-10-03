@@ -83,6 +83,7 @@ export function TaskPane({
         onChange={setDraft}
         posting={convo.posting}
         onSend={convo.post}
+        withElements
       />
     </div>
   );

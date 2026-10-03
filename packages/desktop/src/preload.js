@@ -9,7 +9,7 @@
 // (Find-in-page / Cmd+F used to live here too but was removed — the native
 // findInPage bar behaved poorly inside the SPA.)
 
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, contextBridge } = require('electron');
 
 const isMac = process.platform === 'darwin';
 
@@ -56,3 +56,14 @@ if (isMac) {
   };
   notifyZoom();
 }
+
+// ── Ticket browser bridge ─────────────────────────────────────────────────────
+// Its presence is also how the SPA knows it runs in the desktop shell.
+contextBridge.exposeInMainWorld('fleexDesktop', {
+  capture: (webContentsId, rect) => ipcRenderer.invoke('fleex:browser-capture', webContentsId, rect),
+  onOpenTab: (cb) => {
+    const handler = (_e, url) => cb(url);
+    ipcRenderer.on('fleex:browser-open-tab', handler);
+    return () => ipcRenderer.removeListener('fleex:browser-open-tab', handler);
+  },
+});

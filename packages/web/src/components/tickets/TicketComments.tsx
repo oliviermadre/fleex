@@ -36,6 +36,8 @@ import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+import { ElementContextCard } from '../shared/ElementContextCard';
+import { isElementContextCode, parseElementContext } from '../shared/elementContext';
 import { useColorMode } from '../../hooks/useActiveTheme';
 import { preprocessMentions, SCRATCHPAD_REF_HREF_PREFIX, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { NoteRefChip } from '../markdown/NoteRefChip';
@@ -368,6 +370,16 @@ export const CommentMarkdown = memo(function CommentMarkdown({
       if (isMermaidCode(className)) {
         return <MermaidDiagram code={codeNodeToString(children)} colorMode={colorMode} />;
       }
+      if (isElementContextCode(className)) {
+        const ctx = parseElementContext(codeNodeToString(children));
+        if (ctx) return <ElementContextCard context={ctx} />;
+        // Malformed block: show it as plain code, inside our own <pre> (pre is bypassed below).
+        return (
+          <pre className="my-2 overflow-x-auto rounded-md bg-[var(--theme-bg-overlay)] p-3 font-mono text-xs leading-relaxed">
+            <code>{children}</code>
+          </pre>
+        );
+      }
       if (className?.includes('hljs')) {
         return <code className={className}>{children}</code>;
       }
@@ -382,7 +394,8 @@ export const CommentMarkdown = memo(function CommentMarkdown({
       const firstChild = node?.children?.[0];
       const codeClass =
         firstChild?.type === 'element' ? firstChild.properties?.className : undefined;
-      if (isMermaidCode(Array.isArray(codeClass) ? codeClass.join(' ') : String(codeClass ?? ''))) {
+      const cls = Array.isArray(codeClass) ? codeClass.join(' ') : String(codeClass ?? '');
+      if (isMermaidCode(cls) || isElementContextCode(cls)) {
         return <>{children}</>;
       }
       return (

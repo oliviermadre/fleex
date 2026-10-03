@@ -6,12 +6,14 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
-import { useWorkStore, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from '../../../stores/workStore';
+import { useWorkStore, useEffectiveRightPanel, useBrowserTakesCenter, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from '../../../stores/workStore';
+import { cn } from '../../../lib/cn';
 import type { WorkTask } from '../types';
 import { ContextPanel } from './ContextPanel';
 import { DelivsPanel } from './DelivsPanel';
 import { DiffPanel } from './DiffPanel';
 import { ScratchpadTabsPanel } from './ScratchpadTabsPanel';
+import { BrowserPanel } from './browser/BrowserPanel';
 
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
@@ -20,6 +22,7 @@ const TITLES: Record<string, string> = {
   diff: 'DIFF',
   code: 'CODE',
   scratch: 'NOTES',
+  browser: 'BROWSER',
 };
 
 /** The tool strip is 60px; the panel's right edge sits at that offset. */
@@ -36,7 +39,9 @@ export function RightPanel({
   deliverables: TicketDeliverable[];
   onDeleteTask: (id: string) => void;
 }) {
-  const rightPanel = useWorkStore((s) => s.rightPanel);
+  const rightPanel = useEffectiveRightPanel();
+  // Expanded browser: WorkView drops the center and the panel fills the row.
+  const expanded = useBrowserTakesCenter();
   const width = useWorkStore((s) => s.rightPanelWidth);
   const setRightPanelWidth = useWorkStore((s) => s.setRightPanelWidth);
   const dragging = useRef(false);
@@ -74,24 +79,33 @@ export function RightPanel({
 
   return (
     <section
-      className="relative flex shrink-0 flex-col border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
+      className={cn(
+        'relative flex flex-col border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]',
+        expanded ? 'min-w-0 flex-1' : 'shrink-0',
+      )}
       // The cap is relative to the row it shares with the center and the tool
       // strip, not to the window: the nav and queue already take their share.
-      style={{ width: effectiveWidth, maxWidth: `calc(100% - ${TOOL_STRIP_WIDTH + CENTER_MIN_WIDTH}px)` }}
+      style={expanded ? undefined : { width: effectiveWidth, maxWidth: `calc(100% - ${TOOL_STRIP_WIDTH + CENTER_MIN_WIDTH}px)` }}
     >
       {/* Drag handle on the left edge */}
-      <div
-        onMouseDown={onMouseDown}
-        className="absolute -left-1 top-0 z-10 h-full w-2 cursor-col-resize hover:bg-[var(--theme-accent-muted)]"
-        title="Drag to resize"
-      />
-      <div className="flex h-9 shrink-0 items-center border-b border-[var(--theme-border)] px-3 text-[11px] font-semibold tracking-[0.06em] text-[var(--theme-text-secondary)]">
-        {TITLES[rightPanel] ?? ''}
-      </div>
+      {!expanded && (
+        <div
+          onMouseDown={onMouseDown}
+          className="absolute -left-1 top-0 z-10 h-full w-2 cursor-col-resize hover:bg-[var(--theme-accent-muted)]"
+          title="Drag to resize"
+        />
+      )}
+      {/* The browser's own tab bar stands in for the title row. */}
+      {rightPanel !== 'browser' && (
+        <div className="flex h-9 shrink-0 items-center border-b border-[var(--theme-border)] px-3 text-[11px] font-semibold tracking-[0.06em] text-[var(--theme-text-secondary)]">
+          {TITLES[rightPanel] ?? ''}
+        </div>
+      )}
       {rightPanel === 'context' && <ContextPanel task={task} onDelete={() => onDeleteTask(task.id)} />}
       {rightPanel === 'diff' && <DiffPanel ticketId={task.id} />}
       {rightPanel === 'deliv' && <DelivsPanel ticketId={task.id} deliverables={deliverables} />}
       {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}
+      {rightPanel === 'browser' && <BrowserPanel key={task.id} ticketId={task.id} />}
     </section>
   );
 }

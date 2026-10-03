@@ -9,7 +9,8 @@
  * Timeline marks that pair as "what shows at the bottom".
  */
 import { cn } from '../../../lib/cn';
-import { useWorkStore, type RightPanel } from '../../../stores/workStore';
+import { useWorkStore, useEffectiveRightPanel, type RightPanel } from '../../../stores/workStore';
+import { hasDesktop } from './browser/webview';
 import type { WorkTask } from '../types';
 
 interface Tool {
@@ -79,10 +80,22 @@ const TOOLS: Tool[] = [
       </svg>
     ),
   },
+  {
+    key: 'browser',
+    label: 'Browser',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3 12h18" />
+        <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" />
+      </svg>
+    ),
+  },
 ];
 
 export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; delivCount?: number }) {
-  const rightPanel = useWorkStore((s) => s.rightPanel);
+  const rightPanel = useEffectiveRightPanel();
+  const tools = hasDesktop() ? TOOLS : TOOLS.filter((t) => t.key !== 'browser');
   const toggleRightPanel = useWorkStore((s) => s.toggleRightPanel);
   const shellOpen = useWorkStore((s) => s.shellOpen);
   const shellMode = useWorkStore((s) => s.shellMode);
@@ -99,7 +112,7 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
 
   return (
     <nav className="flex min-h-0 w-[60px] shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none] border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-2">
-      {TOOLS.map((tool) => {
+      {tools.map((tool) => {
         // Code is a center-takeover mode, not a right panel.
         const isCode = tool.key === 'code';
         const active = isCode ? codeMode : rightPanel === tool.key;

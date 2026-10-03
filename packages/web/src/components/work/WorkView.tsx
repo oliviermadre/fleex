@@ -11,7 +11,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
 import { useWorkKeyboard } from './keyboard';
-import { useWorkStore } from '../../stores/workStore';
+import { useWorkStore, useEffectiveRightPanel, useBrowserTakesCenter } from '../../stores/workStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
@@ -33,7 +33,8 @@ import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 export function WorkView() {
   const queue = useWorkQueue();
   const view = useWorkStore((s) => s.view);
-  const rightPanel = useWorkStore((s) => s.rightPanel);
+  const rightPanel = useEffectiveRightPanel();
+  const browserTakesCenter = useBrowserTakesCenter();
   const queueCollapsed = useWorkStore((s) => s.queueCollapsed);
   const shellOpen = useWorkStore((s) => s.shellOpen);
   const shellMode = useWorkStore((s) => s.shellMode);
@@ -114,19 +115,23 @@ export function WorkView() {
           <WorkTopBar queue={queue} />
 
           <div className="flex min-h-0 flex-1">
-            <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
-              {view === 'new' ? (
-                <NewTask />
-              ) : codeMode && selectedTask ? (
-                <CodeEditor ticketId={selectedTask.id} />
-              ) : shellMode && selectedTask ? (
-                <ShellSurface key={selectedTask.id} ticketId={selectedTask.id} />
-              ) : workflowMode && selectedTask && hasWorkflowRuns ? (
-                <TicketWorkflowTab ticketId={selectedTask.id} />
-              ) : (
-                <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
-              )}
-            </main>
+            {/* An expanded browser takes the whole center (wide pages need it) — only
+                where the panel itself renders, so the center never goes blank. */}
+            {!(browserTakesCenter && view === 'task' && selectedTask) && (
+              <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
+                {view === 'new' ? (
+                  <NewTask />
+                ) : codeMode && selectedTask ? (
+                  <CodeEditor ticketId={selectedTask.id} />
+                ) : shellMode && selectedTask ? (
+                  <ShellSurface key={selectedTask.id} ticketId={selectedTask.id} />
+                ) : workflowMode && selectedTask && hasWorkflowRuns ? (
+                  <TicketWorkflowTab ticketId={selectedTask.id} />
+                ) : (
+                  <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+                )}
+              </main>
+            )}
 
             {view === 'task' && rightPanel && selectedTask && (
               <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
