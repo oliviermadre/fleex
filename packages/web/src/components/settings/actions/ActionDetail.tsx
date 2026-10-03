@@ -33,6 +33,7 @@ import {
   TEMPLATE_VARIABLES,
   blankDraft,
   draftWarnings,
+  hasOwnColors,
   newId,
   normaliseDraft,
   validateDraft,
@@ -391,6 +392,19 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
                   {aiFields.includes('icon') && <SuggestedMark />}
                   <span className="text-[11px] text-[var(--theme-text-faint)]">or click the tile</span>
                 </div>
+                {draft.iconType === 'svg' && draft.icon && (
+                  <label className="mt-2.5 flex items-center gap-2 text-[11.5px] text-[var(--theme-text-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={draft.iconColors === 'original'}
+                      onChange={(e) => update({ iconColors: e.target.checked ? 'original' : 'mono' })}
+                    />
+                    Original colours
+                    <span className="text-[var(--theme-text-muted)]">
+                      {hasOwnColors(draft.icon) ? '— off: follows the theme’s text colour.' : '— this icon has no colours of its own.'}
+                    </span>
+                  </label>
+                )}
               </div>
             </div>
             {pickerOpen && (

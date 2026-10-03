@@ -5,36 +5,50 @@
  * three places we do not control: a model, Iconify, and whatever a user pastes.
  * So nothing passes unless it is on the list — elements, attributes, and values
  * alike — and anything that can reach the network or run script (`<script>`,
- * `on*`, `href`, `style`, `url(…)`) is dropped rather than escaped.
+ * `on*`, external `href`, `style`, `url(…)` other than a local `#id`) is dropped
+ * rather than escaped.
+ *
+ * Colours are kept as drawn: whether an icon shows them or follows the theme is
+ * a per-action display choice (`iconColors`), applied when it is rendered.
+ * Gradients and clip paths survive, wired only through local `#id` references.
  *
  * Deliberately a small tokenizer, not a DOM: icons are flat geometry, text
  * nodes are meaningless in them, and the server has no DOM to lean on.
  */
 
-export const SVG_MAX_BYTES = 8 * 1024;
+/** Colour logos (gradients, many paths) are far heavier than line icons. */
+export const SVG_MAX_BYTES = 32 * 1024;
 
-const ALLOWED_ELEMENTS = new Set(['svg', 'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon']);
+/** Lower-case name → the SVG spelling a browser expects. */
+const ALLOWED_ELEMENTS = new Map(
+  ['svg', 'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon', 'defs', 'linearGradient', 'radialGradient', 'stop', 'clipPath']
+    .map((name) => [name.toLowerCase(), name]),
+);
 
-const ALLOWED_ATTRIBUTES = new Set([
-  'viewbox', 'xmlns', 'd', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'width', 'height',
-  'points', 'fill', 'fill-rule', 'fill-opacity', 'clip-rule', 'stroke', 'stroke-width', 'stroke-linecap',
-  'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-opacity',
-  'transform', 'opacity',
-]);
+/** Lower-case name → output spelling (SVG attributes are case-sensitive). */
+const ALLOWED_ATTRIBUTES = new Map(
+  [
+    'viewBox', 'xmlns', 'd', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'width', 'height',
+    'points', 'fill', 'fill-rule', 'fill-opacity', 'clip-rule', 'stroke', 'stroke-width', 'stroke-linecap',
+    'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-opacity',
+    'transform', 'opacity',
+    // Gradients and clip paths.
+    'id', 'offset', 'stop-color', 'stop-opacity', 'gradientUnits', 'gradientTransform', 'spreadMethod',
+    'fx', 'fy', 'fr', 'clip-path', 'clipPathUnits', 'href', 'xlink:href',
+  ].map((name) => [name.toLowerCase(), name]),
+);
 
-const COLOR_ATTRIBUTES = new Set(['fill', 'stroke']);
+/** Attributes that may point at a gradient or clip path of the same SVG. */
+const URL_ATTRIBUTES = new Set(['fill', 'stroke', 'clip-path']);
+const LOCAL_URL = /^url\(\s*['"]?#([A-Za-z_][\w.-]*)['"]?\s*\)$/;
+const SAFE_ID = /^[A-Za-z_][\w.-]*$/;
 const DANGEROUS_VALUE = /url\s*\(|javascript:|data:|expression\s*\(|[<>]/i;
-
-export interface SanitizeOptions {
-  /** Keep brand colours instead of forcing `currentColor`. */
-  keepColors?: boolean;
-}
 
 const TOKEN = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<![^>]*>|<\?[\s\S]*?\?>|<\/\s*([a-zA-Z][\w:-]*)\s*>|<\s*([a-zA-Z][\w:-]*)((?:\s+[^\s=/>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>/g;
 const ATTRIBUTE = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
 
 /** Returns sanitised markup, or null when nothing usable (or too large) remains. */
-export function sanitizeSvg(input: string, options: SanitizeOptions = {}): string | null {
+export function sanitizeSvg(input: string): string | null {
   if (!input || typeof input !== 'string') return null;
   if (input.length > SVG_MAX_BYTES * 4) return null;
 
@@ -53,7 +67,7 @@ export function sanitizeSvg(input: string, options: SanitizeOptions = {}): strin
       if (!stack.some((e) => e.name === name)) continue;
       while (stack.length > 0) {
         const open = stack.pop()!;
-        if (open.keep) out.push(`</${open.name}>`);
+        if (open.keep) out.push(`</${ALLOWED_ELEMENTS.get(open.name)}>`);
         if (open.name === name) break;
       }
       continue;
@@ -68,15 +82,15 @@ export function sanitizeSvg(input: string, options: SanitizeOptions = {}): strin
     if (keep && isRoot) sawRoot = true;
 
     if (keep) {
-      const attrs = sanitizeAttributes(name, rawAttrs, options, isRoot);
-      out.push(`<${name}${attrs}${selfClosing ? '/>' : '>'}`);
+      const attrs = sanitizeAttributes(name, rawAttrs, isRoot);
+      out.push(`<${ALLOWED_ELEMENTS.get(name)}${attrs}${selfClosing ? '/>' : '>'}`);
     }
     if (!selfClosing) stack.push({ name, keep });
   }
   // Close anything left open by malformed input.
   while (stack.length > 0) {
     const open = stack.pop()!;
-    if (open.keep) out.push(`</${open.name}>`);
+    if (open.keep) out.push(`</${ALLOWED_ELEMENTS.get(open.name)}>`);
   }
 
   if (!sawRoot) return null;
@@ -86,7 +100,7 @@ export function sanitizeSvg(input: string, options: SanitizeOptions = {}): strin
   return svg;
 }
 
-function sanitizeAttributes(element: string, raw: string, options: SanitizeOptions, isRoot: boolean): string {
+function sanitizeAttributes(element: string, raw: string, isRoot: boolean): string {
   const attrs = new Map<string, string>();
   let m: RegExpExecArray | null;
   ATTRIBUTE.lastIndex = 0;
@@ -94,11 +108,23 @@ function sanitizeAttributes(element: string, raw: string, options: SanitizeOptio
     const name = m[1]!.toLowerCase();
     const value = (m[2] ?? m[3] ?? m[4] ?? '').trim();
     if (!ALLOWED_ATTRIBUTES.has(name)) continue;
-    if (DANGEROUS_VALUE.test(value)) continue;
-    if (COLOR_ATTRIBUTES.has(name) && !options.keepColors && value !== 'none' && value !== 'currentColor') {
-      attrs.set(name, 'currentColor');
+    if (name === 'id') {
+      if (SAFE_ID.test(value)) attrs.set(name, value);
       continue;
     }
+    if (name === 'href' || name === 'xlink:href') {
+      // Only a gradient inheriting from another one of the same SVG.
+      if ((element === 'lineargradient' || element === 'radialgradient') && value.startsWith('#') && SAFE_ID.test(value.slice(1))) attrs.set('href', value);
+      continue;
+    }
+    if (URL_ATTRIBUTES.has(name)) {
+      const local = LOCAL_URL.exec(value);
+      if (local) {
+        attrs.set(name, `url(#${local[1]})`);
+        continue;
+      }
+    }
+    if (DANGEROUS_VALUE.test(value)) continue;
     attrs.set(name, value);
   }
 
@@ -116,7 +142,7 @@ function sanitizeAttributes(element: string, raw: string, options: SanitizeOptio
 
   let result = '';
   for (const [name, value] of attrs) {
-    const outName = name === 'viewbox' ? 'viewBox' : name;
+    const outName = ALLOWED_ATTRIBUTES.get(name) ?? name;
     result += ` ${outName}="${value.replace(/"/g, '&quot;')}"`;
   }
   return result;
@@ -133,13 +159,12 @@ export function iconifyBodyToSvg(body: string, width = 24, height = 24): string 
  * The picker already routes every import through `sanitizeSvg`, but the config
  * is saved by the client: the server must not trust it to have done so (a
  * direct `PUT /api/config`, an older client, icons saved before the sanitiser
- * existed). Colours are kept — they were the user's choice — and an icon with
- * nothing usable left becomes empty rather than unsafe.
+ * existed). An icon with nothing usable left becomes empty rather than unsafe.
  */
 export function sanitizeActionIcons<T extends { icon: string; iconType: string }>(actions: T[]): T[] {
   return actions.map((action) =>
     action && action.iconType === 'svg' && typeof action.icon === 'string' && action.icon
-      ? { ...action, icon: sanitizeSvg(action.icon, { keepColors: true }) ?? '' }
+      ? { ...action, icon: sanitizeSvg(action.icon) ?? '' }
       : action,
   );
 }

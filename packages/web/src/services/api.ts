@@ -1779,6 +1779,13 @@ export function suggestActionIcons(
   return aiRequest('/actions-ai/icons', body);
 }
 
+/** No model: keywords guessed from label and command, answered in well under a second. */
+export function quickActionIcons(
+  body: import('@fleex/shared').ActionsAiIconsRequest,
+): Promise<import('@fleex/shared').ActionsAiIconsResponse> {
+  return aiRequest('/actions-ai/icons/quick', body);
+}
+
 /** NDJSON stream: `onStage` per step, resolves with the draft. */
 export async function draftActionWithAi(
   body: import('@fleex/shared').ActionsAiDraftRequest,

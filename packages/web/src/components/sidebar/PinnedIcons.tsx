@@ -1,3 +1,4 @@
+import { useId, useMemo } from 'react';
 import type { PinnedIcon } from '../../stores/settingsStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { cn } from '../../lib/cn';
@@ -7,15 +8,9 @@ interface PinnedIconButtonProps {
   collapsed?: boolean;
 }
 
-export function renderIcon(icon: Pick<PinnedIcon, 'icon' | 'iconType' | 'label'>, size: number) {
+export function renderIcon(icon: Pick<PinnedIcon, 'icon' | 'iconType' | 'label' | 'iconColors'>, size: number) {
   if (icon.iconType === 'svg') {
-    return (
-      <span
-        className="flex items-center justify-center [&>svg]:h-full [&>svg]:w-full"
-        style={{ width: size, height: size }}
-        dangerouslySetInnerHTML={{ __html: icon.icon }}
-      />
-    );
+    return <InlineSvgIcon svg={icon.icon} size={size} mono={icon.iconColors !== 'original'} />;
   }
 
   if (icon.iconType === 'base64') {
@@ -27,6 +22,32 @@ export function renderIcon(icon: Pick<PinnedIcon, 'icon' | 'iconType' | 'label'>
   }
 
   return null;
+}
+
+/**
+ * Gives every `id` of the SVG (gradients, clip paths) and the `#id` references
+ * to them a prefix unique to this instance. Inline SVGs share the document's id
+ * space: two icons both defining `id="a"` would paint each other's gradient, and
+ * a hidden copy would blank the visible one.
+ */
+export function scopeSvgIds(svg: string, prefix: string): string {
+  if (!svg.includes('id="')) return svg;
+  return svg
+    .replace(/\bid="([^"]+)"/g, (_, id: string) => `id="${prefix}${id}"`)
+    .replace(/url\(#([^)]+)\)/g, (_, id: string) => `url(#${prefix}${id})`)
+    .replace(/\bhref="#([^"]+)"/g, (_, id: string) => `href="#${prefix}${id}"`);
+}
+
+function InlineSvgIcon({ svg, size, mono }: { svg: string; size: number; mono: boolean }) {
+  const prefix = `i${useId().replace(/[^\w-]/g, '')}-`;
+  const html = useMemo(() => scopeSvgIds(svg, prefix), [svg, prefix]);
+  return (
+    <span
+      className={cn('flex items-center justify-center [&>svg]:h-full [&>svg]:w-full', mono && 'action-icon-mono')}
+      style={{ width: size, height: size }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 export function PinnedIconButton({ icon, collapsed }: PinnedIconButtonProps) {

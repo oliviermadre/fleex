@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { sanitizeSvg, sanitizeActionIcons, iconifyBodyToSvg, SVG_MAX_BYTES } from './svg-sanitizer.js';
 
 describe('sanitizeSvg', () => {
-  it('keeps plain icon geometry and forces currentColor so the icon follows the theme', () => {
+  it('keeps plain icon geometry and its colours: mono vs original is a display choice', () => {
     const out = sanitizeSvg('<svg width="16" height="16"><path d="M0 0h8" fill="#ff0000" stroke="red"/></svg>');
-    expect(out).toBe('<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 0h8" fill="currentColor" stroke="currentColor"/></svg>');
+    expect(out).toBe('<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 0h8" fill="#ff0000" stroke="red"/></svg>');
   });
 
   it('keeps fill="none" (outline icons would otherwise turn solid)', () => {
@@ -17,17 +17,29 @@ describe('sanitizeSvg', () => {
     expect(out).toContain('<circle cx="1" cy="1" r="1"/>');
   });
 
-  it('drops links, styles, foreignObject and url() references — anything that can reach out', () => {
+  it('drops links, styles, foreignObject and external url() references — anything that can reach out', () => {
     const out = sanitizeSvg(
       '<svg viewBox="0 0 24 24"><a href="https://evil"><path d="M1 1"/></a><foreignObject><div>x</div></foreignObject>' +
-      '<style>*{}</style><rect x="0" y="0" width="1" height="1" fill="url(#g)" style="fill:red" xlink:href="#x"/></svg>',
+      '<style>*{}</style><rect x="0" y="0" width="1" height="1" fill="url(https://evil/x.svg#g)" style="fill:red" xlink:href="#x"/>' +
+      '<linearGradient id="a" href="https://evil/#b"><stop offset="0" stop-color="url(javascript:x)"/></linearGradient>' +
+      '<path d="M1 1" clip-path="url(data:x)" fill="url(#a) red"/><g id="x y"/></svg>',
     )!;
-    expect(out).not.toMatch(/href|foreignObject|style|url\(|evil/);
+    expect(out).not.toMatch(/href|foreignObject|style|url\(|evil|javascript|data:|id="x/);
     expect(out).toContain('<rect x="0" y="0" width="1" height="1"/>');
   });
 
-  it('can keep brand colours on request', () => {
-    expect(sanitizeSvg('<svg viewBox="0 0 24 24"><path fill="#181717" d="M1 1"/></svg>', { keepColors: true })).toContain('fill="#181717"');
+  it('keeps gradients and clip paths wired through local #id references, with SVG casing', () => {
+    const out = sanitizeSvg(
+      '<svg viewBox="0 0 24 24"><defs><radialGradient id="g1" cx="1" gradientUnits="userSpaceOnUse" gradientTransform="scale(2)">' +
+      '<stop offset=".5" stop-color="#ff0" stop-opacity=".4"/></radialGradient><linearGradient id="g2" xlink:href="#g1"/>' +
+      "<clipPath id=\"c\"><rect width=\"1\" height=\"1\"/></clipPath></defs><path d=\"M1 1\" fill=\"url('#g2')\" clip-path=\"url(#c)\"/></svg>",
+    )!;
+    expect(out).toContain('<radialGradient id="g1" cx="1" gradientUnits="userSpaceOnUse" gradientTransform="scale(2)">');
+    expect(out).toContain('<stop offset=".5" stop-color="#ff0" stop-opacity=".4"/>');
+    expect(out).toContain('<linearGradient id="g2" href="#g1"/>');
+    expect(out).toContain('<clipPath id="c">');
+    expect(out).toContain('<path d="M1 1" fill="url(#g2)" clip-path="url(#c)"/>');
+    expect(out).toContain('</defs>');
   });
 
   it('rejects input that is not an svg, has no geometry, or is too large', () => {

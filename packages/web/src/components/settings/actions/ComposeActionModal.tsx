@@ -8,7 +8,7 @@ import { useUIStore, type ActionsScope } from '../../../stores/uiStore';
 import { Modal } from '../../ui/Modal';
 import { Button } from '../../ui/Button';
 import { statusDotClass } from '../../actions/actionStatus';
-import { COMPOSE_IDEAS, blankDraft, newId, type AiField } from './actionModel';
+import { COMPOSE_IDEAS, blankDraft, defaultIconColors, newId, type AiField } from './actionModel';
 import { AI_BUTTON, Kbd, SparkIcon } from './shared';
 
 const STAGES: { key: ActionsAiDraftStage; label: string }[] = [
@@ -58,7 +58,7 @@ export function ComposeActionModal({ scope }: { scope: ActionsScope }) {
           ...blankDraft(),
           ...result.draft,
           id: newId(),
-          ...(result.icon ? { icon: result.icon.svg, iconType: 'svg' as const } : {}),
+          ...(result.icon ? { icon: result.icon.svg, iconType: 'svg' as const, iconColors: defaultIconColors({ icon: result.icon.svg, iconType: 'svg' }) } : {}),
         },
         aiFields,
         fromAi: true,

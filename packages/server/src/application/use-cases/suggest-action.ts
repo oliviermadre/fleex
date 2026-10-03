@@ -17,6 +17,7 @@ import type {
 } from '@fleex/shared';
 import { enforceRisk, extractBinaries } from '../../domain/services/command-safety.js';
 import { sanitizeSvg } from '../../domain/services/svg-sanitizer.js';
+import { guessIconKeywords } from '../../domain/services/icon-keywords.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
 /** Fast and cheap: these are short structured completions. Swap here to change model. */
@@ -37,6 +38,9 @@ export interface IconSearchPort {
 }
 
 export class ActionsAiError extends Error {}
+
+/** Two rows of the picker: brand searches return the same logo in colour and in mono. */
+const ICON_SUGGESTION_LIMIT = 12;
 
 const ENVIRONMENT = `
 Execution environment of every command (non-negotiable):
@@ -280,6 +284,22 @@ export class SuggestActionUseCase {
     return this.findIcons(plan.keywords, plan.brand, plan.generate, label ?? request.command ?? 'action', request.exclude);
   }
 
+  /**
+   * The picker's instant first answer: keywords guessed from the label and the
+   * command, no model call (each one costs ~5 s of process spawn). Haiku's
+   * `iconSuggestions` refines it in parallel.
+   */
+  async quickIconSuggestions(request: ActionsAiIconsRequest): Promise<ActionsAiIconsResponse> {
+    const { keywords, brand } = guessIconKeywords(request.label, request.command);
+    if (keywords.length === 0) return { keywords, suggestions: [] };
+    try {
+      const terms = brand && !keywords.includes(brand) ? [brand, ...keywords] : keywords;
+      return { keywords, suggestions: await this.icons.search(terms, { brandFirst: !!brand, includeBrands: !!brand, limit: ICON_SUGGESTION_LIMIT, exclude: request.exclude }) };
+    } catch {
+      return { keywords, suggestions: [], iconifyUnavailable: true };
+    }
+  }
+
   /** Iconify first (brand first when there is one); a generated SVG when asked, when nothing fits, or when Iconify is down. */
   private async findIcons(keywords: string[], brand: string | null, generate: boolean, label: string, exclude?: string[]): Promise<ActionsAiIconsResponse> {
     let suggestions: IconSuggestion[] = [];
@@ -288,7 +308,7 @@ export class SuggestActionUseCase {
       const terms = brand && !keywords.includes(brand) ? [brand, ...keywords] : keywords;
       // Brand logos only when the action is about a brand: otherwise a keyword like
       // "toggle" matches arbitrary logos (a staging toggle got the Deno Deploy one).
-      suggestions = await this.icons.search(terms, { brandFirst: !!brand, includeBrands: !!brand, limit: 6, exclude });
+      suggestions = await this.icons.search(terms, { brandFirst: !!brand, includeBrands: !!brand, limit: ICON_SUGGESTION_LIMIT, exclude });
     } catch (error) {
       iconifyUnavailable = true;
       this.logger.warn('Iconify unreachable, generating icon only', { error: error instanceof Error ? error.message : String(error) });

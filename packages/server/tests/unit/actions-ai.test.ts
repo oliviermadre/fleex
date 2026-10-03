@@ -87,6 +87,25 @@ describe('SuggestActionUseCase.command', () => {
   });
 });
 
+describe('SuggestActionUseCase.quickIconSuggestions', () => {
+  it('answers without the model, from keywords guessed on the server — the command never reaches Iconify', async () => {
+    const model = scriptedModel([]);
+    const search = icons([GH_ICON]);
+    const uc = new SuggestActionUseCase(model, binaries, search, logger);
+    const res = await uc.quickIconSuggestions({ label: 'Login', command: 'gh auth login --secret-token abc' });
+    expect(model.calls).toHaveLength(0);
+    expect(res).toMatchObject({ keywords: ['github', 'login'], suggestions: [GH_ICON] });
+    const [keywords, options] = (search.search as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(JSON.stringify(keywords)).not.toContain('secret');
+    expect(options).toMatchObject({ brandFirst: true, includeBrands: true });
+  });
+
+  it('reports Iconify being down instead of failing', async () => {
+    const uc = new SuggestActionUseCase(scriptedModel([]), binaries, icons(new Error('ECONNREFUSED')), logger);
+    expect(await uc.quickIconSuggestions({ label: 'Deploy' })).toEqual({ keywords: ['deploy'], suggestions: [], iconifyUnavailable: true });
+  });
+});
+
 describe('SuggestActionUseCase.iconSuggestions', () => {
   it('searches Iconify with the keywords only (never the command) and puts the brand first', async () => {
     const model = scriptedModel([() => '{"keywords":["git","octocat"],"brand":"github","generate":false}']);
@@ -97,7 +116,7 @@ describe('SuggestActionUseCase.iconSuggestions', () => {
     const [keywords, options] = (search.search as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(keywords).toEqual(['github', 'git', 'octocat']);
     expect(JSON.stringify(keywords)).not.toContain('secret');
-    expect(options).toMatchObject({ brandFirst: true, includeBrands: true, limit: 6 });
+    expect(options).toMatchObject({ brandFirst: true, includeBrands: true, limit: 12 });
   });
 
   it('still offers a generated icon when Iconify is down', async () => {
@@ -221,6 +240,14 @@ describe('actions AI routes', () => {
     const clean = await app.inject({ method: 'POST', url: '/api/actions-ai/icons/sanitize', payload: { svg: '<svg viewBox="0 0 24 24" onload="x()"><script>1</script><path d="M1 1"/></svg>' } });
     expect(clean.json().svg).not.toMatch(/script|onload/);
     expect((await app.inject({ method: 'POST', url: '/api/actions-ai/icons/sanitize', payload: { svg: '<div/>' } })).statusCode).toBe(422);
+    await app.close();
+  });
+
+  it('serves the quick, model-free icon search even without AI', async () => {
+    const app = await build(false, { quickIconSuggestions: async () => ({ keywords: ['github'], suggestions: [GH_ICON] }) });
+    const quick = await app.inject({ method: 'POST', url: '/api/actions-ai/icons/quick', payload: { label: 'GitHub' } });
+    expect(quick.json().suggestions[0].id).toBe('simple-icons:github');
+    expect((await app.inject({ method: 'POST', url: '/api/actions-ai/icons/quick', payload: {} })).statusCode).toBe(400);
     await app.close();
   });
 

@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ActionIconType, IconSuggestion } from '@fleex/shared';
+import type { ActionIconColors, ActionIconType, IconSuggestion } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { tint } from '../../../lib/tints';
 import * as api from '../../../services/api';
 import { renderIcon } from '../../sidebar/PinnedIcons';
 import { Button } from '../../ui/Button';
-import { inferIconType } from './actionModel';
+import { defaultIconColors, inferIconType } from './actionModel';
 import { AI_TEXT, CODE_INPUT, Chip, SparkIcon, TEXT_INPUT } from './shared';
 
 type Tab = 'ai' | 'library' | 'import';
+
+export type PickedIcon = { icon: string; iconType: ActionIconType; iconColors: ActionIconColors };
 
 interface IconPickerProps {
   aiAvailable: boolean;
@@ -16,7 +18,7 @@ interface IconPickerProps {
   command?: string;
   probeCommand?: string;
   current: string;
-  onPick: (icon: { icon: string; iconType: ActionIconType }, fromAi: boolean) => void;
+  onPick: (icon: PickedIcon, fromAi: boolean) => void;
   onClose: () => void;
 }
 
@@ -24,9 +26,13 @@ interface IconPickerProps {
  * Inline icon picker: model-picked suggestions from Iconify (plus one generated
  * SVG), a plain library search, or an import. Every SVG is sanitised server-side
  * and stored inline, so a saved icon never needs the network to render.
+ *
+ * Previews show each icon's own colours; a picked icon that has some is shown in
+ * colour (`iconColors: 'original'`), which the Identity section can switch off.
  */
-export function IconPicker({ aiAvailable, label, command, probeCommand, current, onPick, onClose }: IconPickerProps) {
+export function IconPicker({ aiAvailable, label, command, probeCommand, current, onPick: onPickRaw, onClose }: IconPickerProps) {
   const [tab, setTab] = useState<Tab>(aiAvailable ? 'ai' : 'library');
+  const onPick = (icon: { icon: string; iconType: ActionIconType }, fromAi: boolean) => onPickRaw({ ...icon, iconColors: defaultIconColors(icon) }, fromAi);
 
   return (
     <div className="mt-4 overflow-hidden rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)]">
@@ -77,7 +83,7 @@ function IconGrid({ items, current, onPick }: { items: IconSuggestion[]; current
           <span className={cn('absolute right-1 top-1 rounded px-1 text-[8.5px]', s.source === 'generated' ? tint('purple') : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)]')}>
             {s.source === 'generated' ? 'generated' : s.source}
           </span>
-          {renderIcon({ icon: s.svg, iconType: 'svg', label: s.name }, 22)}
+          {renderIcon({ icon: s.svg, iconType: 'svg', label: s.name, iconColors: 'original' }, 22)}
           <span className="max-w-full truncate text-[10px] text-[var(--theme-text-muted)]">{s.name}</span>
         </button>
       ))}
@@ -85,48 +91,94 @@ function IconGrid({ items, current, onPick }: { items: IconSuggestion[]; current
   );
 }
 
-function AiTab({ label, command, probeCommand, current, onPick }: { label: string; command?: string; probeCommand?: string; current: string; onPick: (svg: string) => void }) {
-  const [state, setState] = useState<{ loading: boolean; keywords: string[]; items: IconSuggestion[]; error?: string; offline?: boolean }>({ loading: true, keywords: [], items: [] });
-  const seen = useRef<string[]>([]);
+/** Adds the suggestions not already shown, after them: nothing moves under the cursor. */
+function mergeSuggestions(shown: IconSuggestion[], incoming: IconSuggestion[]): IconSuggestion[] {
+  const ids = new Set(shown.map((s) => s.id));
+  return [...shown, ...incoming.filter((s) => !ids.has(s.id))];
+}
 
-  const load = async (more: boolean) => {
-    setState((s) => ({ ...s, loading: true, error: undefined }));
-    try {
-      const res = await api.suggestActionIcons({ label: label || command || 'action', command, probeCommand, ...(more ? { exclude: seen.current } : {}) });
-      seen.current = [...seen.current, ...res.suggestions.map((s) => s.id)];
-      setState({ loading: false, keywords: res.keywords, items: res.suggestions, offline: res.iconifyUnavailable });
-    } catch (e) {
-      setState({ loading: false, keywords: [], items: [], error: e instanceof Error ? e.message : String(e) });
+interface AiState {
+  /** Instant, model-free search (keywords guessed from label and command). */
+  quickLoading: boolean;
+  /** Haiku's keywords, then Iconify — ~5 s, mostly spawning the SDK process. */
+  aiLoading: boolean;
+  keywords: string[];
+  items: IconSuggestion[];
+  error?: string;
+  offline?: boolean;
+}
+
+function AiTab({ label, command, probeCommand, current, onPick }: { label: string; command?: string; probeCommand?: string; current: string; onPick: (svg: string) => void }) {
+  const [state, setState] = useState<AiState>({ quickLoading: true, aiLoading: true, keywords: [], items: [] });
+  const seen = useRef<string[]>([]);
+  const generation = useRef(0);
+
+  const load = (more: boolean) => {
+    const gen = ++generation.current;
+    const request = { label: label || command || 'action', command, probeCommand };
+    const isLive = () => gen === generation.current;
+    const absorb = (res: { keywords: string[]; suggestions: IconSuggestion[]; iconifyUnavailable?: boolean }, replace: boolean) => {
+      seen.current = [...new Set([...seen.current, ...res.suggestions.map((s) => s.id)])];
+      setState((s) => ({
+        ...s,
+        keywords: replace ? res.keywords : [...new Set([...s.keywords, ...res.keywords])],
+        items: replace ? res.suggestions : mergeSuggestions(s.items, res.suggestions),
+        offline: res.iconifyUnavailable || (!replace && s.offline),
+      }));
+    };
+
+    if (more) {
+      setState((s) => ({ ...s, aiLoading: true, error: undefined }));
+    } else {
+      seen.current = [];
+      setState({ quickLoading: true, aiLoading: true, keywords: [], items: [] });
+      api.quickActionIcons(request)
+        .then((res) => isLive() && absorb(res, false))
+        .catch(() => undefined) // Haiku's answer still comes
+        .finally(() => isLive() && setState((s) => ({ ...s, quickLoading: false })));
     }
+
+    api.suggestActionIcons({ ...request, ...(more ? { exclude: seen.current } : {}) })
+      .then((res) => isLive() && absorb(res, more))
+      .catch((e) => isLive() && setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e) })))
+      .finally(() => isLive() && setState((s) => ({ ...s, aiLoading: false })));
   };
 
   // Runs as soon as the picker opens: the point is one click, not two.
   useEffect(() => {
-    void load(false);
+    load(false);
+    return () => {
+      generation.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loading = state.quickLoading || state.aiLoading;
+  const empty = state.items.length === 0;
 
   return (
     <div className="flex flex-col gap-2.5">
       <div className={cn('flex flex-wrap items-center gap-1.5 text-[11.5px]', AI_TEXT)}>
         <SparkIcon size={12} />
-        {state.loading ? 'Haiku is looking for the best icons…' : state.keywords.length ? <>Iconify search: {state.keywords.map((k) => <Chip key={k}>{k}</Chip>)}</> : null}
-        {!state.loading && (
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => void load(true)}>⟳ More ideas</Button>
+        {state.keywords.length ? <>Iconify search: {state.keywords.map((k) => <Chip key={k}>{k}</Chip>)}</> : null}
+        {state.aiLoading && <span className="animate-pulse">{empty ? 'Haiku is looking for the best icons…' : 'Haiku is refining…'}</span>}
+        {!state.aiLoading && (
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => load(true)}>⟳ More ideas</Button>
         )}
       </div>
-      {state.loading ? (
+      {empty && loading ? (
         <div className="grid grid-cols-6 gap-2">
           {Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[72px] animate-pulse rounded-lg bg-[var(--theme-bg-overlay)]" />)}
         </div>
-      ) : state.error ? (
-        <p className={cn('rounded border px-2 py-1.5 text-xs', tint('red'))}>{state.error}</p>
       ) : (
-        <IconGrid items={state.items} current={current} onPick={onPick} />
+        <>
+          {state.error && <p className={cn('rounded border px-2 py-1.5 text-xs', tint('red'))}>{state.error}</p>}
+          <IconGrid items={state.items} current={current} onPick={onPick} />
+        </>
       )}
       {state.offline && <p className="text-[11px] text-[var(--theme-text-muted)]">Iconify is unreachable — showing a generated icon only.</p>}
       <p className="text-[11px] text-[var(--theme-text-faint)]">
-        One click applies. Only keywords are sent to Iconify, never your command. Brand logos (simple-icons) are for personal use.
+        One click applies. Only keywords are sent to Iconify, never your command. Brand logos (logos, devicon, simple-icons) are for personal use.
       </p>
     </div>
   );
@@ -163,7 +215,7 @@ function LibraryTab({ current, onPick }: { current: string; onPick: (svg: string
     <div className="flex flex-col gap-2.5">
       <input
         className={TEXT_INPUT}
-        placeholder="Search Iconify (lucide, simple-icons, tabler)…"
+        placeholder="Search Iconify (logos, devicon, simple-icons, lucide, tabler)…"
         aria-label="Search icons"
         value={q}
         onChange={(e) => setQ(e.target.value)}

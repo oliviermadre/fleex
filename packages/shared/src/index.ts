@@ -574,6 +574,7 @@ export type {
   ActionStatus,
   ActionKind,
   ActionIconType,
+  ActionIconColors,
   StatusProbe,
   ConditionalAction,
   ClickChoice,

@@ -591,6 +591,20 @@ html, body {
   filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6)) drop-shadow(0 0 12px rgba(255, 255, 255, 0.3));
 }
 
+/* Action icons in "mono" mode follow the text colour whatever they were drawn
+   with: CSS beats the SVG's fill/stroke attributes. `none` stays none (outline
+   icons would turn solid), and an svg root with no fill paints currentColor
+   instead of the default black. */
+.action-icon-mono svg:not([fill]) {
+  fill: currentColor;
+}
+.action-icon-mono [fill]:not([fill="none"]) {
+  fill: currentColor;
+}
+.action-icon-mono [stroke]:not([stroke="none"]) {
+  stroke: currentColor;
+}
+
 /* React Flow canvas — bound to the active Fleex theme so the workflow DAG
    (editor + ticket execution view) follows light AND dark themes instead of
    being permanently dark. We override the non-`-default` xy variables, which

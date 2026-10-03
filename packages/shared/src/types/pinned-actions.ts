@@ -61,10 +61,18 @@ export interface ConditionalAction {
 
 export type ActionIconType = 'svg' | 'base64' | 'path' | 'url';
 
+/**
+ * How an inline SVG icon is painted: `'mono'` follows the theme's text colour
+ * (its own fills and strokes are overridden), `'original'` shows the colours it
+ * was drawn with. Absent = mono.
+ */
+export type ActionIconColors = 'mono' | 'original';
+
 export interface PinnedIcon {
   id: string;
   icon: string;
   iconType: ActionIconType;
+  iconColors?: ActionIconColors;
   label: string;
   /** The default action (used when no conditional action matches). */
   actionType: ActionKind;
@@ -91,6 +99,7 @@ export interface WorkspaceAction {
   id: string;
   icon: string;
   iconType: ActionIconType;
+  iconColors?: ActionIconColors;
   label: string;
   actionType: ActionKind;
   actionValue: string;
@@ -308,7 +317,7 @@ export interface ActionsAiCommandSuggestion {
   runMode?: ActionRunMode;
 }
 
-export type IconSource = 'simple-icons' | 'lucide' | 'tabler' | 'generated';
+export type IconSource = 'logos' | 'devicon' | 'simple-icons' | 'lucide' | 'tabler' | 'generated';
 
 export interface IconSuggestion {
   id: string;

@@ -76,6 +76,13 @@ export function actionsAiRoutes(deps: ActionsAiRouteDeps) {
       }
     });
 
+    /** No model: keywords guessed from label and command. Shown at once while `/icons` (Haiku) runs. */
+    app.post<{ Body: ActionsAiIconsRequest }>('/api/actions-ai/icons/quick', async (request, reply) => {
+      const body = request.body;
+      if (!body?.label?.trim() && !body?.command?.trim()) return reply.code(400).send({ error: 'label is required' });
+      return deps.suggestAction.quickIconSuggestions(body);
+    });
+
     /** NDJSON: one `{stage}` per step as it starts, then the result (or `{error}`). */
     app.post<{ Body: ActionsAiDraftRequest }>('/api/actions-ai/draft', async (request, reply) => {
       if (!(await requireAi(reply))) return reply;

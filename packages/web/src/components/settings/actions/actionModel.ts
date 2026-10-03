@@ -1,5 +1,5 @@
 import { ACTION_DEFAULT_TIMEOUT_SEC, CLICK_MAIN, CLICK_MENU, PROBE_DEFAULT_INTERVAL_SEC, PROBE_DEFAULT_TIMEOUT_SEC } from '@fleex/shared';
-import type { ActionIconType, ActionRunMode, ConditionalAction, PinnedIcon, WorkspaceAction } from '@fleex/shared';
+import type { ActionIconColors, ActionIconType, ActionRunMode, ConditionalAction, PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import type { ActionsScope } from '../../../stores/uiStore';
 
 /**
@@ -106,6 +106,26 @@ export function inferIconType(value: string): { icon: string; iconType: ActionIc
   if (v.startsWith('/')) return { icon: v, iconType: 'path' };
   if (/^[A-Za-z0-9+/=\s]+$/.test(v) && v.length > 64) return { icon: v.replace(/\s/g, ''), iconType: 'base64' };
   return null;
+}
+
+const NEUTRAL_COLORS = new Set(['none', 'currentcolor', 'black', '#000', '#000000', 'inherit', 'transparent']);
+
+/**
+ * Does this SVG carry colours of its own (a logo), or is it a plain glyph that
+ * should follow the theme? Black counts as "no colour": it is what a monochrome
+ * SVG exported from a design tool uses.
+ */
+export function hasOwnColors(svg: string): boolean {
+  if (/<(linear|radial)Gradient\b/i.test(svg)) return true;
+  for (const m of svg.matchAll(/\b(?:fill|stroke|stop-color)="([^"]*)"/g)) {
+    if (!NEUTRAL_COLORS.has(m[1]!.trim().toLowerCase())) return true;
+  }
+  return false;
+}
+
+/** The display mode an icon gets when it is picked: its colours when it has some. */
+export function defaultIconColors(icon: { icon: string; iconType: ActionIconType }): ActionIconColors {
+  return icon.iconType === 'svg' && hasOwnColors(icon.icon) ? 'original' : 'mono';
 }
 
 /** Move one item by `delta` positions; out-of-range moves are no-ops. */

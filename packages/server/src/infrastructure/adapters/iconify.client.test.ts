@@ -67,4 +67,21 @@ describe('IconifyClient', () => {
     await client.search(['gh'], { brandFirst: false, limit: 1 });
     expect(calls).toHaveLength(4);
   });
+
+  it('puts colour logos first for a brand, keeps their colours and skips wordmarks', async () => {
+    const fetchFn = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/search') return new Response(JSON.stringify({ icons: ['lucide:github', 'simple-icons:github', 'logos:github', 'logos:github-icon'] }));
+      const icons: Record<string, { body: string; width?: number; height?: number }> = {
+        github: { body: '<path fill="#181717" d="M1 1"/>' },
+        'github-icon': { body: '<path fill="#161614" d="M1 1"/>' },
+      };
+      // logos:github is the wordmark: much wider than tall.
+      if (url.pathname === '/logos.json') icons['github'] = { body: '<path fill="#000" d="M1 1"/>', width: 512, height: 139 };
+      return new Response(JSON.stringify({ width: 24, height: 24, icons }));
+    }) as unknown as typeof fetch;
+    const results = await new IconifyClient(fetchFn).search(['github'], { brandFirst: true, limit: 10 });
+    expect(results.map((r) => r.id)).toEqual(['logos:github-icon', 'simple-icons:github', 'lucide:github']);
+    expect(results[0]!.svg).toContain('fill="#161614"');
+  });
 });
