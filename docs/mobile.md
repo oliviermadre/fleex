@@ -77,6 +77,12 @@ restent montés : un flux ou un scroll survit à un changement d'onglet.
   parmi les thèmes intégrés, persisté comme sur desktop) et bascule vers la vue
   desktop.
 
+Mise en veille : au réveil, l'app rouvre l'écran où tu étais (onglet, ticket
+ouvert et son onglet, page Plus), y compris si iOS l'a déchargée ; les
+brouillons de commentaire sont gardés par ticket. Avec le serveur de dev
+(Vite), le rechargement automatique au retour de veille est désactivé sur
+mobile : Plus › Settings › « Recharger l'app » récupère le nouveau code.
+
 Principe : **parité des actions métier** avec le desktop — seule l'UX
 purement desktop (fenêtres flottantes, DAG, terminaux xterm, Monaco) n'est pas portée.
 

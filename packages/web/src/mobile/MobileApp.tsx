@@ -12,6 +12,7 @@ import { useFocusCount } from '../stores/focusStore';
 import { FocusIcon, TasksIcon } from '../components/sidebar/icons';
 import { cn } from '../lib/cn';
 import { useLockViewport } from './useLockViewport';
+import { useNoDevReloadOnWake, usePersistMobileNav } from './usePersistMobileNav';
 import { SHEET_EASING, SHEET_MS, useSheetDrag } from './useSheetDrag';
 import { KanbanIcon, AssistantIcon } from './MobileIcons';
 import { MobileBoard } from './MobileBoard';
@@ -31,6 +32,8 @@ import { useMobileNavStore, type MobileView } from './mobileNavStore';
  */
 export function MobileApp() {
   useLockViewport();
+  usePersistMobileNav();
+  useNoDevReloadOnWake();
   useWebSocket();
   useTickets();
   useAgentPersonas();

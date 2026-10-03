@@ -505,6 +505,14 @@ export function MobileSettingsPage() {
             <span className="text-[var(--theme-text-muted)]">Vue</span>
             <span className="text-[13px] text-[var(--theme-accent)]">Passer en vue desktop</span>
           </button>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="flex min-h-11 w-full items-center justify-between border-t border-[var(--theme-border-subtle)] px-3 text-left"
+          >
+            <span className="text-[var(--theme-text-muted)]">Application</span>
+            <span className="text-[13px] text-[var(--theme-accent)]">Recharger l’app</span>
+          </button>
         </div>
       </section>
     </div>

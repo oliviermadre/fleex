@@ -66,6 +66,7 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
     if (appliedFor.current === ticket.id) return;
     appliedFor.current = ticket.id;
     setTab(requestedTab ?? 'conversation');
+    useMobileNavStore.getState().setDetailTab(requestedTab ?? 'conversation');
     useMobileNavStore.setState({ requestedDetailTab: null });
   }, [ticket.id, requestedTab]);
 
@@ -210,7 +211,10 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
         {tabs.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              setTab(t.id);
+              useMobileNavStore.getState().setDetailTab(t.id);
+            }}
             className={`min-h-11 shrink-0 whitespace-nowrap px-3 text-[13px] font-medium ${
               tab === t.id
                 ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-text-primary)]'
