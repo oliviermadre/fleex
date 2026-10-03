@@ -6,6 +6,8 @@ import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import type { SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
+import { sdkTotalsFromRow } from '../sdk-totals-row.js';
 import type { PgConnection } from './connection.js';
 
 export class PgAgentEventStore implements AgentEventStorePort {
@@ -53,8 +55,9 @@ export class PgAgentEventStore implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string;
+    commentId?: string; deliverableId?: string; sdkTotals?: SdkUsageTotals;
   }): Promise<void> {
+    const t = metrics?.sdkTotals;
     await this.db.query(
       `UPDATE agent_event_executions SET status = $1, completed_at = $2,
        model = COALESCE($3, model), effective_mode = COALESCE($4, effective_mode),
@@ -62,14 +65,34 @@ export class PgAgentEventStore implements AgentEventStorePort {
        duration_ms = COALESCE($7, duration_ms), cost_usd = COALESCE($8, cost_usd),
        input_tokens = COALESCE($9, input_tokens), output_tokens = COALESCE($10, output_tokens),
        cache_read_tokens = COALESCE($11, cache_read_tokens), cache_creation_tokens = COALESCE($12, cache_creation_tokens),
-       comment_id = COALESCE($13, comment_id), deliverable_id = COALESCE($14, deliverable_id)
+       comment_id = COALESCE($13, comment_id), deliverable_id = COALESCE($14, deliverable_id),
+       sdk_total_cost_usd = COALESCE($16, sdk_total_cost_usd),
+       sdk_total_input_tokens = COALESCE($17, sdk_total_input_tokens),
+       sdk_total_output_tokens = COALESCE($18, sdk_total_output_tokens),
+       sdk_total_cache_read_tokens = COALESCE($19, sdk_total_cache_read_tokens),
+       sdk_total_cache_creation_tokens = COALESCE($20, sdk_total_cache_creation_tokens)
        WHERE execution_id = $15`,
       [status, new Date().toISOString(), metrics?.model ?? null, metrics?.effectiveMode ?? null,
        metrics?.effort ?? null, metrics?.fast ?? null,
        metrics?.durationMs ?? null, metrics?.costUsd ?? null, metrics?.inputTokens ?? null,
        metrics?.outputTokens ?? null, metrics?.cacheReadTokens ?? null, metrics?.cacheCreationTokens ?? null,
-       metrics?.commentId ?? null, metrics?.deliverableId ?? null, executionId],
+       metrics?.commentId ?? null, metrics?.deliverableId ?? null, executionId,
+       t?.costUsd ?? null, t?.inputTokens ?? null, t?.outputTokens ?? null,
+       t?.cacheReadTokens ?? null, t?.cacheCreationTokens ?? null],
     );
+  }
+
+  async getSdkSessionTotals(sdkSessionId: string): Promise<SdkUsageTotals | null> {
+    const { rows } = await this.db.query(
+      `SELECT sdk_total_cost_usd, sdk_total_input_tokens, sdk_total_output_tokens,
+              sdk_total_cache_read_tokens, sdk_total_cache_creation_tokens
+       FROM agent_event_executions
+       WHERE sdk_session_id = $1 AND sdk_total_cost_usd > 0
+       ORDER BY started_at DESC LIMIT 1`,
+      [sdkSessionId],
+    );
+    const row = rows[0] as Record<string, number | string | null> | undefined;
+    return row ? sdkTotalsFromRow(row) : null;
   }
 
   async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
