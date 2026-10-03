@@ -595,9 +595,25 @@ export function resolveTheme(themeId: string, customThemes: Theme[]): Theme {
   if (builtIn) return builtIn;
 
   const custom = customThemes.find((t) => t.id === themeId);
-  if (custom) return custom;
+  if (custom) return withDefaults(custom);
 
   return THEME_VERDANT;
+}
+
+/**
+ * Custom themes are persisted as-is, so ones saved before a field existed
+ * (e.g. `syntax`, added 2026-04) lack it. Fill missing keys from the closest
+ * built-in (Light for light themes, Verdant otherwise) rather than crashing.
+ */
+function withDefaults(theme: Theme): Theme {
+  const colors = { ...THEME_VERDANT.colors, ...theme.colors };
+  const base = isLightTheme({ ...theme, colors }) ? THEME_LIGHT : THEME_VERDANT;
+  return {
+    ...theme,
+    colors: { ...base.colors, ...theme.colors },
+    syntax: { ...base.syntax, ...theme.syntax },
+    terminal: { ...base.terminal, ...theme.terminal },
+  };
 }
 
 /** Relative luminance (0–1) of an #rrggbb / #rgb color. */
