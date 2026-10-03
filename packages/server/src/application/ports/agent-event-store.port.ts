@@ -1,5 +1,6 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
+import type { SdkUsageTotals } from '../utils/sdk-run-usage.js';
 
 /** Params for `upsertCliExecution` — a fully-computed CLI session execution row. */
 export interface CliExecutionUpsert {
@@ -53,7 +54,20 @@ export interface AgentEventStorePort {
     commentId?: string;
     /** Deliverable produced by this run (persona/skill/panel path, known at completion). */
     deliverableId?: string;
+    /**
+     * Raw SDK session totals at the end of this run (cumulative across resumes).
+     * `costUsd`/tokens above are this run's share; these are kept so the next
+     * run of the same session can compute its own share.
+     */
+    sdkTotals?: SdkUsageTotals;
   }): Promise<void>;
+
+  /**
+   * Session totals recorded by the latest execution of `sdkSessionId` that saw
+   * spend (`sdk_total_cost_usd > 0`) — the baseline the next resumed run is
+   * measured against. `null` when the session has no such execution yet.
+   */
+  getSdkSessionTotals(sdkSessionId: string): Promise<SdkUsageTotals | null>;
 
   /**
    * Link an already-completed execution to the artifacts it produced. Used by the
