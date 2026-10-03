@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 const SNAP_RATIO = 1 / 3;
 const SNAP_VELOCITY = 0.4;
 /** Movement (px) before the gesture commits to an axis. */
-const AXIS_LOCK = 8;
+export const AXIS_LOCK = 8;
 /** How much of the drag is kept past the first/last column. */
 const EDGE_RESISTANCE = 0.3;
 

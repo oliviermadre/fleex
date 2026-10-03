@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 
 /** Distance (px) or speed (px/ms) past which a drag down dismisses the sheet. */
-const DISMISS_DISTANCE = 100;
-const DISMISS_VELOCITY = 0.5;
+export const DISMISS_DISTANCE = 100;
+export const DISMISS_VELOCITY = 0.5;
 
 /** Spring-ish easing used by iOS sheets. */
 export const SHEET_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';

@@ -27,14 +27,17 @@ import { KIND_META, formatWait, waitedMs, type FocusAction } from './focusModel'
 
 export interface SnoozeChoice {
   label: string;
+  /** Label where room is short (the phone). */
+  short: string;
   until: () => number;
 }
 
 export const SNOOZE_CHOICES: SnoozeChoice[] = [
-  { label: 'Dans 1 h', until: () => Date.now() + 3600_000 },
-  { label: 'Dans 4 h', until: () => Date.now() + 4 * 3600_000 },
+  { label: 'Dans 1 h', short: '1 h', until: () => Date.now() + 3600_000 },
+  { label: 'Dans 4 h', short: '4 h', until: () => Date.now() + 4 * 3600_000 },
   {
     label: 'Demain matin (9 h)',
+    short: 'Demain 9 h',
     until: () => {
       const d = new Date();
       d.setDate(d.getDate() + 1);
