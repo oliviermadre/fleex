@@ -73,7 +73,7 @@ export function MobileApp() {
 
   return (
     <div
-      className="relative flex h-dvh w-full flex-col overflow-hidden bg-[var(--theme-bg-base)] text-[var(--theme-text-primary)]"
+      className="fixed inset-0 flex flex-col overflow-hidden bg-[var(--theme-bg-base)] text-[var(--theme-text-primary)]"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       <div className={tab('focus')}>
