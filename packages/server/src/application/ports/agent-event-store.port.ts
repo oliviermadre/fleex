@@ -1,6 +1,6 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { SdkUsageTotals } from '../utils/sdk-run-usage.js';
+import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../utils/sdk-run-usage.js';
 
 /** Params for `upsertCliExecution` — a fully-computed CLI session execution row. */
 export interface CliExecutionUpsert {
@@ -55,19 +55,22 @@ export interface AgentEventStorePort {
     /** Deliverable produced by this run (persona/skill/panel path, known at completion). */
     deliverableId?: string;
     /**
-     * Raw SDK session totals at the end of this run (cumulative across resumes).
-     * `costUsd`/tokens above are this run's share; these are kept so the next
-     * run of the same session can compute its own share.
+     * Raw usage the SDK reported for this run (a running session total on a
+     * carrying CLI). `costUsd`/tokens above are this run's share; the raw values
+     * are the baseline the next resumed run of the session is measured against.
      */
     sdkTotals?: SdkUsageTotals;
+    /** Claude Code CLI version that produced the run (from the SDK `init` message). */
+    cliVersion?: string;
+    /** How `costUsd` must be read — see `CostBasis`. */
+    costBasis?: CostBasis;
   }): Promise<void>;
 
   /**
-   * Session totals recorded by the latest execution of `sdkSessionId` that saw
-   * spend (`sdk_total_cost_usd > 0`) — the baseline the next resumed run is
-   * measured against. `null` when the session has no such execution yet.
+   * Earlier executions of `sdkSessionId` other than `executionId`: how many, and
+   * the raw totals + CLI version of the latest one that saw spend.
    */
-  getSdkSessionTotals(sdkSessionId: string): Promise<SdkUsageTotals | null>;
+  getSdkSessionBaseline(sdkSessionId: string, executionId: string): Promise<SdkSessionBaseline>;
 
   /**
    * Link an already-completed execution to the artifacts it produced. Used by the

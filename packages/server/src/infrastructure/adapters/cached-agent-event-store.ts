@@ -1,7 +1,7 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
-import type { SdkUsageTotals } from '../../application/utils/sdk-run-usage.js';
+import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../application/utils/sdk-run-usage.js';
 
 /**
  * Write-through in-memory cache over any AgentEventStorePort.
@@ -109,7 +109,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string; sdkTotals?: SdkUsageTotals;
+    commentId?: string; deliverableId?: string; sdkTotals?: SdkUsageTotals; cliVersion?: string; costBasis?: CostBasis;
   }): Promise<void> {
     await this.inner.completeExecution(executionId, status, metrics);
     const cached = this.executions.get(executionId);
@@ -218,8 +218,8 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     return this.inner.getEventsByExecution(executionId);
   }
 
-  async getSdkSessionTotals(sdkSessionId: string): Promise<SdkUsageTotals | null> {
-    return this.inner.getSdkSessionTotals(sdkSessionId);
+  async getSdkSessionBaseline(sdkSessionId: string, executionId: string): Promise<SdkSessionBaseline> {
+    return this.inner.getSdkSessionBaseline(sdkSessionId, executionId);
   }
 
   async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {

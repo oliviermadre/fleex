@@ -66,6 +66,11 @@ export function isEmptyRun(r: Pick<StreamSdkQueryResult, 'resultText' | 'structu
 export interface StreamSdkQueryResult {
   /** Session id captured from the SDK `init` message, if any. */
   sessionId?: string;
+  /**
+   * Claude Code CLI version from the `init` message. Decides how the result's
+   * usage must be read (session totals or per-query) — see `carriesSessionTotals`.
+   */
+  cliVersion?: string;
   resultText: string;
   structuredOutput: Record<string, unknown> | null;
   /** Subtype of the final result message (e.g. `error_max_structured_output_retries`). */
@@ -115,6 +120,7 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
   const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
   let sessionId: string | undefined;
+  let cliVersion: string | undefined;
   let resultText = '';
   let structuredOutput: Record<string, unknown> | null = null;
   let resultSubtype: string | undefined;
@@ -190,6 +196,7 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
 
       if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
         sessionId = msg['session_id'] as string;
+        if (typeof msg['claude_code_version'] === 'string') cliVersion = msg['claude_code_version'] as string;
         onSessionId?.(sessionId);
         await emitEvent('turn_start', { sessionId });
       }
@@ -257,5 +264,5 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
     );
   }
 
-  return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount, stderr: stderrBuf };
+  return { sessionId, cliVersion, resultText, structuredOutput, resultSubtype, metrics, messageCount, stderr: stderrBuf };
 }
