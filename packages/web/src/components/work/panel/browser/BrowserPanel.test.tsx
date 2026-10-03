@@ -103,25 +103,15 @@ describe('BrowserPanel', () => {
     expect(useBrowserStore.getState().byTicket.T2?.tabs).toHaveLength(1);
   });
 
-  it('toasts each pick while expanded (the composer is hidden), with a Show action', async () => {
+  it('confirms each pick next to the element (no corner toast); Show brings the composer back', async () => {
     useToastStore.setState({ toasts: [] });
     useBrowserStore.setState({ expanded: true });
     render(<BrowserPanel ticketId="T1" />);
     fireEvent.click(screen.getByTitle('Select an element'));
     fire('ipc-message', { channel: 'picker:picked', args: [{ ...ctx, react: { component: 'Card', owners: [] } }] });
-    await waitFor(() => expect(useToastStore.getState().toasts).toHaveLength(1));
-    const toast = useToastStore.getState().toasts[0]!;
-    expect(toast.message).toBe('<Card /> added to your comment');
-    act(() => toast.action!.onClick());
-    expect(useBrowserStore.getState().expanded).toBe(false);
-  });
-
-  it('does not toast a pick when the composer is visible', async () => {
-    useToastStore.setState({ toasts: [] });
-    render(<BrowserPanel ticketId="T1" />);
-    fireEvent.click(screen.getByTitle('Select an element'));
-    fire('ipc-message', { channel: 'picker:picked', args: [ctx] });
-    await waitFor(() => expect(useBrowserStore.getState().pendingElements.T1).toHaveLength(1));
+    await waitFor(() => expect(screen.getByText('<Card />')).toBeTruthy());
     expect(useToastStore.getState().toasts).toEqual([]);
+    fireEvent.click(screen.getByText('Show'));
+    expect(useBrowserStore.getState().expanded).toBe(false);
   });
 });

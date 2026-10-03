@@ -8,7 +8,7 @@ import { cn } from '../../../../lib/cn';
 import { useBrowserStore, type BrowserTab, type TicketBrowser } from '../../../../stores/browserStore';
 import { useWorkStore } from '../../../../stores/workStore';
 import { elementName, normalizeElementContext } from '../../../shared/elementContext';
-import { useToastStore } from '../../../../stores/toastStore';
+import { PickConfirmation, bubblePlacement, type PickNotice } from './PickConfirmation';
 import { BrowserTabView } from './BrowserTabView';
 import { NewTabPage } from './NewTabPage';
 import { captureElement } from './capture';
@@ -62,6 +62,8 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
   const setRightPanel = useWorkStore((s) => s.setRightPanel);
   const views = useRef(new Map<string, ElectronWebview>());
   const [picking, setPicking] = useState(false);
+  const [notice, setNotice] = useState<PickNotice | null>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
   const active = state.tabs.find((t) => t.id === state.activeId) ?? null;
   const [address, setAddress] = useState(active?.url ?? '');
   const addressFocused = useRef(false);
@@ -128,15 +130,18 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
       screenshotUrl = undefined;
     }
     addElement(ticketId, { id, context, screenshotUrl, captureFailed: !screenshotUrl });
-    if (useBrowserStore.getState().expanded) {
-      // The composer (and its chips) is hidden behind the expanded browser.
-      // The label is in the message so two quick picks aren't deduplicated.
-      useToastStore.getState().addToast('success', `${elementName(context)} added to your comment`, {
-        action: { label: 'Show', onClick: () => setExpanded(false) },
-      });
-    } else {
-      requestComposerFocus();
-    }
+    // Confirm on the element itself: with the browser expanded, the composer and
+    // its chips are out of sight.
+    const box = pagesRef.current?.getBoundingClientRect();
+    let zoom = 1;
+    safely(() => { zoom = wv.getZoomFactor(); });
+    setNotice({
+      key: Date.now(),
+      name: elementName(context),
+      screenshotUrl,
+      placement: bubblePlacement(context.rect, zoom, { w: box?.width ?? 0, h: box?.height ?? 0 }),
+    });
+    if (!useBrowserStore.getState().expanded) requestComposerFocus();
   };
 
   return (
@@ -192,7 +197,7 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
       </div>
 
       {/* Pages */}
-      <div className="relative min-h-0 flex-1 bg-[var(--theme-bg-base)]">
+      <div ref={pagesRef} className="relative min-h-0 flex-1 bg-[var(--theme-bg-base)]">
         {state.tabs.map((t) =>
           t.url ? (
             <BrowserTabView
@@ -208,6 +213,14 @@ export function BrowserPanel({ ticketId }: { ticketId: string }) {
           ) : (
             t.id === state.activeId && <NewTabPage key={t.id} />
           ),
+        )}
+        {notice && (
+          <PickConfirmation
+            key={notice.key}
+            pick={notice}
+            onShow={() => { setNotice(null); setExpanded(false); requestComposerFocus(); }}
+            onDone={() => setNotice(null)}
+          />
         )}
       </div>
     </div>
