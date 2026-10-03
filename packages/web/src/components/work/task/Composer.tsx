@@ -19,6 +19,12 @@ import { useAllMentionOptions } from '../../markdown/useAllMentionOptions';
 import { MentionMenu } from '../../markdown/MentionMenu';
 import { useFileUpload } from '../../../hooks/useFileUpload';
 import { useExecConfig } from '../../../hooks/useExecConfig';
+import { useBrowserStore } from '../../../stores/browserStore';
+import { canSend, composeBody, type PendingElement } from '../../shared/elementContext';
+import { ElementChips } from './ElementChips';
+
+/** Stable empty list, so the store selector doesn't re-render on every update. */
+const NO_ELEMENTS: PendingElement[] = [];
 
 interface Props {
   ticketId: string;
@@ -41,9 +47,11 @@ interface Props {
   bare?: boolean;
   /** Lets the host focus the textarea. */
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
+  /** Show ticket-browser element chips and send them with the message (Work view). */
+  withElements?: boolean;
 }
 
-export function Composer({ ticketId, value, onChange, disabled, posting, onSend, placeholder, submitOn = 'enter', showExecBar = true, showSend = true, bare, textareaRef }: Props) {
+export function Composer({ ticketId, value, onChange, disabled, posting, onSend, placeholder, submitOn = 'enter', showExecBar = true, showSend = true, bare, textareaRef, withElements }: Props) {
   const ownRef = useRef<HTMLTextAreaElement>(null);
   const ref = textareaRef ?? ownRef;
 
@@ -62,19 +70,30 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend,
   const options = useAllMentionOptions();
   const mentionAc = useMentionAutocomplete({ options, value, onChange, textareaRef: ref });
   const fileUpload = useFileUpload({ textareaRef: ref, value, onChange });
+  const elements = useBrowserStore((s) => (withElements ? s.pendingElements[ticketId] : undefined)) ?? NO_ELEMENTS;
+  const clearElements = useBrowserStore((s) => s.clearElements);
+  const focusTick = useBrowserStore((s) => s.composerFocusTick);
+  // A pick in the ticket browser asks for the focus; ignore the tick we mounted with.
+  const seenFocusTick = useRef(focusTick);
+  useEffect(() => {
+    if (!withElements || focusTick === seenFocusTick.current) return;
+    seenFocusTick.current = focusTick;
+    ref.current?.focus();
+  }, [focusTick, withElements]);
 
   const send = useCallback(async () => {
-    const body = value.trim();
-    if (!body || disabled || posting) return;
-    // Clear only after a successful post, so an error keeps the draft.
+    if (!canSend(value, elements.length) || disabled || posting) return;
+    const body = composeBody(value, elements);
+    // Clear only after a successful post, so an error keeps the draft and the chips.
     try {
       await onSend(body);
     } catch {
       return; // the caller already surfaced the error
     }
     onChange('');
+    if (elements.length > 0) clearElements(ticketId);
     ref.current?.focus();
-  }, [value, disabled, posting, onSend, onChange]);
+  }, [value, elements, disabled, posting, onSend, onChange, clearElements, ticketId]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     // Let the mention menu consume Arrow/Tab/Enter/Escape first.
@@ -105,6 +124,7 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend,
       className={bare ? 'min-w-0' : 'shrink-0 border-t border-[var(--theme-border)] p-3'}
       {...fileUpload.dragProps}
     >
+      {withElements && <ElementChips ticketId={ticketId} />}
       <MarkdownEditor
         variant="composer"
         surfaceKind="comment"
@@ -150,7 +170,7 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend,
                 type="button"
                 className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-30"
                 onClick={() => void send()}
-                disabled={disabled || posting || !value.trim()}
+                disabled={disabled || posting || !canSend(value, elements.length)}
                 title={submitOn === 'mod-enter' ? 'Send (⌘⏎)' : 'Send (Enter)'}
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
