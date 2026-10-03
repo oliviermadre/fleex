@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PrCiDetail, PrCiSummary, PrMergeMethod } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
+import { getPrBadgeClasses, prHue } from '../../lib/prBadgeStyle';
 import { ciHue, ciLabel, ciTooltip, type ChipCiStatus } from '../../lib/prCi';
 import { tintClasses } from '../../lib/tints';
 import { usePrCi } from '../../hooks/usePrCi';
@@ -80,6 +80,8 @@ export function PrBadge({ org, name, pr, href, className, variant = 'full', show
         label={`${name}#${pr.number}`}
         prUrl={url}
         status={ciStatus}
+        // Same outline as the state pill, so both segments read as one chip.
+        borderColor={tintClasses(prHue({ state, isDraft })).borderColor}
         summary={summary}
         error={error}
         variant={variant}
@@ -88,11 +90,12 @@ export function PrBadge({ org, name, pr, href, className, variant = 'full', show
   );
 }
 
-function PrCiSegment({ prRef, label, prUrl, status, summary, error, variant }: {
+function PrCiSegment({ prRef, label, prUrl, status, borderColor, summary, error, variant }: {
   prRef: string;
   label: string;
   prUrl: string;
   status: ChipCiStatus;
+  borderColor: string;
   summary?: PrCiSummary;
   error?: string;
   variant: 'full' | 'compact';
@@ -182,7 +185,10 @@ function PrCiSegment({ prRef, label, prUrl, status, summary, error, variant }: {
         aria-haspopup="menu"
         aria-expanded={open}
         {...getReferenceProps()}
-        className="inline-flex items-center gap-1 rounded-r-md border border-l-0 border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-1.5 py-0.5 text-[10.5px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]"
+        className={cn(
+          'inline-flex items-center gap-1 rounded-r-md border border-l-0 bg-[var(--theme-bg-surface)] px-1.5 py-0.5 text-[10.5px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]',
+          borderColor,
+        )}
       >
         <span
           data-testid="pr-ci-dot"
