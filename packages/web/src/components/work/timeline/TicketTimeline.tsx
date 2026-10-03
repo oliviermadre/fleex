@@ -14,7 +14,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { TicketType } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
-import { PrBadge } from '../../ui/PrBadge';
+import { PrBadgeGroup } from '../../ui/PrBadgeGroup';
 import { parseGithubPrRef } from '../../../lib/prRef';
 import type { TimelineFilterKey } from '../../../stores/workStore';
 import { TicketTypeIcon } from '../../tickets/TicketTypeBadge';
@@ -163,24 +163,20 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
         </div>
         {filters.pr && model && model.undatedPrs.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1" title="PR sans date connue">
-            {model.undatedPrs.map((pr) => {
-              const parsed = parseGithubPrRef(pr.ref);
-              if (!parsed) return null;
-              return (
-                <PrBadge
-                  key={pr.ref}
-                  org={parsed.org}
-                  name={parsed.name}
-                  pr={{
-                    number: parsed.number,
-                    state: pr.state === 'draft' || !pr.state ? 'open' : pr.state,
-                    isDraft: pr.state === 'draft',
-                    title: pr.title ?? undefined,
-                  }}
-                  href={pr.url || undefined}
-                />
-              );
-            })}
+            <PrBadgeGroup
+              density="full"
+              prs={model.undatedPrs.flatMap((pr) => {
+                const parsed = parseGithubPrRef(pr.ref);
+                if (!parsed) return [];
+                return [{
+                  ...parsed,
+                  href: pr.url || undefined,
+                  title: pr.title ?? pr.ref,
+                  state: pr.state === 'draft' || !pr.state ? 'open' as const : pr.state,
+                  isDraft: pr.state === 'draft',
+                }];
+              })}
+            />
           </div>
         )}
       </aside>

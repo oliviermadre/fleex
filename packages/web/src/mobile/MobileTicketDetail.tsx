@@ -9,6 +9,8 @@ import { appWs } from '../services/websocket';
 import * as api from '../services/api';
 import { cn } from '../lib/cn';
 import { tintClasses } from '../lib/tints';
+import { linkedPrs } from '../lib/prRef';
+import { PrBadgeGroup } from '../components/ui/PrBadgeGroup';
 import { MobileSheet, SheetOption } from './MobileSheet';
 import { useMobileNavStore, type MobileDetailTab } from './mobileNavStore';
 import { PRIORITY_COLOR } from './MobileTicketCard';
@@ -119,14 +121,15 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
     return unsub;
   }, [ticket.id, loadWorkflowRuns]);
 
-  const repoChips = ticket.links.filter((l) => l.type === 'repository' || l.type === 'worktree');
+  const repoLinks = ticket.links.filter((l) => l.type === 'repository' || l.type === 'worktree');
+  const prs = linkedPrs(ticket.links);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'conversation', label: 'Conversation' },
     { id: 'context', label: 'Contexte' },
     { id: 'deliverables', label: deliverableCount ? `Deliverables ${deliverableCount}` : 'Deliverables' },
     { id: 'runs', label: runningCount > 0 ? `Runs ●` : 'Runs' },
-    ...(repoChips.length > 0 ? [{ id: 'diff' as const, label: 'Diff' }] : []),
+    ...(repoLinks.length > 0 ? [{ id: 'diff' as const, label: 'Diff' }] : []),
     ...(workflowRuns && workflowRuns.length > 0
       ? [{ id: 'workflow' as const, label: workflowNeedsHuman ? 'Workflow ✋' : 'Workflow' }]
       : []),
@@ -193,7 +196,7 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
             {ticket.title}
           </h1>
         )}
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <button
             onClick={() => setShowStatus(true)}
             className="flex h-11 shrink-0 items-center gap-2 rounded-[10px] bg-[var(--theme-bg-surface)] px-3.5 text-sm font-medium"
@@ -201,11 +204,7 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
             <span className={cn('h-2 w-2 rounded-full', STATUS_DOT[ticket.status])} />
             {TICKET_STATUS_LABELS[ticket.status]} <span className="text-xs text-[var(--theme-text-muted)]">▾</span>
           </button>
-          {repoChips.map((l) => (
-            <span key={l.id} className="truncate font-mono text-[11px] text-[var(--theme-text-muted)]">
-              {l.type === 'worktree' ? `${l.ref.split(':')[0]} ⎇ ${l.ref.split(':')[1] ?? ''}` : l.ref}
-            </span>
-          ))}
+          <PrBadgeGroup prs={prs} density="full" />
         </div>
       </div>
 

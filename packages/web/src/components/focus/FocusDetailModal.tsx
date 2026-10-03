@@ -3,8 +3,8 @@ import type { Board, FocusItem, Ticket, TicketDeliverable } from '@fleex/shared'
 import { Modal } from '../ui/Modal';
 import { cn } from '../../lib/cn';
 import { tint, tintClasses } from '../../lib/tints';
-import { parseGithubPrRef } from '../../lib/prRef';
-import { PrBadge } from '../ui/PrBadge';
+import { linkedPrs } from '../../lib/prRef';
+import { PrBadgeGroup } from '../ui/PrBadgeGroup';
 import { FocusFavoriteStar, FocusStatusBadge, FocusTicketLead } from './FocusTicketLead';
 import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { MessageMarkdown } from '../work/task/MessageMarkdown';
@@ -255,7 +255,7 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
   };
 
   const wait = formatWait(waitedMs(item, now));
-  const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+  const prs = linkedPrs(ticket.links);
   // Any agentic run (workflow, skill, panel, agent, new session) — the SmartSessionButton menu, styled as a choice.
   const launcherButton = (
     <SmartSessionButton
@@ -495,24 +495,9 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
           <span className="mt-1"><FocusFavoriteStar ticket={ticket} /></span>
           <span className="ml-auto mt-1 shrink-0 font-mono text-xs text-[var(--theme-text-muted)]" title="Coût cumulé du ticket">${item.costUsd.toFixed(2)}</span>
         </div>
-        {prLinks.length > 0 && (
+        {prs.length > 0 && (
           <div className="flex min-w-0 flex-wrap gap-1">
-            {prLinks.map((l) => {
-              const pr = parseGithubPrRef(l.ref);
-              return pr ? (
-                <PrBadge
-                  key={l.id}
-                  org={pr.org}
-                  name={pr.name}
-                  pr={{ number: pr.number, state: 'open', title: l.label }}
-                  href={l.url ?? undefined}
-                />
-              ) : (
-                <a key={l.id} href={l.url ?? undefined} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)]">
-                  {l.label}
-                </a>
-              );
-            })}
+            <PrBadgeGroup prs={prs} density="full" />
           </div>
         )}
         {item.workflow && (

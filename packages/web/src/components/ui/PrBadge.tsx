@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { PrCiDetail, PrCiSummary, PrMergeMethod } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { getPrBadgeClasses, prHue } from '../../lib/prBadgeStyle';
+import { prCiRef } from '../../lib/prRef';
 import { ciHue, ciLabel, ciTooltip, type ChipCiStatus } from '../../lib/prCi';
 import { tintClasses } from '../../lib/tints';
 import { usePrCi } from '../../hooks/usePrCi';
@@ -42,7 +43,7 @@ const MERGEABILITY_MAX_RETRIES = 3;
 export function PrBadge({ org, name, pr, href, className, variant = 'full', showCi = true }: Props) {
   const url = href ?? `https://github.com/${org}/${name}/pull/${pr.number}`;
   // No org means a ref we can't resolve on GitHub: plain pill.
-  const ref = showCi && org ? `${org}/${name}#${pr.number}`.toLowerCase() : null;
+  const ref = showCi && org ? prCiRef(org, name, pr.number) : null;
   const { summary, error } = usePrCi(ref);
 
   const state = summary ? (summary.state.toLowerCase() as Props['pr']['state']) : pr.state;
@@ -62,9 +63,7 @@ export function PrBadge({ org, name, pr, href, className, variant = 'full', show
         withCi ? 'rounded-r-none' : className,
       )}
     >
-      <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
-        <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" />
-      </svg>
+      <PrIcon />
       {name}#{pr.number}
     </a>
   );
@@ -87,6 +86,15 @@ export function PrBadge({ org, name, pr, href, className, variant = 'full', show
         variant={variant}
       />
     </span>
+  );
+}
+
+/** GitHub's pull-request glyph, shared by every PR chip. */
+export function PrIcon() {
+  return (
+    <svg aria-hidden width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
+      <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" />
+    </svg>
   );
 }
 

@@ -23,6 +23,7 @@ import { EpicPicker } from '../../tickets/EpicPicker';
 import { MultiSelect } from '../../ui/MultiSelect';
 import { repoOptions } from '../new/draftOptions';
 import { topReposForBoard } from '../../../lib/repoStatus';
+import { sortPrLinks } from '../../../lib/prRef';
 import { WorkBoardPicker } from './WorkBoardPicker';
 import { WorkStatusPicker } from './WorkStatusPicker';
 import type { WorkTask } from '../types';
@@ -197,7 +198,7 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
   }, [task.id]);
 
   const repoLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'repository'), [ticket]);
-  const prLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'github_pr'), [ticket]);
+  const prLinks = useMemo(() => sortPrLinks((ticket?.links ?? []).filter((l) => l.type === 'github_pr')), [ticket]);
 
   // Each PR's own size, from GitHub. Never `task.pr`: that one carries the
   // worktree diff summed over every repo of the workspace, so showing it on a

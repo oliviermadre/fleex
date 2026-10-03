@@ -18,3 +18,24 @@ export function usePrCi(ref: string | null): { summary?: PrCiSummary; error?: st
 
   return { summary, error };
 }
+
+/**
+ * Watch several PRs at once (a summary chip): one subscription for all refs,
+ * so they ride the same coalesced fetch as the individual chips.
+ */
+export function usePrCiMany(refs: string[]): {
+  summaries: Record<string, PrCiSummary | undefined>;
+  errors: Record<string, string | undefined>;
+} {
+  const subscribe = usePrCiStore((s) => s.subscribe);
+  const summaries = usePrCiStore((s) => s.summaries);
+  const errors = usePrCiStore((s) => s.errors);
+  const key = refs.join(',');
+
+  useEffect(() => {
+    if (!key) return;
+    return subscribe(key.split(','));
+  }, [key, subscribe]);
+
+  return { summaries, errors };
+}

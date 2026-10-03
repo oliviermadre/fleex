@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ciLabel, ciHue, ciTooltip, formatCheckDuration, mergeBlockReason, mergeMethodLabel } from './prCi';
+import { ciLabel, ciHue, ciTooltip, formatCheckDuration, mergeBlockReason, mergeMethodLabel, prGroupTooltip, worstPrStatus, type PrGroupEntry } from './prCi';
 
 describe('ciLabel / ciHue', () => {
   it('maps each chip status to the label and colour the user reads at a glance', () => {
@@ -73,5 +73,39 @@ describe('mergeMethodLabel', () => {
     expect(mergeMethodLabel('squash')).toBe('Squash and merge');
     expect(mergeMethodLabel('merge')).toBe('Create a merge commit');
     expect(mergeMethodLabel('rebase')).toBe('Rebase and merge');
+  });
+});
+
+describe('worstPrStatus', () => {
+  const open = (ci: PrGroupEntry['ci']): PrGroupEntry => ({ state: 'open', ci });
+  const merged: PrGroupEntry = { state: 'merged', ci: 'none' };
+  const closed: PrGroupEntry = { state: 'closed', ci: 'none' };
+
+  it('takes the worst CI among open PRs, whatever the merged ones', () => {
+    expect(worstPrStatus([open('passed'), open('failed'), open('running'), merged])).toEqual({ kind: 'ci', status: 'failed' });
+    expect(worstPrStatus([open('passed'), open('running')])).toEqual({ kind: 'ci', status: 'running' });
+    expect(worstPrStatus([open('passed'), open('loading')])).toEqual({ kind: 'ci', status: 'loading' });
+    expect(worstPrStatus([open('none'), open('passed')])).toEqual({ kind: 'ci', status: 'passed' });
+    expect(worstPrStatus([open('error'), open('running')])).toEqual({ kind: 'ci', status: 'error' });
+  });
+
+  it('falls back to the state once no PR is open: closed beats merged', () => {
+    expect(worstPrStatus([merged, merged])).toEqual({ kind: 'state', state: 'merged' });
+    expect(worstPrStatus([merged, closed])).toEqual({ kind: 'state', state: 'closed' });
+  });
+
+  it('has nothing to say about no PR', () => {
+    expect(worstPrStatus([])).toBeNull();
+  });
+});
+
+describe('prGroupTooltip', () => {
+  it('counts every PR, worst first', () => {
+    expect(prGroupTooltip([
+      { state: 'merged', ci: 'none' },
+      { state: 'open', ci: 'passed' },
+      { state: 'open', ci: 'failed' },
+      { state: 'open', ci: 'passed' },
+    ])).toBe('4 PR — 1 CI failed · 2 CI passed · 1 merged');
   });
 });

@@ -95,3 +95,37 @@ export function formatCheckDuration(check: Pick<PrCheck, 'bucket' | 'startedAt' 
   if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`;
   return `${s}s`;
 }
+
+/** One PR of a group as its chip shows it: GitHub state, and CI while open. */
+export interface PrGroupEntry {
+  state: 'open' | 'merged' | 'closed';
+  ci: ChipCiStatus;
+}
+
+/** What the summary chip's dot shows: the worst CI among open PRs, else the worst state. */
+export type PrGroupWorst = { kind: 'ci'; status: ChipCiStatus } | { kind: 'state'; state: 'merged' | 'closed' };
+
+/** Worst first: a failing PR must never hide behind a passing one. */
+const CI_SEVERITY: ChipCiStatus[] = ['failed', 'error', 'running', 'loading', 'passed', 'none'];
+
+export function worstPrStatus(entries: PrGroupEntry[]): PrGroupWorst | null {
+  const open = entries.filter((e) => e.state === 'open');
+  if (open.length > 0) {
+    const status = CI_SEVERITY.find((s) => open.some((e) => e.ci === s)) ?? 'none';
+    return { kind: 'ci', status };
+  }
+  if (entries.some((e) => e.state === 'closed')) return { kind: 'state', state: 'closed' };
+  if (entries.length > 0) return { kind: 'state', state: 'merged' };
+  return null;
+}
+
+/** "6 PR — 1 CI failed · 2 CI running · 3 merged": worst first. */
+export function prGroupTooltip(entries: PrGroupEntry[]): string {
+  const labels = [
+    ...CI_SEVERITY.map((s) => [ciLabel(s), entries.filter((e) => e.state === 'open' && e.ci === s).length] as const),
+    ['merged', entries.filter((e) => e.state === 'merged').length] as const,
+    ['closed', entries.filter((e) => e.state === 'closed').length] as const,
+  ];
+  const parts = labels.filter(([, n]) => n > 0).map(([label, n]) => `${n} ${label}`);
+  return [`${entries.length} PR`, parts.join(' · ')].filter(Boolean).join(' — ');
+}

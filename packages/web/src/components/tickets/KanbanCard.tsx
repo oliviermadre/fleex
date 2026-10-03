@@ -17,8 +17,8 @@ import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses } from '../../lib/tints';
-import { PrBadge } from '../ui/PrBadge';
-import { parseGithubPrRef } from '../../lib/prRef';
+import { PrBadgeGroup } from '../ui/PrBadgeGroup';
+import { linkedPrs } from '../../lib/prRef';
 import { isMissingRepo, isRepoOptional } from '../../lib/repoStatus';
 import { MissingRepoIcon, RepositoriesIcon } from '../sidebar/icons';
 
@@ -96,7 +96,7 @@ export function KanbanCard({
   }, [ticket.id, ticketGroupIds, groups]);
 
   const issueLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_issue');
-  const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
+  const prs = linkedPrs(ticket.links);
   const ticketSessions = useMemo(
     () => findSessionsForTicketId(ticket.id, sessionGroups),
     [ticket.id, sessionGroups],
@@ -280,7 +280,7 @@ export function KanbanCard({
       )}
 
       {/* ── CHIPS ZONE ── epics + PRs + tags in one flow */}
-      {(epicBadges.length > 0 || prLinks.length > 0 || displayTags.length > 0) && (
+      {(epicBadges.length > 0 || prs.length > 0 || displayTags.length > 0) && (
         <div className="flex flex-wrap gap-1 px-3 pb-2">
           {/* Epics */}
           {epicBadges.map((epic) => (
@@ -294,20 +294,7 @@ export function KanbanCard({
           ))}
 
           {/* PRs */}
-          {prLinks.map((pr: TicketLink) => {
-            const parsed = parseGithubPrRef(pr.ref);
-            if (!parsed) return null;
-            return (
-              <PrBadge
-                key={pr.id}
-                org={parsed.org}
-                name={parsed.name}
-                pr={{ number: parsed.number, state: 'open', title: pr.ref }}
-                href={pr.url ?? undefined}
-                variant="compact"
-              />
-            );
-          })}
+          <PrBadgeGroup prs={prs} density="card" />
 
           {/* Tags */}
           {displayTags.slice(0, 3).map((tag: string) => (

@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import type { Ticket, TicketPriority } from '@fleex/shared';
+import { linkedPrs } from '../lib/prRef';
 import { tintSolid, tintText } from '../lib/tints';
+import { PrBadgeGroup } from '../components/ui/PrBadgeGroup';
 
 export const PRIORITY_COLOR: Record<TicketPriority, string> = {
   none: 'bg-transparent',
@@ -23,11 +25,20 @@ export const MobileTicketCard = memo(function MobileTicketCard({
   const repo = repoLink
     ? (repoLink.type === 'worktree' ? repoLink.ref.split(':')[0] : repoLink.ref)
     : null;
+  const prs = linkedPrs(ticket.links);
 
   return (
-    <button
+    // Not a <button>: the PR chips inside are links and buttons themselves.
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-left active:bg-[var(--theme-bg-hover)]"
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        onOpen();
+      }}
+      className="cursor-pointer rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-left active:bg-[var(--theme-bg-hover)]"
     >
       <div className="flex items-start gap-2">
         {ticket.priority !== 'none' && (
@@ -46,6 +57,7 @@ export const MobileTicketCard = memo(function MobileTicketCard({
               </span>
             )}
             {repo && <span className="truncate">{repo}</span>}
+            <PrBadgeGroup prs={prs} density="card" />
             {ticket.blocked && <span className={tintText('red')}>bloqué</span>}
             {hasSession && <span className="text-[var(--theme-accent)]">session</span>}
             {ticket.favorite && <span className={tintText('yellow')}>★</span>}
@@ -57,6 +69,6 @@ export const MobileTicketCard = memo(function MobileTicketCard({
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 });

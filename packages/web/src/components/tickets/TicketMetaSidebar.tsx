@@ -21,7 +21,7 @@ import { topReposForBoard } from '../../lib/repoStatus';
 import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from './RepoBaseBranchSelect';
 import { Spinner, BusyLine } from '../ui/Spinner';
 import { PrBadge } from '../ui/PrBadge';
-import { parseGithubPrRef } from '../../lib/prRef';
+import { parseGithubPrRef, sortPrLinks } from '../../lib/prRef';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
 
@@ -225,7 +225,7 @@ function CollapsedTicketMetaSidebar({
   const worktreeLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
   const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository');
   const issueLink = ticket.links.find((l: TicketLink) => l.type === 'github_issue');
-  const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
+  const prLinks = sortPrLinks(ticket.links.filter((l: TicketLink) => l.type === 'github_pr'));
 
   const linkedRepoLabel = useMemo(() => {
     if (repoLink) return repoLink.ref;
@@ -1237,7 +1237,7 @@ function PRLinkPicker({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
+  const prLinks = sortPrLinks(ticket.links.filter((l: TicketLink) => l.type === 'github_pr'));
 
   const handleSave = async () => {
     const trimmed = urlValue.trim();
