@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
@@ -7,6 +7,7 @@ import { QuickAddFab, QuickAddSheet } from './MobileQuickAdd';
 import { MobilePageHeader } from './MobilePageHeader';
 import { KanbanIcon } from './MobileIcons';
 import { tintSolid } from '../lib/tints';
+import { useColumnSwipe, COLUMN_EASING, COLUMN_MS } from './useColumnSwipe';
 
 const STATUS_DOT: Record<TicketStatus, string> = {
   backlog: tintSolid('gray'),
@@ -18,6 +19,9 @@ const STATUS_DOT: Record<TicketStatus, string> = {
 };
 
 const DEFAULT_COLUMN_INDEX = TICKET_STATUSES.indexOf('doing');
+/** Width (px) of the neighbouring columns left visible, and the gap between columns. */
+const PEEK = 14;
+const GAP = 8;
 
 export function MobileBoard() {
   const rawBoards = useTicketStore((s) => s.boards);
@@ -40,7 +44,6 @@ export function MobileBoard() {
   );
 
   const [activeIdx, setActiveIdx] = useState(DEFAULT_COLUMN_INDEX);
-  const touchStartX = useRef<number | null>(null);
   const lastIdx = TICKET_STATUSES.length - 1;
 
   const goToColumn = useCallback(
@@ -48,23 +51,33 @@ export function MobileBoard() {
     [lastIdx],
   );
 
-  // Swipe pages the track: |dx| > 50px moves one column. (Native scroll-snap
-  // fought re-renders from WS updates.)
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0]?.clientX ?? null;
-  };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    const start = touchStartX.current;
-    touchStartX.current = null;
-    const end = e.changedTouches[0]?.clientX;
-    if (start === null || end === undefined) return;
-    const dx = end - start;
-    if (Math.abs(dx) > 50) goToColumn(activeIdx + (dx < 0 ? 1 : -1));
-  };
+  // Columns are sized from the viewport width so neighbours peek on each side.
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    setViewportWidth(el.clientWidth);
+    const ro = new ResizeObserver(() => setViewportWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const columnWidth = Math.max(0, viewportWidth - 2 * (PEEK + GAP));
+  const step = columnWidth + GAP;
+
+  const activeStatus = TICKET_STATUSES[activeIdx] ?? 'todo';
+  const prevStatus = TICKET_STATUSES[activeIdx - 1];
+  const nextStatus = TICKET_STATUSES[activeIdx + 1];
+
+  const { dx, dragging, touchProps } = useColumnSwipe({
+    idx: activeIdx,
+    count: TICKET_STATUSES.length,
+    pageWidth: step,
+    onChange: goToColumn,
+  });
 
   // ── Quick add ──
   const [adding, setAdding] = useState(false);
-  const activeStatus = TICKET_STATUSES[activeIdx] ?? 'todo';
   const canAdd = !!(selectedBoardId ?? boards[0]?.id);
 
   return (
@@ -93,62 +106,103 @@ export function MobileBoard() {
         }
       />
 
-      {/* Status chips */}
-      <nav className="flex shrink-0 gap-1.5 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
-        {(TICKET_STATUSES as readonly TicketStatus[]).map((status, idx) => {
-          const count = columns[status]?.length ?? 0;
-          const active = idx === activeIdx;
-          return (
+      {/* Carousel header: the visible column in the middle, its neighbours on each side */}
+      <nav aria-label="Colonnes" className="shrink-0 px-1">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center">
+          {prevStatus ? (
             <button
-              key={status}
-              onClick={() => goToColumn(idx)}
-              className={`flex shrink-0 items-center gap-1.5 min-h-11 whitespace-nowrap rounded-full px-4 text-[13px] font-medium transition-colors ${
-                active
-                  ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
-                  : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
-              }`}
+              onClick={() => goToColumn(activeIdx - 1)}
+              className="flex h-11 min-w-0 items-center gap-1 justify-self-start px-2 text-[13px] text-[var(--theme-text-muted)]"
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[status]}`} />
-              {TICKET_STATUS_LABELS[status]}
-              <span className={active ? 'opacity-80' : 'opacity-60'}>{count}</span>
+              <span aria-hidden className="text-base leading-none">‹</span>
+              <span className="truncate">{TICKET_STATUS_LABELS[prevStatus]}</span>
             </button>
-          );
-        })}
+          ) : <span />}
+          <p aria-live="polite" className="flex items-center gap-2 px-2 text-[15px] font-semibold text-[var(--theme-text-primary)]">
+            <span className={`h-2 w-2 rounded-full ${STATUS_DOT[activeStatus]}`} />
+            {TICKET_STATUS_LABELS[activeStatus]}
+            <span className="font-normal tabular-nums text-[var(--theme-text-muted)]">{columns[activeStatus]?.length ?? 0}</span>
+          </p>
+          {nextStatus ? (
+            <button
+              onClick={() => goToColumn(activeIdx + 1)}
+              className="flex h-11 min-w-0 items-center gap-1 justify-self-end px-2 text-[13px] text-[var(--theme-text-muted)]"
+            >
+              <span className="truncate">{TICKET_STATUS_LABELS[nextStatus]}</span>
+              <span aria-hidden className="text-base leading-none">›</span>
+            </button>
+          ) : <span />}
+        </div>
+        {/* Position dots */}
+        <div aria-hidden className="flex justify-center gap-1.5 pb-2">
+          {(TICKET_STATUSES as readonly TicketStatus[]).map((status, idx) => (
+            <span
+              key={status}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                idx === activeIdx ? `w-4 ${STATUS_DOT[status]}` : 'w-1.5 bg-[var(--theme-text-faint)] opacity-50'
+              }`}
+            />
+          ))}
+        </div>
       </nav>
 
-      {/* Swipeable columns: a 500%-wide track moved with a transform */}
-      <div className="min-h-0 flex-1 overflow-hidden" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      {/* Columns: a track moved with a transform, following the finger */}
+      <div
+        ref={viewportRef}
+        className="min-h-0 flex-1 overflow-hidden"
+        style={{ touchAction: 'pan-y' }}
+        {...touchProps}
+      >
         <div
           className="flex h-full"
           style={{
-            width: `${TICKET_STATUSES.length * 100}%`,
-            transform: `translateX(-${(activeIdx * 100) / TICKET_STATUSES.length}%)`,
-            transition: 'transform 250ms cubic-bezier(0.16, 1, 0.3, 1)',
+            gap: GAP,
+            transform: `translateX(${PEEK + GAP - activeIdx * step + dx}px)`,
+            transition: dragging ? 'none' : `transform ${COLUMN_MS}ms ${COLUMN_EASING}`,
           }}
         >
-          {(TICKET_STATUSES as readonly TicketStatus[]).map((status) => {
+          {(TICKET_STATUSES as readonly TicketStatus[]).map((status, idx) => {
             const tickets = columns[status] ?? [];
+            const active = idx === activeIdx;
             return (
-              <div
+              <section
                 key={status}
-                className="flex h-full flex-none flex-col overflow-y-auto px-3"
-                style={{ width: `${100 / TICKET_STATUSES.length}%`, paddingBottom: 'calc(env(safe-area-inset-bottom) + 120px)' }}
+                aria-label={TICKET_STATUS_LABELS[status]}
+                className="relative flex h-full flex-none flex-col overflow-hidden rounded-t-2xl bg-[var(--theme-bg-surface)] transition-opacity duration-300"
+                style={{ width: columnWidth, opacity: active ? 1 : 0.55 }}
               >
-                {tickets.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-[var(--theme-text-faint)]">Aucun ticket</p>
-                ) : (
-                  <div className="flex flex-col gap-2 py-1">
-                    {tickets.map((t) => (
-                      <MobileTicketCard
-                        key={t.id}
-                        ticket={t}
-                        boardName={isAllBoards ? boardNameById[t.boardId] : undefined}
-                        onOpen={() => selectTicket(t.id)}
-                      />
-                    ))}
-                  </div>
+                <div className={`h-1 shrink-0 ${STATUS_DOT[status]}`} />
+                <div
+                  className="min-h-0 flex-1 px-2 pt-2"
+                  style={{
+                    overflowY: dragging ? 'hidden' : 'auto',
+                    paddingBottom: 'calc(env(safe-area-inset-bottom) + 120px)',
+                  }}
+                >
+                  {tickets.length === 0 ? (
+                    <p className="py-10 text-center text-sm text-[var(--theme-text-faint)]">Aucun ticket</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {tickets.map((t) => (
+                        <MobileTicketCard
+                          key={t.id}
+                          ticket={t}
+                          boardName={isAllBoards ? boardNameById[t.boardId] : undefined}
+                          onOpen={() => selectTicket(t.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* A neighbour is a target, not content: a tap on its edge brings it in */}
+                {!active && (
+                  <button
+                    aria-label={`Aller à ${TICKET_STATUS_LABELS[status]}`}
+                    onClick={() => goToColumn(idx)}
+                    className="absolute inset-0"
+                  />
                 )}
-              </div>
+              </section>
             );
           })}
         </div>
