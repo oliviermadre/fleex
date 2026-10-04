@@ -76,6 +76,9 @@ async function renderSettings() {
   await waitFor(() => expect(screen.getByTestId('repo-actions-settings')).toBeTruthy());
 }
 
+const openStep = (k: 'checkout' | 'server' | 'teardown') => fireEvent.click(screen.getByTestId(`step-${k}`));
+const openTab = (k: 'lifecycle' | 'commands' | 'options') => fireEvent.click(screen.getByTestId(`tab-${k}`));
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.fetchWorktrees).mockResolvedValue([{ path: PATH, branch: 'ticket/775c62', isMain: false, isBare: false }]);
@@ -87,18 +90,19 @@ describe('Actions et Hooks — lifecycle', () => {
     // WHY: the hooks used to hide behind a text field; the strip makes each step discoverable.
     fakeServer({ hooks: { setup: 'pnpm i' } }, { hooks: { teardown: 'docker compose down' } });
     await renderSettings();
-    expect(within(screen.getByTestId('step-overlay')).getByText('✓ 1 fichier')).toBeTruthy();
-    expect(within(screen.getByTestId('step-setup')).getByText('✓ perso')).toBeTruthy();
-    expect(within(screen.getByTestId('step-start')).getByText('+ ajouter')).toBeTruthy();
-    expect(within(screen.getByTestId('step-teardown')).getByText('✓ partagé')).toBeTruthy();
+    // Three moments, in the order they happen: checkout (overlay → file hooks → setup), server, teardown.
+    expect(within(screen.getByTestId('step-checkout')).getByText('✓ 1 fichier · hooks fichiers · setup perso')).toBeTruthy();
+    expect(within(screen.getByTestId('step-server')).getByText('+ ajouter')).toBeTruthy();
+    expect(within(screen.getByTestId('step-teardown')).getByText('✓ teardown partagé')).toBeTruthy();
   });
 
   it('saves the Setup where it lives (personal) and tests the draft in the current worktree', async () => {
     const state = fakeServer({ hooks: { setup: 'pnpm i' } }, null);
     await renderSettings();
+    openStep('checkout');
     const box = screen.getByLabelText('Script Setup');
     fireEvent.change(box, { target: { value: 'pnpm i && make migrate' } });
-    expect(screen.getByTestId('step-setup').querySelector('[title="Modifications non enregistrées"]')).toBeTruthy();
+    expect(screen.getByTestId('step-checkout').querySelector('[title="Modifications non enregistrées"]')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Tester dans le worktree courant/ }));
     await waitFor(() => expect(api.runWorktreeHook).toHaveBeenCalledWith(PATH, 'setup', 'pnpm i && make migrate'));
     await act(async () => {
@@ -111,9 +115,10 @@ describe('Actions et Hooks — lifecycle', () => {
   it('keeps a draft when switching steps', async () => {
     fakeServer({}, null);
     await renderSettings();
+    openStep('checkout');
     fireEvent.change(screen.getByLabelText('Script Setup'), { target: { value: 'make deps' } });
-    fireEvent.click(screen.getByTestId('step-teardown'));
-    fireEvent.click(screen.getByTestId('step-setup'));
+    openStep('teardown');
+    openStep('checkout');
     expect((screen.getByLabelText('Script Setup') as HTMLTextAreaElement).value).toBe('make deps');
   });
 
@@ -121,6 +126,7 @@ describe('Actions et Hooks — lifecycle', () => {
     // WHY (acceptance 9): moving to personal must be explicit about the team's copy.
     const state = fakeServer({}, { hooks: { setup: 'make deps' } });
     await renderSettings();
+    openStep('checkout');
     fireEvent.change(screen.getByLabelText('Script Setup'), { target: { value: 'make deps all' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
@@ -138,6 +144,7 @@ describe('Actions et Hooks — lifecycle', () => {
   it('Partager moves a personal step into .fleex/worktree.json', async () => {
     const state = fakeServer({ hooks: { setup: 'pnpm i' } }, null);
     await renderSettings();
+    openStep('checkout');
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Perso ⇡' }));
     });
@@ -148,13 +155,43 @@ describe('Actions et Hooks — lifecycle', () => {
   it('sets the start from a detected command, without writing the default left clicks', async () => {
     fakeServer({}, null);
     await renderSettings();
-    fireEvent.click(screen.getByTestId('step-start'));
+    openStep('server');
     fireEvent.change(screen.getByLabelText('Commande de démarrage'), { target: { value: 'launch:web' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
     });
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.start', 'launch:web');
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.clickByState', undefined);
+    // The mode is written explicitly, foreground by default.
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.mode', 'foreground');
+  });
+
+  it('detached: Stop, Status and Logs are asked for, and saved with the mode', async () => {
+    // WHY: a start that hands back can't be stopped, watched or tailed by Fleex on its own.
+    fakeServer({ server: { start: './cli/fleex start' } }, null);
+    await renderSettings();
+    openStep('server');
+    expect(within(screen.getByTestId('server-row-stop')).queryByText(/Fleex ne sait pas arrêter/)).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'Détaché' }));
+    expect(within(screen.getByTestId('server-row-stop')).getByText(/Fleex ne sait pas arrêter/)).toBeTruthy();
+    expect(within(screen.getByTestId('server-row-status')).getByText(/sans probe/)).toBeTruthy();
+    expect(within(screen.getByTestId('server-row-logs')).getByText(/sans commande de logs/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Commande de logs'), { target: { value: './cli/fleex logs' } });
+    fireEvent.change(screen.getByLabelText("Commande d'arrêt"), { target: { value: './cli/fleex stop' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    });
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.mode', 'detached');
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.logs', './cli/fleex logs');
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.stop', './cli/fleex stop');
+  });
+
+  it('the teardown moment shows the automatic stop before its script', async () => {
+    fakeServer({}, null);
+    await renderSettings();
+    openStep('teardown');
+    expect(screen.getByTestId('teardown-stop').textContent).toMatch(/Stop du serveur/);
+    expect(screen.getByLabelText('Script Teardown')).toBeTruthy();
   });
 });
 
@@ -165,7 +202,7 @@ describe('Actions et Hooks — probe tester', () => {
     fakeServer({ server: { probe: { command: 'check-up' } } }, null);
     vi.mocked(api.testPinnedProbe).mockResolvedValue({ exitCode: 0, stdout: '{"endpoints":[{"name":"gateway","port":58619},{"name":"web","url":"http://localhost:58621","primary":true}]}', stderr: '' } as Awaited<ReturnType<typeof api.testPinnedProbe>>);
     await renderSettings();
-    fireEvent.click(screen.getByTestId('step-stop'));
+    openStep('server');
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '▶ Tester le probe' }));
     });
@@ -176,7 +213,7 @@ describe('Actions et Hooks — probe tester', () => {
     fakeServer({ server: { probe: { command: 'check-up' } } }, null);
     vi.mocked(api.testPinnedProbe).mockResolvedValue({ exitCode: 0, stdout: 'true', stderr: '' } as Awaited<ReturnType<typeof api.testPinnedProbe>>);
     await renderSettings();
-    fireEvent.click(screen.getByTestId('step-stop'));
+    openStep('server');
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '▶ Tester le probe' }));
     });
@@ -188,6 +225,7 @@ describe('Actions et Hooks — actions, detected commands, options', () => {
   it('adds an action as personal, with an id from its name', async () => {
     const state = fakeServer({}, null);
     await renderSettings();
+    openTab('commands');
     fireEvent.click(screen.getByRole('button', { name: '+ Ajouter une action' }));
     const editor = screen.getByTestId('action-editor');
     fireEvent.change(within(editor).getByLabelText('Nom'), { target: { value: 'DB migrate' } });
@@ -204,6 +242,7 @@ describe('Actions et Hooks — actions, detected commands, options', () => {
   it('opens the editor by clicking the action row, like the pinned actions list', async () => {
     fakeServer({ actions: [{ id: 'migrate', cmd: 'make db-migrate', mode: 'background' }] }, null);
     await renderSettings();
+    openTab('commands');
     const row = screen.getByTestId('action-row-migrate');
     expect(row.textContent).not.toContain('✎');
     fireEvent.click(within(row).getByRole('button', { name: "Plus d'actions pour migrate" }));
@@ -215,6 +254,7 @@ describe('Actions et Hooks — actions, detected commands, options', () => {
   it('refuses an action without a command', async () => {
     fakeServer({}, null);
     await renderSettings();
+    openTab('commands');
     fireEvent.click(screen.getByRole('button', { name: '+ Ajouter une action' }));
     fireEvent.click(within(screen.getByTestId('action-editor')).getByRole('button', { name: 'Ajouter (perso)' }));
     expect(screen.getByText(/Il faut une commande/)).toBeTruthy();
@@ -224,6 +264,7 @@ describe('Actions et Hooks — actions, detected commands, options', () => {
   it('pins, hides, or makes a detected command the start', async () => {
     const state = fakeServer({}, null);
     await renderSettings();
+    openTab('commands');
     const row = screen.getByTestId('detected-npm:test');
     await act(async () => {
       fireEvent.click(within(row).getByRole('button', { name: 'Épingler test' }));
@@ -239,9 +280,27 @@ describe('Actions et Hooks — actions, detected commands, options', () => {
     expect(state.personal.discovery?.hide).toEqual(['npm:test']);
   });
 
+  it('one list: the search and source filters apply to actions and detected commands alike', async () => {
+    // WHY: the screen shows what the worktree menu offers, and must stay usable with dozens of scripts.
+    fakeServer({ actions: [{ id: 'migrate', cmd: 'make db-migrate', mode: 'background' }] }, null);
+    await renderSettings();
+    openTab('commands');
+    fireEvent.change(screen.getByLabelText('Filtrer les commandes'), { target: { value: 'run test' } });
+    expect(screen.queryByTestId('action-row-migrate')).toBeNull();
+    expect(screen.getByTestId('detected-npm:test')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Filtrer les commandes'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Actions/ }));
+    expect(screen.getByTestId('action-row-migrate')).toBeTruthy();
+    expect(screen.queryByTestId('detected-npm:test')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^npm/ }));
+    expect(screen.queryByTestId('action-row-migrate')).toBeNull();
+    expect(screen.getByTestId('detected-npm:test')).toBeTruthy();
+  });
+
   it('turns port reservation on with 10 ports by default', async () => {
     const state = fakeServer({}, null);
     await renderSettings();
+    openTab('options');
     await act(async () => {
       fireEvent.click(screen.getByRole('switch', { name: 'Réserver des ports' }));
     });
@@ -255,6 +314,7 @@ describe('Actions et Hooks — actions, detected commands, options', () => {
     });
     await renderSettings();
     expect(screen.getByText(/Aucun worktree/)).toBeTruthy();
+    openStep('checkout');
     expect((screen.getByRole('button', { name: 'Perso ⇡' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: /Tester dans le worktree courant/ }) as HTMLButtonElement).disabled).toBe(true);
   });

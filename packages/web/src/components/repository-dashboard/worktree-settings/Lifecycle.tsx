@@ -8,6 +8,7 @@ import {
   worktreeSourceId,
   type WorktreeClickChoice,
   type WorktreeConfigKey,
+  type WorktreeServerMode,
   type WorktreeServerState,
 } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
@@ -19,18 +20,19 @@ import { Select } from '../../ui/Select';
 import { OverlaySyncModal } from '../../overlay-sync/OverlaySyncModal';
 import { CODE_INPUT, TEXT_INPUT } from '../../settings/actions/shared';
 import { STATE_LABEL, stateDotClass } from '../../worktree-actions/worktreeUi';
-import { EnvHelp, FieldLabel, Hint, RunResult, ScopeBadge, scopeOf } from './parts';
+import { EnvHelp, FieldLabel, Hint, RunResult, ScopeBadge, Warn, scopeOf } from './parts';
 import type { WorktreeSettingsApi } from './useWorktreeSettings';
 
-export type StepKey = 'overlay' | 'setup' | 'start' | 'stop' | 'teardown';
+export type StepKey = 'checkout' | 'server' | 'teardown';
 
+/** The three moments of a worktree's life, in the order they happen. */
 export const STEPS: { key: StepKey; title: string; when: string; keys: WorktreeConfigKey[] }[] = [
-  { key: 'overlay', title: 'Overlay', when: 'après le checkout', keys: [] },
-  { key: 'setup', title: 'Setup', when: 'à la création', keys: ['hooks.setup'] },
-  { key: 'start', title: 'Start', when: 'clic gauche quand arrêté', keys: ['server.start', 'server.url', 'server.clickByState'] },
-  { key: 'stop', title: 'Stop · Status', when: 'verbes standard', keys: ['server.stop', 'server.probe'] },
-  { key: 'teardown', title: 'Teardown', when: 'avant la suppression', keys: ['hooks.teardown'] },
+  { key: 'checkout', title: 'Au checkout', when: 'overlay · hooks fichiers · setup', keys: ['hooks.setup'] },
+  { key: 'server', title: 'Serveur', when: 'start · logs · stop · status', keys: ['server.mode', 'server.start', 'server.logs', 'server.stop', 'server.probe', 'server.url', 'server.clickByState'] },
+  { key: 'teardown', title: 'Au teardown', when: 'stop du serveur · teardown', keys: ['hooks.teardown'] },
 ];
+
+const SERVER_KEYS = STEPS[1]!.keys;
 
 /** The effective value of a key: personal over shared. */
 export function effective(api: WorktreeSettingsApi, key: WorktreeConfigKey): unknown {
@@ -40,26 +42,40 @@ export function effective(api: WorktreeSettingsApi, key: WorktreeConfigKey): unk
   return p !== undefined ? p : getConfigKey(s.shared, key);
 }
 
-/** One line under a step of the strip: configured where, or "+ ajouter". */
+/** The server's mode as shown: the configured one, else what Fleex guesses (a probe = detached). */
+export function serverMode(api: WorktreeSettingsApi): WorktreeServerMode {
+  const m = effective(api, 'server.mode') as WorktreeServerMode | undefined;
+  if (m) return m;
+  return (effective(api, 'server.probe') as { command?: string } | undefined)?.command ? 'detached' : 'foreground';
+}
+
+function scopeLabel(api: WorktreeSettingsApi, keys: WorktreeConfigKey[]): string {
+  const scope = scopeOf(api, keys);
+  return scope.layer === 'shared' ? 'partagé' : scope.layer === 'personal' ? 'perso' : '';
+}
+
+/** One line under a moment of the strip: what is configured, or "+ ajouter". */
 function stepState(api: WorktreeSettingsApi, step: StepKey): { set: boolean; label: string } {
   const s = api.settings;
   if (!s) return { set: false, label: '' };
-  if (step === 'overlay') return s.overlayFiles.length ? { set: true, label: `✓ ${s.overlayFiles.length} fichier${s.overlayFiles.length > 1 ? 's' : ''}` } : { set: false, label: '+ ajouter' };
-  if (step === 'setup' && !effective(api, 'hooks.setup') && (s.fileHooks.global.length || s.fileHooks.repo.length)) return { set: true, label: '✓ hooks fichiers' };
-  if (step === 'start' && !effective(api, 'server.start')) return { set: false, label: '+ ajouter' };
-  const keys = STEPS.find((x) => x.key === step)!.keys;
-  const scope = scopeOf(api, keys);
-  const hasValue = keys.some((k) => {
-    const v = effective(api, k);
-    return v !== undefined && v !== '';
-  });
-  if (!scope.layer || !hasValue) return { set: false, label: '+ ajouter' };
-  return { set: true, label: scope.layer === 'shared' ? '✓ partagé' : '✓ perso' };
+  if (step === 'checkout') {
+    const parts = [
+      s.overlayFiles.length ? `${s.overlayFiles.length} fichier${s.overlayFiles.length > 1 ? 's' : ''}` : '',
+      s.fileHooks.global.length + s.fileHooks.repo.length ? 'hooks fichiers' : '',
+      effective(api, 'hooks.setup') ? `setup ${scopeLabel(api, ['hooks.setup'])}` : '',
+    ].filter(Boolean);
+    return parts.length ? { set: true, label: `✓ ${parts.join(' · ')}` } : { set: false, label: '+ ajouter' };
+  }
+  if (step === 'server') {
+    if (!effective(api, 'server.start')) return { set: false, label: '+ ajouter' };
+    return { set: true, label: `✓ ${serverMode(api) === 'detached' ? 'détaché' : 'premier plan'} · ${scopeLabel(api, SERVER_KEYS)}` };
+  }
+  return effective(api, 'hooks.teardown') ? { set: true, label: `✓ teardown ${scopeLabel(api, ['hooks.teardown'])}` } : { set: false, label: '+ ajouter' };
 }
 
 /**
- * The worktree's life, from creation to removal, read at a glance (PRD §8.3):
- * a step with a solid border is configured, a dashed one is not.
+ * The worktree's life, from creation to removal, read at a glance: a moment
+ * with a solid border is configured, a dashed one is not.
  */
 export function LifecycleStrip({ api, step, onStep, dirty }: { api: WorktreeSettingsApi; step: StepKey; onStep: (s: StepKey) => void; dirty: Partial<Record<StepKey, boolean>> }) {
   return (
@@ -94,32 +110,42 @@ export function LifecycleStrip({ api, step, onStep, dirty }: { api: WorktreeSett
   );
 }
 
+type ServerDraft = {
+  mode: WorktreeServerMode;
+  start: string;
+  custom: boolean;
+  logs: string;
+  stop: string;
+  probe: string;
+  interval: string;
+  url: string;
+  click: Record<WorktreeServerState, WorktreeClickChoice>;
+};
+
 export type StepDrafts = {
-  setup?: string;
+  checkout?: string;
   teardown?: string;
-  start?: { start: string; custom: boolean; url: string; click: Record<WorktreeServerState, WorktreeClickChoice> };
-  stop?: { stop: string; probe: string; interval: string };
+  server?: ServerDraft;
 };
 
 export function initialDraft(api: WorktreeSettingsApi, step: StepKey): StepDrafts[keyof StepDrafts] {
   const str = (k: WorktreeConfigKey) => (effective(api, k) as string | undefined) ?? '';
-  if (step === 'setup') return str('hooks.setup');
+  if (step === 'checkout') return str('hooks.setup');
   if (step === 'teardown') return str('hooks.teardown');
-  if (step === 'start') {
-    const start = str('server.start');
-    const items = api.settings?.view?.items ?? [];
-    return {
-      start,
-      custom: !!start && !items.some((i) => i.id === start),
-      url: str('server.url'),
-      click: { ...DEFAULT_WORKTREE_CLICK, ...((effective(api, 'server.clickByState') as Record<string, WorktreeClickChoice> | undefined) ?? {}) },
-    };
-  }
-  if (step === 'stop') {
-    const probe = effective(api, 'server.probe') as { command?: string; intervalSec?: number } | undefined;
-    return { stop: str('server.stop'), probe: probe?.command ?? '', interval: String(probe?.intervalSec ?? 30) };
-  }
-  return undefined;
+  const start = str('server.start');
+  const items = api.settings?.view?.items ?? [];
+  const probe = effective(api, 'server.probe') as { command?: string; intervalSec?: number } | undefined;
+  return {
+    mode: serverMode(api),
+    start,
+    custom: !!start && !items.some((i) => i.id === start),
+    logs: str('server.logs'),
+    stop: str('server.stop'),
+    probe: probe?.command ?? '',
+    interval: String(probe?.intervalSec ?? 30),
+    url: str('server.url'),
+    click: { ...DEFAULT_WORKTREE_CLICK, ...((effective(api, 'server.clickByState') as Record<string, WorktreeClickChoice> | undefined) ?? {}) },
+  };
 }
 
 interface EditorProps {
@@ -145,10 +171,25 @@ function VarChips({ vars }: { vars: string[] }) {
 /** The editor of the selected step: its fields, Tester, Partager ↔ Garder pour moi, Save. */
 export function StepEditor(props: EditorProps) {
   const { step } = props;
-  if (step === 'overlay') return <OverlayStep api={props.api} />;
-  if (step === 'setup' || step === 'teardown') return <HookStep {...props} hook={step} />;
-  if (step === 'start') return <StartStep {...props} />;
-  return <StopStep {...props} />;
+  if (step === 'checkout') {
+    return (
+      <div className="space-y-4">
+        <OverlayStep api={props.api} />
+        <div className="border-t border-[var(--theme-border)] pt-3"><HookStep {...props} hook="setup" /></div>
+      </div>
+    );
+  }
+  if (step === 'teardown') {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-3 py-2 text-[11px] text-[var(--theme-text-secondary)]" data-testid="teardown-stop">
+          <span className="font-medium">a. Stop du serveur</span> — automatique, avant le script : Fleex lance la ligne <b>Stop</b> du serveur (ou ferme le terminal du Start), au plus 30 s.
+        </div>
+        <HookStep {...props} hook="teardown" />
+      </div>
+    );
+  }
+  return <ServerStep {...props} />;
 }
 
 function Footer({ api, keys, dirty, onSave, onRevert, children }: { api: WorktreeSettingsApi; keys: WorktreeConfigKey[]; dirty: boolean; onSave: () => void; onRevert: () => void; children?: React.ReactNode }) {
@@ -170,7 +211,7 @@ function OverlayStep({ api }: { api: WorktreeSettingsApi }) {
   return (
     <div>
       <div className="flex items-baseline gap-2">
-        <h4 className="text-sm font-semibold text-[var(--theme-text-primary)]">Overlay</h4>
+        <h4 className="text-sm font-semibold text-[var(--theme-text-primary)]">a. Overlay</h4>
         <span className="text-[11px] text-[var(--theme-text-muted)]">copié dans chaque nouveau worktree, juste après le checkout</span>
       </div>
       <Hint>Fleex seulement : ces fichiers (souvent des <code className="font-mono">.env</code>) peuvent contenir des secrets, ils ne vont jamais dans le fichier partagé.</Hint>
@@ -205,16 +246,10 @@ function HookStep({ api, draft, setDraft, hook }: EditorProps & { hook: 'setup' 
   };
   return (
     <div>
-      <div className="flex items-baseline gap-2">
-        <h4 className="text-sm font-semibold text-[var(--theme-text-primary)]">{hook === 'setup' ? 'Setup (ex post-checkout)' : 'Teardown'}</h4>
-        <span className="text-[11px] text-[var(--theme-text-muted)]">
-          {hook === 'setup' ? 'à la création du worktree, après l\'overlay — asynchrone, ne bloque ni les agents ni le worktree' : 'avant la suppression du worktree — attendu au plus le timeout, n\'empêche jamais la suppression'}
-        </span>
-      </div>
       {hook === 'setup' && (
-        <div className="mt-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-3 py-2">
+        <div className="mb-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-3 py-2">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-[var(--theme-text-secondary)]">Hooks fichiers</span>
+            <span className="text-[11px] font-medium text-[var(--theme-text-secondary)]">b. Hooks fichiers</span>
             <span className="text-[10.5px] text-[var(--theme-text-muted)]">lancés avant le script, dans l&apos;ordre</span>
             <button type="button" className="ml-auto text-[11px] text-[var(--theme-accent)] hover:underline" onClick={() => void openHooksDir(s.repo)}>Ouvrir le dossier des hooks</button>
           </div>
@@ -226,6 +261,12 @@ function HookStep({ api, draft, setDraft, hook }: EditorProps & { hook: 'setup' 
           </ol>
         </div>
       )}
+      <div className="flex items-baseline gap-2">
+        <h4 className="text-sm font-semibold text-[var(--theme-text-primary)]">{hook === 'setup' ? 'c. Script Setup (ex post-checkout)' : 'b. Script Teardown'}</h4>
+        <span className="text-[11px] text-[var(--theme-text-muted)]">
+          {hook === 'setup' ? 'à la création du worktree, après l\'overlay — asynchrone, ne bloque ni les agents ni le worktree' : 'avant la suppression du worktree — attendu au plus le timeout, n\'empêche jamais la suppression'}
+        </span>
+      </div>
       <textarea
         aria-label={hook === 'setup' ? 'Script Setup' : 'Script Teardown'}
         className={cn(CODE_INPUT, 'mt-2 min-h-[110px]')}
@@ -262,15 +303,31 @@ function HookStep({ api, draft, setDraft, hook }: EditorProps & { hook: 'setup' 
 
 const VERB_LABELS: Record<string, string> = { start: 'Start', stop: 'Stop', restart: 'Restart', open: 'Open (navigateur)', logs: 'Logs', status: 'Rafraîchir l\'état' };
 
-function StartStep({ api, draft, setDraft }: EditorProps) {
+/** One verb of the server: label, field, and what Fleex does when it is left empty. */
+function VerbRow({ id, title, children, empty, warn }: { id: string; title: string; children: React.ReactNode; empty: string; warn?: string | null }) {
+  return (
+    <div className="grid gap-x-3 gap-y-1 border-t border-[var(--theme-border)] py-2.5 first:border-t-0 md:grid-cols-[110px_minmax(0,1fr)]" data-testid={`server-row-${id}`}>
+      <div className="flex items-center gap-1 pt-1.5 text-xs font-semibold text-[var(--theme-text-primary)]">{title}<EnvHelp /></div>
+      <div className="min-w-0 space-y-1">
+        {children}
+        {warn ? <Warn>⚠ {warn}</Warn> : <Hint>{empty}</Hint>}
+      </div>
+    </div>
+  );
+}
+
+function ServerStep({ api, draft, setDraft }: EditorProps) {
   const s = api.settings!;
   const view = s.view;
   const items = view?.items ?? [];
-  const saved = initialDraft(api, 'start') as NonNullable<StepDrafts['start']>;
-  const d = (draft as StepDrafts['start']) ?? saved;
+  const saved = initialDraft(api, 'server') as ServerDraft;
+  const d = (draft as ServerDraft | undefined) ?? saved;
   const dirty = JSON.stringify(d) !== JSON.stringify(saved);
   const runVerb = useWorktreeActionsStore((st) => st.runVerb);
-  const patch = (p: Partial<NonNullable<StepDrafts['start']>>) => setDraft({ ...d, ...p });
+  const patch = (p: Partial<ServerDraft>) => setDraft({ ...d, ...p });
+  const [probe, setProbe] = useState<'loading' | { ok: boolean; text: string } | null>(null);
+  const server = view?.server;
+  const detached = d.mode === 'detached';
 
   const targetOptions = [
     { value: '', label: '— non configuré —' },
@@ -285,77 +342,13 @@ function StartStep({ api, draft, setDraft }: EditorProps) {
   const save = async () => {
     const click = Object.fromEntries(WORKTREE_SERVER_STATES.filter((st) => d.click[st] !== DEFAULT_WORKTREE_CLICK[st]).map((st) => [st, d.click[st]]));
     const ok = await api.write([
+      ['server.mode', d.mode],
       ['server.start', d.start.trim() || undefined],
-      ['server.url', d.url.trim() || undefined],
-      ['server.clickByState', Object.keys(click).length ? click : undefined],
-    ]);
-    if (ok) setDraft(undefined);
-  };
-  return (
-    <div>
-      <div className="flex items-baseline gap-2">
-        <h4 className="text-sm font-semibold text-[var(--theme-text-primary)]">Start</h4>
-        <span className="text-[11px] text-[var(--theme-text-muted)]">lance le serveur du worktree dans un terminal persistant, sans timeout</span>
-      </div>
-      <div className="mt-2 grid gap-3 md:grid-cols-2">
-        <div>
-          <FieldLabel htmlFor="wt-start" aside={<EnvHelp />}>Commande de démarrage</FieldLabel>
-          <Select
-            id="wt-start"
-            className="h-8 text-xs"
-            options={targetOptions}
-            value={d.custom ? '__custom' : d.start}
-            onChange={(e) => (e.target.value === '__custom' ? patch({ custom: true, start: d.custom ? d.start : '' }) : patch({ custom: false, start: e.target.value }))}
-          />
-          {d.custom && (
-            <input aria-label="Commande personnalisée" className={cn(TEXT_INPUT, 'mt-1.5 font-mono text-xs')} placeholder="make serve" value={d.start} onChange={(e) => patch({ start: e.target.value })} />
-          )}
-          <Hint>
-            Une config launch.json, un script npm, une cible make, une action, ou n&apos;importe quelle commande.
-            Si elle reste au premier plan, Fleex trouve tout seul son port (les ports écoutés par elle et ses sous-process).
-            Si elle rend la main (<code className="font-mono">docker compose up -d</code>, <code className="font-mono">fleex start</code>), ajoute un probe dans Stop · Status.
-          </Hint>
-        </div>
-        <div>
-          <FieldLabel htmlFor="wt-url">URL (Open)</FieldLabel>
-          <input id="wt-url" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="http://localhost:${port}" value={d.url} onChange={(e) => patch({ url: e.target.value })} />
-          <Hint>Facultatif. Vide = <code className="font-mono">http://localhost:</code> + le port détecté. <code className="font-mono">{'${port}'}</code> = le port détecté. Inutile si le probe renvoie des endpoints.</Hint>
-        </div>
-      </div>
-      <div className="mt-3">
-        <FieldLabel>Clic gauche selon l&apos;état</FieldLabel>
-        <div className="flex flex-col gap-1.5">
-          {WORKTREE_SERVER_STATES.map((st) => (
-            <div key={st} className="grid grid-cols-[110px_14px_minmax(0,1fr)] items-center gap-2.5">
-              <span className="flex items-center gap-1.5 text-xs text-[var(--theme-text-secondary)]"><span className={cn('h-1.5 w-1.5 rounded-full', stateDotClass(st))} /> {STATE_LABEL[st]}</span>
-              <span className="text-[var(--theme-text-faint)]">→</span>
-              <Select aria-label={`Clic gauche quand ${STATE_LABEL[st]}`} className="h-7 py-0 text-xs" options={clickOptions} value={d.click[st]} onChange={(e) => patch({ click: { ...d.click, [st]: e.target.value } })} />
-            </div>
-          ))}
-        </div>
-        <Hint>Indépendant des épingles ★, qui ne font que classer le menu.</Hint>
-      </div>
-      <Footer api={api} keys={['server.start', 'server.url', 'server.clickByState']} dirty={dirty} onSave={() => void save()} onRevert={() => setDraft(undefined)}>
-        <Button size="sm" disabled={!view || dirty || !view.start} title={dirty ? 'Enregistre d\'abord' : undefined} onClick={() => view && void runVerb(view, 'start', null)}>
-          ▶ Démarrer dans le worktree courant
-        </Button>
-      </Footer>
-    </div>
-  );
-}
-
-function StopStep({ api, draft, setDraft }: EditorProps) {
-  const s = api.settings!;
-  const saved = initialDraft(api, 'stop') as NonNullable<StepDrafts['stop']>;
-  const d = (draft as StepDrafts['stop']) ?? saved;
-  const dirty = JSON.stringify(d) !== JSON.stringify(saved);
-  const [probe, setProbe] = useState<'loading' | { ok: boolean; text: string } | null>(null);
-  const patch = (p: Partial<NonNullable<StepDrafts['stop']>>) => setDraft({ ...d, ...p });
-  const server = s.view?.server;
-  const save = async () => {
-    const ok = await api.write([
+      ['server.logs', d.logs.trim() || undefined],
       ['server.stop', d.stop.trim() || undefined],
       ['server.probe', d.probe.trim() ? { command: d.probe.trim(), intervalSec: Number(d.interval) || 30 } : undefined],
+      ['server.url', d.url.trim() || undefined],
+      ['server.clickByState', Object.keys(click).length ? click : undefined],
     ]);
     if (ok) setDraft(undefined);
   };
@@ -380,39 +373,90 @@ function StopStep({ api, draft, setDraft }: EditorProps) {
       setProbe(null);
     }
   };
+
   return (
     <div>
-      <div className="flex items-baseline gap-2">
-        <h4 className="text-sm font-semibold text-[var(--theme-text-primary)]">Stop · Status</h4>
-        <span className="text-[11px] text-[var(--theme-text-muted)]">facultatif : par défaut, Stop ferme le terminal du start et l&apos;état vient du port détecté</span>
-      </div>
-      <div className="mt-2 grid gap-3 md:grid-cols-2">
-        <div>
-          <FieldLabel htmlFor="wt-stop" aside={<EnvHelp />}>Commande d&apos;arrêt</FieldLabel>
-          <input id="wt-stop" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="docker compose stop" value={d.stop} onChange={(e) => patch({ stop: e.target.value })} />
-          <Hint>Lancée avant de fermer le terminal du start (utile pour docker compose).</Hint>
+      <div className="flex flex-wrap items-center gap-2">
+        <h4 className="text-sm font-semibold text-[var(--theme-text-primary)]">Serveur</h4>
+        <div className="inline-flex overflow-hidden rounded-md border border-[var(--theme-border)]" role="radiogroup" aria-label="Mode du serveur">
+          {(['foreground', 'detached'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={d.mode === m}
+              onClick={() => patch({ mode: m })}
+              className={cn('px-2.5 py-1 text-[11px]', d.mode === m ? 'bg-[var(--theme-accent-muted)] font-medium text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
+            >
+              {m === 'foreground' ? 'Premier plan' : 'Détaché'}
+            </button>
+          ))}
         </div>
-        <div>
-          <FieldLabel htmlFor="wt-probe" aside={<EnvHelp />}>Probe d&apos;état</FieldLabel>
+        <span className="text-[11px] text-[var(--theme-text-muted)]">
+          {detached
+            ? 'la commande rend la main (docker compose up -d, fleex start) : Stop et Status sont à fournir'
+            : 'la commande reste ouverte et affiche les logs (pnpm dev) : Fleex suit son process'}
+        </span>
+      </div>
+
+      <div className="mt-2">
+        <VerbRow id="start" title="Start" empty={detached ? 'Lancée en arrière-plan ; sa fin avec 0 veut dire « démarrage demandé ».' : 'Lancée dans un terminal persistant. Fleex trouve son port dans ses process.'} warn={!d.start.trim() ? 'Sans commande Start, le bouton du worktree ne peut pas démarrer le serveur.' : null}>
+          <label htmlFor="wt-start" className="sr-only">Commande de démarrage</label>
+          <Select
+            id="wt-start"
+            className="h-8 text-xs"
+            options={targetOptions}
+            value={d.custom ? '__custom' : d.start}
+            onChange={(e) => (e.target.value === '__custom' ? patch({ custom: true, start: d.custom ? d.start : '' }) : patch({ custom: false, start: e.target.value }))}
+          />
+          {d.custom && (
+            <input aria-label="Commande personnalisée" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder={detached ? './cli/fleex start' : 'pnpm dev'} value={d.start} onChange={(e) => patch({ start: e.target.value })} />
+          )}
+        </VerbRow>
+
+        <VerbRow id="logs" title="Logs" empty={d.logs.trim() ? 'Ouverte dans son propre terminal.' : 'Vide : Fleex montre le terminal du Start.'} warn={detached && !d.logs.trim() ? 'Détaché sans commande de logs : le terminal du Start n\'a que ses premières lignes.' : null}>
+          <input aria-label="Commande de logs" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder={detached ? 'docker compose logs -f --tail 200  ·  ./cli/fleex logs' : '(facultatif)'} value={d.logs} onChange={(e) => patch({ logs: e.target.value })} />
+        </VerbRow>
+
+        <VerbRow id="stop" title="Stop" empty={d.stop.trim() ? 'Lancée, puis Fleex ferme le terminal du Start.' : 'Vide : Fleex ferme le terminal du Start.'} warn={detached && !d.stop.trim() ? 'Détaché sans commande Stop : Fleex ne sait pas arrêter ce serveur.' : null}>
+          <input id="wt-stop" aria-label="Commande d'arrêt" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder={detached ? 'docker compose stop  ·  ./cli/fleex stop' : '(facultatif)'} value={d.stop} onChange={(e) => patch({ stop: e.target.value })} />
+        </VerbRow>
+
+        <VerbRow
+          id="status"
+          title="Status"
+          empty={d.probe.trim() ? 'Code 0 = en marche, sinon arrêté (en erreur si le terminal du Start tourne encore). Sortie facultative : {"endpoints":[{"name","url" | "host"+"port","primary"?}]}, toute autre sortie est ignorée.' : 'Vide : Fleex détecte le port écouté par les process du Start.'}
+          warn={detached && !d.probe.trim() ? 'Détaché sans probe : Fleex suppose que le serveur tourne, sans pouvoir le vérifier ni connaître son URL.' : null}
+        >
           <div className="flex gap-1.5">
-            <input id="wt-probe" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="curl -sf $FLEEX_URL/health" value={d.probe} onChange={(e) => patch({ probe: e.target.value })} />
+            <input id="wt-probe" aria-label="Probe d'état" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="curl -sf $FLEEX_URL/health" value={d.probe} onChange={(e) => patch({ probe: e.target.value })} />
             <Select aria-label="Intervalle du probe" className="h-8 w-24 text-xs" options={['15', '30', '60', '300'].map((v) => ({ value: v, label: `${v} s` }))} value={d.interval} onChange={(e) => patch({ interval: e.target.value })} />
+            <Button size="sm" disabled={!d.probe.trim() || probe === 'loading'} onClick={() => void testProbe()}>▶ Tester le probe</Button>
           </div>
-          <Hint>
-            Tourne dans tous les états, depuis le worktree. <b>Code 0 = en marche</b>, sinon arrêté (en erreur si le terminal du start tourne encore). Indispensable si le start rend la main.
-          </Hint>
-          <Hint>
-            Facultatif : pour donner les adresses à Fleex, le probe affiche sur sa sortie{' '}
-            <code className="font-mono">{'{"endpoints":[{"name":"web","url":"http://localhost:5173","primary":true},{"name":"api","port":4000}]}'}</code>
-            {' '}(<code className="font-mono">url</code>, ou <code className="font-mono">host</code> + <code className="font-mono">port</code>). Toute autre sortie est ignorée et Fleex garde le port qu&apos;il détecte.
-          </Hint>
-        </div>
+          {probe && probe !== 'loading' && (
+            <pre className={cn('max-h-28 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--theme-bg-base)] p-2 font-mono text-[11px]', probe.ok ? tintText('green') : tintText('red'))}>{probe.ok ? '✓ ' : '✗ '}{probe.text}</pre>
+          )}
+          <input id="wt-url" aria-label="URL (Open)" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="URL de repli : http://localhost:${port}" value={d.url} onChange={(e) => patch({ url: e.target.value })} />
+        </VerbRow>
       </div>
-      {probe && probe !== 'loading' && (
-        <pre className={cn('mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--theme-bg-base)] p-2 font-mono text-[11px]', probe.ok ? tintText('green') : tintText('red'))}>{probe.ok ? '✓ ' : '✗ '}{probe.text}</pre>
-      )}
-      <Footer api={api} keys={['server.stop', 'server.probe']} dirty={dirty} onSave={() => void save()} onRevert={() => setDraft(undefined)}>
-        <Button size="sm" disabled={!d.probe.trim() || probe === 'loading'} onClick={() => void testProbe()}>▶ Tester le probe</Button>
+
+      <div className="mt-2 border-t border-[var(--theme-border)] pt-3">
+        <FieldLabel>Clic gauche selon l&apos;état</FieldLabel>
+        <div className="flex flex-col gap-1.5">
+          {WORKTREE_SERVER_STATES.map((st) => (
+            <div key={st} className="grid grid-cols-[110px_14px_minmax(0,1fr)] items-center gap-2.5">
+              <span className="flex items-center gap-1.5 text-xs text-[var(--theme-text-secondary)]"><span className={cn('h-1.5 w-1.5 rounded-full', stateDotClass(st))} /> {STATE_LABEL[st]}</span>
+              <span className="text-[var(--theme-text-faint)]">→</span>
+              <Select aria-label={`Clic gauche quand ${STATE_LABEL[st]}`} className="h-7 py-0 text-xs" options={clickOptions} value={d.click[st]} onChange={(e) => patch({ click: { ...d.click, [st]: e.target.value } })} />
+            </div>
+          ))}
+        </div>
+        <Hint>Indépendant des épingles ★, qui ne font que classer le menu.</Hint>
+      </div>
+      <Footer api={api} keys={SERVER_KEYS} dirty={dirty} onSave={() => void save()} onRevert={() => setDraft(undefined)}>
+        <Button size="sm" disabled={!view || dirty || !view.start} title={dirty ? 'Enregistre d\'abord' : undefined} onClick={() => view && void runVerb(view, 'start', null)}>
+          ▶ Démarrer dans le worktree courant
+        </Button>
       </Footer>
     </div>
   );

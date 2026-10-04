@@ -7,7 +7,8 @@ import { useTicketStore } from '../../../stores/ticketStore';
 import { useWorkStore } from '../../../stores/workStore';
 import { Select } from '../../ui/Select';
 import { LifecycleStrip, StepEditor, initialDraft, type StepDrafts, type StepKey } from './Lifecycle';
-import { DetectedCommands, Options, RepoActions } from './Sections';
+import { CommandsFilterBar, DetectedCommands, Options, RepoActions, type CommandsFilter } from './Sections';
+import { cn } from '../../../lib/cn';
 import { CARD, Hint, Warn } from './parts';
 import { useWorktreeSettings } from './useWorktreeSettings';
 
@@ -29,10 +30,12 @@ function pickDefault(options: WorktreeOption[], ticketWorkspace: string | null):
 }
 
 /**
- * Settings › repo › Config › Actions et Hooks (PRD §8.3): the worktree's
- * lifecycle strip with an editor per step, the repo's actions, the detected
- * commands and the options. Everything shows where it lives (Perso / Partagé)
- * and moves with one click.
+ * Settings › repo › Config › Actions et Hooks, in three tabs:
+ *   - Cycle de vie: checkout (overlay → file hooks → setup), server (mode,
+ *     start · logs · stop · status, left click), teardown (stop → script);
+ *   - Commandes: one filtered list of the repo's actions and detected commands;
+ *   - Options: sources, ports, hooks timeout.
+ * Everything shows where it lives (Perso / Partagé) and moves with one click.
  */
 export function RepoActionsSettings({ org, name }: { org: string; name: string }) {
   const repo = `${org}/${name}`;
@@ -69,7 +72,9 @@ export function RepoActionsSettings({ org, name }: { org: string; name: string }
 
 function SettingsBody({ repo, path, worktrees, onPath }: { repo: string; path: string | null; worktrees: WorktreeOption[]; onPath: (p: string) => void }) {
   const settingsApi = useWorktreeSettings(repo, path);
-  const [step, setStep] = useState<StepKey>('setup');
+  const [tab, setTab] = useState<'lifecycle' | 'commands' | 'options'>('lifecycle');
+  const [step, setStep] = useState<StepKey>('server');
+  const [filter, setFilter] = useState<CommandsFilter>({ query: '', source: 'all' });
   const [drafts, setDrafts] = useState<StepDrafts>({});
   const s = settingsApi.settings;
 
@@ -120,21 +125,50 @@ function SettingsBody({ repo, path, worktrees, onPath }: { repo: string; path: s
         )}
         {s.sharedConfigError && <div className="mt-2"><Warn>⚠ {s.sharedConfigError} — corrige le fichier : Fleex ne le réécrira pas tant qu&apos;il est invalide.</Warn></div>}
 
-        <div className="mt-3">
-          <LifecycleStrip api={settingsApi} step={step} onStep={setStep} dirty={dirty} />
+        <div className="mt-3 flex gap-1 border-b border-[var(--theme-border)]" role="tablist" aria-label="Actions et Hooks">
+          {([['lifecycle', 'Cycle de vie'], ['commands', 'Commandes'], ['options', 'Options']] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={tab === k}
+              data-testid={`tab-${k}`}
+              onClick={() => setTab(k)}
+              className={cn('-mb-px border-b-2 px-3 py-1.5 text-xs', tab === k ? 'border-[var(--theme-accent)] font-semibold text-[var(--theme-text-primary)]' : 'border-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        <div className="mt-3 rounded-lg border border-[var(--theme-border)] p-3">
-          <StepEditor
-            api={settingsApi}
-            step={step}
-            draft={drafts[step as keyof StepDrafts]}
-            setDraft={(d) => setDrafts((all) => ({ ...all, [step]: d }))}
-          />
-        </div>
+        {tab === 'lifecycle' && (
+          <>
+            <div className="mt-3">
+              <LifecycleStrip api={settingsApi} step={step} onStep={setStep} dirty={dirty} />
+            </div>
+            <div className="mt-3 rounded-lg border border-[var(--theme-border)] p-3">
+              <StepEditor
+                api={settingsApi}
+                step={step}
+                draft={drafts[step as keyof StepDrafts]}
+                setDraft={(d) => setDrafts((all) => ({ ...all, [step]: d }))}
+              />
+            </div>
+          </>
+        )}
+        {tab === 'commands' && (
+          <div className="mt-3">
+            <Hint>Tout ce que le menu du worktree propose : tes actions (perso ou partagées) et les commandes détectées dans le repo.</Hint>
+            <CommandsFilterBar api={settingsApi} filter={filter} onFilter={setFilter} />
+          </div>
+        )}
       </div>
-      <RepoActions api={settingsApi} />
-      <DetectedCommands api={settingsApi} />
-      <Options api={settingsApi} />
+      {tab === 'commands' && (
+        <>
+          <RepoActions api={settingsApi} filter={filter} />
+          <DetectedCommands api={settingsApi} filter={filter} />
+        </>
+      )}
+      {tab === 'options' && <Options api={settingsApi} />}
     </div>
   );
 }

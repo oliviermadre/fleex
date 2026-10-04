@@ -9,6 +9,7 @@ import {
   type WorktreeServerState,
 } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
+import { foldAccents } from '../../../lib/normalize';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useWorktreeActionsStore } from '../../../stores/worktreeActionsStore';
 import { Button } from '../../ui/Button';
@@ -27,6 +28,53 @@ export function slugId(label: string, taken: Set<string>): string {
   let id = base;
   for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`;
   return id;
+}
+
+/** The Commandes tab's search and source filter, shared by the actions and the detected commands. */
+export interface CommandsFilter {
+  query: string;
+  source: 'all' | 'pinned' | 'action' | WorktreeDiscoverySource;
+}
+
+const matches = (filter: CommandsFilter | undefined, label: string, cmd: string) => {
+  const q = foldAccents(filter?.query.trim() ?? '');
+  return !q || foldAccents(`${label} ${cmd}`).includes(q);
+};
+
+const FILTER_LABEL: Record<CommandsFilter['source'], string> = { all: 'Toutes', pinned: '★ Épinglées', action: 'Actions', launch: 'launch.json', npm: 'npm', make: 'make', composer: 'composer' };
+
+/** Search + source chips with their counts, like the worktree menu. */
+export function CommandsFilterBar({ api, filter, onFilter }: { api: WorktreeSettingsApi; filter: CommandsFilter; onFilter: (f: CommandsFilter) => void }) {
+  const items = api.settings?.view?.items ?? [];
+  const actions = actionRows(api).length;
+  const count = (src: CommandsFilter['source']) =>
+    src === 'all' ? actions + items.filter((i) => i.layer === 'launch' || i.layer === 'detected').length
+      : src === 'pinned' ? items.filter((i) => i.pinned).length
+        : src === 'action' ? actions
+          : items.filter((i) => i.source === src && i.layer !== 'personal' && i.layer !== 'shared').length;
+  const sources: CommandsFilter['source'][] = ['all', 'pinned', 'action', ...WORKTREE_DISCOVERY_SOURCES];
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <input
+        aria-label="Filtrer les commandes"
+        className={cn(TEXT_INPUT, 'h-7 max-w-[260px] text-xs')}
+        placeholder="Filtrer — nom ou commande"
+        value={filter.query}
+        onChange={(e) => onFilter({ ...filter, query: e.target.value })}
+      />
+      {sources.filter((src) => src === 'all' || count(src) > 0).map((src) => (
+        <button
+          key={src}
+          type="button"
+          aria-pressed={filter.source === src}
+          onClick={() => onFilter({ ...filter, source: src })}
+          className={cn('rounded-full border px-2 py-0.5 text-[11px]', filter.source === src ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-text-primary)]' : 'border-[var(--theme-border)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
+        >
+          {FILTER_LABEL[src]} <span className="text-[var(--theme-text-faint)]">{count(src)}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 interface ActionRow {
@@ -53,9 +101,10 @@ type Draft = { id: string; label: string; cmd: string; mode: 'background' | 'ter
  * per state is in the Start step; these run from the menu). Each row says
  * where it lives and moves with one click.
  */
-export function RepoActions({ api }: { api: WorktreeSettingsApi }) {
+export function RepoActions({ api, filter }: { api: WorktreeSettingsApi; filter?: CommandsFilter }) {
   const s = api.settings!;
-  const rows = actionRows(api);
+  const allRows = actionRows(api);
+  const rows = allRows.filter((r) => matches(filter, r.def.label ?? r.id, r.def.cmd) && (!filter || filter.source !== 'pinned' || !!r.item?.pinned));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const runItem = useWorktreeActionsStore((st) => st.runItem);
@@ -75,7 +124,7 @@ export function RepoActions({ api }: { api: WorktreeSettingsApi }) {
       setError('Il faut une commande (ou une référence comme npm:dev).');
       return;
     }
-    const id = draft.isNew ? slugId(draft.label || draft.cmd.split(/\s+/)[0] || 'action', new Set(rows.map((r) => r.id))) : draft.id;
+    const id = draft.isNew ? slugId(draft.label || draft.cmd.split(/\s+/)[0] || 'action', new Set(allRows.map((r) => r.id))) : draft.id;
     const def: Partial<WorktreeActionDef> = { cmd: draft.cmd.trim(), mode: draft.mode, ...(draft.label.trim() ? { label: draft.label.trim() } : {}), ...(draft.when.length ? { when: draft.when } : {}) };
     // New actions are personal; an existing one is written where it lives.
     if (await api.write([[`action:${id}`, def]], draft.isNew ? 'personal' : undefined)) setDraft(null);
@@ -84,6 +133,8 @@ export function RepoActions({ api }: { api: WorktreeSettingsApi }) {
     if (await api.write([[`action:${id}`, undefined]])) setDraft(null);
   };
 
+  // A detected-source filter (npm, make…) shows only the detected commands.
+  if (filter && filter.source !== 'all' && filter.source !== 'action' && filter.source !== 'pinned') return null;
   return (
     <section className={CARD} aria-labelledby="wt-actions">
       <div className="mb-2 flex items-center gap-2">
@@ -196,11 +247,15 @@ const SOURCE_TITLE: Record<WorktreeDiscoverySource, string> = { launch: '.claude
  * COMMANDES DÉTECTÉES: read from the repo's files, never written. ☆ pins
  * (personal), Masquer hides from the menu, Start makes it the start command.
  */
-export function DetectedCommands({ api }: { api: WorktreeSettingsApi }) {
+export function DetectedCommands({ api, filter }: { api: WorktreeSettingsApi; filter?: CommandsFilter }) {
   const s = api.settings!;
-  const items = (s.view?.items ?? []).filter((i) => i.layer === 'launch' || i.layer === 'detected');
+  const allItems = (s.view?.items ?? []).filter((i) => i.layer === 'launch' || i.layer === 'detected');
+  const items = allItems.filter((i) =>
+    matches(filter, i.label, i.command)
+    && (!filter || filter.source === 'all' || (filter.source === 'pinned' ? i.pinned : filter.source === i.source)));
   const hidden = [...new Set([...(s.shared?.discovery?.hide ?? []), ...(s.personal.discovery?.hide ?? [])])];
   const start = effective(api, 'server.start');
+  if (filter?.source === 'action') return null;
   if (!s.view) return <section className={CARD}><h3 className={H}>Commandes détectées</h3><Hint>Choisis un worktree pour voir les commandes de ses fichiers.</Hint></section>;
   return (
     <section className={CARD} aria-labelledby="wt-detected">
@@ -247,7 +302,7 @@ export function DetectedCommands({ api }: { api: WorktreeSettingsApi }) {
           );
         })}
       </div>
-      {items.length === 0 && <Hint>Rien de détecté à la racine du worktree (package.json, Makefile, composer.json, .claude/launch.json).</Hint>}
+      {allItems.length === 0 && <Hint>Rien de détecté à la racine du worktree (package.json, Makefile, composer.json, .claude/launch.json).</Hint>}
       {hidden.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--theme-text-muted)]">
           Masquées :
