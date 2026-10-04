@@ -307,10 +307,22 @@ function HookStep({ api, draft, setDraft, hook }: EditorProps & { hook: 'setup' 
 const VERB_LABELS: Record<string, string> = { start: 'Start', stop: 'Stop', restart: 'Restart', open: 'Open (navigateur)', logs: 'Logs', status: 'Rafraîchir l\'état' };
 
 /** One verb of the server: label, field, and what Fleex does when it is left empty. */
-function VerbRow({ id, title, children, empty, warn }: { id: string; title: string; children: React.ReactNode; empty: string; warn?: string | null }) {
+/**
+ * How a server command runs — a separate axis from the server's mode (premier plan /
+ * détaché, where the server lives). Fixed per command: whatever the mode of a picked action.
+ */
+const EXEC_LABEL = {
+  terminal: { label: 'terminal', title: 'Lancée dans un terminal Fleex (tmux), que tu peux ouvrir.' },
+  notty: { label: 'sans tty', title: 'Lancée sans terminal : Fleex lit son code de sortie et sa sortie, visible dans l\'historique.' },
+} as const;
+
+function VerbRow({ id, title, exec, children, empty, warn }: { id: string; title: string; exec: keyof typeof EXEC_LABEL; children: React.ReactNode; empty: string; warn?: string | null }) {
   return (
     <div className="grid gap-x-3 gap-y-1 border-t border-[var(--theme-border)] py-2.5 first:border-t-0 md:grid-cols-[110px_minmax(0,1fr)]" data-testid={`server-row-${id}`}>
-      <div className="flex items-center gap-1 pt-1.5 text-xs font-semibold text-[var(--theme-text-primary)]">{title}<EnvHelp /></div>
+      <div className="flex flex-col gap-0.5 pt-1.5">
+        <div className="flex items-center gap-1 text-xs font-semibold text-[var(--theme-text-primary)]">{title}<EnvHelp /></div>
+        <span data-testid={`server-exec-${id}`} title={EXEC_LABEL[exec].title} className="w-fit rounded border border-[var(--theme-border)] px-1 text-[10px] text-[var(--theme-text-muted)]">{EXEC_LABEL[exec].label}</span>
+      </div>
       <div className="min-w-0 space-y-1">
         {children}
         {warn ? <Warn>⚠ {warn}</Warn> : <Hint>{empty}</Hint>}
@@ -430,28 +442,31 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
         </div>
         <span className="text-[11px] text-[var(--theme-text-muted)]">
           {detached
-            ? 'la commande rend la main (docker compose up -d, fleex start) : Stop et Status sont à fournir'
-            : 'la commande reste ouverte et affiche les logs (pnpm dev) : Fleex suit son process'}
+            ? 'le serveur vit hors de Fleex : Start rend la main (docker compose up -d, fleex start), Stop et Status sont à fournir'
+            : 'le serveur vit dans le terminal de Start (pnpm dev) : Fleex suit son process'}
         </span>
       </div>
 
       <div className="mt-2">
-        <VerbRow id="start" title="Start" empty={detached ? 'Lancée en arrière-plan ; sa fin avec 0 veut dire « démarrage demandé ».' : 'Lancée dans un terminal persistant. Fleex trouve son port dans ses process.'} warn={!d.start.trim() ? 'Sans commande Start, le bouton du worktree ne peut pas démarrer le serveur.' : null}>
+        <VerbRow id="start" title="Start" exec="terminal" empty={detached ? 'Rend la main : son terminal se termine, sa fin avec 0 veut dire « démarrage demandé ». Ensuite le probe dit si le serveur tourne.' : 'Reste ouverte dans son terminal : Fleex suit ses process, trouve leur port, et son arrêt veut dire « serveur arrêté ».'} warn={!d.start.trim() ? 'Sans commande Start, le bouton du worktree ne peut pas démarrer le serveur.' : null}>
           <CommandPicker id="wt-start" label="Commande de démarrage" value={d.start} custom={d.custom.start} options={targetOptions} placeholder={detached ? './cli/fleex start' : 'pnpm dev'} onChange={pick('start')} />
         </VerbRow>
 
-        <VerbRow id="logs" title="Logs" empty={d.logs.trim() ? 'Ouverte dans son propre terminal.' : 'Vide : Fleex montre le terminal du Start.'} warn={detached && !d.logs.trim() ? 'Détaché sans commande de logs : le terminal du Start n\'a que ses premières lignes.' : null}>
+        <VerbRow id="logs" title="Logs" exec="terminal" empty={d.logs.trim() ? 'Ouverte dans son propre terminal (pense à -f pour suivre).' : (detached ? 'Vide : Fleex montre le terminal du Start, qui n\'a que ses premières lignes.' : 'Vide : Fleex montre le terminal du Start, où le serveur écrit ses logs.')} warn={detached && !d.logs.trim() ? 'Détaché sans commande de logs : le terminal du Start n\'a que ses premières lignes.' : null}>
           <CommandPicker id="wt-logs" label="Commande de logs" value={d.logs} custom={d.custom.logs} options={targetOptions} placeholder={detached ? 'docker compose logs -f --tail 200  ·  ./cli/fleex logs' : '(facultatif)'} onChange={pick('logs')} />
         </VerbRow>
 
-        <VerbRow id="stop" title="Stop" empty={d.stop.trim() ? 'Lancée, puis Fleex ferme le terminal du Start.' : 'Vide : Fleex ferme le terminal du Start.'} warn={detached && !d.stop.trim() ? 'Détaché sans commande Stop : Fleex ne sait pas arrêter ce serveur.' : null}>
+        <VerbRow id="stop" title="Stop" exec="notty" empty={detached
+            ? 'C\'est elle qui arrête le serveur (Fleex attend sa fin, puis le probe confirme).'
+            : (d.stop.trim() ? 'Lancée d\'abord, puis Fleex arrête la commande Start si elle tourne encore.' : 'Vide : Fleex arrête la commande Start (son terminal), donc le serveur.')} warn={detached && !d.stop.trim() ? 'Détaché sans commande Stop : Fleex ne sait pas arrêter ce serveur.' : null}>
           <CommandPicker id="wt-stop" label="Commande d'arrêt" value={d.stop} custom={d.custom.stop} options={targetOptions} placeholder={detached ? 'docker compose stop  ·  ./cli/fleex stop' : '(facultatif)'} onChange={pick('stop')} />
         </VerbRow>
 
         <VerbRow
           id="status"
           title="Status"
-          empty={d.probe.trim() ? 'Code 0 = en marche, sinon arrêté (en erreur si le terminal du Start tourne encore). Sortie facultative : {"endpoints":[{"name","url" | "host"+"port","primary"?}]}, toute autre sortie est ignorée.' : 'Vide : Fleex détecte le port écouté par les process du Start.'}
+          exec="notty"
+          empty={d.probe.trim() ? `Code 0 = en marche, sinon arrêté${detached ? '' : ' (en erreur si la commande Start tourne encore)'}. Sortie facultative : {"endpoints":[{"name","url" | "host"+"port","primary"?}]}, toute autre sortie est ignorée.` : 'Vide : Fleex détecte le port écouté par les process du Start.'}
           warn={detached && !d.probe.trim() ? 'Détaché sans probe : Fleex suppose que le serveur tourne, sans pouvoir le vérifier ni connaître son URL.' : null}
         >
           <CommandPicker id="wt-probe" label="Probe d'état" value={d.probe} custom={d.custom.probe} options={targetOptions} placeholder="curl -sf $FLEEX_URL/health" onChange={pick('probe')} />

@@ -188,6 +188,23 @@ describe('Actions et Hooks — lifecycle', () => {
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.stop', './cli/fleex stop');
   });
 
+  it('keeps the two axes apart: the mode says where the server lives, each row how its command runs', async () => {
+    // WHY: « détaché » is not « sans tty ». A detached Stop must not talk about closing the Start's
+    // terminal (it ended long ago), and each command shows whether it gets a terminal.
+    fakeServer({ server: { start: './cli/fleex start', stop: './cli/fleex stop', mode: 'detached' } }, null);
+    await renderSettings();
+    openStep('server');
+    expect(screen.getByTestId('server-exec-start').textContent).toBe('terminal');
+    expect(screen.getByTestId('server-exec-logs').textContent).toBe('terminal');
+    expect(screen.getByTestId('server-exec-stop').textContent).toBe('sans tty');
+    expect(screen.getByTestId('server-exec-status').textContent).toBe('sans tty');
+    const stopRow = screen.getByTestId('server-row-stop');
+    expect(within(stopRow).queryByText(/terminal du Start/)).toBeNull();
+    expect(within(stopRow).getByText(/C'est elle qui arrête le serveur/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: 'Premier plan' }));
+    expect(within(screen.getByTestId('server-row-stop')).getByText(/arrête la commande Start/)).toBeTruthy();
+  });
+
   it('Logs, Stop and Status pick a command of the repo like Start, saved as its id', async () => {
     // WHY: an action already written ("stop instance") or a detected command must be reusable
     // for every server command, not only Start — no copy of the command to keep in sync.
