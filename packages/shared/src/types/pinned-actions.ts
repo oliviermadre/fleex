@@ -140,7 +140,8 @@ export interface ProbeTestResult {
   exitCode: number;
 }
 
-export type ActionSourceKind = 'pinned' | 'workspace';
+/** `worktree`: a worktree button's command (see worktree-actions.ts). */
+export type ActionSourceKind = 'pinned' | 'workspace' | 'worktree';
 
 export interface ActionRunRequest {
   /** Pinned icon / workspace action id. `draft:<id>` for Settings "Try" runs. */

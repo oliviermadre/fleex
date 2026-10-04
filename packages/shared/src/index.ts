@@ -624,5 +624,35 @@ export {
   runSlotKey,
   isSlotOf,
 } from './types/pinned-actions.js';
+export type {
+  WorktreeServerState,
+  WorktreeItemSource,
+  WorktreeDiscoverySource,
+  WorktreeConfigLayer,
+  WorktreeRunMode,
+  WorktreeVerb,
+  WorktreeActionDef,
+  WorktreeClickChoice,
+  WorktreeServerConfig,
+  WorktreeConfig,
+  WorktreeActionItem,
+  WorktreeServerSnapshot,
+  WorktreeActionsView,
+  WorktreeActionsListResponse,
+  WorktreeRunRequest,
+  WorktreeRunResponse,
+  WorktreeActionsWsMessage,
+} from './types/worktree-actions.js';
+export {
+  WORKTREE_SERVER_STATES,
+  WORKTREE_DISCOVERY_SOURCES,
+  WORKTREE_VERBS,
+  DEFAULT_WORKTREE_CLICK,
+  WORKTREE_START_SLOT,
+  worktreeClickByState,
+  isWorktreeVerb,
+  worktreeItemOffered,
+  worktreeSourceId,
+} from './types/worktree-actions.js';
 export type { RunHint, RunHintCode, RunHintSuggestion, DiagnosableRun, BinaryDiagnosis, BinaryKind } from './run-diagnosis.js';
 export { diagnoseRun, extractBinaries, BINARY_NAME, aliasUsesTty, scriptFromAlias } from './run-diagnosis.js';
