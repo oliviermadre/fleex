@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { WorktreeActionItem, WorktreeActionsView, WorktreeServerSnapshot, WorktreeVerb } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { usePopover } from '../../hooks/usePopover';
-import { useWorktreeActionsStore } from '../../stores/worktreeActionsStore';
+import { openWorktreeUrl, useWorktreeActionsStore } from '../../stores/worktreeActionsStore';
 import { Tooltip } from '../ui/Tooltip';
 import { OverlaySyncModal } from '../overlay-sync/OverlaySyncModal';
 import { WorktreeActionMenu } from './WorktreeActionMenu';
@@ -12,7 +12,11 @@ import { STATE_LABEL, resolveLeftClick, stateDotClass, stateTextClass } from './
 /** First line of the tooltip: the URL of a running server, else its state. */
 export function stateLine(server: WorktreeServerSnapshot, configured: boolean): string {
   if (!configured) return 'start non configuré';
-  if (server.state === 'running') return server.url ?? (server.port ? `localhost:${server.port}` : 'running (port inconnu)');
+  if (server.state === 'running') {
+    const primary = server.endpoints?.[0];
+    if (primary && server.endpoints!.length > 1) return `${primary.name} ${primary.url}`;
+    return server.url ?? (server.port ? `localhost:${server.port}` : 'running (port inconnu)');
+  }
   if (server.state === 'error') return server.exitCode !== undefined ? `error (exit ${server.exitCode})` : 'error';
   return server.state === 'starting' ? 'starting…' : STATE_LABEL[server.state];
 }
@@ -129,6 +133,10 @@ export function WorktreeActionButton({ view, root, ticketId, label, openNonce }:
             <span data-testid="worktree-tooltip" className="flex flex-col gap-0.5 whitespace-nowrap">
               {/* First thing asked of a running server: where is it? */}
               <span className={cn('font-mono', configured && stateTextClass(state))}>{stateLine(server, configured)}</span>
+              {/* Every service the probe reported, the primary one being the line above. */}
+              {state === 'running' && server.endpoints?.slice(1).map((e) => (
+                <span key={e.name} className="font-mono text-[var(--theme-text-muted)]">{e.name} {e.url}</span>
+              ))}
               <span>▶ Clic : {left.label}</span>
               <span className="text-[var(--theme-text-muted)]">Clic droit / ▾ : menu</span>
             </span>
@@ -174,6 +182,7 @@ export function WorktreeActionButton({ view, root, ticketId, label, openNonce }:
           server={server}
           name={label}
           onVerb={(verb) => void runVerb(view, verb, ticketId)}
+          onOpenUrl={(url) => openWorktreeUrl(url, ticketId)}
           onItem={(item: WorktreeActionItem) => void runItem(view, item)}
           onPin={(item, pinned) => void setPinned(root, view, item.id, pinned)}
           onSyncOverlay={() => setSyncOpen(true)}

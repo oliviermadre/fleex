@@ -18,7 +18,7 @@ import { CODE_INPUT, Dropdown, MenuButton, RunModeToggle, Switch, TEXT_INPUT, en
 const ROW_ICON_BUTTON = 'flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] opacity-0 hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)] focus-visible:opacity-100 group-hover:opacity-100 group-focus-visible:opacity-100';
 import { STATE_LABEL, SOURCE_GLYPH, stateDotClass } from '../../worktree-actions/worktreeUi';
 import { effective } from './Lifecycle';
-import { CARD, ERROR_TEXT, FieldLabel, H, Hint, ScopeBadge } from './parts';
+import { CARD, ERROR_TEXT, EnvHelp, FieldLabel, H, Hint, ScopeBadge } from './parts';
 import type { WorktreeSettingsApi } from './useWorktreeSettings';
 
 /** `Lint the code` → `lint-the-code`: an id for a new action. */
@@ -159,7 +159,7 @@ function ActionEditor({ draft, setDraft, refs, error, onSave, onDelete }: { draf
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <RunModeToggle small value={draft.mode} onChange={(mode) => patch({ mode })} />
-        <span className="font-mono text-[10.5px] text-[var(--theme-text-muted)]">{environmentLine(draft.mode)} · cwd = le worktree · FLEEX_*</span>
+        <span className="font-mono text-[10.5px] text-[var(--theme-text-muted)]">{environmentLine(draft.mode)} · cwd = le worktree · FLEEX_*<EnvHelp /></span>
       </div>
       <div>
         <span className="mr-2 text-[11px] text-[var(--theme-text-muted)]">Dans le menu quand le serveur est</span>
@@ -316,7 +316,8 @@ export function Options({ api }: { api: WorktreeSettingsApi }) {
           )}
           <Hint>
             Désactivé : Fleex détecte le port sur lequel le serveur écoute. Activé : chaque worktree reçoit une plage stable
-            ({s.view?.reservedPort ? <code className="font-mono">FLEEX_PORT={s.view.reservedPort}</code> : <code className="font-mono">FLEEX_PORT</code>}, et <code className="font-mono">PORT</code> pour une config launch.json en autoPort).
+            ({s.view?.reservedPort ? <code className="font-mono">FLEEX_PORT={s.view.reservedPort}</code> : <code className="font-mono">FLEEX_PORT</code>}, taille <code className="font-mono">FLEEX_PORT_COUNT</code>, et <code className="font-mono">PORT</code> pour une config launch.json en autoPort).
+            Fleex ne l&apos;impose pas : passe-la toi-même à l&apos;app, par exemple <code className="font-mono">bun run dev --app-port $FLEEX_PORT</code>.
           </Hint>
         </div>
         <div>

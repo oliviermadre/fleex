@@ -4,6 +4,7 @@ import {
   WORKTREE_SERVER_STATES,
   WORKTREE_VERBS,
   getConfigKey,
+  parseProbeEndpoints,
   worktreeSourceId,
   type WorktreeClickChoice,
   type WorktreeConfigKey,
@@ -18,7 +19,7 @@ import { Select } from '../../ui/Select';
 import { OverlaySyncModal } from '../../overlay-sync/OverlaySyncModal';
 import { CODE_INPUT, TEXT_INPUT } from '../../settings/actions/shared';
 import { STATE_LABEL, stateDotClass } from '../../worktree-actions/worktreeUi';
-import { FieldLabel, Hint, RunResult, ScopeBadge, scopeOf } from './parts';
+import { EnvHelp, FieldLabel, Hint, RunResult, ScopeBadge, scopeOf } from './parts';
 import type { WorktreeSettingsApi } from './useWorktreeSettings';
 
 export type StepKey = 'overlay' | 'setup' | 'start' | 'stop' | 'teardown';
@@ -236,6 +237,7 @@ function HookStep({ api, draft, setDraft, hook }: EditorProps & { hook: 'setup' 
       <div className="mt-1.5 space-y-1">
         <VarChips vars={ENV_VARS} />
         <VarChips vars={TEMPLATE_VARS} />
+        <EnvHelp />
       </div>
       {hook === 'setup' && setup && (
         <p className={cn('mt-2 text-[11px]', setup.state === 'failed' ? tintText('red') : setup.state === 'ok' ? tintText('green') : 'text-[var(--theme-text-muted)]')}>
@@ -297,7 +299,7 @@ function StartStep({ api, draft, setDraft }: EditorProps) {
       </div>
       <div className="mt-2 grid gap-3 md:grid-cols-2">
         <div>
-          <FieldLabel htmlFor="wt-start">Commande de démarrage</FieldLabel>
+          <FieldLabel htmlFor="wt-start" aside={<EnvHelp />}>Commande de démarrage</FieldLabel>
           <Select
             id="wt-start"
             className="h-8 text-xs"
@@ -308,12 +310,16 @@ function StartStep({ api, draft, setDraft }: EditorProps) {
           {d.custom && (
             <input aria-label="Commande personnalisée" className={cn(TEXT_INPUT, 'mt-1.5 font-mono text-xs')} placeholder="make serve" value={d.start} onChange={(e) => patch({ start: e.target.value })} />
           )}
-          <Hint>Une config launch.json, un script npm, une cible make, une action, ou n&apos;importe quelle commande.</Hint>
+          <Hint>
+            Une config launch.json, un script npm, une cible make, une action, ou n&apos;importe quelle commande.
+            Si elle reste au premier plan, Fleex trouve tout seul son port (les ports écoutés par elle et ses sous-process).
+            Si elle rend la main (<code className="font-mono">docker compose up -d</code>, <code className="font-mono">fleex start</code>), ajoute un probe dans Stop · Status.
+          </Hint>
         </div>
         <div>
           <FieldLabel htmlFor="wt-url">URL (Open)</FieldLabel>
           <input id="wt-url" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="http://localhost:${port}" value={d.url} onChange={(e) => patch({ url: e.target.value })} />
-          <Hint>Vide = <code className="font-mono">http://localhost:</code> + le port détecté. <code className="font-mono">{'${port}'}</code> = le port détecté.</Hint>
+          <Hint>Facultatif. Vide = <code className="font-mono">http://localhost:</code> + le port détecté. <code className="font-mono">{'${port}'}</code> = le port détecté. Inutile si le probe renvoie des endpoints.</Hint>
         </div>
       </div>
       <div className="mt-3">
@@ -364,7 +370,12 @@ function StopStep({ api, draft, setDraft }: EditorProps) {
     ].filter(Boolean).join(' ');
     try {
       const res = await testProbeCommand(`${s.path ? `cd ${q(s.path)} && ` : ''}${env ? `export ${env}; ` : ''}${d.probe}`);
-      setProbe({ ok: res.exitCode === 0, text: [res.stdout, res.stderr].filter(Boolean).join('\n') || `exit ${res.exitCode}` });
+      // Same reading as Fleex: exit code = state, stdout = endpoints when it follows the contract.
+      const endpoints = res.exitCode === 0 ? parseProbeEndpoints(res.stdout) : undefined;
+      const verdict = res.exitCode === 0
+        ? (endpoints ? `en marche · ${endpoints.length} endpoint${endpoints.length > 1 ? 's' : ''} :\n${endpoints.map((e) => `  ${e.primary ? '★ ' : '  '}${e.name}  ${e.url}`).join('\n')}` : 'en marche · pas d\'endpoints dans la sortie (Fleex garde le port détecté)')
+        : `arrêté (exit ${res.exitCode})`;
+      setProbe({ ok: res.exitCode === 0, text: [verdict, [res.stdout, res.stderr].filter(Boolean).join('\n')].filter(Boolean).join('\n\n') });
     } catch {
       setProbe(null);
     }
@@ -377,17 +388,24 @@ function StopStep({ api, draft, setDraft }: EditorProps) {
       </div>
       <div className="mt-2 grid gap-3 md:grid-cols-2">
         <div>
-          <FieldLabel htmlFor="wt-stop">Commande d&apos;arrêt</FieldLabel>
+          <FieldLabel htmlFor="wt-stop" aside={<EnvHelp />}>Commande d&apos;arrêt</FieldLabel>
           <input id="wt-stop" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="docker compose stop" value={d.stop} onChange={(e) => patch({ stop: e.target.value })} />
           <Hint>Lancée avant de fermer le terminal du start (utile pour docker compose).</Hint>
         </div>
         <div>
-          <FieldLabel htmlFor="wt-probe">Probe d&apos;état</FieldLabel>
+          <FieldLabel htmlFor="wt-probe" aside={<EnvHelp />}>Probe d&apos;état</FieldLabel>
           <div className="flex gap-1.5">
             <input id="wt-probe" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="curl -sf $FLEEX_URL/health" value={d.probe} onChange={(e) => patch({ probe: e.target.value })} />
             <Select aria-label="Intervalle du probe" className="h-8 w-24 text-xs" options={['15', '30', '60', '300'].map((v) => ({ value: v, label: `${v} s` }))} value={d.interval} onChange={(e) => patch({ interval: e.target.value })} />
           </div>
-          <Hint>Tourne dans tous les états, depuis le worktree : code 0 = en marche, sinon arrêté (en erreur si le terminal du start tourne encore). Indispensable si le start rend la main (docker compose up -d).</Hint>
+          <Hint>
+            Tourne dans tous les états, depuis le worktree. <b>Code 0 = en marche</b>, sinon arrêté (en erreur si le terminal du start tourne encore). Indispensable si le start rend la main.
+          </Hint>
+          <Hint>
+            Facultatif : pour donner les adresses à Fleex, le probe affiche sur sa sortie{' '}
+            <code className="font-mono">{'{"endpoints":[{"name":"web","url":"http://localhost:5173","primary":true},{"name":"api","port":4000}]}'}</code>
+            {' '}(<code className="font-mono">url</code>, ou <code className="font-mono">host</code> + <code className="font-mono">port</code>). Toute autre sortie est ignorée et Fleex garde le port qu&apos;il détecte.
+          </Hint>
         </div>
       </div>
       {probe && probe !== 'loading' && (

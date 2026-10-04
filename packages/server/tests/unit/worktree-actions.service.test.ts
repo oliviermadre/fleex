@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { parseProbeEndpoints } from '@fleex/shared';
 import { migrateLegacySetupHooks } from '../../src/application/services/worktree-actions.service.js';
 import { FLEEX, FakeTmux, SECOND, WS, flush, setup } from '../helpers/worktree-actions-harness.js';
 
@@ -220,6 +221,89 @@ describe('WorktreeActionsService — status probe', () => {
     clock.ms += 30_000;
     await service.tickForTest();
     expect((await service.view(SECOND)).server.state).toBe('running');
+  });
+});
+
+describe('WorktreeActionsService — probe endpoints contract', () => {
+  // Exit 0 = running; the probe's stdout may name the services (`{"endpoints":[…]}`)
+  // so a detached app (`fleex start`) still gets its URL. Anything else is ignored.
+  const FLEEX_STATUS = JSON.stringify({
+    endpoints: [
+      { name: 'gateway', url: 'http://localhost:58619' },
+      { name: 'server', host: '127.0.0.1', port: 58620 },
+      { name: 'web', url: 'http://localhost:58621', primary: true },
+    ],
+  });
+  let stdout: string;
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    stdout = FLEEX_STATUS;
+    ctx = setup({ shell: async (command) => (command.includes('check-up') ? { stdout, stderr: '', exitCode: 0 } : { stdout: '', stderr: '', exitCode: 1 }) });
+    ctx.config.update({ worktreeConfigs: { 'oliviermadre/secondrepo': { server: { start: './cli/fleex start', probe: { command: 'check-up', intervalSec: 30 } } } } });
+  });
+
+  it('takes the URL and port of the primary endpoint, and keeps every service', async () => {
+    const { service, clock } = ctx;
+    await service.view(SECOND);
+    clock.ms += 30_000;
+    await service.tickForTest();
+    const { server } = await service.view(SECOND);
+    expect(server.state).toBe('running');
+    expect(server.url).toBe('http://localhost:58621');
+    expect(server.port).toBe(58621);
+    expect(server.endpoints?.map((e) => [e.name, e.url, e.port])).toEqual([
+      ['web', 'http://localhost:58621', 58621],
+      ['gateway', 'http://localhost:58619', 58619],
+      ['server', 'http://127.0.0.1:58620', 58620],
+    ]);
+    // Open goes to the primary endpoint.
+    expect((await service.run(SECOND, { verb: 'open' })).url).toBe('http://localhost:58621');
+  });
+
+  it('passes FLEEX_URL_<NAME> / FLEEX_PORT_<NAME> to the commands run while it is up', async () => {
+    const { service, clock, tmux } = ctx;
+    await service.view(SECOND);
+    clock.ms += 30_000;
+    await service.tickForTest();
+    await service.run(SECOND, { id: 'make:up' });
+    const cmd = tmux.started.at(-1)?.command ?? '';
+    expect(cmd).toContain("FLEEX_URL_GATEWAY='http://localhost:58619'");
+    expect(cmd).toContain("FLEEX_PORT_SERVER='58620'");
+    expect(cmd).toContain("FLEEX_URL='http://localhost:58621'");
+  });
+
+  it('ignores a stdout that is not the contract: running, but no endpoint', async () => {
+    const { service, clock } = ctx;
+    stdout = 'true'; // e.g. jq -e '… | .status == "running"'
+    await service.view(SECOND);
+    clock.ms += 30_000;
+    await service.tickForTest();
+    const { server } = await service.view(SECOND);
+    expect(server.state).toBe('running');
+    expect(server.endpoints).toBeUndefined();
+    expect(server.url).toBeUndefined();
+  });
+});
+
+describe('parseProbeEndpoints', () => {
+  it('reads url or host+port, defaults the host, and puts the primary first', () => {
+    expect(parseProbeEndpoints('{"endpoints":[{"name":"api","port":4000},{"name":"web","url":"https://app.test","primary":true}]}')).toEqual([
+      { name: 'web', url: 'https://app.test', port: 443, primary: true },
+      { name: 'api', url: 'http://localhost:4000', port: 4000 },
+    ]);
+  });
+
+  it('makes the first endpoint primary when none is flagged', () => {
+    expect(parseProbeEndpoints('{"endpoints":[{"name":"a","port":1},{"name":"b","port":2}]}')?.[0]).toEqual({ name: 'a', url: 'http://localhost:1', port: 1, primary: true });
+  });
+
+  it.each([
+    ['not JSON', 'running on 3000'],
+    ['a bare value', 'true'],
+    ['no endpoints key', '{"services":[]}'],
+    ['no valid entry', '{"endpoints":[{"name":"x"},{"url":"http://a:1"},{"name":"y","port":70000}]}'],
+  ])('ignores %s', (_label, out) => {
+    expect(parseProbeEndpoints(out)).toBeUndefined();
   });
 });
 

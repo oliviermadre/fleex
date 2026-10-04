@@ -27,6 +27,8 @@ export interface WorktreeActionMenuProps {
   server: WorktreeServerSnapshot;
   name: string;
   onVerb: (verb: WorktreeVerb) => void;
+  /** Open one of the services the probe reported (the primary one goes through `onVerb('open')`). */
+  onOpenUrl: (url: string) => void;
   onItem: (item: WorktreeActionItem) => void;
   onPin: (item: WorktreeActionItem, pinned: boolean) => void;
   onSyncOverlay: () => void;
@@ -55,6 +57,7 @@ export function WorktreeActionMenu({
   server,
   name,
   onVerb,
+  onOpenUrl,
   onItem,
   onPin,
   onSyncOverlay,
@@ -196,6 +199,15 @@ export function WorktreeActionMenu({
             <VerbButton disabled={state !== 'running' || !server.url} onClick={verb('open')}>↗ Open</VerbButton>
             <VerbButton onClick={verb('logs')}>≡ Logs</VerbButton>
           </div>
+          {state === 'running' && server.endpoints && server.endpoints.length > 1 && (
+            <div className="mt-1.5 flex flex-wrap gap-1" role="toolbar" aria-label="Services" data-testid="worktree-endpoints">
+              {server.endpoints.map((e) => (
+                <VerbButton key={e.name} onClick={() => { onOpenUrl(e.url); onClose(); }} title={e.url}>
+                  ↗ {e.name}{e.port ? <span className="ml-1 font-mono text-[var(--theme-text-faint)]">:{e.port}</span> : null}
+                </VerbButton>
+              ))}
+            </div>
+          )}
           {setup && setup.state !== 'ok' && (
             <div className="mt-1.5 flex items-center gap-1.5 rounded bg-[var(--theme-bg-overlay)] px-2 py-1 text-[10.5px]" data-testid="setup-state">
               <span className={setup.state === 'failed' ? stateTextClass('error') : stateTextClass('starting')}>

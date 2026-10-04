@@ -15,6 +15,7 @@ vi.mock('../../../services/api', async (importOriginal) => ({
   setWorktreeConfigKey: vi.fn(),
   shareWorktreeKeys: vi.fn(),
   unshareWorktreeKeys: vi.fn(),
+  testPinnedProbe: vi.fn(),
   runWorktreeHook: vi.fn(async () => ({ runId: 'r1', server: { path: PATH, state: 'stopped', updatedAt: '' } })),
 }));
 
@@ -154,6 +155,32 @@ describe('Actions et Hooks — lifecycle', () => {
     });
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.start', 'launch:web');
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.clickByState', undefined);
+  });
+});
+
+describe('Actions et Hooks — probe tester', () => {
+  // WHY: the probe has two jobs (exit code = state, stdout = endpoints); the tester
+  // must show how Fleex reads it, so a probe can be written against the contract.
+  it('reads the stdout like Fleex: the endpoints when it follows the contract', async () => {
+    fakeServer({ server: { probe: { command: 'check-up' } } }, null);
+    vi.mocked(api.testPinnedProbe).mockResolvedValue({ exitCode: 0, stdout: '{"endpoints":[{"name":"gateway","port":58619},{"name":"web","url":"http://localhost:58621","primary":true}]}', stderr: '' } as Awaited<ReturnType<typeof api.testPinnedProbe>>);
+    await renderSettings();
+    fireEvent.click(screen.getByTestId('step-stop'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '▶ Tester le probe' }));
+    });
+    expect(screen.getByText(/en marche · 2 endpoints/).textContent).toMatch(/★ web {2}http:\/\/localhost:58621[\s\S]*gateway {2}http:\/\/localhost:58619/);
+  });
+
+  it('says when the stdout is ignored', async () => {
+    fakeServer({ server: { probe: { command: 'check-up' } } }, null);
+    vi.mocked(api.testPinnedProbe).mockResolvedValue({ exitCode: 0, stdout: 'true', stderr: '' } as Awaited<ReturnType<typeof api.testPinnedProbe>>);
+    await renderSettings();
+    fireEvent.click(screen.getByTestId('step-stop'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '▶ Tester le probe' }));
+    });
+    expect(screen.getByText(/pas d'endpoints dans la sortie/)).toBeTruthy();
   });
 });
 

@@ -231,6 +231,42 @@ describe('WorktreeActionMenu', () => {
   });
 });
 
+describe('probe endpoints', () => {
+  // WHY: an app started in the background (fleex start) names its services through
+  // its probe — the first thing wanted is each service's URL, one click away.
+  const running = view({
+    server: {
+      path: PATH, state: 'running', port: 58621, url: 'http://localhost:58621', updatedAt: '2026-10-04T10:00:00Z',
+      endpoints: [
+        { name: 'web', url: 'http://localhost:58621', port: 58621, primary: true },
+        { name: 'gateway', url: 'http://localhost:58619', port: 58619 },
+        { name: 'server', url: 'http://127.0.0.1:58620', port: 58620 },
+      ],
+    },
+  });
+
+  it('tooltip starts with the primary service, then lists the others', () => {
+    expect(stateLine(running.server, true)).toBe('web http://localhost:58621');
+  });
+
+  it('the menu opens any reported service, not only the primary one', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderButton(running);
+    fireEvent.click(screen.getByRole('button', { name: 'fleex menu' }));
+    const services = within(menu()).getByTestId('worktree-endpoints');
+    expect(within(services).getAllByRole('button').map((b) => b.textContent)).toEqual(['↗ web:58621', '↗ gateway:58619', '↗ server:58620']);
+    fireEvent.click(within(services).getByText(/gateway/));
+    expect(open).toHaveBeenCalledWith('http://localhost:58619', '_blank');
+    open.mockRestore();
+  });
+
+  it('shows no services row for a single-port server', () => {
+    renderButton(view({ server: { path: PATH, state: 'running', port: 5173, url: 'http://localhost:5173', updatedAt: '' } }));
+    fireEvent.click(screen.getByRole('button', { name: 'fleex menu' }));
+    expect(within(menu()).queryByTestId('worktree-endpoints')).toBeNull();
+  });
+});
+
 describe('labels and left click', () => {
   it('tells two worktrees of the same repo apart by branch', () => {
     const a = view({ path: '/w/fleex', branch: 'ticket/775c62-repo-actions' });

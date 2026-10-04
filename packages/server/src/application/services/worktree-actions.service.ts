@@ -4,6 +4,8 @@ import {
   isWorktreeVerb,
   runSlotKey,
   worktreeSourceId,
+  endpointEnv,
+  parseProbeEndpoints,
   getConfigKey,
   isWorktreeConfigKey,
   setConfigKey,
@@ -12,6 +14,7 @@ import {
   type WorktreeActionsView,
   type WorktreeConfig,
   type WorktreeConfigKey,
+  type WorktreeEndpoint,
   type WorktreeHook,
   type WorktreeSettingsResponse,
   type WorktreeSetupSnapshot,
@@ -114,6 +117,8 @@ interface ServerEntry {
   lastProbeAt: number;
   /** When the start command was launched: bounds a detached start waiting on its probe. */
   startedAt?: number;
+  /** What the last passing probe reported on its stdout (the endpoints contract), if anything. */
+  probeEndpoints?: WorktreeEndpoint[];
   checking: boolean;
 }
 
@@ -294,7 +299,7 @@ export class WorktreeActionsService {
         sourceId: entry.sourceId,
         sourceKind: 'worktree',
         label: `${ctx.name} · stop`,
-        command: withEnv(stopCommand, { ...this.fleexEnv(ctx, entry.snapshot.port), ...reserved, ...(entry.snapshot.url ? { FLEEX_URL: entry.snapshot.url } : {}) }),
+        command: withEnv(stopCommand, { ...this.fleexEnv(ctx, entry.snapshot.port), ...reserved, ...(entry.snapshot.url ? { FLEEX_URL: entry.snapshot.url } : {}), ...endpointEnv(entry.snapshot.endpoints) }),
         cwd: path,
         mode: 'background',
         slot: 'stop',
@@ -322,6 +327,7 @@ export class WorktreeActionsService {
     const env = {
       ...(await this.envFor(path, ctx, merged, port, item.autoPort)),
       ...(port && entry?.snapshot.url ? { FLEEX_URL: entry.snapshot.url } : {}),
+      ...(entry?.snapshot.state === 'running' ? endpointEnv(entry.snapshot.endpoints) : {}),
       ...(item.env ?? {}),
     };
     const sourceId = worktreeSourceId(path);
@@ -823,7 +829,8 @@ export class WorktreeActionsService {
     const prev = entry.snapshot;
     // Fields not restated are dropped: a stopped server has no port, run or session.
     const snapshot: WorktreeServerSnapshot = { path: prev.path, updatedAt: prev.updatedAt, ...next };
-    const changed = (['state', 'port', 'url', 'runId', 'tmuxSession', 'exitCode'] as const).some((k) => snapshot[k] !== prev[k]);
+    const changed = (['state', 'port', 'url', 'runId', 'tmuxSession', 'exitCode'] as const).some((k) => snapshot[k] !== prev[k])
+      || JSON.stringify(snapshot.endpoints) !== JSON.stringify(prev.endpoints);
     if (!changed) return;
     snapshot.updatedAt = this.now().toISOString();
     entry.snapshot = snapshot;
@@ -867,7 +874,9 @@ export class WorktreeActionsService {
         if (force || state === 'starting' || entry.lastProbeAt === 0 || this.nowMs() - entry.lastProbeAt >= intervalMs) {
           entry.lastProbeAt = this.nowMs();
           const url = this.urlFor(entry, port);
-          const res = await this.deps.shell(withEnv(entry.probe.command, { ...entry.env, ...(port ? { FLEEX_PORT: String(port) } : {}), ...(url ? { FLEEX_URL: url } : {}) }), { cwd: entry.cwd, timeoutMs: PROBE_TIMEOUT_MS }).catch(() => ({ exitCode: 1 }));
+          const res = await this.deps.shell(withEnv(entry.probe.command, { ...entry.env, ...(port ? { FLEEX_PORT: String(port) } : {}), ...(url ? { FLEEX_URL: url } : {}), ...endpointEnv(entry.probeEndpoints) }), { cwd: entry.cwd, timeoutMs: PROBE_TIMEOUT_MS }).catch(() => ({ exitCode: 1, stdout: '' }));
+          // Exit code = running or not; stdout may name the endpoints (else ignored, detection stays).
+          entry.probeEndpoints = res.exitCode === 0 ? parseProbeEndpoints(res.stdout) : undefined;
           if (res.exitCode === 0) up = true;
           else if (state === 'running') {
             // Still our process: it is unhealthy. Nothing of ours alive: it was stopped.
@@ -884,6 +893,13 @@ export class WorktreeActionsService {
       }
 
       if (up) {
+        const endpoints = entry.probe ? entry.probeEndpoints : undefined;
+        if (endpoints) {
+          // The probe knows better than the process tree (detached servers, several services).
+          const primary = endpoints[0]!;
+          this.setState(entry, { state: 'running', ...keep, ...(primary.port ? { port: primary.port } : {}), url: primary.url, endpoints });
+          return;
+        }
         const url = this.urlFor(entry, port);
         this.setState(entry, { state: 'running', ...keep, ...(port ? { port } : {}), ...(url ? { url } : {}) });
       } else if (!processAlive && entry.startedAt !== undefined && this.nowMs() - entry.startedAt >= DETACHED_START_TIMEOUT_MS) {

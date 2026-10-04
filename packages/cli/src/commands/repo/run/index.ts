@@ -48,6 +48,10 @@ server (its terminal and logs appear in the UI). ${chalk.green('fleex repo actio
     } else {
       success(`${view.repo ?? view.path}: server ${state}`);
     }
+    // Every service the probe reported (`{"endpoints":[…]}` on its stdout).
+    if (target !== 'open' && s.state === 'running') {
+      for (const e of s.endpoints ?? []) process.stdout.write(`  ${e.primary ? '★' : ' '} ${e.name.padEnd(12)} ${e.url}\n`);
+    }
   },
 };
 

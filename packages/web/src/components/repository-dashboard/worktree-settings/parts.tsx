@@ -5,6 +5,7 @@ import { tint, tintText } from '../../../lib/tints';
 import { usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
 import { Button } from '../../ui/Button';
 import { Modal } from '../../ui/Modal';
+import { Tooltip } from '../../ui/Tooltip';
 import { runDuration, statusTextClass } from '../../actions/actionStatus';
 import type { WorktreeSettingsApi } from './useWorktreeSettings';
 
@@ -105,8 +106,44 @@ export function Warn({ children }: { children: ReactNode }) {
   return <p className={cn('rounded-md px-2.5 py-1.5 text-[11px]', tint('yellow'))}>{children}</p>;
 }
 
-export function FieldLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
-  return <label htmlFor={htmlFor} className="mb-1 block text-[11px] font-medium text-[var(--theme-text-secondary)]">{children}</label>;
+export function FieldLabel({ children, htmlFor, aside }: { children: ReactNode; htmlFor?: string; /** Next to the label, outside it (e.g. EnvHelp). */ aside?: ReactNode }) {
+  const label = <label htmlFor={htmlFor} className={cn('block text-[11px] font-medium text-[var(--theme-text-secondary)]', !aside && 'mb-1')}>{children}</label>;
+  return aside ? <div className="mb-1 flex items-center">{label}{aside}</div> : label;
 }
 
 export const ERROR_TEXT = cn('text-[11px]', tintText('red'));
+
+/** Which variable a worktree command gets, and when it is filled (shown by `EnvHelp`). */
+export const ENV_HELP: readonly { vars: string; when: string }[] = [
+  { vars: 'FLEEX_REPO · FLEEX_BRANCH · FLEEX_TICKET_ID', when: 'toujours' },
+  { vars: 'FLEEX_WORKTREE_PATH · FLEEX_REPO_PATH · FLEEX_WORKSPACE_PATH', when: 'toujours (le worktree, le checkout principal, le workspace du ticket)' },
+  { vars: 'FLEEX_PORT · FLEEX_PORT_COUNT', when: 'réservation de ports activée : début et taille de la plage du worktree, dès le Setup et le Start' },
+  { vars: 'FLEEX_PORT · FLEEX_URL', when: 'serveur en marche : port et URL principaux (Stop, actions, probe suivant)' },
+  { vars: 'FLEEX_URL_<NOM> · FLEEX_PORT_<NOM>', when: 'serveur en marche, quand le probe renvoie des endpoints (ex. FLEEX_URL_GATEWAY)' },
+  { vars: 'PORT', when: 'seulement pour une config launch.json en autoPort (= FLEEX_PORT)' },
+  { vars: '{{org}} {{repo}} {{branch}} {{worktree_path}}', when: 'scripts Setup et Teardown (ancienne syntaxe, toujours remplacée)' },
+];
+
+/** « ⓘ Variables » next to a command field: every variable Fleex passes, and when. */
+export function EnvHelp() {
+  return (
+    <Tooltip
+      interactive
+      placement="bottom-start"
+      label={
+        <span className="block max-w-[420px]" data-testid="env-help">
+          <span className="mb-1 block font-semibold">Variables passées à la commande</span>
+          {ENV_HELP.map((v) => (
+            <span key={v.vars} className="mb-1 block">
+              <code className="font-mono text-[10.5px]">{v.vars}</code>
+              <span className="block font-normal text-[var(--theme-text-muted)]">{v.when}</span>
+            </span>
+          ))}
+          <span className="block font-normal text-[var(--theme-text-muted)]">Elles s&apos;utilisent comme n&apos;importe quelle variable shell : <code className="font-mono">bun run dev --app-port $FLEEX_PORT</code>.</span>
+        </span>
+      }
+    >
+      <button type="button" aria-label="Variables disponibles" className="ml-1 rounded px-1 text-[10.5px] font-normal text-[var(--theme-accent)] hover:underline">ⓘ variables</button>
+    </Tooltip>
+  );
+}

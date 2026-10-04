@@ -645,6 +645,7 @@ export type {
   WorktreeSetupSnapshot,
   WorktreeHook,
   WorktreeSettingsResponse,
+  WorktreeEndpoint,
 } from './types/worktree-actions.js';
 export type { WorktreeConfigKey } from './types/worktree-config-keys.js';
 export { getConfigKey, setConfigKey, listConfigKeys, keyScope, isWorktreeConfigKey } from './types/worktree-config-keys.js';
@@ -658,6 +659,8 @@ export {
   isWorktreeVerb,
   worktreeItemOffered,
   worktreeSourceId,
+  parseProbeEndpoints,
+  endpointEnv,
 } from './types/worktree-actions.js';
 export type { RunHint, RunHintCode, RunHintSuggestion, DiagnosableRun, BinaryDiagnosis, BinaryKind } from './run-diagnosis.js';
 export { diagnoseRun, extractBinaries, BINARY_NAME, aliasUsesTty, scriptFromAlias } from './run-diagnosis.js';

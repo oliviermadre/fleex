@@ -116,8 +116,78 @@ export interface WorktreeServerSnapshot {
   tmuxSession?: string;
   /** Exit code of the start command, when it ended. */
   exitCode?: number;
+  /**
+   * Services the probe reported (`{"endpoints":[…]}` on its stdout), primary
+   * first. When present, `port` / `url` are the primary endpoint's.
+   */
+  endpoints?: WorktreeEndpoint[];
   /** ISO timestamp of the last change. */
   updatedAt: string;
+}
+
+/** One service of a running worktree server, as reported by its probe. */
+export interface WorktreeEndpoint {
+  name: string;
+  url: string;
+  port?: number;
+  /** The endpoint Open and the button's tooltip use. Exactly one per list. */
+  primary?: boolean;
+}
+
+/**
+ * Read the probe's stdout contract: a JSON object `{"endpoints": [{ "name",
+ * "url" | ("host"?, "port"), "primary"? }]}`. Anything else — not JSON, no
+ * `endpoints`, no valid entry — returns undefined and Fleex keeps its own port
+ * detection: the exit code alone says running or not.
+ */
+export function parseProbeEndpoints(stdout: string): WorktreeEndpoint[] | undefined {
+  let data: unknown;
+  try {
+    data = JSON.parse(stdout.trim());
+  } catch {
+    return undefined;
+  }
+  const list = data && typeof data === 'object' ? (data as { endpoints?: unknown }).endpoints : undefined;
+  if (!Array.isArray(list)) return undefined;
+  const out: WorktreeEndpoint[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object') continue;
+    const e = raw as { name?: unknown; url?: unknown; host?: unknown; port?: unknown; primary?: unknown };
+    if (typeof e.name !== 'string' || !e.name.trim()) continue;
+    const port = typeof e.port === 'number' && Number.isInteger(e.port) && e.port > 0 && e.port < 65536 ? e.port : undefined;
+    let url: string | undefined;
+    if (typeof e.url === 'string' && /^https?:\/\/\S+$/.test(e.url)) url = e.url;
+    else if (port) url = `http://${typeof e.host === 'string' && e.host.trim() ? e.host.trim() : 'localhost'}:${port}`;
+    if (!url) continue;
+    const urlPort = port ?? portOfUrl(url);
+    out.push({ name: e.name.trim(), url, ...(urlPort ? { port: urlPort } : {}), ...(e.primary === true ? { primary: true } : {}) });
+  }
+  if (out.length === 0) return undefined;
+  const primaryAt = Math.max(0, out.findIndex((e) => e.primary));
+  const [primary] = out.splice(primaryAt, 1);
+  return [{ ...primary!, primary: true }, ...out.map(({ primary: _p, ...rest }) => rest)];
+}
+
+function portOfUrl(url: string): number | undefined {
+  try {
+    const u = new URL(url);
+    if (u.port) return Number(u.port);
+    return u.protocol === 'https:' ? 443 : 80;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `FLEEX_URL_<NAME>` / `FLEEX_PORT_<NAME>` for every endpoint (`web-app` → `WEB_APP`). */
+export function endpointEnv(endpoints: readonly WorktreeEndpoint[] | undefined): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const e of endpoints ?? []) {
+    const key = e.name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!key) continue;
+    env[`FLEEX_URL_${key}`] = e.url;
+    if (e.port) env[`FLEEX_PORT_${key}`] = String(e.port);
+  }
+  return env;
 }
 
 export interface WorktreeActionsView {
