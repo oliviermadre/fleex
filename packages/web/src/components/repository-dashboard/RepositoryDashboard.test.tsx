@@ -4,6 +4,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { RepositoryDashboard } from './RepositoryDashboard';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 
+vi.mock('../../services/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/api')>()),
+  fetchPersonalWorktreeConfig: vi.fn(async () => ({})),
+}));
+
 const data = {
   org: 'acme', name: 'app',
   openIssues: [], recentlyClosedIssues: [], openPullRequests: [], recentlyMergedPullRequests: [],
@@ -40,6 +45,11 @@ describe('RepositoryDashboard tabs', () => {
   it('switches tabs', () => {
     render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
     fireEvent.click(screen.getByText('Config'));
-    expect(screen.getByText('Post-checkout hook')).toBeTruthy();
+    expect(screen.getByText(/^Setup/)).toBeTruthy();
+  });
+
+  it('opens on the tab named in ?tab= (the worktree menu\'s "Réglages du repo…")', () => {
+    render(<MemoryRouter initialEntries={['/repositories/acme/app?tab=config']}><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
+    expect(screen.getByText(/^Setup/)).toBeTruthy();
   });
 });

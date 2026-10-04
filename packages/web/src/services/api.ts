@@ -1849,3 +1849,46 @@ export async function diagnoseBinary(binary: string): Promise<import('@fleex/sha
     return null;
   }
 }
+
+// ─── Worktree actions (WORKTREES group of the Work top bar) ─────────────────
+
+/** Silent (no toast): fetched in the background for every ticket the top bar shows. */
+export function fetchWorktreeActions(path: string): Promise<import('@fleex/shared').WorktreeActionsListResponse> {
+  return browseRequest(`/worktree-actions?path=${encodeURIComponent(path)}`);
+}
+
+/**
+ * Run a worktree verb or command. "Already running" is a 200 with
+ * `alreadyRunning` (the answer names the run); a refusal ("no start command",
+ * "server stopped") is a 4xx with `error`, toasted like any error.
+ */
+export async function runWorktreeAction(
+  body: import('@fleex/shared').WorktreeRunRequest,
+): Promise<import('@fleex/shared').WorktreeRunResponse> {
+  const res = await fetch(`${API_URL}/worktree-actions/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text().catch(() => '');
+  let json: (import('@fleex/shared').WorktreeRunResponse & { error?: string }) | null = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch { /* not JSON */ }
+  if (res.ok && json) return json;
+  const message = json?.error ?? extractErrorMessage(text, res.statusText);
+  useToastStore.getState().addToast('error', message);
+  throw new Error(message);
+}
+
+export function setWorktreeItemPinned(path: string, id: string, pinned: boolean): Promise<import('@fleex/shared').WorktreeActionsView> {
+  return request(`/worktree-actions/${pinned ? 'pin' : 'unpin'}`, { method: 'POST', body: JSON.stringify({ path, id }) });
+}
+
+export function fetchPersonalWorktreeConfig(repo: string): Promise<import('@fleex/shared').WorktreeConfig> {
+  return request(`/worktree-actions/personal?repo=${encodeURIComponent(repo)}`);
+}
+
+export function savePersonalWorktreeHooks(repo: string, hooks: { setup?: string; timeoutSec?: number }): Promise<import('@fleex/shared').WorktreeConfig> {
+  return request('/worktree-actions/personal/hooks', { method: 'PUT', body: JSON.stringify({ repo, hooks }) });
+}

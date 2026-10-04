@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { DashboardHeader } from './DashboardHeader';
 import { IssuesSection } from './IssuesSection';
@@ -10,6 +11,7 @@ import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
 
 type Tab = 'overview' | 'worktrees' | 'pulls' | 'issues' | 'config';
+const TABS: readonly Tab[] = ['overview', 'worktrees', 'pulls', 'issues', 'config'];
 
 interface Props {
   repoKey: string;
@@ -23,16 +25,24 @@ export function RepositoryDashboard({ repoKey }: Props) {
   const githubUser = useRepositoryDashboardStore((s) => s.githubUser);
   const repoStats = useRepositoryDashboardStore((s) => s.repoStats);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  // `?tab=config` (the worktree menu's "Réglages du repo…") opens a given tab.
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<Tab>(TABS.includes(requestedTab as Tab) ? (requestedTab as Tab) : 'overview');
 
   useEffect(() => {
     if (!org || !name) return;
 
-    setActiveTab('overview');
+    setActiveTab(TABS.includes(requestedTab as Tab) ? (requestedTab as Tab) : 'overview');
     setLoading(true);
     fetchDashboard(org, name).finally(() => setLoading(false));
     fetchRepoStats(org, name);
   }, [org, name, fetchDashboard, fetchRepoStats]);
+
+  // Same repo, new `?tab=`: switch without refetching.
+  useEffect(() => {
+    if (TABS.includes(requestedTab as Tab)) setActiveTab(requestedTab as Tab);
+  }, [requestedTab]);
 
   const isCurrentRepo = dashboardData?.org === org && dashboardData?.name === name;
   const data = isCurrentRepo ? dashboardData : null;
