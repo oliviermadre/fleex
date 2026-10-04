@@ -48,7 +48,7 @@ export const STARTING_CHECK_MS = 2_000;
 export const RUNNING_CHECK_MS = 15_000;
 const STOP_WAIT_MS = 10_000;
 /** A background Start must hand back (`up -d`): past this, its run is cut and the start failed. */
-const BACKGROUND_START_TIMEOUT_SEC = 300;
+const BACKGROUND_START_TIMEOUT_SEC = 900;
 /** Before a removal the stop command gets less time: the HTTP request deleting the ticket waits on it. */
 const TEARDOWN_STOP_COMMAND_MS = 30_000;
 const PORT_CHECK_TIMEOUT_MS = 5_000;

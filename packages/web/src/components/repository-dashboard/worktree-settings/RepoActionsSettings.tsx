@@ -100,7 +100,7 @@ function SettingsBody({ repo, path, worktrees, onPath }: { repo: string; path: s
       <div className={CARD}>
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Actions et Hooks</h3>
-          <span className="text-[11px] text-[var(--theme-text-muted)]">Perso = dans Fleex · Partagé = <code className="font-mono">.fleex/worktree.json</code> du repo, à committer</span>
+          <span className="text-[11px] text-[var(--theme-text-muted)]">Perso = dans Fleex · Partagé = <code className="font-mono">.fleex/worktree.json</code> du repo</span>
           <span className="flex-1" />
           {worktrees.length > 0 ? (
             <label className="flex items-center gap-1.5 text-[11px] text-[var(--theme-text-muted)]">
@@ -120,7 +120,7 @@ function SettingsBody({ repo, path, worktrees, onPath }: { repo: string; path: s
         {s.path && (
           <Hint>
             <code className="font-mono">.fleex/worktree.json</code> dans ce worktree : {s.shared ? `${sharedKeys.length} élément${sharedKeys.length > 1 ? 's' : ''} partagé${sharedKeys.length > 1 ? 's' : ''}` : 'absent'}
-            {' '}— Fleex l&apos;écrit, ne le commit jamais. Chaque branche peut avoir le sien.
+            {' '}— Fleex l&apos;écrit mais ne le commit pas : c&apos;est à toi de le committer. Chaque branche peut avoir le sien.
           </Hint>
         )}
         {s.sharedConfigError && <div className="mt-2"><Warn>⚠ {s.sharedConfigError} — corrige le fichier : Fleex ne le réécrira pas tant qu&apos;il est invalide.</Warn></div>}

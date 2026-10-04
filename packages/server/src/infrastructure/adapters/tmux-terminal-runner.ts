@@ -202,10 +202,7 @@ export class TmuxTerminalRunner implements TerminalRunPort {
     if (state === 'gone') return { alive: false, dead: false, ports: [] };
     if (state.dead) return { alive: true, dead: true, exitStatus: state.status, ports: [] };
     const script = [
-      `pid=$(tmux list-panes -t ${shellQuote(sessionName)} -F '#{pane_pid}' 2>/dev/null | head -1)`,
-      '[ -z "$pid" ] && exit 0',
-      'all=$pid; frontier=$pid',
-      'while [ -n "$frontier" ]; do next=""; for p in $frontier; do next="$next $(pgrep -P "$p" 2>/dev/null)"; done; frontier=$(echo $next); all="$all $frontier"; done',
+      ...processTreeScript(sessionName),
       'lsof -nP -a -iTCP -sTCP:LISTEN -p "$(echo $all | tr " " ",")" -Fn 2>/dev/null || true',
     ].join('\n');
     try {
@@ -231,7 +228,22 @@ export class TmuxTerminalRunner implements TerminalRunPort {
     }
   }
 
+  /**
+   * Ends a session for good. Closing the pane only sends SIGHUP to its
+   * foreground job: `npm run dev` → vite, concurrently, `docker compose up`…
+   * may leave children behind, holding the port for the next worktree. So the
+   * whole process tree gets SIGTERM, a grace period, then SIGKILL — and only
+   * then is the session closed.
+   */
   private async kill(name: string): Promise<void> {
+    try {
+      await this.execFn('sh', ['-c', [
+        ...processTreeScript(name),
+        'kill -TERM $all 2>/dev/null',
+        `i=0; while [ $i -lt ${KILL_GRACE_TICKS} ]; do alive=""; for p in $all; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done; [ -z "$alive" ] && exit 0; sleep 0.1; i=$((i+1)); done`,
+        'kill -KILL $alive 2>/dev/null; exit 0',
+      ].join('\n')]);
+    } catch { /* nothing to signal */ }
     try {
       await this.execFn('tmux', ['kill-session', '-t', name]);
     } catch { /* already gone */ }
@@ -246,4 +258,17 @@ export class TmuxTerminalRunner implements TerminalRunPort {
       return '';
     }
   }
+}
+
+/** Grace period between SIGTERM and SIGKILL, in 0.1 s ticks (5 s). */
+const KILL_GRACE_TICKS = 50;
+
+/** Sets `$all` to the pane's pid and all its descendants (empty session → exit 0). */
+function processTreeScript(sessionName: string): string[] {
+  return [
+    `pid=$(tmux list-panes -t ${shellQuote(sessionName)} -F '#{pane_pid}' 2>/dev/null | head -1)`,
+    '[ -z "$pid" ] && exit 0',
+    'all=$pid; frontier=$pid',
+    'while [ -n "$frontier" ]; do next=""; for p in $frontier; do next="$next $(pgrep -P "$p" 2>/dev/null)"; done; frontier=$(echo $next); all="$all $frontier"; done',
+  ];
 }

@@ -282,7 +282,7 @@ describe('WorktreeActionsService — Start and Stop run like pinned actions (bac
     expect(res.run?.mode).toBe('background');
     expect(ctx.tmux.started).toHaveLength(0); // no terminal
     expect(ctx.execCalls.at(-1)!.command).toMatch(/; docker compose up -d$/);
-    expect(ctx.execCalls.at(-1)!.timeoutMs).toBe(300_000); // it must hand back
+    expect(ctx.execCalls.at(-1)!.timeoutMs).toBe(900_000); // it must hand back, cold builds included
     await flush();
     await flush();
     // Exit 0, no probe: detached by nature, so the start worked → running (not stopped).

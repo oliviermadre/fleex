@@ -325,7 +325,9 @@ function VerbRow({ id, title, exec, children, empty, warn }: { id: string; title
   return (
     <div className="grid gap-x-3 gap-y-1 border-t border-[var(--theme-border)] py-2.5 first:border-t-0 md:grid-cols-[110px_minmax(0,1fr)]" data-testid={`server-row-${id}`}>
       <div className="flex flex-col gap-0.5 pt-1.5">
-        <div className="flex items-center gap-1 text-xs font-semibold text-[var(--theme-text-primary)]">{title}<EnvHelp /></div>
+        <div className="text-xs font-semibold text-[var(--theme-text-primary)]">{title}</div>
+        {/* Under the title: beside it, « Status ⓘ variables » wrapped in the 110 px column. */}
+        <div className="whitespace-nowrap"><EnvHelp /></div>
         {exec && <span data-testid={`server-exec-${id}`} title={FIXED_EXEC[exec].title} className="w-fit rounded border border-[var(--theme-border)] px-1 text-[10px] text-[var(--theme-text-muted)]">{FIXED_EXEC[exec].label}</span>}
       </div>
       <div className="min-w-0 space-y-1">
@@ -441,30 +443,32 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
       </div>
 
       <div className="mt-2">
-        <VerbRow id="start" title="Start" empty={d.startIn === 'background'
-          ? 'Sans terminal, elle doit rendre la main (docker compose up -d, fleex start) : sa fin avec 0 veut dire « démarrage demandé », ensuite le probe dit si le serveur tourne.'
-          : detached
-            ? 'Elle rend la main : sa fin avec 0 veut dire « démarrage demandé », ensuite le probe dit si le serveur tourne. Son terminal garde ce qu\'elle a affiché.'
-            : 'Le serveur reste dans ce terminal : Fleex suit ses process, trouve leur port, et la fin du terminal veut dire « serveur arrêté ».'} warn={!d.start.trim() ? 'Sans commande Start, le bouton du worktree ne peut pas démarrer le serveur.' : null}>
+        <VerbRow id="start" title="Start" empty={!detached
+          ? 'Fleex la supervise dans un terminal caché : rien ne s\'ouvre (Logs l\'affiche), il trouve son port dans ses process, et sa fin veut dire « arrêté ». Un Stop vide l\'arrête avec tout son arbre de process.'
+          : d.startIn === 'background'
+            ? 'Sans terminal : sa fin avec 0 veut dire « démarrage demandé », sa sortie reste dans l\'historique (Logs vide l\'affiche), puis le probe dit si le serveur tourne. 15 min au plus.'
+            : 'Dans un terminal (pour voir sa sortie ou répondre à une question) : sa fin avec 0 veut dire « démarrage demandé », puis le probe dit si le serveur tourne.'} warn={!d.start.trim() ? 'Sans commande Start, le bouton du worktree ne peut pas démarrer le serveur.' : null}>
           <CommandPicker id="wt-start" label="Commande de démarrage" value={d.start} custom={d.custom.start} options={targetOptions} placeholder={detached ? './cli/fleex start' : 'pnpm dev'} onChange={pick('start')} />
           <div className="flex flex-wrap items-center gap-2">
-            <RunModeToggle small label="Exécution de Start" value={d.startIn} onChange={(m) => patch({ startIn: m })} />
-            {d.startIn === 'terminal' && (
-              <div className="inline-flex gap-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-0.5" role="radiogroup" aria-label="Le serveur">
-                {(['foreground', 'detached'] as const).map((m) => (
+            {/* First what the command is (the server itself, or a launcher), then — for a launcher only — how it runs. */}
+            <div className="inline-flex gap-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-0.5" role="radiogroup" aria-label="La commande">
+              {(['foreground', 'detached'] as const).map((m) => {
+                const on = detached ? m === 'detached' : m === 'foreground';
+                return (
                   <button
                     key={m}
                     type="button"
                     role="radio"
-                    aria-checked={d.mode === m}
-                    onClick={() => patch({ mode: m })}
-                    className={cn('rounded-md px-2 py-0.5 text-[11px] font-medium', d.mode === m ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]')}
+                    aria-checked={on}
+                    onClick={() => patch(m === 'foreground' ? { mode: 'foreground', startIn: 'terminal' } : { mode: 'detached' })}
+                    className={cn('rounded-md px-2 py-0.5 text-[11px] font-medium', on ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]')}
                   >
-                    {m === 'foreground' ? 'reste dans le terminal' : 'rend la main'}
+                    {m === 'foreground' ? 'reste ouverte (c\'est le serveur)' : 'rend la main (elle lance le serveur)'}
                   </button>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
+            {detached && <RunModeToggle small label="Exécution de Start" value={d.startIn} onChange={(m) => patch({ startIn: m })} />}
           </div>
         </VerbRow>
 
@@ -488,7 +492,7 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
         >
           <CommandPicker id="wt-probe" label="Probe d'état" value={d.probe} custom={d.custom.probe} options={targetOptions} placeholder="curl -sf $FLEEX_URL/health" onChange={pick('probe')} />
           <div className="flex gap-1.5">
-            <Select aria-label="Intervalle du probe" className="h-8 w-24 text-xs" options={['15', '30', '60', '300'].map((v) => ({ value: v, label: `${v} s` }))} value={d.interval} onChange={(e) => patch({ interval: e.target.value })} />
+            <Select aria-label="Intervalle du probe" title="Fréquence à laquelle Fleex relance le probe" className="h-8 w-36 text-xs" options={['15', '30', '60', '300'].map((v) => ({ value: v, label: `toutes les ${v} s` }))} value={d.interval} onChange={(e) => patch({ interval: e.target.value })} />
             <Button size="sm" disabled={!d.probe.trim() || probe === 'loading'} onClick={() => void testProbe()}>▶ Tester le probe</Button>
           </div>
           {probe && probe !== 'loading' && (

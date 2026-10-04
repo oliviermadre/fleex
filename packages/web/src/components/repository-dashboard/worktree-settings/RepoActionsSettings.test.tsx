@@ -172,7 +172,7 @@ describe('Actions et Hooks — lifecycle', () => {
     await renderSettings();
     openStep('server');
     expect(within(screen.getByTestId('server-row-stop')).queryByText(/Fleex ne sait pas arrêter/)).toBeNull();
-    fireEvent.click(screen.getByRole('radio', { name: 'rend la main' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'rend la main (elle lance le serveur)' }));
     expect(within(screen.getByTestId('server-row-stop')).getByText(/Fleex ne sait pas arrêter/)).toBeTruthy();
     expect(within(screen.getByTestId('server-row-status')).getByText(/sans probe/)).toBeTruthy();
     expect(within(screen.getByTestId('server-row-logs')).getByText(/sans commande de logs/)).toBeTruthy();
@@ -188,24 +188,24 @@ describe('Actions et Hooks — lifecycle', () => {
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.stop', './cli/fleex stop');
   });
 
-  it('Start and Stop run like pinned actions (Background | Terminal); Logs is a terminal, Status background', async () => {
-    // WHY: « détaché » is not « sans TTY ». docker compose up -d runs fine in background and a
-    // stop may ask for a confirmation in a terminal. Start decides whether the server stays:
-    // a background Start must hand back, so it is detached with no extra choice.
+  it('Start says first what it is (the server, or a launcher); only a launcher picks Background | Terminal', async () => {
+    // WHY: « reste ouverte » is the case most agents' worktrees need — a blocking server Fleex
+    // supervises without showing a pane. How it runs only matters for a command that hands back
+    // (docker compose up -d runs fine in background). Logs is a terminal, Status background.
     fakeServer({ server: { start: './cli/fleex start', stop: './cli/fleex stop' } }, null);
     await renderSettings();
     openStep('server');
     expect(screen.getByTestId('server-exec-logs').textContent).toBe('Terminal');
     expect(screen.getByTestId('server-exec-status').textContent).toBe('Background');
-    expect(screen.queryByTestId('server-exec-start')).toBeNull();
-    // Terminal Start: the server stays in it, or the command hands back.
-    expect(screen.getByRole('radiogroup', { name: 'Le serveur' })).toBeTruthy();
-    expect(within(screen.getByTestId('server-row-logs')).queryByText(/sans commande de logs/)).toBeNull();
-    // Background Start: no TTY to stay in, detached by nature.
+    // A blocking server: supervised in a hidden terminal, no run-mode choice.
+    expect(screen.getByRole('radio', { name: "reste ouverte (c'est le serveur)" }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('radiogroup', { name: 'Exécution de Start' })).toBeNull();
+    expect(within(screen.getByTestId('server-row-start')).getByText(/terminal caché/)).toBeTruthy();
+    // A launcher: Background | Terminal, and Stop / Logs are asked for.
+    fireEvent.click(screen.getByRole('radio', { name: 'rend la main (elle lance le serveur)' }));
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Exécution de Start' })).getByRole('radio', { name: 'Background' }));
-    expect(screen.queryByRole('radiogroup', { name: 'Le serveur' })).toBeNull();
     expect(within(screen.getByTestId('server-row-logs')).getByText(/sans commande de logs/)).toBeTruthy();
-    // Stop in a terminal, to answer a confirmation.
+    // Stop in a terminal, to see it or answer it.
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Exécution de Stop' })).getByRole('radio', { name: 'Terminal' }));
     expect(within(screen.getByTestId('server-row-stop')).getByText(/répondre à une confirmation/)).toBeTruthy();
     await act(async () => {
@@ -214,6 +214,18 @@ describe('Actions et Hooks — lifecycle', () => {
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.startIn', 'background');
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.mode', 'detached');
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.stopIn', 'terminal');
+  });
+
+  it('going back to « reste ouverte » drops a background run mode', async () => {
+    fakeServer({ server: { start: 'docker compose up -d', startIn: 'background' } }, null);
+    await renderSettings();
+    openStep('server');
+    fireEvent.click(screen.getByRole('radio', { name: "reste ouverte (c'est le serveur)" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    });
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.mode', 'foreground');
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.startIn', undefined);
   });
 
   it('Logs, Stop and Status pick a command of the repo like Start, saved as its id', async () => {

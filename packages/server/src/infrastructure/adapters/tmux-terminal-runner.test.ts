@@ -126,6 +126,18 @@ describe('TmuxTerminalRunner · safety net', () => {
     expect(delays).toEqual([1000]); // only the poll, no 4 h guard
   });
 
+  it('ends a session with its whole process tree: SIGTERM, a grace, SIGKILL, then the session', async () => {
+    // WHY: closing the pane only HUPs its foreground job — vite under npm, concurrently, a child
+    // that ignores HUP would outlive Stop and hold the port for the next worktree.
+    const t = fakeTmux(['gone']);
+    await t.runner.close('fxact_3000_wt_1ab2c__start');
+    const at = (pred: (a: string[]) => boolean) => t.calls.findIndex(pred);
+    const tree = at((a) => a[0] === '-c' && a[1]!.includes('kill -TERM $all'));
+    expect(tree).toBeGreaterThanOrEqual(0);
+    expect(t.calls[tree]![1]).toMatch(/pgrep -P[\s\S]*kill -TERM \$all[\s\S]*kill -0[\s\S]*kill -KILL/);
+    expect(at((a) => a[0] === 'kill-session')).toBeGreaterThan(tree);
+  });
+
   it('reads listening ports from lsof field output', () => {
     expect(parseLsofPorts('p123\nf20\nn*:5173\nn127.0.0.1:24678\nn[::1]:5173\n')).toEqual([5173, 24678]);
     expect(parseLsofPorts('')).toEqual([]);
