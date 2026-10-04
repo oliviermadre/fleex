@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TmuxTerminalRunner, stripTerminalOutput, shellQuote } from './tmux-terminal-runner.js';
+import { TmuxTerminalRunner, stripTerminalOutput, shellQuote, isWorktreeServerSession, parseLsofPorts } from './tmux-terminal-runner.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
@@ -91,5 +91,28 @@ describe('TmuxTerminalRunner · safety net', () => {
     polls.splice(0).forEach((p) => p());
     expect(await handle.done).toMatchObject({ exitCode: 130, timedOut: true, cancelled: false });
     expect(calls.some((a) => a[0] === 'kill-session')).toBe(true);
+  });
+
+  it('spares worktree dev servers at startup: they are adopted back, not orphans', async () => {
+    // WHY: restarting Fleex must not kill the dev servers the user started from the worktree buttons.
+    const t = fakeTmux(['gone'], ['fxact_3000_kp', 'fxact_3000_wt_1ab2c__start', 'fxact_3000_wt_1ab2c__npm_test']);
+    const server = t.runner.sessionNameFor('wt:1ab2c::start');
+    expect(server).toBe('fxact_3000_wt_1ab2c__start');
+    expect(isWorktreeServerSession(server)).toBe(true);
+    expect(await t.runner.killOrphans(isWorktreeServerSession)).toBe(2);
+    expect(t.calls.filter((a) => a[0] === 'kill-session').map((a) => a[2])).toEqual(['fxact_3000_kp', 'fxact_3000_wt_1ab2c__npm_test']);
+  });
+
+  it('runs with no safety-net timeout when asked (maxMs 0)', async () => {
+    const delays: number[] = [];
+    const execFn: ExecFn = vi.fn(async (_c: string, args: string[]) => (args[0] === 'list-panes' ? { stdout: '0 0', stderr: '' } : { stdout: '', stderr: '' }));
+    const runner = new TmuxTerminalRunner(execFn, {} as HostFs, '/tmp', logger, { setTimer: (_fn, ms) => { delays.push(ms); return 0; }, clearTimer: () => {} });
+    await runner.start({ runId: 'r9', command: 'pnpm dev', cwd: '/', sessionName: 'fxact_wt_x__start', maxMs: 0 });
+    expect(delays).toEqual([1000]); // only the poll, no 4 h guard
+  });
+
+  it('reads listening ports from lsof field output', () => {
+    expect(parseLsofPorts('p123\nf20\nn*:5173\nn127.0.0.1:24678\nn[::1]:5173\n')).toEqual([5173, 24678]);
+    expect(parseLsofPorts('')).toEqual([]);
   });
 });

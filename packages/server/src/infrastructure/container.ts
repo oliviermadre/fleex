@@ -133,10 +133,11 @@ import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 import { PinnedStatusService } from '../domain/services/pinned-status.service.js';
 import { ActionRunService } from '../domain/services/action-run.service.js';
+import { WorktreeActionsService, migrateLegacySetupHooks } from '../application/services/worktree-actions.service.js';
 import { BinaryDiagnosisService, BINARY_DIAGNOSIS_TIMEOUT_MS } from '../domain/services/binary-diagnosis.service.js';
 import { TmuxTerminalRunner } from './adapters/tmux-terminal-runner.js';
 import { remoteStreamShellExec, gatewayStreamsExec, StreamExecUnavailableError } from './host/stream-exec.js';
-import type { ActionRunCapabilities } from '@fleex/shared';
+import type { ActionRun, ActionRunCapabilities } from '@fleex/shared';
 import { SuggestActionUseCase } from '../application/use-cases/suggest-action.js';
 import { ClaudeJsonModel, ShellBinaryLookup, createAiAvailability } from './adapters/actions-ai.adapters.js';
 import { IconifyClient } from './adapters/iconify.client.js';
@@ -759,6 +760,8 @@ export async function createContainer() {
   // through the gateway (falling back to buffered exec on a gateway not restarted).
   const actionTerminals = new TmuxTerminalRunner(execFn, hostFs, '/tmp', logger, { instanceTag: process.env['PORT'] ?? '3000' });
   const streamShell = remoteStreamShellExec(gatewayUrl);
+  // Bound below, once the worktree actions (which need the runs) exist.
+  let onWorktreeRunFinished: (run: ActionRun) => void = () => {};
   const actionRuns = new ActionRunService({
     exec: runShell,
     streamExec: async (command, options) => {
@@ -776,8 +779,29 @@ export async function createContainer() {
     // reflects what the click just did instead of waiting a full interval.
     onFinished: (run) => {
       if (run.sourceKind === 'pinned') pinnedStatus.refresh(run.sourceId);
+      if (run.sourceKind === 'worktree') onWorktreeRunFinished(run);
     },
   });
+
+  // Worktree buttons: per-worktree commands and dev-server state (same runs and terminals).
+  const legacySetup = migrateLegacySetupHooks(config.get());
+  if (legacySetup) {
+    await config.update({ worktreeConfigs: legacySetup });
+    logger.info('Migrated post-checkout hooks to worktree Setup hooks', { repos: Object.keys(legacySetup).length });
+  }
+  const worktreeActions = new WorktreeActionsService({
+    hostFs,
+    getRepoInfo: (path) => git.getInfo(path),
+    discoverWorktrees: (root) => overlayManager.discoverWorktrees(root),
+    config,
+    resolver,
+    actionRuns,
+    terminals: actionTerminals,
+    shell: (command, options) => shellExecFn(command, { cwd: options.cwd, timeout: options.timeoutMs }),
+    broadcast: (type, data) => pinnedStatusBroadcast(type, data),
+    logger,
+  });
+  onWorktreeRunFinished = (run) => worktreeActions.onRunFinished(run);
   let capabilitiesCache: { at: number; value: ActionRunCapabilities } | null = null;
   const actionRunCapabilities = async (): Promise<ActionRunCapabilities> => {
     if (capabilitiesCache && Date.now() - capabilitiesCache.at < 60_000) return capabilitiesCache.value;
@@ -809,6 +833,7 @@ export async function createContainer() {
     pinnedStatus,
     actionRuns,
     actionTerminals,
+    worktreeActions,
     actionRunCapabilities,
     binaryDiagnosis,
     setPinnedStatusBroadcast,

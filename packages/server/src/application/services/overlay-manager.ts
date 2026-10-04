@@ -15,6 +15,7 @@ import type {
   OverlaySyncRemoveResponse,
   OverlaySyncRepoScan,
 } from '@fleex/shared';
+import { buildFleexEnv, envArgv } from '../../domain/services/worktree-env.js';
 import {
   buildTree,
   classifyStatus,
@@ -91,9 +92,18 @@ export class OverlayManager {
   }
 
   /**
-   * Run post-checkout hooks for a repo after worktree creation.
-   * Checks both file-based hooks (overlays/org/name/hooks/) and inline config hooks.
-   * Returns HookResult if a hook ran, null otherwise.
+   * Run the Setup hooks of a new worktree (formerly "post-checkout"): global
+   * file hooks, then the repo's file hooks, then the inline Setup script — all
+   * fire-and-forget, never blocking the worktree or the agents.
+   *
+   * The inline script comes from the config layers (PRD §9): the personal
+   * `worktreeConfigs[repo].hooks.setup`, else `hooks.setup` of the worktree's
+   * own `.fleex/worktree.json`, else the legacy `postCheckoutHook`. Every hook
+   * gets the `FLEEX_*` environment; `{{…}}` substitutions keep working.
+   *
+   * Returns true when an inline script is known to run. A Setup that only lives
+   * in `.fleex/worktree.json` is read asynchronously, so it still runs but this
+   * returns false.
    */
   firePostCheckoutHooks(
     org: string,
@@ -102,43 +112,84 @@ export class OverlayManager {
     branch: string,
   ): boolean {
     const repoKey = `${org}/${name}`;
+    const env = this.hookEnv(org, name, worktreePath, branch);
 
     // 1. Run global file-based hooks first
     const globalHooksDir = this.resolver.globalOverlayHooksDir();
-    this.runFileHooks(globalHooksDir, '_global', '', worktreePath, branch);
+    this.runFileHooks(globalHooksDir, '_global', '', worktreePath, branch, env);
 
     // 2. Check for per-repo file-based hooks
     const hooksDir = this.resolver.overlayHooksDir(org, name);
-    this.runFileHooks(hooksDir, org, name, worktreePath, branch);
+    this.runFileHooks(hooksDir, org, name, worktreePath, branch, env);
 
-    // 3. Check for inline config hook
+    // 3. Inline Setup script, from the layers
     const appConfig = this.config.get();
     const repoConfig = appConfig.repoConfigs?.[repoKey];
-    const script = repoConfig?.postCheckoutHook?.trim();
-    if (!script) return false;
-
-    const timeoutSeconds = repoConfig?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SECONDS;
+    const personal = appConfig.worktreeConfigs?.[repoKey]?.hooks;
+    const legacy = repoConfig?.postCheckoutHook;
+    const timeoutSeconds = personal?.timeoutSec ?? repoConfig?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SECONDS;
     const timeoutMs = timeoutSeconds * 1000;
 
-    const interpolated = script
-      .replace(/\{\{org\}\}/g, org)
-      .replace(/\{\{repo\}\}/g, name)
-      .replace(/\{\{branch\}\}/g, branch)
-      .replace(/\{\{worktree_path\}\}/g, worktreePath);
+    const runInline = (script: string) => {
+      const interpolated = script
+        .replace(/\{\{org\}\}/g, org)
+        .replace(/\{\{repo\}\}/g, name)
+        .replace(/\{\{branch\}\}/g, branch)
+        .replace(/\{\{worktree_path\}\}/g, worktreePath);
+      this.logger.info('Starting setup hook (async)', { repoKey, worktreePath, timeoutMs });
+      return env
+        .then((vars) => this.execFn('env', envArgv(vars, ['bash', '-c', interpolated]), { cwd: worktreePath, timeout: timeoutMs }))
+        .then(() => {
+          this.logger.info('Setup hook completed', { repoKey, worktreePath });
+        })
+        .catch((err) => {
+          const stderr = (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
+          this.logger.warn('Setup hook failed', { repoKey, worktreePath, stderr });
+        });
+    };
 
-    this.logger.info('Starting post-checkout hook (async)', { repoKey, worktreePath, timeoutMs });
+    // Personal layer set (even to '' = explicitly none): it wins, known now.
+    if (personal?.setup !== undefined) {
+      const script = personal.setup.trim();
+      if (!script) return false;
+      void runInline(script);
+      return true;
+    }
 
-    // Fire and forget
-    this.execFn('bash', ['-c', interpolated], { cwd: worktreePath, timeout: timeoutMs })
-      .then(() => {
-        this.logger.info('Post-checkout hook completed', { repoKey, worktreePath });
-      })
-      .catch((err) => {
-        const stderr = (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
-        this.logger.warn('Post-checkout hook failed', { repoKey, worktreePath, stderr });
-      });
+    // Else the shared file, read async, falling back to the legacy field.
+    void this.readSharedSetup(worktreePath).then((shared) => {
+      const script = (shared ?? legacy ?? '').trim();
+      if (script) return runInline(script);
+      return undefined;
+    });
+    return !!legacy?.trim();
+  }
 
-    return true;
+  /** `hooks.setup` of the worktree's `.fleex/worktree.json`, if any. */
+  private async readSharedSetup(worktreePath: string): Promise<string | undefined> {
+    try {
+      const parsed = JSON.parse(await this.hostFs.readFile(join(worktreePath, '.fleex', 'worktree.json'))) as { hooks?: { setup?: unknown } };
+      return typeof parsed?.hooks?.setup === 'string' ? parsed.hooks.setup : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** The FLEEX_* environment of a hook (the ticket id comes from the workspace manifest). */
+  private async hookEnv(org: string, name: string, worktreePath: string, branch: string): Promise<Record<string, string>> {
+    const workspacePath = dirname(worktreePath);
+    let ticketId: string | undefined;
+    try {
+      const manifest = JSON.parse(await this.hostFs.readFile(join(workspacePath, '.fleex.json'))) as { ticketId?: unknown };
+      if (typeof manifest.ticketId === 'string') ticketId = manifest.ticketId;
+    } catch { /* not in a ticket workspace */ }
+    return buildFleexEnv({
+      repo: `${org}/${name}`,
+      repoPath: this.resolver.barePath(org, name),
+      worktreePath,
+      ...(ticketId ? { workspacePath, ticketId } : {}),
+      branch,
+    });
   }
 
   /**
@@ -150,6 +201,7 @@ export class OverlayManager {
     name: string,
     worktreePath: string,
     branch: string,
+    env: Promise<Record<string, string>>,
   ): void {
     // Fire and forget — async discovery and execution
     (async () => {
@@ -163,12 +215,13 @@ export class OverlayManager {
       const appConfig = this.config.get();
       const repoConfig = appConfig.repoConfigs?.[`${org}/${name}`];
       const timeoutMs = (repoConfig?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SECONDS) * 1000;
+      const vars = await env;
 
       for (const script of scripts) {
         const scriptPath = `${hooksDir}/${script.name}`;
-        this.logger.info('Running hook script', { scriptPath, worktreePath });
+        this.logger.info('Running hook script', { scriptPath, worktreePath, branch });
         try {
-          await this.execFn('bash', [scriptPath], {
+          await this.execFn('env', envArgv(vars, ['bash', scriptPath]), {
             cwd: worktreePath,
             timeout: timeoutMs,
           });
@@ -242,7 +295,7 @@ export class OverlayManager {
    * - Otherwise the root is treated as a ticket workspace: every immediate
    *   subdirectory that carries a `.git` entry is a worktree target.
    */
-  private async discoverWorktrees(rootPath: string): Promise<string[]> {
+  async discoverWorktrees(rootPath: string): Promise<string[]> {
     if (!rootPath) return [];
     if (await this.hostFs.exists(join(rootPath, '.git'))) return [rootPath];
 

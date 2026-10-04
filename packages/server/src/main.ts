@@ -19,6 +19,8 @@ import { configRoutes } from './infrastructure/http/config.routes.js';
 import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
 import { pinnedActionsRoutes } from './infrastructure/http/pinned-actions.routes.js';
+import { worktreeActionsRoutes } from './infrastructure/http/worktree-actions.routes.js';
+import { isWorktreeServerSession } from './infrastructure/adapters/tmux-terminal-runner.js';
 import { prCiRoutes } from './infrastructure/http/pr-ci.routes.js';
 import { actionsAiRoutes } from './infrastructure/http/actions-ai.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
@@ -92,7 +94,8 @@ async function main() {
   await container.discoverSessions.execute();
 
   // Action terminals of a previous run of this instance: nothing tracks them any more.
-  void container.actionTerminals.killOrphans().catch(() => {});
+  // Worktree dev servers are spared: the worktree actions adopt them back.
+  void container.actionTerminals.killOrphans(isWorktreeServerSession).catch(() => {});
 
   const app = Fastify({ logger: false, serverFactory: fleexServerFactory });
   await app.register(cors, { origin: true, credentials: true });
@@ -122,6 +125,7 @@ async function main() {
   await app.register(deliverableTypesRoutes(container));
   await app.register(execRoutes(container));
   await app.register(pinnedActionsRoutes(container));
+  await app.register(worktreeActionsRoutes(container));
   await app.register(actionsAiRoutes({ suggestAction: container.suggestAction, iconSearch: container.iconSearch, isAvailable: container.isActionsAiAvailable, logger: container.logger }));
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));

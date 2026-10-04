@@ -35,7 +35,8 @@ export interface TerminalRunHandle {
 export interface TerminalRunPort {
   /** The tmux session a source's terminal run uses — known before it exists. */
   sessionNameFor(sourceId: string): string;
-  start(request: { runId: string; sourceId: string; command: string; cwd: string; sessionName: string }): Promise<TerminalRunHandle>;
+  /** `maxMs` 0 = no safety-net timeout (long-lived dev servers). */
+  start(request: { runId: string; sourceId: string; command: string; cwd: string; sessionName: string; maxMs?: number }): Promise<TerminalRunHandle>;
   /** Kill a finished run's terminal (kept readable until the user closes it). */
   close(sessionName: string): Promise<void>;
 }
@@ -133,7 +134,11 @@ export class ActionRunService {
 
   constructor(private readonly deps: ActionRunDeps) {}
 
-  start(request: ActionRunRequest): StartRunResult {
+  /**
+   * `persistent`: a terminal run with no safety-net timeout — a worktree's dev
+   * server, which runs until it is stopped.
+   */
+  start(request: ActionRunRequest, options: { persistent?: boolean } = {}): StartRunResult {
     const key = runSlotKey(request.sourceId, request.slot);
     const runningRunId = this.running.get(key);
     if (runningRunId) return { ok: false, runningRunId };
@@ -162,7 +167,7 @@ export class ActionRunService {
     if (terminal) {
       let markReady: () => void = () => {};
       live.terminalReady = new Promise<void>((resolve) => { markReady = resolve; });
-      void this.executeInTerminal(live, cwd, markReady);
+      void this.executeInTerminal(live, cwd, markReady, options.persistent ? 0 : undefined);
     } else {
       void this.execute(live, cwd, clampActionTimeout(request.timeoutSec) * 1000);
     }
@@ -250,10 +255,10 @@ export class ActionRunService {
     }
   }
 
-  private async executeInTerminal(live: LiveRun, cwd: string, markReady: () => void): Promise<void> {
+  private async executeInTerminal(live: LiveRun, cwd: string, markReady: () => void, maxMs?: number): Promise<void> {
     const { run } = live;
     try {
-      const handle = await this.deps.terminal!.start({ runId: run.runId, sourceId: run.sourceId, command: run.command, cwd, sessionName: run.tmuxSession! });
+      const handle = await this.deps.terminal!.start({ runId: run.runId, sourceId: run.sourceId, command: run.command, cwd, sessionName: run.tmuxSession!, ...(maxMs !== undefined ? { maxMs } : {}) });
       live.cancel = () => handle.cancel();
       markReady();
       if (live.cancelRequested) void handle.cancel().catch(() => {});
