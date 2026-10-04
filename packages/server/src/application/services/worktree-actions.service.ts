@@ -2,6 +2,7 @@ import { basename, dirname, join } from 'node:path';
 import {
   WORKTREE_START_SLOT,
   WORKTREE_LOGS_SLOT,
+  WORKTREE_STOP_SLOT,
   isWorktreeVerb,
   runSlotKey,
   worktreeSourceId,
@@ -46,6 +47,8 @@ export const STARTING_CHECK_MS = 2_000;
 /** …and once running, check it is still there this often. */
 export const RUNNING_CHECK_MS = 15_000;
 const STOP_WAIT_MS = 10_000;
+/** A background Start must hand back (`up -d`): past this, its run is cut and the start failed. */
+const BACKGROUND_START_TIMEOUT_SEC = 300;
 /** Before a removal the stop command gets less time: the HTTP request deleting the ticket waits on it. */
 const TEARDOWN_STOP_COMMAND_MS = 30_000;
 const PORT_CHECK_TIMEOUT_MS = 5_000;
@@ -220,8 +223,10 @@ export class WorktreeActionsService {
         }
         return this.start(path, resolved, resolved.merged.start);
       }
-      case 'stop':
-        return { server: await this.stop(path, resolved) };
+      case 'stop': {
+        const res = await this.stop(path, resolved, 120_000, true);
+        return res.run ? { runId: res.run.runId, run: res.run, server: res.server } : { server: res.server };
+      }
       case 'restart': {
         await this.stop(path, resolved);
         if (!resolved.merged.start) throw new WorktreeActionError(409, 'No start command configured for this worktree');
@@ -265,6 +270,9 @@ export class WorktreeActionsService {
     const item = target.item;
     const env = { ...(await this.envFor(path, ctx, merged, item?.port, item?.autoPort)), ...(item?.env ?? {}) };
     const cwd = item?.cwd ? join(path, item.cwd) : path;
+    // Background: no TTY, it hands back and its exit code tells (merge made the server detached).
+    // Terminal: a persistent TTY with no timeout, where a foreground server stays.
+    const background = merged.server.startIn === 'background';
     const result = this.deps.actionRuns.start(
       {
         sourceId: entry.sourceId,
@@ -272,10 +280,11 @@ export class WorktreeActionsService {
         label: `${ctx.name} · ${target.label}`,
         command: withEnv(target.command, env),
         cwd,
-        mode: 'terminal',
+        mode: background ? 'background' : 'terminal',
         slot: WORKTREE_START_SLOT,
+        ...(background ? { timeoutSec: BACKGROUND_START_TIMEOUT_SEC } : {}),
       },
-      { persistent: true },
+      { persistent: !background },
     );
     if (!result.ok) return { alreadyRunning: true, runId: result.runningRunId, server: { ...entry.snapshot } };
 
@@ -298,26 +307,43 @@ export class WorktreeActionsService {
     return { runId: result.run.runId, run: result.run, server: { ...entry.snapshot } };
   }
 
-  private async stop(path: string, { ctx, merged }: Resolved, stopCommandWaitMs = 120_000): Promise<WorktreeServerSnapshot> {
+  /**
+   * Stop: the stop command (if any), then the start command's run is ended.
+   * `interactive`: a terminal stop command is handed back at once (the user may
+   * have to answer it in its terminal); the rest of the stop follows its end.
+   */
+  private async stop(path: string, resolved: Resolved, stopCommandWaitMs = 120_000, interactive = false): Promise<{ server: WorktreeServerSnapshot; run?: ActionRun }> {
+    const { ctx, merged } = resolved;
     const reserved = await this.envFor(path, ctx, merged);
     const entry = await this.entryFor(path, merged, ctx);
-    if (entry.snapshot.state === 'stopped') return { ...entry.snapshot };
+    if (entry.snapshot.state === 'stopped') return { server: { ...entry.snapshot } };
 
     const stopCommand = merged.server.stop?.trim();
     if (stopCommand && entry.snapshot.state !== 'error') {
+      const terminal = merged.server.stopIn === 'terminal';
       const res = this.deps.actionRuns.start({
         sourceId: entry.sourceId,
         sourceKind: 'worktree',
         label: `${ctx.name} · stop`,
         command: withEnv(stopCommand, { ...this.fleexEnv(ctx, entry.snapshot.port), ...reserved, ...(entry.snapshot.url ? { FLEEX_URL: entry.snapshot.url } : {}), ...endpointEnv(entry.snapshot.endpoints) }),
         cwd: path,
-        mode: 'background',
-        slot: 'stop',
+        mode: terminal ? 'terminal' : 'background',
+        slot: WORKTREE_STOP_SLOT,
         timeoutSec: 120,
       });
+      if (res.ok && terminal && interactive) {
+        void this.waitForRun(res.run.runId, stopCommandWaitMs)
+          .then(() => this.endStartRun(entry))
+          .catch((err) => this.deps.logger.warn('Worktree stop failed', { path, error: String(err) }));
+        return { server: { ...entry.snapshot }, run: res.run };
+      }
       if (res.ok) await this.waitForRun(res.run.runId, stopCommandWaitMs);
     }
+    return { server: await this.endStartRun(entry) };
+  }
 
+  /** Whatever the stop command did, the start command must not outlive Stop. */
+  private async endStartRun(entry: ServerEntry): Promise<WorktreeServerSnapshot> {
     // Whatever the stop command did, the start command must not outlive Stop.
     // A start command that already handed back (`up -d`) only left its terminal behind.
     const runId = entry.snapshot.runId;
@@ -1053,6 +1079,9 @@ export function sanitizeKeyValue(key: WorktreeConfigKey, value: unknown): unknow
       return str(value);
     case 'server.mode':
       return value === 'foreground' || value === 'detached' ? value : bad('expected foreground | detached');
+    case 'server.startIn':
+    case 'server.stopIn':
+      return value === 'background' || value === 'terminal' ? value : bad('expected background | terminal');
     case 'server.start':
     case 'server.logs':
     case 'server.stop':

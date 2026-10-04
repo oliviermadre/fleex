@@ -6,6 +6,7 @@ import {
   getConfigKey,
   parseProbeEndpoints,
   worktreeSourceId,
+  type ActionRunMode,
   type WorktreeClickChoice,
   type WorktreeConfigKey,
   type WorktreeServerMode,
@@ -18,7 +19,7 @@ import { useWorktreeActionsStore } from '../../../stores/worktreeActionsStore';
 import { Button } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { OverlaySyncModal } from '../../overlay-sync/OverlaySyncModal';
-import { CODE_INPUT, TEXT_INPUT } from '../../settings/actions/shared';
+import { CODE_INPUT, RunModeToggle, TEXT_INPUT } from '../../settings/actions/shared';
 import { STATE_LABEL, stateDotClass } from '../../worktree-actions/worktreeUi';
 import { EnvHelp, FieldLabel, Hint, RunResult, ScopeBadge, Warn, scopeOf } from './parts';
 import type { WorktreeSettingsApi } from './useWorktreeSettings';
@@ -28,7 +29,7 @@ export type StepKey = 'checkout' | 'server' | 'teardown';
 /** The three moments of a worktree's life, in the order they happen. */
 export const STEPS: { key: StepKey; title: string; when: string; keys: WorktreeConfigKey[] }[] = [
   { key: 'checkout', title: 'Au checkout', when: 'overlay · hooks fichiers · setup', keys: ['hooks.setup'] },
-  { key: 'server', title: 'Serveur', when: 'start · logs · stop · status', keys: ['server.mode', 'server.start', 'server.logs', 'server.stop', 'server.probe', 'server.url', 'server.clickByState'] },
+  { key: 'server', title: 'Serveur', when: 'start · logs · stop · status', keys: ['server.mode', 'server.startIn', 'server.stopIn', 'server.start', 'server.logs', 'server.stop', 'server.probe', 'server.url', 'server.clickByState'] },
   { key: 'teardown', title: 'Au teardown', when: 'stop du serveur · teardown', keys: ['hooks.teardown'] },
 ];
 
@@ -44,6 +45,8 @@ export function effective(api: WorktreeSettingsApi, key: WorktreeConfigKey): unk
 
 /** The server's mode as shown: the configured one, else what Fleex guesses (a probe = detached). */
 export function serverMode(api: WorktreeSettingsApi): WorktreeServerMode {
+  // A background Start has no TTY to keep a server in: it is detached by nature.
+  if (effective(api, 'server.startIn') === 'background') return 'detached';
   const m = effective(api, 'server.mode') as WorktreeServerMode | undefined;
   if (m) return m;
   return (effective(api, 'server.probe') as { command?: string } | undefined)?.command ? 'detached' : 'foreground';
@@ -116,6 +119,9 @@ const PICKED_KEYS: PickedKey[] = ['start', 'logs', 'stop', 'probe'];
 
 type ServerDraft = {
   mode: WorktreeServerMode;
+  /** How Start and Stop run, like a pinned action. Logs is always a terminal, Status always background. */
+  startIn: ActionRunMode;
+  stopIn: ActionRunMode;
   start: string;
   /** Per command: typed by hand (true) or one of the repo's commands, by id (false). */
   custom: Record<PickedKey, boolean>;
@@ -143,6 +149,8 @@ export function initialDraft(api: WorktreeSettingsApi, step: StepKey): StepDraft
   const custom = Object.fromEntries(PICKED_KEYS.map((k) => [k, !!values[k] && !items.some((i) => i.id === values[k])])) as Record<PickedKey, boolean>;
   return {
     mode: serverMode(api),
+    startIn: effective(api, 'server.startIn') === 'background' ? 'background' : 'terminal',
+    stopIn: effective(api, 'server.stopIn') === 'terminal' ? 'terminal' : 'background',
     ...values,
     custom,
     interval: String(probe?.intervalSec ?? 30),
@@ -307,21 +315,18 @@ function HookStep({ api, draft, setDraft, hook }: EditorProps & { hook: 'setup' 
 const VERB_LABELS: Record<string, string> = { start: 'Start', stop: 'Stop', restart: 'Restart', open: 'Open (navigateur)', logs: 'Logs', status: 'Rafraîchir l\'état' };
 
 /** One verb of the server: label, field, and what Fleex does when it is left empty. */
-/**
- * How a server command runs — a separate axis from the server's mode (premier plan /
- * détaché, where the server lives). Fixed per command: whatever the mode of a picked action.
- */
-const EXEC_LABEL = {
-  terminal: { label: 'terminal', title: 'Lancée dans un terminal Fleex (tmux), que tu peux ouvrir.' },
-  notty: { label: 'sans tty', title: 'Lancée sans terminal : Fleex lit son code de sortie et sa sortie, visible dans l\'historique.' },
+/** Logs and Status run one way only — shown with the pinned actions' words. */
+const FIXED_EXEC = {
+  terminal: { label: 'Terminal', title: 'Toujours dans un terminal : des logs se suivent (-f).' },
+  background: { label: 'Background', title: 'Toujours en background : Fleex lit son code de sortie et sa sortie.' },
 } as const;
 
-function VerbRow({ id, title, exec, children, empty, warn }: { id: string; title: string; exec: keyof typeof EXEC_LABEL; children: React.ReactNode; empty: string; warn?: string | null }) {
+function VerbRow({ id, title, exec, children, empty, warn }: { id: string; title: string; exec?: keyof typeof FIXED_EXEC; children: React.ReactNode; empty: string; warn?: string | null }) {
   return (
     <div className="grid gap-x-3 gap-y-1 border-t border-[var(--theme-border)] py-2.5 first:border-t-0 md:grid-cols-[110px_minmax(0,1fr)]" data-testid={`server-row-${id}`}>
       <div className="flex flex-col gap-0.5 pt-1.5">
         <div className="flex items-center gap-1 text-xs font-semibold text-[var(--theme-text-primary)]">{title}<EnvHelp /></div>
-        <span data-testid={`server-exec-${id}`} title={EXEC_LABEL[exec].title} className="w-fit rounded border border-[var(--theme-border)] px-1 text-[10px] text-[var(--theme-text-muted)]">{EXEC_LABEL[exec].label}</span>
+        {exec && <span data-testid={`server-exec-${id}`} title={FIXED_EXEC[exec].title} className="w-fit rounded border border-[var(--theme-border)] px-1 text-[10px] text-[var(--theme-text-muted)]">{FIXED_EXEC[exec].label}</span>}
       </div>
       <div className="min-w-0 space-y-1">
         {children}
@@ -372,9 +377,13 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
   const patch = (p: Partial<ServerDraft>) => setDraft({ ...d, ...p });
   const [probe, setProbe] = useState<'loading' | { ok: boolean; text: string } | null>(null);
   const server = view?.server;
-  const detached = d.mode === 'detached';
+  const detached = d.startIn === 'background' || d.mode === 'detached';
 
-  const pick = (k: PickedKey) => (value: string, custom: boolean) => patch({ [k]: value, custom: { ...d.custom, [k]: custom } });
+  // Picking an action or a detected command also takes its run mode, for Start and Stop.
+  const pick = (k: PickedKey) => (value: string, custom: boolean) => {
+    const runMode = items.find((i) => i.id === value)?.mode;
+    patch({ [k]: value, custom: { ...d.custom, [k]: custom }, ...(runMode && k === 'start' ? { startIn: runMode } : {}), ...(runMode && k === 'stop' ? { stopIn: runMode } : {}) });
+  };
   // What runs for a picked command: the id resolves to its command, as on the server.
   const commandOf = (v: string) => items.find((i) => i.id === v)?.command ?? v;
   const targetOptions = [
@@ -390,7 +399,9 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
   const save = async () => {
     const click = Object.fromEntries(WORKTREE_SERVER_STATES.filter((st) => d.click[st] !== DEFAULT_WORKTREE_CLICK[st]).map((st) => [st, d.click[st]]));
     const ok = await api.write([
-      ['server.mode', d.mode],
+      ['server.mode', d.startIn === 'background' ? 'detached' : d.mode],
+      ['server.startIn', d.startIn === 'background' ? 'background' : undefined],
+      ['server.stopIn', d.stopIn === 'terminal' && d.stop.trim() ? 'terminal' : undefined],
       ['server.start', d.start.trim() || undefined],
       ['server.logs', d.logs.trim() || undefined],
       ['server.stop', d.stop.trim() || undefined],
@@ -426,46 +437,52 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <h4 className="text-sm font-semibold text-[var(--theme-text-primary)]">Serveur</h4>
-        <div className="inline-flex overflow-hidden rounded-md border border-[var(--theme-border)]" role="radiogroup" aria-label="Mode du serveur">
-          {(['foreground', 'detached'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="radio"
-              aria-checked={d.mode === m}
-              onClick={() => patch({ mode: m })}
-              className={cn('px-2.5 py-1 text-[11px]', d.mode === m ? 'bg-[var(--theme-accent-muted)] font-medium text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
-            >
-              {m === 'foreground' ? 'Premier plan' : 'Détaché'}
-            </button>
-          ))}
-        </div>
-        <span className="text-[11px] text-[var(--theme-text-muted)]">
-          {detached
-            ? 'le serveur vit hors de Fleex : Start rend la main (docker compose up -d, fleex start), Stop et Status sont à fournir'
-            : 'le serveur vit dans le terminal de Start (pnpm dev) : Fleex suit son process'}
-        </span>
+        <span className="text-[11px] text-[var(--theme-text-muted)]">C&apos;est Start qui décide : tout le reste s&apos;en déduit.</span>
       </div>
 
       <div className="mt-2">
-        <VerbRow id="start" title="Start" exec="terminal" empty={detached ? 'Rend la main : son terminal se termine, sa fin avec 0 veut dire « démarrage demandé ». Ensuite le probe dit si le serveur tourne.' : 'Reste ouverte dans son terminal : Fleex suit ses process, trouve leur port, et son arrêt veut dire « serveur arrêté ».'} warn={!d.start.trim() ? 'Sans commande Start, le bouton du worktree ne peut pas démarrer le serveur.' : null}>
+        <VerbRow id="start" title="Start" empty={d.startIn === 'background'
+          ? 'Sans terminal, elle doit rendre la main (docker compose up -d, fleex start) : sa fin avec 0 veut dire « démarrage demandé », ensuite le probe dit si le serveur tourne.'
+          : detached
+            ? 'Elle rend la main : sa fin avec 0 veut dire « démarrage demandé », ensuite le probe dit si le serveur tourne. Son terminal garde ce qu\'elle a affiché.'
+            : 'Le serveur reste dans ce terminal : Fleex suit ses process, trouve leur port, et la fin du terminal veut dire « serveur arrêté ».'} warn={!d.start.trim() ? 'Sans commande Start, le bouton du worktree ne peut pas démarrer le serveur.' : null}>
           <CommandPicker id="wt-start" label="Commande de démarrage" value={d.start} custom={d.custom.start} options={targetOptions} placeholder={detached ? './cli/fleex start' : 'pnpm dev'} onChange={pick('start')} />
+          <div className="flex flex-wrap items-center gap-2">
+            <RunModeToggle small label="Exécution de Start" value={d.startIn} onChange={(m) => patch({ startIn: m })} />
+            {d.startIn === 'terminal' && (
+              <div className="inline-flex gap-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-0.5" role="radiogroup" aria-label="Le serveur">
+                {(['foreground', 'detached'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={d.mode === m}
+                    onClick={() => patch({ mode: m })}
+                    className={cn('rounded-md px-2 py-0.5 text-[11px] font-medium', d.mode === m ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]')}
+                  >
+                    {m === 'foreground' ? 'reste dans le terminal' : 'rend la main'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </VerbRow>
 
-        <VerbRow id="logs" title="Logs" exec="terminal" empty={d.logs.trim() ? 'Ouverte dans son propre terminal (pense à -f pour suivre).' : (detached ? 'Vide : Fleex montre le terminal du Start, qui n\'a que ses premières lignes.' : 'Vide : Fleex montre le terminal du Start, où le serveur écrit ses logs.')} warn={detached && !d.logs.trim() ? 'Détaché sans commande de logs : le terminal du Start n\'a que ses premières lignes.' : null}>
+        <VerbRow id="logs" title="Logs" exec="terminal" empty={d.logs.trim() ? 'Ouverte dans son propre terminal (pense à -f pour suivre). Elle s\'ajoute à ce que montre le Start, sans le remplacer.' : 'Vide : Fleex montre le terminal du Start, où le serveur écrit ses logs.'} warn={detached && !d.logs.trim() ? 'Start rend la main sans commande de logs : Fleex n\'a que ce que Start a affiché avant de rendre la main.' : null}>
           <CommandPicker id="wt-logs" label="Commande de logs" value={d.logs} custom={d.custom.logs} options={targetOptions} placeholder={detached ? 'docker compose logs -f --tail 200  ·  ./cli/fleex logs' : '(facultatif)'} onChange={pick('logs')} />
         </VerbRow>
 
-        <VerbRow id="stop" title="Stop" exec="notty" empty={detached
-            ? 'C\'est elle qui arrête le serveur (Fleex attend sa fin, puis le probe confirme).'
-            : (d.stop.trim() ? 'Lancée d\'abord, puis Fleex arrête la commande Start si elle tourne encore.' : 'Vide : Fleex arrête la commande Start (son terminal), donc le serveur.')} warn={detached && !d.stop.trim() ? 'Détaché sans commande Stop : Fleex ne sait pas arrêter ce serveur.' : null}>
+        <VerbRow id="stop" title="Stop" empty={!d.stop.trim()
+            ? 'Vide : Fleex arrête la commande Start (son terminal), donc le serveur.'
+            : `${d.stopIn === 'terminal' ? 'Ouverte dans un terminal, où tu peux répondre à une confirmation' : 'Lancée en background'} ; Fleex attend sa fin${detached ? ', puis le probe confirme l\'arrêt' : ', puis arrête la commande Start si elle tourne encore'}.${d.stopIn === 'terminal' ? ' Au teardown, personne ne répond : 30 s au plus.' : ''}`} warn={detached && !d.stop.trim() ? 'Start rend la main sans commande Stop : Fleex ne sait pas arrêter ce serveur.' : null}>
           <CommandPicker id="wt-stop" label="Commande d'arrêt" value={d.stop} custom={d.custom.stop} options={targetOptions} placeholder={detached ? 'docker compose stop  ·  ./cli/fleex stop' : '(facultatif)'} onChange={pick('stop')} />
+          {d.stop.trim() && <RunModeToggle small label="Exécution de Stop" value={d.stopIn} onChange={(m) => patch({ stopIn: m })} />}
         </VerbRow>
 
         <VerbRow
           id="status"
           title="Status"
-          exec="notty"
+          exec="background"
           empty={d.probe.trim() ? `Code 0 = en marche, sinon arrêté${detached ? '' : ' (en erreur si la commande Start tourne encore)'}. Sortie facultative : {"endpoints":[{"name","url" | "host"+"port","primary"?}]}, toute autre sortie est ignorée.` : 'Vide : Fleex détecte le port écouté par les process du Start.'}
           warn={detached && !d.probe.trim() ? 'Détaché sans probe : Fleex suppose que le serveur tourne, sans pouvoir le vérifier ni connaître son URL.' : null}
         >

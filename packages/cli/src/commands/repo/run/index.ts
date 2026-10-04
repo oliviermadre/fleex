@@ -40,6 +40,10 @@ server (its terminal and logs appear in the UI). ${chalk.green('fleex repo actio
       process.stdout.write(`${res.url}\n`);
     } else if (target === 'logs') {
       await showLogs(res);
+    } else if (target === 'stop' && res.run?.mode === 'terminal' && res.run.tmuxSession) {
+      // server.stopIn = terminal: the stop command may ask something — attach to answer it.
+      if (process.stdout.isTTY) spawnSync('tmux', ['attach', '-t', res.run.tmuxSession], { stdio: 'inherit' });
+      else info(`Stop command running in a terminal — tmux attach -t ${res.run.tmuxSession}`);
     } else if (res.alreadyRunning) {
       info(`Already running${res.runId ? ` (run ${res.runId})` : ''} — server ${state}`);
     } else if (res.runId) {

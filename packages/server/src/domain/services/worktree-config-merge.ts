@@ -114,6 +114,8 @@ export function mergeWorktreeConfig({ personal, shared, launch, detected }: Merg
     const item = byRef(server[key]);
     if (item) server[key] = item.command;
   }
+  // A background Start has no TTY to keep a server in: it hands back, so the server is detached.
+  if (server.startIn === 'background') server.mode = 'detached';
   const probeItem = byRef(server.probe?.command);
   if (probeItem && server.probe) server.probe = { ...server.probe, command: probeItem.command };
 

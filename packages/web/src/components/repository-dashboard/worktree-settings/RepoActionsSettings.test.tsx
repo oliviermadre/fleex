@@ -172,7 +172,7 @@ describe('Actions et Hooks — lifecycle', () => {
     await renderSettings();
     openStep('server');
     expect(within(screen.getByTestId('server-row-stop')).queryByText(/Fleex ne sait pas arrêter/)).toBeNull();
-    fireEvent.click(screen.getByRole('radio', { name: 'Détaché' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'rend la main' }));
     expect(within(screen.getByTestId('server-row-stop')).getByText(/Fleex ne sait pas arrêter/)).toBeTruthy();
     expect(within(screen.getByTestId('server-row-status')).getByText(/sans probe/)).toBeTruthy();
     expect(within(screen.getByTestId('server-row-logs')).getByText(/sans commande de logs/)).toBeTruthy();
@@ -188,21 +188,32 @@ describe('Actions et Hooks — lifecycle', () => {
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.stop', './cli/fleex stop');
   });
 
-  it('keeps the two axes apart: the mode says where the server lives, each row how its command runs', async () => {
-    // WHY: « détaché » is not « sans tty ». A detached Stop must not talk about closing the Start's
-    // terminal (it ended long ago), and each command shows whether it gets a terminal.
-    fakeServer({ server: { start: './cli/fleex start', stop: './cli/fleex stop', mode: 'detached' } }, null);
+  it('Start and Stop run like pinned actions (Background | Terminal); Logs is a terminal, Status background', async () => {
+    // WHY: « détaché » is not « sans TTY ». docker compose up -d runs fine in background and a
+    // stop may ask for a confirmation in a terminal. Start decides whether the server stays:
+    // a background Start must hand back, so it is detached with no extra choice.
+    fakeServer({ server: { start: './cli/fleex start', stop: './cli/fleex stop' } }, null);
     await renderSettings();
     openStep('server');
-    expect(screen.getByTestId('server-exec-start').textContent).toBe('terminal');
-    expect(screen.getByTestId('server-exec-logs').textContent).toBe('terminal');
-    expect(screen.getByTestId('server-exec-stop').textContent).toBe('sans tty');
-    expect(screen.getByTestId('server-exec-status').textContent).toBe('sans tty');
-    const stopRow = screen.getByTestId('server-row-stop');
-    expect(within(stopRow).queryByText(/terminal du Start/)).toBeNull();
-    expect(within(stopRow).getByText(/C'est elle qui arrête le serveur/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('radio', { name: 'Premier plan' }));
-    expect(within(screen.getByTestId('server-row-stop')).getByText(/arrête la commande Start/)).toBeTruthy();
+    expect(screen.getByTestId('server-exec-logs').textContent).toBe('Terminal');
+    expect(screen.getByTestId('server-exec-status').textContent).toBe('Background');
+    expect(screen.queryByTestId('server-exec-start')).toBeNull();
+    // Terminal Start: the server stays in it, or the command hands back.
+    expect(screen.getByRole('radiogroup', { name: 'Le serveur' })).toBeTruthy();
+    expect(within(screen.getByTestId('server-row-logs')).queryByText(/sans commande de logs/)).toBeNull();
+    // Background Start: no TTY to stay in, detached by nature.
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Exécution de Start' })).getByRole('radio', { name: 'Background' }));
+    expect(screen.queryByRole('radiogroup', { name: 'Le serveur' })).toBeNull();
+    expect(within(screen.getByTestId('server-row-logs')).getByText(/sans commande de logs/)).toBeTruthy();
+    // Stop in a terminal, to answer a confirmation.
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Exécution de Stop' })).getByRole('radio', { name: 'Terminal' }));
+    expect(within(screen.getByTestId('server-row-stop')).getByText(/répondre à une confirmation/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    });
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.startIn', 'background');
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.mode', 'detached');
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.stopIn', 'terminal');
   });
 
   it('Logs, Stop and Status pick a command of the repo like Start, saved as its id', async () => {

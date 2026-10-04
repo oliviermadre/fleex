@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  WORKTREE_LOGS_SLOT,
+  WORKTREE_LOGS_SLOT, WORKTREE_STOP_SLOT,
   WORKTREE_START_SLOT,
   runSlotKey,
   worktreeSourceId,
@@ -152,6 +152,11 @@ export const useWorktreeActionsStore = create<WorktreeActionsState>((set, get) =
       const sourceId = worktreeSourceId(view.path);
       usePinnedActionsStore.getState().openTerminal({ key: runSlotKey(sourceId, WORKTREE_LOGS_SLOT), sourceId, sourceKind: 'worktree', runId: res.run.runId, label: `${worktreeName(view)} · logs`, command: res.run.command, cwd: view.path });
     } else if (verb === 'logs') showServerLogs(view, res.runId, res.server);
+    if (verb === 'stop' && res.run?.mode === 'terminal') {
+      // server.stopIn = terminal: the stop command may ask for a confirmation — show its terminal.
+      const sourceId = worktreeSourceId(view.path);
+      usePinnedActionsStore.getState().openTerminal({ key: runSlotKey(sourceId, WORKTREE_STOP_SLOT), sourceId, sourceKind: 'worktree', runId: res.run.runId, label: `${worktreeName(view)} · stop`, command: res.run.command, cwd: view.path });
+    }
   },
 
   runItem: async (view, item) => {

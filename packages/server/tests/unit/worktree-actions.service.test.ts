@@ -271,6 +271,52 @@ describe('WorktreeActionsService — server.mode and server.logs', () => {
   });
 });
 
+describe('WorktreeActionsService — Start and Stop run like pinned actions (background | terminal)', () => {
+  // WHY: « détaché » is not « sans TTY ». `docker compose up -d` runs fine in background, and a
+  // stop may ask for a confirmation in a terminal. Start decides whether the server stays.
+  const REPO = 'oliviermadre/secondrepo';
+  it('a background Start runs with no TTY, must hand back, and leaves a detached server', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { start: 'docker compose up -d', startIn: 'background', stop: 'docker compose stop' } } } });
+    const res = await ctx.service.run(SECOND, { verb: 'start' });
+    expect(res.run?.mode).toBe('background');
+    expect(ctx.tmux.started).toHaveLength(0); // no terminal
+    expect(ctx.execCalls.at(-1)!.command).toMatch(/; docker compose up -d$/);
+    expect(ctx.execCalls.at(-1)!.timeoutMs).toBe(300_000); // it must hand back
+    await flush();
+    await flush();
+    // Exit 0, no probe: detached by nature, so the start worked → running (not stopped).
+    expect((await ctx.service.view(SECOND)).server.state).toBe('running');
+  });
+
+  it('a terminal Stop is handed back at once (it may ask something), the stop completes when it ends', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { mode: 'detached', start: './cli/fleex start', stop: './cli/fleex stop', stopIn: 'terminal' } } } });
+    await ctx.service.run(SECOND, { verb: 'start' });
+    ctx.tmux.exit(ctx.startSession(SECOND), 0);
+    await flush();
+    await flush();
+    expect((await ctx.service.view(SECOND)).server.state).toBe('running');
+
+    const res = await ctx.service.run(SECOND, { verb: 'stop' });
+    expect(res.run).toMatchObject({ mode: 'terminal', slot: 'stop' });
+    expect(ctx.tmux.started.at(-1)!.command).toMatch(/; \.\/cli\/fleex stop$/);
+    expect(res.server.state).toBe('running'); // waiting for the user's answer
+
+    ctx.tmux.exit(ctx.tmux.started.at(-1)!.sessionName, 0);
+    await flush();
+    await flush();
+    await flush();
+    expect((await ctx.service.view(SECOND)).server.state).toBe('stopped');
+  });
+
+  it('accepts background | terminal for startIn and stopIn only', () => {
+    expect(sanitizeKeyValue('server.startIn', 'background')).toBe('background');
+    expect(sanitizeKeyValue('server.stopIn', 'terminal')).toBe('terminal');
+    expect(() => sanitizeKeyValue('server.stopIn', 'detached')).toThrow(/background \| terminal/);
+  });
+});
+
 describe('WorktreeActionsService — probe endpoints contract', () => {
   // Exit 0 = running; the probe's stdout may name the services (`{"endpoints":[…]}`)
   // so a detached app (`fleex start`) still gets its URL. Anything else is ignored.

@@ -1,4 +1,4 @@
-import type { ActionRun } from './pinned-actions.js';
+import type { ActionRun, ActionRunMode } from './pinned-actions.js';
 
 /**
  * Worktree actions — the per-worktree button of the Work top bar (WORKTREES
@@ -65,6 +65,14 @@ export interface WorktreeServerConfig {
   mode?: WorktreeServerMode;
   /** A shell command, or a reference (`launch:web`, `npm:dev`, `make:up`). */
   start?: string;
+  /**
+   * How Start runs, like a pinned action: `terminal` (default, a TTY — a server that
+   * stays in it is followed there) or `background` (no TTY: it must hand back, its
+   * exit code says whether the start worked — so the server is detached).
+   */
+  startIn?: ActionRunMode;
+  /** How Stop runs: `background` (default) or `terminal` (it may ask for a confirmation). */
+  stopIn?: ActionRunMode;
   /** Shows the server's logs, opened in a terminal (`docker compose logs -f`), or a reference. Without it: the start command's terminal. */
   logs?: string;
   /** Optional, a command or a reference: without it, Stop kills the start command's terminal session. */
@@ -319,3 +327,6 @@ export const WORKTREE_START_SLOT = 'start';
 
 /** The run slot of the server's logs command (`server.logs`). */
 export const WORKTREE_LOGS_SLOT = 'server:logs';
+
+/** The run slot of the server's stop command (`server.stop`). */
+export const WORKTREE_STOP_SLOT = 'stop';

@@ -78,6 +78,12 @@ describe('mergeWorktreeConfig', () => {
     expect(raw.server).toMatchObject({ stop: 'docker compose stop', logs: 'docker compose logs -f' });
   });
 
+  it('a background Start makes the server detached, whatever mode was saved', () => {
+    // WHY: with no TTY there is nowhere for a server to stay — the command must hand back.
+    expect(mergeWorktreeConfig({ personal: { server: { start: 'docker compose up -d', startIn: 'background', mode: 'foreground' } }, launch, detected }).server.mode).toBe('detached');
+    expect(mergeWorktreeConfig({ personal: { server: { start: 'pnpm dev', startIn: 'terminal', mode: 'foreground' } }, launch, detected }).server.mode).toBe('foreground');
+  });
+
   it('starts from a detected item even when discovery hides it from the menu', () => {
     const merged = mergeWorktreeConfig({ shared: { server: { start: 'make:up' }, discovery: { sources: ['npm'] } }, launch, detected });
     expect(merged.start).toMatchObject({ id: 'make:up', command: 'make up' });

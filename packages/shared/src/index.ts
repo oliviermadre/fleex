@@ -657,6 +657,7 @@ export {
   DEFAULT_WORKTREE_CLICK,
   WORKTREE_START_SLOT,
   WORKTREE_LOGS_SLOT,
+  WORKTREE_STOP_SLOT,
   worktreeClickByState,
   isWorktreeVerb,
   worktreeItemOffered,
