@@ -1,8 +1,9 @@
 import chalk from 'chalk';
-import { isWorktreeVerb, type WorktreeRunResponse } from '@fleex/shared';
+import { spawnSync } from 'node:child_process';
+import { WORKTREE_LOGS_SLOT, isWorktreeVerb, type ActionRun, type WorktreeRunResponse } from '@fleex/shared';
 import type { CommandDef } from '../../../core/types.ts';
 import { info, ok as success } from '../../../core/colors.ts';
-import { apiBase, apiPost } from '../../../core/api.ts';
+import { apiBase, apiGet, apiPost } from '../../../core/api.ts';
 import { printJson } from '../../../core/agentic.ts';
 import { WORKTREE_OPTION, fetchWorktrees, singleWorktree, worktreeTarget } from '../_worktree.ts';
 
@@ -38,9 +39,7 @@ server (its terminal and logs appear in the UI). ${chalk.green('fleex repo actio
       // The UI opens it in the ticket's browser; a terminal prints it.
       process.stdout.write(`${res.url}\n`);
     } else if (target === 'logs') {
-      if (res.runId) info(`Server run ${res.runId} — its log: worktree menu › Logs, or GET /api/action-runs/${res.runId}`);
-      if (s.tmuxSession) info(`Live terminal: tmux attach -t ${s.tmuxSession}`);
-      if (!res.runId && !s.tmuxSession) info('No server run yet.');
+      await showLogs(res);
     } else if (res.alreadyRunning) {
       info(`Already running${res.runId ? ` (run ${res.runId})` : ''} — server ${state}`);
     } else if (res.runId) {
@@ -54,5 +53,30 @@ server (its terminal and logs appear in the UI). ${chalk.green('fleex repo actio
     }
   },
 };
+
+/**
+ * `logs` shows the logs for real: the server.logs command's live terminal
+ * (attached when this is a TTY), else the start run's recorded output.
+ */
+async function showLogs(res: WorktreeRunResponse): Promise<void> {
+  const s = res.server;
+  if (res.run?.slot === WORKTREE_LOGS_SLOT && res.run.tmuxSession) {
+    if (process.stdout.isTTY) {
+      spawnSync('tmux', ['attach', '-t', res.run.tmuxSession], { stdio: 'inherit' });
+    } else {
+      info(`Logs command running in tmux — tmux attach -t ${res.run.tmuxSession}`);
+    }
+    return;
+  }
+  if (!res.runId) {
+    info(s.tmuxSession ? `No run recorded — tmux attach -t ${s.tmuxSession}` : 'No logs: no start run yet, and no logs command (server.logs) configured.');
+    return;
+  }
+  const run = await apiGet<ActionRun>(`${apiBase()}/api/action-runs/${res.runId}`);
+  const out = [run.stdout, run.stderr].filter(Boolean).join('\n');
+  process.stdout.write(out ? (out.endsWith('\n') ? out : `${out}\n`) : '');
+  if (!out) info('The start run printed nothing.');
+  if (s.tmuxSession && !run.finishedAt) info(`Live: tmux attach -t ${s.tmuxSession}  (or set server.logs, e.g. docker compose logs -f)`);
+}
 
 export default def;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseProbeEndpoints } from '@fleex/shared';
-import { migrateLegacySetupHooks } from '../../src/application/services/worktree-actions.service.js';
+import { migrateLegacySetupHooks, sanitizeKeyValue } from '../../src/application/services/worktree-actions.service.js';
 import { FLEEX, FakeTmux, SECOND, WS, flush, setup } from '../helpers/worktree-actions-harness.js';
 
 describe('WorktreeActionsService — reading', () => {
@@ -221,6 +221,53 @@ describe('WorktreeActionsService — status probe', () => {
     clock.ms += 30_000;
     await service.tickForTest();
     expect((await service.view(SECOND)).server.state).toBe('running');
+  });
+});
+
+describe('WorktreeActionsService — server.mode and server.logs', () => {
+  // WHY: the mode is explicit — a foreground start that ends means stopped even
+  // with a probe; a detached one has handed back and keeps "running".
+  const REPO = 'oliviermadre/secondrepo';
+  it('foreground: a start ending with 0 means stopped, probe or not', async () => {
+    const ctx = setup({ shell: async () => ({ stdout: '', stderr: '', exitCode: 1 }) });
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { mode: 'foreground', start: 'pnpm dev', probe: { command: 'check-up' } } } } });
+    await ctx.service.run(SECOND, { verb: 'start' });
+    ctx.tmux.exit(ctx.startSession(SECOND), 0);
+    await flush();
+    await flush();
+    expect((await ctx.service.view(SECOND)).server.state).toBe('stopped');
+  });
+
+  it('detached without a probe: the start handing back with 0 counts as running', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { mode: 'detached', start: './cli/fleex start', stop: './cli/fleex stop' } } } });
+    await ctx.service.run(SECOND, { verb: 'start' });
+    ctx.tmux.exit(ctx.startSession(SECOND), 0);
+    await flush();
+    await flush();
+    expect((await ctx.service.view(SECOND)).server.state).toBe('running');
+  });
+
+  it('logs runs server.logs in its own terminal, with the FLEEX_* env', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { mode: 'detached', start: 'docker compose up -d', logs: 'docker compose logs -f' } } } });
+    const res = await ctx.service.run(SECOND, { verb: 'logs' });
+    expect(res.run).toMatchObject({ slot: 'server:logs', mode: 'terminal' });
+    expect(ctx.tmux.started.at(-1)!.command).toMatch(/FLEEX_BRANCH=.*; docker compose logs -f$/);
+  });
+
+  it('logs without server.logs still points at the start run', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { start: 'pnpm dev' } } } });
+    const started = await ctx.service.run(SECOND, { verb: 'start' });
+    const res = await ctx.service.run(SECOND, { verb: 'logs' });
+    expect(res.runId).toBe(started.runId);
+    expect(res.run).toBeUndefined();
+  });
+
+  it('rejects an unknown mode', () => {
+    expect(() => sanitizeKeyValue('server.mode', 'background')).toThrow(/foreground \| detached/);
+    expect(sanitizeKeyValue('server.mode', 'detached')).toBe('detached');
   });
 });
 

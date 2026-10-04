@@ -1,6 +1,7 @@
 import { basename, dirname, join } from 'node:path';
 import {
   WORKTREE_START_SLOT,
+  WORKTREE_LOGS_SLOT,
   isWorktreeVerb,
   runSlotKey,
   worktreeSourceId,
@@ -21,6 +22,7 @@ import {
   type WorktreeRunResponse,
   type WorktreeServerSnapshot,
   type WorktreeServerState,
+  type WorktreeServerMode,
   type WorktreeVerb,
 } from '@fleex/shared';
 import type { AppConfig, ConfigPort } from '../ports/config.port.js';
@@ -111,6 +113,8 @@ interface ServerEntry {
   launchUrl?: string;
   urlTemplate?: string;
   probe?: { command: string; intervalSec?: number };
+  /** `server.mode` as configured (undefined = guessed from the probe). */
+  mode?: WorktreeServerMode;
   env: Record<string, string>;
   cwd: string;
   nextCheckAt: number;
@@ -232,6 +236,12 @@ export class WorktreeActionsService {
       }
       case 'logs': {
         const entry = await this.entryFor(path, resolved.merged, resolved.ctx);
+        // A logs command (detached servers log elsewhere: docker compose logs -f, fleex logs) wins.
+        const logs = resolved.merged.server.logs?.trim();
+        if (logs) {
+          const res = await this.runItem(path, resolved, { id: WORKTREE_LOGS_SLOT, source: 'action', layer: 'personal', label: 'logs', command: logs, mode: 'terminal', pinned: false });
+          return res.run || res.runId ? res : { server: { ...entry.snapshot } };
+        }
         const runId = entry.snapshot.runId ?? this.deps.actionRuns.list(entry.sourceId).find((r) => r.slot === WORKTREE_START_SLOT)?.runId;
         return { ...(runId ? { runId } : {}), server: { ...entry.snapshot } };
       }
@@ -359,7 +369,13 @@ export class WorktreeActionsService {
     const entry = [...this.entries.values()].find((e) => e.sourceId === run.sourceId);
     if (!entry || entry.snapshot.runId !== run.runId) return;
     const failed = !run.cancelled && run.exitCode !== 0;
-    if (!failed && !run.cancelled && entry.probe) {
+    const detached = entry.mode === 'detached' || (entry.mode === undefined && !!entry.probe);
+    if (!failed && !run.cancelled && detached && !entry.probe) {
+      // Detached without a probe: Fleex cannot check — it assumes the start worked.
+      this.setState(entry, { state: 'running', runId: run.runId, ...(entry.snapshot.tmuxSession ? { tmuxSession: entry.snapshot.tmuxSession } : {}) });
+      return;
+    }
+    if (!failed && !run.cancelled && detached) {
       // Handed back with 0 (`docker compose up -d`): the probe says whether it is up.
       const keep = { runId: run.runId, ...(entry.snapshot.tmuxSession ? { tmuxSession: entry.snapshot.tmuxSession } : {}) };
       this.setState(entry, entry.snapshot.state === 'running' ? { ...entry.snapshot, ...keep } : { state: 'starting', ...keep });
@@ -786,6 +802,7 @@ export class WorktreeActionsService {
     const probe = merged.server.probe?.command?.trim() ? merged.server.probe : undefined;
     if (probe?.command !== entry.probe?.command || probe?.intervalSec !== entry.probe?.intervalSec) entry.lastProbeAt = 0;
     entry.probe = probe;
+    entry.mode = merged.server.mode;
     entry.urlTemplate = merged.server.url;
     // A server Fleex did not start still gets the worktree's FLEEX_* env in its probe.
     if (probe && Object.keys(entry.env).length === 0) entry.env = await this.envFor(path, ctx, merged);
@@ -807,6 +824,7 @@ export class WorktreeActionsService {
       ...(merged.start?.item?.url ? { launchUrl: merged.start.item.url } : {}),
       ...(merged.server.url ? { urlTemplate: merged.server.url } : {}),
       ...(merged.server.probe?.command?.trim() ? { probe: merged.server.probe } : {}),
+      ...(merged.server.mode ? { mode: merged.server.mode } : {}),
     };
     this.entries.set(path, entry);
     const session = this.deps.terminals.sessionNameFor(runSlotKey(sourceId, WORKTREE_START_SLOT));
@@ -1033,7 +1051,10 @@ export function sanitizeKeyValue(key: WorktreeConfigKey, value: unknown): unknow
     case 'hooks.setup':
     case 'hooks.teardown':
       return str(value);
+    case 'server.mode':
+      return value === 'foreground' || value === 'detached' ? value : bad('expected foreground | detached');
     case 'server.start':
+    case 'server.logs':
     case 'server.stop':
     case 'server.url': {
       const v = str(value, 4000).trim();

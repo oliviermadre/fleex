@@ -6,7 +6,7 @@ import type { WorktreeActionDef, WorktreeConfig, WorktreeDiscoverySource } from 
  * writes one at a time.
  *
  *   hooks.setup · hooks.teardown · hooks.timeoutSec
- *   server.start · server.stop · server.probe · server.url · server.clickByState
+ *   server.mode · server.start · server.logs · server.stop · server.probe · server.url · server.clickByState
  *   action:<id> · pin:<id> · hide:<id>
  *   discovery.sources · ports
  */
@@ -16,7 +16,9 @@ const FIELD_KEYS = [
   'hooks.setup',
   'hooks.teardown',
   'hooks.timeoutSec',
+  'server.mode',
   'server.start',
+  'server.logs',
   'server.stop',
   'server.probe',
   'server.url',
@@ -42,7 +44,9 @@ export function getConfigKey(config: WorktreeConfig | null | undefined, key: Wor
     case 'hooks.setup': return config.hooks?.setup;
     case 'hooks.teardown': return config.hooks?.teardown;
     case 'hooks.timeoutSec': return config.hooks?.timeoutSec;
+    case 'server.mode': return config.server?.mode;
     case 'server.start': return config.server?.start;
+    case 'server.logs': return config.server?.logs;
     case 'server.stop': return config.server?.stop;
     case 'server.probe': return config.server?.probe;
     case 'server.url': return config.server?.url;

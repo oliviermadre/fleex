@@ -53,9 +53,20 @@ export interface WorktreeActionDef {
 /** `'menu'` opens the menu; else a verb or an item id. */
 export type WorktreeClickChoice = WorktreeVerb | 'menu' | (string & {});
 
+/**
+ * How the start command behaves. `foreground`: it keeps running and prints the
+ * logs (`pnpm dev`) — Fleex follows its process. `detached`: it hands back
+ * (`docker compose up -d`, `fleex start`) — the probe says whether it is up.
+ * Unset = guessed: a start ending with 0 while a probe is set counts as detached.
+ */
+export type WorktreeServerMode = 'foreground' | 'detached';
+
 export interface WorktreeServerConfig {
+  mode?: WorktreeServerMode;
   /** A shell command, or a reference (`launch:web`, `npm:dev`, `make:up`). */
   start?: string;
+  /** Shows the server's logs, opened in a terminal (`docker compose logs -f`). Without it: the start command's terminal. */
+  logs?: string;
   /** Optional: without it, Stop kills the start command's terminal session. */
   stop?: string;
   probe?: { command: string; intervalSec?: number };
@@ -304,3 +315,6 @@ export function worktreeSourceId(path: string): string {
 
 /** The run slot of the server's start command. */
 export const WORKTREE_START_SLOT = 'start';
+
+/** The run slot of the server's logs command (`server.logs`). */
+export const WORKTREE_LOGS_SLOT = 'server:logs';

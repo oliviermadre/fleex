@@ -646,6 +646,7 @@ export type {
   WorktreeHook,
   WorktreeSettingsResponse,
   WorktreeEndpoint,
+  WorktreeServerMode,
 } from './types/worktree-actions.js';
 export type { WorktreeConfigKey } from './types/worktree-config-keys.js';
 export { getConfigKey, setConfigKey, listConfigKeys, keyScope, isWorktreeConfigKey } from './types/worktree-config-keys.js';
@@ -655,6 +656,7 @@ export {
   WORKTREE_VERBS,
   DEFAULT_WORKTREE_CLICK,
   WORKTREE_START_SLOT,
+  WORKTREE_LOGS_SLOT,
   worktreeClickByState,
   isWorktreeVerb,
   worktreeItemOffered,

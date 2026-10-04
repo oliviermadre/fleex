@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  WORKTREE_LOGS_SLOT,
   WORKTREE_START_SLOT,
   runSlotKey,
   worktreeSourceId,
@@ -146,7 +147,11 @@ export const useWorktreeActionsStore = create<WorktreeActionsState>((set, get) =
     }
     set((s) => ({ servers: { ...s.servers, [view.path]: newer(s.servers[view.path], res.server) } }));
     if (verb === 'open' && res.url) openWorktreeUrl(res.url, ticketId);
-    if (verb === 'logs') showServerLogs(view, res.runId, res.server);
+    if (verb === 'logs' && res.run?.slot === WORKTREE_LOGS_SLOT) {
+      // server.logs: its own terminal (docker compose logs -f, fleex logs…).
+      const sourceId = worktreeSourceId(view.path);
+      usePinnedActionsStore.getState().openTerminal({ key: runSlotKey(sourceId, WORKTREE_LOGS_SLOT), sourceId, sourceKind: 'worktree', runId: res.run.runId, label: `${worktreeName(view)} · logs`, command: res.run.command, cwd: view.path });
+    } else if (verb === 'logs') showServerLogs(view, res.runId, res.server);
   },
 
   runItem: async (view, item) => {
