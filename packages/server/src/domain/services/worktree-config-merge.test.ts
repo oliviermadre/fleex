@@ -60,6 +60,24 @@ describe('mergeWorktreeConfig', () => {
     expect(mergeWorktreeConfig({ personal: { server: { start: 'make serve' } }, launch, detected }).start).toEqual({ command: 'make serve', label: 'start' });
   });
 
+  it('resolves Stop, Logs and the probe to the command of an existing action or detected item, like Start', () => {
+    // One action written once ("stop instance") must serve as the Stop verb too, without copying its command.
+    const merged = mergeWorktreeConfig({
+      personal: {
+        actions: [{ id: 'stop-instance', label: 'stop instance', cmd: './cli/fleex stop' }],
+        server: { stop: 'stop-instance', logs: 'make:up', probe: { command: 'npm:dev', intervalSec: 15 } },
+      },
+      launch,
+      detected,
+    });
+    expect(merged.server.stop).toBe('./cli/fleex stop');
+    expect(merged.server.logs).toBe('make up');
+    expect(merged.server.probe).toEqual({ command: 'pnpm run dev', intervalSec: 15 });
+    // A raw command that is no id stays as is.
+    const raw = mergeWorktreeConfig({ personal: { server: { stop: 'docker compose stop', logs: 'docker compose logs -f' } }, launch, detected });
+    expect(raw.server).toMatchObject({ stop: 'docker compose stop', logs: 'docker compose logs -f' });
+  });
+
   it('starts from a detected item even when discovery hides it from the menu', () => {
     const merged = mergeWorktreeConfig({ shared: { server: { start: 'make:up' }, discovery: { sources: ['npm'] } }, launch, detected });
     expect(merged.start).toMatchObject({ id: 'make:up', command: 'make up' });

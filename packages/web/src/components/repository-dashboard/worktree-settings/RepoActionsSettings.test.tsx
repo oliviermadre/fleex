@@ -176,14 +176,37 @@ describe('Actions et Hooks — lifecycle', () => {
     expect(within(screen.getByTestId('server-row-stop')).getByText(/Fleex ne sait pas arrêter/)).toBeTruthy();
     expect(within(screen.getByTestId('server-row-status')).getByText(/sans probe/)).toBeTruthy();
     expect(within(screen.getByTestId('server-row-logs')).getByText(/sans commande de logs/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Commande de logs'), { target: { value: './cli/fleex logs' } });
-    fireEvent.change(screen.getByLabelText("Commande d'arrêt"), { target: { value: './cli/fleex stop' } });
+    fireEvent.change(screen.getByLabelText('Commande de logs'), { target: { value: '__custom' } });
+    fireEvent.change(screen.getByLabelText('Commande de logs (personnalisée)'), { target: { value: './cli/fleex logs' } });
+    fireEvent.change(screen.getByLabelText("Commande d'arrêt"), { target: { value: '__custom' } });
+    fireEvent.change(screen.getByLabelText("Commande d'arrêt (personnalisée)"), { target: { value: './cli/fleex stop' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
     });
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.mode', 'detached');
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.logs', './cli/fleex logs');
     expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.stop', './cli/fleex stop');
+  });
+
+  it('Logs, Stop and Status pick a command of the repo like Start, saved as its id', async () => {
+    // WHY: an action already written ("stop instance") or a detected command must be reusable
+    // for every server command, not only Start — no copy of the command to keep in sync.
+    fakeServer({ server: { stop: 'docker compose stop' } }, null);
+    await renderSettings();
+    openStep('server');
+    // A saved command that is no id shows as custom, with its text.
+    expect((screen.getByLabelText("Commande d'arrêt") as HTMLSelectElement).value).toBe('__custom');
+    expect((screen.getByLabelText("Commande d'arrêt (personnalisée)") as HTMLInputElement).value).toBe('docker compose stop');
+    fireEvent.change(screen.getByLabelText("Commande d'arrêt"), { target: { value: 'launch:web' } });
+    expect(screen.queryByLabelText("Commande d'arrêt (personnalisée)")).toBeNull();
+    fireEvent.change(screen.getByLabelText('Commande de logs'), { target: { value: 'launch:web' } });
+    fireEvent.change(screen.getByLabelText("Probe d'état"), { target: { value: 'launch:web' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    });
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.stop', 'launch:web');
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.logs', 'launch:web');
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.probe', { command: 'launch:web', intervalSec: 30 });
   });
 
   it('the teardown moment shows the automatic stop before its script', async () => {

@@ -65,10 +65,11 @@ export interface WorktreeServerConfig {
   mode?: WorktreeServerMode;
   /** A shell command, or a reference (`launch:web`, `npm:dev`, `make:up`). */
   start?: string;
-  /** Shows the server's logs, opened in a terminal (`docker compose logs -f`). Without it: the start command's terminal. */
+  /** Shows the server's logs, opened in a terminal (`docker compose logs -f`), or a reference. Without it: the start command's terminal. */
   logs?: string;
-  /** Optional: without it, Stop kills the start command's terminal session. */
+  /** Optional, a command or a reference: without it, Stop kills the start command's terminal session. */
   stop?: string;
+  /** `command` is a shell command or a reference, like start. */
   probe?: { command: string; intervalSec?: number };
   /** `${port}` is replaced by the detected port. */
   url?: string;

@@ -110,10 +110,15 @@ export function LifecycleStrip({ api, step, onStep, dirty }: { api: WorktreeSett
   );
 }
 
+/** The server commands that take a command of the repo (picked) or a custom one, alike. */
+type PickedKey = 'start' | 'logs' | 'stop' | 'probe';
+const PICKED_KEYS: PickedKey[] = ['start', 'logs', 'stop', 'probe'];
+
 type ServerDraft = {
   mode: WorktreeServerMode;
   start: string;
-  custom: boolean;
+  /** Per command: typed by hand (true) or one of the repo's commands, by id (false). */
+  custom: Record<PickedKey, boolean>;
   logs: string;
   stop: string;
   probe: string;
@@ -132,16 +137,14 @@ export function initialDraft(api: WorktreeSettingsApi, step: StepKey): StepDraft
   const str = (k: WorktreeConfigKey) => (effective(api, k) as string | undefined) ?? '';
   if (step === 'checkout') return str('hooks.setup');
   if (step === 'teardown') return str('hooks.teardown');
-  const start = str('server.start');
   const items = api.settings?.view?.items ?? [];
   const probe = effective(api, 'server.probe') as { command?: string; intervalSec?: number } | undefined;
+  const values: Record<PickedKey, string> = { start: str('server.start'), logs: str('server.logs'), stop: str('server.stop'), probe: probe?.command ?? '' };
+  const custom = Object.fromEntries(PICKED_KEYS.map((k) => [k, !!values[k] && !items.some((i) => i.id === values[k])])) as Record<PickedKey, boolean>;
   return {
     mode: serverMode(api),
-    start,
-    custom: !!start && !items.some((i) => i.id === start),
-    logs: str('server.logs'),
-    stop: str('server.stop'),
-    probe: probe?.command ?? '',
+    ...values,
+    custom,
     interval: String(probe?.intervalSec ?? 30),
     url: str('server.url'),
     click: { ...DEFAULT_WORKTREE_CLICK, ...((effective(api, 'server.clickByState') as Record<string, WorktreeClickChoice> | undefined) ?? {}) },
@@ -316,6 +319,36 @@ function VerbRow({ id, title, children, empty, warn }: { id: string; title: stri
   );
 }
 
+/**
+ * A command of the repo (an action or a detected command, saved as its id) or a
+ * custom one typed by hand. Start, Logs, Stop and Status all pick the same way.
+ */
+function CommandPicker({ id, label, value, custom, options, placeholder, onChange }: {
+  id: string;
+  label: string;
+  value: string;
+  custom: boolean;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  onChange: (value: string, custom: boolean) => void;
+}) {
+  return (
+    <>
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <Select
+        id={id}
+        className="h-8 text-xs"
+        options={options}
+        value={custom ? '__custom' : value}
+        onChange={(e) => (e.target.value === '__custom' ? onChange(custom ? value : '', true) : onChange(e.target.value, false))}
+      />
+      {custom && (
+        <input aria-label={`${label} (personnalisée)`} className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value, true)} />
+      )}
+    </>
+  );
+}
+
 function ServerStep({ api, draft, setDraft }: EditorProps) {
   const s = api.settings!;
   const view = s.view;
@@ -329,6 +362,9 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
   const server = view?.server;
   const detached = d.mode === 'detached';
 
+  const pick = (k: PickedKey) => (value: string, custom: boolean) => patch({ [k]: value, custom: { ...d.custom, [k]: custom } });
+  // What runs for a picked command: the id resolves to its command, as on the server.
+  const commandOf = (v: string) => items.find((i) => i.id === v)?.command ?? v;
   const targetOptions = [
     { value: '', label: '— non configuré —' },
     ...items.map((i) => ({ value: i.id, label: `${i.source === 'action' ? 'action' : i.id.split(':')[0]} · ${i.label} — ${i.command}` })),
@@ -362,7 +398,7 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
       server?.port ? `FLEEX_PORT=${q(String(server.port))}` : '',
     ].filter(Boolean).join(' ');
     try {
-      const res = await testProbeCommand(`${s.path ? `cd ${q(s.path)} && ` : ''}${env ? `export ${env}; ` : ''}${d.probe}`);
+      const res = await testProbeCommand(`${s.path ? `cd ${q(s.path)} && ` : ''}${env ? `export ${env}; ` : ''}${commandOf(d.probe)}`);
       // Same reading as Fleex: exit code = state, stdout = endpoints when it follows the contract.
       const endpoints = res.exitCode === 0 ? parseProbeEndpoints(res.stdout) : undefined;
       const verdict = res.exitCode === 0
@@ -401,25 +437,15 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
 
       <div className="mt-2">
         <VerbRow id="start" title="Start" empty={detached ? 'Lancée en arrière-plan ; sa fin avec 0 veut dire « démarrage demandé ».' : 'Lancée dans un terminal persistant. Fleex trouve son port dans ses process.'} warn={!d.start.trim() ? 'Sans commande Start, le bouton du worktree ne peut pas démarrer le serveur.' : null}>
-          <label htmlFor="wt-start" className="sr-only">Commande de démarrage</label>
-          <Select
-            id="wt-start"
-            className="h-8 text-xs"
-            options={targetOptions}
-            value={d.custom ? '__custom' : d.start}
-            onChange={(e) => (e.target.value === '__custom' ? patch({ custom: true, start: d.custom ? d.start : '' }) : patch({ custom: false, start: e.target.value }))}
-          />
-          {d.custom && (
-            <input aria-label="Commande personnalisée" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder={detached ? './cli/fleex start' : 'pnpm dev'} value={d.start} onChange={(e) => patch({ start: e.target.value })} />
-          )}
+          <CommandPicker id="wt-start" label="Commande de démarrage" value={d.start} custom={d.custom.start} options={targetOptions} placeholder={detached ? './cli/fleex start' : 'pnpm dev'} onChange={pick('start')} />
         </VerbRow>
 
         <VerbRow id="logs" title="Logs" empty={d.logs.trim() ? 'Ouverte dans son propre terminal.' : 'Vide : Fleex montre le terminal du Start.'} warn={detached && !d.logs.trim() ? 'Détaché sans commande de logs : le terminal du Start n\'a que ses premières lignes.' : null}>
-          <input aria-label="Commande de logs" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder={detached ? 'docker compose logs -f --tail 200  ·  ./cli/fleex logs' : '(facultatif)'} value={d.logs} onChange={(e) => patch({ logs: e.target.value })} />
+          <CommandPicker id="wt-logs" label="Commande de logs" value={d.logs} custom={d.custom.logs} options={targetOptions} placeholder={detached ? 'docker compose logs -f --tail 200  ·  ./cli/fleex logs' : '(facultatif)'} onChange={pick('logs')} />
         </VerbRow>
 
         <VerbRow id="stop" title="Stop" empty={d.stop.trim() ? 'Lancée, puis Fleex ferme le terminal du Start.' : 'Vide : Fleex ferme le terminal du Start.'} warn={detached && !d.stop.trim() ? 'Détaché sans commande Stop : Fleex ne sait pas arrêter ce serveur.' : null}>
-          <input id="wt-stop" aria-label="Commande d'arrêt" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder={detached ? 'docker compose stop  ·  ./cli/fleex stop' : '(facultatif)'} value={d.stop} onChange={(e) => patch({ stop: e.target.value })} />
+          <CommandPicker id="wt-stop" label="Commande d'arrêt" value={d.stop} custom={d.custom.stop} options={targetOptions} placeholder={detached ? 'docker compose stop  ·  ./cli/fleex stop' : '(facultatif)'} onChange={pick('stop')} />
         </VerbRow>
 
         <VerbRow
@@ -428,8 +454,8 @@ function ServerStep({ api, draft, setDraft }: EditorProps) {
           empty={d.probe.trim() ? 'Code 0 = en marche, sinon arrêté (en erreur si le terminal du Start tourne encore). Sortie facultative : {"endpoints":[{"name","url" | "host"+"port","primary"?}]}, toute autre sortie est ignorée.' : 'Vide : Fleex détecte le port écouté par les process du Start.'}
           warn={detached && !d.probe.trim() ? 'Détaché sans probe : Fleex suppose que le serveur tourne, sans pouvoir le vérifier ni connaître son URL.' : null}
         >
+          <CommandPicker id="wt-probe" label="Probe d'état" value={d.probe} custom={d.custom.probe} options={targetOptions} placeholder="curl -sf $FLEEX_URL/health" onChange={pick('probe')} />
           <div className="flex gap-1.5">
-            <input id="wt-probe" aria-label="Probe d'état" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="curl -sf $FLEEX_URL/health" value={d.probe} onChange={(e) => patch({ probe: e.target.value })} />
             <Select aria-label="Intervalle du probe" className="h-8 w-24 text-xs" options={['15', '30', '60', '300'].map((v) => ({ value: v, label: `${v} s` }))} value={d.interval} onChange={(e) => patch({ interval: e.target.value })} />
             <Button size="sm" disabled={!d.probe.trim() || probe === 'loading'} onClick={() => void testProbe()}>▶ Tester le probe</Button>
           </div>

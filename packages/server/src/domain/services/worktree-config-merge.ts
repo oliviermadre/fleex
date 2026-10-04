@@ -97,12 +97,25 @@ export function mergeWorktreeConfig({ personal, shared, launch, detected }: Merg
 
   const server: WorktreeServerConfig = { ...(shared?.server ?? {}), ...(personal?.server ?? {}) };
   const hooks = { ...(shared?.hooks ?? {}), ...(personal?.hooks ?? {}) };
+  // Start, Logs, Stop and the probe each take a command or the id of a command (`action:…`, `npm:dev`).
+  const byRef = (ref: string | undefined) => {
+    const r = ref?.trim();
+    if (!r) return undefined;
+    return items.find((i) => i.id === r) ?? [...launch, ...detected].map((i) => ({ ...i, layer: detectedLayer(i), pinned: false })).find((i) => i.id === r);
+  };
   const startRef = server.start?.trim();
   let start: MergedWorktree['start'] = null;
   if (startRef) {
-    const item = items.find((i) => i.id === startRef) ?? [...launch, ...detected].map((i) => ({ ...i, layer: detectedLayer(i), pinned: false })).find((i) => i.id === startRef);
+    const item = byRef(startRef);
     start = item ? { id: item.id, command: item.command, label: item.label, item } : { command: startRef, label: 'start' };
   }
+  // Stop, Logs and the probe run as commands: an id resolves to that command here, once.
+  for (const key of ['stop', 'logs'] as const) {
+    const item = byRef(server[key]);
+    if (item) server[key] = item.command;
+  }
+  const probeItem = byRef(server.probe?.command);
+  if (probeItem && server.probe) server.probe = { ...server.probe, command: probeItem.command };
 
   const portsCfg = { ...(shared?.ports ?? {}), ...(personal?.ports ?? {}) };
   const count = Math.min(MAX_PORT_COUNT, Math.max(1, Math.round(Number(portsCfg.count) || DEFAULT_PORT_COUNT)));
