@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { WorktreeActionItem, WorktreeActionsView, WorktreeVerb } from '@fleex/shared';
+import type { WorktreeActionItem, WorktreeActionsView, WorktreeServerSnapshot, WorktreeVerb } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { usePopover } from '../../hooks/usePopover';
 import { useWorktreeActionsStore } from '../../stores/worktreeActionsStore';
@@ -8,6 +8,14 @@ import { Tooltip } from '../ui/Tooltip';
 import { OverlaySyncModal } from '../overlay-sync/OverlaySyncModal';
 import { WorktreeActionMenu } from './WorktreeActionMenu';
 import { STATE_LABEL, resolveLeftClick, stateDotClass, stateTextClass } from './worktreeUi';
+
+/** First line of the tooltip: the URL of a running server, else its state. */
+export function stateLine(server: WorktreeServerSnapshot, configured: boolean): string {
+  if (!configured) return 'start non configuré';
+  if (server.state === 'running') return server.url ?? (server.port ? `localhost:${server.port}` : 'running (port inconnu)');
+  if (server.state === 'error') return server.exitCode !== undefined ? `error (exit ${server.exitCode})` : 'error';
+  return server.state === 'starting' ? 'starting…' : STATE_LABEL[server.state];
+}
 
 /** PRD §8.2: the menu never grows past this, it scrolls inside. */
 export const MENU_MAX_HEIGHT = 440;
@@ -85,11 +93,15 @@ export function WorktreeActionButton({ view, root, ticketId, label, openNonce }:
     ? { kind: 'settings' as const, label: 'Configurer le start (Réglages › Actions et Hooks)' }
     : resolveLeftClick(view, state);
 
+  /** The click a browser still sends after a long press (iOS Safari) must not act again. */
+  const swallowLongPressClick = () => {
+    if (!longPressed.current) return false;
+    longPressed.current = false;
+    return true;
+  };
+
   const onLeft = () => {
-    if (longPressed.current) {
-      longPressed.current = false;
-      return;
-    }
+    if (swallowLongPressClick()) return;
     if (left.kind === 'settings') navigate(settingsUrl!);
     else if (left.kind === 'menu') openMenu();
     else if (left.kind === 'verb') void runVerb(view, left.verb as WorktreeVerb, ticketId);
@@ -112,25 +124,30 @@ export function WorktreeActionButton({ view, root, ticketId, label, openNonce }:
         }}
         {...touchHandlers}
       >
-        <Tooltip label={<span className="whitespace-nowrap">▶ Click: {left.label} · right click / ▾: menu</span>}>
+        <Tooltip
+          label={
+            <span data-testid="worktree-tooltip" className="flex flex-col gap-0.5 whitespace-nowrap">
+              {/* First thing asked of a running server: where is it? */}
+              <span className={cn('font-mono', configured && stateTextClass(state))}>{stateLine(server, configured)}</span>
+              <span>▶ Clic : {left.label}</span>
+              <span className="text-[var(--theme-text-muted)]">Clic droit / ▾ : menu</span>
+            </span>
+          }
+        >
           <button
             type="button"
             onClick={onLeft}
             aria-label={`${label} — ${configured ? STATE_LABEL[state] : 'not configured'}`}
             className="flex items-center gap-1.5 px-2 hover:bg-[var(--theme-accent-muted)] hover:text-[var(--theme-text-primary)]"
           >
+            {/* Compact: the name, then the state as a dot only (state, port and URL are in the tooltip). */}
+            <span className="max-w-[140px] truncate text-[var(--theme-text-primary)]">{label}</span>
             <span
               data-testid="worktree-state-dot"
               className={cn('h-[7px] w-[7px] shrink-0 rounded-full', configured ? stateDotClass(state) : 'border border-[var(--theme-text-muted)]')}
             />
-            <span className="max-w-[140px] truncate text-[var(--theme-text-primary)]">{label}</span>
             {setup?.state === 'failed' && <span className={stateTextClass('error')} title="Le Setup a échoué — voir le menu">⚠</span>}
             {setup?.state === 'running' && <span className={cn('animate-pulse motion-reduce:animate-none', stateTextClass('starting'))} title="Setup en cours">◌</span>}
-            {state === 'running' && server.port ? (
-              <span className={cn('font-mono text-[10.5px]', stateTextClass('running'))}>:{server.port}</span>
-            ) : (
-              <span className={cn('text-[10px]', configured ? stateTextClass(state) : 'text-[var(--theme-text-faint)]')}>{STATE_LABEL[state]}</span>
-            )}
           </button>
         </Tooltip>
         <span className="w-px bg-[var(--theme-border)]" />
@@ -139,7 +156,11 @@ export function WorktreeActionButton({ view, root, ticketId, label, openNonce }:
           aria-label={`${label} menu`}
           aria-haspopup="menu"
           aria-expanded={open}
-          onClick={() => (open ? setOpen(false) : openMenu())}
+          onClick={() => {
+            if (swallowLongPressClick()) return; // the long press already opened it
+            if (open) setOpen(false);
+            else openMenu();
+          }}
           className="flex w-[22px] items-center justify-center text-[var(--theme-text-muted)] hover:bg-[var(--theme-accent-muted)] hover:text-[var(--theme-text-primary)]"
         >
           <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

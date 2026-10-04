@@ -41,6 +41,8 @@ export const STARTING_CHECK_MS = 2_000;
 /** …and once running, check it is still there this often. */
 export const RUNNING_CHECK_MS = 15_000;
 const STOP_WAIT_MS = 10_000;
+/** Before a removal the stop command gets less time: the HTTP request deleting the ticket waits on it. */
+const TEARDOWN_STOP_COMMAND_MS = 30_000;
 const PORT_CHECK_TIMEOUT_MS = 5_000;
 const PROBE_TIMEOUT_MS = 10_000;
 
@@ -270,7 +272,7 @@ export class WorktreeActionsService {
     return { runId: result.run.runId, run: result.run, server: { ...entry.snapshot } };
   }
 
-  private async stop(path: string, { ctx, merged }: Resolved): Promise<WorktreeServerSnapshot> {
+  private async stop(path: string, { ctx, merged }: Resolved, stopCommandWaitMs = 120_000): Promise<WorktreeServerSnapshot> {
     const reserved = await this.envFor(path, ctx, merged);
     const entry = await this.entryFor(path, merged);
     if (entry.snapshot.state === 'stopped') return { ...entry.snapshot };
@@ -287,7 +289,7 @@ export class WorktreeActionsService {
         slot: 'stop',
         timeoutSec: 120,
       });
-      if (res.ok) await this.waitForRun(res.run.runId, 120_000);
+      if (res.ok) await this.waitForRun(res.run.runId, stopCommandWaitMs);
     }
 
     // Whatever the stop command did, the start command must not outlive Stop.
@@ -496,7 +498,7 @@ export class WorktreeActionsService {
     if (inline) parts.push(interpolateHook(inline, { org: ctx.org ?? '', repo: ctx.name, branch: ctx.branch, worktreePath: path }));
     if (parts.length === 0) throw new WorktreeActionError(409, `No ${hook} hook configured for this worktree`);
     const env = await this.envFor(path, ctx, merged);
-    const timeoutSec = merged.hooks.timeoutSec ?? this.deps.config.get().repoConfigs?.[ctx.repo ?? '']?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SEC;
+    const timeoutSec = this.hookTimeoutSec({ ctx, merged });
     const result = this.deps.actionRuns.start({
       sourceId: worktreeSourceId(path),
       sourceKind: 'worktree',
@@ -524,13 +526,16 @@ export class WorktreeActionsService {
   async teardown(path: string): Promise<void> {
     try {
       const resolved = await this.resolve(path);
-      const entry = this.entries.get(path);
-      if (entry && entry.snapshot.state !== 'stopped') await this.stop(path, resolved).catch(() => {});
+      // entryFor, not the in-memory map: after a Fleex restart the server's tmux
+      // session is only known once adopted, and it must not outlive its folder.
+      const entry = await this.entryFor(path, resolved.merged);
+      if (entry.snapshot.state !== 'stopped') await this.stop(path, resolved, TEARDOWN_STOP_COMMAND_MS).catch(() => {});
       const script = resolved.merged.hooks.teardown?.trim();
       if (script) {
         const res = await this.runHook(path, 'teardown');
         if (res.runId) {
-          const timeoutSec = resolved.merged.hooks.timeoutSec ?? DEFAULT_HOOK_TIMEOUT_SEC;
+          // Same timeout as the hook run itself (runHook), repo setting included.
+          const timeoutSec = this.hookTimeoutSec(resolved);
           await this.waitForRun(res.runId, timeoutSec * 1000 + 2000);
           const run = this.deps.actionRuns.get(res.runId);
           if (run && (run.timedOut || (run.finishedAt && run.exitCode !== 0))) {
@@ -548,6 +553,10 @@ export class WorktreeActionsService {
       this.setups.delete(path);
       await this.releasePorts(path).catch(() => {});
     }
+  }
+
+  private hookTimeoutSec({ ctx, merged }: Pick<Resolved, 'ctx' | 'merged'>): number {
+    return merged.hooks.timeoutSec ?? this.deps.config.get().repoConfigs?.[ctx.repo ?? '']?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SEC;
   }
 
   /** The repo's hooks folder (created if needed), opened in the host's file manager. */
@@ -901,20 +910,30 @@ export class WorktreeActionsService {
 }
 
 /**
- * Copy each repo's legacy `postCheckoutHook` into the personal layer's
- * `hooks.setup` (PRD D6), once: a setup already set — even to '' — wins.
- * Returns the new `worktreeConfigs`, or null when nothing changed.
+ * Move each repo's legacy `postCheckoutHook` into the personal layer's
+ * `hooks.setup` (PRD D6): copied when no setup is set yet (even '' wins), then
+ * cleared from `repoConfigs` in every case. Clearing it is what keeps a Setup
+ * emptied or shared later from being brought back by the next start, or run
+ * as a fallback at worktree creation.
+ * Returns both maps when something changed, else null.
  */
-export function migrateLegacySetupHooks(config: Pick<AppConfig, 'repoConfigs' | 'worktreeConfigs'>): AppConfig['worktreeConfigs'] | null {
-  const next = { ...(config.worktreeConfigs ?? {}) };
+export function migrateLegacySetupHooks(
+  config: Pick<AppConfig, 'repoConfigs' | 'worktreeConfigs'>,
+): { worktreeConfigs: NonNullable<AppConfig['worktreeConfigs']>; repoConfigs: NonNullable<AppConfig['repoConfigs']> } | null {
+  const worktreeConfigs = { ...(config.worktreeConfigs ?? {}) };
+  const repoConfigs = { ...(config.repoConfigs ?? {}) };
   let changed = false;
   for (const [repo, repoConfig] of Object.entries(config.repoConfigs ?? {})) {
-    const legacy = repoConfig?.postCheckoutHook;
-    if (!legacy?.trim() || next[repo]?.hooks?.setup !== undefined) continue;
-    next[repo] = { ...(next[repo] ?? {}), hooks: { ...(next[repo]?.hooks ?? {}), setup: legacy } };
+    if (!repoConfig || repoConfig.postCheckoutHook === undefined) continue;
+    const legacy = repoConfig.postCheckoutHook;
+    if (legacy.trim() && worktreeConfigs[repo]?.hooks?.setup === undefined) {
+      worktreeConfigs[repo] = { ...(worktreeConfigs[repo] ?? {}), hooks: { ...(worktreeConfigs[repo]?.hooks ?? {}), setup: legacy } };
+    }
+    const { postCheckoutHook: _dropped, ...rest } = repoConfig;
+    repoConfigs[repo] = rest;
     changed = true;
   }
-  return changed ? next : null;
+  return changed ? { worktreeConfigs, repoConfigs } : null;
 }
 
 function shellQuote(s: string): string {

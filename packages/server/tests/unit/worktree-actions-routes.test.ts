@@ -67,6 +67,18 @@ describe('settings routes', () => {
   });
 });
 
+describe('hooks/open', () => {
+  it('refuses . and .. as org or name: the hooks folder must stay inside the overlays', async () => {
+    const openHooksDir = vi.fn(async () => ({ dir: '/x' }));
+    const app = await appWith({ openHooksDir } as Partial<WorktreeActionsService>);
+    for (const repo of ['../..', '../x', 'o/..', './x', 'o/.']) {
+      expect((await app.inject({ method: 'POST', url: '/api/worktree-actions/hooks/open', payload: { repo } })).statusCode).toBe(400);
+    }
+    expect((await app.inject({ method: 'POST', url: '/api/worktree-actions/hooks/open', payload: { repo: 'oliviermadre/fleex.dev' } })).statusCode).toBe(200);
+    expect(openHooksDir).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('PUT /api/config and the personal worktree layer', () => {
   it('ignores worktreeConfigs: the web PUTs a stale copy of the whole config', async () => {
     // WHY: a pin made from the CLI must survive the web saving any unrelated setting.

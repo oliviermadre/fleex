@@ -54,7 +54,7 @@ export class FakeTmux implements TerminalRunPort, WorktreeServerTerminals {
 
 export const flush = () => new Promise((r) => setTimeout(r, 0));
 
-export function setup(opts: { tmux?: FakeTmux; config?: FakeConfigPort; exec?: RunExecFn; overlay?: ConstructorParameters<typeof WorktreeActionsService>[0]['overlay'] } = {}) {
+export function setup(opts: { tmux?: FakeTmux; config?: FakeConfigPort; exec?: RunExecFn; overlay?: ConstructorParameters<typeof WorktreeActionsService>[0]['overlay']; advanceClockOnSleep?: boolean } = {}) {
   const tmux = opts.tmux ?? new FakeTmux();
   const config = opts.config ?? new FakeConfigPort();
   const hostFs = new FakeHostFs();
@@ -93,7 +93,10 @@ export function setup(opts: { tmux?: FakeTmux; config?: FakeConfigPort; exec?: R
     logger: new FakeLoggerPort(),
     now: () => new Date(clock.ms),
     setTimer: () => 0,
-    sleep: async () => { await flush(); },
+    sleep: async (ms: number) => {
+      if (opts.advanceClockOnSleep) clock.ms += ms;
+      await flush();
+    },
     ...(opts.overlay ? { overlay: opts.overlay } : {}),
   });
 

@@ -18,8 +18,17 @@ const LOG_TAIL_BYTES = 128 * 1024;
  * A worktree's dev server (`wt:<hash>::start` → `…_wt_<hash>__start`): long
  * lived on purpose, so it survives a Fleex restart and is adopted back.
  */
+function fnv1a(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
 export function isWorktreeServerSession(name: string): boolean {
-  return /_wt_[a-z0-9]+__start$/.test(name);
+  return /_wt_[a-z0-9]+__start_[0-9a-f]{8}$/.test(name);
 }
 
 /** What `inspect` sees of a session: its pane, and the TCP ports its process tree listens on. */
@@ -82,9 +91,16 @@ export class TmuxTerminalRunner implements TerminalRunPort {
     private readonly options: TmuxTerminalRunnerOptions = {},
   ) {}
 
+  /**
+   * A readable session name per key. When the key does not survive as is (a
+   * character tmux rejects, or longer than 48), a hash of the full key is
+   * appended: `build.prod` and `build_prod`, or two long ids sharing a prefix,
+   * must not share a session — starting one kills the session of that name.
+   */
   sessionNameFor(sourceId: string): string {
-    const slug = sourceId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 48) || 'action';
-    return `${this.ownPrefix()}${slug}`;
+    const safe = sourceId.replace(/[^A-Za-z0-9_-]/g, '_');
+    if (safe && safe === sourceId && safe.length <= 48) return `${this.ownPrefix()}${safe}`;
+    return `${this.ownPrefix()}${safe.slice(0, 39) || 'action'}_${fnv1a(sourceId)}`;
   }
 
   async start(request: { runId: string; command: string; cwd: string; sessionName: string; maxMs?: number }): Promise<TerminalRunHandle> {

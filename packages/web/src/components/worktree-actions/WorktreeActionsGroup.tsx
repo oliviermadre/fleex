@@ -91,9 +91,8 @@ function OverflowButton({ items, onPick }: { items: { view: WorktreeActionsView;
                   }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
                 >
-                  <span className={cn('h-[7px] w-[7px] rounded-full', view.start || state !== 'stopped' ? stateDotClass(state) : 'border border-[var(--theme-text-muted)]')} />
                   <span className="flex-1 truncate text-[var(--theme-text-primary)]">{label}</span>
-                  <span className="text-[10px] text-[var(--theme-text-muted)]">{STATE_LABEL[state]}</span>
+                  <span title={STATE_LABEL[state]} className={cn('h-[7px] w-[7px] rounded-full', view.start || state !== 'stopped' ? stateDotClass(state) : 'border border-[var(--theme-text-muted)]')} />
                 </button>
               );
             })}

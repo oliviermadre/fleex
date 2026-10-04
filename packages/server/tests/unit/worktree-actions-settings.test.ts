@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sanitizeKeyValue, PORT_RANGE_BASE, PORT_RANGE_SLOT } from '../../src/application/services/worktree-actions.service.js';
-import { FLEEX, SECOND, flush, setup } from '../helpers/worktree-actions-harness.js';
+import { FLEEX, FakeTmux, SECOND, flush, setup } from '../helpers/worktree-actions-harness.js';
 
 const overlay = {
   listOverlayFilesRecursive: async () => ['.env', 'apps/web/.env'],
@@ -136,6 +136,33 @@ describe('hooks on demand and teardown', () => {
     await expect(service.teardown(FLEEX)).resolves.toBeUndefined();
     expect(tmux.sessions.has(startSession(FLEEX))).toBe(false);
     expect(execCalls.some((c) => c.command.endsWith('docker compose down -v'))).toBe(true);
+  });
+
+  it('teardown stops a server adopted from before a Fleex restart', async () => {
+    // WHY: after a restart the server is only in tmux; deleting the ticket without
+    // opening its view must still stop it, or it runs forever in a deleted folder.
+    const tmux = new FakeTmux();
+    const first = setup({ tmux, overlay });
+    first.config.update({ worktreeConfigs: { 'oliviermadre/fleex': { server: { start: 'launch:web' } } } });
+    await first.service.run(FLEEX, { verb: 'start' });
+    const session = first.startSession(FLEEX);
+    expect(tmux.sessions.has(session)).toBe(true);
+
+    const restarted = setup({ tmux, config: first.config, overlay });
+    await restarted.service.teardown(FLEEX);
+    expect(tmux.sessions.has(session)).toBe(false);
+  });
+
+  it('teardown waits for the hook as long as the repo hook timeout allows', async () => {
+    // WHY: the hook runs with hookTimeoutSeconds; waiting only the 60 s default cut a 300 s teardown short.
+    const ctx = setup({ overlay, advanceClockOnSleep: true, exec: () => new Promise(() => {}) });
+    ctx.config.update({
+      repoConfigs: { 'oliviermadre/fleex': { hookTimeoutSeconds: 300 } },
+      worktreeConfigs: { 'oliviermadre/fleex': { hooks: { teardown: 'slow-down' } } },
+    });
+    const before = ctx.clock.ms;
+    await ctx.service.teardown(FLEEX);
+    expect(ctx.clock.ms - before).toBeGreaterThanOrEqual(300_000);
   });
 
   it('teardown without a hook is a no-op that still forgets the worktree', async () => {

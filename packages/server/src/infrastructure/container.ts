@@ -786,8 +786,8 @@ export async function createContainer() {
   // Worktree buttons: per-worktree commands and dev-server state (same runs and terminals).
   const legacySetup = migrateLegacySetupHooks(config.get());
   if (legacySetup) {
-    await config.update({ worktreeConfigs: legacySetup });
-    logger.info('Migrated post-checkout hooks to worktree Setup hooks', { repos: Object.keys(legacySetup).length });
+    await config.update(legacySetup);
+    logger.info('Migrated post-checkout hooks to worktree Setup hooks');
   }
   const worktreeActions = new WorktreeActionsService({
     hostFs,

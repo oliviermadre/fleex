@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { WorktreeActionItem, WorktreeActionsView } from '@fleex/shared';
 import * as api from '../../services/api';
 import { useWorktreeActionsStore } from '../../stores/worktreeActionsStore';
-import { WorktreeActionButton } from './WorktreeActionButton';
+import { WorktreeActionButton, stateLine } from './WorktreeActionButton';
 import { worktreeLabels } from './WorktreeActionsGroup';
 import { resolveLeftClick } from './worktreeUi';
 
@@ -81,10 +81,27 @@ describe('WorktreeActionButton', () => {
     expect(useWorktreeActionsStore.getState().servers[PATH]?.state).toBe('starting');
   });
 
-  it('shows the port once running, and opens the URL instead of starting again', async () => {
+  it('stays compact: the name then a state dot, no state word nor port on the button', () => {
+    // WHY: a ticket with 3 repos filled the top bar with "stopped stopped stopped".
+    renderButton(view({ server: { path: PATH, state: 'running', port: 5173, url: 'http://localhost:5173', updatedAt: 'x' } }));
+    const left = screen.getByRole('button', { name: 'fleex — running' });
+    expect(left.textContent).toBe('fleex');
+    const [name, dot] = Array.from(left.children);
+    expect(name!.textContent).toBe('fleex');
+    expect(dot).toBe(screen.getByTestId('worktree-state-dot'));
+  });
+
+  it('the tooltip starts with the URL of a running server, else its state', () => {
+    // WHY: "which URL?" is the first question about a running server.
+    expect(stateLine({ path: PATH, state: 'running', port: 5173, url: 'http://localhost:5173', updatedAt: '' }, true)).toBe('http://localhost:5173');
+    expect(stateLine({ path: PATH, state: 'running', port: 8080, updatedAt: '' }, true)).toBe('localhost:8080');
+    expect(stateLine({ path: PATH, state: 'error', exitCode: 3, updatedAt: '' }, true)).toBe('error (exit 3)');
+    expect(stateLine({ path: PATH, state: 'stopped', updatedAt: '' }, false)).toBe('start non configuré');
+  });
+
+  it('opens the URL instead of starting again once running', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderButton(view({ server: { path: PATH, state: 'running', port: 5173, url: 'http://localhost:5173', updatedAt: 'x' } }));
-    expect(screen.getByText(':5173')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'fleex — running' }));
     expect(open).toHaveBeenCalledWith('http://localhost:5173', '_blank');
     expect(api.runWorktreeAction).not.toHaveBeenCalled();
@@ -113,6 +130,22 @@ describe('WorktreeActionButton', () => {
       fireEvent.click(left);
       expect(menu()).toBeTruthy();
       expect(api.runWorktreeAction).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a long press on ▾ opens the menu and the click that follows does not close it', () => {
+    // WHY: iOS Safari still sends a click after a long press; ▾ toggles, so it closed the menu at once.
+    vi.useFakeTimers();
+    try {
+      renderButton();
+      const arrow = screen.getByRole('button', { name: 'fleex menu' });
+      fireEvent.touchStart(arrow);
+      act(() => { vi.advanceTimersByTime(600); });
+      fireEvent.touchEnd(arrow);
+      fireEvent.click(arrow);
+      expect(menu()).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }

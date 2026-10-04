@@ -53,7 +53,19 @@ describe('TmuxTerminalRunner', () => {
 
   it('names sessions outside fleex_ (never adopted as user sessions) and per instance', () => {
     const t = fakeTmux(['gone']);
-    expect(t.runner.sessionNameFor('draft:a b')).toBe('fxact_3000_draft_a_b');
+    expect(t.runner.sessionNameFor('kp')).toBe('fxact_3000_kp');
+    expect(t.runner.sessionNameFor('draft:a b')).toMatch(/^fxact_3000_draft_a_b_[0-9a-f]{8}$/);
+  });
+
+  it('gives two keys that sanitize or truncate alike their own sessions', () => {
+    // WHY: starting a command kills the session of its name first, so
+    // `build.prod` must not kill `build_prod`, nor one long id another.
+    const t = fakeTmux(['gone']);
+    const name = (k: string) => t.runner.sessionNameFor(k);
+    expect(name('wt:1::npm:build.prod')).not.toBe(name('wt:1::npm:build_prod'));
+    const long = 'wt:1ab2c::npm:test:integration:packages-server-';
+    expect(name(`${long}a`)).not.toBe(name(`${long}b`));
+    expect(name(`${long}a`).length).toBeLessThanOrEqual('fxact_3000_'.length + 48);
   });
 
   it('at startup kills only its own leftover action terminals, not another instance’s nor user sessions', async () => {
@@ -95,12 +107,15 @@ describe('TmuxTerminalRunner · safety net', () => {
 
   it('spares worktree dev servers at startup: they are adopted back, not orphans', async () => {
     // WHY: restarting Fleex must not kill the dev servers the user started from the worktree buttons.
-    const t = fakeTmux(['gone'], ['fxact_3000_kp', 'fxact_3000_wt_1ab2c__start', 'fxact_3000_wt_1ab2c__npm_test']);
-    const server = t.runner.sessionNameFor('wt:1ab2c::start');
-    expect(server).toBe('fxact_3000_wt_1ab2c__start');
+    const names = fakeTmux(['gone']).runner;
+    const server = names.sessionNameFor('wt:1ab2c::start');
+    const npmTest = names.sessionNameFor('wt:1ab2c::npm:test');
+    const t = fakeTmux(['gone'], ['fxact_3000_kp', server, npmTest, 'fxact_3000_wt_1ab2c__start']);
     expect(isWorktreeServerSession(server)).toBe(true);
-    expect(await t.runner.killOrphans(isWorktreeServerSession)).toBe(2);
-    expect(t.calls.filter((a) => a[0] === 'kill-session').map((a) => a[2])).toEqual(['fxact_3000_kp', 'fxact_3000_wt_1ab2c__npm_test']);
+    expect(isWorktreeServerSession(npmTest)).toBe(false);
+    // A pre-hash name could never be adopted back (nothing looks it up): killed, not leaked.
+    expect(await t.runner.killOrphans(isWorktreeServerSession)).toBe(3);
+    expect(t.calls.filter((a) => a[0] === 'kill-session').map((a) => a[2])).toEqual(['fxact_3000_kp', npmTest, 'fxact_3000_wt_1ab2c__start']);
   });
 
   it('runs with no safety-net timeout when asked (maxMs 0)', async () => {

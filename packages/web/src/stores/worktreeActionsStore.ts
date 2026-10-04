@@ -40,6 +40,14 @@ function newer(a: WorktreeServerSnapshot | undefined, b: WorktreeServerSnapshot)
   return a && a.updatedAt > b.updatedAt ? a : b;
 }
 
+/**
+ * Per ticket workspace, bumped by every load and every pin: an answer is kept
+ * only if nothing newer started since — a menu-open load that comes back after
+ * a ★ click must not bring the old star back.
+ */
+const loadGeneration: Record<string, number> = {};
+const bumpGeneration = (root: string) => (loadGeneration[root] = (loadGeneration[root] ?? 0) + 1);
+
 interface WorktreeActionsState {
   /** Views per ticket workspace path, as last fetched. */
   byRoot: Record<string, WorktreeActionsView[]>;
@@ -48,6 +56,8 @@ interface WorktreeActionsState {
   /** Last Setup run per worktree path (fetches + `worktree-setup:update` pushes). */
   setups: Record<string, WorktreeSetupSnapshot>;
   load: (root: string) => Promise<void>;
+  /** Re-fetch every workspace already shown (after a WebSocket reconnect: pushes may have been missed). */
+  reloadAll: () => Promise<void>;
   /** "Relancer le Setup": file hooks then the Setup script, in the action engine. */
   rerunSetup: (view: WorktreeActionsView) => Promise<void>;
   openHooksDir: (repo: string) => Promise<void>;
@@ -70,12 +80,14 @@ export const useWorktreeActionsStore = create<WorktreeActionsState>((set, get) =
   setups: {},
 
   load: async (root) => {
+    const generation = bumpGeneration(root);
     let worktrees: WorktreeActionsView[];
     try {
       ({ worktrees } = await api.fetchWorktreeActions(root));
     } catch {
       return; // silent: no workspace yet, or a server without the route
     }
+    if (loadGeneration[root] !== generation) return; // a newer load or a pin since
     set((s) => {
       const servers = { ...s.servers };
       const setups = { ...s.setups };
@@ -85,6 +97,10 @@ export const useWorktreeActionsStore = create<WorktreeActionsState>((set, get) =
       }
       return { byRoot: { ...s.byRoot, [root]: worktrees }, servers, setups };
     });
+  },
+
+  reloadAll: async () => {
+    await Promise.all(Object.keys(get().byRoot).map((root) => get().load(root)));
   },
 
   handleWsMessage: (msg) => {
@@ -162,6 +178,7 @@ export const useWorktreeActionsStore = create<WorktreeActionsState>((set, get) =
     const patch = (views: WorktreeActionsView[] | undefined, next: (v: WorktreeActionsView) => WorktreeActionsView) =>
       (views ?? []).map((v) => (v.path === view.path ? next(v) : v));
     set((s) => ({ byRoot: { ...s.byRoot, [root]: patch(s.byRoot[root], (v) => ({ ...v, items: v.items.map((i) => (i.id === id ? { ...i, pinned } : i)) })) } }));
+    bumpGeneration(root); // a load already in flight predates this pin
     try {
       const fresh = await api.setWorktreeItemPinned(view.path, id, pinned);
       set((s) => ({ byRoot: { ...s.byRoot, [root]: patch(s.byRoot[root], () => fresh) } }));

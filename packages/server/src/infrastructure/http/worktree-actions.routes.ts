@@ -8,7 +8,8 @@ export interface WorktreeActionsRouteDeps {
   resolver: Pick<RepoPathResolver, 'isManagedPath'>;
 }
 
-const REPO_REF = /^[^/\s]+\/[^/\s]+$/;
+/** `org/name`, each a plain name: `.` and `..` would point the hooks folder outside the overlays. */
+const REPO_REF = /^(?!\.\.?\/)[^/\s]+\/(?!\.\.?$)[^/\s]+$/;
 
 /**
  * The worktree buttons (WORKTREES group of the Work top bar) and their CLI

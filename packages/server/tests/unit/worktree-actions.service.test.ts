@@ -147,10 +147,20 @@ describe('WorktreeActionsService — commands and pins', () => {
 describe('migrateLegacySetupHooks', () => {
   it('copies a post-checkout hook into the personal Setup once, never over an existing one', () => {
     // WHY (acceptance 7): an existing hook must keep running after the rename.
-    expect(migrateLegacySetupHooks({
-      repoConfigs: { 'o/a': { postCheckoutHook: 'bun install' }, 'o/b': { postCheckoutHook: 'make' }, 'o/c': { postCheckoutHook: '  ' } },
+    const out = migrateLegacySetupHooks({
+      repoConfigs: { 'o/a': { postCheckoutHook: 'bun install', hookTimeoutSeconds: 90 }, 'o/b': { postCheckoutHook: 'make' }, 'o/c': { postCheckoutHook: '  ' } },
       worktreeConfigs: { 'o/b': { hooks: { setup: '' } } },
-    })).toEqual({ 'o/a': { hooks: { setup: 'bun install' } }, 'o/b': { hooks: { setup: '' } } });
+    });
+    expect(out?.worktreeConfigs).toEqual({ 'o/a': { hooks: { setup: 'bun install' } }, 'o/b': { hooks: { setup: '' } } });
     expect(migrateLegacySetupHooks({ repoConfigs: {}, worktreeConfigs: {} })).toBeNull();
+  });
+
+  it('clears the legacy field, so an emptied or shared Setup never comes back on the next start', () => {
+    // WHY: emptying Setup removes hooks.setup; if postCheckoutHook stayed, the next
+    // migration copied it back and it outranked the team's shared Setup.
+    const first = migrateLegacySetupHooks({ repoConfigs: { 'o/a': { postCheckoutHook: 'npm i', hookTimeoutSeconds: 90 } }, worktreeConfigs: {} })!;
+    expect(first.repoConfigs).toEqual({ 'o/a': { hookTimeoutSeconds: 90 } });
+    const { setup: _emptied, ...hooks } = first.worktreeConfigs['o/a']!.hooks!;
+    expect(migrateLegacySetupHooks({ repoConfigs: first.repoConfigs, worktreeConfigs: { 'o/a': { hooks } } })).toBeNull();
   });
 });
