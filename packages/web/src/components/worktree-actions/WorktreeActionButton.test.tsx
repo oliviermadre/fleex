@@ -7,6 +7,7 @@ import { useWorktreeActionsStore } from '../../stores/worktreeActionsStore';
 import { WorktreeActionButton, stateLine } from './WorktreeActionButton';
 import { worktreeLabels } from './WorktreeActionsGroup';
 import { resolveLeftClick } from './worktreeUi';
+import { tintClasses } from '../../lib/tints';
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/api')>()),
@@ -208,6 +209,15 @@ describe('WorktreeActionMenu', () => {
     fireEvent.click(within(menu()).getByRole('button', { name: 'Pin test' }));
     expect(api.setWorktreeItemPinned).toHaveBeenCalledWith(PATH, 'npm:test', true);
     expect(api.runWorktreeAction).not.toHaveBeenCalled();
+  });
+
+  it('a pinned star is yellow, like a ticket favorite; an unpinned one is not', () => {
+    // WHY: graphic consistency — Fleex's favorite star is yellow everywhere (tickets).
+    renderButton();
+    fireEvent.click(screen.getByRole('button', { name: 'fleex menu' }));
+    const yellow = tintClasses('yellow').solidText;
+    expect(within(menu()).getByRole('button', { name: 'Unpin dev' }).className).toContain(yellow);
+    expect(within(menu()).getByRole('button', { name: 'Pin test' }).className).not.toContain(yellow);
   });
 
   it('runs the highlighted command with ↓ then ⏎', async () => {

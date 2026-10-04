@@ -9,6 +9,7 @@ import {
   type WorktreeServerState,
 } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
+import { tintClasses } from '../../../lib/tints';
 import { foldAccents } from '../../../lib/normalize';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useWorktreeActionsStore } from '../../../stores/worktreeActionsStore';
@@ -279,7 +280,7 @@ export function DetectedCommands({ api, filter }: { api: WorktreeSettingsApi; fi
                     <button
                       type="button"
                       aria-label={i.pinned ? `Désépingler ${i.label}` : `Épingler ${i.label}`}
-                      className={cn('w-4 shrink-0', i.pinned ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-accent)]')}
+                      className={cn('w-4 shrink-0', tintClasses('yellow').hoverText, i.pinned ? tintClasses('yellow').solidText : 'text-[var(--theme-text-faint)]')}
                       onClick={() => void api.write([[`pin:${i.id}`, i.pinned ? undefined : true]], i.pinned ? undefined : 'personal')}
                     >
                       {i.pinned ? '★' : '☆'}

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { worktreeItemOffered, type WorktreeActionItem, type WorktreeActionsView, type WorktreeServerSnapshot, type WorktreeSetupSnapshot, type WorktreeVerb } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 import { foldAccents } from '../../lib/normalize';
 import { FloatingPortal } from '../../hooks/usePopover';
 import { FILTER_LABEL, GROUP_LABEL, GROUP_ORDER, SOURCE_GLYPH, STATE_LABEL, groupOf, stateDotClass, stateTextClass, type MenuGroupKind } from './worktreeUi';
@@ -353,9 +354,10 @@ function Row({ row, index, active, onHover, onLaunch, onPin }: { row: MenuRow; i
             onPin();
           }}
           className={cn(
-            'shrink-0 px-0.5 text-[12px] leading-none transition-colors hover:text-[var(--theme-accent)]',
-            // Faint but always there: a touch screen has no hover to reveal it.
-            row.item?.pinned ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-faint)] opacity-40 group-hover:opacity-100 focus:opacity-100',
+            'shrink-0 px-0.5 text-[12px] leading-none transition-colors',
+            // Yellow like a ticket's favorite star. Faint but always there: a touch screen has no hover to reveal it.
+            tintClasses('yellow').hoverText,
+            row.item?.pinned ? tintClasses('yellow').solidText : 'text-[var(--theme-text-faint)] opacity-40 group-hover:opacity-100 focus:opacity-100',
             active && 'opacity-100',
           )}
         >
