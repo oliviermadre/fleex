@@ -18,7 +18,8 @@ export function configRoutes(container: Container) {
       // basePath is managed by ~/.fleex/workspaces.json (injected via env at
       // startup), not the DB — ignore any attempt to change it through the API.
       // workspace is likewise env-derived and echoed back on GET, never stored.
-      const { basePath: _ignoredBasePath, workspace: _ignoredWorkspace, ...updatable } = request.body;
+      // worktreeConfigs / worktreePorts are server-owned (see AppConfig): a stale web copy must not overwrite them.
+      const { basePath: _ignoredBasePath, workspace: _ignoredWorkspace, worktreeConfigs: _serverOwned, worktreePorts: _serverOwnedPorts, ...updatable } = request.body;
       // Icons are rendered as raw markup: sanitise them here too, whatever the client did.
       if (Array.isArray(updatable.pinnedIcons)) updatable.pinnedIcons = sanitizeActionIcons(updatable.pinnedIcons);
       if (Array.isArray(updatable.workspaceActions)) updatable.workspaceActions = sanitizeActionIcons(updatable.workspaceActions);

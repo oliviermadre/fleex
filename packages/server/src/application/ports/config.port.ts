@@ -1,6 +1,10 @@
-import type { DeliverableTypeDef, PinnedIcon, WorkspaceAction } from '@fleex/shared';
+import type { DeliverableTypeDef, PinnedIcon, WorkspaceAction, WorktreeConfig } from '@fleex/shared';
 
 export interface RepoConfig {
+  /**
+   * Legacy inline setup hook. Migrated to `worktreeConfigs[k].hooks.setup` at
+   * startup and still read as a fallback for one version.
+   */
   postCheckoutHook?: string; // multiline shell script, empty = disabled
   hookTimeoutSeconds?: number; // default 60
 }
@@ -87,6 +91,18 @@ export interface AppConfig {
   pinnedIcons?: PinnedIcon[];
   /** Ticket-header actions — run with the ticket's workspace as cwd. */
   workspaceActions?: WorkspaceAction[];
+  /**
+   * Personal layer of the worktree actions, key = "org/name" (same shape as
+   * `.fleex/worktree.json`). Server-owned: written by /api/worktree-actions
+   * only, and stripped from PUT /api/config — the web PUTs its whole settings
+   * copy, which would otherwise overwrite a pin made from the CLI meanwhile.
+   */
+  worktreeConfigs?: Record<string, WorktreeConfig>;
+  /**
+   * Reserved port range start per worktree path (port reservation on).
+   * Server-owned like `worktreeConfigs`: stable across restarts, released at teardown.
+   */
+  worktreePorts?: Record<string, number>;
 }
 
 /**

@@ -1,0 +1,444 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { parseProbeEndpoints } from '@fleex/shared';
+import { migrateLegacySetupHooks, sanitizeKeyValue } from '../../src/application/services/worktree-actions.service.js';
+import { FLEEX, FakeTmux, SECOND, WS, flush, setup } from '../helpers/worktree-actions-harness.js';
+
+describe('WorktreeActionsService — reading', () => {
+  it('lists one entry per worktree of the ticket, each with its own detected commands', async () => {
+    // WHY (acceptance 1–2): a ticket with fleex + secondrepo shows two buttons, each menu
+    // listing that repo's own commands with no config at all; composer event hooks are not commands.
+    const { service } = setup();
+    const views = await service.list(WS);
+    expect(views.map((v) => v.repo)).toEqual(['oliviermadre/fleex', 'oliviermadre/secondrepo']);
+    expect(views[0]!.items.map((i) => `${i.id} → ${i.command}`)).toEqual([
+      'launch:web → pnpm dev', 'npm:dev → pnpm run dev', 'npm:test → pnpm run test', 'npm:lint → pnpm run lint',
+    ]);
+    expect(views[1]!.items.map((i) => i.id)).toEqual(['make:up', 'composer:serve']);
+    expect(views[1]!.start).toBeNull();
+    expect(views[1]!.server.state).toBe('stopped');
+  });
+
+  it('reads the shared .fleex/worktree.json under the personal layer', async () => {
+    const { service, hostFs, config } = setup();
+    hostFs.writeFile(`${SECOND}/.fleex/worktree.json`, JSON.stringify({ server: { start: 'make:up' }, actions: [{ id: 'migrate', cmd: 'make db-migrate' }] }));
+    config.update({ worktreeConfigs: { 'oliviermadre/secondrepo': { actions: [{ id: 'migrate', cmd: 'make db-migrate FAST=1' }] } } });
+    const view = await service.view(SECOND);
+    expect(view.start).toEqual({ id: 'make:up', command: 'make up', label: 'up' });
+    expect(view.items.find((i) => i.id === 'migrate')).toMatchObject({ layer: 'personal', command: 'make db-migrate FAST=1' });
+  });
+
+  it('reports a broken shared file instead of silently ignoring it', async () => {
+    const { service, hostFs } = setup();
+    hostFs.writeFile(`${SECOND}/.fleex/worktree.json`, '{ nope');
+    const view = await service.view(SECOND);
+    expect(view.sharedConfigError).toMatch(/\.fleex\/worktree\.json/);
+    expect(view.items.map((i) => i.id)).toEqual(['make:up', 'composer:serve']);
+  });
+});
+
+describe('WorktreeActionsService — server lifecycle', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    ctx = setup();
+    ctx.config.update({ worktreeConfigs: { 'oliviermadre/fleex': { server: { start: 'launch:web' } } } });
+  });
+
+  it('start → starting → running on the detected port → open → stop', async () => {
+    // WHY (acceptance 5): the left click must follow the server's real state, not the click.
+    const { service, tmux, startSession } = ctx;
+    const started = await service.run(FLEEX, { verb: 'start' });
+    expect(started.server.state).toBe('starting');
+    expect(tmux.started[0]).toMatchObject({ cwd: FLEEX, maxMs: 0 }); // a dev server has no timeout
+    expect(tmux.started[0]!.command).toContain("FLEEX_TICKET_ID='T-775'");
+    expect(tmux.started[0]!.command).toContain("FLEEX_PORT='5173'");
+    expect(tmux.started[0]!.command.endsWith('; pnpm dev')).toBe(true);
+
+    await expect(service.run(FLEEX, { verb: 'open' })).rejects.toThrow(/starting/);
+
+    tmux.sessions.get(startSession(FLEEX))!.ports = [5173, 24678];
+    await service.tickForTest();
+    expect((await service.view(FLEEX)).server.state).toBe('starting'); // not due yet
+    ctx.clock.ms += 2_000;
+    await service.tickForTest();
+    const running = (await service.view(FLEEX)).server;
+    expect(running).toMatchObject({ state: 'running', port: 5173, url: 'http://localhost:5173' });
+    expect((await service.run(FLEEX, { verb: 'open' })).url).toBe('http://localhost:5173');
+
+    const second = await service.run(FLEEX, { verb: 'start' });
+    expect(second.alreadyRunning).toBe(true);
+
+    const stopped = await service.run(FLEEX, { verb: 'stop' });
+    expect(stopped.server.state).toBe('stopped');
+    expect(tmux.sessions.has(startSession(FLEEX))).toBe(false);
+  });
+
+  it('turns to error when the start command dies with a non-zero code, and logs points at that run', async () => {
+    // WHY (acceptance 6): a crashed server must be red, with its output one click away.
+    const { service, tmux, startSession, broadcasts } = ctx;
+    const { runId } = await service.run(FLEEX, { verb: 'start' });
+    tmux.exit(startSession(FLEEX), 1);
+    await flush();
+    await flush();
+    const view = await service.view(FLEEX);
+    expect(view.server).toMatchObject({ state: 'error', exitCode: 1 });
+    expect(broadcasts.at(-1)?.state).toBe('error');
+    expect((await service.run(FLEEX, { verb: 'logs' })).runId).toBe(runId);
+  });
+
+  it('a start command that ends with exit 0 just means stopped', async () => {
+    const { service, tmux, startSession } = ctx;
+    await service.run(FLEEX, { verb: 'start' });
+    tmux.exit(startSession(FLEEX), 0);
+    await flush();
+    await flush();
+    expect((await service.view(FLEEX)).server.state).toBe('stopped');
+  });
+
+  it('a launch.json configuration run from the menu starts the server', async () => {
+    const { service } = ctx;
+    const res = await service.run(FLEEX, { id: 'launch:web' });
+    expect(res.server.state).toBe('starting');
+  });
+
+  it('refuses to start a worktree with nothing to start', async () => {
+    const { service } = ctx;
+    await expect(service.run(SECOND, { verb: 'start' })).rejects.toThrow(/No start command/);
+  });
+
+  it('adopts a server left running by a previous Fleex run', async () => {
+    // WHY: dev servers survive a Fleex restart (their tmux session is spared), so the
+    // button must come back green instead of offering to start a second one.
+    const tmux = new FakeTmux();
+    const first = setup({ tmux });
+    first.config.update({ worktreeConfigs: { 'oliviermadre/fleex': { server: { start: 'launch:web' } } } });
+    await first.service.run(FLEEX, { verb: 'start' });
+    tmux.sessions.get(first.startSession(FLEEX))!.ports = [5173];
+
+    const restarted = setup({ tmux, config: first.config });
+    const view = await restarted.service.view(FLEEX);
+    expect(view.server).toMatchObject({ state: 'running', port: 5173 });
+    const stopped = await restarted.service.run(FLEEX, { verb: 'stop' });
+    expect(stopped.server.state).toBe('stopped');
+    expect(tmux.sessions.size).toBe(0);
+  });
+});
+
+describe('WorktreeActionsService — status probe', () => {
+  // The probe is the source of truth when one is configured: most servers start
+  // with a command that hands back (docker compose up -d), or outside Fleex.
+  let up: boolean;
+  let ctx: ReturnType<typeof setup>;
+  const probeRuns = () => ctx.shellCalls.filter((c) => c.includes('check-up')).length;
+  beforeEach(() => {
+    up = false;
+    ctx = setup({ shell: async (command) => ({ stdout: '', stderr: '', exitCode: command.includes('check-up') && up ? 0 : 1 }) });
+    ctx.config.update({ worktreeConfigs: { 'oliviermadre/secondrepo': { server: { start: 'docker compose up -d', stop: 'docker compose stop', probe: { command: 'check-up', intervalSec: 30 } } } } });
+  });
+
+  it('turns a server started outside Fleex green, and back to stopped when it goes away', async () => {
+    const { service, clock } = ctx;
+    expect((await service.view(SECOND)).server.state).toBe('stopped');
+    up = true;
+    clock.ms += 30_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('running');
+
+    up = false;
+    clock.ms += 30_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('stopped');
+  });
+
+  it('probes a stopped worktree only once per interval', async () => {
+    const { service, clock } = ctx;
+    await service.view(SECOND);
+    await service.tickForTest();
+    const first = probeRuns();
+    expect(first).toBe(1);
+    clock.ms += 10_000;
+    await service.tickForTest();
+    expect(probeRuns()).toBe(first);
+    clock.ms += 20_000;
+    await service.tickForTest();
+    expect(probeRuns()).toBe(first + 1);
+  });
+
+  it('a start command that hands back leaves the state to the probe, and Stop runs the stop command', async () => {
+    const { service, tmux, clock, execCalls } = ctx;
+    const session = ctx.startSession(SECOND);
+    expect((await service.run(SECOND, { verb: 'start' })).server.state).toBe('starting');
+    tmux.exit(session, 0); // `up -d` is done, the containers keep running
+    await flush();
+    await flush();
+    expect((await service.view(SECOND)).server.state).toBe('starting');
+
+    up = true;
+    clock.ms += 2_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('running');
+
+    up = false; // the stop command brings it down
+    const stopped = await service.run(SECOND, { verb: 'stop' });
+    expect(stopped.server.state).toBe('stopped');
+    expect(execCalls.some((c) => c.command.endsWith('; docker compose stop'))).toBe(true);
+    expect(tmux.sessions.has(session)).toBe(false); // the finished start terminal is closed too
+  });
+
+  it('gives up on a start that handed back when the probe never passes', async () => {
+    const { service, tmux, clock } = ctx;
+    await service.run(SECOND, { verb: 'start' });
+    tmux.exit(ctx.startSession(SECOND), 0);
+    await flush();
+    await flush();
+    clock.ms += 60_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('starting');
+    clock.ms += 5 * 60_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('error');
+  });
+
+  it('a foreground server whose probe fails while running is in error', async () => {
+    const { service, clock } = ctx;
+    await service.run(SECOND, { verb: 'start' });
+    up = true;
+    clock.ms += 2_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('running');
+    up = false;
+    clock.ms += 30_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('error');
+  });
+
+  it('picks up a probe configured after the worktree was first seen', async () => {
+    const { service, config, clock } = ctx;
+    config.update({ worktreeConfigs: {} });
+    await service.view(SECOND);
+    up = true;
+    config.update({ worktreeConfigs: { 'oliviermadre/secondrepo': { server: { probe: { command: 'check-up' } } } } });
+    await service.view(SECOND);
+    clock.ms += 30_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('running');
+  });
+});
+
+describe('WorktreeActionsService — server.mode and server.logs', () => {
+  // WHY: the mode is explicit — a foreground start that ends means stopped even
+  // with a probe; a detached one has handed back and keeps "running".
+  const REPO = 'oliviermadre/secondrepo';
+  it('foreground: a start ending with 0 means stopped, probe or not', async () => {
+    const ctx = setup({ shell: async () => ({ stdout: '', stderr: '', exitCode: 1 }) });
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { mode: 'foreground', start: 'pnpm dev', probe: { command: 'check-up' } } } } });
+    await ctx.service.run(SECOND, { verb: 'start' });
+    ctx.tmux.exit(ctx.startSession(SECOND), 0);
+    await flush();
+    await flush();
+    expect((await ctx.service.view(SECOND)).server.state).toBe('stopped');
+  });
+
+  it('detached without a probe: the start handing back with 0 counts as running', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { mode: 'detached', start: './cli/fleex start', stop: './cli/fleex stop' } } } });
+    await ctx.service.run(SECOND, { verb: 'start' });
+    ctx.tmux.exit(ctx.startSession(SECOND), 0);
+    await flush();
+    await flush();
+    expect((await ctx.service.view(SECOND)).server.state).toBe('running');
+  });
+
+  it('logs runs server.logs in its own terminal, with the FLEEX_* env', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { mode: 'detached', start: 'docker compose up -d', logs: 'docker compose logs -f' } } } });
+    const res = await ctx.service.run(SECOND, { verb: 'logs' });
+    expect(res.run).toMatchObject({ slot: 'server:logs', mode: 'terminal' });
+    expect(ctx.tmux.started.at(-1)!.command).toMatch(/FLEEX_BRANCH=.*; docker compose logs -f$/);
+  });
+
+  it('logs without server.logs still points at the start run', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { start: 'pnpm dev' } } } });
+    const started = await ctx.service.run(SECOND, { verb: 'start' });
+    const res = await ctx.service.run(SECOND, { verb: 'logs' });
+    expect(res.runId).toBe(started.runId);
+    expect(res.run).toBeUndefined();
+  });
+
+  it('rejects an unknown mode', () => {
+    expect(() => sanitizeKeyValue('server.mode', 'background')).toThrow(/foreground \| detached/);
+    expect(sanitizeKeyValue('server.mode', 'detached')).toBe('detached');
+  });
+});
+
+describe('WorktreeActionsService — Start and Stop run like pinned actions (background | terminal)', () => {
+  // WHY: « détaché » is not « sans TTY ». `docker compose up -d` runs fine in background, and a
+  // stop may ask for a confirmation in a terminal. Start decides whether the server stays.
+  const REPO = 'oliviermadre/secondrepo';
+  it('a background Start runs with no TTY, must hand back, and leaves a detached server', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { start: 'docker compose up -d', startIn: 'background', stop: 'docker compose stop' } } } });
+    const res = await ctx.service.run(SECOND, { verb: 'start' });
+    expect(res.run?.mode).toBe('background');
+    expect(ctx.tmux.started).toHaveLength(0); // no terminal
+    expect(ctx.execCalls.at(-1)!.command).toMatch(/; docker compose up -d$/);
+    expect(ctx.execCalls.at(-1)!.timeoutMs).toBe(900_000); // it must hand back, cold builds included
+    await flush();
+    await flush();
+    // Exit 0, no probe: detached by nature, so the start worked → running (not stopped).
+    expect((await ctx.service.view(SECOND)).server.state).toBe('running');
+  });
+
+  it('a terminal Stop is handed back at once (it may ask something), the stop completes when it ends', async () => {
+    const ctx = setup();
+    ctx.config.update({ worktreeConfigs: { [REPO]: { server: { mode: 'detached', start: './cli/fleex start', stop: './cli/fleex stop', stopIn: 'terminal' } } } });
+    await ctx.service.run(SECOND, { verb: 'start' });
+    ctx.tmux.exit(ctx.startSession(SECOND), 0);
+    await flush();
+    await flush();
+    expect((await ctx.service.view(SECOND)).server.state).toBe('running');
+
+    const res = await ctx.service.run(SECOND, { verb: 'stop' });
+    expect(res.run).toMatchObject({ mode: 'terminal', slot: 'stop' });
+    expect(ctx.tmux.started.at(-1)!.command).toMatch(/; \.\/cli\/fleex stop$/);
+    expect(res.server.state).toBe('running'); // waiting for the user's answer
+
+    ctx.tmux.exit(ctx.tmux.started.at(-1)!.sessionName, 0);
+    await flush();
+    await flush();
+    await flush();
+    expect((await ctx.service.view(SECOND)).server.state).toBe('stopped');
+  });
+
+  it('accepts background | terminal for startIn and stopIn only', () => {
+    expect(sanitizeKeyValue('server.startIn', 'background')).toBe('background');
+    expect(sanitizeKeyValue('server.stopIn', 'terminal')).toBe('terminal');
+    expect(() => sanitizeKeyValue('server.stopIn', 'detached')).toThrow(/background \| terminal/);
+  });
+});
+
+describe('WorktreeActionsService — probe endpoints contract', () => {
+  // Exit 0 = running; the probe's stdout may name the services (`{"endpoints":[…]}`)
+  // so a detached app (`fleex start`) still gets its URL. Anything else is ignored.
+  const FLEEX_STATUS = JSON.stringify({
+    endpoints: [
+      { name: 'gateway', url: 'http://localhost:58619' },
+      { name: 'server', host: '127.0.0.1', port: 58620 },
+      { name: 'web', url: 'http://localhost:58621', primary: true },
+    ],
+  });
+  let stdout: string;
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    stdout = FLEEX_STATUS;
+    ctx = setup({ shell: async (command) => (command.includes('check-up') ? { stdout, stderr: '', exitCode: 0 } : { stdout: '', stderr: '', exitCode: 1 }) });
+    ctx.config.update({ worktreeConfigs: { 'oliviermadre/secondrepo': { server: { start: './cli/fleex start', probe: { command: 'check-up', intervalSec: 30 } } } } });
+  });
+
+  it('takes the URL and port of the primary endpoint, and keeps every service', async () => {
+    const { service, clock } = ctx;
+    await service.view(SECOND);
+    clock.ms += 30_000;
+    await service.tickForTest();
+    const { server } = await service.view(SECOND);
+    expect(server.state).toBe('running');
+    expect(server.url).toBe('http://localhost:58621');
+    expect(server.port).toBe(58621);
+    expect(server.endpoints?.map((e) => [e.name, e.url, e.port])).toEqual([
+      ['web', 'http://localhost:58621', 58621],
+      ['gateway', 'http://localhost:58619', 58619],
+      ['server', 'http://127.0.0.1:58620', 58620],
+    ]);
+    // Open goes to the primary endpoint.
+    expect((await service.run(SECOND, { verb: 'open' })).url).toBe('http://localhost:58621');
+  });
+
+  it('passes FLEEX_URL_<NAME> / FLEEX_PORT_<NAME> to the commands run while it is up', async () => {
+    const { service, clock, tmux } = ctx;
+    await service.view(SECOND);
+    clock.ms += 30_000;
+    await service.tickForTest();
+    await service.run(SECOND, { id: 'make:up' });
+    const cmd = tmux.started.at(-1)?.command ?? '';
+    expect(cmd).toContain("FLEEX_URL_GATEWAY='http://localhost:58619'");
+    expect(cmd).toContain("FLEEX_PORT_SERVER='58620'");
+    expect(cmd).toContain("FLEEX_URL='http://localhost:58621'");
+  });
+
+  it('ignores a stdout that is not the contract: running, but no endpoint', async () => {
+    const { service, clock } = ctx;
+    stdout = 'true'; // e.g. jq -e '… | .status == "running"'
+    await service.view(SECOND);
+    clock.ms += 30_000;
+    await service.tickForTest();
+    const { server } = await service.view(SECOND);
+    expect(server.state).toBe('running');
+    expect(server.endpoints).toBeUndefined();
+    expect(server.url).toBeUndefined();
+  });
+});
+
+describe('parseProbeEndpoints', () => {
+  it('reads url or host+port, defaults the host, and puts the primary first', () => {
+    expect(parseProbeEndpoints('{"endpoints":[{"name":"api","port":4000},{"name":"web","url":"https://app.test","primary":true}]}')).toEqual([
+      { name: 'web', url: 'https://app.test', port: 443, primary: true },
+      { name: 'api', url: 'http://localhost:4000', port: 4000 },
+    ]);
+  });
+
+  it('makes the first endpoint primary when none is flagged', () => {
+    expect(parseProbeEndpoints('{"endpoints":[{"name":"a","port":1},{"name":"b","port":2}]}')?.[0]).toEqual({ name: 'a', url: 'http://localhost:1', port: 1, primary: true });
+  });
+
+  it.each([
+    ['not JSON', 'running on 3000'],
+    ['a bare value', 'true'],
+    ['no endpoints key', '{"services":[]}'],
+    ['no valid entry', '{"endpoints":[{"name":"x"},{"url":"http://a:1"},{"name":"y","port":70000}]}'],
+  ])('ignores %s', (_label, out) => {
+    expect(parseProbeEndpoints(out)).toBeUndefined();
+  });
+});
+
+describe('WorktreeActionsService — commands and pins', () => {
+  it('runs a detected command in its own terminal slot with the FLEEX_* env', async () => {
+    const { service, tmux } = setup();
+    const res = await service.run(FLEEX, { id: 'npm:test' });
+    expect(res.runId).toBeTruthy();
+    expect(res.run).toMatchObject({ sourceKind: 'worktree', slot: 'npm:test', label: 'fleex · test', mode: 'terminal' });
+    expect(tmux.started[0]!.command).toMatch(/FLEEX_BRANCH='ticket\/775c62-repo-actions'.*; pnpm run test$/);
+    expect(tmux.started[0]!.maxMs).toBeUndefined();
+    await expect(service.run(FLEEX, { id: 'npm:nope' })).rejects.toThrow(/No command/);
+  });
+
+  it('keeps a pin in the personal layer, so it survives a reload', async () => {
+    // WHY (acceptance 4): ★ is personal by default and must persist server-side.
+    const { service, config } = setup();
+    const view = await service.setPinned(FLEEX, 'npm:lint', true);
+    expect(view.items.find((i) => i.id === 'npm:lint')?.pinned).toBe(true);
+    expect(config.get().worktreeConfigs?.['oliviermadre/fleex']?.pins).toEqual(['npm:lint']);
+    await service.setPinned(FLEEX, 'npm:lint', false);
+    expect(config.get().worktreeConfigs?.['oliviermadre/fleex']?.pins).toEqual([]);
+  });
+});
+
+describe('migrateLegacySetupHooks', () => {
+  it('copies a post-checkout hook into the personal Setup once, never over an existing one', () => {
+    // WHY (acceptance 7): an existing hook must keep running after the rename.
+    const out = migrateLegacySetupHooks({
+      repoConfigs: { 'o/a': { postCheckoutHook: 'bun install', hookTimeoutSeconds: 90 }, 'o/b': { postCheckoutHook: 'make' }, 'o/c': { postCheckoutHook: '  ' } },
+      worktreeConfigs: { 'o/b': { hooks: { setup: '' } } },
+    });
+    expect(out?.worktreeConfigs).toEqual({ 'o/a': { hooks: { setup: 'bun install' } }, 'o/b': { hooks: { setup: '' } } });
+    expect(migrateLegacySetupHooks({ repoConfigs: {}, worktreeConfigs: {} })).toBeNull();
+  });
+
+  it('clears the legacy field, so an emptied or shared Setup never comes back on the next start', () => {
+    // WHY: emptying Setup removes hooks.setup; if postCheckoutHook stayed, the next
+    // migration copied it back and it outranked the team's shared Setup.
+    const first = migrateLegacySetupHooks({ repoConfigs: { 'o/a': { postCheckoutHook: 'npm i', hookTimeoutSeconds: 90 } }, worktreeConfigs: {} })!;
+    expect(first.repoConfigs).toEqual({ 'o/a': { hookTimeoutSeconds: 90 } });
+    const { setup: _emptied, ...hooks } = first.worktreeConfigs['o/a']!.hooks!;
+    expect(migrateLegacySetupHooks({ repoConfigs: first.repoConfigs, worktreeConfigs: { 'o/a': { hooks } } })).toBeNull();
+  });
+});

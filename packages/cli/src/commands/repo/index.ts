@@ -24,6 +24,14 @@ ${SECTION('Examples:')}
   ${DIM('$')} fleex repo unregister oliviermadre/fleex     ${DIM('# remove from config (deletes clone)')}
   ${DIM('$')} fleex repo refresh --all                     ${DIM('# refresh GitHub data in background')}
 
+${SECTION('Worktree commands')} ${DIM('(the WORKTREES buttons of the Work view; worktree = current dir or --worktree):')}
+  ${DIM('$')} fleex repo actions                           ${DIM('# commands: actions, launch.json, npm, make, composer')}
+  ${DIM('$')} fleex repo run start                         ${DIM('# start | stop | restart | status | open | logs')}
+  ${DIM('$')} fleex repo run npm:test                      ${DIM('# any id listed by actions')}
+  ${DIM('$')} fleex repo pin npm:test                      ${DIM('# ★ in the menu (unpin to undo)')}
+  ${DIM('$')} fleex repo share action:lint                 ${DIM('# Partager → .fleex/worktree.json (unshare = Garder pour moi)')}
+  ${DIM('$')} fleex repo hooks show | run setup | open     ${DIM('# Setup / Teardown hooks')}
+
 ${SECTION('Attach a PR/issue to a ticket:')}  that's a ${GREEN('ticket')} command, not ${GREEN('repo')}.
   ${DIM('$')} fleex ticket link 42 --pr <pr-url>           ${DIM('# ATTACH a PR to ticket #42 (URL or org/name#N)')}
   ${DIM('$')} fleex ticket link 42 --issue <issue-url>     ${DIM('# ATTACH an issue (use unlink to remove)')}

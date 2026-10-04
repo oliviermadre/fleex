@@ -67,6 +67,9 @@ export interface RunMeta {
   closeOnSuccess?: boolean;
 }
 
+/** Starts the run server-side; the default posts to /api/action-runs (worktree commands post to their own route). */
+export type RunStarter = (request: ActionRunRequest) => Promise<{ runId: string; alreadyRunning: boolean; run?: ActionRun }>;
+
 /** The run in flight for any of `sourceId`'s commands (default or a rule), if one is. */
 export function runningRunOf(running: Record<string, string>, sourceId: string): string | undefined {
   for (const [key, runId] of Object.entries(running)) if (isSlotOf(key, sourceId)) return runId;
@@ -155,7 +158,7 @@ interface PinnedActionsState {
   loadStatuses: () => Promise<void>;
   loadCapabilities: () => Promise<void>;
   handleWsMessage: (msg: PinnedStatusWsMessage) => void;
-  run: (request: ActionRunRequest, meta?: RunMeta) => Promise<void>;
+  run: (request: ActionRunRequest, meta?: RunMeta, start?: RunStarter) => Promise<void>;
   /** Replay a finished run once in terminal mode (same command, cwd and source). */
   rerunInTerminal: (run: ActionRun) => Promise<void>;
   cancelRun: (runId: string) => Promise<void>;
@@ -307,7 +310,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
     }
   },
 
-  run: async (request, meta = {}) => {
+  run: async (request, meta = {}, start = api.startActionRun) => {
     // Each command of an action (default, each rule) runs on its own.
     const key = runSlotKey(request.sourceId, request.slot);
     const { terminals, terminalMinimized, activeTerminal } = get();
@@ -326,7 +329,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
     // Optimistic: the button shows its spinner before the WS echo arrives.
     set((s) => ({ running: { ...s.running, [key]: 'pending' } }));
     try {
-      const { runId, alreadyRunning, run } = await api.startActionRun(request);
+      const { runId, alreadyRunning, run } = await start(request);
       runRequests.set(runId, { request, meta });
       set((s) => ({
         ...(s.running[key] === 'pending' ? { running: { ...s.running, [key]: runId } } : {}),

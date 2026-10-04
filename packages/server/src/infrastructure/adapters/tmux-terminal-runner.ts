@@ -14,6 +14,42 @@ export const TERMINAL_MAX_MS = 4 * 60 * 60 * 1000;
 const POLL_MS = 1000;
 const LOG_TAIL_BYTES = 128 * 1024;
 
+/**
+ * A worktree's dev server (`wt:<hash>::start` → `…_wt_<hash>__start`): long
+ * lived on purpose, so it survives a Fleex restart and is adopted back.
+ */
+function fnv1a(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+export function isWorktreeServerSession(name: string): boolean {
+  return /_wt_[a-z0-9]+__start_[0-9a-f]{8}$/.test(name);
+}
+
+/** What `inspect` sees of a session: its pane, and the TCP ports its process tree listens on. */
+export interface SessionInspection {
+  alive: boolean;
+  /** The command ended (pane kept by remain-on-exit). */
+  dead: boolean;
+  exitStatus?: number;
+  ports: number[];
+}
+
+/** `lsof -F n` lines (`n*:5173`, `n127.0.0.1:3000`, `n[::1]:8080`) → sorted unique ports. */
+export function parseLsofPorts(output: string): number[] {
+  const ports = new Set<number>();
+  for (const line of output.split('\n')) {
+    const m = /^n.*:(\d+)$/.exec(line.trim());
+    if (m) ports.add(Number(m[1]));
+  }
+  return [...ports].filter((p) => p > 0 && p < 65536).sort((a, b) => a - b);
+}
+
 export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
@@ -55,13 +91,22 @@ export class TmuxTerminalRunner implements TerminalRunPort {
     private readonly options: TmuxTerminalRunnerOptions = {},
   ) {}
 
+  /**
+   * A readable session name per key. When the key does not survive as is (a
+   * character tmux rejects, or longer than 48), a hash of the full key is
+   * appended: `build.prod` and `build_prod`, or two long ids sharing a prefix,
+   * must not share a session — starting one kills the session of that name.
+   */
   sessionNameFor(sourceId: string): string {
-    const slug = sourceId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 48) || 'action';
-    return `${this.ownPrefix()}${slug}`;
+    const safe = sourceId.replace(/[^A-Za-z0-9_-]/g, '_');
+    if (safe && safe === sourceId && safe.length <= 48) return `${this.ownPrefix()}${safe}`;
+    return `${this.ownPrefix()}${safe.slice(0, 39) || 'action'}_${fnv1a(sourceId)}`;
   }
 
-  async start(request: { runId: string; command: string; cwd: string; sessionName: string }): Promise<TerminalRunHandle> {
+  async start(request: { runId: string; command: string; cwd: string; sessionName: string; maxMs?: number }): Promise<TerminalRunHandle> {
     const { runId, command, cwd, sessionName: name } = request;
+    // 0 = no safety net (a worktree's dev server runs until stopped).
+    const maxMs = request.maxMs ?? this.options.maxMs ?? TERMINAL_MAX_MS;
     const logFile = `${this.tmpDir.replace(/\/$/, '')}/fleex-action-${runId}.log`;
     const gate = `fxgo_${runId}`;
 
@@ -83,15 +128,17 @@ export class TmuxTerminalRunner implements TerminalRunPort {
 
     const done = new Promise<{ exitCode: number; output: string; cancelled: boolean; timedOut: boolean }>((resolve) => {
       let finished = false;
-      const guard = setTimer(() => {
-        timedOut = true;
-        void this.kill(name);
-      }, this.options.maxMs ?? TERMINAL_MAX_MS);
+      const guard = maxMs > 0
+        ? setTimer(() => {
+            timedOut = true;
+            void this.kill(name);
+          }, maxMs)
+        : null;
 
       const finish = async (exitCode: number) => {
         if (finished) return;
         finished = true;
-        clearTimer(guard);
+        if (guard !== null) clearTimer(guard);
         const output = await this.readOutput(logFile);
         resolve({ exitCode, output, cancelled, timedOut });
       };
@@ -129,18 +176,41 @@ export class TmuxTerminalRunner implements TerminalRunPort {
     await this.kill(sessionName);
   }
 
-  /** At server start: no action terminal survives a restart (nothing tracks it any more). */
-  async killOrphans(): Promise<number> {
+  /**
+   * At server start: no action terminal survives a restart (nothing tracks it
+   * any more) — except those `keep` spares (worktree dev servers, adopted back).
+   */
+  async killOrphans(keep: (name: string) => boolean = () => false): Promise<number> {
     let names: string[] = [];
     try {
       const { stdout } = await this.execFn('tmux', ['list-sessions', '-F', '#{session_name}']);
-      names = stdout.split('\n').map((s) => s.trim()).filter((s) => s.startsWith(this.ownPrefix()));
+      names = stdout.split('\n').map((s) => s.trim()).filter((s) => s.startsWith(this.ownPrefix()) && !keep(s));
     } catch {
       return 0; // no tmux server running
     }
     for (const name of names) await this.kill(name);
     if (names.length) this.logger.info('Killed orphan action terminals', { count: names.length });
     return names.length;
+  }
+
+  /**
+   * Is the session there, has its command ended, and which TCP ports does its
+   * process tree listen on (pane pid and all descendants, through lsof).
+   */
+  async inspect(sessionName: string): Promise<SessionInspection> {
+    const state = await this.paneState(sessionName);
+    if (state === 'gone') return { alive: false, dead: false, ports: [] };
+    if (state.dead) return { alive: true, dead: true, exitStatus: state.status, ports: [] };
+    const script = [
+      ...processTreeScript(sessionName),
+      'lsof -nP -a -iTCP -sTCP:LISTEN -p "$(echo $all | tr " " ",")" -Fn 2>/dev/null || true',
+    ].join('\n');
+    try {
+      const { stdout } = await this.execFn('sh', ['-c', script]);
+      return { alive: true, dead: false, ports: parseLsofPorts(stdout) };
+    } catch {
+      return { alive: true, dead: false, ports: [] };
+    }
   }
 
   private ownPrefix(): string {
@@ -158,7 +228,22 @@ export class TmuxTerminalRunner implements TerminalRunPort {
     }
   }
 
+  /**
+   * Ends a session for good. Closing the pane only sends SIGHUP to its
+   * foreground job: `npm run dev` → vite, concurrently, `docker compose up`…
+   * may leave children behind, holding the port for the next worktree. So the
+   * whole process tree gets SIGTERM, a grace period, then SIGKILL — and only
+   * then is the session closed.
+   */
   private async kill(name: string): Promise<void> {
+    try {
+      await this.execFn('sh', ['-c', [
+        ...processTreeScript(name),
+        'kill -TERM $all 2>/dev/null',
+        `i=0; while [ $i -lt ${KILL_GRACE_TICKS} ]; do alive=""; for p in $all; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done; [ -z "$alive" ] && exit 0; sleep 0.1; i=$((i+1)); done`,
+        'kill -KILL $alive 2>/dev/null; exit 0',
+      ].join('\n')]);
+    } catch { /* nothing to signal */ }
     try {
       await this.execFn('tmux', ['kill-session', '-t', name]);
     } catch { /* already gone */ }
@@ -173,4 +258,17 @@ export class TmuxTerminalRunner implements TerminalRunPort {
       return '';
     }
   }
+}
+
+/** Grace period between SIGTERM and SIGKILL, in 0.1 s ticks (5 s). */
+const KILL_GRACE_TICKS = 50;
+
+/** Sets `$all` to the pane's pid and all its descendants (empty session → exit 0). */
+function processTreeScript(sessionName: string): string[] {
+  return [
+    `pid=$(tmux list-panes -t ${shellQuote(sessionName)} -F '#{pane_pid}' 2>/dev/null | head -1)`,
+    '[ -z "$pid" ] && exit 0',
+    'all=$pid; frontier=$pid',
+    'while [ -n "$frontier" ]; do next=""; for p in $frontier; do next="$next $(pgrep -P "$p" 2>/dev/null)"; done; frontier=$(echo $next); all="$all $frontier"; done',
+  ];
 }

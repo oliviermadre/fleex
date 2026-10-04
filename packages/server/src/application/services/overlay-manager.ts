@@ -5,6 +5,7 @@ import type { GitPort } from '../ports/git.port.js';
 import type { HostFs, ExecFn } from '../../infrastructure/host/types.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type {
+  WorktreeSetupSnapshot,
   HookResult,
   OverlayFileStatus,
   OverlaySyncApplyItem,
@@ -15,6 +16,7 @@ import type {
   OverlaySyncRemoveResponse,
   OverlaySyncRepoScan,
 } from '@fleex/shared';
+import { buildFleexEnv, envArgv, interpolateHook } from '../../domain/services/worktree-env.js';
 import {
   buildTree,
   classifyStatus,
@@ -90,10 +92,25 @@ export class OverlayManager {
     }
   }
 
+  /** Setup state of a worktree, as it runs (wired to the worktree actions, which broadcast it). */
+  onSetupState: (snapshot: WorktreeSetupSnapshot) => void = () => {};
+  /** Extra hook environment for a worktree (its reserved port range, when port reservation is on). */
+  extraHookEnv: (worktreePath: string) => Promise<Record<string, string>> = async () => ({});
+
   /**
-   * Run post-checkout hooks for a repo after worktree creation.
-   * Checks both file-based hooks (overlays/org/name/hooks/) and inline config hooks.
-   * Returns HookResult if a hook ran, null otherwise.
+   * Run the Setup hooks of a new worktree (formerly "post-checkout"), in order:
+   * global file hooks, then the repo's file hooks, then the inline Setup script.
+   * Fire-and-forget — never blocking the worktree or the agents — but its
+   * progress is reported (`onSetupState`) for the worktree menu.
+   *
+   * The inline script comes from the config layers (PRD §9): the personal
+   * `worktreeConfigs[repo].hooks.setup`, else `hooks.setup` of the worktree's
+   * own `.fleex/worktree.json`, else the legacy `postCheckoutHook`. Every hook
+   * gets the `FLEEX_*` environment; `{{…}}` substitutions keep working.
+   *
+   * Returns true when an inline script is known to run. A Setup that only lives
+   * in `.fleex/worktree.json` is read asynchronously, so it still runs but this
+   * returns false.
    */
   firePostCheckoutHooks(
     org: string,
@@ -102,87 +119,103 @@ export class OverlayManager {
     branch: string,
   ): boolean {
     const repoKey = `${org}/${name}`;
-
-    // 1. Run global file-based hooks first
-    const globalHooksDir = this.resolver.globalOverlayHooksDir();
-    this.runFileHooks(globalHooksDir, '_global', '', worktreePath, branch);
-
-    // 2. Check for per-repo file-based hooks
-    const hooksDir = this.resolver.overlayHooksDir(org, name);
-    this.runFileHooks(hooksDir, org, name, worktreePath, branch);
-
-    // 3. Check for inline config hook
     const appConfig = this.config.get();
     const repoConfig = appConfig.repoConfigs?.[repoKey];
-    const script = repoConfig?.postCheckoutHook?.trim();
-    if (!script) return false;
+    const personal = appConfig.worktreeConfigs?.[repoKey]?.hooks;
+    const legacy = repoConfig?.postCheckoutHook;
+    const timeoutMs = (personal?.timeoutSec ?? repoConfig?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SECONDS) * 1000;
+    const fileTimeoutMs = (repoConfig?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SECONDS) * 1000;
 
-    const timeoutSeconds = repoConfig?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SECONDS;
-    const timeoutMs = timeoutSeconds * 1000;
+    void (async () => {
+      const env = await this.hookEnv(org, name, worktreePath, branch);
+      const files = [
+        ...(await this.listHookScripts(this.resolver.globalOverlayHooksDir())),
+        ...(await this.listHookScripts(this.resolver.overlayHooksDir(org, name))),
+      ];
+      // Personal layer set (even to '' = explicitly none) wins; else the shared file, else legacy.
+      const inline = (personal?.setup !== undefined ? personal.setup : (await this.readSharedSetup(worktreePath)) ?? legacy ?? '').trim();
+      if (files.length === 0 && !inline) return;
 
-    const interpolated = script
-      .replace(/\{\{org\}\}/g, org)
-      .replace(/\{\{repo\}\}/g, name)
-      .replace(/\{\{branch\}\}/g, branch)
-      .replace(/\{\{worktree_path\}\}/g, worktreePath);
-
-    this.logger.info('Starting post-checkout hook (async)', { repoKey, worktreePath, timeoutMs });
-
-    // Fire and forget
-    this.execFn('bash', ['-c', interpolated], { cwd: worktreePath, timeout: timeoutMs })
-      .then(() => {
-        this.logger.info('Post-checkout hook completed', { repoKey, worktreePath });
-      })
-      .catch((err) => {
-        const stderr = (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
-        this.logger.warn('Post-checkout hook failed', { repoKey, worktreePath, stderr });
-      });
-
-    return true;
-  }
-
-  /**
-   * Run file-based hooks from the hooks directory (fire-and-forget).
-   */
-  private runFileHooks(
-    hooksDir: string,
-    org: string,
-    name: string,
-    worktreePath: string,
-    branch: string,
-  ): void {
-    // Fire and forget — async discovery and execution
-    (async () => {
-      const exists = await this.hostFs.exists(hooksDir);
-      if (!exists) return;
-
-      const entries = await this.hostFs.readdir(hooksDir);
-      const scripts = entries.filter((e) => e.isFile).sort((a, b) => a.name.localeCompare(b.name));
-      if (scripts.length === 0) return;
-
-      const appConfig = this.config.get();
-      const repoConfig = appConfig.repoConfigs?.[`${org}/${name}`];
-      const timeoutMs = (repoConfig?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SECONDS) * 1000;
-
-      for (const script of scripts) {
-        const scriptPath = `${hooksDir}/${script.name}`;
-        this.logger.info('Running hook script', { scriptPath, worktreePath });
+      const startedAt = new Date().toISOString();
+      this.onSetupState({ path: worktreePath, state: 'running', startedAt });
+      const errors: string[] = [];
+      for (const scriptPath of files) {
+        this.logger.info('Running hook script', { scriptPath, worktreePath, branch });
         try {
-          await this.execFn('bash', [scriptPath], {
-            cwd: worktreePath,
-            timeout: timeoutMs,
-          });
+          await this.execFn('env', envArgv(env, ['bash', scriptPath]), { cwd: worktreePath, timeout: fileTimeoutMs });
           this.logger.info('Hook script completed', { scriptPath });
         } catch (err) {
           const stderr = (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
           this.logger.warn('Hook script failed', { scriptPath, stderr });
+          errors.push(`${scriptPath}: ${stderr}`);
         }
       }
-    })().catch((err) => {
-      this.logger.warn('Failed to run file hooks', {
-        org, name, error: err instanceof Error ? err.message : String(err),
+      if (inline) {
+        const interpolated = interpolateHook(inline, { org, repo: name, branch, worktreePath });
+        this.logger.info('Starting setup hook (async)', { repoKey, worktreePath, timeoutMs });
+        try {
+          await this.execFn('env', envArgv(env, ['bash', '-c', interpolated]), { cwd: worktreePath, timeout: timeoutMs });
+          this.logger.info('Setup hook completed', { repoKey, worktreePath });
+        } catch (err) {
+          const stderr = (err as { stderr?: string }).stderr ?? (err instanceof Error ? err.message : String(err));
+          this.logger.warn('Setup hook failed', { repoKey, worktreePath, stderr });
+          errors.push(stderr);
+        }
+      }
+      this.onSetupState({
+        path: worktreePath,
+        state: errors.length ? 'failed' : 'ok',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        ...(errors.length ? { error: errors.join('\n').slice(-2000) } : {}),
       });
+    })().catch((err) => {
+      this.logger.warn('Failed to run setup hooks', { repoKey, error: err instanceof Error ? err.message : String(err) });
     });
+
+    return personal?.setup !== undefined ? !!personal.setup.trim() : !!legacy?.trim();
+  }
+
+  /** Executable hook scripts of a hooks dir, sorted by name (absolute paths). */
+  async listHookScripts(hooksDir: string): Promise<string[]> {
+    if (!(await this.hostFs.exists(hooksDir))) return [];
+    try {
+      const entries = await this.hostFs.readdir(hooksDir);
+      return entries.filter((e) => e.isFile).map((e) => e.name).sort((a, b) => a.localeCompare(b)).map((n) => `${hooksDir}/${n}`);
+    } catch {
+      return [];
+    }
+  }
+
+  /** `hooks.setup` of the worktree's `.fleex/worktree.json`, if any. */
+  private async readSharedSetup(worktreePath: string): Promise<string | undefined> {
+    try {
+      const parsed = JSON.parse(await this.hostFs.readFile(join(worktreePath, '.fleex', 'worktree.json'))) as { hooks?: { setup?: unknown } };
+      return typeof parsed?.hooks?.setup === 'string' ? parsed.hooks.setup : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** The FLEEX_* environment of a hook (the ticket id comes from the workspace manifest). */
+  private async hookEnv(org: string, name: string, worktreePath: string, branch: string): Promise<Record<string, string>> {
+    const workspacePath = dirname(worktreePath);
+    let ticketId: string | undefined;
+    try {
+      const manifest = JSON.parse(await this.hostFs.readFile(join(workspacePath, '.fleex.json'))) as { ticketId?: unknown };
+      if (typeof manifest.ticketId === 'string') ticketId = manifest.ticketId;
+    } catch { /* not in a ticket workspace */ }
+    const extra = await this.extraHookEnv(worktreePath).catch(() => ({}));
+    return {
+      ...buildFleexEnv({
+        repo: `${org}/${name}`,
+        repoPath: this.resolver.barePath(org, name),
+        worktreePath,
+        ...(ticketId ? { workspacePath, ticketId } : {}),
+        branch,
+      }),
+      ...extra,
+    };
   }
 
   /**
@@ -242,7 +275,7 @@ export class OverlayManager {
    * - Otherwise the root is treated as a ticket workspace: every immediate
    *   subdirectory that carries a `.git` entry is a worktree target.
    */
-  private async discoverWorktrees(rootPath: string): Promise<string[]> {
+  async discoverWorktrees(rootPath: string): Promise<string[]> {
     if (!rootPath) return [];
     if (await this.hostFs.exists(join(rootPath, '.git'))) return [rootPath];
 

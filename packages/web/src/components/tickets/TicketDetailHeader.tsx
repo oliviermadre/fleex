@@ -6,7 +6,7 @@ import { getStatusBadgeClass } from '../../lib/statusColors';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
-import { OverlaySyncButton } from '../overlay-sync/OverlaySyncButton';
+import { WorktreeActionsGroup } from '../worktree-actions/WorktreeActionsGroup';
 import { PinnedActionButton } from '../actions/PinnedActionButton';
 
 export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
@@ -53,11 +53,8 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
         {ticket.title}
       </span>
 
-      {/* Sync overlay + pinned (global) actions + workspace actions — mirrors WorktreeHeader */}
+      {/* Pinned (global) actions + workspace actions + worktree buttons — mirrors the Work top bar */}
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        {/* Sync overlay — opens on the ticket's workspace root; the server walks
-            it for worktrees. The repo props are only used for the no-ticket case. */}
-        <OverlaySyncButton ticket={ticket} worktree={null} repoOrg="" repoName="" />
         {hasActions && (
           <div className="flex items-center gap-2">
             {pinnedIcons.map((icon) => (
@@ -76,6 +73,8 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
             ))}
           </div>
         )}
+        {/* One button per worktree; Sync overlay lives in each one's menu. */}
+        <WorktreeActionsGroup ticket={ticket} separator={hasActions} />
       </div>
     </div>
   );

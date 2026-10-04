@@ -141,7 +141,18 @@ export class GitCliAdapter implements GitPort {
     this.logger.debug('Worktree created', { repoPath, wtPath, branch });
   }
 
+  /**
+   * Run before every `git worktree remove` (the worktree's Teardown hook). It
+   * must never block the removal: a failure is the hook's to report.
+   */
+  beforeRemoveWorktree: (wtPath: string) => Promise<void> = async () => {};
+
   async removeWorktree(repoPath: string, wtPath: string): Promise<void> {
+    try {
+      await this.beforeRemoveWorktree(wtPath);
+    } catch (err) {
+      this.logger.warn('Teardown before worktree removal failed', { wtPath, error: err instanceof Error ? err.message : String(err) });
+    }
     await this.execFn('git', ['worktree', 'remove', '--force', wtPath], {
       cwd: repoPath,
     });

@@ -624,5 +624,46 @@ export {
   runSlotKey,
   isSlotOf,
 } from './types/pinned-actions.js';
+export type {
+  WorktreeServerState,
+  WorktreeItemSource,
+  WorktreeDiscoverySource,
+  WorktreeConfigLayer,
+  WorktreeRunMode,
+  WorktreeVerb,
+  WorktreeActionDef,
+  WorktreeClickChoice,
+  WorktreeServerConfig,
+  WorktreeConfig,
+  WorktreeActionItem,
+  WorktreeServerSnapshot,
+  WorktreeActionsView,
+  WorktreeActionsListResponse,
+  WorktreeRunRequest,
+  WorktreeRunResponse,
+  WorktreeActionsWsMessage,
+  WorktreeSetupSnapshot,
+  WorktreeHook,
+  WorktreeSettingsResponse,
+  WorktreeEndpoint,
+  WorktreeServerMode,
+} from './types/worktree-actions.js';
+export type { WorktreeConfigKey } from './types/worktree-config-keys.js';
+export { getConfigKey, setConfigKey, listConfigKeys, keyScope, isWorktreeConfigKey } from './types/worktree-config-keys.js';
+export {
+  WORKTREE_SERVER_STATES,
+  WORKTREE_DISCOVERY_SOURCES,
+  WORKTREE_VERBS,
+  DEFAULT_WORKTREE_CLICK,
+  WORKTREE_START_SLOT,
+  WORKTREE_LOGS_SLOT,
+  WORKTREE_STOP_SLOT,
+  worktreeClickByState,
+  isWorktreeVerb,
+  worktreeItemOffered,
+  worktreeSourceId,
+  parseProbeEndpoints,
+  endpointEnv,
+} from './types/worktree-actions.js';
 export type { RunHint, RunHintCode, RunHintSuggestion, DiagnosableRun, BinaryDiagnosis, BinaryKind } from './run-diagnosis.js';
 export { diagnoseRun, extractBinaries, BINARY_NAME, aliasUsesTty, scriptFromAlias } from './run-diagnosis.js';

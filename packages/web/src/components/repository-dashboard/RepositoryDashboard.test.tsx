@@ -4,6 +4,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { RepositoryDashboard } from './RepositoryDashboard';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 
+vi.mock('../../services/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/api')>()),
+  fetchWorktrees: vi.fn(async () => []),
+  fetchWorktreeSettings: vi.fn(async () => ({ repo: 'acme/app', path: null, personal: {}, shared: null, overlayFiles: [], fileHooks: { global: [], repo: [] }, hooksDir: '/h', hookTimeoutSeconds: 60 })),
+}));
+
 const data = {
   org: 'acme', name: 'app',
   openIssues: [], recentlyClosedIssues: [], openPullRequests: [], recentlyMergedPullRequests: [],
@@ -37,9 +43,14 @@ describe('RepositoryDashboard tabs', () => {
     expect(screen.getByText('No active worktrees')).toBeTruthy(); // full panel empty state
   });
 
-  it('switches tabs', () => {
+  it('switches tabs', async () => {
     render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
     fireEvent.click(screen.getByText('Config'));
-    expect(screen.getByText('Post-checkout hook')).toBeTruthy();
+    expect(await screen.findByText('Actions et Hooks')).toBeTruthy();
+  });
+
+  it('opens on the tab named in ?tab= (the worktree menu\'s "Réglages du repo…")', async () => {
+    render(<MemoryRouter initialEntries={['/repositories/acme/app?tab=config']}><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
+    expect(await screen.findByText('Actions et Hooks')).toBeTruthy();
   });
 });

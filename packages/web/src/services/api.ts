@@ -1849,3 +1849,74 @@ export async function diagnoseBinary(binary: string): Promise<import('@fleex/sha
     return null;
   }
 }
+
+// ─── Worktree actions (WORKTREES group of the Work top bar) ─────────────────
+
+/** Silent (no toast): fetched in the background for every ticket the top bar shows. */
+export function fetchWorktreeActions(path: string): Promise<import('@fleex/shared').WorktreeActionsListResponse> {
+  return browseRequest(`/worktree-actions?path=${encodeURIComponent(path)}`);
+}
+
+/**
+ * Run a worktree verb or command. "Already running" is a 200 with
+ * `alreadyRunning` (the answer names the run); a refusal ("no start command",
+ * "server stopped") is a 4xx with `error`, toasted like any error.
+ */
+export async function runWorktreeAction(
+  body: import('@fleex/shared').WorktreeRunRequest,
+): Promise<import('@fleex/shared').WorktreeRunResponse> {
+  const res = await fetch(`${API_URL}/worktree-actions/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text().catch(() => '');
+  let json: (import('@fleex/shared').WorktreeRunResponse & { error?: string }) | null = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch { /* not JSON */ }
+  if (res.ok && json) return json;
+  const message = json?.error ?? extractErrorMessage(text, res.statusText);
+  useToastStore.getState().addToast('error', message);
+  throw new Error(message);
+}
+
+export function setWorktreeItemPinned(path: string, id: string, pinned: boolean): Promise<import('@fleex/shared').WorktreeActionsView> {
+  return request(`/worktree-actions/${pinned ? 'pin' : 'unpin'}`, { method: 'POST', body: JSON.stringify({ path, id }) });
+}
+
+export function fetchWorktreeSettings(repo: string, path: string | null): Promise<import('@fleex/shared').WorktreeSettingsResponse> {
+  return request(`/worktree-actions/settings?repo=${encodeURIComponent(repo)}${path ? `&path=${encodeURIComponent(path)}` : ''}`);
+}
+
+/** Write one config key in one layer (`value` undefined removes it). */
+export function setWorktreeConfigKey(
+  repo: string,
+  path: string | null,
+  layer: 'personal' | 'shared',
+  key: string,
+  value: unknown,
+): Promise<import('@fleex/shared').WorktreeSettingsResponse> {
+  return request('/worktree-actions/config', { method: 'POST', body: JSON.stringify({ repo, path, layer, key, value: value ?? null }) });
+}
+
+export function shareWorktreeKeys(path: string, keys: string[]): Promise<{ moved: string[]; file: string; settings: import('@fleex/shared').WorktreeSettingsResponse }> {
+  return request('/worktree-actions/share', { method: 'POST', body: JSON.stringify({ path, keys }) });
+}
+
+export function unshareWorktreeKeys(path: string, keys: string[], removeFromFile: boolean): Promise<{ moved: string[]; settings: import('@fleex/shared').WorktreeSettingsResponse }> {
+  return request('/worktree-actions/unshare', { method: 'POST', body: JSON.stringify({ path, keys, removeFromFile }) });
+}
+
+export function runWorktreeHook(
+  path: string,
+  hook: import('@fleex/shared').WorktreeHook,
+  command?: string,
+): Promise<import('@fleex/shared').WorktreeRunResponse & { setup?: import('@fleex/shared').WorktreeSetupSnapshot }> {
+  return request('/worktree-actions/hooks/run', { method: 'POST', body: JSON.stringify({ path, hook, ...(command !== undefined ? { command } : {}) }) });
+}
+
+export function openWorktreeHooksDir(repo: string): Promise<{ dir: string }> {
+  return request('/worktree-actions/hooks/open', { method: 'POST', body: JSON.stringify({ repo }) });
+}
+

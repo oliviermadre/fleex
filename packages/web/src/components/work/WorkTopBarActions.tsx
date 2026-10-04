@@ -1,26 +1,18 @@
 /**
- * The right-hand action cluster of the Work top bar (SPEC §2), in two labelled
- * groups split by a separator: the PINNED global actions, then the TICKET
- * actions scoped to the selected ticket's workspace (Cursor, Finder, localhost,
- * Logs…) ending with the system-provided overlay-sync button. Reuses the same
- * settings primitives as WorktreeHeader; the TICKET group only appears when a
- * ticket (hence a workspace) is selected.
+ * The right-hand action cluster of the Work top bar (SPEC §2), in labelled
+ * groups split by separators: the PINNED global actions, the TICKET actions
+ * scoped to the selected ticket's workspace (Cursor, Finder, localhost,
+ * Logs…), then WORKTREES — one button per worktree of the ticket, whose menu
+ * also holds Sync overlay. Reuses the same settings primitives as
+ * WorktreeHeader; TICKET and WORKTREES only appear when a ticket is selected.
  */
 import { useMemo } from 'react';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
-import { OverlaySyncButton } from '../overlay-sync/OverlaySyncButton';
+import { WorktreeActionsGroup } from '../worktree-actions/WorktreeActionsGroup';
 import { PinnedActionButton } from '../actions/PinnedActionButton';
 import { GROUP_LABEL } from './topBarStyles';
-
-/** First repository link "org/name" of a ticket, split for the overlay button. */
-function firstRepo(refs: string[]): { org: string; name: string } {
-  const ref = refs[0];
-  if (!ref) return { org: '', name: '' };
-  const slash = ref.indexOf('/');
-  return slash > 0 ? { org: ref.slice(0, slash), name: ref.slice(slash + 1) } : { org: '', name: '' };
-}
 
 export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
   const ticket = useTicketStore((s) => (ticketId ? s.tickets.find((t) => t.id === ticketId) ?? null : null));
@@ -40,12 +32,9 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
     [ticket, basePath],
   );
 
-  const repo = useMemo(
-    () => firstRepo((ticket?.links ?? []).filter((l) => l.type === 'repository').map((l) => l.ref)),
-    [ticket],
-  );
-
   const hasPinned = pinnedIcons.length > 0;
+  // The TICKET group used to always hold Sync overlay; that moved into the worktree menus.
+  const hasTicketActions = !!workspaceContext && workspaceActions.length > 0;
 
   if (!hasPinned && !workspaceContext) return null;
 
@@ -62,9 +51,9 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
         </>
       )}
 
-      {hasPinned && workspaceContext && <div className="mx-1 h-4 w-px bg-[var(--theme-border)]" />}
+      {hasPinned && hasTicketActions && <div className="mx-1 h-4 w-px bg-[var(--theme-border)]" />}
 
-      {workspaceContext && (
+      {hasTicketActions && workspaceContext && (
         <>
           <span className={GROUP_LABEL}>TICKET</span>
           <div className="flex items-center gap-2">
@@ -76,10 +65,11 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
                 onRun={() => executeWorkspaceAction(action, workspaceContext)}
               />
             ))}
-            <OverlaySyncButton ticket={ticket} worktree={null} repoOrg={repo.org} repoName={repo.name} />
           </div>
         </>
       )}
+
+      {ticket && <WorktreeActionsGroup ticket={ticket} separator={hasPinned || hasTicketActions} />}
     </div>
   );
 }

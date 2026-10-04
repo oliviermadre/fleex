@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TmuxTerminalRunner, stripTerminalOutput, shellQuote } from './tmux-terminal-runner.js';
+import { TmuxTerminalRunner, stripTerminalOutput, shellQuote, isWorktreeServerSession, parseLsofPorts } from './tmux-terminal-runner.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
@@ -53,7 +53,19 @@ describe('TmuxTerminalRunner', () => {
 
   it('names sessions outside fleex_ (never adopted as user sessions) and per instance', () => {
     const t = fakeTmux(['gone']);
-    expect(t.runner.sessionNameFor('draft:a b')).toBe('fxact_3000_draft_a_b');
+    expect(t.runner.sessionNameFor('kp')).toBe('fxact_3000_kp');
+    expect(t.runner.sessionNameFor('draft:a b')).toMatch(/^fxact_3000_draft_a_b_[0-9a-f]{8}$/);
+  });
+
+  it('gives two keys that sanitize or truncate alike their own sessions', () => {
+    // WHY: starting a command kills the session of its name first, so
+    // `build.prod` must not kill `build_prod`, nor one long id another.
+    const t = fakeTmux(['gone']);
+    const name = (k: string) => t.runner.sessionNameFor(k);
+    expect(name('wt:1::npm:build.prod')).not.toBe(name('wt:1::npm:build_prod'));
+    const long = 'wt:1ab2c::npm:test:integration:packages-server-';
+    expect(name(`${long}a`)).not.toBe(name(`${long}b`));
+    expect(name(`${long}a`).length).toBeLessThanOrEqual('fxact_3000_'.length + 48);
   });
 
   it('at startup kills only its own leftover action terminals, not another instance’s nor user sessions', async () => {
@@ -91,5 +103,43 @@ describe('TmuxTerminalRunner · safety net', () => {
     polls.splice(0).forEach((p) => p());
     expect(await handle.done).toMatchObject({ exitCode: 130, timedOut: true, cancelled: false });
     expect(calls.some((a) => a[0] === 'kill-session')).toBe(true);
+  });
+
+  it('spares worktree dev servers at startup: they are adopted back, not orphans', async () => {
+    // WHY: restarting Fleex must not kill the dev servers the user started from the worktree buttons.
+    const names = fakeTmux(['gone']).runner;
+    const server = names.sessionNameFor('wt:1ab2c::start');
+    const npmTest = names.sessionNameFor('wt:1ab2c::npm:test');
+    const t = fakeTmux(['gone'], ['fxact_3000_kp', server, npmTest, 'fxact_3000_wt_1ab2c__start']);
+    expect(isWorktreeServerSession(server)).toBe(true);
+    expect(isWorktreeServerSession(npmTest)).toBe(false);
+    // A pre-hash name could never be adopted back (nothing looks it up): killed, not leaked.
+    expect(await t.runner.killOrphans(isWorktreeServerSession)).toBe(3);
+    expect(t.calls.filter((a) => a[0] === 'kill-session').map((a) => a[2])).toEqual(['fxact_3000_kp', npmTest, 'fxact_3000_wt_1ab2c__start']);
+  });
+
+  it('runs with no safety-net timeout when asked (maxMs 0)', async () => {
+    const delays: number[] = [];
+    const execFn: ExecFn = vi.fn(async (_c: string, args: string[]) => (args[0] === 'list-panes' ? { stdout: '0 0', stderr: '' } : { stdout: '', stderr: '' }));
+    const runner = new TmuxTerminalRunner(execFn, {} as HostFs, '/tmp', logger, { setTimer: (_fn, ms) => { delays.push(ms); return 0; }, clearTimer: () => {} });
+    await runner.start({ runId: 'r9', command: 'pnpm dev', cwd: '/', sessionName: 'fxact_wt_x__start', maxMs: 0 });
+    expect(delays).toEqual([1000]); // only the poll, no 4 h guard
+  });
+
+  it('ends a session with its whole process tree: SIGTERM, a grace, SIGKILL, then the session', async () => {
+    // WHY: closing the pane only HUPs its foreground job — vite under npm, concurrently, a child
+    // that ignores HUP would outlive Stop and hold the port for the next worktree.
+    const t = fakeTmux(['gone']);
+    await t.runner.close('fxact_3000_wt_1ab2c__start');
+    const at = (pred: (a: string[]) => boolean) => t.calls.findIndex(pred);
+    const tree = at((a) => a[0] === '-c' && a[1]!.includes('kill -TERM $all'));
+    expect(tree).toBeGreaterThanOrEqual(0);
+    expect(t.calls[tree]![1]).toMatch(/pgrep -P[\s\S]*kill -TERM \$all[\s\S]*kill -0[\s\S]*kill -KILL/);
+    expect(at((a) => a[0] === 'kill-session')).toBeGreaterThan(tree);
+  });
+
+  it('reads listening ports from lsof field output', () => {
+    expect(parseLsofPorts('p123\nf20\nn*:5173\nn127.0.0.1:24678\nn[::1]:5173\n')).toEqual([5173, 24678]);
+    expect(parseLsofPorts('')).toEqual([]);
   });
 });

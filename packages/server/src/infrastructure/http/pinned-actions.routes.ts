@@ -13,7 +13,7 @@ export interface PinnedActionsRouteDeps {
   logger: { info: (msg: string, meta?: Record<string, unknown>) => void };
 }
 
-const SOURCE_KINDS = new Set<ActionSourceKind>(['pinned', 'workspace']);
+const SOURCE_KINDS = new Set<ActionSourceKind>(['pinned', 'workspace', 'worktree']);
 
 /**
  * Status probes and asynchronous action runs for the pinned / workspace action
