@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { WorktreeActionItem, WorktreeActionsView } from '@fleex/shared';
 import * as api from '../../services/api';
 import { useWorktreeActionsStore } from '../../stores/worktreeActionsStore';
@@ -12,6 +12,8 @@ vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/api')>()),
   fetchWorktreeActions: vi.fn(async () => ({ worktrees: [] })),
   runWorktreeAction: vi.fn(async (req: { path: string }) => ({ server: { path: req.path, state: 'starting', updatedAt: '2026-10-04T10:00:01Z' } })),
+  runWorktreeHook: vi.fn(async (path: string) => ({ runId: 'h1', server: { path, state: 'stopped', updatedAt: '' }, setup: { path, state: 'running', startedAt: '2026-10-04T10:00:00Z', runId: 'h1' } })),
+  openWorktreeHooksDir: vi.fn(async () => ({ dir: '/base/overlays/oliviermadre/fleex/hooks' })),
   setWorktreeItemPinned: vi.fn(),
 }));
 
@@ -41,10 +43,17 @@ function view(over: Partial<WorktreeActionsView> = {}): WorktreeActionsView {
   };
 }
 
+function Where() {
+  const loc = useLocation();
+  return <div data-testid="location">{loc.pathname}{loc.search}</div>;
+}
+
 function renderButton(v = view()) {
   return render(
     <MemoryRouter>
-      <WorktreeActionButton view={v} root="/base/workspaces/775c62" ticketId="T1" label="fleex" />
+      <Routes>
+        <Route path="*" element={<><WorktreeActionButton view={v} root="/base/workspaces/775c62" ticketId="T1" label="fleex" /><Where /></>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -56,7 +65,7 @@ const rowLabels = () => within(menu()).getAllByRole('menuitem').map((r) => r.que
 beforeEach(() => {
   // jsdom has no layout: keyboard navigation scrolls the highlighted row into view.
   Element.prototype.scrollIntoView = vi.fn();
-  useWorktreeActionsStore.setState({ byRoot: {}, servers: {} });
+  useWorktreeActionsStore.setState({ byRoot: {}, servers: {}, setups: {} });
   vi.clearAllMocks();
 });
 afterEach(cleanup);
@@ -109,11 +118,33 @@ describe('WorktreeActionButton', () => {
     }
   });
 
-  it('without a start command, the left click opens the menu, which says why', () => {
+  it('without a start command, the left click goes to Réglages › Actions et Hooks; the menu says why', () => {
+    // WHY (PRD §6): the fix for "nothing to start" is one click away, where the start is configured.
     renderButton(view({ start: null }));
     fireEvent.click(screen.getByRole('button', { name: 'fleex — not configured' }));
-    expect(within(menu()).getByText(/Start non configuré/)).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toBe('/repositories/oliviermadre/fleex?tab=config');
     expect(api.runWorktreeAction).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'fleex menu' }));
+    expect(within(menu()).getByText(/Start non configuré/)).toBeTruthy();
+  });
+
+  it('Système offers Relancer le Setup and the hooks folder; a failed setup shows in the header with its logs', async () => {
+    useWorktreeActionsStore.setState({ setups: { [PATH]: { path: PATH, state: 'failed', startedAt: 'x', runId: 'h0', error: 'npm ERR! missing script' } } });
+    renderButton();
+    expect(screen.getByTitle(/Le Setup a échoué/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'fleex menu' }));
+    expect(within(screen.getByTestId('setup-state')).getByText(/setup échoué/)).toBeTruthy();
+    expect(within(screen.getByTestId('setup-state')).getByText(/missing script/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(within(menu()).getByText('Relancer le Setup'));
+    });
+    expect(api.runWorktreeHook).toHaveBeenCalledWith(PATH, 'setup');
+    expect(useWorktreeActionsStore.getState().setups[PATH]?.state).toBe('running');
+    fireEvent.click(screen.getByRole('button', { name: 'fleex menu' }));
+    await act(async () => {
+      fireEvent.click(within(menu()).getByText('Ouvrir le dossier des hooks'));
+    });
+    expect(api.openWorktreeHooksDir).toHaveBeenCalledWith('oliviermadre/fleex');
   });
 });
 

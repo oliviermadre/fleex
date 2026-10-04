@@ -6,7 +6,8 @@ import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardSto
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/api')>()),
-  fetchPersonalWorktreeConfig: vi.fn(async () => ({})),
+  fetchWorktrees: vi.fn(async () => []),
+  fetchWorktreeSettings: vi.fn(async () => ({ repo: 'acme/app', path: null, personal: {}, shared: null, overlayFiles: [], fileHooks: { global: [], repo: [] }, hooksDir: '/h', hookTimeoutSeconds: 60 })),
 }));
 
 const data = {
@@ -42,14 +43,14 @@ describe('RepositoryDashboard tabs', () => {
     expect(screen.getByText('No active worktrees')).toBeTruthy(); // full panel empty state
   });
 
-  it('switches tabs', () => {
+  it('switches tabs', async () => {
     render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
     fireEvent.click(screen.getByText('Config'));
-    expect(screen.getByText(/^Setup/)).toBeTruthy();
+    expect(await screen.findByText('Actions et Hooks')).toBeTruthy();
   });
 
-  it('opens on the tab named in ?tab= (the worktree menu\'s "Réglages du repo…")', () => {
+  it('opens on the tab named in ?tab= (the worktree menu\'s "Réglages du repo…")', async () => {
     render(<MemoryRouter initialEntries={['/repositories/acme/app?tab=config']}><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
-    expect(screen.getByText(/^Setup/)).toBeTruthy();
+    expect(await screen.findByText('Actions et Hooks')).toBeTruthy();
   });
 });

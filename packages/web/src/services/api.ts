@@ -1885,10 +1885,38 @@ export function setWorktreeItemPinned(path: string, id: string, pinned: boolean)
   return request(`/worktree-actions/${pinned ? 'pin' : 'unpin'}`, { method: 'POST', body: JSON.stringify({ path, id }) });
 }
 
-export function fetchPersonalWorktreeConfig(repo: string): Promise<import('@fleex/shared').WorktreeConfig> {
-  return request(`/worktree-actions/personal?repo=${encodeURIComponent(repo)}`);
+export function fetchWorktreeSettings(repo: string, path: string | null): Promise<import('@fleex/shared').WorktreeSettingsResponse> {
+  return request(`/worktree-actions/settings?repo=${encodeURIComponent(repo)}${path ? `&path=${encodeURIComponent(path)}` : ''}`);
 }
 
-export function savePersonalWorktreeHooks(repo: string, hooks: { setup?: string; timeoutSec?: number }): Promise<import('@fleex/shared').WorktreeConfig> {
-  return request('/worktree-actions/personal/hooks', { method: 'PUT', body: JSON.stringify({ repo, hooks }) });
+/** Write one config key in one layer (`value` undefined removes it). */
+export function setWorktreeConfigKey(
+  repo: string,
+  path: string | null,
+  layer: 'personal' | 'shared',
+  key: string,
+  value: unknown,
+): Promise<import('@fleex/shared').WorktreeSettingsResponse> {
+  return request('/worktree-actions/config', { method: 'POST', body: JSON.stringify({ repo, path, layer, key, value: value ?? null }) });
 }
+
+export function shareWorktreeKeys(path: string, keys: string[]): Promise<{ moved: string[]; file: string; settings: import('@fleex/shared').WorktreeSettingsResponse }> {
+  return request('/worktree-actions/share', { method: 'POST', body: JSON.stringify({ path, keys }) });
+}
+
+export function unshareWorktreeKeys(path: string, keys: string[], removeFromFile: boolean): Promise<{ moved: string[]; settings: import('@fleex/shared').WorktreeSettingsResponse }> {
+  return request('/worktree-actions/unshare', { method: 'POST', body: JSON.stringify({ path, keys, removeFromFile }) });
+}
+
+export function runWorktreeHook(
+  path: string,
+  hook: import('@fleex/shared').WorktreeHook,
+  command?: string,
+): Promise<import('@fleex/shared').WorktreeRunResponse & { setup?: import('@fleex/shared').WorktreeSetupSnapshot }> {
+  return request('/worktree-actions/hooks/run', { method: 'POST', body: JSON.stringify({ path, hook, ...(command !== undefined ? { command } : {}) }) });
+}
+
+export function openWorktreeHooksDir(repo: string): Promise<{ dir: string }> {
+  return request('/worktree-actions/hooks/open', { method: 'POST', body: JSON.stringify({ repo }) });
+}
+

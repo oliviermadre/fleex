@@ -1,0 +1,221 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, cleanup, fireEvent, waitFor, within, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { setConfigKey, type WorktreeConfig, type WorktreeSettingsResponse } from '@fleex/shared';
+import * as api from '../../../services/api';
+import { RepoActionsSettings } from './RepoActionsSettings';
+
+const PATH = '/base/workspaces/775c62/fleex';
+const REPO = 'oliviermadre/fleex';
+
+vi.mock('../../../services/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../services/api')>()),
+  fetchWorktrees: vi.fn(),
+  fetchWorktreeSettings: vi.fn(),
+  setWorktreeConfigKey: vi.fn(),
+  shareWorktreeKeys: vi.fn(),
+  unshareWorktreeKeys: vi.fn(),
+  runWorktreeHook: vi.fn(async () => ({ runId: 'r1', server: { path: PATH, state: 'stopped', updatedAt: '' } })),
+}));
+
+/** A tiny in-memory server: both layers, recomputed settings on every write. */
+function fakeServer(personal: WorktreeConfig, shared: WorktreeConfig | null) {
+  const state = { personal, shared };
+  const settings = (): WorktreeSettingsResponse => ({
+    repo: REPO,
+    path: PATH,
+    personal: state.personal,
+    shared: state.shared,
+    view: {
+      path: PATH,
+      repo: REPO,
+      branch: 'ticket/775c62',
+      items: [
+        { id: 'launch:web', source: 'launch', layer: 'launch', label: 'web', command: 'pnpm dev', mode: 'terminal', port: 5173, pinned: false },
+        { id: 'npm:test', source: 'npm', layer: 'detected', label: 'test', command: 'pnpm run test', mode: 'terminal', pinned: (state.personal.pins ?? []).includes('npm:test') },
+        ...(state.personal.actions ?? []).map((a) => ({ id: a.id, source: 'action' as const, layer: 'personal' as const, label: a.label ?? a.id, command: a.cmd, mode: a.mode ?? 'background' as const, pinned: false })),
+        ...(state.shared?.actions ?? []).map((a) => ({ id: a.id, source: 'action' as const, layer: 'shared' as const, label: a.label ?? a.id, command: a.cmd, mode: a.mode ?? 'background' as const, pinned: false })),
+      ],
+      start: null,
+      clickByState: { stopped: 'start', starting: 'logs', running: 'open', error: 'logs' },
+      server: { path: PATH, state: 'stopped', updatedAt: '' },
+    },
+    overlayFiles: ['.env'],
+    fileHooks: { global: [], repo: ['/base/overlays/oliviermadre/fleex/hooks/10-deps.sh'] },
+    hooksDir: '/base/overlays/oliviermadre/fleex/hooks',
+    hookTimeoutSeconds: 60,
+  });
+  vi.mocked(api.fetchWorktreeSettings).mockImplementation(async () => settings());
+  vi.mocked(api.setWorktreeConfigKey).mockImplementation(async (_repo, _path, layer, key, value) => {
+    if (layer === 'personal') state.personal = setConfigKey(state.personal, key, value);
+    else state.shared = setConfigKey(state.shared, key, value);
+    return settings();
+  });
+  vi.mocked(api.shareWorktreeKeys).mockImplementation(async (_path, keys) => {
+    for (const k of keys) {
+      const v = k.startsWith('action:') ? state.personal.actions?.find((a) => `action:${a.id}` === k) : (state.personal.hooks as Record<string, unknown> | undefined)?.[k.split('.')[1]!];
+      state.shared = setConfigKey(state.shared, k, v);
+      state.personal = setConfigKey(state.personal, k, undefined);
+    }
+    return { moved: keys, file: `${PATH}/.fleex/worktree.json`, settings: settings() };
+  });
+  vi.mocked(api.unshareWorktreeKeys).mockImplementation(async (_path, keys, removeFromFile) => {
+    for (const k of keys) {
+      const v = (state.shared?.hooks as Record<string, unknown> | undefined)?.[k.split('.')[1]!];
+      state.personal = setConfigKey(state.personal, k, v);
+      if (removeFromFile) state.shared = setConfigKey(state.shared, k, undefined);
+    }
+    return { moved: keys, settings: settings() };
+  });
+  return state;
+}
+
+async function renderSettings() {
+  render(<MemoryRouter><RepoActionsSettings org="oliviermadre" name="fleex" /></MemoryRouter>);
+  await waitFor(() => expect(screen.getByTestId('repo-actions-settings')).toBeTruthy());
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(api.fetchWorktrees).mockResolvedValue([{ path: PATH, branch: 'ticket/775c62', isMain: false, isBare: false }]);
+});
+afterEach(cleanup);
+
+describe('Actions et Hooks — lifecycle', () => {
+  it('reads the strip at a glance: configured steps say where they live, empty ones offer to add', async () => {
+    // WHY: the hooks used to hide behind a text field; the strip makes each step discoverable.
+    fakeServer({ hooks: { setup: 'pnpm i' } }, { hooks: { teardown: 'docker compose down' } });
+    await renderSettings();
+    expect(within(screen.getByTestId('step-overlay')).getByText('✓ 1 fichier')).toBeTruthy();
+    expect(within(screen.getByTestId('step-setup')).getByText('✓ perso')).toBeTruthy();
+    expect(within(screen.getByTestId('step-start')).getByText('+ ajouter')).toBeTruthy();
+    expect(within(screen.getByTestId('step-teardown')).getByText('✓ partagé')).toBeTruthy();
+  });
+
+  it('saves the Setup where it lives (personal) and tests the draft in the current worktree', async () => {
+    const state = fakeServer({ hooks: { setup: 'pnpm i' } }, null);
+    await renderSettings();
+    const box = screen.getByLabelText('Script Setup');
+    fireEvent.change(box, { target: { value: 'pnpm i && make migrate' } });
+    expect(screen.getByTestId('step-setup').querySelector('[title="Modifications non enregistrées"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Tester dans le worktree courant/ }));
+    await waitFor(() => expect(api.runWorktreeHook).toHaveBeenCalledWith(PATH, 'setup', 'pnpm i && make migrate'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    });
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'hooks.setup', 'pnpm i && make migrate');
+    expect(state.personal.hooks?.setup).toBe('pnpm i && make migrate');
+  });
+
+  it('keeps a draft when switching steps', async () => {
+    fakeServer({}, null);
+    await renderSettings();
+    fireEvent.change(screen.getByLabelText('Script Setup'), { target: { value: 'make deps' } });
+    fireEvent.click(screen.getByTestId('step-teardown'));
+    fireEvent.click(screen.getByTestId('step-setup'));
+    expect((screen.getByLabelText('Script Setup') as HTMLTextAreaElement).value).toBe('make deps');
+  });
+
+  it('a shared value is edited in the file; Garder pour moi asks whether to remove it from the file', async () => {
+    // WHY (acceptance 9): moving to personal must be explicit about the team's copy.
+    const state = fakeServer({}, { hooks: { setup: 'make deps' } });
+    await renderSettings();
+    fireEvent.change(screen.getByLabelText('Script Setup'), { target: { value: 'make deps all' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    });
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'shared', 'hooks.setup', 'make deps all');
+    fireEvent.click(screen.getByRole('button', { name: 'Partagé ⇣' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Retirer aussi du fichier' }));
+    });
+    expect(api.unshareWorktreeKeys).toHaveBeenCalledWith(PATH, ['hooks.setup'], true);
+    expect(state.shared).toEqual({});
+    expect(state.personal.hooks?.setup).toBe('make deps all');
+  });
+
+  it('Partager moves a personal step into .fleex/worktree.json', async () => {
+    const state = fakeServer({ hooks: { setup: 'pnpm i' } }, null);
+    await renderSettings();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Perso ⇡' }));
+    });
+    expect(api.shareWorktreeKeys).toHaveBeenCalledWith(PATH, ['hooks.setup']);
+    expect(state.shared?.hooks?.setup).toBe('pnpm i');
+  });
+
+  it('sets the start from a detected command, without writing the default left clicks', async () => {
+    fakeServer({}, null);
+    await renderSettings();
+    fireEvent.click(screen.getByTestId('step-start'));
+    fireEvent.change(screen.getByLabelText('Commande de démarrage'), { target: { value: 'launch:web' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    });
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.start', 'launch:web');
+    expect(api.setWorktreeConfigKey).toHaveBeenCalledWith(REPO, PATH, 'personal', 'server.clickByState', undefined);
+  });
+});
+
+describe('Actions et Hooks — actions, detected commands, options', () => {
+  it('adds an action as personal, with an id from its name', async () => {
+    const state = fakeServer({}, null);
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: '+ Ajouter une action' }));
+    const editor = screen.getByTestId('action-editor');
+    fireEvent.change(within(editor).getByLabelText('Nom'), { target: { value: 'DB migrate' } });
+    fireEvent.change(within(editor).getByLabelText('Commande'), { target: { value: 'make db-migrate' } });
+    await act(async () => {
+      fireEvent.click(within(editor).getByRole('button', { name: 'Ajouter (perso)' }));
+    });
+    expect(state.personal.actions).toEqual([{ id: 'db-migrate', cmd: 'make db-migrate', mode: 'background', label: 'DB migrate' }]);
+    expect(screen.getByTestId('action-row-db-migrate')).toBeTruthy();
+  });
+
+  it('refuses an action without a command', async () => {
+    fakeServer({}, null);
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: '+ Ajouter une action' }));
+    fireEvent.click(within(screen.getByTestId('action-editor')).getByRole('button', { name: 'Ajouter (perso)' }));
+    expect(screen.getByText(/Il faut une commande/)).toBeTruthy();
+    expect(api.setWorktreeConfigKey).not.toHaveBeenCalled();
+  });
+
+  it('pins, hides, or makes a detected command the start', async () => {
+    const state = fakeServer({}, null);
+    await renderSettings();
+    const row = screen.getByTestId('detected-npm:test');
+    await act(async () => {
+      fireEvent.click(within(row).getByRole('button', { name: 'Épingler test' }));
+    });
+    expect(state.personal.pins).toEqual(['npm:test']);
+    await act(async () => {
+      fireEvent.click(within(screen.getByTestId('detected-launch:web')).getByText('▶ start'));
+    });
+    expect(state.personal.server?.start).toBe('launch:web');
+    await act(async () => {
+      fireEvent.click(within(screen.getByTestId('detected-npm:test')).getByText('masquer'));
+    });
+    expect(state.personal.discovery?.hide).toEqual(['npm:test']);
+  });
+
+  it('turns port reservation on with 10 ports by default', async () => {
+    const state = fakeServer({}, null);
+    await renderSettings();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: 'Réserver des ports' }));
+    });
+    expect(state.personal.ports).toEqual({ reserve: true, count: 10 });
+  });
+
+  it('without a worktree, only the personal layer is editable', async () => {
+    vi.mocked(api.fetchWorktrees).mockResolvedValue([]);
+    vi.mocked(api.fetchWorktreeSettings).mockResolvedValue({
+      repo: REPO, path: null, personal: { hooks: { setup: 'pnpm i' } }, shared: null, overlayFiles: [], fileHooks: { global: [], repo: [] }, hooksDir: '/h', hookTimeoutSeconds: 60,
+    });
+    await renderSettings();
+    expect(screen.getByText(/Aucun worktree/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Perso ⇡' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /Tester dans le worktree courant/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});

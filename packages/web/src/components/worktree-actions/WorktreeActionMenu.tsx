@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { worktreeItemOffered, type WorktreeActionItem, type WorktreeActionsView, type WorktreeServerSnapshot, type WorktreeVerb } from '@fleex/shared';
+import { worktreeItemOffered, type WorktreeActionItem, type WorktreeActionsView, type WorktreeServerSnapshot, type WorktreeSetupSnapshot, type WorktreeVerb } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { foldAccents } from '../../lib/normalize';
 import { FloatingPortal } from '../../hooks/usePopover';
@@ -31,6 +31,11 @@ export interface WorktreeActionMenuProps {
   onPin: (item: WorktreeActionItem, pinned: boolean) => void;
   onSyncOverlay: () => void;
   onRepoSettings: (() => void) | null;
+  /** Last Setup run of this worktree, shown in the header. */
+  setup?: WorktreeSetupSnapshot;
+  onRerunSetup: () => void;
+  onSetupLogs: () => void;
+  onOpenHooks: (() => void) | null;
   onClose: () => void;
   floatingRef: (node: HTMLElement | null) => void;
   floatingStyles: CSSProperties;
@@ -54,6 +59,10 @@ export function WorktreeActionMenu({
   onPin,
   onSyncOverlay,
   onRepoSettings,
+  setup,
+  onRerunSetup,
+  onSetupLogs,
+  onOpenHooks,
   onClose,
   floatingRef,
   floatingStyles,
@@ -87,9 +96,11 @@ export function WorktreeActionMenu({
       onLaunch: () => onItem(item),
     }));
     out.push({ key: 'system:sync', group: 'system', label: 'Sync overlay', detail: 'fichiers gitignorés → overlay', search: foldAccents('sync overlay gitignore env'), onLaunch: onSyncOverlay });
-    if (onRepoSettings) out.push({ key: 'system:settings', group: 'system', label: 'Réglages du repo…', search: foldAccents('reglages settings repo hook setup'), onLaunch: onRepoSettings });
+    out.push({ key: 'system:setup', group: 'system', label: 'Relancer le Setup', detail: 'hooks fichiers puis script Setup', search: foldAccents('relancer setup hook post-checkout install'), onLaunch: onRerunSetup });
+    if (onOpenHooks) out.push({ key: 'system:hooks', group: 'system', label: 'Ouvrir le dossier des hooks', detail: 'overlays/<org>/<repo>/hooks', search: foldAccents('ouvrir dossier hooks fichiers'), onLaunch: onOpenHooks });
+    if (onRepoSettings) out.push({ key: 'system:settings', group: 'system', label: 'Réglages du repo…', detail: 'Actions et Hooks', search: foldAccents('reglages settings repo hook setup actions'), onLaunch: onRepoSettings });
     return out;
-  }, [view.items, state, onItem, onSyncOverlay, onRepoSettings]);
+  }, [view.items, state, onItem, onSyncOverlay, onRepoSettings, onRerunSetup, onOpenHooks]);
 
   const counts = useMemo(() => {
     const c: Record<MenuGroupKind, number> = { pinned: 0, action: 0, launch: 0, npm: 0, make: 0, composer: 0, system: 0 };
@@ -185,10 +196,25 @@ export function WorktreeActionMenu({
             <VerbButton disabled={state !== 'running' || !server.url} onClick={verb('open')}>↗ Open</VerbButton>
             <VerbButton onClick={verb('logs')}>≡ Logs</VerbButton>
           </div>
+          {setup && setup.state !== 'ok' && (
+            <div className="mt-1.5 flex items-center gap-1.5 rounded bg-[var(--theme-bg-overlay)] px-2 py-1 text-[10.5px]" data-testid="setup-state">
+              <span className={setup.state === 'failed' ? stateTextClass('error') : stateTextClass('starting')}>
+                {setup.state === 'running' ? '● setup en cours' : '✗ setup échoué'}
+              </span>
+              {setup.state === 'failed' && setup.error && <span className="min-w-0 flex-1 truncate font-mono text-[var(--theme-text-muted)]" title={setup.error}>{setup.error.split('\n').filter(Boolean).pop()}</span>}
+              {setup.runId && (
+                <button type="button" className="ml-auto shrink-0 text-[var(--theme-accent)] hover:underline" onClick={(e) => { e.stopPropagation(); onSetupLogs(); onClose(); }}>voir les logs</button>
+              )}
+            </div>
+          )}
           {!view.start && (
             <div className="mt-1.5 rounded bg-[var(--theme-bg-overlay)] px-2 py-1 text-[10.5px] text-[var(--theme-text-muted)]">
               Start non configuré : {detected} commande{detected > 1 ? 's' : ''} détectée{detected > 1 ? 's' : ''}.
-              {' '}Lance une config launch.json, ou ajoute <code className="font-mono">server.start</code> dans <code className="font-mono">.fleex/worktree.json</code>.
+              {onRepoSettings ? (
+                <> <button type="button" className="text-[var(--theme-accent)] hover:underline" onClick={(e) => { e.stopPropagation(); onRepoSettings(); onClose(); }}>Configurer…</button> ou lance une config launch.json.</>
+              ) : (
+                <> Lance une config launch.json, ou ajoute <code className="font-mono">server.start</code> dans <code className="font-mono">.fleex/worktree.json</code>.</>
+              )}
             </div>
           )}
           {view.sharedConfigError && (

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WorktreeActionItem, WorktreeActionsView, WorktreeVerb } from '@fleex/shared';
 import { cn } from '../../lib/cn';
@@ -20,6 +20,8 @@ interface Props {
   ticketId: string | null;
   /** Short name shown on the button (`fleex`, or `fleex·spike` when a repo has two worktrees). */
   label: string;
+  /** Bumped to open the menu from outside (a pick in the `+N` overflow list). */
+  openNonce?: number;
 }
 
 /**
@@ -28,12 +30,16 @@ interface Props {
  * error…), the ▾ part opens the launcher. Right click and long press anywhere
  * on it open the launcher too, so a phone or a trackpad never needs a right click.
  */
-export function WorktreeActionButton({ view, root, ticketId, label }: Props) {
+export function WorktreeActionButton({ view, root, ticketId, label, openNonce }: Props) {
   const server = useWorktreeActionsStore((s) => s.servers[view.path]) ?? view.server;
   const load = useWorktreeActionsStore((s) => s.load);
   const runVerb = useWorktreeActionsStore((s) => s.runVerb);
   const runItem = useWorktreeActionsStore((s) => s.runItem);
   const setPinned = useWorktreeActionsStore((s) => s.setPinned);
+  const setup = useWorktreeActionsStore((s) => s.setups[view.path]) ?? view.setup;
+  const rerunSetup = useWorktreeActionsStore((s) => s.rerunSetup);
+  const showSetupLogs = useWorktreeActionsStore((s) => s.showSetupLogs);
+  const openHooksDir = useWorktreeActionsStore((s) => s.openHooksDir);
   const navigate = useNavigate();
   const [syncOpen, setSyncOpen] = useState(false);
   const { open, setOpen, refs, floatingStyles, getFloatingProps } = usePopover({ placement: 'bottom-end', maxHeight: MENU_MAX_HEIGHT, enableClick: false });
@@ -43,6 +49,11 @@ export function WorktreeActionButton({ view, root, ticketId, label }: Props) {
     void load(root);
     setOpen(true);
   }, [load, root, setOpen]);
+
+  useEffect(() => {
+    if (openNonce) openMenu();
+    // Only a new nonce opens it, not a re-render (openMenu is stable enough to leave out).
+  }, [openNonce]);
 
   // Long press (touch): open the menu, and swallow the click that follows.
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,15 +78,20 @@ export function WorktreeActionButton({ view, root, ticketId, label }: Props) {
 
   const state = server.state;
   const configured = !!view.start || state !== 'stopped';
-  const left = resolveLeftClick(view, state);
   const [org, repoName] = view.repo?.split('/') ?? [];
+  const settingsUrl = org && repoName ? `/repositories/${org}/${repoName}?tab=config` : null;
+  // Nothing to start: the left click goes where the start is configured (PRD §6).
+  const left = !view.start && state === 'stopped' && settingsUrl
+    ? { kind: 'settings' as const, label: 'Configurer le start (Réglages › Actions et Hooks)' }
+    : resolveLeftClick(view, state);
 
   const onLeft = () => {
     if (longPressed.current) {
       longPressed.current = false;
       return;
     }
-    if (left.kind === 'menu') openMenu();
+    if (left.kind === 'settings') navigate(settingsUrl!);
+    else if (left.kind === 'menu') openMenu();
     else if (left.kind === 'verb') void runVerb(view, left.verb as WorktreeVerb, ticketId);
     else void runItem(view, left.item);
   };
@@ -108,6 +124,8 @@ export function WorktreeActionButton({ view, root, ticketId, label }: Props) {
               className={cn('h-[7px] w-[7px] shrink-0 rounded-full', configured ? stateDotClass(state) : 'border border-[var(--theme-text-muted)]')}
             />
             <span className="max-w-[140px] truncate text-[var(--theme-text-primary)]">{label}</span>
+            {setup?.state === 'failed' && <span className={stateTextClass('error')} title="Le Setup a échoué — voir le menu">⚠</span>}
+            {setup?.state === 'running' && <span className={cn('animate-pulse motion-reduce:animate-none', stateTextClass('starting'))} title="Setup en cours">◌</span>}
             {state === 'running' && server.port ? (
               <span className={cn('font-mono text-[10.5px]', stateTextClass('running'))}>:{server.port}</span>
             ) : (
@@ -138,7 +156,11 @@ export function WorktreeActionButton({ view, root, ticketId, label }: Props) {
           onItem={(item: WorktreeActionItem) => void runItem(view, item)}
           onPin={(item, pinned) => void setPinned(root, view, item.id, pinned)}
           onSyncOverlay={() => setSyncOpen(true)}
-          onRepoSettings={org && repoName ? () => navigate(`/repositories/${org}/${repoName}?tab=config`) : null}
+          onRepoSettings={settingsUrl ? () => navigate(settingsUrl) : null}
+          {...(setup ? { setup } : {})}
+          onRerunSetup={() => void rerunSetup(view)}
+          onSetupLogs={() => showSetupLogs(view)}
+          onOpenHooks={view.repo ? () => void openHooksDir(view.repo!) : null}
           onClose={() => setOpen(false)}
           floatingRef={refs.setFloating}
           floatingStyles={floatingStyles}

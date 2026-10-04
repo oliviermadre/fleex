@@ -8,6 +8,7 @@ import {
   type WorktreeActionsView,
   type WorktreeActionsWsMessage,
   type WorktreeServerSnapshot,
+  type WorktreeSetupSnapshot,
   type WorktreeVerb,
 } from '@fleex/shared';
 import * as api from '../services/api';
@@ -44,7 +45,14 @@ interface WorktreeActionsState {
   byRoot: Record<string, WorktreeActionsView[]>;
   /** Live server state per worktree path (fetches + `worktree-server:update` pushes). */
   servers: Record<string, WorktreeServerSnapshot>;
+  /** Last Setup run per worktree path (fetches + `worktree-setup:update` pushes). */
+  setups: Record<string, WorktreeSetupSnapshot>;
   load: (root: string) => Promise<void>;
+  /** "Relancer le Setup": file hooks then the Setup script, in the action engine. */
+  rerunSetup: (view: WorktreeActionsView) => Promise<void>;
+  openHooksDir: (repo: string) => Promise<void>;
+  /** Logs of the last Setup run. */
+  showSetupLogs: (view: WorktreeActionsView) => void;
   handleWsMessage: (msg: WorktreeActionsWsMessage) => void;
   runVerb: (view: WorktreeActionsView, verb: WorktreeVerb, ticketId: string | null) => Promise<void>;
   runItem: (view: WorktreeActionsView, item: WorktreeActionItem) => Promise<void>;
@@ -59,6 +67,7 @@ interface WorktreeActionsState {
 export const useWorktreeActionsStore = create<WorktreeActionsState>((set, get) => ({
   byRoot: {},
   servers: {},
+  setups: {},
 
   load: async (root) => {
     let worktrees: WorktreeActionsView[];
@@ -69,14 +78,41 @@ export const useWorktreeActionsStore = create<WorktreeActionsState>((set, get) =
     }
     set((s) => {
       const servers = { ...s.servers };
-      for (const w of worktrees) servers[w.path] = newer(servers[w.path], w.server);
-      return { byRoot: { ...s.byRoot, [root]: worktrees }, servers };
+      const setups = { ...s.setups };
+      for (const w of worktrees) {
+        servers[w.path] = newer(servers[w.path], w.server);
+        if (w.setup && (!setups[w.path] || setups[w.path]!.startedAt <= w.setup.startedAt)) setups[w.path] = w.setup;
+      }
+      return { byRoot: { ...s.byRoot, [root]: worktrees }, servers, setups };
     });
   },
 
   handleWsMessage: (msg) => {
+    if (msg.type === 'worktree-setup:update') {
+      set((s) => ({ setups: { ...s.setups, [msg.data.path]: msg.data } }));
+      return;
+    }
     if (msg.type !== 'worktree-server:update') return;
     set((s) => ({ servers: { ...s.servers, [msg.data.path]: newer(s.servers[msg.data.path], msg.data) } }));
+  },
+
+  rerunSetup: async (view) => {
+    try {
+      const res = await api.runWorktreeHook(view.path, 'setup');
+      if (res.setup) set((s) => ({ setups: { ...s.setups, [view.path]: res.setup! } }));
+    } catch { /* toasted */ }
+  },
+
+  openHooksDir: async (repo) => {
+    try {
+      const { dir } = await api.openWorktreeHooksDir(repo);
+      useToastStore.getState().addToast('info', `Dossier des hooks : ${dir}`);
+    } catch { /* toasted */ }
+  },
+
+  showSetupLogs: (view) => {
+    const runId = get().setups[view.path]?.runId;
+    if (runId) usePinnedActionsStore.getState().openLogs({ sourceId: worktreeSourceId(view.path), label: `${worktreeName(view)} · setup`, runId });
   },
 
   runVerb: async (view, verb, ticketId) => {
