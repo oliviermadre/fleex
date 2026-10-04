@@ -37,7 +37,12 @@ export interface MergedWorktree {
   start: { id?: string; command: string; label: string; item?: WorktreeActionItem } | null;
   clickByState: Record<WorktreeServerState, WorktreeClickChoice>;
   hooks: NonNullable<WorktreeConfig['hooks']>;
+  /** Port reservation, personal over shared. */
+  ports: { reserve: boolean; count: number };
 }
+
+export const DEFAULT_PORT_COUNT = 10;
+export const MAX_PORT_COUNT = 20;
 
 function sourcesOf(personal?: WorktreeConfig, shared?: WorktreeConfig): Set<WorktreeDiscoverySource> {
   const chosen = personal?.discovery?.sources ?? shared?.discovery?.sources;
@@ -99,5 +104,7 @@ export function mergeWorktreeConfig({ personal, shared, launch, detected }: Merg
     start = item ? { id: item.id, command: item.command, label: item.label, item } : { command: startRef, label: 'start' };
   }
 
-  return { items, server, start, clickByState: worktreeClickByState(server.clickByState), hooks };
+  const portsCfg = { ...(shared?.ports ?? {}), ...(personal?.ports ?? {}) };
+  const count = Math.min(MAX_PORT_COUNT, Math.max(1, Math.round(Number(portsCfg.count) || DEFAULT_PORT_COUNT)));
+  return { items, server, start, clickByState: worktreeClickByState(server.clickByState), hooks, ports: { reserve: portsCfg.reserve === true, count } };
 }

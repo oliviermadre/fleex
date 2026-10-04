@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { WorktreeActionsListResponse, WorktreeConfig, WorktreeRunRequest } from '@fleex/shared';
+import type { WorktreeActionsListResponse, WorktreeRunRequest } from '@fleex/shared';
 import { WorktreeActionError, type WorktreeActionsService } from '../../application/services/worktree-actions.service.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 
@@ -62,21 +62,78 @@ export function worktreeActionsRoutes(deps: WorktreeActionsRouteDeps) {
       });
     }
 
-    // Personal layer of a repo (Settings › repo › Setup hook reads and writes it).
-    app.get<{ Querystring: { repo?: string } }>('/api/worktree-actions/personal', async (request, reply) => {
+    // Settings › Actions et Hooks: both layers, the merged view, overlay files and file hooks.
+    app.get<{ Querystring: { repo?: string; path?: string } }>('/api/worktree-actions/settings', async (request, reply) => {
       const repo = request.query.repo ?? '';
       if (!REPO_REF.test(repo)) return reply.code(400).send({ error: 'repo must be org/name' });
-      return worktreeActions.getPersonal(repo);
+      const path = request.query.path || null;
+      if (path !== null && !managed(path, reply)) return reply;
+      try {
+        return await worktreeActions.settings(repo, path);
+      } catch (err) {
+        return fail(err, reply);
+      }
     });
 
-    app.put<{ Body: { repo?: string; hooks?: WorktreeConfig['hooks'] } }>('/api/worktree-actions/personal/hooks', async (request, reply) => {
+    // One key in one layer (value null/absent = remove). Shared = the worktree's .fleex/worktree.json.
+    app.post<{ Body: { repo?: string; path?: string | null; layer?: string; key?: string; value?: unknown } }>('/api/worktree-actions/config', async (request, reply) => {
+      const body = request.body ?? {};
+      const repo = body.repo ?? '';
+      if (!REPO_REF.test(repo)) return reply.code(400).send({ error: 'repo must be org/name' });
+      if (body.layer !== 'personal' && body.layer !== 'shared') return reply.code(400).send({ error: 'layer must be personal or shared' });
+      if (typeof body.key !== 'string') return reply.code(400).send({ error: 'key is required' });
+      const path = body.path || null;
+      if (path !== null && !managed(path, reply)) return reply;
+      try {
+        return await worktreeActions.setKey(repo, path, body.layer, body.key, body.value ?? undefined);
+      } catch (err) {
+        return fail(err, reply);
+      }
+    });
+
+    // Partager (personal → .fleex/worktree.json) / Garder pour moi (→ personal, optionally out of the file).
+    app.post<{ Body: { path?: string; keys?: unknown } }>('/api/worktree-actions/share', async (request, reply) => {
+      const body = request.body ?? {};
+      if (!managed(body.path, reply)) return reply;
+      const keys = Array.isArray(body.keys) ? body.keys.filter((k): k is string => typeof k === 'string') : [];
+      if (keys.length === 0) return reply.code(400).send({ error: 'keys is required' });
+      try {
+        return await worktreeActions.share(body.path, keys);
+      } catch (err) {
+        return fail(err, reply);
+      }
+    });
+
+    app.post<{ Body: { path?: string; keys?: unknown; removeFromFile?: boolean } }>('/api/worktree-actions/unshare', async (request, reply) => {
+      const body = request.body ?? {};
+      if (!managed(body.path, reply)) return reply;
+      const keys = Array.isArray(body.keys) ? body.keys.filter((k): k is string => typeof k === 'string') : [];
+      if (keys.length === 0) return reply.code(400).send({ error: 'keys is required' });
+      try {
+        return await worktreeActions.unshare(body.path, keys, body.removeFromFile === true);
+      } catch (err) {
+        return fail(err, reply);
+      }
+    });
+
+    // Run a hook now: "Tester" (a draft command) or "Relancer le Setup".
+    app.post<{ Body: { path?: string; hook?: string; command?: unknown } }>('/api/worktree-actions/hooks/run', async (request, reply) => {
+      const body = request.body ?? {};
+      if (!managed(body.path, reply)) return reply;
+      if (body.hook !== 'setup' && body.hook !== 'teardown') return reply.code(400).send({ error: 'hook must be setup or teardown' });
+      const command = typeof body.command === 'string' ? body.command : undefined;
+      try {
+        const result = await worktreeActions.runHook(body.path, body.hook, command);
+        return reply.code(result.runId && !result.alreadyRunning ? 202 : 200).send(result);
+      } catch (err) {
+        return fail(err, reply);
+      }
+    });
+
+    app.post<{ Body: { repo?: string } }>('/api/worktree-actions/hooks/open', async (request, reply) => {
       const repo = request.body?.repo ?? '';
       if (!REPO_REF.test(repo)) return reply.code(400).send({ error: 'repo must be org/name' });
-      const hooks = request.body?.hooks ?? {};
-      const patch: NonNullable<WorktreeConfig['hooks']> = {};
-      if (typeof hooks.setup === 'string') patch.setup = hooks.setup;
-      if (typeof hooks.timeoutSec === 'number' && hooks.timeoutSec > 0) patch.timeoutSec = Math.min(3600, Math.round(hooks.timeoutSec));
-      return worktreeActions.updatePersonal(repo, (cfg) => ({ ...cfg, hooks: { ...(cfg.hooks ?? {}), ...patch } }));
+      return worktreeActions.openHooksDir(repo);
     });
   };
 }

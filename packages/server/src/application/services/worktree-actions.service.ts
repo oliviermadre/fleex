@@ -4,10 +4,17 @@ import {
   isWorktreeVerb,
   runSlotKey,
   worktreeSourceId,
+  getConfigKey,
+  isWorktreeConfigKey,
+  setConfigKey,
   type ActionRun,
   type WorktreeActionItem,
   type WorktreeActionsView,
   type WorktreeConfig,
+  type WorktreeConfigKey,
+  type WorktreeHook,
+  type WorktreeSettingsResponse,
+  type WorktreeSetupSnapshot,
   type WorktreeRunResponse,
   type WorktreeServerSnapshot,
   type WorktreeServerState,
@@ -27,7 +34,7 @@ import {
   type DetectedItem,
 } from '../../domain/services/worktree-discovery.js';
 import { mergeWorktreeConfig, type MergedWorktree } from '../../domain/services/worktree-config-merge.js';
-import { buildFleexEnv, withEnv } from '../../domain/services/worktree-env.js';
+import { buildFleexEnv, interpolateHook, withEnv } from '../../domain/services/worktree-env.js';
 
 /** While starting, look for the port this often… */
 export const STARTING_CHECK_MS = 2_000;
@@ -58,8 +65,14 @@ export interface WorktreeActionsDeps {
   actionRuns: Pick<ActionRunService, 'start' | 'cancel' | 'get' | 'list'>;
   terminals: WorktreeServerTerminals;
   shell: WorktreeShell;
-  broadcast: (type: 'worktree-server:update', data: WorktreeServerSnapshot) => void;
+  broadcast: (type: 'worktree-server:update' | 'worktree-setup:update', data: WorktreeServerSnapshot | WorktreeSetupSnapshot) => void;
   logger: LoggerPort;
+  /** Overlay files and hook scripts of a repo (settings screen, Setup re-runs). */
+  overlay?: {
+    listOverlayFilesRecursive(org: string, name: string): Promise<string[]>;
+    listHookScripts(hooksDir: string): Promise<string[]>;
+    ensureOverlayDirs(org: string, name: string): Promise<void>;
+  };
   now?: () => Date;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -101,8 +114,15 @@ interface ServerEntry {
 interface Resolved {
   ctx: WorktreeContext;
   merged: MergedWorktree;
+  personal: WorktreeConfig;
+  shared: WorktreeConfig | null;
   sharedConfigError?: string;
 }
+
+/** First port of the reserved ranges, and the size of a range slot. */
+export const PORT_RANGE_BASE = 41000;
+export const PORT_RANGE_SLOT = 20;
+const DEFAULT_HOOK_TIMEOUT_SEC = 60;
 
 /**
  * The worktree buttons: reads a worktree's four config layers, runs its
@@ -118,6 +138,7 @@ interface Resolved {
 export class WorktreeActionsService {
   private readonly entries = new Map<string, ServerEntry>();
   private readonly fileCache = new Map<string, { mtimeMs: number; text: string }>();
+  private readonly setups = new Map<string, WorktreeSetupSnapshot>();
   private timer: unknown = null;
 
   constructor(private readonly deps: WorktreeActionsDeps) {}
@@ -133,6 +154,7 @@ export class WorktreeActionsService {
 
   async view(path: string): Promise<WorktreeActionsView> {
     const { ctx, merged, sharedConfigError } = await this.resolve(path);
+    if (merged.ports.reserve) await this.allocatePorts(path);
     const entry = await this.entryFor(path, merged);
     return {
       path,
@@ -143,6 +165,8 @@ export class WorktreeActionsService {
       clickByState: merged.clickByState,
       server: { ...entry.snapshot },
       ...(sharedConfigError ? { sharedConfigError } : {}),
+      ...(this.setups.get(path) ? { setup: { ...this.setups.get(path)! } } : {}),
+      ...(this.deps.config.get().worktreePorts?.[path] ? { reservedPort: this.deps.config.get().worktreePorts![path] } : {}),
     };
   }
 
@@ -163,7 +187,7 @@ export class WorktreeActionsService {
     if (!item) throw new WorktreeActionError(404, `No command "${id}" in this worktree`);
     // A launch.json configuration is a start target (PRD D4): it runs as the server.
     if (item.source === 'launch') return this.start(path, resolved, { id: item.id, command: item.command, label: item.label, item });
-    return this.runItem(path, resolved, item);
+    return await this.runItem(path, resolved, item);
   }
 
   private async runVerb(path: string, verb: WorktreeVerb): Promise<WorktreeRunResponse> {
@@ -212,7 +236,7 @@ export class WorktreeActionsService {
       return { alreadyRunning: true, ...(entry.snapshot.runId ? { runId: entry.snapshot.runId } : {}), server: { ...entry.snapshot } };
     }
     const item = target.item;
-    const env = { ...this.fleexEnv(ctx, item?.port), ...(item?.env ?? {}) };
+    const env = { ...(await this.envFor(path, ctx, merged, item?.port, item?.autoPort)), ...(item?.env ?? {}) };
     const cwd = item?.cwd ? join(path, item.cwd) : path;
     const result = this.deps.actionRuns.start(
       {
@@ -247,6 +271,7 @@ export class WorktreeActionsService {
   }
 
   private async stop(path: string, { ctx, merged }: Resolved): Promise<WorktreeServerSnapshot> {
+    const reserved = await this.envFor(path, ctx, merged);
     const entry = await this.entryFor(path, merged);
     if (entry.snapshot.state === 'stopped') return { ...entry.snapshot };
 
@@ -256,7 +281,7 @@ export class WorktreeActionsService {
         sourceId: entry.sourceId,
         sourceKind: 'worktree',
         label: `${ctx.name} · stop`,
-        command: withEnv(stopCommand, { ...this.fleexEnv(ctx, entry.snapshot.port), ...(entry.snapshot.url ? { FLEEX_URL: entry.snapshot.url } : {}) }),
+        command: withEnv(stopCommand, { ...this.fleexEnv(ctx, entry.snapshot.port), ...reserved, ...(entry.snapshot.url ? { FLEEX_URL: entry.snapshot.url } : {}) }),
         cwd: path,
         mode: 'background',
         slot: 'stop',
@@ -277,11 +302,11 @@ export class WorktreeActionsService {
     return { ...entry.snapshot };
   }
 
-  private runItem(path: string, { ctx }: Resolved, item: WorktreeActionItem): WorktreeRunResponse {
+  private async runItem(path: string, { ctx, merged }: Resolved, item: WorktreeActionItem): Promise<WorktreeRunResponse> {
     const entry = this.entries.get(path);
     const port = entry?.snapshot.state === 'running' ? entry.snapshot.port : undefined;
     const env = {
-      ...this.fleexEnv(ctx, port),
+      ...(await this.envFor(path, ctx, merged, port, item.autoPort)),
       ...(port && entry?.snapshot.url ? { FLEEX_URL: entry.snapshot.url } : {}),
       ...(item.env ?? {}),
     };
@@ -302,6 +327,14 @@ export class WorktreeActionsService {
 
   /** ActionRunService's `onFinished`: the start command ending ends the server. */
   onRunFinished(run: ActionRun): void {
+    if (run.sourceKind === 'worktree' && run.slot === 'hook:setup') {
+      const setup = [...this.setups.values()].find((s) => s.runId === run.runId);
+      if (setup) {
+        const failed = !!run.timedOut || (!run.cancelled && run.exitCode !== 0);
+        this.recordSetup({ ...setup, state: failed ? 'failed' : 'ok', finishedAt: run.finishedAt ?? this.now().toISOString(), ...(failed ? { error: (run.stderr || run.stdout).slice(-2000) } : {}) });
+      }
+      return;
+    }
     if (run.sourceKind !== 'worktree' || run.slot !== WORKTREE_START_SLOT) return;
     const entry = [...this.entries.values()].find((e) => e.sourceId === run.sourceId);
     if (!entry || entry.snapshot.runId !== run.runId) return;
@@ -336,11 +369,271 @@ export class WorktreeActionsService {
     return next;
   }
 
+
+  // ─── Settings: layers, share / keep for me ────────────────────────────────
+
+  /**
+   * Everything Settings › Actions et Hooks edits: both layers raw (to show
+   * where each element lives), the merged view, the overlay files and the
+   * file hooks. `path` null = the repo has no checkout: personal layer only.
+   */
+  async settings(repo: string, path: string | null): Promise<WorktreeSettingsResponse> {
+    const [org, name] = repo.split('/') as [string, string];
+    let shared: WorktreeConfig | null = null;
+    let sharedConfigError: string | undefined;
+    let view: WorktreeActionsView | undefined;
+    if (path) {
+      const resolved = await this.resolveFor(repo, path);
+      shared = resolved.shared;
+      sharedConfigError = resolved.sharedConfigError;
+      view = await this.view(path);
+    }
+    const overlay = this.deps.overlay;
+    const hooksDir = this.deps.resolver.overlayHooksDir(org, name);
+    return {
+      repo,
+      path,
+      personal: this.getPersonal(repo),
+      shared,
+      ...(sharedConfigError ? { sharedConfigError } : {}),
+      ...(view ? { view } : {}),
+      overlayFiles: overlay ? await overlay.listOverlayFilesRecursive(org, name) : [],
+      fileHooks: {
+        global: overlay ? await overlay.listHookScripts(this.deps.resolver.globalOverlayHooksDir()) : [],
+        repo: overlay ? await overlay.listHookScripts(hooksDir) : [],
+      },
+      hooksDir,
+      hookTimeoutSeconds: this.deps.config.get().repoConfigs?.[repo]?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SEC,
+    };
+  }
+
+  /**
+   * Write one key in one layer (undefined removes it). The shared layer is the
+   * worktree's `.fleex/worktree.json`: Fleex writes it, never commits it.
+   */
+  async setKey(repo: string, path: string | null, layer: 'personal' | 'shared', key: WorktreeConfigKey, value: unknown): Promise<WorktreeSettingsResponse> {
+    if (!isWorktreeConfigKey(key)) throw new WorktreeActionError(400, `Unknown config key "${key}"`);
+    const clean = sanitizeKeyValue(key, value);
+    if (layer === 'personal') {
+      await this.updatePersonal(repo, (cfg) => setConfigKey(cfg, key, clean));
+    } else {
+      if (!path) throw new WorktreeActionError(400, 'The shared layer lives in a worktree: pass its path');
+      const { shared } = await this.resolveFor(repo, path, true);
+      await this.writeShared(path, setConfigKey(shared, key, clean));
+    }
+    return this.settings(repo, path);
+  }
+
+  /** "Partager": move keys from the personal layer into `.fleex/worktree.json`. */
+  async share(path: string, keys: WorktreeConfigKey[]): Promise<{ moved: WorktreeConfigKey[]; file: string; settings: WorktreeSettingsResponse }> {
+    const { ctx } = await this.resolve(path);
+    if (!ctx.repo) throw new WorktreeActionError(400, 'This worktree has no resolvable repository (git remote)');
+    const repo = ctx.repo;
+    const { shared } = await this.resolveFor(repo, path, true);
+    let nextShared = shared;
+    let personal = this.getPersonal(repo);
+    const moved: WorktreeConfigKey[] = [];
+    for (const key of keys) {
+      if (!isWorktreeConfigKey(key)) throw new WorktreeActionError(400, `Unknown config key "${key}"`);
+      const value = getConfigKey(personal, key);
+      if (value === undefined) continue;
+      nextShared = setConfigKey(nextShared, key, value);
+      personal = setConfigKey(personal, key, undefined);
+      moved.push(key);
+    }
+    if (moved.length === 0) throw new WorktreeActionError(409, 'Nothing personal to share for these keys');
+    await this.writeShared(path, nextShared ?? {});
+    await this.updatePersonal(repo, () => personal);
+    return { moved, file: join(path, SHARED_CONFIG_FILE), settings: await this.settings(repo, path) };
+  }
+
+  /**
+   * "Garder pour moi": copy keys from `.fleex/worktree.json` into the personal
+   * layer. With `removeFromFile` they also leave the file; otherwise the
+   * personal copy just masks the team's.
+   */
+  async unshare(path: string, keys: WorktreeConfigKey[], removeFromFile: boolean): Promise<{ moved: WorktreeConfigKey[]; settings: WorktreeSettingsResponse }> {
+    const { ctx } = await this.resolve(path);
+    if (!ctx.repo) throw new WorktreeActionError(400, 'This worktree has no resolvable repository (git remote)');
+    const repo = ctx.repo;
+    const { shared } = await this.resolveFor(repo, path, true);
+    let nextShared = shared;
+    let personal = this.getPersonal(repo);
+    const moved: WorktreeConfigKey[] = [];
+    for (const key of keys) {
+      if (!isWorktreeConfigKey(key)) throw new WorktreeActionError(400, `Unknown config key "${key}"`);
+      const value = getConfigKey(shared, key);
+      if (value === undefined) continue;
+      personal = setConfigKey(personal, key, value);
+      if (removeFromFile) nextShared = setConfigKey(nextShared, key, undefined);
+      moved.push(key);
+    }
+    if (moved.length === 0) throw new WorktreeActionError(409, 'Nothing shared to keep for these keys');
+    await this.updatePersonal(repo, () => personal);
+    if (removeFromFile) await this.writeShared(path, nextShared ?? {});
+    return { moved, settings: await this.settings(repo, path) };
+  }
+
+  // ─── Hooks ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Run a hook now, in the action engine (output in the logs): "Tester dans le
+   * worktree courant" (a draft `command`), or "Relancer le Setup" (file hooks,
+   * then the inline script, like at creation).
+   */
+  async runHook(path: string, hook: WorktreeHook, command?: string): Promise<WorktreeRunResponse & { setup?: WorktreeSetupSnapshot }> {
+    const { ctx, merged } = await this.resolve(path);
+    const inline = (command ?? merged.hooks[hook] ?? '').trim();
+    const parts: string[] = [];
+    if (hook === 'setup' && command === undefined && this.deps.overlay && ctx.org) {
+      const files = [
+        ...(await this.deps.overlay.listHookScripts(this.deps.resolver.globalOverlayHooksDir())),
+        ...(await this.deps.overlay.listHookScripts(this.deps.resolver.overlayHooksDir(ctx.org, ctx.name))),
+      ];
+      // Same as at creation: a failing file hook is reported, the next ones still run.
+      for (const f of files) parts.push(`bash ${shellQuote(f)} || echo "hook failed: ${f.replace(/["$`\\]/g, '')}" >&2`);
+    }
+    if (inline) parts.push(interpolateHook(inline, { org: ctx.org ?? '', repo: ctx.name, branch: ctx.branch, worktreePath: path }));
+    if (parts.length === 0) throw new WorktreeActionError(409, `No ${hook} hook configured for this worktree`);
+    const env = await this.envFor(path, ctx, merged);
+    const timeoutSec = merged.hooks.timeoutSec ?? this.deps.config.get().repoConfigs?.[ctx.repo ?? '']?.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_SEC;
+    const result = this.deps.actionRuns.start({
+      sourceId: worktreeSourceId(path),
+      sourceKind: 'worktree',
+      label: `${ctx.name} · ${hook}${command !== undefined ? ' (test)' : ''}`,
+      command: withEnv(parts.join('\n'), env),
+      cwd: path,
+      mode: 'background',
+      slot: `hook:${hook}`,
+      timeoutSec,
+    });
+    const server = this.entries.get(path)?.snapshot ?? this.blankSnapshot(path);
+    if (!result.ok) return { alreadyRunning: true, runId: result.runningRunId, server: { ...server } };
+    let setup: WorktreeSetupSnapshot | undefined;
+    if (hook === 'setup') {
+      setup = { path, state: 'running', startedAt: result.run.startedAt, runId: result.run.runId };
+      this.recordSetup(setup);
+    }
+    return { runId: result.run.runId, run: result.run, server: { ...server }, ...(setup ? { setup } : {}) };
+  }
+
+  /**
+   * Before `git worktree remove`: stop the worktree's server, then run its
+   * Teardown hook, waiting at most its timeout. Never throws: removal goes on.
+   */
+  async teardown(path: string): Promise<void> {
+    try {
+      const resolved = await this.resolve(path);
+      const entry = this.entries.get(path);
+      if (entry && entry.snapshot.state !== 'stopped') await this.stop(path, resolved).catch(() => {});
+      const script = resolved.merged.hooks.teardown?.trim();
+      if (script) {
+        const res = await this.runHook(path, 'teardown');
+        if (res.runId) {
+          const timeoutSec = resolved.merged.hooks.timeoutSec ?? DEFAULT_HOOK_TIMEOUT_SEC;
+          await this.waitForRun(res.runId, timeoutSec * 1000 + 2000);
+          const run = this.deps.actionRuns.get(res.runId);
+          if (run && (run.timedOut || (run.finishedAt && run.exitCode !== 0))) {
+            this.deps.logger.warn('Teardown hook failed — removing the worktree anyway', { path, exitCode: run.exitCode, timedOut: run.timedOut });
+          } else if (run && !run.finishedAt) {
+            this.deps.logger.warn('Teardown hook still running at its timeout — removing the worktree anyway', { path });
+            await this.deps.actionRuns.cancel(res.runId);
+          }
+        }
+      }
+    } catch (err) {
+      this.deps.logger.warn('Teardown failed — removing the worktree anyway', { path, error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      this.entries.delete(path);
+      this.setups.delete(path);
+      await this.releasePorts(path).catch(() => {});
+    }
+  }
+
+  /** The repo's hooks folder (created if needed), opened in the host's file manager. */
+  async openHooksDir(repo: string): Promise<{ dir: string }> {
+    const [org, name] = repo.split('/') as [string, string];
+    await this.deps.overlay?.ensureOverlayDirs(org, name);
+    const dir = this.deps.resolver.overlayHooksDir(org, name);
+    const q = shellQuote(dir);
+    await this.deps.shell(`if command -v open >/dev/null 2>&1; then open ${q}; elif command -v xdg-open >/dev/null 2>&1; then xdg-open ${q}; fi`, { cwd: '/', timeoutMs: 5000 }).catch(() => null);
+    return { dir };
+  }
+
+  /** OverlayManager's Setup progress at worktree creation. */
+  recordSetup(snapshot: WorktreeSetupSnapshot): void {
+    this.setups.set(snapshot.path, snapshot);
+    this.deps.broadcast('worktree-setup:update', { ...snapshot });
+  }
+
+  /** Hook environment of a worktree from its reservation (for OverlayManager's creation-time Setup). */
+  async reservedEnv(path: string): Promise<Record<string, string>> {
+    try {
+      const { ctx, merged } = await this.resolve(path);
+      if (!merged.ports.reserve) return {};
+      return this.envFor(path, ctx, merged);
+    } catch {
+      return {};
+    }
+  }
+
+  // ─── Ports ─────────────────────────────────────────────────────────────────
+
+  /** The worktree's reserved range start, allocated on first need, stable across restarts. */
+  private async allocatePorts(path: string): Promise<number> {
+    const all = this.deps.config.get().worktreePorts ?? {};
+    if (all[path]) return all[path]!;
+    const taken = new Set(Object.values(all));
+    let base = PORT_RANGE_BASE;
+    while (taken.has(base)) base += PORT_RANGE_SLOT;
+    await this.deps.config.update({ worktreePorts: { ...all, [path]: base } });
+    return base;
+  }
+
+  private async releasePorts(path: string): Promise<void> {
+    const all = this.deps.config.get().worktreePorts;
+    if (!all?.[path]) return;
+    const { [path]: _gone, ...rest } = all;
+    await this.deps.config.update({ worktreePorts: rest });
+  }
+
+  /**
+   * FLEEX_* for a command: the reserved range when reservation is on (and
+   * `PORT` too for a launch.json configuration with `autoPort`), else the
+   * port that is known (detected, or launch.json's).
+   */
+  private async envFor(path: string, ctx: WorktreeContext, merged: MergedWorktree, knownPort?: number, autoPort?: boolean): Promise<Record<string, string>> {
+    if (!merged.ports.reserve) return this.fleexEnv(ctx, knownPort);
+    const base = await this.allocatePorts(path);
+    return {
+      ...buildFleexEnv({ ...this.envContext(ctx), port: base, portCount: merged.ports.count }),
+      ...(autoPort ? { PORT: String(base) } : {}),
+    };
+  }
+
+  private async writeShared(path: string, config: WorktreeConfig): Promise<void> {
+    const file = join(path, SHARED_CONFIG_FILE);
+    const { version: _v, ...rest } = config;
+    await this.deps.hostFs.mkdir(join(path, '.fleex'));
+    // Stable formatting, version first: diffs stay readable in review.
+    await this.deps.hostFs.writeFile(file, `${JSON.stringify({ version: 1, ...rest }, null, 2)}\n`);
+    this.fileCache.delete(file);
+    this.deps.logger.info('Wrote shared worktree config', { file });
+  }
+
+  /** Resolve a worktree that must belong to `repo`; `strict` refuses a broken shared file (it would be overwritten). */
+  private async resolveFor(repo: string, path: string, strict = false): Promise<Resolved> {
+    const resolved = await this.resolve(path);
+    if (resolved.ctx.repo !== repo) throw new WorktreeActionError(400, `${path} is not a worktree of ${repo}`);
+    if (strict && resolved.sharedConfigError) throw new WorktreeActionError(409, `${resolved.sharedConfigError} — fix the file first, Fleex will not overwrite it`);
+    return resolved;
+  }
+
   // ─── Internals ─────────────────────────────────────────────────────────────
 
   private async resolve(path: string): Promise<Resolved> {
     const ctx = await this.context(path);
-    const personal = ctx.repo ? this.deps.config.get().worktreeConfigs?.[ctx.repo] : undefined;
+    const personal = (ctx.repo ? this.deps.config.get().worktreeConfigs?.[ctx.repo] : undefined) ?? {};
     const sharedText = await this.readCached(join(path, SHARED_CONFIG_FILE));
     let shared: WorktreeConfig | undefined;
     let sharedConfigError: string | undefined;
@@ -354,7 +647,7 @@ export class WorktreeActionsService {
       }
     }
     const [launch, detected] = await Promise.all([this.readLaunch(path), this.detect(path)]);
-    return { ctx, merged: mergeWorktreeConfig({ personal, shared, launch, detected }), ...(sharedConfigError ? { sharedConfigError } : {}) };
+    return { ctx, personal, shared: shared ?? null, merged: mergeWorktreeConfig({ personal, shared, launch, detected }), ...(sharedConfigError ? { sharedConfigError } : {}) };
   }
 
   private async readLaunch(path: string): Promise<DetectedItem[]> {
@@ -433,15 +726,18 @@ export class WorktreeActionsService {
     };
   }
 
-  private fleexEnv(ctx: WorktreeContext, port?: number): Record<string, string> {
-    return buildFleexEnv({
+  private envContext(ctx: WorktreeContext) {
+    return {
       worktreePath: ctx.path,
       ...(ctx.repo ? { repo: ctx.repo, repoPath: this.deps.resolver.barePath(ctx.org!, ctx.name) } : {}),
       ...(ctx.workspacePath ? { workspacePath: ctx.workspacePath } : {}),
       ...(ctx.branch ? { branch: ctx.branch } : {}),
       ...(ctx.ticketId ? { ticketId: ctx.ticketId } : {}),
-      ...(port ? { port } : {}),
-    });
+    };
+  }
+
+  private fleexEnv(ctx: WorktreeContext, port?: number): Record<string, string> {
+    return buildFleexEnv({ ...this.envContext(ctx), ...(port ? { port } : {}) });
   }
 
   /**
@@ -619,4 +915,77 @@ export function migrateLegacySetupHooks(config: Pick<AppConfig, 'repoConfigs' | 
     changed = true;
   }
   return changed ? next : null;
+}
+
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+const STATES = new Set(['stopped', 'starting', 'running', 'error']);
+const SOURCES = new Set(['launch', 'npm', 'make', 'composer']);
+
+/**
+ * Validate a value before it is written into a layer: what the settings
+ * screen, the CLI or a hand-made request may send. Throws a 400 on junk.
+ */
+export function sanitizeKeyValue(key: WorktreeConfigKey, value: unknown): unknown {
+  if (value === undefined || value === null) return undefined;
+  const bad = (why: string): never => {
+    throw new WorktreeActionError(400, `Invalid value for ${key}: ${why}`);
+  };
+  const str = (v: unknown, max = 20_000) => (typeof v === 'string' && v.length <= max ? v : bad('expected a string'));
+  const [kind] = key.split(':');
+  if (kind === 'pin' || kind === 'hide') return value === true ? true : bad('expected true');
+  if (kind === 'action') {
+    const v = value as Record<string, unknown>;
+    if (typeof v !== 'object' || Array.isArray(v)) bad('expected an object');
+    const out: Record<string, unknown> = { cmd: str(v['cmd']) };
+    if (v['label'] !== undefined) out['label'] = str(v['label'], 200);
+    if (v['mode'] !== undefined) out['mode'] = v['mode'] === 'terminal' ? 'terminal' : v['mode'] === 'background' ? 'background' : bad('mode');
+    if (v['when'] !== undefined) {
+      if (!Array.isArray(v['when']) || !v['when'].every((x) => STATES.has(x as string))) bad('when');
+      if ((v['when'] as unknown[]).length) out['when'] = v['when'];
+    }
+    if (v['hidden'] === true) out['hidden'] = true;
+    return out;
+  }
+  switch (key) {
+    case 'hooks.setup':
+    case 'hooks.teardown':
+      return str(value);
+    case 'server.start':
+    case 'server.stop':
+    case 'server.url': {
+      const v = str(value, 4000).trim();
+      return v || undefined;
+    }
+    case 'hooks.timeoutSec': {
+      const n = Number(value);
+      return Number.isFinite(n) && n > 0 ? Math.min(3600, Math.round(n)) : bad('expected seconds > 0');
+    }
+    case 'server.probe': {
+      const v = value as Record<string, unknown>;
+      const command = str(v?.['command'], 4000).trim();
+      if (!command) return undefined;
+      const interval = Number(v['intervalSec']);
+      return { command, ...(Number.isFinite(interval) && interval > 0 ? { intervalSec: Math.max(5, Math.round(interval)) } : {}) };
+    }
+    case 'server.clickByState': {
+      const v = value as Record<string, unknown>;
+      if (typeof v !== 'object' || Array.isArray(v)) bad('expected an object');
+      const out = Object.fromEntries(Object.entries(v).filter(([s, c]) => STATES.has(s) && typeof c === 'string' && c.length <= 200));
+      return Object.keys(out).length ? out : undefined;
+    }
+    case 'discovery.sources': {
+      if (!Array.isArray(value) || !value.every((x) => SOURCES.has(x as string))) bad('expected launch | npm | make | composer');
+      return value;
+    }
+    case 'ports': {
+      const v = value as Record<string, unknown>;
+      const count = Number(v?.['count']);
+      return { reserve: v?.['reserve'] === true, ...(Number.isFinite(count) && count > 0 ? { count: Math.min(20, Math.round(count)) } : {}) };
+    }
+    default:
+      return bad('unknown key');
+  }
 }

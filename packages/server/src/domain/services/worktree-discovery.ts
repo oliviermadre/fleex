@@ -118,6 +118,7 @@ export function parseLaunchJson(text: string): DetectedItem[] {
       ...(cwd ? { cwd } : {}),
       ...(env ? { env } : {}),
       ...(port ? { port } : {}),
+      ...(conf['autoPort'] === true ? { autoPort: true } : {}),
       ...(typeof conf['url'] === 'string' && conf['url'].trim() ? { url: conf['url'].trim() } : {}),
     });
   }

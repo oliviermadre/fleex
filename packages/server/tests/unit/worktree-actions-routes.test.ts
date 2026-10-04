@@ -40,17 +40,45 @@ describe('worktree actions routes', () => {
   });
 });
 
+describe('settings routes', () => {
+  it('validates the layer, the repo and the path before writing', async () => {
+    const setKey = vi.fn(async () => ({ repo: 'o/r' }));
+    const app = await appWith({ setKey } as Partial<WorktreeActionsService>);
+    const bad = await app.inject({ method: 'POST', url: '/api/worktree-actions/config', payload: { repo: 'o/r', layer: 'team', key: 'server.start', value: 'x' } });
+    expect(bad.statusCode).toBe(400);
+    const outside = await app.inject({ method: 'POST', url: '/api/worktree-actions/config', payload: { repo: 'o/r', path: '/etc', layer: 'shared', key: 'server.start', value: 'x' } });
+    expect(outside.statusCode).toBe(400);
+    const ok = await app.inject({ method: 'POST', url: '/api/worktree-actions/config', payload: { repo: 'o/r', path: '/base/w', layer: 'shared', key: 'server.start', value: 'x' } });
+    expect(ok.statusCode).toBe(200);
+    expect(setKey).toHaveBeenCalledWith('o/r', '/base/w', 'shared', 'server.start', 'x');
+    // null removes the key
+    await app.inject({ method: 'POST', url: '/api/worktree-actions/config', payload: { repo: 'o/r', layer: 'personal', key: 'server.start', value: null } });
+    expect(setKey).toHaveBeenLastCalledWith('o/r', null, 'personal', 'server.start', undefined);
+  });
+
+  it('share / unshare / hooks/run need keys or a known hook', async () => {
+    const share = vi.fn(async () => ({}));
+    const runHook = vi.fn(async () => ({ runId: 'r', server: { path: '/base/w', state: 'stopped' as const, updatedAt: '' } }));
+    const app = await appWith({ share, runHook } as Partial<WorktreeActionsService>);
+    expect((await app.inject({ method: 'POST', url: '/api/worktree-actions/share', payload: { path: '/base/w', keys: [] } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/api/worktree-actions/share', payload: { path: '/base/w', keys: ['action:x'] } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/api/worktree-actions/hooks/run', payload: { path: '/base/w', hook: 'rm' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/api/worktree-actions/hooks/run', payload: { path: '/base/w', hook: 'setup' } })).statusCode).toBe(202);
+  });
+});
+
 describe('PUT /api/config and the personal worktree layer', () => {
   it('ignores worktreeConfigs: the web PUTs a stale copy of the whole config', async () => {
     // WHY: a pin made from the CLI must survive the web saving any unrelated setting.
-    let stored: Record<string, unknown> = { worktreeConfigs: { 'o/r': { pins: ['npm:dev'] } } };
+    let stored: Record<string, unknown> = { worktreeConfigs: { 'o/r': { pins: ['npm:dev'] } }, worktreePorts: { '/w': 41000 } };
     const container = {
       config: { get: () => stored, update: vi.fn(async (patch: Record<string, unknown>) => { stored = { ...stored, ...patch }; }) },
       pinnedStatus: { configure: vi.fn() },
     } as unknown as Container;
     const app = Fastify();
     await app.register(configRoutes(container));
-    await app.inject({ method: 'PUT', url: '/api/config', payload: { humanDisplayName: 'Nas', worktreeConfigs: {} } });
+    await app.inject({ method: 'PUT', url: '/api/config', payload: { humanDisplayName: 'Nas', worktreeConfigs: {}, worktreePorts: {} } });
+    expect(stored['worktreePorts']).toEqual({ '/w': 41000 });
     expect(stored['worktreeConfigs']).toEqual({ 'o/r': { pins: ['npm:dev'] } });
     expect(stored['humanDisplayName']).toBe('Nas');
   });

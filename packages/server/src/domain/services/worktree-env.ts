@@ -16,6 +16,8 @@ export interface FleexEnvContext {
   ticketId?: string;
   port?: number;
   url?: string;
+  /** Size of the reserved port range (port reservation on). */
+  portCount?: number;
 }
 
 export function buildFleexEnv(ctx: FleexEnvContext): Record<string, string> {
@@ -27,6 +29,7 @@ export function buildFleexEnv(ctx: FleexEnvContext): Record<string, string> {
   if (ctx.ticketId) env['FLEEX_TICKET_ID'] = ctx.ticketId;
   if (ctx.port) env['FLEEX_PORT'] = String(ctx.port);
   if (ctx.url) env['FLEEX_URL'] = ctx.url;
+  if (ctx.port && ctx.portCount) env['FLEEX_PORT_COUNT'] = String(ctx.portCount);
   return env;
 }
 
@@ -50,4 +53,13 @@ export function withEnv(command: string, env: Record<string, string>): string {
 /** argv for `env K=V … <argv>`, for execFile-style calls (file hooks, bash -c). */
 export function envArgv(env: Record<string, string>, argv: string[]): string[] {
   return [...Object.entries(env).filter(([k]) => ENV_NAME.test(k)).map(([k, v]) => `${k}=${v}`), ...argv];
+}
+
+/** The `{{org}}` `{{repo}}` `{{branch}}` `{{worktree_path}}` substitutions of inline hooks (kept for old scripts). */
+export function interpolateHook(script: string, vars: { org: string; repo: string; branch: string; worktreePath: string }): string {
+  return script
+    .replace(/\{\{org\}\}/g, vars.org)
+    .replace(/\{\{repo\}\}/g, vars.repo)
+    .replace(/\{\{branch\}\}/g, vars.branch)
+    .replace(/\{\{worktree_path\}\}/g, vars.worktreePath);
 }

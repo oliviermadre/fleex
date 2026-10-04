@@ -800,8 +800,13 @@ export async function createContainer() {
     shell: (command, options) => shellExecFn(command, { cwd: options.cwd, timeout: options.timeoutMs }),
     broadcast: (type, data) => pinnedStatusBroadcast(type, data),
     logger,
+    overlay: overlayManager,
   });
   onWorktreeRunFinished = (run) => worktreeActions.onRunFinished(run);
+  // Setup progress at worktree creation, its reserved ports, and Teardown before every removal.
+  overlayManager.onSetupState = (snapshot) => worktreeActions.recordSetup(snapshot);
+  overlayManager.extraHookEnv = (path) => worktreeActions.reservedEnv(path);
+  git.beforeRemoveWorktree = (path) => worktreeActions.teardown(path);
   let capabilitiesCache: { at: number; value: ActionRunCapabilities } | null = null;
   const actionRunCapabilities = async (): Promise<ActionRunCapabilities> => {
     if (capabilitiesCache && Date.now() - capabilitiesCache.at < 60_000) return capabilitiesCache.value;

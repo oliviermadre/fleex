@@ -70,4 +70,49 @@ describe('Setup hook (formerly post-checkout)', () => {
     expect(file.cmd).toBe('env');
     expect(file.args).toContain('FLEEX_BRANCH=main');
   });
+
+  it('runs global file hooks, then the repo ones, then the inline script — and reports the state', async () => {
+    // WHY: the worktree menu shows "setup en cours / échoué", and a dependency install in a file hook
+    // must be done before the inline script that relies on it.
+    const { mgr, hostFs, config, calls, settle } = setup();
+    const states: string[] = [];
+    mgr.onSetupState = (snap) => states.push(snap.state + (snap.error ? `:${snap.error}` : ''));
+    mgr.extraHookEnv = async () => ({ FLEEX_PORT: '41000' });
+    hostFs.addDirEntries('/base/overlays/_global/hooks', [{ name: 'a.sh', isFile: true, isDirectory: false }]);
+    hostFs.addDirEntries('/base/overlays/o/fleex/hooks', [{ name: 'b.sh', isFile: true, isDirectory: false }]);
+    config.update({ worktreeConfigs: { 'o/fleex': { hooks: { setup: 'make' } } } });
+    mgr.firePostCheckoutHooks('o', 'fleex', WT, 'main');
+    await settle();
+    expect(calls.map((c) => c.args.at(-1))).toEqual(['/base/overlays/_global/hooks/a.sh', '/base/overlays/o/fleex/hooks/b.sh', 'make']);
+    expect(calls[0]!.args).toContain('FLEEX_PORT=41000');
+    expect(states).toEqual(['running', 'ok']);
+  });
+
+  it('reports a failed setup, and still runs the inline script after a failing file hook', async () => {
+    const calls: string[] = [];
+    const hostFs = new FakeHostFs();
+    const config = new FakeConfigPort();
+    const mgr = new OverlayManager(hostFs, new RepoPathResolver('/base'), async (_c, args) => {
+      calls.push(args.at(-1)!);
+      if (args.at(-1)!.endsWith('b.sh')) throw Object.assign(new Error('x'), { stderr: 'npm ERR!' });
+      return { stdout: '', stderr: '' };
+    }, config, new FakeLoggerPort(), new FakeGitPort());
+    const states: string[] = [];
+    mgr.onSetupState = (snap) => states.push(snap.state);
+    hostFs.addDirEntries('/base/overlays/o/fleex/hooks', [{ name: 'b.sh', isFile: true, isDirectory: false }]);
+    config.update({ worktreeConfigs: { 'o/fleex': { hooks: { setup: 'make' } } } });
+    mgr.firePostCheckoutHooks('o', 'fleex', WT, 'main');
+    for (let i = 0; i < 10; i += 1) await new Promise((r) => setTimeout(r, 0));
+    expect(calls).toEqual(['/base/overlays/o/fleex/hooks/b.sh', 'make']);
+    expect(states).toEqual(['running', 'failed']);
+  });
+
+  it('reports nothing when there is no hook at all', async () => {
+    const { mgr, settle } = setup();
+    const states: string[] = [];
+    mgr.onSetupState = (snap) => states.push(snap.state);
+    mgr.firePostCheckoutHooks('o', 'fleex', WT, 'main');
+    await settle();
+    expect(states).toEqual([]);
+  });
 });

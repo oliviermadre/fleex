@@ -642,7 +642,12 @@ export type {
   WorktreeRunRequest,
   WorktreeRunResponse,
   WorktreeActionsWsMessage,
+  WorktreeSetupSnapshot,
+  WorktreeHook,
+  WorktreeSettingsResponse,
 } from './types/worktree-actions.js';
+export type { WorktreeConfigKey } from './types/worktree-config-keys.js';
+export { getConfigKey, setConfigKey, listConfigKeys, keyScope, isWorktreeConfigKey } from './types/worktree-config-keys.js';
 export {
   WORKTREE_SERVER_STATES,
   WORKTREE_DISCOVERY_SOURCES,

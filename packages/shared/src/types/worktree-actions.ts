@@ -98,6 +98,8 @@ export interface WorktreeActionItem {
   /** launch.json `port` / `url`. */
   port?: number;
   url?: string;
+  /** launch.json `autoPort`: with port reservation on, `PORT` is forced to the worktree's port. */
+  autoPort?: boolean;
   when?: WorktreeServerState[];
   pinned: boolean;
 }
@@ -130,6 +132,44 @@ export interface WorktreeActionsView {
   server: WorktreeServerSnapshot;
   /** `.fleex/worktree.json` was present but could not be parsed. */
   sharedConfigError?: string;
+  /** Last Setup hook run of this worktree, if Fleex saw one. */
+  setup?: WorktreeSetupSnapshot;
+  /** First port of the worktree's reserved range (port reservation on). */
+  reservedPort?: number;
+}
+
+/** A Setup hook run (at worktree creation, or re-run from the menu / settings). */
+export interface WorktreeSetupSnapshot {
+  path: string;
+  state: 'running' | 'ok' | 'failed';
+  startedAt: string;
+  finishedAt?: string;
+  /** The run, when it went through the action engine (re-runs): its logs open from the menu. */
+  runId?: string;
+  /** Tail of the error output of a failed run. */
+  error?: string;
+}
+
+export type WorktreeHook = 'setup' | 'teardown';
+
+/** Everything the repo's Settings › Actions et Hooks screen edits, for one worktree (or the repo alone). */
+export interface WorktreeSettingsResponse {
+  repo: string;
+  /** The worktree whose `.fleex/worktree.json` is read and written; null = no checkout (personal layer only). */
+  path: string | null;
+  personal: WorktreeConfig;
+  /** Parsed `.fleex/worktree.json`, null when absent. */
+  shared: WorktreeConfig | null;
+  sharedConfigError?: string;
+  /** Merged view (items, start, server state); absent without a worktree. */
+  view?: WorktreeActionsView;
+  /** Overlay files copied into each new worktree (relative paths). */
+  overlayFiles: string[];
+  /** File hooks run at Setup, in order: global first, then the repo's. */
+  fileHooks: { global: string[]; repo: string[] };
+  hooksDir: string;
+  /** Legacy `hookTimeoutSeconds` of the repo (file hooks use it too). */
+  hookTimeoutSeconds: number;
 }
 
 export interface WorktreeActionsListResponse {
@@ -154,7 +194,9 @@ export interface WorktreeRunResponse {
   server: WorktreeServerSnapshot;
 }
 
-export type WorktreeActionsWsMessage = { type: 'worktree-server:update'; data: WorktreeServerSnapshot };
+export type WorktreeActionsWsMessage =
+  | { type: 'worktree-server:update'; data: WorktreeServerSnapshot }
+  | { type: 'worktree-setup:update'; data: WorktreeSetupSnapshot };
 
 export const DEFAULT_WORKTREE_CLICK: Record<WorktreeServerState, WorktreeClickChoice> = {
   stopped: 'start',

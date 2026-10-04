@@ -98,6 +98,11 @@ export interface AppConfig {
    * copy, which would otherwise overwrite a pin made from the CLI meanwhile.
    */
   worktreeConfigs?: Record<string, WorktreeConfig>;
+  /**
+   * Reserved port range start per worktree path (port reservation on).
+   * Server-owned like `worktreeConfigs`: stable across restarts, released at teardown.
+   */
+  worktreePorts?: Record<string, number>;
 }
 
 /**
