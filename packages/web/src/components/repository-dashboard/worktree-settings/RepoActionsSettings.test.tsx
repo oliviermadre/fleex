@@ -172,6 +172,19 @@ describe('Actions et Hooks — actions, detected commands, options', () => {
     expect(screen.getByTestId('action-row-db-migrate')).toBeTruthy();
   });
 
+  // Same affordance as the pinned/ticket actions list: no edit glyph, the row
+  // itself opens the editor; the scope badge and ⋯ must not hijack that click.
+  it('opens the editor by clicking the action row, like the pinned actions list', async () => {
+    fakeServer({ actions: [{ id: 'migrate', cmd: 'make db-migrate', mode: 'background' }] }, null);
+    await renderSettings();
+    const row = screen.getByTestId('action-row-migrate');
+    expect(row.textContent).not.toContain('✎');
+    fireEvent.click(within(row).getByRole('button', { name: "Plus d'actions pour migrate" }));
+    expect(screen.queryByTestId('action-editor')).toBeNull();
+    fireEvent.click(row);
+    expect(within(screen.getByTestId('action-editor')).getByLabelText('Commande')).toHaveProperty('value', 'make db-migrate');
+  });
+
   it('refuses an action without a command', async () => {
     fakeServer({}, null);
     await renderSettings();

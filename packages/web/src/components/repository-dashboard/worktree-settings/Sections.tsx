@@ -12,7 +12,10 @@ import { cn } from '../../../lib/cn';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useWorktreeActionsStore } from '../../../stores/worktreeActionsStore';
 import { Button } from '../../ui/Button';
-import { CODE_INPUT, RunModeToggle, Switch, TEXT_INPUT, environmentLine } from '../../settings/actions/shared';
+import { CODE_INPUT, Dropdown, MenuButton, RunModeToggle, Switch, TEXT_INPUT, environmentLine } from '../../settings/actions/shared';
+
+/** Row ▶ / ⋯ buttons, styled like the pinned actions list (ActionList). */
+const ROW_ICON_BUTTON = 'flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] opacity-0 hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)] focus-visible:opacity-100 group-hover:opacity-100 group-focus-visible:opacity-100';
 import { STATE_LABEL, SOURCE_GLYPH, stateDotClass } from '../../worktree-actions/worktreeUi';
 import { effective } from './Lifecycle';
 import { CARD, ERROR_TEXT, FieldLabel, H, Hint, ScopeBadge } from './parts';
@@ -95,17 +98,41 @@ export function RepoActions({ api }: { api: WorktreeSettingsApi }) {
           draft && !draft.isNew && draft.id === row.id ? (
             <ActionEditor key={row.id} draft={draft} setDraft={setDraft} refs={refs} error={error} onSave={() => void save()} onDelete={() => void remove(row.id)} />
           ) : (
-            <div key={row.id} className="flex items-center gap-2 py-1.5 text-xs" data-testid={`action-row-${row.id}`}>
+            // Same affordances as the pinned/ticket actions list: the row opens the
+            // editor, ▶ and ⋯ show on hover.
+            <div
+              key={row.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Modifier ${row.def.label || row.id}`}
+              onClick={() => edit(row)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) { e.preventDefault(); edit(row); } }}
+              className="group -mx-1.5 flex cursor-pointer items-center gap-2 rounded px-1.5 py-1.5 text-xs hover:bg-[var(--theme-bg-overlay)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--theme-accent)]"
+              data-testid={`action-row-${row.id}`}
+            >
               <span className={cn('w-3 text-center font-mono text-[10px] font-bold', SOURCE_GLYPH.action.className)}>{SOURCE_GLYPH.action.glyph}</span>
               <span className="w-40 shrink-0 truncate font-medium text-[var(--theme-text-primary)]">{row.def.label || row.id}</span>
               <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--theme-text-secondary)]">{row.def.cmd}</span>
               {row.def.when?.length ? <span className="flex gap-0.5">{row.def.when.map((w) => <span key={w} className={cn('h-1.5 w-1.5 rounded-full', stateDotClass(w))} title={STATE_LABEL[w]} />)}</span> : null}
               <span className="w-20 shrink-0 text-[11px] text-[var(--theme-text-muted)]">{row.def.mode ?? 'background'}</span>
-              <ScopeBadge api={api} keys={[`action:${row.id}`]} small />
-              {row.item && s.view && (
-                <button type="button" aria-label={`Lancer ${row.id}`} className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]" onClick={() => void runItem(s.view!, row.item!)}>▶</button>
-              )}
-              <button type="button" aria-label={`Modifier ${row.id}`} className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]" onClick={() => edit(row)}>✎</button>
+              <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                <ScopeBadge api={api} keys={[`action:${row.id}`]} small />
+              </span>
+              <span className="flex w-[52px] shrink-0 items-center justify-end gap-1">
+                {row.item && s.view && (
+                  <button type="button" aria-label={`Lancer ${row.id}`} className={ROW_ICON_BUTTON} onClick={(e) => { e.stopPropagation(); void runItem(s.view!, row.item!); }}>▶</button>
+                )}
+                <Dropdown label={`Plus d'actions pour ${row.def.label || row.id}`} className={ROW_ICON_BUTTON} trigger="⋯">
+                  {(close) => (
+                    <>
+                      {row.item && s.view && <MenuButton onClick={() => { close(); void runItem(s.view!, row.item!); }}>Lancer</MenuButton>}
+                      <MenuButton onClick={() => { close(); edit(row); }} hint="↵">Modifier</MenuButton>
+                      <div className="my-1 border-t border-[var(--theme-border)]" />
+                      <MenuButton danger onClick={() => { close(); void remove(row.id); }}>Supprimer</MenuButton>
+                    </>
+                  )}
+                </Dropdown>
+              </span>
             </div>
           )
         ))}
