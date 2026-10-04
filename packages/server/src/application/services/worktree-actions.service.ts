@@ -45,6 +45,8 @@ const STOP_WAIT_MS = 10_000;
 const TEARDOWN_STOP_COMMAND_MS = 30_000;
 const PORT_CHECK_TIMEOUT_MS = 5_000;
 const PROBE_TIMEOUT_MS = 10_000;
+/** A start command that handed back (`up -d`) has this long for its probe to pass. */
+export const DETACHED_START_TIMEOUT_MS = 5 * 60_000;
 
 export const SHARED_CONFIG_FILE = '.fleex/worktree.json';
 export const LAUNCH_FILE = '.claude/launch.json';
@@ -110,6 +112,8 @@ interface ServerEntry {
   cwd: string;
   nextCheckAt: number;
   lastProbeAt: number;
+  /** When the start command was launched: bounds a detached start waiting on its probe. */
+  startedAt?: number;
   checking: boolean;
 }
 
@@ -136,6 +140,12 @@ const DEFAULT_HOOK_TIMEOUT_SEC = 60;
  * stopped → starting → running | error: running once a port is heard on (in
  * the start command's process tree, or the launch.json port) or the probe
  * passes; error when the command dies with a non-zero code.
+ *
+ * With a probe, the probe is the source of truth and runs in every state: it
+ * turns a server started outside Fleex green, and a start command that hands
+ * back with 0 (`docker compose up -d`) leaves the state to it instead of
+ * meaning stopped. A failing probe means stopped when nothing of ours is
+ * alive, error when the start command still runs.
  */
 export class WorktreeActionsService {
   private readonly entries = new Map<string, ServerEntry>();
@@ -157,7 +167,7 @@ export class WorktreeActionsService {
   async view(path: string): Promise<WorktreeActionsView> {
     const { ctx, merged, sharedConfigError } = await this.resolve(path);
     if (merged.ports.reserve) await this.allocatePorts(path);
-    const entry = await this.entryFor(path, merged);
+    const entry = await this.entryFor(path, merged, ctx);
     return {
       path,
       repo: ctx.repo,
@@ -209,19 +219,19 @@ export class WorktreeActionsService {
         return this.start(path, resolved, resolved.merged.start);
       }
       case 'open': {
-        const entry = await this.entryFor(path, resolved.merged);
+        const entry = await this.entryFor(path, resolved.merged, resolved.ctx);
         if (entry.snapshot.state !== 'running' || !entry.snapshot.url) {
           throw new WorktreeActionError(409, `The server is ${entry.snapshot.state}${entry.snapshot.state === 'running' ? ' but its URL is unknown' : ''}`);
         }
         return { url: entry.snapshot.url, server: { ...entry.snapshot } };
       }
       case 'logs': {
-        const entry = await this.entryFor(path, resolved.merged);
+        const entry = await this.entryFor(path, resolved.merged, resolved.ctx);
         const runId = entry.snapshot.runId ?? this.deps.actionRuns.list(entry.sourceId).find((r) => r.slot === WORKTREE_START_SLOT)?.runId;
         return { ...(runId ? { runId } : {}), server: { ...entry.snapshot } };
       }
       case 'status': {
-        const entry = await this.entryFor(path, resolved.merged);
+        const entry = await this.entryFor(path, resolved.merged, resolved.ctx);
         await this.check(entry, true);
         return { server: { ...entry.snapshot } };
       }
@@ -233,7 +243,7 @@ export class WorktreeActionsService {
     { ctx, merged }: Resolved,
     target: NonNullable<MergedWorktree['start']>,
   ): Promise<WorktreeRunResponse> {
-    const entry = await this.entryFor(path, merged);
+    const entry = await this.entryFor(path, merged, ctx);
     if (entry.snapshot.state === 'starting' || entry.snapshot.state === 'running') {
       return { alreadyRunning: true, ...(entry.snapshot.runId ? { runId: entry.snapshot.runId } : {}), server: { ...entry.snapshot } };
     }
@@ -261,6 +271,7 @@ export class WorktreeActionsService {
     entry.env = env;
     entry.cwd = cwd;
     entry.lastProbeAt = 0;
+    entry.startedAt = this.nowMs();
     this.setState(entry, {
       state: 'starting',
       runId: result.run.runId,
@@ -274,7 +285,7 @@ export class WorktreeActionsService {
 
   private async stop(path: string, { ctx, merged }: Resolved, stopCommandWaitMs = 120_000): Promise<WorktreeServerSnapshot> {
     const reserved = await this.envFor(path, ctx, merged);
-    const entry = await this.entryFor(path, merged);
+    const entry = await this.entryFor(path, merged, ctx);
     if (entry.snapshot.state === 'stopped') return { ...entry.snapshot };
 
     const stopCommand = merged.server.stop?.trim();
@@ -293,13 +304,14 @@ export class WorktreeActionsService {
     }
 
     // Whatever the stop command did, the start command must not outlive Stop.
+    // A start command that already handed back (`up -d`) only left its terminal behind.
     const runId = entry.snapshot.runId;
-    if (runId) {
-      await this.deps.actionRuns.cancel(runId);
+    if (runId && (await this.deps.actionRuns.cancel(runId))) {
       await this.waitForRun(runId, STOP_WAIT_MS);
     } else if (entry.snapshot.tmuxSession) {
       await this.deps.terminals.close(entry.snapshot.tmuxSession);
     }
+    entry.lastProbeAt = this.nowMs(); // the next probe says whether the stop worked
     this.setState(entry, { state: 'stopped' });
     return { ...entry.snapshot };
   }
@@ -341,6 +353,14 @@ export class WorktreeActionsService {
     const entry = [...this.entries.values()].find((e) => e.sourceId === run.sourceId);
     if (!entry || entry.snapshot.runId !== run.runId) return;
     const failed = !run.cancelled && run.exitCode !== 0;
+    if (!failed && !run.cancelled && entry.probe) {
+      // Handed back with 0 (`docker compose up -d`): the probe says whether it is up.
+      const keep = { runId: run.runId, ...(entry.snapshot.tmuxSession ? { tmuxSession: entry.snapshot.tmuxSession } : {}) };
+      this.setState(entry, entry.snapshot.state === 'running' ? { ...entry.snapshot, ...keep } : { state: 'starting', ...keep });
+      entry.nextCheckAt = 0;
+      this.schedule();
+      return;
+    }
     this.setState(entry, failed
       ? { state: 'error', ...(run.exitCode !== undefined ? { exitCode: run.exitCode } : {}), ...(entry.snapshot.tmuxSession ? { tmuxSession: entry.snapshot.tmuxSession } : {}) }
       : { state: 'stopped' });
@@ -528,7 +548,7 @@ export class WorktreeActionsService {
       const resolved = await this.resolve(path);
       // entryFor, not the in-memory map: after a Fleex restart the server's tmux
       // session is only known once adopted, and it must not outlive its folder.
-      const entry = await this.entryFor(path, resolved.merged);
+      const entry = await this.entryFor(path, resolved.merged, resolved.ctx);
       if (entry.snapshot.state !== 'stopped') await this.stop(path, resolved, TEARDOWN_STOP_COMMAND_MS).catch(() => {});
       const script = resolved.merged.hooks.teardown?.trim();
       if (script) {
@@ -752,11 +772,22 @@ export class WorktreeActionsService {
   /**
    * The worktree's server entry. Created on first sight — and if a start
    * session of a previous Fleex run is still alive, it is adopted as starting
-   * (the next check finds its port).
+   * (the next check finds its port). Its probe and URL follow the settings, so
+   * a probe saved later is picked up on the next read.
    */
-  private async entryFor(path: string, merged: MergedWorktree): Promise<ServerEntry> {
-    const existing = this.entries.get(path);
-    if (existing) return existing;
+  private async entryFor(path: string, merged: MergedWorktree, ctx: WorktreeContext): Promise<ServerEntry> {
+    const entry = this.entries.get(path) ?? (await this.createEntry(path, merged));
+    const probe = merged.server.probe?.command?.trim() ? merged.server.probe : undefined;
+    if (probe?.command !== entry.probe?.command || probe?.intervalSec !== entry.probe?.intervalSec) entry.lastProbeAt = 0;
+    entry.probe = probe;
+    entry.urlTemplate = merged.server.url;
+    // A server Fleex did not start still gets the worktree's FLEEX_* env in its probe.
+    if (probe && Object.keys(entry.env).length === 0) entry.env = await this.envFor(path, ctx, merged);
+    this.schedule();
+    return entry;
+  }
+
+  private async createEntry(path: string, merged: MergedWorktree): Promise<ServerEntry> {
     const sourceId = worktreeSourceId(path);
     const entry: ServerEntry = {
       sourceId,
@@ -799,57 +830,71 @@ export class WorktreeActionsService {
     this.deps.broadcast('worktree-server:update', { ...snapshot });
   }
 
-  /** One look at a live server: process alive? port? probe? */
+  /**
+   * One look at a server: process alive? port? probe? Without a probe only a
+   * starting or running server is looked at; with one, every state is.
+   */
   private async check(entry: ServerEntry, force = false): Promise<void> {
     const { state, tmuxSession, runId } = entry.snapshot;
-    if (state !== 'starting' && state !== 'running') return;
+    const live = state === 'starting' || state === 'running';
+    if (!live && !entry.probe) return;
     if (entry.checking || (!force && this.nowMs() < entry.nextCheckAt)) return;
     entry.checking = true;
     try {
       let ports: number[] = [];
-      if (tmuxSession) {
+      let processAlive = false;
+      if (live && tmuxSession) {
         const seen = await this.deps.terminals.inspect(tmuxSession);
-        // With a run in flight, its end is reported by onRunFinished; an adopted one has no run.
-        if (!seen.alive) {
-          if (!runId) this.setState(entry, { state: 'stopped' });
+        if (seen.alive && !seen.dead) {
+          processAlive = true;
+          ports = seen.ports;
+        } else if (!entry.probe || (seen.dead && seen.exitStatus)) {
+          // With a run in flight, its end is reported by onRunFinished; an adopted one has no run.
+          if (!runId) {
+            this.setState(entry, seen.dead && seen.exitStatus ? { state: 'error', exitCode: seen.exitStatus, tmuxSession } : { state: 'stopped' });
+          }
           return;
         }
-        if (seen.dead) {
-          if (!runId) this.setState(entry, seen.exitStatus ? { state: 'error', exitCode: seen.exitStatus, tmuxSession } : { state: 'stopped' });
-          return;
-        }
-        ports = seen.ports;
+        // else: the start command handed back with 0 — the probe decides.
       }
       let port = entry.launchPort && ports.includes(entry.launchPort) ? entry.launchPort : ports[0];
-      if (!port && entry.launchPort && (await this.listening(entry.launchPort))) port = entry.launchPort;
+      if (!port && live && entry.launchPort && (await this.listening(entry.launchPort))) port = entry.launchPort;
       let up = !!port;
+      const keep = { ...(runId ? { runId } : {}), ...(tmuxSession ? { tmuxSession } : {}) };
 
       if (entry.probe) {
         const intervalMs = Math.max(5, entry.probe.intervalSec ?? 30) * 1000;
-        if (force || state === 'starting' || this.nowMs() - entry.lastProbeAt >= intervalMs) {
+        if (force || state === 'starting' || entry.lastProbeAt === 0 || this.nowMs() - entry.lastProbeAt >= intervalMs) {
           entry.lastProbeAt = this.nowMs();
           const url = this.urlFor(entry, port);
           const res = await this.deps.shell(withEnv(entry.probe.command, { ...entry.env, ...(port ? { FLEEX_PORT: String(port) } : {}), ...(url ? { FLEEX_URL: url } : {}) }), { cwd: entry.cwd, timeoutMs: PROBE_TIMEOUT_MS }).catch(() => ({ exitCode: 1 }));
           if (res.exitCode === 0) up = true;
           else if (state === 'running') {
-            this.setState(entry, { state: 'error', ...(runId ? { runId } : {}), ...(tmuxSession ? { tmuxSession } : {}) });
+            // Still our process: it is unhealthy. Nothing of ours alive: it was stopped.
+            this.setState(entry, processAlive ? { state: 'error', ...keep } : { state: 'stopped' });
             return;
+          } else if (!live) {
+            return; // stopped or error, and still down
           }
         } else if (state === 'running') {
           up = true; // between two probes, a running server stays running
+        } else if (!live) {
+          return;
         }
       }
 
-      const keep = { ...(runId ? { runId } : {}), ...(tmuxSession ? { tmuxSession } : {}) };
       if (up) {
         const url = this.urlFor(entry, port);
         this.setState(entry, { state: 'running', ...keep, ...(port ? { port } : {}), ...(url ? { url } : {}) });
+      } else if (!processAlive && entry.startedAt !== undefined && this.nowMs() - entry.startedAt >= DETACHED_START_TIMEOUT_MS) {
+        this.setState(entry, { state: 'error', ...keep });
       } else {
         this.setState(entry, { state: 'starting', ...keep });
       }
     } finally {
       entry.checking = false;
-      entry.nextCheckAt = this.nowMs() + (entry.snapshot.state === 'running' ? RUNNING_CHECK_MS : STARTING_CHECK_MS);
+      const s = entry.snapshot.state;
+      entry.nextCheckAt = this.nowMs() + (s === 'running' ? RUNNING_CHECK_MS : s === 'starting' ? STARTING_CHECK_MS : Math.max(5, entry.probe?.intervalSec ?? 30) * 1000);
     }
   }
 
@@ -877,10 +922,10 @@ export class WorktreeActionsService {
     }
   }
 
-  /** One timer for every live server, ticking while any is starting or running. */
+  /** One timer for every watched server: starting, running, or with a probe. */
   private schedule(): void {
     if (this.timer !== null) return;
-    const live = [...this.entries.values()].some((e) => e.snapshot.state === 'starting' || e.snapshot.state === 'running');
+    const live = [...this.entries.values()].some((e) => e.probe || e.snapshot.state === 'starting' || e.snapshot.state === 'running');
     if (!live) return;
     this.timer = (this.deps.setTimer ?? setTimeout)(() => {
       this.timer = null;

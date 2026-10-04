@@ -122,6 +122,107 @@ describe('WorktreeActionsService — server lifecycle', () => {
   });
 });
 
+describe('WorktreeActionsService — status probe', () => {
+  // The probe is the source of truth when one is configured: most servers start
+  // with a command that hands back (docker compose up -d), or outside Fleex.
+  let up: boolean;
+  let ctx: ReturnType<typeof setup>;
+  const probeRuns = () => ctx.shellCalls.filter((c) => c.includes('check-up')).length;
+  beforeEach(() => {
+    up = false;
+    ctx = setup({ shell: async (command) => ({ stdout: '', stderr: '', exitCode: command.includes('check-up') && up ? 0 : 1 }) });
+    ctx.config.update({ worktreeConfigs: { 'oliviermadre/secondrepo': { server: { start: 'docker compose up -d', stop: 'docker compose stop', probe: { command: 'check-up', intervalSec: 30 } } } } });
+  });
+
+  it('turns a server started outside Fleex green, and back to stopped when it goes away', async () => {
+    const { service, clock } = ctx;
+    expect((await service.view(SECOND)).server.state).toBe('stopped');
+    up = true;
+    clock.ms += 30_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('running');
+
+    up = false;
+    clock.ms += 30_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('stopped');
+  });
+
+  it('probes a stopped worktree only once per interval', async () => {
+    const { service, clock } = ctx;
+    await service.view(SECOND);
+    await service.tickForTest();
+    const first = probeRuns();
+    expect(first).toBe(1);
+    clock.ms += 10_000;
+    await service.tickForTest();
+    expect(probeRuns()).toBe(first);
+    clock.ms += 20_000;
+    await service.tickForTest();
+    expect(probeRuns()).toBe(first + 1);
+  });
+
+  it('a start command that hands back leaves the state to the probe, and Stop runs the stop command', async () => {
+    const { service, tmux, clock, execCalls } = ctx;
+    const session = ctx.startSession(SECOND);
+    expect((await service.run(SECOND, { verb: 'start' })).server.state).toBe('starting');
+    tmux.exit(session, 0); // `up -d` is done, the containers keep running
+    await flush();
+    await flush();
+    expect((await service.view(SECOND)).server.state).toBe('starting');
+
+    up = true;
+    clock.ms += 2_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('running');
+
+    up = false; // the stop command brings it down
+    const stopped = await service.run(SECOND, { verb: 'stop' });
+    expect(stopped.server.state).toBe('stopped');
+    expect(execCalls.some((c) => c.command.endsWith('; docker compose stop'))).toBe(true);
+    expect(tmux.sessions.has(session)).toBe(false); // the finished start terminal is closed too
+  });
+
+  it('gives up on a start that handed back when the probe never passes', async () => {
+    const { service, tmux, clock } = ctx;
+    await service.run(SECOND, { verb: 'start' });
+    tmux.exit(ctx.startSession(SECOND), 0);
+    await flush();
+    await flush();
+    clock.ms += 60_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('starting');
+    clock.ms += 5 * 60_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('error');
+  });
+
+  it('a foreground server whose probe fails while running is in error', async () => {
+    const { service, clock } = ctx;
+    await service.run(SECOND, { verb: 'start' });
+    up = true;
+    clock.ms += 2_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('running');
+    up = false;
+    clock.ms += 30_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('error');
+  });
+
+  it('picks up a probe configured after the worktree was first seen', async () => {
+    const { service, config, clock } = ctx;
+    config.update({ worktreeConfigs: {} });
+    await service.view(SECOND);
+    up = true;
+    config.update({ worktreeConfigs: { 'oliviermadre/secondrepo': { server: { probe: { command: 'check-up' } } } } });
+    await service.view(SECOND);
+    clock.ms += 30_000;
+    await service.tickForTest();
+    expect((await service.view(SECOND)).server.state).toBe('running');
+  });
+});
+
 describe('WorktreeActionsService — commands and pins', () => {
   it('runs a detected command in its own terminal slot with the FLEEX_* env', async () => {
     const { service, tmux } = setup();

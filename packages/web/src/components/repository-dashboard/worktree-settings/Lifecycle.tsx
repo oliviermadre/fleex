@@ -355,10 +355,15 @@ function StopStep({ api, draft, setDraft }: EditorProps) {
   };
   const testProbe = async () => {
     setProbe('loading');
-    // The probe sees the server's URL and port, like when Fleex runs it.
-    const env = [server?.url ? `FLEEX_URL='${server.url}'` : '', server?.port ? `FLEEX_PORT='${server.port}'` : ''].filter(Boolean).join(' ');
+    // The probe runs in the worktree and sees the server's URL and port, like when Fleex runs it.
+    const q = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
+    const env = [
+      s.path ? `FLEEX_WORKTREE_PATH=${q(s.path)}` : '',
+      server?.url ? `FLEEX_URL=${q(server.url)}` : '',
+      server?.port ? `FLEEX_PORT=${q(String(server.port))}` : '',
+    ].filter(Boolean).join(' ');
     try {
-      const res = await testProbeCommand(`${env ? `export ${env}; ` : ''}${d.probe}`);
+      const res = await testProbeCommand(`${s.path ? `cd ${q(s.path)} && ` : ''}${env ? `export ${env}; ` : ''}${d.probe}`);
       setProbe({ ok: res.exitCode === 0, text: [res.stdout, res.stderr].filter(Boolean).join('\n') || `exit ${res.exitCode}` });
     } catch {
       setProbe(null);
@@ -382,7 +387,7 @@ function StopStep({ api, draft, setDraft }: EditorProps) {
             <input id="wt-probe" className={cn(TEXT_INPUT, 'font-mono text-xs')} placeholder="curl -sf $FLEEX_URL/health" value={d.probe} onChange={(e) => patch({ probe: e.target.value })} />
             <Select aria-label="Intervalle du probe" className="h-8 w-24 text-xs" options={['15', '30', '60', '300'].map((v) => ({ value: v, label: `${v} s` }))} value={d.interval} onChange={(e) => patch({ interval: e.target.value })} />
           </div>
-          <Hint>Code 0 = en marche ; un échec quand il tournait le passe en erreur.</Hint>
+          <Hint>Tourne dans tous les états, depuis le worktree : code 0 = en marche, sinon arrêté (en erreur si le terminal du start tourne encore). Indispensable si le start rend la main (docker compose up -d).</Hint>
         </div>
       </div>
       {probe && probe !== 'loading' && (

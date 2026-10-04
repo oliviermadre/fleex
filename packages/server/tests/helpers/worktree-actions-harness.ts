@@ -1,6 +1,6 @@
 import { worktreeSourceId, type WorktreeServerSnapshot, type WorktreeSetupSnapshot } from '@fleex/shared';
 import { ActionRunService, type RunExecFn, type TerminalRunPort } from '../../src/domain/services/action-run.service.js';
-import { WorktreeActionsService, type WorktreeServerTerminals } from '../../src/application/services/worktree-actions.service.js';
+import { WorktreeActionsService, type WorktreeServerTerminals, type WorktreeShell } from '../../src/application/services/worktree-actions.service.js';
 import { RepoPathResolver } from '../../src/domain/services/repo-path-resolver.js';
 import { FakeConfigPort, FakeHostFs, FakeLoggerPort } from './fakes.js';
 
@@ -54,7 +54,7 @@ export class FakeTmux implements TerminalRunPort, WorktreeServerTerminals {
 
 export const flush = () => new Promise((r) => setTimeout(r, 0));
 
-export function setup(opts: { tmux?: FakeTmux; config?: FakeConfigPort; exec?: RunExecFn; overlay?: ConstructorParameters<typeof WorktreeActionsService>[0]['overlay']; advanceClockOnSleep?: boolean } = {}) {
+export function setup(opts: { tmux?: FakeTmux; config?: FakeConfigPort; exec?: RunExecFn; shell?: WorktreeShell; overlay?: ConstructorParameters<typeof WorktreeActionsService>[0]['overlay']; advanceClockOnSleep?: boolean } = {}) {
   const tmux = opts.tmux ?? new FakeTmux();
   const config = opts.config ?? new FakeConfigPort();
   const hostFs = new FakeHostFs();
@@ -85,9 +85,9 @@ export function setup(opts: { tmux?: FakeTmux; config?: FakeConfigPort; exec?: R
     resolver: new RepoPathResolver('/base'),
     actionRuns,
     terminals: tmux,
-    shell: async (command) => {
+    shell: async (command, options) => {
       shellCalls.push(command);
-      return { stdout: '', stderr: '', exitCode: 1 };
+      return opts.shell ? opts.shell(command, options) : { stdout: '', stderr: '', exitCode: 1 };
     },
     broadcast: (_t, data) => broadcasts.push(data),
     logger: new FakeLoggerPort(),
