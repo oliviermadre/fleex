@@ -47,6 +47,22 @@ export function buildStandardOutputSchema(typeIds: string[]) {
         },
         comment: { oneOf: [{ type: 'string' }, { type: 'null' }] },
         mentionStatus: { type: 'string', enum: ['resolved', 'waiting_for_info'], default: 'resolved' },
+        questions: {
+          oneOf: [
+            {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  prompt: { type: 'string' },
+                  options: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['prompt', 'options'],
+              },
+            },
+            { type: 'null' },
+          ],
+        },
       },
       required: ['deliverable', 'comment'],
     },

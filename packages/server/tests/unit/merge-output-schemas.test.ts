@@ -26,4 +26,14 @@ describe('mergeOutputSchemas', () => {
     });
     expect(merged.schema.required).toEqual(expect.arrayContaining(['x', 'deliverable', 'comment']));
   });
+  it('exposes optional questions in the standard schema', () => {
+    const props = STANDARD_OUTPUT_SCHEMA.schema.properties as Record<string, unknown>;
+    expect(props.questions).toBeDefined();
+    expect(STANDARD_OUTPUT_SCHEMA.schema.required).toEqual(['deliverable', 'comment']);
+  });
+
+  it('keeps questions when merging a custom schema', () => {
+    const merged = mergeOutputSchemas(STANDARD_OUTPUT_SCHEMA, { type: 'object', properties: { x: { type: 'string' } } });
+    expect((merged.schema.properties as Record<string, unknown>).questions).toBeDefined();
+  });
 });

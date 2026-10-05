@@ -7,6 +7,30 @@ function config(deliverableTypes?: { id: string; description: string }[]) {
 }
 
 describe('AgentStepExecutor', () => {
+  const step = { id: 's1', name: 'X', executorType: 'agent' as const, executorRef: 'p', position: { x: 0, y: 0 } };
+  const ctx = { workflowName: 'W', stepName: 'X', outgoingEdges: [], previousOutputs: {} };
+  const runStep = (structuredOutput: Record<string, unknown>) => {
+    const executeAgent = { executeForWorkflowStep: vi.fn().mockResolvedValue({ structuredOutput, rawText: '', executionId: 'e' }) };
+    return new AgentStepExecutor(executeAgent as never, config() as never).execute({
+      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1', step, workflowContext: ctx,
+    });
+  };
+
+  it('keeps sanitized questions on a waiting step, out of schemaFields', async () => {
+    const r = await runStep({
+      deliverable: null, comment: 'Which?', mentionStatus: 'waiting_for_info',
+      questions: [{ prompt: 'Repo ?', options: ['fleex', 'odys', 9] }],
+    });
+    expect(r.output.questions).toEqual([{ prompt: 'Repo ?', options: ['fleex', 'odys'] }]);
+    expect(r.output.schemaFields).not.toHaveProperty('questions');
+  });
+
+  it('drops questions when the step is not waiting', async () => {
+    const r = await runStep({ deliverable: null, comment: 'Done', questions: [{ prompt: 'P', options: ['A', 'B'] }] });
+    expect(r.output.questions).toBeNull();
+    expect(r.output.schemaFields).not.toHaveProperty('questions');
+  });
+
   it('calls executeForWorkflowStep and maps result to StepOutput', async () => {
     const executeAgent = {
       executeForWorkflowStep: vi.fn().mockResolvedValue({

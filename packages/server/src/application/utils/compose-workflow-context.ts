@@ -118,7 +118,7 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
   // so it's especially easy for the agent to misuse `comment` as a meta status
   // report ("I asked X about Y") instead of the actual question. The standard
   // mentionStatus instruction covers this, but doubling down here is cheap.
-  parts.push(`**If you need human input to continue this workflow**: set \`mentionStatus: "waiting_for_info"\` and put your actual question(s) in \`comment\`. The workflow will pause and a side panel will prompt the user to respond. Their answer is recorded in this run's history and this step retries automatically with that new context. Write the question directly ("Should we use option A or B?"), as if chatting — do NOT narrate ("I posed a question to @someone", "Awaiting reply"); only what you write in \`comment\` reaches the reader.`);
+  parts.push(`**If you need human input to continue this workflow**: set \`mentionStatus: "waiting_for_info"\` and put your actual question(s) in \`comment\`. The workflow will pause and a side panel will prompt the user to respond. Their answer is recorded in this run's history and this step retries automatically with that new context. Write the question directly ("Should we use option A or B?"), as if chatting — do NOT narrate ("I posed a question to @someone", "Awaiting reply"); only what you write in \`comment\` reaches the reader. If the answer is a closed choice, also declare it in \`questions\` (\`[{ "prompt": "...", "options": ["A", "B"] }]\`, 2–5 short options) so the user gets one button per option; keep the full question in \`comment\` too.`);
   parts.push('');
 
   const history = input.runHistory ? formatRunHistory(input.runHistory) : '';

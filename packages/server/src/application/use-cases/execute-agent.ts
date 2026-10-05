@@ -183,6 +183,13 @@ ${typeLines}
     "Should the bundle target Apple silicon only?"). Do NOT write a status report about
     having asked (e.g. "I posed a question to @nas", "Awaiting reply from X") — the system
     does not post any separate question; only what you write in \`comment\` reaches the reader.
+- **questions** (optional, only with \`"waiting_for_info"\`): when you wait for a **closed choice**
+  between precise answers, declare it here, e.g.
+  \`[{ "prompt": "Front (lot 5)?", "options": ["Attach odys-front here", "Separate ticket"] }]\`.
+  The human sees one button per option. 2 to 5 short options per question, at most 4 questions.
+  An open question ("what name for…?") does NOT go here: it stays in \`comment\` only.
+  \`comment\` must stay complete and readable without the buttons — restate the questions in it —
+  because the CLI, memory and exports only see the text. Set to null otherwise.
 - Both deliverable and comment can be non-null, or both null (silent completion — only valid with "resolved").
 
 ## CRITICAL — Handoff Rules (ENFORCED BY THE SYSTEM)
