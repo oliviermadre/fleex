@@ -8,6 +8,7 @@ import { PrBadgeGroup } from '../ui/PrBadgeGroup';
 import { FocusFavoriteStar, FocusStatusBadge, FocusTicketLead } from './FocusTicketLead';
 import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { MessageMarkdown } from '../work/task/MessageMarkdown';
+import { QuestionPicker } from '../work/task/QuestionPicker';
 import { useTicketDeliverables } from '../work/panel/useTicketDeliverables';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { Composer } from '../work/task/Composer';
@@ -196,8 +197,10 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
   const setPref = useFocusStore((s) => s.setPref);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   // Idle items: commenting is a choice first — the composer shows once "Commenter" is picked,
-  // or right away when the ticket already has a draft, so it is never out of sight.
+  // or right away when the ticket already has a draft, so it is never out of sight. Same for a
+  // free-text reply to a question whose agent declared choices ("Répondre autrement").
   const [commentOpen, setCommentOpen] = useState(false);
+  const choices = item.kind === 'question' && item.question?.source !== 'session' ? item.question?.questions ?? null : null;
   const answerRef = useRef<HTMLTextAreaElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
 
@@ -215,9 +218,9 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
   useEffect(() => {
     setNotes('');
     setSnoozeOpen(false);
-    const drafting = item.kind === 'idle' && draft.trim() !== '';
+    const drafting = (item.kind === 'idle' || !!choices?.length) && draft.trim() !== '';
     setCommentOpen(drafting);
-    const typing = drafting || (item.kind === 'question' && item.question?.source !== 'session');
+    const typing = drafting || (item.kind === 'question' && item.question?.source !== 'session' && !choices?.length);
     const t = setTimeout(() => (typing ? answerRef.current : primaryRef.current)?.focus(), 60);
     return () => clearTimeout(t);
     // The draft is read when the item changes, not followed as it is typed.
@@ -352,6 +355,46 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
       </>
     );
     controls = <div className="flex flex-wrap gap-2">{actions.map((a) => optionButton(a, false))}</div>;
+  } else if (item.kind === 'question' && choices?.length) {
+    const n = choices.length;
+    prompt = (
+      <AskHeader hue={meta.hue}>
+        Ce qui t’attend · {item.question?.askedBy ? `${item.question.askedBy} ` : ''}{n > 1 ? `a ${n} questions` : 'a une question'} depuis {wait}
+      </AskHeader>
+    );
+    controls = (
+      <>
+        <QuestionPicker key={item.key} questions={choices} onSubmit={(text) => send(text)} />
+        {commentOpen ? (
+          <>
+            <Composer
+              bare
+              ticketId={ticket.id}
+              textareaRef={answerRef}
+              value={draft}
+              onChange={draftSetter(ticket.id)}
+              onSend={send}
+              submitOn="mod-enter"
+              showSend={false}
+              placeholder="Ta réponse… @ pour mentionner, colle une capture (⌘⏎ pour envoyer)"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => send()} title="l’agent repart aussitôt" className={cn(CTA_BASE, CTA_SECONDARY)}>
+                Envoyer cette réponse <kbd className="rounded border border-current px-1 font-mono text-[10px] opacity-60">⌘⏎</kbd>
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={openComment}
+            className="justify-self-start text-[12px] text-[var(--theme-text-muted)] underline-offset-2 hover:text-[var(--theme-text-primary)] hover:underline"
+          >
+            Répondre autrement
+          </button>
+        )}
+      </>
+    );
   } else if (item.kind === 'question') {
     prompt = (
       <>

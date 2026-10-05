@@ -61,6 +61,17 @@ const QUESTION: FocusItem = {
   question: { source: 'mention', mentionId: 'm1', runId: null, stepRunId: null, askedBy: 'Dev', text: 'Global or per board?' },
   lastAgentComment: { authorName: 'Dev', body: 'Global or per board?', createdAt: minutesAgo(300) },
 };
+const MULTI: FocusItem = {
+  ...QUESTION,
+  question: {
+    ...QUESTION.question!,
+    text: 'Two things',
+    questions: [
+      { prompt: 'Scope ?', options: ['Global', 'Per board'] },
+      { prompt: 'Base ?', options: ['Postgres', 'SQLite'] },
+    ],
+  },
+};
 
 function renderView() {
   return render(
@@ -136,6 +147,40 @@ describe('FocusView', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_MS); });
     expect(api.postTicketComment).toHaveBeenCalledWith('t2', 'Global');
+  });
+
+  it('a question with several declared choices opens the detail instead of a free-text reply', () => {
+    useFocusStore.setState({ items: [MULTI] });
+    renderView();
+    const row = document.querySelector('[data-focus-key="question:m1"]') as HTMLElement;
+    expect(within(row).queryByPlaceholderText('Répondre à @Dev…')).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Répondre aux 2 questions' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/Dev a 2 questions/)).toBeTruthy();
+    expect(within(dialog).getByRole('radiogroup', { name: 'Scope ?' })).toBeTruthy();
+  });
+
+  it('answers declared choices from the detail, through the usual answer path', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    useFocusStore.setState({ items: [MULTI] });
+    renderView();
+    fireEvent.click(screen.getByText('Timeout configurable'));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByPlaceholderText(/Ta réponse/)).toBeNull();
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Per board' }));
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Postgres' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer les 2 réponses' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_MS); });
+    expect(api.postTicketComment).toHaveBeenCalledWith('t2', '**Scope ?** Per board\n**Base ?** Postgres');
+  });
+
+  it('keeps a free-text reply behind "Répondre autrement" in the detail', () => {
+    useFocusStore.setState({ items: [MULTI] });
+    renderView();
+    fireEvent.click(screen.getByText('Timeout configurable'));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Répondre autrement' }));
+    expect(within(dialog).getByPlaceholderText(/Ta réponse/)).toBeTruthy();
   });
 
   it('opens the detail popup on click and sends "Ouvrir dans Tasks" to the Tasks view', () => {

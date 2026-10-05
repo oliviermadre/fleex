@@ -51,6 +51,8 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
   // A CLI session's question is answered in its terminal, not with a comment.
   const reply = item.kind === 'question' && item.question?.source !== 'session';
   const options = reply ? questionOptions(item) : [];
+  // Several declared choices are answered in the detail, one group of options each.
+  const choiceCount = reply ? item.question?.questions?.length ?? 0 : 0;
 
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   const send = () => {
@@ -128,7 +130,16 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
         className="col-[3/-1] row-start-2 flex flex-wrap items-center gap-1.5 xl:col-[4/5] xl:row-start-1 xl:flex-nowrap xl:justify-end"
         onClick={stop}
       >
-        {reply ? (
+        {choiceCount > 1 ? (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md bg-[var(--theme-accent)] px-2.5 text-xs font-semibold text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]"
+          >
+            Répondre aux {choiceCount} questions
+            <span aria-hidden>→</span>
+          </button>
+        ) : reply ? (
           <div className="flex w-full items-center gap-1 xl:w-[300px]">
             <input
               value={answer}
