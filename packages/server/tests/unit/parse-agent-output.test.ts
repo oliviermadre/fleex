@@ -290,4 +290,23 @@ Hope that helps!`;
     const result = parseAgentOutput(input);
     expect(result?.mentionStatus).toBeUndefined();
   });
+  it('carries sanitized questions through', () => {
+    const input = JSON.stringify({
+      deliverable: null,
+      comment: 'Two things',
+      mentionStatus: 'waiting_for_info',
+      questions: [{ prompt: 'Front ?', options: ['Ici', 'Séparé', 7] }],
+    });
+    expect(parseAgentOutput(input)).toEqual({
+      deliverable: null,
+      comment: 'Two things',
+      mentionStatus: 'waiting_for_info',
+      questions: [{ prompt: 'Front ?', options: ['Ici', 'Séparé'] }],
+    });
+  });
+
+  it('accepts the output when questions is malformed, dropping it', () => {
+    const input = JSON.stringify({ deliverable: null, comment: 'Hi', questions: 'nope' });
+    expect(parseAgentOutput(input)).toEqual({ deliverable: null, comment: 'Hi' });
+  });
 });

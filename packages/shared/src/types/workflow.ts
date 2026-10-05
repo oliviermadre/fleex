@@ -1,4 +1,4 @@
-import type { DeliverableType, DeliverableStatus } from './ticket.js';
+import type { DeliverableType, DeliverableStatus, AgentQuestion } from './ticket.js';
 import type { RunSubject } from './routine.js';
 
 export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route';
@@ -204,6 +204,8 @@ export interface StepOutput {
   } | null;
   comment?: string | null;
   mentionStatus?: 'resolved' | 'waiting_for_info';
+  /** Closed questions declared with `waiting_for_info` (see AgentQuestion). */
+  questions?: AgentQuestion[] | null;
   schemaFields: Record<string, unknown>;
   outcome?: string;
   /**

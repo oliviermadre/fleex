@@ -208,6 +208,14 @@ export interface AgentTokenCreated extends AgentToken {
 
 export type CommentVisibility = 'public' | 'private';
 
+/** A closed question an agent asks, answered with one of its options (one button each). */
+export interface AgentQuestion {
+  /** Short label shown above the question's buttons. */
+  prompt: string;
+  /** The answers offered, one button each. */
+  options: string[];
+}
+
 export interface TicketComment {
   readonly id: string;
   readonly ticketId: string;
@@ -218,6 +226,8 @@ export interface TicketComment {
   readonly privateRecipients: string[];
   readonly mentions: string[];
   readonly parentId: string | null;
+  /** Closed questions the agent declared with `waiting_for_info`; null/absent = free reply only. */
+  readonly questions?: AgentQuestion[] | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

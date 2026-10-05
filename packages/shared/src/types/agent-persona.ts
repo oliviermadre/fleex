@@ -1,4 +1,4 @@
-import type { DeliverableType, DeliverableStatus } from './ticket.js';
+import type { DeliverableType, DeliverableStatus, AgentQuestion } from './ticket.js';
 
 export type ExecutionMode = 'claude_code' | 'message';
 
@@ -42,6 +42,7 @@ export interface AgentStructuredOutput {
   deliverable: { title: string; markdown: string; type: DeliverableType; status: DeliverableStatus } | null;
   comment: string | null;
   mentionStatus?: 'resolved' | 'waiting_for_info';
+  questions?: AgentQuestion[] | null;
 }
 
 export type AgentExecutionStatus = 'no_work' | 'started' | 'already_running';
