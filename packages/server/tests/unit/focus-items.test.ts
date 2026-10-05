@@ -147,6 +147,40 @@ describe('deriveFocusItems', () => {
     });
   });
 
+  it('carries the comment questions on a mention question', () => {
+    const questions = [{ prompt: 'Scope ?', options: ['Global', 'Per board'] }];
+    const comment = { id: 'c9', ticketId: 'T1', authorType: 'agent', authorName: 'Dev', body: 'Scope?', createdAt: T2, questions } as TicketComment;
+    const { items } = deriveFocusItems(inputs({
+      tickets: [ticket('T1')],
+      mentions: [mention('m1', 'T1', 'waiting_for_info')],
+      executions: [exec('x1', 'T1', { mentionId: 'm1', completedAt: T2 })],
+      lastAgentCommentByTicket: new Map([['T1', comment]]),
+    }));
+    expect(items[0]!.question!.questions).toEqual(questions);
+  });
+
+  it('carries the step output questions on a step question, null when absent', () => {
+    const questions = [{ prompt: 'Repo ?', options: ['fleex', 'odys'] }];
+    const r = run('r1', 'T1', 'needs_review');
+    const withQ = deriveFocusItems(inputs({
+      tickets: [ticket('T1')],
+      runsByTicket: new Map([['T1', [r]]]),
+      stepRunsByRun: new Map([['r1', [stepRun('s', 'r1', 'plan', 'needs_review', {
+        output: { schemaFields: {}, result: 'needs_review', comment: 'Which repo?', questions },
+      })]]]),
+    }));
+    expect(withQ.items[0]!.question!.questions).toEqual(questions);
+
+    const withoutQ = deriveFocusItems(inputs({
+      tickets: [ticket('T1')],
+      runsByTicket: new Map([['T1', [r]]]),
+      stepRunsByRun: new Map([['r1', [stepRun('s', 'r1', 'plan', 'needs_review', {
+        output: { schemaFields: {}, result: 'needs_review', comment: 'Which repo?' },
+      })]]]),
+    }));
+    expect(withoutQ.items[0]!.question!.questions).toBeNull();
+  });
+
   it('turns a paused non-gate step into a step question', () => {
     const r = run('r1', 'T1', 'needs_review');
     const { items } = deriveFocusItems(inputs({
