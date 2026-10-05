@@ -2,7 +2,6 @@ import type { FocusItem, FocusItemKind, Ticket, TicketPriority, TicketStatus } f
 import { FOCUS_KIND_ORDER } from '@fleex/shared';
 import type { TintHue } from '../../lib/tints';
 import * as api from '../../services/api';
-import { parseInlineOptions } from '../work/selectors';
 
 /**
  * Pure model of the Focus page: labels, ordering, and — above all — the actions
@@ -57,18 +56,14 @@ export function sortFocusItems(
   });
 }
 
-/** Longest text still read as a one-click answer rather than a sentence. */
-const MAX_OPTION_CHARS = 60;
-
 /**
- * Choices the agent offered in its question ("- A\n- B", "a) … b) …"), when any.
- * A numbered list of sub-questions is not a set of answers: the list only counts
- * when every entry is short and none is itself a question.
+ * The buttons a question row offers: the options of the agent's single declared
+ * question. Several questions are answered from the task detail, where each gets
+ * its own button group; none means a free reply.
  */
 export function questionOptions(item: FocusItem): string[] {
-  const opts = item.question?.text ? parseInlineOptions(item.question.text) : [];
-  const answerLike = opts.every((o) => o.length <= MAX_OPTION_CHARS && !o.trim().endsWith('?'));
-  return answerLike ? opts.slice(0, 4) : [];
+  const qs = item.question?.questions;
+  return qs && qs.length === 1 ? qs[0]!.options : [];
 }
 
 /** One-line context shown under the title. */
