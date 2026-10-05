@@ -41,6 +41,14 @@ describe('sanitizeQuestions', () => {
   });
 });
 
+describe('sanitizeQuestions — storable text', () => {
+  it('never cuts a prompt in the middle of a surrogate pair', () => {
+    const prompt = sanitizeQuestions([q('a'.repeat(199) + '😀' + 'tail', ['A', 'B'])])![0]!.prompt;
+    expect(prompt).toBe('a'.repeat(199) + '😀');
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(prompt)).toBe(false);
+  });
+});
+
 describe('questionsToKeep', () => {
   const questions = [q('P', ['A', 'B'])];
 

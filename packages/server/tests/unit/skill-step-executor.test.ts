@@ -32,4 +32,24 @@ describe('SkillStepExecutor', () => {
       workflowContext: { workflowName: 'W', stepName: 'X', outgoingEdges: [], previousOutputs: {} },
     })).rejects.toThrow(/skill .* not found/);
   });
+  it('keeps sanitized questions on a waiting step, out of schemaFields', async () => {
+    const skillStore = { getByCommandName: vi.fn().mockResolvedValue({ id: 'sk-1', commandName: 'doc-writer' }) };
+    const executeAgent = {
+      executeForSkill: vi.fn().mockResolvedValue({
+        structuredOutput: {
+          deliverable: null, comment: 'Which?', mentionStatus: 'waiting_for_info',
+          questions: [{ prompt: 'Repo ?', options: ['fleex', 'odys', 9] }],
+        },
+        rawText: '', executionId: 'exec-q',
+      }),
+    };
+    const exec = new SkillStepExecutor(executeAgent as never, skillStore as never, {} as never, { get: () => ({}) } as never);
+    const r = await exec.execute({
+      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
+      step: { id: 's1', name: 'Doc', executorType: 'skill', executorRef: 'doc-writer', position: { x: 0, y: 0 } },
+      workflowContext: { workflowName: 'W', stepName: 'Doc', outgoingEdges: [], previousOutputs: {} },
+    });
+    expect(r.output.questions).toEqual([{ prompt: 'Repo ?', options: ['fleex', 'odys'] }]);
+    expect(r.output.schemaFields).not.toHaveProperty('questions');
+  });
 });

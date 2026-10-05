@@ -28,7 +28,9 @@ export function sanitizeQuestions(raw: unknown): AgentQuestion[] | null {
       kept.push(text);
     }
     if (kept.length < MIN_OPTIONS) continue;
-    out.push({ prompt: prompt.trim().slice(0, MAX_PROMPT_CHARS), options: kept.slice(0, MAX_OPTIONS) });
+    // Cut on code points, not UTF-16 units: a half surrogate pair is rejected by a jsonb column.
+    const cut = Array.from(prompt.trim()).slice(0, MAX_PROMPT_CHARS).join('');
+    out.push({ prompt: cut, options: kept.slice(0, MAX_OPTIONS) });
   }
   return out.length > 0 ? out : null;
 }

@@ -24,4 +24,23 @@ describe('PanelStepExecutor', () => {
     expect(r.output.deliverable?.title).toBe('Spec');
     expect(r.output.result).toBe('ok');
   });
+  it('keeps sanitized questions on a waiting step, out of schemaFields', async () => {
+    const runPanel = {
+      execute: vi.fn().mockResolvedValue({
+        structuredOutput: {
+          deliverable: null, comment: 'Which?', mentionStatus: 'waiting_for_info',
+          questions: [{ prompt: 'Scope ?', options: ['MVP', 'Full', null] }],
+        },
+        executionId: 'exec-q',
+      }),
+    };
+    const exec = new PanelStepExecutor(runPanel as never, { get: () => ({}) } as never);
+    const r = await exec.execute({
+      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
+      step: { id: 's1', name: 'Panel', executorType: 'panel', executorRef: 'p', position: { x: 0, y: 0 } },
+      workflowContext: { workflowName: 'W', stepName: 'Panel', outgoingEdges: [], previousOutputs: {} },
+    });
+    expect(r.output.questions).toEqual([{ prompt: 'Scope ?', options: ['MVP', 'Full'] }]);
+    expect(r.output.schemaFields).not.toHaveProperty('questions');
+  });
 });

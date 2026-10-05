@@ -1,5 +1,5 @@
 import type { TicketComment, CommentVisibility, AgentQuestion } from '@fleex/shared';
-import { sanitizeForStorage } from '@fleex/shared';
+import { sanitizeForStorage, sanitizeForStorageDeep } from '@fleex/shared';
 
 const AGENT_MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
 const PANEL_MENTION_PATTERN = /@panel:([a-zA-Z0-9_-]+)/g;
@@ -53,7 +53,7 @@ export class TicketCommentEntity {
       params.parentId ?? null,
       now,
       now,
-      params.questions ?? null,
+      sanitizeForStorageDeep(params.questions ?? null),
     );
   }
 
