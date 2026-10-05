@@ -1,4 +1,4 @@
-import type { CommentVisibility } from '@fleex/shared';
+import type { AgentQuestion, CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
 import type { CommentSummary, CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { PgConnection } from './connection.js';
@@ -59,8 +59,8 @@ export class PgCommentStore implements CommentStorePort {
     await this.db.query(
       `INSERT INTO comments (
         id, ticket_id, author_type, author_name, body, visibility,
-        private_recipients, mentions, parent_id, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        private_recipients, mentions, parent_id, created_at, updated_at, questions
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       ON CONFLICT (id) DO UPDATE SET
         ticket_id = $2,
         author_type = $3,
@@ -71,7 +71,8 @@ export class PgCommentStore implements CommentStorePort {
         mentions = $8,
         parent_id = $9,
         created_at = $10,
-        updated_at = $11`,
+        updated_at = $11,
+        questions = $12`,
       [
         comment.id,
         comment.ticketId,
@@ -84,6 +85,7 @@ export class PgCommentStore implements CommentStorePort {
         comment.parentId,
         comment.createdAt.toISOString(),
         comment.updatedAt.toISOString(),
+        comment.questions ? JSON.stringify(comment.questions) : null,
       ],
     );
   }
@@ -106,5 +108,6 @@ function rowToComment(row: Record<string, unknown>): TicketCommentEntity {
     (row.parent_id as string) ?? null,
     new Date(row.created_at as string),
     new Date(row.updated_at as string),
+    (row.questions as AgentQuestion[] | null) ?? null,
   );
 }

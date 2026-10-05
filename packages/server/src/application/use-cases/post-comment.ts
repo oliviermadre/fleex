@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CommentVisibility, MentionExecutionMode } from '@fleex/shared';
+import type { AgentQuestion, CommentVisibility, MentionExecutionMode } from '@fleex/shared';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
@@ -33,6 +33,8 @@ export class PostCommentUseCase {
      * session) instead of spawning a duplicate parallel mention.
      */
     suppressMentionForAgents?: string[];
+    /** Closed questions declared by the agent (already sanitized by questionsToKeep). */
+    questions?: AgentQuestion[] | null;
   }): Promise<{ comment: TicketCommentEntity; createdMentions: TicketMentionEntity[] }> {
     const comment = TicketCommentEntity.create({
       id: randomUUID(),
@@ -43,6 +45,7 @@ export class PostCommentUseCase {
       visibility: params.visibility,
       privateRecipients: params.privateRecipients,
       parentId: params.parentId,
+      questions: params.questions,
     });
 
     await this.commentStore.save(comment);

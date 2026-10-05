@@ -19,3 +19,11 @@ describe('TicketCommentEntity.extractWorkflowMentions', () => {
     expect(TicketCommentEntity.extractWorkflowMentions('plain @workflow text')).toEqual([]);
   });
 });
+
+describe('TicketCommentEntity questions', () => {
+  it('defaults questions to null', () => {
+    const c = TicketCommentEntity.create({ id: 'c', ticketId: 't', authorType: 'user', authorName: 'me', body: 'hi' });
+    expect(c.questions).toBeNull();
+    expect(c.toDTO().questions).toBeNull();
+  });
+});

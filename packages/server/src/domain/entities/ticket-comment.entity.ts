@@ -1,4 +1,4 @@
-import type { TicketComment, CommentVisibility } from '@fleex/shared';
+import type { TicketComment, CommentVisibility, AgentQuestion } from '@fleex/shared';
 import { sanitizeForStorage } from '@fleex/shared';
 
 const AGENT_MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
@@ -24,6 +24,7 @@ export class TicketCommentEntity {
     public readonly parentId: string | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
+    public questions: AgentQuestion[] | null = null,
   ) {}
 
   static create(params: {
@@ -35,6 +36,7 @@ export class TicketCommentEntity {
     visibility?: CommentVisibility;
     privateRecipients?: string[];
     parentId?: string | null;
+    questions?: AgentQuestion[] | null;
   }): TicketCommentEntity {
     const now = new Date();
     const body = sanitizeForStorage(params.body);
@@ -51,6 +53,7 @@ export class TicketCommentEntity {
       params.parentId ?? null,
       now,
       now,
+      params.questions ?? null,
     );
   }
 
@@ -144,6 +147,7 @@ export class TicketCommentEntity {
       privateRecipients: this.privateRecipients,
       mentions: this.mentions,
       parentId: this.parentId,
+      questions: this.questions,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

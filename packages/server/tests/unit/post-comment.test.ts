@@ -42,6 +42,13 @@ describe('PostCommentUseCase — mention conflict suppression', () => {
     );
   });
 
+  it('stores the questions on the comment', async () => {
+    const questions = [{ prompt: 'P', options: ['A', 'B'] }];
+    const { comment } = await useCase.execute({ ticketId: 't1', authorType: 'agent', authorName: 'Dev', body: 'Q?', questions });
+    expect(comment.questions).toEqual(questions);
+    expect(comments.saved[0]!.toDTO().questions).toEqual(questions);
+  });
+
   it('creates a mention for a mentioned agent by default', async () => {
     const { createdMentions } = await useCase.execute({
       ticketId: 't1',
