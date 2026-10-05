@@ -1,3 +1,5 @@
+import type { AgentQuestion } from './ticket.js';
+
 // ── Focus (human-attention queue) ──
 
 /**
@@ -71,6 +73,8 @@ export interface FocusQuestion {
   readonly askedBy: string | null;
   /** The question itself — the agent's last comment, or the paused step's comment. */
   readonly text: string | null;
+  /** Closed questions the agent declared, when any — the source of answer buttons. */
+  readonly questions?: AgentQuestion[] | null;
   /** `session` only: the waiting terminal, to open it. */
   readonly sessionId?: string;
   /** `session` only: what the session waits for. */

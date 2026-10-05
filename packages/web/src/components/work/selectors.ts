@@ -90,37 +90,6 @@ export function suggestionsFor(t: SuggestionInput): Suggestion[] {
   return out;
 }
 
-/**
- * Parse the answer options out of an agent's question text. Supports the three
- * shapes the prototype and real agents produce, checked in order:
- *   - lettered:  "a) Run now  b) Wait"  /  "A. Run now"
- *   - numbered:  "1. Run now  2. Wait"  /  "1) Wait"
- *   - bulleted:  lines starting with -, *, or •
- * Returns [] when no option list is found (free reply only). Options are trimmed
- * and empty ones dropped; a single option is treated as none (needs ≥ 2).
- */
-export function parseInlineOptions(text: string): string[] {
-  if (!text) return [];
-  const lines = text.split('\n');
-
-  // Bulleted list — one option per line.
-  const bulletRe = /^\s*[-*•]\s+(.+?)\s*$/;
-  const bulleted = lines
-    .map((l) => l.match(bulletRe)?.[1])
-    .filter((v): v is string => !!v && v.trim().length > 0);
-  if (bulleted.length >= 2) return bulleted.map((s) => s.trim());
-
-  // Lettered options — may be inline on one line: "a) X b) Y" or line-led "A. X".
-  const lettered = matchInlineMarkers(text, /(?:^|\s)([a-z])[).]\s+/gi);
-  if (lettered.length >= 2) return lettered;
-
-  // Numbered options — "1. X 2. Y" inline, or line-led "1) X".
-  const numbered = matchInlineMarkers(text, /(?:^|\s)(\d{1,2})[).]\s+/g);
-  if (numbered.length >= 2) return numbered;
-
-  return [];
-}
-
 // ── Agent personas (SPEC §6.1 AGENTS) ─────────────────────────────────────
 
 export type PersonaState = 'running' | 'waiting' | 'idle';
@@ -296,30 +265,4 @@ export function buildStream(
   // a same-millisecond tie into run → comment → deliverable → event.
   entries.sort((x, y) => x.at - y.at || STREAM_RANK[x.kind] - STREAM_RANK[y.kind]);
   return entries;
-}
-
-/**
- * Split `text` on a repeating marker regex (e.g. "a) ", "1. ") and return each
- * segment between consecutive markers, trimmed. The regex matches an optional
- * leading space then the marker; `markerStart` is where the marker begins (end
- * of the previous segment) and `contentStart` where the option text begins.
- */
-function matchInlineMarkers(text: string, re: RegExp): string[] {
-  const markers: { markerStart: number; contentStart: number }[] = [];
-  let m: RegExpExecArray | null;
-  re.lastIndex = 0;
-  while ((m = re.exec(text)) !== null) {
-    const leadingWs = m[0].length - m[0].trimStart().length;
-    markers.push({ markerStart: m.index + leadingWs, contentStart: m.index + m[0].length });
-  }
-  if (markers.length < 2) return [];
-
-  const out: string[] = [];
-  for (let i = 0; i < markers.length; i++) {
-    const from = markers[i]!.contentStart;
-    const to = i + 1 < markers.length ? markers[i + 1]!.markerStart : text.length;
-    const seg = text.slice(from, to).trim().replace(/[.,;]$/, '').trim();
-    if (seg) out.push(seg);
-  }
-  return out.length >= 2 ? out : [];
 }

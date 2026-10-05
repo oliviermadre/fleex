@@ -1,4 +1,5 @@
 import type { AgentStructuredOutput, DeliverableType, DeliverableStatus } from '@fleex/shared';
+import { sanitizeQuestions } from './agent-questions.js';
 
 /**
  * Options controlling how the deliverable `type` field is coerced.
@@ -96,6 +97,9 @@ function validateShape(obj: unknown, options: ParseAgentOutputOptions): AgentStr
     // Invalid value — ignore it (default to resolved)
   }
 
+  // Questions are optional and never invalidate the output (see sanitizeQuestions).
+  const questions = sanitizeQuestions(record['questions']);
+
   return {
     deliverable:
       deliverable != null
@@ -110,6 +114,7 @@ function validateShape(obj: unknown, options: ParseAgentOutputOptions): AgentStr
     ...(mentionStatus === 'resolved' || mentionStatus === 'waiting_for_info'
       ? { mentionStatus: mentionStatus as 'resolved' | 'waiting_for_info' }
       : {}),
+    ...(questions ? { questions } : {}),
   };
 }
 

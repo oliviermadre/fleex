@@ -2,10 +2,11 @@ import type { ExecuteAgentUseCase } from '../../use-cases/execute-agent.js';
 import type { ConfigPort } from '../../ports/config.port.js';
 import { buildStandardOutputSchema, mergeOutputSchemas, selectableDeliverableTypeIds } from '../../utils/merge-output-schemas.js';
 import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
+import { questionsToKeep } from '../../utils/agent-questions.js';
 import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
 import type { StepOutput, MentionExecutionMode } from '@fleex/shared';
 
-const STANDARD_KEYS = new Set(['deliverable', 'comment', 'mentionStatus']);
+const STANDARD_KEYS = new Set(['deliverable', 'comment', 'mentionStatus', 'questions']);
 
 export class AgentStepExecutor implements StepExecutor {
   constructor(
@@ -61,6 +62,7 @@ export class AgentStepExecutor implements StepExecutor {
       deliverable: (so['deliverable'] as StepOutput['deliverable']) ?? null,
       comment: (so['comment'] as string | null) ?? null,
       mentionStatus,
+      questions: questionsToKeep(so),
       schemaFields,
       result,
     };

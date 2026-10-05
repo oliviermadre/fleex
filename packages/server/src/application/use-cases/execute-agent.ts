@@ -16,6 +16,7 @@ import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
+import { questionsToKeep } from '../utils/agent-questions.js';
 import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult, isEmptyRun } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
@@ -143,7 +144,7 @@ interface QueueItem {
  * Build the structured-output instructions, enumerating the workspace's
  * configured (agent-selectable) deliverable types with their descriptions.
  */
-function buildStructuredOutputInstructions(types: DeliverableTypeDef[]): string {
+export function buildStructuredOutputInstructions(types: DeliverableTypeDef[]): string {
   const selectable = types.filter((t) => !t.system);
   const fallback = selectable.some((t) => t.id === 'report') ? 'report' : (selectable[0]?.id ?? 'report');
   const typeLines = selectable
@@ -183,6 +184,16 @@ ${typeLines}
     "Should the bundle target Apple silicon only?"). Do NOT write a status report about
     having asked (e.g. "I posed a question to @nas", "Awaiting reply from X") — the system
     does not post any separate question; only what you write in \`comment\` reaches the reader.
+    **Rule:** whenever a question in your \`comment\` offers alternatives — "(a) … (b) …",
+    "1) … 2) …", "X or Y?", "do you validate?" — you MUST declare them in \`questions\` too,
+    so the human gets one button per answer instead of having to type it.
+- **questions**: REQUIRED key. An array of the **closed choices** you are waiting on, each
+  \`{ "prompt": "<short question>", "options": ["<answer>", "<answer>"] }\`, e.g.
+  \`[{ "prompt": "Front (lot 5)?", "options": ["Attach odys-front here", "Separate ticket"] }]\`.
+  2 to 5 short options per question (≤ 80 chars), at most 4 questions. Set it to \`null\` when
+  you are not waiting (\`"resolved"\`) or when every question is open ("what name for…?").
+  \`comment\` must stay complete and readable without the buttons — restate the questions in it —
+  because the CLI, memory and exports only see the text.
 - Both deliverable and comment can be non-null, or both null (silent completion — only valid with "resolved").
 
 ## CRITICAL — Handoff Rules (ENFORCED BY THE SYSTEM)
@@ -1302,6 +1313,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             authorType: 'agent',
             parentId: mention.commentId,
             humanMentionNames: humanName ? [humanName] : [],
+            questions: questionsToKeep(structured),
           });
           resultCommentId = comment.id;
 
@@ -1891,6 +1903,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             authorType: 'agent',
             parentId: announceComment.id,
             humanMentionNames: humanName ? [humanName] : [],
+            questions: questionsToKeep(structured),
           });
           resultCommentId = comment.id;
 

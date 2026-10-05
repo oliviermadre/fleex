@@ -260,6 +260,7 @@ export function deriveFocusItems(inputs: FocusInputs): FocusDerivation {
             question: {
               source: 'step', mentionId: null, runId: run.id, stepRunId: sr.id,
               askedBy: step.name, text: sr.output?.comment ?? null,
+              questions: sr.output?.questions ?? null,
             },
           });
         }
@@ -278,6 +279,7 @@ export function deriveFocusItems(inputs: FocusInputs): FocusDerivation {
         question: {
           source: 'mention', mentionId: m.id, runId: null, stepRunId: null,
           askedBy: display(m.targetAgent), text: comment?.body ?? null,
+          questions: comment?.questions ?? null,
         },
       });
     }

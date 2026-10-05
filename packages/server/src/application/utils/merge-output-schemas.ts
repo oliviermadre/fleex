@@ -47,8 +47,27 @@ export function buildStandardOutputSchema(typeIds: string[]) {
         },
         comment: { oneOf: [{ type: 'string' }, { type: 'null' }] },
         mentionStatus: { type: 'string', enum: ['resolved', 'waiting_for_info'], default: 'resolved' },
+        questions: {
+          oneOf: [
+            {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  prompt: { type: 'string' },
+                  options: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['prompt', 'options'],
+              },
+            },
+            { type: 'null' },
+          ],
+        },
       },
-      required: ['deliverable', 'comment'],
+      // `questions` is required (null allowed) so the agent decides on every
+      // answer whether it is waiting on a closed choice, instead of skipping an
+      // optional key. parseAgentOutput still accepts outputs without it.
+      required: ['deliverable', 'comment', 'questions'],
     },
   };
 }

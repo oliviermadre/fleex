@@ -1,4 +1,4 @@
-import type { CommentVisibility } from '@fleex/shared';
+import type { AgentQuestion, CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
 import type { CommentSummary, CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { SupabaseConnection } from './connection.js';
@@ -17,6 +17,7 @@ interface CommentRow {
   private_recipients: string[];
   mentions: string[];
   parent_id: string | null;
+  questions?: AgentQuestion[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +35,7 @@ function rowToEntity(r: CommentRow): TicketCommentEntity {
     r.parent_id,
     new Date(r.created_at),
     new Date(r.updated_at),
+    r.questions ?? null,
   );
 }
 
@@ -167,6 +169,7 @@ export class SupabaseCommentStore implements CommentStorePort {
       private_recipients: comment.privateRecipients,
       mentions: comment.mentions,
       parent_id: comment.parentId,
+      questions: comment.questions,
       created_at: comment.createdAt.toISOString(),
       updated_at: comment.updatedAt.toISOString(),
     });

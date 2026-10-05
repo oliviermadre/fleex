@@ -201,6 +201,7 @@ export type {
   AgentTokenCreated,
   CommentVisibility,
   TicketComment,
+  AgentQuestion,
   MentionStatus,
   MentionTargetType,
   MentionExecutionMode,

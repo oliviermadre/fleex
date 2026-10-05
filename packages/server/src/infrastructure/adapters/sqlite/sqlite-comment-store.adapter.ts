@@ -1,4 +1,4 @@
-import type { CommentVisibility } from '@fleex/shared';
+import type { AgentQuestion, CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
 import type { CommentSummary, CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -13,6 +13,7 @@ interface CommentRow {
   private_recipients: string;
   mentions: string;
   parent_id: string | null;
+  questions: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -70,10 +71,10 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO comments
         (id, ticket_id, author_type, author_name, body, visibility,
-         private_recipients, mentions, parent_id, created_at, updated_at)
+         private_recipients, mentions, parent_id, questions, created_at, updated_at)
       VALUES
         (@id, @ticket_id, @author_type, @author_name, @body, @visibility,
-         @private_recipients, @mentions, @parent_id, @created_at, @updated_at)
+         @private_recipients, @mentions, @parent_id, @questions, @created_at, @updated_at)
     `);
 
     stmt.run({
@@ -86,6 +87,7 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       private_recipients: JSON.stringify(comment.privateRecipients),
       mentions: JSON.stringify(comment.mentions),
       parent_id: comment.parentId,
+      questions: comment.questions ? JSON.stringify(comment.questions) : null,
       created_at: comment.createdAt.toISOString(),
       updated_at: comment.updatedAt.toISOString(),
     });
@@ -108,6 +110,18 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       row.parent_id,
       new Date(row.created_at),
       new Date(row.updated_at),
+      parseQuestions(row.questions),
     );
+  }
+}
+
+/** A NULL or unreadable cell reads as "no questions" — never fail a comment read over it. */
+function parseQuestions(raw: string | null): AgentQuestion[] | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as AgentQuestion[]) : null;
+  } catch {
+    return null;
   }
 }

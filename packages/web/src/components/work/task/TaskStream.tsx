@@ -15,7 +15,7 @@ import { DeliverableCard } from './DeliverableCard';
 import { InlineQuestion } from './InlineQuestion';
 import { MessageMarkdown } from './MessageMarkdown';
 import { TicketActionCards } from '../../tickets/TicketActionCards';
-import { buildStream, parseInlineOptions, type QueueActivity } from '../selectors';
+import { buildStream, type QueueActivity } from '../selectors';
 
 interface Props {
   ticketId: string;
@@ -62,13 +62,13 @@ export function TaskStream({
   }, [stream.length]);
 
   // The pending question is the last agent comment when the task is waiting and
-  // that comment offers a parseable choice.
+  // the agent declared closed questions on it.
   const questionCommentId = useMemo(() => {
     if (!showActionCards || activity !== 'waiting') return null;
     for (let i = comments.length - 1; i >= 0; i--) {
       const c = comments[i]!;
       if (c.authorType === 'agent') {
-        return parseInlineOptions(c.body).length >= 2 ? c.id : null;
+        return c.questions?.length ? c.id : null;
       }
     }
     return null;
@@ -110,7 +110,7 @@ export function TaskStream({
                   key={entry.comment.id}
                   authorName={entry.comment.authorName}
                   body={entry.comment.body}
-                  options={parseInlineOptions(entry.comment.body)}
+                  questions={entry.comment.questions ?? []}
                   onAnswer={onAnswer}
                 />
               ) : (

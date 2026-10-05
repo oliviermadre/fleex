@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import {
   partitionQueue,
-  parseInlineOptions,
   suggestionsFor,
   formatActivity,
   buildStream,
@@ -102,52 +101,6 @@ describe('suggestionsFor', () => {
     expect(chips.find((s) => s.id === 'see-with-dev')?.mention).toBe('@agent:builder ');
   });
 });
-
-describe('parseInlineOptions', () => {
-  it('parses inline lettered options', () => {
-    expect(parseInlineOptions('a) Run now b) Wait')).toEqual(['Run now', 'Wait']);
-  });
-
-  it('parses lettered options with a dot', () => {
-    expect(parseInlineOptions('A. Approve B. Read first')).toEqual(['Approve', 'Read first']);
-  });
-
-  it('parses inline numbered options', () => {
-    expect(parseInlineOptions('1. Push it 2. Hold')).toEqual(['Push it', 'Hold']);
-  });
-
-  it('parses numbered options with a paren', () => {
-    expect(parseInlineOptions('1) Run now 2) Wait 3) Cancel')).toEqual(['Run now', 'Wait', 'Cancel']);
-  });
-
-  it('parses a bulleted list across lines', () => {
-    expect(parseInlineOptions('Choose:\n- Run now\n- Wait for rotation')).toEqual([
-      'Run now',
-      'Wait for rotation',
-    ]);
-  });
-
-  it('parses bullets with • and *', () => {
-    expect(parseInlineOptions('• Yes\n* No')).toEqual(['Yes', 'No']);
-  });
-
-  it('returns [] when there is no option list', () => {
-    expect(parseInlineOptions('Should I run the migration on staging now?')).toEqual([]);
-  });
-
-  it('returns [] for a single option (needs at least two)', () => {
-    expect(parseInlineOptions('a) Just do it')).toEqual([]);
-  });
-
-  it('returns [] for empty text', () => {
-    expect(parseInlineOptions('')).toEqual([]);
-  });
-
-  it('does not treat a decimal number in prose as an option marker', () => {
-    expect(parseInlineOptions('The budget is 1. something and 2. another thing?')).toBeInstanceOf(Array);
-  });
-});
-
 function activity(over: Partial<TicketActivity> & Pick<TicketActivity, 'action'>): TicketActivity {
   return {
     id: over.id ?? `act-${over.action}`,

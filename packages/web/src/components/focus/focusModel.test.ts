@@ -45,19 +45,41 @@ describe('focusActions', () => {
     expect(api.resolveWorkflowRoute).toHaveBeenCalledWith('r', 's', { edgeId: 'e2', notes: undefined });
   });
 
-  it('questions offer the options the agent listed, answered as a comment', async () => {
+  it('a single declared question offers its options, answered as a comment', async () => {
     const item: FocusItem = {
       ...base, kind: 'question',
-      question: { source: 'mention', mentionId: 'm', runId: null, stepRunId: null, askedBy: 'Dev', text: 'Where?\n- Global\n- Per board' },
+      question: {
+        source: 'mention', mentionId: 'm', runId: null, stepRunId: null, askedBy: 'Dev', text: 'Where?',
+        questions: [{ prompt: 'Scope ?', options: ['Global', 'Per board'] }],
+      },
     };
     expect(questionOptions(item)).toEqual(['Global', 'Per board']);
-    // A list of sub-questions is not a set of answers.
-    const subQuestions = { ...item, question: { ...item.question!, text: 'I need:\n1. Which repo is it?\n2. Which runs?' } };
-    expect(questionOptions(subQuestions)).toEqual([]);
     const actions = focusActions(item, ctx);
     expect(actions.map((a) => a.label)).toEqual(['Global', 'Per board']);
     await actions[1]!.run();
     expect(api.postTicketComment).toHaveBeenCalledWith('T1', 'Per board');
+  });
+
+  it('offers no buttons without declared questions, even when the text lists options', () => {
+    const item: FocusItem = {
+      ...base, kind: 'question',
+      question: { source: 'mention', mentionId: 'm', runId: null, stepRunId: null, askedBy: 'Dev', text: 'Where?\n- Global\n- Per board' },
+    };
+    expect(questionOptions(item)).toEqual([]);
+  });
+
+  it('offers no buttons for several questions (answered from the detail view)', () => {
+    const item: FocusItem = {
+      ...base, kind: 'question',
+      question: {
+        source: 'mention', mentionId: 'm', runId: null, stepRunId: null, askedBy: 'Dev', text: 'Two things',
+        questions: [
+          { prompt: 'A ?', options: ['1', '2'] },
+          { prompt: 'B ?', options: ['3', '4'] },
+        ],
+      },
+    };
+    expect(questionOptions(item)).toEqual([]);
   });
 
   it('a paused step question is answered with a comment then a retry carrying the answer', async () => {

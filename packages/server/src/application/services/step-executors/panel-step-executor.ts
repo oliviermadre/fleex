@@ -4,8 +4,9 @@ import { buildStandardOutputSchema, mergeOutputSchemas, selectableDeliverableTyp
 import { composeWorkflowContextPrompt } from '../../utils/compose-workflow-context.js';
 import type { StepExecutor, StepExecutionInput, StepExecutorResult } from './types.js';
 import type { StepOutput } from '@fleex/shared';
+import { questionsToKeep } from '../../utils/agent-questions.js';
 
-const STANDARD_KEYS = new Set(['deliverable', 'comment', 'mentionStatus']);
+const STANDARD_KEYS = new Set(['deliverable', 'comment', 'mentionStatus', 'questions']);
 
 export class PanelStepExecutor implements StepExecutor {
   constructor(
@@ -64,6 +65,7 @@ export class PanelStepExecutor implements StepExecutor {
       deliverable: (so['deliverable'] as StepOutput['deliverable']) ?? null,
       comment: (so['comment'] as string | null) ?? null,
       mentionStatus,
+      questions: questionsToKeep(so),
       schemaFields,
       result: mentionStatus === 'waiting_for_info' ? 'needs_review' : 'ok',
     };
