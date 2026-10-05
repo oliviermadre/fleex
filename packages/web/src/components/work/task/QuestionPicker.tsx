@@ -53,8 +53,10 @@ export function QuestionPicker({ questions, onSubmit, disabled = false }: Props)
   };
 
   return (
-    <div className="rounded-lg border border-[var(--tint-yellow-border)] bg-[var(--theme-bg-surface)] px-3 py-2.5">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    // A column whose question list is the only part that shrinks: in a height-capped host
+    // (Focus detail) the header and the send button stay in view while the list scrolls.
+    <div className="flex min-h-0 flex-col rounded-lg border border-[var(--tint-yellow-border)] bg-[var(--theme-bg-surface)] px-3 py-2.5">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
         <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--tint-yellow-text)]">
           À toi de trancher · {questions.length} question{single ? '' : 's'}
         </span>
@@ -63,7 +65,7 @@ export function QuestionPicker({ questions, onSubmit, disabled = false }: Props)
         )}
       </div>
 
-      <ol className="grid gap-3">
+      <ol className="-mr-1.5 grid min-h-0 gap-3 overflow-y-auto pr-1.5">
         {questions.map((q, qi) => {
           const p = picks[qi];
           const custom = p?.kind === 'custom';
@@ -144,7 +146,7 @@ export function QuestionPicker({ questions, onSubmit, disabled = false }: Props)
       </ol>
 
       {!single && !disabled && (
-        <div className="mt-3 flex items-center justify-end gap-3">
+        <div className="mt-3 flex shrink-0 items-center justify-end gap-3">
           {left > 0 && <span className="text-[11.5px] text-[var(--theme-text-muted)]">Encore {left} à choisir</span>}
           <button
             type="button"

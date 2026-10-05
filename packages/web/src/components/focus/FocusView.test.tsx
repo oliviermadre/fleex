@@ -61,6 +61,10 @@ const QUESTION: FocusItem = {
   question: { source: 'mention', mentionId: 'm1', runId: null, stepRunId: null, askedBy: 'Dev', text: 'Global or per board?' },
   lastAgentComment: { authorName: 'Dev', body: 'Global or per board?', createdAt: minutesAgo(300) },
 };
+const SINGLE: FocusItem = {
+  ...QUESTION,
+  question: { ...QUESTION.question!, questions: [{ prompt: 'Scope ?', options: ['Global', 'Per board'] }] },
+};
 const MULTI: FocusItem = {
   ...QUESTION,
   question: {
@@ -158,6 +162,18 @@ describe('FocusView', () => {
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText(/Dev a 2 questions/)).toBeTruthy();
     expect(within(dialog).getByRole('radiogroup', { name: 'Scope ?' })).toBeTruthy();
+  });
+
+  it('a single declared question also opens the detail: no free-text reply, no option chips in the row', () => {
+    useFocusStore.setState({ items: [SINGLE] });
+    renderView();
+    const row = document.querySelector('[data-focus-key="question:m1"]') as HTMLElement;
+    expect(within(row).queryByPlaceholderText('Répondre à @Dev…')).toBeNull();
+    expect(within(row).queryByRole('button', { name: 'Global' })).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Répondre à la question' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/Dev a une question/)).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Global' })).toBeTruthy();
   });
 
   it('answers declared choices from the detail, through the usual answer path', async () => {

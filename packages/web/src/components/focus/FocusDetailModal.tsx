@@ -388,7 +388,7 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
           <button
             type="button"
             onClick={openComment}
-            className="justify-self-start text-[12px] text-[var(--theme-text-muted)] underline-offset-2 hover:text-[var(--theme-text-primary)] hover:underline"
+            className="shrink-0 self-start text-[12px] text-[var(--theme-text-muted)] underline-offset-2 hover:text-[var(--theme-text-primary)] hover:underline"
           >
             Répondre autrement
           </button>
@@ -605,8 +605,11 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
         )}
       </div>
 
-      <section className={cn('grid shrink-0 gap-2.5 border-t px-5 py-3', tintClasses(meta.hue).borderColor, tintClasses(meta.hue).bg)}>
-        <div>{prompt}</div>
+      {/* Capped at 40% of the popup so a long ask never squeezes the Fil out of sight. The zone
+          itself stays whole (header, send button, alternatives); what overflows scrolls inside
+          it — the question list, for declared choices. */}
+      <section className={cn('flex max-h-[40%] min-h-0 shrink-0 flex-col gap-2.5 overflow-y-auto border-t px-5 py-3', tintClasses(meta.hue).borderColor, tintClasses(meta.hue).bg)}>
+        <div className="shrink-0">{prompt}</div>
         {controls}
       </section>
 

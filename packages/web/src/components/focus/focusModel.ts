@@ -56,16 +56,6 @@ export function sortFocusItems(
   });
 }
 
-/**
- * The buttons a question row offers: the options of the agent's single declared
- * question. Several questions are answered from the task detail, where each gets
- * its own button group; none means a free reply.
- */
-export function questionOptions(item: FocusItem): string[] {
-  const qs = item.question?.questions;
-  return qs && qs.length === 1 ? qs[0]!.options : [];
-}
-
 /** One-line context shown under the title. */
 export function focusSummary(item: FocusItem): string {
   switch (item.kind) {
@@ -167,13 +157,8 @@ export function focusActions(item: FocusItem, ctx: FocusActionContext): FocusAct
           run: async () => open(sessionId),
         }];
       }
-      return questionOptions(item).map((opt) => ({
-        id: `ans:${opt}`,
-        label: opt,
-        hint: 'réponse proposée',
-        toast: `${ref} · réponse envoyée à ${item.question?.askedBy ?? 'l’agent'}`,
-        run: () => answerQuestion(item, opt),
-      }));
+      // Declared choices are answered in the detail (QuestionPicker); anything else is a free reply.
+      return [];
     }
     case 'error': {
       const e = item.error;

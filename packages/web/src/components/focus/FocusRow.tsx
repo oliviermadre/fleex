@@ -8,7 +8,7 @@ import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useSessionStore } from '../../stores/sessionStore';
 import { executeSkill } from '../../services/api';
 import { KindIcon } from './FocusIcons';
-import { KIND_META, STALE_MS, focusSummary, formatWait, questionOptions, waitedMs, type FocusAction } from './focusModel';
+import { KIND_META, STALE_MS, focusSummary, formatWait, waitedMs, type FocusAction } from './focusModel';
 
 /**
  * Grid shared by every row: kind · status · ticket · actions · session · wait
@@ -50,8 +50,7 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
   const [answer, setAnswer] = useState('');
   // A CLI session's question is answered in its terminal, not with a comment.
   const reply = item.kind === 'question' && item.question?.source !== 'session';
-  const options = reply ? questionOptions(item) : [];
-  // Several declared choices are answered in the detail, one group of options each.
+  // Declared choices are answered in the detail, where each question gets its options.
   const choiceCount = reply ? item.question?.questions?.length ?? 0 : 0;
 
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
@@ -108,21 +107,6 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
           {who && <span className={cn('mr-1.5', tintClasses('purple').text)}>{item.kind === 'question' ? `@${who}` : who}</span>}
           <span className={item.kind === 'error' ? tintClasses('red').text : undefined}>{focusSummary(item)}</span>
         </div>
-        {options.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1" onClick={stop}>
-            {actions.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => onAction(a)}
-                title={`Répondre « ${a.label} »`}
-                className="h-6 rounded-full border border-dashed border-[var(--theme-border-input)] px-2 text-[11.5px] text-[var(--theme-text-secondary)] hover:border-solid hover:text-[var(--theme-text-primary)]"
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Direct actions — second line below xl. */}
@@ -130,13 +114,13 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
         className="col-[3/-1] row-start-2 flex flex-wrap items-center gap-1.5 xl:col-[4/5] xl:row-start-1 xl:flex-nowrap xl:justify-end"
         onClick={stop}
       >
-        {choiceCount > 1 ? (
+        {choiceCount > 0 ? (
           <button
             type="button"
             onClick={onOpen}
             className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md bg-[var(--theme-accent)] px-2.5 text-xs font-semibold text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]"
           >
-            Répondre aux {choiceCount} questions
+            {choiceCount > 1 ? `Répondre aux ${choiceCount} questions` : 'Répondre à la question'}
             <span aria-hidden>→</span>
           </button>
         ) : reply ? (
