@@ -16,6 +16,7 @@ import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
+import { questionsToKeep } from '../utils/agent-questions.js';
 import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult, isEmptyRun } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
@@ -1309,6 +1310,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             authorType: 'agent',
             parentId: mention.commentId,
             humanMentionNames: humanName ? [humanName] : [],
+            questions: questionsToKeep(structured),
           });
           resultCommentId = comment.id;
 
@@ -1898,6 +1900,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             authorType: 'agent',
             parentId: announceComment.id,
             humanMentionNames: humanName ? [humanName] : [],
+            questions: questionsToKeep(structured),
           });
           resultCommentId = comment.id;
 
