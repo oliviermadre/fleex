@@ -64,7 +64,10 @@ export function buildStandardOutputSchema(typeIds: string[]) {
           ],
         },
       },
-      required: ['deliverable', 'comment'],
+      // `questions` is required (null allowed) so the agent decides on every
+      // answer whether it is waiting on a closed choice, instead of skipping an
+      // optional key. parseAgentOutput still accepts outputs without it.
+      required: ['deliverable', 'comment', 'questions'],
     },
   };
 }

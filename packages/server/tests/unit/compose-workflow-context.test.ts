@@ -156,4 +156,8 @@ describe('composeWorkflowContextPrompt — step identity', () => {
     // No type is presented as the safe default: the example is a placeholder.
     expect(out).toContain('--type <TYPE>');
   });
+  it('makes declaring closed choices in questions a rule, not an option', () => {
+    const out = composeWorkflowContextPrompt({ workflowName: 'W', stepName: 'S', outgoingEdges: [], previousOutputs: {} });
+    expect(out).toContain('you MUST also declare them in `questions`');
+  });
 });

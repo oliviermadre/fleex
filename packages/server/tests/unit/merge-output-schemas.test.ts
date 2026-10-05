@@ -26,10 +26,10 @@ describe('mergeOutputSchemas', () => {
     });
     expect(merged.schema.required).toEqual(expect.arrayContaining(['x', 'deliverable', 'comment']));
   });
-  it('exposes optional questions in the standard schema', () => {
-    const props = STANDARD_OUTPUT_SCHEMA.schema.properties as Record<string, unknown>;
-    expect(props.questions).toBeDefined();
-    expect(STANDARD_OUTPUT_SCHEMA.schema.required).toEqual(['deliverable', 'comment']);
+  it('requires questions in the standard schema, null allowed, so the agent decides every time', () => {
+    const props = STANDARD_OUTPUT_SCHEMA.schema.properties as Record<string, { oneOf?: { type: string }[] }>;
+    expect(props.questions!.oneOf!.map((o) => o.type)).toEqual(['array', 'null']);
+    expect(STANDARD_OUTPUT_SCHEMA.schema.required).toEqual(['deliverable', 'comment', 'questions']);
   });
 
   it('keeps questions when merging a custom schema', () => {
