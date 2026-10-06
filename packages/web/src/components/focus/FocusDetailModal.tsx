@@ -23,7 +23,7 @@ import { executeSkill } from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
 import { useFocusStore } from '../../stores/focusStore';
 import { FocusThread } from './FocusThread';
-import { KindIcon } from './FocusIcons';
+import { ChevronDownIcon, KindIcon, SnoozeIcon } from './FocusIcons';
 import { KIND_META, formatWait, waitedMs, type FocusAction } from './focusModel';
 
 export interface SnoozeChoice {
@@ -619,9 +619,11 @@ function FocusDetailContent(props: Props & { frozen: boolean }) {
             type="button"
             onClick={() => setSnoozeOpen((v) => !v)}
             aria-expanded={snoozeOpen}
-            className="h-7 rounded-md border border-[var(--theme-border-input)] px-2.5 text-xs font-medium text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)]"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--theme-border-input)] px-2.5 text-xs font-medium text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)]"
           >
-            Plus tard ▾
+            <SnoozeIcon />
+            Plus tard
+            <ChevronDownIcon />
           </button>
           {snoozeOpen && (
             <span className="absolute bottom-[calc(100%+6px)] left-0 z-10 grid min-w-[190px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1 shadow-xl">

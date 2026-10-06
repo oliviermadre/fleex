@@ -7,16 +7,18 @@ import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useSessionStore } from '../../stores/sessionStore';
 import { executeSkill } from '../../services/api';
-import { KindIcon } from './FocusIcons';
+import { FloatingPortal, usePopover } from '../../hooks/usePopover';
+import { SNOOZE_CHOICES } from './FocusDetailModal';
+import { ChevronDownIcon, KindIcon, SnoozeIcon } from './FocusIcons';
 import { KIND_META, STALE_MS, focusSummary, formatWait, waitedMs, type FocusAction } from './focusModel';
 
 /**
- * Grid shared by every row: kind · status · ticket · actions · session · wait
+ * Grid shared by every row: kind · status · ticket · actions · session · snooze · wait
  * (status in its own column so the titles line up; the buttons sit together,
  * the wait closes the row).
  */
 export const FOCUS_ROW_GRID =
-  'grid-cols-[96px_80px_minmax(0,1fr)_108px_76px] xl:grid-cols-[96px_80px_minmax(0,1fr)_auto_108px_76px]';
+  'grid-cols-[96px_80px_minmax(0,1fr)_108px_112px_76px] xl:grid-cols-[96px_80px_minmax(0,1fr)_auto_108px_112px_76px]';
 
 interface Props {
   item: FocusItem;
@@ -29,6 +31,7 @@ interface Props {
   onAction: (action: FocusAction) => void;
   onAnswer: (text: string) => void;
   onOpenLogs: (executionId: string) => void;
+  onSnooze: (until: number) => void;
 }
 
 /**
@@ -38,7 +41,7 @@ interface Props {
  * A click anywhere else opens the detail popup.
  */
 export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
-  { item, ticket, board, actions, now, selected, onOpen, onAction, onAnswer, onOpenLogs },
+  { item, ticket, board, actions, now, selected, onOpen, onAction, onAnswer, onOpenLogs, onSnooze },
   ref,
 ) {
   const meta = KIND_META[item.kind];
@@ -192,7 +195,7 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
 
       <div
         className={cn(
-          'col-start-5 row-start-1 text-right font-mono xl:col-start-6 text-[11.5px] tabular-nums whitespace-nowrap',
+          'col-start-6 row-start-1 text-right font-mono xl:col-start-7 text-[11.5px] tabular-nums whitespace-nowrap',
           stale ? tintClasses('orange').text : 'text-[var(--theme-text-muted)]',
         )}
         title={item.since ? `En attente depuis le ${new Date(item.since).toLocaleString()}` : undefined}
@@ -208,6 +211,51 @@ export const FocusRow = forwardRef<HTMLDivElement, Props>(function FocusRow(
           onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
         />
       </div>
+
+      <div className="col-start-5 row-start-1 flex justify-end xl:col-start-6" onClick={stop}>
+        <SnoozeMenu onSnooze={onSnooze} />
+      </div>
     </div>
   );
 });
+
+/** "Plus tard ▾": the snooze choices, in a portal so the row's overflow never clips them. */
+function SnoozeMenu({ onSnooze }: { onSnooze: (until: number) => void }) {
+  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ placement: 'bottom-end' });
+  return (
+    <>
+      <button
+        ref={refs.setReference}
+        type="button"
+        {...getReferenceProps()}
+        className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-[var(--theme-border-input)] px-2.5 text-xs text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)]"
+      >
+        <SnoozeIcon />
+        Plus tard
+        <ChevronDownIcon />
+      </button>
+      {open && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="z-[9999] grid min-w-[190px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1 shadow-xl"
+          >
+            {SNOOZE_CHOICES.map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                role="menuitem"
+                onClick={() => { setOpen(false); onSnooze(c.until()); }}
+                className="rounded px-2 py-1.5 text-left text-xs text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]"
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </FloatingPortal>
+      )}
+    </>
+  );
+}

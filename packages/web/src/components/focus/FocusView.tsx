@@ -371,6 +371,7 @@ export function FocusView() {
                   onAction={(a) => act(item, a)}
                   onAnswer={(text) => answer(item, text)}
                   onOpenLogs={(executionId) => setLogs({ executionId, title: ticket.title })}
+                  onSnooze={(until) => snoozeItem(item, until)}
                 />
               );
             })}

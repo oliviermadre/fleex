@@ -146,7 +146,7 @@ export function FocusRunningSection({ running, ticketById, boardById, now, open,
                 </div>
 
                 <div
-                  className="col-start-5 row-start-1 whitespace-nowrap text-right font-mono text-[11.5px] tabular-nums text-[var(--theme-text-muted)] xl:col-start-6"
+                  className="col-start-6 row-start-1 whitespace-nowrap text-right font-mono text-[11.5px] tabular-nums text-[var(--theme-text-muted)] xl:col-start-7"
                   title={r.since ? `En cours depuis le ${new Date(r.since).toLocaleString()}` : undefined}
                 >
                   {formatWait(waitedMs(r, now))}
