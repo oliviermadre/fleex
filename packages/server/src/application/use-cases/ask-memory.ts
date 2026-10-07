@@ -4,7 +4,7 @@ import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.
 import type { MemorySnippet, RetrieveContextUseCase } from './retrieve-context.js';
 
 /** Cheap and fast: this is summarisation over retrieved text, not reasoning. */
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-haiku-5-5';
 
 /** How many chunks are handed to the synthesiser. */
 const DEFAULT_LIMIT = 12;

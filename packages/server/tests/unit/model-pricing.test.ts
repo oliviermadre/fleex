@@ -54,6 +54,21 @@ describe('priceFor — Sonnet generations', () => {
   });
 });
 
+describe('priceFor — Haiku generations', () => {
+  it('prices Haiku 5.5 at $0.10/$0.50 per MTok (≤100K-token prompt rate)', () => {
+    const p = priceFor('claude-haiku-5-5');
+    expect(p).not.toBeNull();
+    expect(p!.inp).toBe(0.1e-6);
+    expect(p!.out).toBe(0.5e-6);
+  });
+
+  it('keeps Haiku 4.5 at $1/$5 per MTok', () => {
+    const p = priceFor('claude-haiku-4-5')!;
+    expect(p.inp).toBe(1e-6);
+    expect(p.out).toBe(5e-6);
+  });
+});
+
 describe('computeSessionCost — a Fable 5.1 transcript', () => {
   let dir: string;
   beforeAll(() => {

@@ -9,13 +9,14 @@ import { EFFORT_LEVELS, FALLBACK_MODELS, inferModelCapabilities, isEffortLevel, 
  */
 describe('inferModelCapabilities — effort ladder per model', () => {
   const cases: Array<[string, string[]]> = [
-    // Full ladder: Opus ≥ 4.7, Sonnet 5, and the Fable line.
+    // Full ladder: Opus ≥ 4.7, Sonnet 5, Haiku 5.5, and the Fable line.
     ['claude-opus-5-5', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-opus-5', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-opus-4-8', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-opus-4-7', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-sonnet-5-5', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-sonnet-5', ['low', 'medium', 'high', 'xhigh', 'max']],
+    ['claude-haiku-5-5', ['low', 'medium', 'high', 'xhigh', 'max']],
     ['claude-fable-5', ['low', 'medium', 'high', 'xhigh', 'max']],
     // Gated on `isFable`, not on version weight — every Fable minor inherits the
     // full ladder, so a new one must never silently lose `xhigh`/`max`.
@@ -38,6 +39,10 @@ describe('inferModelCapabilities — effort ladder per model', () => {
       expect(caps.supportsEffort).toBe(expected.length > 0);
     });
   }
+
+  it('gives Haiku 5.5 effort but not fast mode', () => {
+    expect(inferModelCapabilities('claude-haiku-5-5')).toMatchObject({ supportsEffort: true, supportsFastMode: false });
+  });
 
   it('always lists levels ascending, matching the canonical ladder order', () => {
     for (const { id } of FALLBACK_MODELS) {

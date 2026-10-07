@@ -33,9 +33,11 @@ export interface ModelCapabilities {
  * Anthropic API does not advertise capabilities.
  *
  * Three separate thresholds, because the ladder grew one rung at a time:
- *  - effort at all → Opus ≥ 4.5, Sonnet ≥ 4.6, and the Fable line (Claude 5 gen)
+ *  - effort at all → Opus ≥ 4.5, Sonnet ≥ 4.6, Haiku ≥ 5.5, and the Fable line (Claude 5 gen)
  *  - `max`         → the 4.6 generation on (so Opus 4.5 is effort-capable but caps at `high`)
- *  - `xhigh`       → Opus ≥ 4.7 and Sonnet ≥ 5 (it never shipped on Sonnet 4.6)
+ *  - `xhigh`       → Opus ≥ 4.7, Sonnet ≥ 5 and Haiku ≥ 5.5 (it never shipped on Sonnet 4.6)
+ *
+ * Fast mode is Opus/Sonnet/Fable only here — Haiku 5.5 takes effort but no `speed`.
  *
  * Conservative by construction: unknown/older ids get no effort at all, so the
  * UI hides the control instead of offering a level the API would 400 on.
@@ -56,17 +58,18 @@ export function inferModelCapabilities(id: string): ModelCapabilities {
   const isOpus = lower.includes('opus');
   const isSonnet = lower.includes('sonnet');
   const isFable = lower.includes('fable');
+  const isHaiku = lower.includes('haiku');
 
-  const capable = (isOpus && weight >= 405) || (isSonnet && weight >= 406) || isFable;
+  const capable = (isOpus && weight >= 405) || (isSonnet && weight >= 406) || (isHaiku && weight >= 505) || isFable;
   if (!capable) return { supportsEffort: false, supportsFastMode: false, effortLevels: [] };
 
-  const hasXhigh = isFable || (isOpus && weight >= 407) || (isSonnet && weight >= 500);
+  const hasXhigh = isFable || isHaiku || (isOpus && weight >= 407) || (isSonnet && weight >= 500);
   const hasMax = isFable || weight >= 406;
   const effortLevels: EffortLevel[] = ['low', 'medium', 'high'];
   if (hasXhigh) effortLevels.push('xhigh');
   if (hasMax) effortLevels.push('max');
 
-  return { supportsEffort: true, supportsFastMode: true, effortLevels };
+  return { supportsEffort: true, supportsFastMode: !isHaiku, effortLevels };
 }
 
 /**
@@ -131,5 +134,6 @@ export const FALLBACK_MODELS: ModelOption[] = [
   staticModel('claude-sonnet-5-5', 'Claude Sonnet 5.5', 'sonnet'),
   staticModel('claude-sonnet-5', 'Claude Sonnet 5', 'sonnet'),
   staticModel('claude-sonnet-4-6', 'Claude Sonnet 4.6', 'sonnet'),
+  staticModel('claude-haiku-5-5', 'Claude Haiku 5.5', 'haiku'),
   staticModel('claude-haiku-4-5', 'Claude Haiku 4.5', 'haiku'),
 ];
