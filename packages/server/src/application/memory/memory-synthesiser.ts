@@ -3,7 +3,7 @@ import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.
 import type { MemorySnippet } from '../use-cases/retrieve-context.js';
 
 /** Cheap and fast: every one of these tasks is reading and rewriting, not reasoning. */
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-haiku-5-5';
 
 /**
  * Output that means "there is nothing worth producing here".

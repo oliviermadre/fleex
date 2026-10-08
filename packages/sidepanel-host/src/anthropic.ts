@@ -15,7 +15,7 @@ export function createClient(apiKey?: string): Anthropic {
 
 /**
  * Streaming completion for the chosen Claude model. Adaptive thinking is only
- * sent for models that support it (Opus ≥ 4.5 / Sonnet ≥ 4.6) — Haiku and older
+ * sent for models that support it (Opus ≥ 4.5 / Sonnet ≥ 4.6 / Haiku ≥ 5.5) — Haiku 4.5 and older
  * models reject `thinking` with a 400. Text deltas are forwarded to `onText` as
  * they arrive; the final content + stop reason are returned for the tool loop.
  */

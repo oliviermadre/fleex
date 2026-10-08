@@ -7,7 +7,7 @@ import type { LoggerPort } from '../ports/logger.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-haiku-5-5';
 
 /** Sentinel the model emits when the session is not worth persisting. */
 const SKIP_SENTINEL = 'SKIP';

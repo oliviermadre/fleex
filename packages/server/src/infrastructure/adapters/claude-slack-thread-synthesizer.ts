@@ -2,7 +2,7 @@ import type { SlackThreadSynthesizerPort } from '../../application/ports/slack-i
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { SdkConcurrencyLimiter } from '../../application/services/sdk-concurrency-limiter.js';
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-haiku-5-5';
 /** ~25k tokens of conversation: beyond any ticket-worthy thread, and a ceiling on cost. */
 const MAX_TRANSCRIPT_CHARS = 100_000;
 

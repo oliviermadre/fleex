@@ -21,7 +21,7 @@ import { guessIconKeywords } from '../../domain/services/icon-keywords.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
 /** Fast and cheap: these are short structured completions. Swap here to change model. */
-export const ACTIONS_AI_MODEL = 'claude-haiku-4-5-20251001';
+export const ACTIONS_AI_MODEL = 'claude-haiku-5-5';
 
 /** One non-agentic completion that should return a JSON object. */
 export interface JsonModelPort {

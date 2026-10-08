@@ -108,6 +108,16 @@ describe('ModelService', () => {
     expect(models[0]).toMatchObject({ label: 'Claude Sonnet 5.5', family: 'sonnet' });
   });
 
+  it('ranks Haiku 5.5 above Haiku 4.5 and derives its label', async () => {
+    const fake = makeFakeClient([{ id: 'claude-haiku-4-5' }, { id: 'claude-haiku-5-5' }]);
+    const svc = new ModelService(new FakeLoggerPort(), 60_000, () => fake as never);
+
+    const { models } = await svc.getAvailableModels();
+
+    expect(models.map((m) => m.id)).toEqual(['claude-haiku-5-5', 'claude-haiku-4-5']);
+    expect(models[0]).toMatchObject({ label: 'Claude Haiku 5.5', family: 'haiku', supportsEffort: true });
+  });
+
   it('excludes legacy Claude 1/2/instant models so dropdowns stay clean', async () => {
     const fake = makeFakeClient([
       { id: 'claude-1-2' },

@@ -11,7 +11,7 @@ import type { LoggerPort } from '../ports/logger.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-haiku-5-5';
 
 const SYSTEM_PROMPT = `You are a technical summarizer. Generate a concise ticket summary (~400 words max) for developer memory.
 

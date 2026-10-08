@@ -33,9 +33,10 @@ describe('createLlm — adaptive thinking gating', () => {
     expect((await paramsFor('claude-opus-5')).thinking).toEqual({ type: 'adaptive' });
     expect((await paramsFor('claude-opus-4-8')).thinking).toEqual({ type: 'adaptive' });
     expect((await paramsFor('claude-sonnet-4-6')).thinking).toEqual({ type: 'adaptive' });
+    expect((await paramsFor('claude-haiku-5-5')).thinking).toEqual({ type: 'adaptive' });
   });
 
-  it('omits thinking for Haiku (would 400 with "adaptive thinking is not supported")', async () => {
+  it('omits thinking for Haiku 4.5 (would 400 with "adaptive thinking is not supported")', async () => {
     const params = await paramsFor('claude-haiku-4-5');
     expect(params.thinking).toBeUndefined();
     expect('thinking' in params).toBe(false);

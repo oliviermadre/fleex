@@ -125,7 +125,7 @@ export function ComposeActionModal({ scope }: { scope: ActionsScope }) {
         </>
       )}
       <div className="flex items-center gap-2.5 border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-2.5 pl-5 pr-3">
-        <span className="text-[11px] text-[var(--theme-text-muted)]">{scope === 'pinned' ? 'Top bar' : 'Ticket'} · claude-haiku-4-5</span>
+        <span className="text-[11px] text-[var(--theme-text-muted)]">{scope === 'pinned' ? 'Top bar' : 'Ticket'} · claude-haiku-5-5</span>
         <span className="flex-1" />
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
         <button type="button" className={AI_BUTTON} disabled={busy || !text.trim()} onClick={() => void generate()}>

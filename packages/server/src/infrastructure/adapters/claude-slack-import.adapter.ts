@@ -8,7 +8,7 @@ import type { SdkConcurrencyLimiter } from '../../application/services/sdk-concu
  * read-thread-then-summarize task; speed matters here because the import is on
  * the critical path of the user seeing their ticket fill in.
  */
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-haiku-5-5';
 
 /**
  * Upper bound on agentic turns. Reading a message + its thread needs only a

@@ -25,6 +25,8 @@ export const MODEL_PRICING: Record<string, Price> = {
   'claude-sonnet-5': price(2e-6, 10e-6),
   'claude-sonnet-4-6': price(3e-6, 15e-6),
   'claude-sonnet-4-5': price(3e-6, 15e-6),
+  // Haiku 5.5 bills $0.50/$2.50 past a 100K-token prompt; priced at the ≤100K rate.
+  'claude-haiku-5-5': price(0.1e-6, 0.5e-6),
   'claude-haiku-4-5': price(1e-6, 5e-6),
   'claude-haiku-4-5-20251001': price(1e-6, 5e-6),
   'claude-fable-5-1': price(10e-6, 50e-6),
