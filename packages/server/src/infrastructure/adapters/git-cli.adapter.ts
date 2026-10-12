@@ -389,12 +389,40 @@ export class GitCliAdapter implements GitPort {
     return stdout;
   }
 
-  async getStatusPorcelain(worktreePath: string): Promise<string> {
-    const { stdout } = await this.execFn('git', ['status', '--porcelain'], {
+  async getStatusPorcelain(worktreePath: string, opts?: { untrackedAll?: boolean }): Promise<string> {
+    const args = opts?.untrackedAll ? ['status', '--porcelain', '-uall'] : ['status', '--porcelain'];
+    const { stdout } = await this.execFn('git', args, {
       cwd: worktreePath,
       timeout: 10_000,
     });
     return stdout;
+  }
+
+  async getHeadBranch(worktreePath: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.execFn('git', ['symbolic-ref', '-q', '--short', 'HEAD'], { cwd: worktreePath });
+      return stdout.trim() || null;
+    } catch {
+      // Exit 1 = detached HEAD. Anything else surfaces on the next git call.
+      return null;
+    }
+  }
+
+  async countCommitsNotOnRemotes(worktreePath: string, extraRefs: string[]): Promise<number> {
+    const { stdout } = await this.execFn(
+      'git',
+      ['rev-list', '--count', 'HEAD', '--not', '--remotes', ...extraRefs],
+      { cwd: worktreePath, timeout: 30_000 },
+    );
+    const count = Number.parseInt(stdout.trim(), 10);
+    // Never read garbage as "nothing unpushed": a caller deletes the worktree on 0.
+    if (Number.isNaN(count)) throw new Error(`Unexpected rev-list output in ${worktreePath}: ${stdout}`);
+    return count;
+  }
+
+  async deleteLocalBranch(repoPath: string, branch: string): Promise<void> {
+    await this.execFn('git', ['branch', '-D', branch], { cwd: repoPath });
+    this.logger.debug('Local branch deleted', { repoPath, branch });
   }
 
   async repairWorktrees(repoPath: string): Promise<void> {
