@@ -43,6 +43,28 @@ export interface Skill {
   markdownContent?: string;
   enabled: boolean;
   personaId?: string;
+  /** 'claude_code' for a SKILL.md mirrored from the server's machine. */
+  source?: 'fleex' | 'claude_code';
+  ccOrigin?: ClaudeCodeOrigin;
+}
+
+export type ClaudeCodeOrigin = 'user' | 'project' | 'plugin' | 'synced';
+
+/** Admin view of a Claude Code skill (GET /api/claude-code-skills). */
+export interface ClaudeCodeSkillRow {
+  id: string;
+  origin: ClaudeCodeOrigin;
+  nativeName: string;
+  commandName: string;
+  name: string;
+  description: string;
+  repo: string | null;
+  plugin: string | null;
+  sourcePath: string;
+  enabled: boolean;
+  personaId: string | null;
+  status: 'present' | 'missing' | 'invalid' | 'conflict';
+  modifiedSinceActivation: boolean;
 }
 
 export interface PanelMember {
@@ -109,6 +131,10 @@ export function fetchPersonaStatuses(): Promise<Record<string, PersonaStatus>> {
 }
 export function fetchSkills(enabledOnly = false): Promise<Skill[]> {
   return apiGet<Skill[]>(`${apiBase()}/api/skills${enabledOnly ? '/enabled' : ''}`);
+}
+/** Every Claude Code skill of the target server's machine, any status. */
+export function fetchClaudeCodeSkills(): Promise<{ hostId: string; skills: ClaudeCodeSkillRow[] }> {
+  return apiGet<{ hostId: string; skills: ClaudeCodeSkillRow[] }>(`${apiBase()}/api/claude-code-skills`);
 }
 export function fetchPanels(enabledOnly = false): Promise<Panel[]> {
   return apiGet<Panel[]>(`${apiBase()}/api/panels${enabledOnly ? '/enabled' : ''}`);
