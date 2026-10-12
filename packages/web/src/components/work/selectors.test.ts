@@ -427,12 +427,15 @@ describe('threadTurns / lastAgentQuestion / threadActivityDetail', () => {
     expect(turns.map((c) => c.id)).toEqual(['a', 'b']);
   });
 
-  it('lastAgentQuestion returns the options of the last agent turn, or null', () => {
+  it('lastAgentQuestion returns the questions the last agent turn declared, or null', () => {
+    const declared = [{ prompt: 'Keep it?', options: ['Keep', 'Drop'] }];
     const turns = [
       comment({ id: 'a', createdAt: '2026-01-01T10:00:00.000Z', authorType: 'assistant', body: 'go' }),
-      comment({ id: 'q', createdAt: '2026-01-01T10:01:00.000Z', authorType: 'agent', body: 'Keep it?\n- Keep\n- Drop' }),
+      comment({ id: 'q', createdAt: '2026-01-01T10:01:00.000Z', authorType: 'agent', body: 'Keep it?', questions: declared }),
     ];
-    expect(lastAgentQuestion(turns)?.options).toEqual(['Keep', 'Drop']);
+    expect(lastAgentQuestion(turns)?.questions).toEqual(declared);
+    // Choices are declared, never guessed: a bullet list in the body alone is not a question.
+    expect(lastAgentQuestion([comment({ id: 'm', createdAt: '2026-01-01T10:01:00.000Z', authorType: 'agent', body: 'Keep it?\n- Keep\n- Drop' })])).toBeNull();
     expect(lastAgentQuestion([...turns, comment({ id: 'p', createdAt: '2026-01-01T10:02:00.000Z', authorType: 'agent', body: 'done' })])).toBeNull();
     expect(lastAgentQuestion([])).toBeNull();
   });
