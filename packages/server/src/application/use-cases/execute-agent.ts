@@ -1696,12 +1696,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const announceAuthor = opts?.workflowContext
       ? `workflow:${opts.workflowContext.workflowName} → ${opts.workflowContext.stepName}`
       : (persona.displayName || persona.name);
+    // Launched from a thread turn: the run (announce, then its replies) stays in that thread.
+    const triggerCommentId = opts?.mentionId ? (await this.mentionStore.getById(opts.mentionId))?.commentId : undefined;
     const { comment: announceComment } = await this.postComment.execute({
       ticketId,
       body: announceBody,
       authorName: announceAuthor,
       authorType: 'agent',
       humanMentionNames: [],
+      ...(triggerCommentId ? { threadOf: triggerCommentId } : {}),
     });
 
     if (this.eventBus) {
@@ -2031,6 +2034,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
               title: structured.deliverable.title,
               content: structured.deliverable.markdown,
               status: structured.deliverable.status,
+              // Same link as a persona's deliverable: whoever reads the mention (a thread) finds it.
+              ...(opts?.mentionId ? { mentionId: opts.mentionId } : {}),
             });
             resultDeliverableId = deliverable.id;
 

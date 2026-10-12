@@ -1,7 +1,9 @@
-import type { AgentThread, AgentThreadStatus } from '@fleex/shared';
+import type { AgentThread, AgentThreadStatus, AgentThreadTargetType } from '@fleex/shared';
 
 /**
- * A delegation the assistant opened with one agent persona on a ticket. Its
+ * A delegation the assistant opened with one target (persona, skill, panel or
+ * workflow — `targetType`) on a ticket. `personaId` / `personaName` are the
+ * target's id and mention key whatever its type. Its
  * status mirrors the mention currently driving it; `concluded` and `failed`
  * are terminal — every transition on a terminal thread is a no-op that
  * returns false, so a late mention event can never resurrect a closed thread.
@@ -24,6 +26,7 @@ export class AgentThreadEntity {
     public readonly createdAt: Date,
     public updatedAt: Date,
     public concludedAt: Date | null,
+    public readonly targetType: AgentThreadTargetType = 'agent',
   ) {}
 
   static create(params: {
@@ -34,13 +37,19 @@ export class AgentThreadEntity {
     assistantPersonaId: string;
     brief: string;
     forwardedContext: string[];
+    targetType?: AgentThreadTargetType;
   }): AgentThreadEntity {
     const now = new Date();
     return new AgentThreadEntity(
       params.id, params.ticketId, 'assistant', params.personaId, params.personaName,
       params.assistantPersonaId, params.brief, [...params.forwardedContext],
-      'running', null, 0, 0, null, now, now, null,
+      'running', null, 0, 0, null, now, now, null, params.targetType ?? 'agent',
     );
+  }
+
+  /** How a comment addresses this thread's target: `@agent:x`, `@skill:x`, `@panel:x`, `@workflow:x`. */
+  get mentionTag(): string {
+    return `@${this.targetType}:${this.personaName}`;
   }
 
   /**
@@ -124,6 +133,7 @@ export class AgentThreadEntity {
       id: this.id,
       ticketId: this.ticketId,
       initiator: this.initiator,
+      targetType: this.targetType,
       personaId: this.personaId,
       personaName: this.personaName,
       assistantPersonaId: this.assistantPersonaId,

@@ -580,3 +580,41 @@ describe('DomainEventListener', () => {
     });
   });
 });
+
+describe('DomainEventListener — a panel or workflow that cannot run fails its mention', () => {
+  // Otherwise the mention shows as queued forever and an assistant thread waiting on it never wakes.
+  async function trigger(targetType: 'panel' | 'workflow') {
+    const eventBus = new EventBus();
+    const mocks = createMocks();
+    const mention = TicketMentionEntity.create({
+      id: 'm1', ticketId: 't1', commentId: 'c1', targetAgent: 'x', sourceAgent: 'Nas', targetType, executionMode: 'plan',
+    });
+    vi.mocked(mocks.mentionStore.getById).mockResolvedValue(mention);
+    const listener = new DomainEventListener({
+      eventBus, ...mocks,
+      runPanel: { execute: vi.fn().mockRejectedValue(new Error('Panel x not found')) } as never,
+    } as never);
+    listener.setWorkflowDeps({
+      workflowTemplateStore: { getBySlug: vi.fn().mockResolvedValue({ id: 'w', enabled: true }) } as never,
+      createWorkflowRun: { execute: vi.fn().mockRejectedValue(new Error('A workflow run is already active')) } as never,
+    });
+    listener.register();
+    const failed: Array<{ reason: string; message: string }> = [];
+    eventBus.on('mention.execution_failed', (e) => { failed.push(e as never); });
+    eventBus.emit({ type: 'mention.created', mentionId: 'm1', ticketId: 't1', targetAgent: 'x', targetType, sourceAgent: 'Nas', occurredAt: new Date() });
+    await new Promise((r) => setTimeout(r, 10));
+    return { mention, failed };
+  }
+
+  it('panel crash → mention failed, execution_failed emitted', async () => {
+    const { mention, failed } = await trigger('panel');
+    expect(mention.status).toBe('failed');
+    expect(failed).toEqual([expect.objectContaining({ reason: 'panel_failed', message: 'Panel x not found' })]);
+  });
+
+  it('workflow run refused at creation → mention failed, execution_failed emitted', async () => {
+    const { mention, failed } = await trigger('workflow');
+    expect(mention.status).toBe('failed');
+    expect(failed).toEqual([expect.objectContaining({ reason: 'workflow_start_failed' })]);
+  });
+});

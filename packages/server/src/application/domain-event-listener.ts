@@ -1,5 +1,4 @@
 import type { ClaudeCodeSkillsUseCase } from './use-cases/claude-code-skills.js';
-import { SubworkflowExpansionFailedError } from '../domain/errors.js';
 import type { EventBus } from './event-bus.js';
 import { BroadcastRegistrar, type BroadcastFn } from './broadcast-registrar.js';
 import type { PersonaStorePort } from './ports/persona-store.port.js';
@@ -175,12 +174,14 @@ export class DomainEventListener {
       panelName: event.targetAgent,
       ticketId: event.ticketId,
       mentionId: event.mentionId,
-    }).catch((err) => {
+    }).catch(async (err) => {
+      const message = err instanceof Error ? err.message : String(err);
       this.deps.logger.error('Panel auto-trigger failed', {
         panelName: event.targetAgent,
         ticketId: event.ticketId,
-        error: err instanceof Error ? err.message : String(err),
+        error: message,
       });
+      await this.failMention(event.mentionId, 'panel_failed', message);
     });
   }
 
@@ -282,20 +283,36 @@ export class DomainEventListener {
         await this.deps.mentionStore.save(mention);
       }
     }).catch(async (err) => {
-      // A sub-workflow that doesn't expand already explained itself on the
-      // ticket: close the mention so it doesn't sit there as "pending".
-      if (err instanceof SubworkflowExpansionFailedError) {
-        const mention = await this.deps.mentionStore.getById(event.mentionId);
-        if (mention && mention.status !== 'resolved') {
-          mention.resolve();
-          await this.deps.mentionStore.save(mention);
-        }
-      }
+      // A workflow that doesn't start fails its mention, so it doesn't sit there
+      // as "pending" and a thread waiting on it wakes up. That includes a
+      // sub-workflow that doesn't expand (it already explained itself on the ticket).
+      const message = err instanceof Error ? err.message : String(err);
       this.deps.logger.error('Workflow auto-trigger failed', {
         slug: event.targetAgent, ticketId: event.ticketId,
-        error: err instanceof Error ? err.message : String(err),
+        error: message,
       });
+      await this.failMention(event.mentionId, 'workflow_start_failed', message);
     });
+  }
+
+  /**
+   * A panel or workflow that could not run fails its mention, like a crashed
+   * agent run: otherwise it shows as queued forever, and an assistant thread
+   * waiting on it is never woken.
+   */
+  private async failMention(mentionId: string, reason: string, message: string): Promise<void> {
+    try {
+      const mention = await this.deps.mentionStore.getById(mentionId);
+      if (!mention || mention.status === 'resolved' || mention.status === 'failed') return;
+      mention.markFailed();
+      await this.deps.mentionStore.save(mention);
+      this.deps.eventBus.emit({
+        type: 'mention.execution_failed', mentionId: mention.id, ticketId: mention.ticketId,
+        targetAgent: mention.targetAgent, reason, message, occurredAt: new Date(),
+      });
+    } catch (err) {
+      this.deps.logger.warn('Could not fail mention', { mentionId, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   // ── Comment posted workflow: handle mentions for auto-review ──
