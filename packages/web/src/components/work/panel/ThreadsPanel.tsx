@@ -22,6 +22,7 @@ import type { WorkTask } from '../types';
 import { useTicketThreads } from './useTicketThreads';
 import { useThreadTurns } from './useThreadTurns';
 import { resolveSelectedThread } from './threadSelection';
+import { threadTargetLabel } from '../selectors';
 
 const DOT: Record<AgentThread['status'], string> = {
   running: 'bg-[var(--theme-accent)] animate-pulse',
@@ -78,7 +79,7 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
 
   const thread = resolveSelectedThread(threads, selectedThreadId);
   const turns = useThreadTurns(thread?.id ?? null);
-  const personaName = (t: AgentThread) => personas.find((p) => p.id === t.personaId)?.displayName ?? t.personaName;
+  const personaName = (t: AgentThread) => threadTargetLabel(t, personas.find((p) => p.id === t.personaId)?.displayName);
 
   // Cost = the agent runs this thread opened (executions of its mentions).
   const [mentions, setMentions] = useState<TicketMention[]>([]);

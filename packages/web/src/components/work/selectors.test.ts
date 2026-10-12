@@ -7,6 +7,7 @@ import {
   threadMentionIds,
   lastAgentQuestion,
   threadActivityDetail,
+  threadTargetLabel,
   partitionQueue,
   suggestionsFor,
   formatActivity,
@@ -388,7 +389,7 @@ describe('personasForTicket', () => {
 
 function thread(over: Partial<AgentThread> & { id: string }): AgentThread {
   return {
-    ticketId: 't1', initiator: 'assistant', personaId: 'p-builder', personaName: 'builder', assistantPersonaId: 'pa',
+    ticketId: 't1', initiator: 'assistant', targetType: 'agent', personaId: 'p-builder', personaName: 'builder', assistantPersonaId: 'pa',
     brief: 'Fix e2e', forwardedContext: ['ticket'], status: 'running', currentMentionId: null, exchanges: 1, failures: 0,
     summary: null, createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-01T10:00:00.000Z', concludedAt: null,
     ...over,
@@ -473,5 +474,18 @@ describe('parseModeRequest / stripModeRequest', () => {
     expect(parseModeRequest('hello')).toBeNull();
     expect(parseModeRequest('<!-- fleex:mode-request {"mode":"god","threadId":"x"} -->')).toBeNull();
     expect(stripModeRequest('hello')).toBe('hello');
+  });
+});
+
+describe('threadTargetLabel', () => {
+  it('names a persona thread by the persona display name, falling back to its key', () => {
+    expect(threadTargetLabel(thread({ id: 'a' }), 'The Builder')).toBe('The Builder');
+    expect(threadTargetLabel(thread({ id: 'a' }))).toBe('builder');
+  });
+  // A skill or workflow sharing a persona-looking key must not read as a persona.
+  it('names a skill, panel or workflow thread by its kind and key, ignoring any persona name', () => {
+    expect(threadTargetLabel(thread({ id: 's', targetType: 'skill', personaName: 'lint' }), 'The Builder')).toBe('Skill · lint');
+    expect(threadTargetLabel(thread({ id: 'p', targetType: 'panel', personaName: 'leadership' }))).toBe('Panel · leadership');
+    expect(threadTargetLabel(thread({ id: 'w', targetType: 'workflow', personaName: 'review' }))).toBe('Workflow · review');
   });
 });
