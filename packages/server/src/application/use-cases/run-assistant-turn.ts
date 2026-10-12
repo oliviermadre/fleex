@@ -99,12 +99,23 @@ export class RunAssistantTurnUseCase {
     private readonly llm: AssistantLlm,
   ) {}
 
+  /** The `workThreadsEnabled` kill switch, read on every call so it applies without a restart. */
+  get enabled(): boolean {
+    return this.deps.config.get().workThreadsEnabled !== false;
+  }
+
+  /** Null when the assistant is switched off: callers then behave as if none were configured. */
   async resolveAssistantPersona(ticket: TicketEntity): Promise<AgentPersonaEntity | null> {
+    if (!this.enabled) return null;
     const id = ticket.assistantPersonaId ?? this.deps.config.get().defaultAssistantPersonaId ?? null;
     return id ? this.deps.personaStore.getById(id) : null;
   }
 
   execute(params: { ticketId: string; trigger: AssistantTrigger }): Promise<void> {
+    if (!this.enabled) {
+      this.deps.logger.info('Assistant switched off (workThreadsEnabled=false); turn skipped', { ticketId: params.ticketId, trigger: params.trigger.kind });
+      return Promise.resolve();
+    }
     const prev = this.lanes.get(params.ticketId) ?? Promise.resolve();
     const run = prev
       .then(() => this.runTurn(params))
