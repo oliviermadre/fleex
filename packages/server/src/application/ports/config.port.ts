@@ -28,6 +28,13 @@ export interface AppConfig {
   agentMaxTurns?: number;
   /** Persona id that plays the assistant in the Work view unless a ticket overrides it. */
   defaultAssistantPersonaId?: string;
+  /**
+   * Kill switch for the assistant and its threads (Work view Phase 3). Absent
+   * means on. Off: no assistant turn ever starts (message, new ticket, thread
+   * wake-up), the assistant routes answer `assistant: null` so the composer
+   * posts plain comments, and mentions go straight to their targets again.
+   */
+  workThreadsEnabled?: boolean;
   repositories?: string[];
   resolvedRepositories?: string[];
   resolvedAt?: string;

@@ -206,6 +206,8 @@ function GeneralTab({
         </div>
       </div>
 
+      <AssistantSwitch />
+
       <div>
         <label htmlFor="defaultAssistantPersonaId" className="mb-1 block text-sm font-medium text-[var(--theme-text-secondary)]">
           Default assistant
@@ -423,3 +425,47 @@ function AgentTokensTab() {
   );
 }
 
+/**
+ * Kill switch for the assistant and its threads, saved on click like the Memory
+ * tab toggles: when it misbehaves it must be one click away. Off, the server
+ * starts no assistant turn and the Work composer posts plain comments.
+ */
+function AssistantSwitch() {
+  const settings = useSettingsStore((s) => s.settings);
+  const saveSettings = useSettingsStore((s) => s.saveSettings);
+  const [saving, setSaving] = useState(false);
+  const enabled = settings.workThreadsEnabled !== false;
+  const toggle = async (next: boolean) => {
+    setSaving(true);
+    try {
+      await saveSettings({ workThreadsEnabled: next });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <label
+      className={cn(
+        'flex items-start gap-2.5 rounded border border-[var(--theme-border)] px-3 py-2',
+        saving ? 'opacity-50' : 'cursor-pointer hover:bg-[var(--theme-bg-hover)]',
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={enabled}
+        disabled={saving}
+        onChange={(e) => void toggle(e.target.checked)}
+        className="mt-0.5 flex-shrink-0 accent-[var(--theme-accent)]"
+        aria-label="Assistant & threads"
+      />
+      <span className="min-w-0">
+        <span className="text-sm font-medium text-[var(--theme-text-primary)]">Assistant & threads</span>
+        <span className="mt-0.5 block text-xs text-[var(--theme-text-muted)]">
+          {enabled
+            ? 'On: the Work composer talks to the assistant, which delegates in threads. Saved immediately.'
+            : 'Off: the Work composer posts plain comments and @agent: / @skill: / @workflow: mentions run directly. No assistant turn starts. Saved immediately.'}
+        </span>
+      </span>
+    </label>
+  );
+}
