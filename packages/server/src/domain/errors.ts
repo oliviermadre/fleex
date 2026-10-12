@@ -151,6 +151,33 @@ export class SkillCommandNameConflictError extends DomainError {
   }
 }
 
+export class ReservedSkillCommandNameError extends DomainError {
+  constructor(commandName: string) {
+    super(
+      `Skill command name "${commandName}" uses the "cc-" prefix, reserved for Claude Code skills`,
+      'RESERVED_SKILL_COMMAND_NAME',
+    );
+  }
+}
+
+export class ClaudeCodeSkillNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Claude Code skill not found on this host: ${id}`, 'CLAUDE_CODE_SKILL_NOT_FOUND');
+  }
+}
+
+export class ClaudeCodeSkillNotActivatableError extends DomainError {
+  constructor(commandName: string, status: string) {
+    super(`Claude Code skill ${commandName} cannot be enabled (status: ${status})`, 'CLAUDE_CODE_SKILL_NOT_ACTIVATABLE');
+  }
+}
+
+export class SystemPersonaProtectedError extends DomainError {
+  constructor(name: string, action: 'delete' | 'rename') {
+    super(`Persona "${name}" is a system persona and cannot be ${action === 'delete' ? 'deleted' : 'renamed'}`, 'SYSTEM_PERSONA_PROTECTED');
+  }
+}
+
 export class PanelNotFoundError extends DomainError {
   constructor(id: string) {
     super(`Panel not found: ${id}`, 'PANEL_NOT_FOUND');

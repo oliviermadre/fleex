@@ -31,6 +31,9 @@ import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
+import { SkillEntity } from '../../domain/entities/skill.entity.js';
+import { buildClaudeCodeSkillInstructions } from '../../domain/services/claude-code-skills.js';
+import type { ClaudeCodeSkillsUseCase } from './claude-code-skills.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
 import type { EventBus } from '../event-bus.js';
@@ -255,6 +258,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
   /** Set by container — bare-clone infrastructure */
   public bareCloneManager: BareCloneManager | null = null;
+  public claudeCodeSkills: ClaudeCodeSkillsUseCase | null = null;
   public resolver: RepoPathResolver | null = null;
 
   /** Set by container — enables resolving file attachments in agent prompts */
@@ -1596,6 +1600,45 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const { SkillNotFoundError } = await import('../../domain/errors.js');
     const skill = await this.skillStore.getById(skillId);
     if (!skill) throw new SkillNotFoundError(skillId);
+    return this.runSkill(skill, ticketId, opts);
+  }
+
+  /**
+   * Run a Claude Code skill (a SKILL.md mirrored from this machine) against a
+   * ticket. Same pipeline as a native skill — announce comment, workspace,
+   * persona, structured output — but the instructions only hand control to
+   * Claude Code's native `Skill` tool, so the skill's own files, scripts and
+   * progressive disclosure are used as-is instead of being copied into a prompt.
+   */
+  async executeForClaudeCodeSkill(ccSkillId: string, ticketId: string, opts?: {
+    commentBody?: string;
+    mentionId?: string;
+  }): Promise<void> {
+    if (!this.claudeCodeSkills) throw new Error('Claude Code skills not available');
+    const cc = await this.claudeCodeSkills.get(ccSkillId);
+    const personaId = await this.claudeCodeSkills.effectivePersonaId(cc);
+    const skill = new SkillEntity(
+      cc.id, cc.commandName, cc.name, cc.name || cc.nativeName,
+      buildClaudeCodeSkillInstructions(cc), true, personaId, cc.createdAt, cc.updatedAt,
+    );
+    await this.runSkill(skill, ticketId, opts);
+  }
+
+  private async runSkill(skill: SkillEntity, ticketId: string, opts?: {
+    commentBody?: string;
+    mentionId?: string;
+    outputFormatOverride?: typeof OUTPUT_FORMAT_SCHEMA;
+    workflowContextPrompt?: string;
+    returnStructured?: boolean;
+    // When set, the "Running skill: X" announce comment is authored with a
+    // workflow-aware label (e.g. "workflow:Smoke Test → PR FAQ") so readers
+    // of the ticket comments tab can tell at a glance which workflow run
+    // produced each comment instead of seeing just the bare persona name.
+    // `runId`/`stepRunId` additionally tag the execution with the workflow node
+    // it belongs to, so the Execution Log header names the step being debugged.
+    workflowContext?: { workflowName: string; stepName: string; runId?: string | null; stepRunId?: string | null };
+  }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
+    const skillId = skill.id;
 
     const persona = await this.personaStore.getById(skill.personaId);
     if (!persona) throw new AgentPersonaNotFoundError(skill.personaId);

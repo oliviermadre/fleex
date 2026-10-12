@@ -42,6 +42,7 @@ import { unifiedWsPlugin } from './infrastructure/ws/unified-ws.js';
 import { WsHeartbeat } from './infrastructure/ws/ws-heartbeat.js';
 import { personaRoutes } from './infrastructure/http/persona.routes.js';
 import { skillRoutes } from './infrastructure/http/skill.routes.js';
+import { claudeCodeSkillRoutes } from './infrastructure/http/claude-code-skill.routes.js';
 import { panelRoutes } from './infrastructure/http/panel.routes.js';
 import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
 import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
@@ -135,6 +136,7 @@ async function main() {
   await app.register(prCiRoutes({ github: container.githubGraphql, emit: (e) => container.eventBus.emit(e) }));
   await app.register(personaRoutes(container));
   await app.register(skillRoutes(container));
+  await app.register(claudeCodeSkillRoutes(container));
   await app.register(panelRoutes(container));
   await app.register(agentEventsRoutes(container));
   await app.register(domainEventLogRoutes(container));
@@ -304,6 +306,14 @@ async function main() {
   // downloading. The sweeper reads the engine setting per pass, so starting it
   // unconditionally costs nothing on the default engine.
   container.memorySweeper?.start(MEMORY_SWEEP_INTERVAL_MS);
+
+  // Mirror this machine's Claude Code skills (SKILL.md). Background: the gateway
+  // and bare clones may be slow, boot must not wait on them.
+  container.claudeCodeSkills.scan().catch((err) => {
+    container.logger.warn('Claude Code skill scan at boot failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   // Load the encoder in the background rather than on the first question.
   //

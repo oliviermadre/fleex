@@ -261,4 +261,8 @@ export class FakeHostFs implements HostFs {
   async readTail(): Promise<string> {
     return '';
   }
+
+  async realpath(path: string): Promise<string | null> {
+    return path;
+  }
 }

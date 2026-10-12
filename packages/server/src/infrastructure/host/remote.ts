@@ -144,4 +144,9 @@ export class RemoteHostFs implements HostFs {
     const data = await this.call({ op: 'readTail', path, bytes });
     return data.content;
   }
+
+  async realpath(path: string): Promise<string | null> {
+    const data = await this.call({ op: 'realpath', path });
+    return data?.path ?? null;
+  }
 }
