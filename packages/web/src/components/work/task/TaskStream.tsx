@@ -30,7 +30,7 @@ import type { CommentPin } from './CommentPin';
 import { DelegationCard } from './DelegationCard';
 import { ModeRequestCard } from './ModeRequestCard';
 import { AssistantLiveReply } from './AssistantLiveReply';
-import { buildStream, parseModeRequest, threadTurns, threadMentionIds, type ModeRequest, type QueueActivity } from '../selectors';
+import { buildStream, parseModeRequest, threadTargetLabel, threadTurns, threadMentionIds, type ModeRequest, type QueueActivity } from '../selectors';
 
 const EMPTY_THREADS: AgentThread[] = [];
 const EMPTY_NAMES: Record<string, string> = {};
@@ -219,7 +219,7 @@ export function TaskStream({
                   key={`t-${entry.thread.id}`}
                   thread={entry.thread}
                   turns={threadTurns(comments, entry.thread.id)}
-                  personaDisplayName={personaNames[entry.thread.personaId] ?? entry.thread.personaName}
+                  personaDisplayName={threadTargetLabel(entry.thread, personaNames[entry.thread.personaId])}
                   onOpen={(id) => onOpenThread?.(id)}
                   onAnswer={(id, text) => onAnswerThread?.(id, text)}
                 />
