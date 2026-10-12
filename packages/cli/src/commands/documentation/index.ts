@@ -88,6 +88,23 @@ const COMMON_TASKS: Array<{ goal: string; command: string }> = [
   { goal: 'Créer un ticket', command: 'fleex ticket create --title "…"' },
   { goal: 'Commenter un ticket', command: 'fleex ticket comment <ticket-id> "…"' },
   { goal: 'Déplacer un ticket vers un statut', command: 'fleex ticket move <ticket-id> <status>' },
+  { goal: 'Trouver un ticket', command: 'fleex memory search "…"' },
+  { goal: 'Lister les tickets actifs d\'un board', command: 'fleex ticket list --board <b> --status doing --limit 20 --json' },
+];
+
+/**
+ * Token-budget rules for reading tickets, rendered right after Common tasks.
+ * One oversized `ticket list --json` once returned >1M tokens and poisoned the
+ * whole session (the result is re-sent every turn), so an agent must know the
+ * defaults BEFORE its first call — hence a curated block at the top, not just
+ * the per-command notes buried in the reference.
+ */
+const AGENT_RULES_HEADING = 'Rules for reading tickets (token budget)';
+const AGENT_RULES: string[] = [
+  '`fleex ticket list --json` is slim (grid columns + id, type, tags, updatedAt; never the description). `--json-full` loads every field and can blow the context window: use it deliberately, with `--limit`.',
+  '`fleex ticket list` hides `done`/`cancelled` by default. Use `--status done` (comma-separated list accepted) or `--all` to see them.',
+  '`fleex ticket list` returns 50 tickets at most by default, the most recently updated (`--limit 0` = all).',
+  'Prefer `--board` + `--status` + `--limit`. For the full content of one ticket: `fleex ticket show <id>`. To *find* a ticket: `fleex memory search "<query>"` / `fleex memory similar "<title>"` rather than listing.',
 ];
 
 export function describeCommand(cmd: Command, breadcrumb: string[]): CommandDoc {
@@ -131,6 +148,10 @@ export function renderMarkdown(root: Command, docs: CommandDoc[]): string {
   lines.push('> Intention → commande. Si ton but est listé ici, utilise directement cette commande.');
   lines.push('');
   for (const t of COMMON_TASKS) lines.push(`- **${t.goal}** → \`${t.command}\``);
+  lines.push('');
+  lines.push(`## ${AGENT_RULES_HEADING}`);
+  lines.push('');
+  for (const r of AGENT_RULES) lines.push(`- ${r}`);
   lines.push('');
   lines.push('## Index');
   for (const d of docs) lines.push(`- \`${d.path}\` — ${d.description}`);
@@ -177,6 +198,9 @@ export function renderText(root: Command, docs: CommandDoc[]): string {
   lines.push('');
   lines.push('Common tasks (intention -> command):');
   for (const t of COMMON_TASKS) lines.push(`  - ${t.goal} -> ${t.command}`);
+  lines.push('');
+  lines.push(`${AGENT_RULES_HEADING}:`);
+  for (const r of AGENT_RULES) lines.push(`  - ${r.replace(/`/g, '')}`);
   lines.push('');
   for (const d of docs) {
     lines.push(`${d.path}${d.aliases.length ? ' (' + d.aliases.join(', ') + ')' : ''}`);

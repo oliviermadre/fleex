@@ -49,3 +49,25 @@ describe('fleex documentation — Common tasks router (text)', () => {
     expect(tasksIdx).toBeLessThan(out.length / 2);
   });
 });
+
+/**
+ * One `ticket list --json` once returned >1M tokens. An agent reads the top of
+ * `fleex documentation` first, so the cheap-by-default rules must sit there,
+ * before the index — not only in the per-command notes far below.
+ */
+describe('fleex documentation — token-budget rules for reading tickets', () => {
+  for (const [name, out, heading, index] of [
+    ['markdown', renderMarkdown(root, []), '## Rules for reading tickets', '## Index'],
+    ['text', renderText(root, []), 'Rules for reading tickets', null],
+  ] as const) {
+    it(`${name}: rules render near the top with every key flag`, () => {
+      const start = out.indexOf(heading);
+      expect(start).toBeGreaterThanOrEqual(0);
+      if (index) expect(start).toBeLessThan(out.indexOf(index));
+      const section = out.slice(start, index ? out.indexOf(index) : undefined);
+      for (const needle of ['--json-full', '--all', '--limit', 'ticket show', 'memory search']) {
+        expect(section).toContain(needle);
+      }
+    });
+  }
+});

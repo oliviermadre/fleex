@@ -20,8 +20,11 @@ ${SECTION('Statuses:')}  backlog, todo, doing, reviewing, done, cancelled
 ${SECTION('Priorities:')} none, low, medium, high
 
 ${SECTION('Examples:')}
-  ${DIM('$')} fleex ticket list                          ${DIM('# all tickets')}
+  ${DIM('$')} fleex ticket list                          ${DIM('# active tickets (done/cancelled hidden, max 50)')}
   ${DIM('$')} fleex ticket list --status doing           ${DIM('# in-progress tickets')}
+  ${DIM('$')} fleex ticket list --status done,cancelled  ${DIM('# closed tickets')}
+  ${DIM('$')} fleex ticket list --all --limit 0          ${DIM('# every ticket, no cap')}
+  ${DIM('$')} fleex ticket list --json-full --limit 5    ${DIM('# every field: expensive in tokens')}
   ${DIM('$')} fleex ticket list --epic abc12345          ${DIM('# tickets in an epic')}
   ${DIM('$')} fleex ticket show 42                       ${DIM('# show ticket #42')}
   ${DIM('$')} fleex ticket show 42 --full                ${DIM('# include comments + deliverables')}
