@@ -38,12 +38,12 @@ describe('DelegationCard', () => {
     expect(onOpen).toHaveBeenCalledWith('th1');
   });
 
-  it('in waiting state offers the agent question options and answers on click', () => {
+  it('in waiting state offers the options the agent declared and answers on click', () => {
     const onAnswer = vi.fn();
     render(
       <DelegationCard
         thread={thread({ status: 'waiting' })}
-        turns={[turn({ id: 'q', body: 'Keep the fallback?\n- Keep\n- Drop' })]}
+        turns={[turn({ id: 'q', body: 'Keep the fallback?', questions: [{ prompt: 'Keep the fallback?', options: ['Keep', 'Drop'] }] })]}
         personaDisplayName="The Builder"
         onOpen={() => {}}
         onAnswer={onAnswer}
@@ -51,5 +51,18 @@ describe('DelegationCard', () => {
     );
     fireEvent.click(screen.getByText('Drop'));
     expect(onAnswer).toHaveBeenCalledWith('th1', 'Drop');
+  });
+
+  it('never guesses buttons from a bullet list the agent did not declare as questions', () => {
+    render(
+      <DelegationCard
+        thread={thread({ status: 'waiting' })}
+        turns={[turn({ id: 'q', body: 'Keep the fallback?\n- Keep\n- Drop' })]}
+        personaDisplayName="The Builder"
+        onOpen={() => {}}
+        onAnswer={() => {}}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Drop' })).toBeNull();
   });
 });
