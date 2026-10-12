@@ -8,11 +8,18 @@ import type {
 import * as api from '../services/api';
 
 interface SkillState {
+  /** Native Fleex skills (editable). */
   skills: Skill[];
+  /**
+   * Runnable Claude Code skills of this server's machine (`source: 'claude_code'`).
+   * Kept apart so editors, workflow and routine pickers only ever see native skills.
+   */
+  claudeCodeSkills: Skill[];
   loaded: boolean;
   selectedSkillId: string | null;
 
   loadSkills: () => Promise<void>;
+  loadClaudeCodeSkills: () => Promise<void>;
   selectSkill: (id: string | null) => void;
   createSkill: (req: CreateSkillRequest) => Promise<Skill>;
   updateSkill: (id: string, req: UpdateSkillRequest) => Promise<void>;
@@ -23,6 +30,7 @@ interface SkillState {
 
 export const useSkillStore = create<SkillState>((set, get) => ({
   skills: [],
+  claudeCodeSkills: [],
   loaded: false,
   selectedSkillId: null,
 
@@ -32,6 +40,16 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       set({ skills, loaded: true });
     } catch (err) {
       console.error('Failed to load skills:', err);
+    }
+    await get().loadClaudeCodeSkills();
+  },
+
+  loadClaudeCodeSkills: async () => {
+    try {
+      set({ claudeCodeSkills: await api.fetchRunnableClaudeCodeSkills() });
+    } catch (err) {
+      // Never let Claude Code skills hide native ones.
+      console.error('Failed to load Claude Code skills:', err);
     }
   },
 

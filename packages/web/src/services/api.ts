@@ -923,6 +923,46 @@ export async function executeSkill(id: string, ticketId: string): Promise<{ stat
   });
 }
 
+// ── Claude Code skills API (SKILL.md mirrored from this server's machine) ──
+
+/** Runnable Claude Code skills of this host, in the native skill shape. */
+export async function fetchRunnableClaudeCodeSkills(): Promise<import('@fleex/shared').Skill[]> {
+  const all = await request<import('@fleex/shared').Skill[]>('/skills?include=claude_code');
+  return all.filter((s) => s.source === 'claude_code');
+}
+
+export interface ClaudeCodeSkillAdminList {
+  hostId: string;
+  systemPersonaId: string | null;
+  skills: import('@fleex/shared').ClaudeCodeSkill[];
+}
+
+export async function fetchClaudeCodeSkills(): Promise<ClaudeCodeSkillAdminList> {
+  return request<ClaudeCodeSkillAdminList>('/claude-code-skills');
+}
+
+export async function scanClaudeCodeSkills(): Promise<import('@fleex/shared').ClaudeCodeSkillScanReport> {
+  return request<import('@fleex/shared').ClaudeCodeSkillScanReport>('/claude-code-skills/scan', { method: 'POST', body: '{}' });
+}
+
+export async function updateClaudeCodeSkill(
+  id: string,
+  req: import('@fleex/shared').UpdateClaudeCodeSkillRequest,
+): Promise<import('@fleex/shared').ClaudeCodeSkill> {
+  return request<import('@fleex/shared').ClaudeCodeSkill>(`/claude-code-skills/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function bulkSetClaudeCodeSkillsEnabled(ids: string[], enabled: boolean): Promise<{ updated: number }> {
+  return request<{ updated: number }>('/claude-code-skills/bulk', { method: 'POST', body: JSON.stringify({ ids, enabled }) });
+}
+
+export async function fetchClaudeCodeSkillContent(id: string): Promise<{ content: string }> {
+  return request<{ content: string }>(`/claude-code-skills/${encodeURIComponent(id)}/content`);
+}
+
 // ── Panels API ──
 
 export async function fetchPanels(): Promise<import('@fleex/shared').Panel[]> {

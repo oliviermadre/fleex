@@ -17,7 +17,8 @@ import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { PrimitiveIcon, PRIMITIVE_META } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
 import { foldAccents } from '../../lib/normalize';
-import { tintClasses } from '../../lib/tints';
+import { tint, tintClasses } from '../../lib/tints';
+import { claudeCodeSkillsInScope, claudeCodeSkillTooltip, ticketRepos } from '../../lib/claude-code-skills';
 import * as api from '../../services/api';
 
 interface SmartSessionButtonProps {
@@ -125,6 +126,10 @@ interface LaunchItem {
   /** Lowercased, accent-stripped haystack for search. */
   readonly search: string;
   readonly onLaunch: () => void;
+  /** Small label after the name (e.g. "CC" for a Claude Code skill). */
+  readonly badge?: string;
+  /** Native tooltip on the row. */
+  readonly title?: string;
 }
 
 interface LaunchGroup {
@@ -187,6 +192,7 @@ function LaunchRow({ item, index, active, marker, onHover }: { item: LaunchItem;
       aria-selected={active}
       data-index={index}
       className={rowClass(active)}
+      title={item.title}
       onMouseEnter={onHover}
       onClick={(e) => {
         e.stopPropagation();
@@ -195,6 +201,9 @@ function LaunchRow({ item, index, active, marker, onHover }: { item: LaunchItem;
     >
       {marker ?? item.icon}
       <span className="truncate text-[var(--theme-text-primary)]">{item.displayName}</span>
+      {item.badge && (
+        <span className={cn('shrink-0 rounded px-1 text-[9px] font-semibold tracking-wider', tint('indigo'))}>{item.badge}</span>
+      )}
       <span className="ml-auto shrink-0 pl-2 text-[9px] font-mono text-[var(--theme-text-faint)]">{item.token}</span>
     </button>
   );
@@ -467,6 +476,8 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
+  const claudeCodeSkills = useSkillStore((s) => s.claudeCodeSkills);
+  const ticketLinks = useTicketStore((s) => (ticketId ? s.tickets.find((t) => t.id === ticketId)?.links : undefined));
   const addToast = useToastStore((s) => s.addToast);
   const { open: dropdownOpen, setOpen: setDropdownOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ maxHeight: LAUNCHER_MAX_HEIGHT });
   const [internalCreating, setInternalCreating] = useState(false);
@@ -507,7 +518,11 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
 
   const onCreateSession = handleCreateSession;
 
-  const enabledSkills = skills.filter((s) => s.enabled);
+  const enabledSkills = [
+    ...skills.filter((s) => s.enabled),
+    // Claude Code skills of this machine, scoped to the ticket's repos.
+    ...claudeCodeSkillsInScope(claudeCodeSkills, ticketRepos(ticketLinks)),
+  ];
 
   const templates = useWorkflowTemplateStore((s) => s.templates);
   const refreshTemplates = useWorkflowTemplateStore((s) => s.refresh);
@@ -629,6 +644,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         icon: KIND_ICON.skill,
         search: normalize(`${s.displayName} ${s.name} ${s.commandName}`),
         onLaunch: () => void handleExecuteSkill(s.id),
+        ...(s.source === 'claude_code' ? { badge: 'CC', title: claudeCodeSkillTooltip(s) } : {}),
       }))
     : [];
 

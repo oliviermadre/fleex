@@ -12,6 +12,7 @@ import {
 } from '../../stores/frequentLaunchStore';
 import { CreateAgentModal } from './CreateAgentModal';
 import { CreateSkillModal } from './CreateSkillModal';
+import { ClaudeCodeSkillsModal } from './ClaudeCodeSkillsModal';
 import { CreatePanelModal } from './CreatePanelModal';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
 import { ModelBadge } from './ModelBadge';
@@ -63,6 +64,8 @@ export function AgentListPanel() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [skillModalOpen, setSkillModalOpen] = useState(false);
+  const [ccSkillsOpen, setCcSkillsOpen] = useState(false);
+  const activeClaudeCodeSkills = useSkillStore((s) => s.claudeCodeSkills.length);
   const [panelModalOpen, setPanelModalOpen] = useState(false);
   const [workflowModalOpen, setWorkflowModalOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ id: string; kind: PrimitiveKind } | null>(null);
@@ -431,6 +434,17 @@ export function AgentListPanel() {
                     onDelete={() => setDeleteTarget({ id: skill.id, kind: 'skill', name: skill.displayName })}
                   />
                 ))}
+            {!isSearching && (
+              <button
+                onClick={() => setCcSkillsOpen(true)}
+                className="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]"
+                title="Skills Claude Code (SKILL.md) détectés sur cette machine"
+              >
+                <span className="rounded px-1 text-[9px] font-semibold tracking-wider text-[var(--theme-accent)]">CC</span>
+                <span className="flex-1 truncate">Skills Claude Code détectés</span>
+                <span className="text-[10px] tabular-nums text-[var(--theme-text-faint)]">{activeClaudeCodeSkills} actif(s)</span>
+              </button>
+            )}
           </Section>
         )}
 
@@ -522,6 +536,7 @@ export function AgentListPanel() {
 
       <CreateAgentModal open={modalOpen} onClose={() => setModalOpen(false)} />
       <CreateSkillModal open={skillModalOpen} onClose={() => setSkillModalOpen(false)} />
+      <ClaudeCodeSkillsModal open={ccSkillsOpen} onClose={() => setCcSkillsOpen(false)} />
       <CreatePanelModal open={panelModalOpen} onClose={() => setPanelModalOpen(false)} />
       <CreateWorkflowModal open={workflowModalOpen} onClose={() => setWorkflowModalOpen(false)} />
 

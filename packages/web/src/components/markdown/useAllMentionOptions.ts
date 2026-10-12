@@ -6,6 +6,7 @@ import { useRoutineStore } from '../../stores/routineStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSkillStore } from '../../stores/skillStore';
+import { claudeCodeSkillsInScope } from '../../lib/claude-code-skills';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import type { MentionOption } from './MentionMenu';
@@ -28,6 +29,7 @@ export function useAllMentionOptions(): MentionOption[] {
   const personas = useAgentPersonaStore((s) => s.personas);
   const panels = usePanelStore((s) => s.panels);
   const skills = useSkillStore((s) => s.skills);
+  const claudeCodeSkills = useSkillStore((s) => s.claudeCodeSkills);
   const templates = useWorkflowTemplateStore((s) => s.templates);
   const routines = useRoutineStore((s) => s.routines);
   const scratchpadList = useScratchpadStore((s) => s.scratchpadList);
@@ -49,6 +51,11 @@ export function useAllMentionOptions(): MentionOption[] {
     for (const skill of skills) {
       if (skill.enabled === false) continue;
       opts.push({ insertText: `@skill:${skill.commandName}`, label: skill.displayName || skill.commandName, type: 'skill' });
+    }
+    // No ticket context here: one entry per `cc-` name. The server still picks
+    // the project or user version — or nothing — from the ticket's repos.
+    for (const skill of claudeCodeSkillsInScope(claudeCodeSkills, null)) {
+      opts.push({ insertText: `@skill:${skill.commandName}`, label: `${skill.displayName} · CC`, type: 'skill' });
     }
     for (const wf of templates) {
       if (wf.enabled === false) continue;
@@ -73,5 +80,5 @@ export function useAllMentionOptions(): MentionOption[] {
       opts.push({ insertText: `@ticket:${t.displayId}`, label: `#${t.displayId} ${t.title}`, type: 'ticket', deferred: true });
     }
     return opts;
-  }, [personas, panels, skills, templates, routines, scratchpadList, tickets, humanMentionName]);
+  }, [personas, panels, skills, claudeCodeSkills, templates, routines, scratchpadList, tickets, humanMentionName]);
 }

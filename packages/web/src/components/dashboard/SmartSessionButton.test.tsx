@@ -5,6 +5,7 @@ import { SmartSessionButton } from './SmartSessionButton';
 import * as api from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
 import { useSkillStore } from '../../stores/skillStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { usePanelStore } from '../../stores/panelStore';
@@ -511,5 +512,50 @@ describe('SmartSessionButton — launcher panel', () => {
     expect(screen.queryByText('Archi Committee')).toBeNull();
     // Sessions creation is still available.
     expect(screen.getByText('New session')).toBeTruthy();
+  });
+});
+
+describe('SmartSessionButton — Claude Code skills', () => {
+  const cc = (over: Partial<Skill>): Skill => ({
+    id: 'cc1', commandName: 'cc-deploy', name: 'deploy', displayName: 'deploy', markdownContent: '', enabled: true,
+    personaId: 'sys', createdAt: '', updatedAt: '', source: 'claude_code', ccOrigin: 'user', nativeName: 'deploy',
+    repo: null, sourcePath: '~/.claude/skills/deploy/SKILL.md', ...over,
+  });
+  const userDeploy = cc({});
+  const projectDeploy = cc({ id: 'cc2', ccOrigin: 'project', repo: 'evaneos/fleex', sourcePath: '.claude/skills/deploy/SKILL.md' });
+  const projectOnly = cc({ id: 'cc3', commandName: 'cc-db-migrate', name: 'db-migrate', displayName: 'db-migrate', ccOrigin: 'project', repo: 'evaneos/fleex' });
+
+  const withRepos = (refs: string[]) => useTicketStore.setState({
+    tickets: [{ id: 't1', links: refs.map((ref, i) => ({ id: `l${i}`, type: 'repository', ref, label: ref, url: null, createdAt: '' })) }] as never,
+  });
+
+  beforeEach(() => {
+    useSkillStore.setState({ skills: [], claudeCodeSkills: [userDeploy, projectDeploy, projectOnly] });
+  });
+  afterEach(() => {
+    useSkillStore.setState({ claudeCodeSkills: [] });
+    useTicketStore.setState({ tickets: [] });
+  });
+
+  it('marks imported skills with a CC badge and launches the project version on a ticket linked to its repo', async () => {
+    withRepos(['evaneos/fleex']);
+    const onExecuteSkill = vi.fn().mockResolvedValue(undefined);
+    render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={onExecuteSkill} />);
+    await openDropdown();
+
+    expect(screen.getAllByText('CC')).toHaveLength(2); // one cc-deploy (deduped) + cc-db-migrate
+    await act(async () => { fireEvent.click(screen.getByText('deploy')); });
+    expect(onExecuteSkill).toHaveBeenCalledWith('cc2');
+  });
+
+  it('hides project skills on a ticket not linked to their repo, and falls back to the user version', async () => {
+    withRepos(['evaneos/other']);
+    const onExecuteSkill = vi.fn().mockResolvedValue(undefined);
+    render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={onExecuteSkill} />);
+    await openDropdown();
+
+    expect(screen.queryByText('db-migrate')).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByText('deploy')); });
+    expect(onExecuteSkill).toHaveBeenCalledWith('cc1');
   });
 });
