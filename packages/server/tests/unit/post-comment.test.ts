@@ -129,12 +129,32 @@ describe('PostCommentUseCase — assistant threads', () => {
     expect(createdMentions).toHaveLength(0);
   });
 
-  it('suppressAgentMentions skips agent and panel mentions but keeps skills/workflows', async () => {
+  // The assistant now delegates to skills and workflows too (tracked threads):
+  // a direct mention from the Work composer would launch them a second time.
+  it('suppressAgentMentions skips every launchable mention: agents, panels, skills and workflows', async () => {
     const { createdMentions } = await useCase.execute({
       ticketId: 't1', authorType: 'user', authorName: 'olivier',
       body: '@agent:builder @panel:leadership @skill:lint @workflow:review', suppressAgentMentions: true,
     });
+    expect(createdMentions).toEqual([]);
+  });
+
+  it('without suppressAgentMentions a user comment still launches skills and workflows directly', async () => {
+    const { createdMentions } = await useCase.execute({
+      ticketId: 't1', authorType: 'user', authorName: 'olivier', body: '@skill:lint @workflow:review',
+    });
     expect(createdMentions.map((m) => m.targetType).sort()).toEqual(['skill', 'workflow']);
+  });
+
+  it('threadOf joins the thread of a comment without replying to it', async () => {
+    const { comment: turn } = await useCase.execute({
+      ticketId: 't1', authorType: 'assistant', authorName: 'Nas', body: '@skill:lint go', threadId: 'th1',
+    });
+    const { comment: announce } = await useCase.execute({
+      ticketId: 't1', authorType: 'agent', authorName: 'The Builder', body: 'Running skill: Lint', threadOf: turn.id,
+    });
+    expect(announce.threadId).toBe('th1');
+    expect(announce.parentId).toBeNull();
   });
 
   it('inherits threadId from the parent comment when parentId is given', async () => {

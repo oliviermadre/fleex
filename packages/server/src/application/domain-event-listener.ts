@@ -174,12 +174,14 @@ export class DomainEventListener {
       panelName: event.targetAgent,
       ticketId: event.ticketId,
       mentionId: event.mentionId,
-    }).catch((err) => {
+    }).catch(async (err) => {
+      const message = err instanceof Error ? err.message : String(err);
       this.deps.logger.error('Panel auto-trigger failed', {
         panelName: event.targetAgent,
         ticketId: event.ticketId,
-        error: err instanceof Error ? err.message : String(err),
+        error: message,
       });
+      await this.failMention(event.mentionId, 'panel_failed', message);
     });
   }
 
@@ -280,12 +282,34 @@ export class DomainEventListener {
         mention.resolve();
         await this.deps.mentionStore.save(mention);
       }
-    }).catch((err) => {
+    }).catch(async (err) => {
+      const message = err instanceof Error ? err.message : String(err);
       this.deps.logger.error('Workflow auto-trigger failed', {
         slug: event.targetAgent, ticketId: event.ticketId,
-        error: err instanceof Error ? err.message : String(err),
+        error: message,
       });
+      await this.failMention(event.mentionId, 'workflow_start_failed', message);
     });
+  }
+
+  /**
+   * A panel or workflow that could not run fails its mention, like a crashed
+   * agent run: otherwise it shows as queued forever, and an assistant thread
+   * waiting on it is never woken.
+   */
+  private async failMention(mentionId: string, reason: string, message: string): Promise<void> {
+    try {
+      const mention = await this.deps.mentionStore.getById(mentionId);
+      if (!mention || mention.status === 'resolved' || mention.status === 'failed') return;
+      mention.markFailed();
+      await this.deps.mentionStore.save(mention);
+      this.deps.eventBus.emit({
+        type: 'mention.execution_failed', mentionId: mention.id, ticketId: mention.ticketId,
+        targetAgent: mention.targetAgent, reason, message, occurredAt: new Date(),
+      });
+    } catch (err) {
+      this.deps.logger.warn('Could not fail mention', { mentionId, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   // ── Comment posted workflow: handle mentions for auto-review ──

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
-import type { AgentEventType, AgentQuestion } from '@fleex/shared';
+import type { AgentEventType, AgentQuestion, AgentThreadTargetType } from '@fleex/shared';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import { AgentThreadEntity } from '../../domain/entities/agent-thread.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
@@ -10,6 +10,11 @@ import type { CommentStorePort } from '../ports/comment-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
+import type { SkillStorePort } from '../ports/skill-store.port.js';
+import type { PanelStorePort } from '../ports/panel-store.port.js';
+import type { WorkflowTemplateStorePort } from '../ports/workflow-template-store.port.js';
+import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
+import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -29,11 +34,18 @@ import {
   parseActionToolInput,
   renderQuestion,
   assistantQuestions,
+  skillSummary,
+  type AssistantCapabilities,
   type AssistantAction,
   type AssistantTrigger,
 } from '../assistant/assistant-protocol.js';
 
 export const MAX_ASSISTANT_TURNS_PER_THREAD = 8;
+
+/** How a tool result names what was launched. */
+const TARGET_LABEL: Record<AgentThreadTargetType, string> = {
+  agent: "l'agent", skill: 'le skill', panel: 'le panel', workflow: 'le workflow',
+};
 /** Consecutive agent failures after which the assistant stops relaunching and reports back. */
 export const MAX_THREAD_FAILURES = 3;
 /** Tool rounds one assistant turn may take before it must answer. */
@@ -53,6 +65,11 @@ export interface RunAssistantTurnDeps {
   mentionStore: MentionStorePort;
   ticketStore: TicketStorePort;
   personaStore: PersonaStorePort;
+  /** Delegation targets besides personas. Null stores (unsupported adapter) offer none of that kind. */
+  skillStore?: SkillStorePort | null;
+  panelStore?: PanelStorePort | null;
+  workflowTemplateStore?: WorkflowTemplateStorePort | null;
+  workflowRunStore?: WorkflowRunStorePort | null;
   postComment: PostCommentUseCase;
   getTicketContext: GetTicketContextUseCase;
   agentEventStore: AgentEventStorePort;
@@ -113,16 +130,22 @@ export class RunAssistantTurnUseCase {
       return;
     }
 
-    const [context, allThreads, personas, cliTools] = await Promise.all([
+    const [context, allThreads, personas, cliTools, capabilities] = await Promise.all([
       this.deps.getTicketContext.execute({ ticketId, agentName: assistant.name }),
       this.deps.threadStore.getByTicket(ticketId),
       this.deps.personaStore.getAll(),
       this.deps.environment.cliTools(),
+      this.loadCapabilities(),
     ]);
     const threadId = trigger.kind === 'user_message' || trigger.kind === 'ticket_created' ? null : trigger.threadId;
     const turns = threadId ? context.comments.filter((c) => c.threadId === threadId) : [];
     let threadDeliverables: typeof context.deliverables = [];
-    if (threadId && turns.length > 0) {
+    const thread = threadId ? allThreads.find((t) => t.id === threadId) : undefined;
+    if (thread?.targetType === 'workflow') {
+      // A workflow's output is its run's deliverables; its steps do not post into the thread.
+      const run = await this.workflowRunOf(thread);
+      threadDeliverables = run ? context.deliverables.filter((d) => d.workflowRunId === run.id) : [];
+    } else if (threadId && turns.length > 0) {
       const turnIds = new Set(turns.map((c) => c.id));
       const mentionIds = new Set(context.mentions.all.filter((m) => turnIds.has(m.commentId)).map((m) => m.id));
       threadDeliverables = context.deliverables.filter((d) => d.mentionId && mentionIds.has(d.mentionId));
@@ -135,6 +158,7 @@ export class RunAssistantTurnUseCase {
       personas: personas
         .filter((p) => p.id !== assistant.id)
         .map((p) => ({ name: p.name, displayName: p.displayName, identityMd: p.identityMd })),
+      capabilities,
     });
     const userPrompt = buildAssistantUserPrompt({ context, threads: allThreads.map((t) => t.toDTO()), trigger, turns, threadDeliverables });
     const model = ticket.modelOverride ?? assistant.model;
@@ -237,7 +261,7 @@ export class RunAssistantTurnUseCase {
               text = `Arguments invalides : ${err instanceof Error ? err.message : String(err)}`;
               isError = true;
             }
-          } else if (call.name in { delegate_to_persona: 1, continue_thread: 1, conclude_thread: 1, request_mode: 1 }) {
+          } else if (call.name in { delegate: 1, continue_thread: 1, conclude_thread: 1, request_mode: 1 }) {
             text = 'Arguments invalides pour cette action (champs requis manquants).';
             isError = true;
           } else {
@@ -290,19 +314,24 @@ export class RunAssistantTurnUseCase {
         return 'Message posté.';
 
       case 'delegate': {
-        const open = threads.find((t) => t.personaName === action.personaName && !t.isTerminal);
+        const open = threads.find((t) => t.targetType === action.targetType && t.personaName === action.name && !t.isTerminal);
         if (open) return this.continueThread(ticket, assistant, open, action.turn);
-        const target = await this.deps.personaStore.getByName(action.personaName);
-        if (!target) return `Persona inconnue : « ${action.personaName} ». Personas disponibles : ${(await this.deps.personaStore.getAll()).map((p) => p.name).join(', ')}.`;
+        const target = await this.resolveTarget(action.targetType, action.name);
+        if ('error' in target) return target.error;
+        if (action.targetType === 'workflow') {
+          const busy = await this.activeWorkflowRun(ticket.id);
+          if (busy) return `Un workflow tourne déjà sur ce ticket (run ${busy.id}, ${busy.status}) : un seul run actif par ticket. Rien n'a été lancé.`;
+        }
         if (action.message) await this.postAssistant(ticket, assistant, null, action.message);
         const thread = AgentThreadEntity.create({
           id: randomUUID(), ticketId: ticket.id, personaId: target.id, personaName: target.name,
           assistantPersonaId: assistant.id, brief: action.brief, forwardedContext: action.forward,
+          targetType: action.targetType,
         });
         await this.deps.threadStore.save(thread);
         this.emit({ type: 'thread.created', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
         await this.openTurn(ticket, assistant, thread, action.turn);
-        return `Thread ${thread.id} ouvert avec ${target.displayName || target.name} ; l'agent a été lancé. Tu seras rappelé quand il aura répondu.`;
+        return `Thread ${thread.id} ouvert avec ${target.displayName} ; ${TARGET_LABEL[action.targetType]} a été lancé. Tu seras rappelé quand il aura fini.`;
       }
 
       case 'continue_thread': {
@@ -327,7 +356,7 @@ export class RunAssistantTurnUseCase {
         const thread = threads.find((t) => t.id === action.threadId);
         if (!thread) return `Thread inconnu : ${action.threadId}.`;
         if (thread.isTerminal) return 'Ce thread est déjà clos.';
-        const target = await this.deps.personaStore.getByName(thread.personaName);
+        const target = await this.resolveTarget(thread.targetType, thread.personaName);
         const mentionId = thread.currentMentionId;
         thread.conclude(action.summary);
         await this.deps.threadStore.save(thread);
@@ -340,7 +369,7 @@ export class RunAssistantTurnUseCase {
             this.emit({ type: 'mention.resolved', mentionId, ticketId: ticket.id, targetAgent: mention.targetAgent, resolvedBy: assistant.name, occurredAt: new Date() });
           }
         }
-        const who = target?.displayName || thread.personaName;
+        const who = 'error' in target ? thread.personaName : target.displayName;
         const lead = action.message ? `${action.message}\n\n` : '';
         await this.postAssistant(ticket, assistant, null, `${lead}Retour de ${who} : ${action.summary}${renderQuestion(action.question)}`, { questions: assistantQuestions(action.question) });
         this.emit({ type: 'thread.concluded', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
@@ -366,6 +395,14 @@ export class RunAssistantTurnUseCase {
         summary: `Thread interrompu après ${assistantTurns} échanges sans conclusion.`,
       }, [thread]);
     }
+    if (thread.targetType === 'workflow') {
+      const run = await this.workflowRunOf(thread);
+      if (run?.isActive()) {
+        return `Le workflow ${thread.personaName} est encore en cours (run ${run.id}, ${run.status}) : rien n'a été relancé. Tu seras rappelé quand il s'arrêtera.`;
+      }
+      const busy = await this.activeWorkflowRun(ticket.id);
+      if (busy) return `Un autre workflow tourne sur ce ticket (run ${busy.id}) : un seul run actif par ticket. Rien n'a été relancé.`;
+    }
     const current = thread.currentMentionId ? await this.deps.mentionStore.getById(thread.currentMentionId) : null;
     // The agent is still on its previous turn (queued or running): a new mention
     // would queue behind it on the same lane and go stale. The assistant is called
@@ -374,7 +411,7 @@ export class RunAssistantTurnUseCase {
       return `${thread.personaName} travaille encore sur le tour précédent : rien n'a été envoyé. Tu seras rappelé quand il aura répondu ; transmets alors ce qui est nouveau. Dis simplement à l'utilisateur que tu transmettras à la fin du tour.`;
     }
     if (current && current.status === 'waiting_for_info') {
-      await this.postAssistant(ticket, assistant, thread.id, `@agent:${thread.personaName} ${turn}`, { suppressMentionForAgents: [thread.personaName] });
+      await this.postAssistant(ticket, assistant, thread.id, `${thread.mentionTag} ${turn}`, { suppressMentionForAgents: [thread.personaName] });
       thread.recordTurn();
       thread.markRunning();
       await this.deps.threadStore.save(thread);
@@ -392,12 +429,68 @@ export class RunAssistantTurnUseCase {
   }
 
   private async openTurn(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string): Promise<void> {
-    const { createdMentions } = await this.postAssistant(ticket, assistant, thread.id, `@agent:${thread.personaName} ${turn}`);
-    const mention = createdMentions.find((m) => m.targetAgent === thread.personaName);
+    const { createdMentions } = await this.postAssistant(ticket, assistant, thread.id, `${thread.mentionTag} ${turn}`);
+    const mention = createdMentions.find((m) => m.targetAgent === thread.personaName && m.targetType === thread.targetType);
     if (mention) thread.openTurn(mention.id);
     else thread.recordTurn();
     await this.deps.threadStore.save(thread);
     this.emit({ type: 'thread.updated', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
+  }
+
+  /** Enabled skills, panels and workflows, as the system prompt lists them. */
+  private async loadCapabilities(): Promise<AssistantCapabilities> {
+    const [skills, panels, workflows, personas] = await Promise.all([
+      this.deps.skillStore?.getEnabled() ?? [],
+      this.deps.panelStore?.getEnabled() ?? [],
+      this.deps.workflowTemplateStore?.getEnabled() ?? [],
+      this.deps.personaStore.getAll(),
+    ]);
+    const personaName = new Map(personas.map((p) => [p.id, p.displayName || p.name]));
+    return {
+      skills: skills.map((s) => ({ name: s.commandName, displayName: s.displayName || s.name, description: skillSummary(s.markdownContent) })),
+      panels: panels.map((p) => ({
+        name: p.name, displayName: p.displayName, description: p.description,
+        members: p.members.map((m) => personaName.get(m.personaId) ?? m.personaId),
+      })),
+      workflows: workflows.map((w) => ({ slug: w.slug, name: w.name, description: w.description })),
+    };
+  }
+
+  /** The delegation target named by the assistant, or the tool error it reads back. */
+  private async resolveTarget(type: AgentThreadTargetType, name: string): Promise<{ id: string; name: string; displayName: string } | { error: string }> {
+    switch (type) {
+      case 'agent': {
+        const p = await this.deps.personaStore.getByName(name);
+        if (p) return { id: p.id, name: p.name, displayName: p.displayName || p.name };
+        return { error: `Persona inconnue : « ${name} ». Personas disponibles : ${(await this.deps.personaStore.getAll()).map((x) => x.name).join(', ')}.` };
+      }
+      case 'skill': {
+        const s = await this.deps.skillStore?.getByCommandName(name);
+        if (s?.enabled) return { id: s.id, name: s.commandName, displayName: s.displayName || s.name };
+        return { error: `Skill inconnu ou désactivé : « ${name} ». Skills disponibles : ${((await this.deps.skillStore?.getEnabled()) ?? []).map((x) => x.commandName).join(', ') || 'aucun'}.` };
+      }
+      case 'panel': {
+        const p = await this.deps.panelStore?.getByName(name);
+        if (p?.enabled) return { id: p.id, name: p.name, displayName: p.displayName || p.name };
+        return { error: `Panel inconnu ou désactivé : « ${name} ». Panels disponibles : ${((await this.deps.panelStore?.getEnabled()) ?? []).map((x) => x.name).join(', ') || 'aucun'}.` };
+      }
+      case 'workflow': {
+        const w = await this.deps.workflowTemplateStore?.getBySlug(name);
+        if (w?.enabled) return { id: w.id, name: w.slug, displayName: w.name };
+        return { error: `Workflow inconnu ou désactivé : « ${name} ». Workflows disponibles : ${((await this.deps.workflowTemplateStore?.getEnabled()) ?? []).map((x) => x.slug).join(', ') || 'aucun'}.` };
+      }
+    }
+  }
+
+  /** The run a workflow thread's current turn started (`triggeredFrom: mention:<id>`). */
+  async workflowRunOf(thread: AgentThreadEntity): Promise<WorkflowRunEntity | null> {
+    if (!thread.currentMentionId || !this.deps.workflowRunStore) return null;
+    const from = `mention:${thread.currentMentionId}`;
+    return (await this.deps.workflowRunStore.getByTicket(thread.ticketId)).find((r) => r.triggeredFrom === from) ?? null;
+  }
+
+  private async activeWorkflowRun(ticketId: string): Promise<WorkflowRunEntity | null> {
+    return (await this.deps.workflowRunStore?.getActiveByTicket(ticketId)) ?? null;
   }
 
   private async postAssistant(
