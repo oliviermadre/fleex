@@ -9,7 +9,8 @@ type FsRequest =
   | { op: 'exists'; path: string }
   | { op: 'mkdir'; path: string }
   | { op: 'rm'; path: string; recursive?: boolean }
-  | { op: 'readTail'; path: string; bytes: number };
+  | { op: 'readTail'; path: string; bytes: number }
+  | { op: 'realpath'; path: string };
 
 export async function handleFs(body: FsRequest): Promise<unknown> {
   switch (body.op) {
@@ -39,6 +40,16 @@ export async function handleFs(body: FsRequest): Promise<unknown> {
         return { size: stat.size, mtimeMs: stat.mtimeMs };
       } catch {
         return null;
+      }
+    }
+
+    case 'realpath': {
+      // Resolves symlinks (e.g. ~/.claude/skills/x -> ~/.agents/skills/x).
+      // null when the path does not exist or a link is dangling.
+      try {
+        return { path: await fsp.realpath(body.path) };
+      } catch {
+        return { path: null };
       }
     }
 

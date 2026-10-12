@@ -28,4 +28,6 @@ export interface HostFs {
   mkdir(path: string): Promise<void>;
   rm(path: string, options?: { recursive?: boolean }): Promise<void>;
   readTail(path: string, bytes: number): Promise<string>;
+  /** Symlink-resolved absolute path, or null if it does not exist. */
+  realpath(path: string): Promise<string | null>;
 }

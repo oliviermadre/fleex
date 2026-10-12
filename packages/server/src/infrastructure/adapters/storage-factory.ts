@@ -10,6 +10,7 @@ import type { DomainEventLogStorePort } from '../../application/ports/domain-eve
 import type { ConfigPort } from '../../application/ports/config.port.js';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
+import type { ClaudeCodeSkillStorePort } from '../../application/ports/claude-code-skill-store.port.js';
 import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
 import type { FileStorePort } from '../../application/ports/file-store.port.js';
 import type { FileMetaStorePort } from '../../application/ports/file-meta-store.port.js';
@@ -36,6 +37,7 @@ export interface StorageStores {
   agentEventStore: AgentEventStorePort;
   domainEventLogStore: DomainEventLogStorePort;
   skillStore: SkillStorePort;
+  claudeCodeSkillStore: ClaudeCodeSkillStorePort;
   panelStore: PanelStorePort;
   kvStore: KvStorePort | null;
   fileStore: FileStorePort;
@@ -116,6 +118,7 @@ async function createSqliteStores(deps: {
   const { SqliteDomainEventLogStoreAdapter } = await import('./sqlite/sqlite-domain-event-log-store.adapter.js');
   const { SqliteKvStoreAdapter } = await import('./sqlite/sqlite-kv-store.adapter.js');
   const { SqliteSkillStoreAdapter } = await import('./sqlite/sqlite-skill-store.adapter.js');
+  const { SqliteClaudeCodeSkillStoreAdapter } = await import('./sqlite/sqlite-claude-code-skill-store.adapter.js');
   const { SqlitePanelStoreAdapter } = await import('./sqlite/sqlite-panel-store.adapter.js');
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { SqliteFileMetaStoreAdapter } = await import('./sqlite/sqlite-file-meta-store.adapter.js');
@@ -153,6 +156,7 @@ async function createSqliteStores(deps: {
     agentEventStore,
     domainEventLogStore: new SqliteDomainEventLogStoreAdapter(connection),
     skillStore: new SqliteSkillStoreAdapter(connection),
+    claudeCodeSkillStore: new SqliteClaudeCodeSkillStoreAdapter(connection),
     panelStore: new SqlitePanelStoreAdapter(connection),
     kvStore: new SqliteKvStoreAdapter(connection),
     fileStore: new DiskFileStoreAdapter(deps.homedir),
@@ -189,6 +193,7 @@ async function createPgsqlStores(deps: {
   const { PgDomainEventLogStore } = await import('./pgsql/pg-domain-event-log-store.adapter.js');
   const { PgKvStoreAdapter } = await import('./pgsql/pg-kv-store.adapter.js');
   const { PgSkillStore } = await import('./pgsql/pg-skill-store.adapter.js');
+  const { PgClaudeCodeSkillStore } = await import('./pgsql/pg-claude-code-skill-store.adapter.js');
   const { PgPanelStore } = await import('./pgsql/pg-panel-store.adapter.js');
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { PgFileMetaStore } = await import('./pgsql/pg-file-meta-store.adapter.js');
@@ -223,6 +228,7 @@ async function createPgsqlStores(deps: {
     agentEventStore,
     domainEventLogStore,
     skillStore: new PgSkillStore(connection),
+    claudeCodeSkillStore: new PgClaudeCodeSkillStore(connection),
     panelStore: new PgPanelStore(connection),
     kvStore: new PgKvStoreAdapter(connection),
     fileStore: new DiskFileStoreAdapter(deps.homedir),
@@ -263,6 +269,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseDomainEventLogStore } = await import('./supabase/supabase-domain-event-log-store.adapter.js');
   const { SupabaseKvStoreAdapter } = await import('./supabase/supabase-kv-store.adapter.js');
   const { SupabaseSkillStore } = await import('./supabase/supabase-skill-store.adapter.js');
+  const { SupabaseClaudeCodeSkillStore } = await import('./supabase/supabase-claude-code-skill-store.adapter.js');
   const { SupabasePanelStore } = await import('./supabase/supabase-panel-store.adapter.js');
   const { SupabaseFileStoreAdapter } = await import('./supabase/supabase-file-store.adapter.js');
   const { SupabaseFileMetaStore } = await import('./supabase/supabase-file-meta-store.adapter.js');
@@ -304,6 +311,7 @@ async function createSupabaseStores(deps: {
     agentEventStore,
     domainEventLogStore: new SupabaseDomainEventLogStore(connection),
     skillStore: new SupabaseSkillStore(connection),
+    claudeCodeSkillStore: new SupabaseClaudeCodeSkillStore(connection),
     panelStore: new SupabasePanelStore(connection),
     kvStore: new SupabaseKvStoreAdapter(connection),
     fileStore: new SupabaseFileStoreAdapter(connection),

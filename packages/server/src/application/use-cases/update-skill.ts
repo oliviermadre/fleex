@@ -1,4 +1,5 @@
-import { SkillNotFoundError, SkillCommandNameConflictError, AgentPersonaNotFoundError } from '../../domain/errors.js';
+import { SkillNotFoundError, SkillCommandNameConflictError, AgentPersonaNotFoundError, ReservedSkillCommandNameError } from '../../domain/errors.js';
+import { isReservedCommandName } from '../../domain/services/claude-code-skills.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -28,6 +29,9 @@ export class UpdateSkillUseCase {
     }
 
     if (changes.commandName && changes.commandName !== skill.commandName) {
+      if (isReservedCommandName(changes.commandName)) {
+        throw new ReservedSkillCommandNameError(changes.commandName);
+      }
       const existing = await this.skillStore.getByCommandName(changes.commandName);
       if (existing) {
         throw new SkillCommandNameConflictError(changes.commandName);

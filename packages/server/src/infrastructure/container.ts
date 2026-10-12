@@ -60,6 +60,8 @@ import { ManageDeliverableTypesUseCase } from '../application/use-cases/manage-d
 import { GetTicketContextUseCase } from '../application/use-cases/get-ticket-context.js';
 import { CreatePersonaUseCase } from '../application/use-cases/create-persona.js';
 import { UpdatePersonaUseCase } from '../application/use-cases/update-persona.js';
+import { ClaudeCodeSkillsUseCase } from '../application/use-cases/claude-code-skills.js';
+import { ClaudeCodeSkillScanner } from '../application/services/claude-code-skill-scanner.js';
 import { DeletePersonaUseCase } from '../application/use-cases/delete-persona.js';
 import { CreateSkillUseCase } from '../application/use-cases/create-skill.js';
 import { UpdateSkillUseCase } from '../application/use-cases/update-skill.js';
@@ -177,6 +179,7 @@ export async function createContainer() {
     agentEventStore,
     domainEventLogStore,
     skillStore,
+    claudeCodeSkillStore,
     panelStore,
     kvStore,
     fileStore,
@@ -323,7 +326,7 @@ export async function createContainer() {
   // Agent personas use cases
   const createPersona = new CreatePersonaUseCase(personaStore_, logger);
   const updatePersona = new UpdatePersonaUseCase(personaStore_, logger);
-  const deletePersona = new DeletePersonaUseCase(personaStore_, logger);
+  const deletePersona = new DeletePersonaUseCase(personaStore_, logger, claudeCodeSkillStore);
 
   // Skill CRUD use cases
   const createSkill = new CreateSkillUseCase(skillStore, personaStore_, logger);
@@ -455,10 +458,24 @@ export async function createContainer() {
   // Unique per-process server identifier — used to filter our own events on the hub fan-out.
   const serverId = process.env['FLEEX_INSTANCE_ID'] ?? randomUUID();
 
+  // Claude Code skills (SKILL.md on this machine) mirrored as Fleex skills.
+  // Scoped to this machine: servers on one host share skills, not the port.
+  const claudeCodeHostId = process.env['FLEEX_INSTANCE_ID'] ?? hostname();
+  const listRepositories = new ListRepositoriesUseCase(git, config, logger, hostFs, resolver);
+  const claudeCodeSkillScanner = new ClaudeCodeSkillScanner(
+    hostFs, execFn, hostHomedir, () => listRepositories.execute(), logger,
+  );
+  const claudeCodeSkills = new ClaudeCodeSkillsUseCase(
+    claudeCodeSkillStore, claudeCodeSkillScanner, skillStore, personaStore_, ticketStore_, claudeCodeHostId, logger,
+  );
+
+  executeAgent.claudeCodeSkills = claudeCodeSkills;
+
   const domainEventListener = new DomainEventListener({
     eventBus,
     personaStore: personaStore_,
     skillStore,
+    claudeCodeSkills,
     ticketStore: ticketStore_,
     mentionStore,
     commentStore,
@@ -876,7 +893,7 @@ export async function createContainer() {
     getSessionGroups,
     discoverSessions,
     processHookEvent,
-    listRepositories: new ListRepositoriesUseCase(git, config, logger, hostFs, resolver),
+    listRepositories,
     listWorktrees: new ListWorktreesUseCase(git, logger, resolver, bareCloneManager),
     worktreeCleanup: new WorktreeCleanupUseCase({
       basePath: config.get().basePath,
@@ -918,6 +935,7 @@ export async function createContainer() {
     updatePersona,
     deletePersona,
     skillStore,
+    claudeCodeSkills,
     createSkill,
     updateSkill,
     deleteSkill,

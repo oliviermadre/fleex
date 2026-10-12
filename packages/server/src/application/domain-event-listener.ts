@@ -1,3 +1,4 @@
+import type { ClaudeCodeSkillsUseCase } from './use-cases/claude-code-skills.js';
 import type { EventBus } from './event-bus.js';
 import { BroadcastRegistrar, type BroadcastFn } from './broadcast-registrar.js';
 import type { PersonaStorePort } from './ports/persona-store.port.js';
@@ -42,6 +43,8 @@ export interface DomainEventListenerDeps {
   logger: LoggerPort;
   workflowTemplateStore?: WorkflowTemplateStorePort | null;
   createWorkflowRun?: CreateWorkflowRunUseCase | null;
+  /** Resolves `@skill:cc-…` to a Claude Code skill of this host. */
+  claudeCodeSkills?: ClaudeCodeSkillsUseCase | null;
 }
 
 /**
@@ -183,6 +186,28 @@ export class DomainEventListener {
     if (event.targetType !== 'skill') return;
 
     const skill = await this.deps.skillStore.getByCommandName(event.targetAgent);
+    // A native skill always wins its name; otherwise `cc-…` may be a Claude Code
+    // skill of this machine, in scope for this ticket's repos.
+    const ccSkill = !skill && this.deps.claudeCodeSkills
+      ? await this.deps.claudeCodeSkills.resolveForTicket(event.targetAgent, event.ticketId)
+      : null;
+    if (ccSkill) {
+      const ccMention = await this.deps.mentionStore.getById(event.mentionId);
+      if (!ccMention) return;
+      const ccComment = await this.deps.commentStore.getById(ccMention.commentId);
+      const ccArgs = ccComment ? ccComment.body.replace(/@skill:[a-zA-Z0-9_-]+/g, '').trim() : '';
+      this.deps.executeAgent.executeForClaudeCodeSkill(ccSkill.id, event.ticketId, {
+        commentBody: ccArgs || undefined,
+        mentionId: event.mentionId,
+      }).catch((err) => {
+        this.deps.logger.error('Claude Code skill auto-trigger failed', {
+          skillName: event.targetAgent,
+          ticketId: event.ticketId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      return;
+    }
     if (!skill || !skill.enabled) {
       // Unknown or disabled skill — resolve silently
       const mention = await this.deps.mentionStore.getById(event.mentionId);

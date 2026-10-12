@@ -271,6 +271,12 @@ export type {
   UpdateSkillRequest,
   SkillWsMessageType,
   SkillWsMessage,
+  SkillSource,
+  ClaudeCodeSkillOrigin,
+  ClaudeCodeSkillStatus,
+  ClaudeCodeSkill,
+  ClaudeCodeSkillScanReport,
+  UpdateClaudeCodeSkillRequest,
 } from './types/skill.js';
 
 export type {
