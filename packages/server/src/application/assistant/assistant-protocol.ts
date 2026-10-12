@@ -1,4 +1,5 @@
-import type { AgentThread, ConversationMode, TicketComment, TicketContext, TicketDeliverable } from '@fleex/shared';
+import type { AgentQuestion, AgentThread, ConversationMode, TicketComment, TicketContext, TicketDeliverable } from '@fleex/shared';
+import { sanitizeQuestions } from '../utils/agent-questions.js';
 
 export interface AssistantQuestion { text: string; options: string[] }
 
@@ -190,10 +191,20 @@ export function parseAssistantOutput(structured: Record<string, unknown> | null,
   }
 }
 
-/** The bullet-list shape `parseInlineOptions` (web) recognises as an inline question. */
+/**
+ * The question restated in the comment body, so the comment stays complete
+ * without its buttons (CLI, memory, exports only see the text). The buttons
+ * come from `assistantQuestions`, never from parsing this text.
+ */
 export function renderQuestion(q: AssistantQuestion | null | undefined): string {
   if (!q || q.options.length < 2) return '';
   return `\n\n${q.text}\n${q.options.map((o) => `- ${o}`).join('\n')}`;
+}
+
+/** The assistant's question as the declared `questions` the UI renders one button per option from. */
+export function assistantQuestions(q: AssistantQuestion | null | undefined): AgentQuestion[] | null {
+  if (!q) return null;
+  return sanitizeQuestions([{ prompt: q.text, options: q.options }]);
 }
 
 export interface AssistantEnvContext {

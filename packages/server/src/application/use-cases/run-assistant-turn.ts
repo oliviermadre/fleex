@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
-import type { AgentEventType } from '@fleex/shared';
+import type { AgentEventType, AgentQuestion } from '@fleex/shared';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import { AgentThreadEntity } from '../../domain/entities/agent-thread.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
@@ -28,6 +28,7 @@ import {
   buildAssistantUserPrompt,
   parseActionToolInput,
   renderQuestion,
+  assistantQuestions,
   type AssistantAction,
   type AssistantTrigger,
 } from '../assistant/assistant-protocol.js';
@@ -285,7 +286,7 @@ export class RunAssistantTurnUseCase {
   ): Promise<string> {
     switch (action.action) {
       case 'reply':
-        await this.postAssistant(ticket, assistant, null, action.message + renderQuestion(action.question));
+        await this.postAssistant(ticket, assistant, null, action.message + renderQuestion(action.question), { questions: assistantQuestions(action.question) });
         return 'Message posté.';
 
       case 'delegate': {
@@ -341,7 +342,7 @@ export class RunAssistantTurnUseCase {
         }
         const who = target?.displayName || thread.personaName;
         const lead = action.message ? `${action.message}\n\n` : '';
-        await this.postAssistant(ticket, assistant, null, `${lead}Retour de ${who} : ${action.summary}${renderQuestion(action.question)}`);
+        await this.postAssistant(ticket, assistant, null, `${lead}Retour de ${who} : ${action.summary}${renderQuestion(action.question)}`, { questions: assistantQuestions(action.question) });
         this.emit({ type: 'thread.concluded', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
         return `Thread conclu ; le résumé a été posté dans le fil.`;
       }
@@ -404,7 +405,7 @@ export class RunAssistantTurnUseCase {
     assistant: AgentPersonaEntity,
     threadId: string | null,
     body: string,
-    extra: { suppressMentionForAgents?: string[] } = {},
+    extra: { suppressMentionForAgents?: string[]; questions?: AgentQuestion[] | null } = {},
   ) {
     const authorName = assistant.displayName || assistant.name;
     const result = await this.deps.postComment.execute({ ticketId: ticket.id, authorType: 'assistant', authorName, body, threadId, ...extra });
