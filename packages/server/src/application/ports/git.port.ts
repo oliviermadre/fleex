@@ -55,8 +55,21 @@ export interface GitPort {
   getFileDiffPatch(worktreePath: string, path: string, baseBranch?: string): Promise<string>;
   /** A file's contents at the merge-base (for the editor's side-by-side diff); '' if absent there. */
   getFileBaseContent(worktreePath: string, path: string, baseBranch?: string): Promise<string>;
-  /** `git status --porcelain` output for the worktree. */
-  getStatusPorcelain(worktreePath: string): Promise<string>;
+  /**
+   * `git status --porcelain` output for the worktree. `untrackedAll` lists every
+   * untracked file (`-uall`) instead of collapsing untracked folders to `dir/`.
+   */
+  getStatusPorcelain(worktreePath: string, opts?: { untrackedAll?: boolean }): Promise<string>;
+  /** Branch checked out in the worktree, or null on a detached HEAD. */
+  getHeadBranch(worktreePath: string): Promise<string | null>;
+  /**
+   * Commits reachable from the worktree's HEAD that no remote-tracking ref and
+   * none of `extraRefs` (e.g. fetched `refs/pull/N/head`) contain — the work
+   * that exists nowhere but on this disk.
+   */
+  countCommitsNotOnRemotes(worktreePath: string, extraRefs: string[]): Promise<number>;
+  /** `git branch -D <branch>` — local only, never touches the remote. */
+  deleteLocalBranch(repoPath: string, branch: string): Promise<void>;
   repairWorktrees(repoPath: string): Promise<void>;
   pruneWorktrees(repoPath: string): Promise<void>;
 }

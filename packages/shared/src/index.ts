@@ -668,3 +668,28 @@ export {
 } from './types/worktree-actions.js';
 export type { RunHint, RunHintCode, RunHintSuggestion, DiagnosableRun, BinaryDiagnosis, BinaryKind } from './run-diagnosis.js';
 export { diagnoseRun, extractBinaries, BINARY_NAME, aliasUsesTty, scriptFromAlias } from './run-diagnosis.js';
+export type {
+  WorktreeCleanupStatus,
+  WorktreeCleanupReason,
+  WorktreeCleanupUnknownReason,
+  WorktreeCleanupBranchAction,
+  WorktreeCleanupPrState,
+  WorktreeCleanupCriteria,
+  WorktreeCleanupWorktree,
+  WorktreeCleanupOrphanLink,
+  WorktreeCleanupTicket,
+  WorktreeCleanupEmptyWorkspace,
+  WorktreeCleanupUnknownDir,
+  WorktreeCleanupSkippedTicket,
+  WorktreeCleanupTotals,
+  WorktreeCleanupReport,
+  WorktreeCleanupRequest,
+} from './types/worktree-cleanup.js';
+export {
+  WORKTREE_CLEANUP_SCHEMA_VERSION,
+  WORKTREE_CLEANUP_STATUSES,
+  WORKTREE_CLEANUP_REASONS,
+  DEFAULT_CLEANUP_OLDER_THAN,
+  parseCleanupOlderThan,
+  parseCleanupStatuses,
+} from './types/worktree-cleanup.js';

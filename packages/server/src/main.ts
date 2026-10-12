@@ -25,6 +25,7 @@ import { prCiRoutes } from './infrastructure/http/pr-ci.routes.js';
 import { actionsAiRoutes } from './infrastructure/http/actions-ai.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
+import { worktreeCleanupRoutes } from './infrastructure/http/worktree-cleanup.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
 import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
 import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
@@ -146,6 +147,7 @@ async function main() {
   await app.register(fileRoutes(container));
   await app.register(ticketGroupRoutes(container));
   await app.register(overlaySyncRoutes(container));
+  await app.register(worktreeCleanupRoutes(container));
 
   // Anthropic model discovery (cached server-side)
   const modelService = new ModelService(container.logger);

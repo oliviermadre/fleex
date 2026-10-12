@@ -28,6 +28,8 @@ import { GetSessionGroupsUseCase } from '../application/use-cases/get-session-gr
 import { DiscoverExistingSessionsUseCase } from '../application/use-cases/discover-existing-sessions.js';
 import { ListRepositoriesUseCase } from '../application/use-cases/list-repositories.js';
 import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js';
+import { WorktreeCleanupUseCase } from '../application/use-cases/worktree-cleanup.js';
+import { ExecWorkspaceActivityProbe } from './adapters/workspace-activity-probe.adapter.js';
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
 import { RebaseTicketWorktreeUseCase } from '../application/use-cases/rebase-ticket-worktree.js';
 import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-worktree.js';
@@ -876,6 +878,19 @@ export async function createContainer() {
     processHookEvent,
     listRepositories: new ListRepositoriesUseCase(git, config, logger, hostFs, resolver),
     listWorktrees: new ListWorktreesUseCase(git, logger, resolver, bareCloneManager),
+    worktreeCleanup: new WorktreeCleanupUseCase({
+      basePath: config.get().basePath,
+      git,
+      hostFs,
+      execFn,
+      resolver,
+      ticketStore: ticketStore_,
+      fetchBare: (org, name) => bareCloneManager.fetch(org, name),
+      fetchPRStates: (prs) => githubGraphql.fetchPRStates(prs),
+      probe: new ExecWorkspaceActivityProbe(execFn),
+      emit: (e) => eventBus.emit(e),
+      logger,
+    }),
     createWorktree: createWorktreeUC,
     rebaseTicketWorktree,
     getClaudeUsage,

@@ -53,13 +53,15 @@ export class BareCloneManager {
 
   /**
    * Fetch latest changes for a bare clone. Called before any git operation.
+   * Never throws; returns false when the clone is missing or the fetch failed,
+   * for the callers that must not trust stale remote refs.
    */
-  async fetch(org: string, name: string): Promise<void> {
+  async fetch(org: string, name: string): Promise<boolean> {
     const barePath = this.resolver.barePath(org, name);
     const exists = await this.hostFs.exists(barePath);
     if (!exists) {
       this.logger.warn('Bare clone not found for fetch', { org, name, barePath });
-      return;
+      return false;
     }
     try {
       // Ensure the fetch refspec is configured (may be missing on older bare clones)
@@ -68,8 +70,10 @@ export class BareCloneManager {
         { cwd: barePath },
       );
       await this.execFn('git', ['fetch', '--prune', 'origin'], { cwd: barePath });
+      return true;
     } catch {
       this.logger.warn('Failed to fetch bare clone', { org, name, barePath });
+      return false;
     }
   }
 
