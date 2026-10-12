@@ -72,7 +72,18 @@ function fixed(content: Anthropic.ContentBlock[]): AssistantLlm {
 }
 
 /** Scripts the model: each round returns text and/or tool calls; text is streamed char-by-char. */
-function harness(rounds: Round[], opts: { hasApiKey?: boolean } = {}) {
+interface Catalogue {
+  skills?: Array<{ id: string; commandName: string; name: string; displayName: string; markdownContent: string; enabled: boolean }>;
+  workflows?: Array<{ id: string; slug: string; name: string; description: string; enabled: boolean }>;
+  runs?: Array<{ id: string; ticketId: string; triggeredFrom: string; status: string; isActive(): boolean }>;
+  deliverables?: Array<Record<string, unknown>>;
+}
+
+function run(id: string, triggeredFrom: string, status: string) {
+  return { id, ticketId: 't1', triggeredFrom, status, isActive: () => ['running', 'blocked', 'needs_review'].includes(status) };
+}
+
+function harness(rounds: Round[], opts: { hasApiKey?: boolean } & Catalogue = {}) {
   const ticket = TicketEntity.create({ id: 't1', boardId: 'b', displayId: 1, title: 'e2e rouges' });
   ticket.updateExecutionConfig({ assistantPersonaId: 'p-nas' });
   const personas = [persona('nas'), persona('builder')];
@@ -109,12 +120,25 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean } = {}) {
     getTicketContext: {
       execute: async () => ({
         ticket: ticket.toDTO(), comments: (await comments.getByTicket('t1')).map((c) => c.toDTO()),
-        mentions: { pending: [], all: mentions.saved.map((m) => m.toDTO()) }, deliverables: [], activity: [], relevantSummaries: [], epics: [], memorySnippets: [],
+        mentions: { pending: [], all: mentions.saved.map((m) => m.toDTO()) }, deliverables: opts.deliverables ?? [], activity: [], relevantSummaries: [], epics: [], memorySnippets: [],
       }),
     } as never,
     agentEventStore: agentEvents as never, executeAgent: executeAgent as never,
     config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0 }) } as never,
     eventBus, logger: logger as never,
+    skillStore: {
+      getEnabled: async () => (opts.skills ?? []).filter((x) => x.enabled),
+      getByCommandName: async (n: string) => (opts.skills ?? []).find((x) => x.commandName === n) ?? null,
+    } as never,
+    panelStore: { getEnabled: async () => [], getByName: async () => null } as never,
+    workflowTemplateStore: {
+      getEnabled: async () => (opts.workflows ?? []).filter((x) => x.enabled),
+      getBySlug: async (n: string) => (opts.workflows ?? []).find((x) => x.slug === n) ?? null,
+    } as never,
+    workflowRunStore: {
+      getByTicket: async () => opts.runs ?? [],
+      getActiveByTicket: async () => (opts.runs ?? []).find((r) => r.isActive()) ?? null,
+    } as never,
     environment: {
       workspace: 'qa', cliBin: '/opt/fleex', hasApiKey: opts.hasApiKey ?? true,
       cliTools: async () => [showTool],
@@ -126,7 +150,7 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean } = {}) {
 }
 
 const user = (commentId: string) => ({ kind: 'user_message' as const, commentId });
-const delegateBuilder = { name: 'delegate_to_persona', input: { personaName: 'builder', brief: 'A', turn: 'un' } };
+const delegateBuilder = { name: 'delegate', input: { targetType: 'agent', name: 'builder', brief: 'A', turn: 'un' } };
 
 describe('RunAssistantTurnUseCase — conversation', () => {
   it('a plain text answer becomes one assistant comment, streamed as deltas in the execution log', async () => {
@@ -149,7 +173,7 @@ describe('RunAssistantTurnUseCase — conversation', () => {
     expect(call.system).toContain('Workspace Fleex : **qa**');
     expect(call.system).toContain('1 outils `fleex_*`');
     expect(call.system.length).toBeLessThan(12000);
-    expect(call.tools).toEqual(['delegate_to_persona', 'continue_thread', 'conclude_thread', 'request_mode', 'fleex_ticket_show']);
+    expect(call.tools).toEqual(['delegate', 'continue_thread', 'conclude_thread', 'request_mode', 'fleex_ticket_show']);
   });
 
   it('a fleex_* tool call runs the CLI and feeds the result back before the answer', async () => {
@@ -198,9 +222,9 @@ describe('RunAssistantTurnUseCase — conversation', () => {
 });
 
 describe('RunAssistantTurnUseCase — thread actions as tools', () => {
-  it('delegate_to_persona → announcement, thread, opening turn with a mention, thread.created; empty final text posts nothing more', async () => {
+  it('delegate (agent) → announcement, thread, opening turn with a mention, thread.created; empty final text posts nothing more', async () => {
     const h = harness([
-      { tools: [{ name: 'delegate_to_persona', input: { personaName: 'builder', brief: 'Fix e2e', forward: ['ticket', 'pr'], turn: 'Corrige les e2e', message: 'Je vois ça avec The Builder' } }] },
+      { tools: [{ name: 'delegate', input: { targetType: 'agent', name: 'builder', brief: 'Fix e2e', forward: ['ticket', 'pr'], turn: 'Corrige les e2e', message: 'Je vois ça avec The Builder' } }] },
       { text: '' },
     ]);
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
@@ -216,7 +240,7 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
   });
 
   it('a second thread action in the same turn is refused', async () => {
-    const h = harness([{ tools: [delegateBuilder, { name: 'delegate_to_persona', input: { personaName: 'builder', brief: 'B', turn: 'deux' } }] }, { text: '' }]);
+    const h = harness([{ tools: [delegateBuilder, { name: 'delegate', input: { targetType: 'agent', name: 'builder', brief: 'B', turn: 'deux' } }] }, { text: '' }]);
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
     expect(h.mentions.saved).toHaveLength(1);
     const results = h.llmCalls[1]!.messages[2]!.content as Anthropic.ToolResultBlockParam[];
@@ -224,7 +248,7 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
   });
 
   it('delegate on a persona with an open thread becomes a continue', async () => {
-    const h = harness([{ tools: [delegateBuilder] }, { text: '' }, { tools: [{ name: 'delegate_to_persona', input: { personaName: 'builder', brief: 'B', turn: 'deux' } }] }, { text: '' }]);
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }, { tools: [{ name: 'delegate', input: { targetType: 'agent', name: 'builder', brief: 'B', turn: 'deux' } }] }, { text: '' }]);
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
     // The first turn has settled (otherwise the continue is refused as "still working").
     const m = h.mentions.saved[0]!; m.acknowledge(); m.resolve(); await h.mentions.save(m);
@@ -345,5 +369,88 @@ describe('RunAssistantTurnUseCase — streaming order', () => {
     expect(text).toBe('A'.repeat(70) + 'B'.repeat(70) + 'C'.repeat(70));
     expect(deltas.map((e) => e.sequence)).toEqual([...deltas.map((e) => e.sequence)].sort((a, b) => a - b));
     expect(deltas.length).toBeLessThan(10);
+  });
+});
+
+describe('RunAssistantTurnUseCase — delegating to skills, panels and workflows', () => {
+  const lint = { id: 's-lint', commandName: 'lint', name: 'lint', displayName: 'Lint', markdownContent: '# Lint\nRuns the linter on the worktree.', enabled: true };
+  const off = { id: 's-off', commandName: 'old', name: 'old', displayName: 'Old', markdownContent: 'Retired.', enabled: false };
+  const review = { id: 'w-review', slug: 'review', name: 'Review', description: 'Code review then QA.', enabled: true };
+
+  it('lists only the enabled skills and workflows in the system prompt, with what they do', async () => {
+    const h = harness([{ text: 'ok' }], { skills: [lint, off], workflows: [review] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const system = h.llmCalls[0]!.system;
+    expect(system).toContain('@skill:lint — Lint : Runs the linter on the worktree.');
+    expect(system).not.toContain('@skill:old');
+    expect(system).toContain('@workflow:review — Review : Code review then QA.');
+  });
+
+  it('a skill delegation opens a skill thread whose opening turn mentions @skill: and is tracked by that mention', async () => {
+    const h = harness([{ tools: [{ name: 'delegate', input: { targetType: 'skill', name: 'lint', brief: 'Lint', turn: '--fix' } }] }, { text: '' }], { skills: [lint] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    expect([thread.targetType, thread.personaId, thread.personaName]).toEqual(['skill', 's-lint', 'lint']);
+    expect(h.comments.saved.at(-1)!.body).toBe('@skill:lint --fix');
+    expect(h.mentions.saved.map((m) => m.targetType)).toEqual(['skill']);
+    expect(thread.currentMentionId).toBe(h.mentions.saved[0]!.id);
+  });
+
+  it('an unknown or disabled target opens nothing and tells the model what exists', async () => {
+    const h = harness([{ tools: [{ name: 'delegate', input: { targetType: 'skill', name: 'old', brief: 'x', turn: 'y' } }] }, { text: '' }], { skills: [lint, off] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.threads.saved.size).toBe(0);
+    expect(h.mentions.saved).toHaveLength(0);
+    const result = (h.llmCalls[1]!.messages[2]!.content as Anthropic.ToolResultBlockParam[])[0]!;
+    expect(result.content).toContain('Skills disponibles : lint');
+  });
+
+  // One active run per ticket: a second one would be refused at creation and the thread would only fail.
+  it('does not open a workflow thread while a run is already active on the ticket', async () => {
+    const h = harness(
+      [{ tools: [{ name: 'delegate', input: { targetType: 'workflow', name: 'review', brief: 'x', turn: 'y' } }] }, { text: '' }],
+      { workflows: [review], runs: [run('r0', 'manual', 'needs_review')] },
+    );
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.threads.saved.size).toBe(0);
+    expect(h.mentions.saved).toHaveLength(0);
+  });
+
+  it('does not relaunch a workflow thread whose run is still waiting on a human gate', async () => {
+    const h = harness([{ tools: [{ name: 'delegate', input: { targetType: 'workflow', name: 'review', brief: 'x', turn: 'y' } }] }, { text: '' }], { workflows: [review] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const posted = h.comments.saved.length;
+    h.mentions.saved[0]!.resolve(); // a workflow mention settles as soon as its run starts
+    // The run it started now waits on a gate.
+    (h as unknown as { uc: { deps: { workflowRunStore: unknown } } }).uc.deps.workflowRunStore = {
+      getByTicket: async () => [run('r1', `mention:${thread.currentMentionId}`, 'needs_review')],
+      getActiveByTicket: async () => run('r1', `mention:${thread.currentMentionId}`, 'needs_review'),
+    };
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'encore' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
+    expect(h.comments.saved.length).toBe(posted);
+    expect(h.mentions.saved).toHaveLength(1);
+  });
+
+  it("a workflow thread's results are its run's deliverables, read in full", async () => {
+    const thread = AgentThreadEntity.create({
+      id: 'th-w', ticketId: 't1', personaId: 'w-review', personaName: 'review', assistantPersonaId: 'p-nas', brief: 'x',
+      forwardedContext: ['ticket'], targetType: 'workflow',
+    });
+    thread.openTurn('m-w');
+    const h = harness([{ text: 'ok' }], {
+      workflows: [review],
+      runs: [run('r1', 'mention:m-w', 'completed')],
+      deliverables: [
+        { id: 'd1', title: 'QA report', type: 'report', status: 'final', agentName: 'workflow', createdAt: '2026-10-12T00:00:00Z', content: 'ALL GREEN', workflowRunId: 'r1', mentionId: null },
+        { id: 'd2', title: 'Other', type: 'report', status: 'final', agentName: 'x', createdAt: '2026-10-12T00:00:00Z', content: 'UNRELATED', workflowRunId: 'r9', mentionId: null },
+      ],
+    });
+    await h.threads.save(thread);
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: 'th-w', mentionStatus: 'resolved', workflowRun: { id: 'r1', status: 'completed' } } });
+    const prompt = h.llmCalls[0]!.messages[0]!.content as string;
+    expect(prompt).toContain('ALL GREEN');
+    expect(prompt).not.toContain('UNRELATED');
   });
 });

@@ -81,3 +81,18 @@ describe('AgentThreadEntity — idle', () => {
     expect(t.status).toBe('running');
   });
 });
+
+describe('AgentThreadEntity — target', () => {
+  const base = { id: 'th', ticketId: 't', personaId: 'x', personaName: 'lint', assistantPersonaId: 'pa', brief: 'b', forwardedContext: [] };
+  it('is a persona thread unless told otherwise', () => {
+    const t = AgentThreadEntity.create(base);
+    expect(t.targetType).toBe('agent');
+    expect(t.toDTO().targetType).toBe('agent');
+  });
+  // The mention tag is how a turn reaches the target through the existing mention pipeline.
+  it('addresses its target with the mention prefix of its type', () => {
+    for (const targetType of ['agent', 'skill', 'panel', 'workflow'] as const) {
+      expect(AgentThreadEntity.create({ ...base, targetType }).mentionTag).toBe(`@${targetType}:lint`);
+    }
+  });
+});

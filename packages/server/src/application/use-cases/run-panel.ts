@@ -218,7 +218,10 @@ export class RunPanelUseCase {
       : `panel:${panel.name}`;
     let announceCommentId: string | null = null;
     if (params.ticketId) {
+      // Launched from a thread turn: the discussion (announce, then synthesis) stays in that thread.
+      const triggerCommentId = params.mentionId ? (await this.mentionStore.getById(params.mentionId))?.commentId : undefined;
       const { comment: announceComment } = await this.postComment.execute({
+        ...(triggerCommentId ? { threadOf: triggerCommentId } : {}),
         ticketId: params.ticketId,
         body: `🏛️ **${panel.displayName}** — Panel discussion started on: **${topic}**\n\n_${panel.members.length} members participating..._`,
         authorName: panelAuthor,

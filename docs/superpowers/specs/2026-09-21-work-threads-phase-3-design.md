@@ -66,7 +66,7 @@ Un tour est un `TicketComment` avec un `threadId` non nul. Trois auteurs : l'ass
 
 `PostCommentUseCase.execute` gagne deux paramètres :
 - `threadId?: string | null` ; **héritage** : si `parentId` est fourni sans `threadId`, le commentaire hérite du `threadId` de son parent. C'est ce qui range automatiquement la réponse de l'agent dans le thread (`ExecuteAgent` répond toujours avec `parentId: mention.commentId`).
-- `suppressAgentMentions?: boolean` : n'ouvre aucune mention `@agent:` / `@panel:` pour ce commentaire. Utilisé pour le message utilisateur du composer Work : l'assistant interprète les `@agent:x` comme une consigne de délégation. Les mentions `@skill:` et `@workflow:` gardent leur comportement.
+- `suppressAgentMentions?: boolean` : n'ouvre aucune mention `@agent:` / `@panel:` pour ce commentaire. Utilisé pour le message utilisateur du composer Work : l'assistant interprète les `@agent:x` comme une consigne de délégation. ~~Les mentions `@skill:` et `@workflow:` gardent leur comportement.~~ Depuis que l'assistant délègue aussi aux skills, panels et workflows (threads suivis, `targetType`), `suppressAgentMentions` coupe les quatre types de mentions : sinon une mention tapée dans le composer partirait deux fois.
 
 La règle « les commentaires d'agents ne créent pas de mentions » (`isAgentAuthored`) ne s'applique qu'à `authorType === 'agent'`. Un commentaire `assistant` crée des mentions : c'est ainsi que l'assistant lance un agent.
 

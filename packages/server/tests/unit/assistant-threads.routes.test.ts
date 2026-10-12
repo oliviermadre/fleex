@@ -151,4 +151,54 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     expect(ticket.blocked).toBe(false);
     expect(ticketSaves).toBe(1);
   });
+
+  function workflowThread() {
+    const t = AgentThreadEntity.create({ id: 'thw', ticketId: 't1', personaId: 'w', personaName: 'review', assistantPersonaId: 'a', brief: 'x', forwardedContext: [], targetType: 'workflow' });
+    t.openTurn('mw');
+    return t;
+  }
+
+  // Its mention is resolved at run start: reading that as "done" would park a workflow that is still running.
+  it('leaves a workflow thread running while its run is active, though its mention is resolved', async () => {
+    const app = Fastify();
+    const t = workflowThread();
+    const turns: unknown[] = [];
+    await app.register(assistantThreadsRoutes({
+      threadStore: { getByTicket: async () => [t], save: async () => {} },
+      mentionStore: { getById: async () => ({ status: 'resolved' }) },
+      runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); }, workflowRunOf: async () => ({ id: 'r1', status: 'running', isActive: () => true }) },
+    } as never));
+    const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
+    expect(res.json()[0].status).toBe('running');
+    expect(turns).toHaveLength(0);
+  });
+
+  it('repairs a workflow thread from its finished run and replays the wake-up with the run', async () => {
+    const app = Fastify();
+    const t = workflowThread();
+    const turns: unknown[] = [];
+    await app.register(assistantThreadsRoutes({
+      threadStore: { getByTicket: async () => [t], save: async () => {} },
+      mentionStore: { getById: async () => ({ status: 'resolved' }) },
+      runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); }, workflowRunOf: async () => ({ id: 'r1', status: 'failed', isActive: () => false }) },
+    } as never));
+    const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
+    expect(res.json()[0].status).toBe('failed');
+    expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: 'thw', mentionStatus: 'failed', workflowRun: { id: 'r1', status: 'failed' } } }]);
+  });
+
+  // A plain reply must not start a second workflow run while the first waits on a gate.
+  it('POST /api/threads/:id/messages does not re-tag a workflow thread; the user re-runs it by typing the tag', async () => {
+    const app = Fastify();
+    const t = workflowThread();
+    const posted: Array<Record<string, unknown>> = [];
+    await app.register(assistantThreadsRoutes({
+      threadStore: { getById: async () => t, save: async () => {} },
+      mentionStore: { getById: async () => null },
+      config: { get: () => ({}) }, eventBus: new EventBus(),
+      postComment: { execute: async (p: Record<string, unknown>) => { posted.push(p); return { comment: { id: 'c', toDTO: () => ({}) }, createdMentions: [] }; } },
+    } as never));
+    await app.inject({ method: 'POST', url: '/api/threads/thw/messages', payload: { body: 'gate validée' } });
+    expect(posted[0]).toMatchObject({ body: 'gate validée', threadId: 'thw' });
+  });
 });

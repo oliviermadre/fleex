@@ -67,9 +67,25 @@ export function assistantThreadsRoutes(container: Deps) {
     async function reconcile(threads: Awaited<ReturnType<typeof container.threadStore.getByTicket>>) {
       for (const t of threads) {
         if (t.status !== 'running' || !t.currentMentionId) continue;
+        if (t.targetType === 'workflow') {
+          // Its mention settles at run start: the run says where the thread is.
+          const run = await container.runAssistantTurn.workflowRunOf(t);
+          if (run && !run.isActive()) {
+            const done = run.status === 'completed';
+            if (done) t.markIdle(); else t.fail();
+            await container.threadStore.save(t);
+            void container.runAssistantTurn.execute({
+              ticketId: t.ticketId,
+              trigger: { kind: 'thread_reply', threadId: t.id, mentionStatus: done ? 'resolved' : 'failed', workflowRun: { id: run.id, status: run.status } },
+            });
+          }
+          if (run) continue;
+        }
         const m = await container.mentionStore.getById(t.currentMentionId);
         if (!m) continue;
+        if (t.targetType === 'workflow' && m.status !== 'failed') continue;
         if (m.status === 'pending') {
+          if (t.targetType !== 'agent') continue; // the stale-lane problem is the agent queue's
           // A new turn queued behind an older turn of the same thread still parked
           // in waiting_for_info (data from before the busy-agent guard): the older
           // one holds the (agent, ticket) lane forever. Close it so the new turn runs.
@@ -130,8 +146,12 @@ export function assistantThreadsRoutes(container: Deps) {
       const waiting = current?.status === 'waiting_for_info';
       const { humanDisplayName, humanMentionName } = container.config.get();
       const authorName = humanDisplayName || humanMentionName || 'user';
-      const tag = `@agent:${thread.personaName}`;
-      const body = waiting || request.body.body.includes(tag) ? request.body.body : `${tag} ${request.body.body}`;
+      const tag = thread.mentionTag;
+      // A persona is re-mentioned on each turn. A skill, panel or workflow only
+      // re-runs when the user types its tag: a plain reply must not start a
+      // second workflow run while the first waits on a gate.
+      const retag = thread.targetType === 'agent' && !waiting && !request.body.body.includes(tag);
+      const body = retag ? `${tag} ${request.body.body}` : request.body.body;
       const { comment, createdMentions } = await container.postComment.execute({
         ticketId: thread.ticketId,
         authorType: 'user',
@@ -144,7 +164,7 @@ export function assistantThreadsRoutes(container: Deps) {
       });
       const now = new Date();
       for (const m of createdMentions) {
-        if (m.targetAgent === thread.personaName) {
+        if (m.targetAgent === thread.personaName && m.targetType === thread.targetType) {
           thread.openTurn(m.id);
           await container.threadStore.save(thread);
         }

@@ -82,3 +82,86 @@ describe('AssistantThreadListener', () => {
     expect(s.turns).toHaveLength(0);
   });
 });
+
+describe('AssistantThreadListener — workflow threads follow their run', () => {
+  function setupWorkflow(runStatus = 'running') {
+    const thread = AgentThreadEntity.create({
+      id: 'thw', ticketId: 't1', personaId: 'w', personaName: 'review', assistantPersonaId: 'pa', brief: 'b', forwardedContext: [], targetType: 'workflow',
+    });
+    thread.openTurn('mw');
+    const run = { id: 'r1', triggeredFrom: 'mention:mw', status: runStatus };
+    const threadStore = {
+      getByCurrentMentionId: async (id: string) => (id === 'mw' ? thread : null),
+      getById: async () => thread,
+      save: async () => {},
+    };
+    const turns: Array<{ trigger: Record<string, unknown> }> = [];
+    const bus = new EventBus();
+    new AssistantThreadListener({
+      eventBus: bus, threadStore: threadStore as never, commentStore: { getById: async () => null } as never,
+      runAssistantTurn: { execute: async (p: never) => { turns.push(p); } } as never, logger: logger as never,
+      workflowRunStore: { getById: async (id: string) => (id === 'r1' ? run : { id, triggeredFrom: 'manual', status: 'completed' }) } as never,
+    }).register();
+    const wf = (type: string) => bus.emit({ type, workflowRunId: 'r1', ticketId: 't1', stepRunId: 's', stepId: 's', occurredAt: new Date() } as never);
+    return { bus, thread, run, turns, wf };
+  }
+
+  // The workflow mention is resolved as soon as the run is created: waking on it would
+  // tell the assistant the work is done while the first step is barely starting.
+  it('ignores the mention settling at run start', async () => {
+    const s = setupWorkflow();
+    s.bus.emit({ type: 'mention.resolved', mentionId: 'mw', ticketId: 't1', targetAgent: 'review', resolvedBy: 'x', occurredAt: new Date() });
+    await tick();
+    expect(s.thread.status).toBe('running');
+    expect(s.turns).toHaveLength(0);
+  });
+
+  it('a run that could not start (mention failed) fails the thread', async () => {
+    const s = setupWorkflow();
+    s.bus.emit({ type: 'mention.execution_failed', mentionId: 'mw', ticketId: 't1', targetAgent: 'review', reason: 'workflow_start_failed', message: 'already active', occurredAt: new Date() } as never);
+    await tick();
+    expect(s.thread.status).toBe('failed');
+    expect(s.turns).toHaveLength(1);
+  });
+
+  it('run completed → idle, assistant woken with the run', async () => {
+    const s = setupWorkflow('completed');
+    s.wf('workflow.run_completed');
+    await tick();
+    expect(s.thread.status).toBe('idle');
+    expect(s.turns[0]!.trigger).toMatchObject({ kind: 'thread_reply', mentionStatus: 'resolved', workflowRun: { id: 'r1', status: 'completed' } });
+  });
+
+  it('run failed or cancelled → failed, assistant woken', async () => {
+    for (const [type, status] of [['workflow.run_failed', 'failed'], ['workflow.run_cancelled', 'cancelled']] as const) {
+      const s = setupWorkflow(status);
+      s.wf(type);
+      await tick();
+      expect(s.thread.status).toBe('failed');
+      expect(s.turns[0]!.trigger).toMatchObject({ mentionStatus: 'failed', workflowRun: { status } });
+    }
+  });
+
+  it('a human gate parks the thread in waiting and wakes the assistant once; the next step resumes it silently', async () => {
+    const s = setupWorkflow('needs_review');
+    s.wf('workflow.needs_review');
+    await tick();
+    s.wf('workflow.awaiting_routing');
+    await tick();
+    expect(s.thread.status).toBe('waiting');
+    expect(s.turns).toHaveLength(1);
+    expect(s.turns[0]!.trigger).toMatchObject({ mentionStatus: 'waiting_for_info' });
+    s.wf('workflow.step_started');
+    await tick();
+    expect(s.thread.status).toBe('running');
+    expect(s.turns).toHaveLength(1);
+  });
+
+  it('ignores runs it did not start', async () => {
+    const s = setupWorkflow();
+    s.bus.emit({ type: 'workflow.run_completed', workflowRunId: 'r-other', ticketId: 't1', occurredAt: new Date() } as never);
+    await tick();
+    expect(s.thread.status).toBe('running');
+    expect(s.turns).toHaveLength(0);
+  });
+});
