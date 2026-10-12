@@ -83,7 +83,7 @@ function run(id: string, triggeredFrom: string, status: string) {
   return { id, ticketId: 't1', triggeredFrom, status, isActive: () => ['running', 'blocked', 'needs_review'].includes(status) };
 }
 
-function harness(rounds: Round[], opts: { hasApiKey?: boolean } & Catalogue = {}) {
+function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnabled?: boolean } & Catalogue = {}) {
   const ticket = TicketEntity.create({ id: 't1', boardId: 'b', displayId: 1, title: 'e2e rouges' });
   ticket.updateExecutionConfig({ assistantPersonaId: 'p-nas' });
   const personas = [persona('nas'), persona('builder')];
@@ -124,7 +124,7 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean } & Catalogue = {}
       }),
     } as never,
     agentEventStore: agentEvents as never, executeAgent: executeAgent as never,
-    config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0 }) } as never,
+    config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: opts.workThreadsEnabled }) } as never,
     eventBus, logger: logger as never,
     skillStore: {
       getEnabled: async () => (opts.skills ?? []).filter((x) => x.enabled),
@@ -477,5 +477,31 @@ describe('RunAssistantTurnUseCase — delegating to skills, panels and workflows
     const prompt = h.llmCalls[0]!.messages[0]!.content as string;
     expect(prompt).toContain('ALL GREEN');
     expect(prompt).not.toContain('UNRELATED');
+  });
+});
+
+// The kill switch: when the assistant misbehaves, switching it off must stop it everywhere
+// (message, new ticket, thread wake-up) without a restart, and leave the ticket usable.
+describe('RunAssistantTurnUseCase — workThreadsEnabled kill switch', () => {
+  it('off: no turn runs — no model call, no comment, no execution log', async () => {
+    const h = harness([{ text: 'Bonjour' }], { workThreadsEnabled: false });
+    for (const trigger of [user('c0'), { kind: 'ticket_created' as const }, { kind: 'thread_reply' as const, threadId: 'th', mentionStatus: 'resolved' as const }]) {
+      await h.uc.execute({ ticketId: 't1', trigger });
+    }
+    expect(h.llmCalls).toHaveLength(0);
+    expect(h.comments.saved).toHaveLength(0);
+    expect(h.agentEvents.executions).toHaveLength(0);
+  });
+
+  it('off: no assistant persona resolves, so the routes answer assistant: null and the composer posts plain comments', async () => {
+    const h = harness([], { workThreadsEnabled: false });
+    expect(await h.uc.resolveAssistantPersona(h.ticket)).toBeNull();
+  });
+
+  it('absent means on', async () => {
+    const h = harness([{ text: 'Bonjour' }]);
+    expect((await h.uc.resolveAssistantPersona(h.ticket))?.id).toBe('p-nas');
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.comments.saved).toHaveLength(1);
   });
 });
