@@ -24,6 +24,18 @@ function make(id: string, ticketId = 't1') {
 }
 
 describe('SqliteThreadStoreAdapter', () => {
+  it('keeps what a thread delegates to (migration 038), and reads pre-existing rows as persona threads', async () => {
+    const w = AgentThreadEntity.create({
+      id: 'thw', ticketId: 't1', personaId: 'w1', personaName: 'review', assistantPersonaId: 'pa', brief: 'b',
+      forwardedContext: [], targetType: 'workflow',
+    });
+    await store.save(w);
+    expect((await store.getById('thw'))?.targetType).toBe('workflow');
+    conn.db.prepare(`INSERT INTO agent_threads (id, ticket_id, initiator, persona_id, persona_name, assistant_persona_id, brief,
+      forwarded_context, status, exchanges, created_at, updated_at) VALUES ('old','t1','assistant','p','builder','pa','b','[]','idle',1,'2026-01-01','2026-01-01')`).run();
+    expect((await store.getById('old'))?.targetType).toBe('agent');
+  });
+
   it('round-trips a thread through save/getById', async () => {
     const t = make('th1');
     t.openTurn('m1');

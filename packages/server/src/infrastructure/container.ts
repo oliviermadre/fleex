@@ -495,6 +495,7 @@ export async function createContainer() {
     threadStore, commentStore, mentionStore, ticketStore: ticketStore_, personaStore: personaStore_, postComment,
     getTicketContext, agentEventStore: agentEventStore_, executeAgent, config, eventBus, logger,
     environment: assistantEnvironment,
+    skillStore, panelStore, workflowTemplateStore, workflowRunStore,
   }, createAnthropicAssistantLlm(new Anthropic({ apiKey: anthropicApiKey || 'missing' })));
 
   const domainEventListener = new DomainEventListener({
@@ -516,7 +517,7 @@ export async function createContainer() {
   });
   domainEventListener.register();
   // Assistant threads follow the mentions that drive them (local bus only).
-  new AssistantThreadListener({ eventBus, threadStore, commentStore, runAssistantTurn, logger }).register();
+  new AssistantThreadListener({ eventBus, threadStore, commentStore, runAssistantTurn, logger, workflowRunStore }).register();
 
   // Keeps the retrieval index current. A sibling of the listener above, on the
   // same local bus: ingestion is a side-effect, so hub-relayed events must not

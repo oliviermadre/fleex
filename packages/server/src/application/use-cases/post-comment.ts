@@ -30,6 +30,12 @@ export class PostCommentUseCase {
      * the thread that mentioned it); `null` = force a main-stream comment.
      */
     threadId?: string | null;
+    /**
+     * Join the thread of this comment without replying to it (`threadId`
+     * undefined, no `parentId`): a skill or panel run announces itself in the
+     * thread that mentioned it, and its result comments follow as replies.
+     */
+    threadOf?: string;
     humanMentionNames?: string[];
     executionMode?: MentionExecutionMode;
     /**
@@ -42,15 +48,17 @@ export class PostCommentUseCase {
     /** Closed questions declared by the agent (already sanitized by questionsToKeep). */
     questions?: AgentQuestion[] | null;
     /**
-     * Skip @agent:/@panel: mentions entirely. The Work composer sets it: the
-     * assistant reads those mentions as delegation instructions instead.
+     * Skip @agent:/@panel:/@skill:/@workflow: mentions entirely. The Work
+     * composer sets it: the assistant reads those mentions as delegation
+     * instructions instead, so nothing launches twice.
      */
     suppressAgentMentions?: boolean;
   }): Promise<{ comment: TicketCommentEntity; createdMentions: TicketMentionEntity[] }> {
     let threadId: string | null = params.threadId ?? null;
-    if (params.threadId === undefined && params.parentId) {
-      const parent = await this.commentStore.getById(params.parentId);
-      threadId = parent?.threadId ?? null;
+    const threadSource = params.parentId ?? params.threadOf;
+    if (params.threadId === undefined && threadSource) {
+      const source = await this.commentStore.getById(threadSource);
+      threadId = source?.threadId ?? null;
     }
 
     const comment = TicketCommentEntity.create({
@@ -119,7 +127,7 @@ export class PostCommentUseCase {
 
     }
 
-    if (!isAgentAuthored) {
+    if (!isAgentAuthored && params.suppressAgentMentions !== true) {
       // Create mentions for @skill:xxx found in the body
       const skillMentions = TicketCommentEntity.extractSkillMentions(params.body);
       for (const commandName of skillMentions) {

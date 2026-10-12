@@ -1,4 +1,4 @@
-import type { AgentThreadStatus } from '@fleex/shared';
+import type { AgentThreadStatus, AgentThreadTargetType } from '@fleex/shared';
 import { AgentThreadEntity } from '../../../domain/entities/agent-thread.entity.js';
 import type { ThreadStorePort } from '../../../application/ports/thread-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -7,7 +7,7 @@ interface ThreadRow {
   id: string; ticket_id: string; initiator: string; persona_id: string; persona_name: string;
   assistant_persona_id: string; brief: string; forwarded_context: string; status: string;
   current_mention_id: string | null; exchanges: number; failures: number; summary: string | null;
-  created_at: string; updated_at: string; concluded_at: string | null;
+  created_at: string; updated_at: string; concluded_at: string | null; target_type: string | null;
 }
 
 export function threadRowToEntity(r: ThreadRow): AgentThreadEntity {
@@ -15,7 +15,7 @@ export function threadRowToEntity(r: ThreadRow): AgentThreadEntity {
     r.id, r.ticket_id, 'assistant', r.persona_id, r.persona_name, r.assistant_persona_id, r.brief,
     JSON.parse(r.forwarded_context) as string[], r.status as AgentThreadStatus, r.current_mention_id,
     Number(r.exchanges), Number(r.failures ?? 0), r.summary, new Date(r.created_at), new Date(r.updated_at),
-    r.concluded_at ? new Date(r.concluded_at) : null,
+    r.concluded_at ? new Date(r.concluded_at) : null, (r.target_type ?? 'agent') as AgentThreadTargetType,
   );
 }
 
@@ -26,7 +26,7 @@ export function threadEntityToRow(t: AgentThreadEntity): ThreadRow {
     forwarded_context: JSON.stringify(t.forwardedContext), status: t.status,
     current_mention_id: t.currentMentionId, exchanges: t.exchanges, failures: t.failures, summary: t.summary,
     created_at: t.createdAt.toISOString(), updated_at: t.updatedAt.toISOString(),
-    concluded_at: t.concludedAt?.toISOString() ?? null,
+    concluded_at: t.concludedAt?.toISOString() ?? null, target_type: t.targetType,
   };
 }
 
@@ -63,10 +63,10 @@ export class SqliteThreadStoreAdapter implements ThreadStorePort {
     this.conn.db.prepare(`
       INSERT OR REPLACE INTO agent_threads
         (id, ticket_id, initiator, persona_id, persona_name, assistant_persona_id, brief, forwarded_context,
-         status, current_mention_id, exchanges, failures, summary, created_at, updated_at, concluded_at)
+         status, current_mention_id, exchanges, failures, summary, created_at, updated_at, concluded_at, target_type)
       VALUES
         (@id, @ticket_id, @initiator, @persona_id, @persona_name, @assistant_persona_id, @brief, @forwarded_context,
-         @status, @current_mention_id, @exchanges, @failures, @summary, @created_at, @updated_at, @concluded_at)
+         @status, @current_mention_id, @exchanges, @failures, @summary, @created_at, @updated_at, @concluded_at, @target_type)
     `).run(threadEntityToRow(thread));
   }
 }

@@ -6,16 +6,23 @@
  */
 export type AgentThreadStatus = 'running' | 'idle' | 'waiting' | 'concluded' | 'failed';
 
+/** What the assistant delegated to: a persona, or a skill / panel / workflow it runs. */
+export type AgentThreadTargetType = 'agent' | 'skill' | 'panel' | 'workflow';
+
 /**
- * A delegation opened by the assistant with one agent persona on a ticket.
+ * A delegation opened by the assistant with one target (a persona, a skill, a
+ * panel or a workflow) on a ticket.
  * Turns are ticket comments carrying `threadId === id`.
  */
 export interface AgentThread {
   readonly id: string;
   readonly ticketId: string;
   readonly initiator: 'assistant';
+  /** What `personaId` / `personaName` point at. */
+  readonly targetType: AgentThreadTargetType;
+  /** Id of the delegated target (persona, skill, panel or workflow template). */
   readonly personaId: string;
-  /** Mention key of the delegated persona (`@agent:<personaName>`). */
+  /** Mention key of the target: `@<targetType>:<personaName>` (persona name, skill command, panel name, workflow slug). */
   readonly personaName: string;
   readonly assistantPersonaId: string;
   readonly brief: string;

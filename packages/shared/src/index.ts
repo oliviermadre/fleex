@@ -700,4 +700,4 @@ export {
   parseCleanupOlderThan,
   parseCleanupStatuses,
 } from './types/worktree-cleanup.js';
-export type { AgentThread, AgentThreadStatus } from './types/agent-thread.js';
+export type { AgentThread, AgentThreadStatus, AgentThreadTargetType } from './types/agent-thread.js';
