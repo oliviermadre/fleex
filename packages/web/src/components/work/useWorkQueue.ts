@@ -15,7 +15,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useWorkStore } from '../../stores/workStore';
-import { idleActivitySource, threadActivityDetail } from './selectors';
+import { idleActivitySource, threadActivityDetail, threadTargetLabel } from './selectors';
 import { useThreadStore } from '../../stores/threadStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { matchQueueFilters, pruneUnknown, type KnownIds, type QueueConfig, type QueueFilterKey } from './queueFilters';
@@ -329,7 +329,7 @@ export function useWorkQueue(): WorkQueueModel {
       createdAt: toMs(t.createdAt),
       activity,
       activityDetail:
-        threadActivityDetail(threadsByTicket[t.id] ?? [], (th) => personas.find((p) => p.id === th.personaId)?.displayName ?? th.personaName) ??
+        threadActivityDetail(threadsByTicket[t.id] ?? [], (th) => threadTargetLabel(th, personas.find((p) => p.id === th.personaId)?.displayName)) ??
         detailByTicket[t.id] ?? null,
       since: toMs(sinceByTicket[t.id]),
       lastActivityAt: toMs(idleActivitySource(t, lastActivityAtByTicket[t.id])),
