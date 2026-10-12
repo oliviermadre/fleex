@@ -164,6 +164,31 @@ describe('RunAssistantTurnUseCase — conversation', () => {
     expect(h.emitted).toContain('comment.posted');
   });
 
+  // What the user watched stream must be what stays: the live bubble used to show every
+  // round's text glued together, then the posted comment kept only the last round's.
+  it('text around a tool call: the posted comment is exactly what was streamed, rounds separated by a blank line', async () => {
+    const h = harness([
+      { text: 'Je regarde le ticket.', tools: [{ name: 'fleex_ticket_show', input: { id: 't1' } }] },
+      { text: 'Il est en doing, rien à faire.' },
+    ]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const streamed = h.agentEvents.events
+      .filter((e) => e.eventType === 'content_block_delta' && (e.data as { type: string }).type === 'assistant')
+      .flatMap((e) => (e.data as { message: { content: Array<{ type: string; text?: string }> } }).message.content)
+      .filter((b) => b.type === 'text').map((b) => b.text).join('');
+    expect(h.comments.saved.map((c) => c.body)).toEqual(['Je regarde le ticket.\n\nIl est en doing, rien à faire.']);
+    expect(streamed).toBe(h.comments.saved[0]!.body);
+  });
+
+  it('a round that says nothing adds no separator, so stream and comment still match', async () => {
+    const h = harness([
+      { tools: [{ name: 'fleex_ticket_show', input: { id: 't1' } }] },
+      { text: 'Il est en doing.' },
+    ]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.comments.saved.map((c) => c.body)).toEqual(['Il est en doing.']);
+  });
+
   it('the system prompt starts with the Fleex environment and exposes action + fleex tools', async () => {
     const h = harness([{ text: 'ok' }]);
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });

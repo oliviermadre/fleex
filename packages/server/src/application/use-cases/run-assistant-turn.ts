@@ -53,6 +53,8 @@ export const ASSISTANT_MAX_ROUNDS = 8;
 /** Streamed text is coalesced into agent_events of about this size, or after this delay. */
 export const ASSISTANT_DELTA_CHUNK_CHARS = 60;
 export const ASSISTANT_DELTA_FLUSH_MS = 150;
+/** Between the text of two model rounds (around a tool call), in the stream and in the posted comment alike. */
+export const ROUND_SEPARATOR = '\n\n';
 
 /** Machine-readable tail of a mode-request comment; the web renders it as a CTA. Invisible in markdown. */
 export function modeRequestMarker(mode: string, threadId: string): string {
@@ -208,6 +210,10 @@ export class RunAssistantTurnUseCase {
 
     const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
     const usage = { inputTokens: 0, outputTokens: 0 };
+    // Everything the model says to the user this turn, one entry per round that
+    // spoke. The posted comment is exactly what was streamed: all rounds, joined
+    // by a blank line — the same separator the live deltas carry.
+    const said: string[] = [];
     let finalText = '';
     let concluded = false;
     let threadActionTaken = false;
@@ -216,8 +222,13 @@ export class RunAssistantTurnUseCase {
     try {
       for (let round = 0; round < ASSISTANT_MAX_ROUNDS; round++) {
         let roundText = '';
+        let separator = said.length > 0 ? ROUND_SEPARATOR : '';
         const res = await this.llm({ model, system, messages, tools }, (delta) => {
           roundText += delta;
+          if (separator && delta.trim()) {
+            onTextDelta(separator);
+            separator = '';
+          }
           onTextDelta(delta);
         });
         flushText();
@@ -227,11 +238,12 @@ export class RunAssistantTurnUseCase {
         messages.push({ role: 'assistant', content: res.content });
 
         const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-        if (toolUses.length === 0) {
-          finalText = roundText.trim() || res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map((b) => b.text).join('').trim();
-          break;
-        }
-        if (roundText.trim()) finalText = roundText.trim(); // text before a tool call: keep the last one
+        const spoken = roundText.trim() || (toolUses.length === 0
+          ? res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map((b) => b.text).join('').trim()
+          : '');
+        if (spoken) said.push(spoken);
+        finalText = said.join(ROUND_SEPARATOR);
+        if (toolUses.length === 0) break;
 
         const results: Anthropic.ToolResultBlockParam[] = [];
         for (const call of toolUses) {
