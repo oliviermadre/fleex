@@ -38,7 +38,7 @@ function ticket(id: string, displayId: number, title: string): Ticket {
     id, boardId: 'b1', displayId, title, description: '', status: 'doing', priority: 'high', type: null, position: 0,
     tags: [], links: [], blocked: false, favorite: false, dueDate: null, assignee: null, agentClaimedAt: null,
     githubMetadata: null, archivedAt: null, firstDoingAt: null, statusChangedAt: '2026-09-28T08:00:00Z',
-    conversationMode: 'talk', modelOverride: null, effortOverride: null, fastMode: false,
+    conversationMode: 'talk', modelOverride: null, effortOverride: null, fastMode: false, assistantPersonaId: null,
     createdAt: '2026-09-28T08:00:00Z', updatedAt: '2026-09-28T08:00:00Z',
   } as Ticket;
 }
