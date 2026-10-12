@@ -15,7 +15,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useWorkStore, excludedBy, type QueueFilterKey, type QueueGroupBy } from '../../stores/workStore';
-import { partitionQueue, idleActivitySource, threadActivityDetail, type QueueItem } from './selectors';
+import { partitionQueue, idleActivitySource, threadActivityDetail, threadTargetLabel, type QueueItem } from './selectors';
 import { useThreadStore } from '../../stores/threadStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
@@ -261,7 +261,7 @@ export function useWorkQueue(): WorkQueueModel {
       blocked: t.blocked,
       activity,
       activityDetail:
-        threadActivityDetail(threadsByTicket[t.id] ?? [], (th) => personas.find((p) => p.id === th.personaId)?.displayName ?? th.personaName) ??
+        threadActivityDetail(threadsByTicket[t.id] ?? [], (th) => threadTargetLabel(th, personas.find((p) => p.id === th.personaId)?.displayName)) ??
         detailByTicket[t.id] ?? null,
       since: toMs(sinceByTicket[t.id]),
       lastActivityAt: toMs(idleActivitySource(t, lastActivityAtByTicket[t.id])),

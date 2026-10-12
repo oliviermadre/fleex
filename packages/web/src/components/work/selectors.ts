@@ -320,6 +320,21 @@ export function lastAgentQuestion(turns: readonly TicketComment[]): { comment: T
   return null;
 }
 
+const TARGET_KIND: Record<Exclude<AgentThread['targetType'], 'agent'>, string> = {
+  skill: 'Skill', panel: 'Panel', workflow: 'Workflow',
+};
+
+/**
+ * What a thread delegates to, as the UI names it: the persona's display name,
+ * or `Skill · lint`, `Panel · leadership`, `Workflow · review` — a skill must
+ * not read as a persona. `personaDisplayName` is looked up by the caller (it
+ * only exists for persona threads).
+ */
+export function threadTargetLabel(thread: AgentThread, personaDisplayName?: string | null): string {
+  if (thread.targetType === 'agent' || !thread.targetType) return personaDisplayName ?? thread.personaName;
+  return `${TARGET_KIND[thread.targetType]} · ${thread.personaName}`;
+}
+
 /**
  * Queue-row label while a thread runs: `<persona> · in thread with assistant`.
  * Null when no thread is running (the regular activity detail applies).
