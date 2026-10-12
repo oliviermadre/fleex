@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAssistantOutput, renderQuestion, buildAssistantSystemPrompt } from '../../src/application/assistant/assistant-protocol.js';
+import { parseAssistantOutput, renderQuestion, assistantQuestions, buildAssistantSystemPrompt } from '../../src/application/assistant/assistant-protocol.js';
 
 describe('parseAssistantOutput', () => {
   it('accepts a structured reply', () => {
@@ -25,10 +25,21 @@ describe('parseAssistantOutput', () => {
 });
 
 describe('renderQuestion', () => {
-  it('renders the bullet list parseInlineOptions understands', () => {
+  it('restates the question and its options in the body, so the comment reads without buttons', () => {
     expect(renderQuestion({ text: 'Push it?', options: ['Push it', 'Hold'] })).toBe('\n\nPush it?\n- Push it\n- Hold');
     expect(renderQuestion(null)).toBe('');
     expect(renderQuestion({ text: 'x', options: ['only one'] })).toBe('');
+  });
+});
+
+describe('assistantQuestions', () => {
+  it('declares the question so the UI renders one button per option (buttons are never parsed from the body)', () => {
+    expect(assistantQuestions({ text: 'Push it?', options: ['Push it', 'Hold'] })).toEqual([{ prompt: 'Push it?', options: ['Push it', 'Hold'] }]);
+  });
+
+  it('declares nothing when there is no closed choice to offer', () => {
+    expect(assistantQuestions(null)).toBeNull();
+    expect(assistantQuestions({ text: 'x', options: ['only one'] })).toBeNull();
   });
 });
 
