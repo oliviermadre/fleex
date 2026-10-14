@@ -4,9 +4,15 @@
  * queue (left), the conversation / new-task center with its own top bar, the
  * one-at-a-time right tool window with its tool strip, and the status bar.
  *
- * Layout (SPEC §1): the full-height QUEUE 300px, then a column holding the top
- * bar above CENTER minmax(0,1fr) · RIGHT PANEL (toggle) · TOOL STRIP 60px and
- * the bottom drawer — shell (⌘J) or Timeline (⌥T), one at a time. The status bar spans the whole width, underneath.
+ * Layout (SPEC §1), a 3×3 grid:
+ *
+ *   QUEUE | TOP BAR ───────────────────────────────
+ *   QUEUE | CENTER · RIGHT PANEL (toggle) | TOOL STRIP
+ *   BOTTOM DRAWER ────────────────────────| TOOL STRIP
+ *
+ * The bottom drawer — shell (⌘J) or Timeline (⌥T), one at a time — runs under
+ * the queue too, so it spans everything between the nav rail and the tool
+ * strip. The status bar spans the whole width, underneath.
  */
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
@@ -103,52 +109,62 @@ export function WorkView() {
     // here cut the tool strip and the bottom of every column off on small
     // windows. The center shrinks instead; the side columns scroll on their own.
     <div className="flex h-full min-h-0 w-full flex-col bg-[var(--theme-bg-base)] text-[var(--theme-text-primary)]">
-      <div className="flex min-h-0 flex-1">
-        {/* The queue runs the full height, so the top bar starts to its right. */}
-        {queueCollapsed ? (
-          <CollapsedQueueRail counts={queue.counts} />
-        ) : (
-          <WorkQueue queue={queue} onOpenExecution={openExecution} />
-        )}
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <WorkTopBar queue={queue} />
-
-          <div className="flex min-h-0 flex-1">
-            {/* An expanded browser takes the whole center (wide pages need it) — only
-                where the panel itself renders, so the center never goes blank. */}
-            {!(browserTakesCenter && view === 'task' && selectedTask) && (
-              <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
-                {view === 'new' ? (
-                  <NewTask />
-                ) : codeMode && selectedTask ? (
-                  <CodeEditor ticketId={selectedTask.id} />
-                ) : shellMode && selectedTask ? (
-                  <ShellSurface key={selectedTask.id} ticketId={selectedTask.id} />
-                ) : workflowMode && selectedTask && hasWorkflowRuns ? (
-                  <TicketWorkflowTab ticketId={selectedTask.id} />
-                ) : (
-                  <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
-                )}
-              </main>
-            )}
-
-            {view === 'task' && rightPanel && selectedTask && (
-              <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
-            )}
-
-            {view === 'task' && <ToolStrip task={selectedTask} delivCount={deliverables.length} />}
-          </div>
-
-          {/* Shell drawer (⌘J) — under the working area, beside the queue (SPEC §7). */}
-          {view === 'task' && selectedTask && shellOpen && !shellMode && (
-            <ShellDrawer key={selectedTask.id} ticketId={selectedTask.id} />
-          )}
-          {/* Timeline drawer (⌥T) — same slot; the store never lets both open. */}
-          {view === 'task' && selectedTask && timelineOpen && (
-            <TimelineDrawer key={selectedTask.id} task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+      <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto]">
+        {/* The queue runs down to the bottom drawer, so the top bar starts to its right. */}
+        <div className="col-start-1 row-span-2 row-start-1 flex min-h-0">
+          {queueCollapsed ? (
+            <CollapsedQueueRail counts={queue.counts} />
+          ) : (
+            <WorkQueue queue={queue} onOpenExecution={openExecution} />
           )}
         </div>
+
+        <div className="col-span-2 col-start-2 row-start-1 min-w-0">
+          <WorkTopBar queue={queue} />
+        </div>
+
+        <div className="col-start-2 row-start-2 flex min-h-0 min-w-0">
+          {/* An expanded browser takes the whole center (wide pages need it) — only
+              where the panel itself renders, so the center never goes blank. */}
+          {!(browserTakesCenter && view === 'task' && selectedTask) && (
+            <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
+              {view === 'new' ? (
+                <NewTask />
+              ) : codeMode && selectedTask ? (
+                <CodeEditor ticketId={selectedTask.id} />
+              ) : shellMode && selectedTask ? (
+                <ShellSurface key={selectedTask.id} ticketId={selectedTask.id} />
+              ) : workflowMode && selectedTask && hasWorkflowRuns ? (
+                <TicketWorkflowTab ticketId={selectedTask.id} />
+              ) : (
+                <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+              )}
+            </main>
+          )}
+
+          {view === 'task' && rightPanel && selectedTask && (
+            <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
+          )}
+        </div>
+
+        {/* The tool strip runs down beside the bottom drawer: its Shell / Timeline
+            buttons stay next to the band they toggle. */}
+        {view === 'task' && (
+          <div className="col-start-3 row-span-2 row-start-2 flex min-h-0">
+            <ToolStrip task={selectedTask} delivCount={deliverables.length} />
+          </div>
+        )}
+
+        {/* Bottom drawer — Shell (⌘J) or Timeline (⌥T), the store never lets both
+            open. Full width between the nav rail and the tool strip, under the queue. */}
+        {view === 'task' && selectedTask && ((shellOpen && !shellMode) || timelineOpen) && (
+          <div className="col-span-2 col-start-1 row-start-3 flex min-w-0 flex-col" data-testid="work-bottom-drawer">
+            {shellOpen && !shellMode && <ShellDrawer key={selectedTask.id} ticketId={selectedTask.id} />}
+            {timelineOpen && (
+              <TimelineDrawer key={selectedTask.id} task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+            )}
+          </div>
+        )}
       </div>
 
       {view === 'task' && <WorkStatusBar task={selectedTask} />}
