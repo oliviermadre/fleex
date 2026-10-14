@@ -143,7 +143,7 @@ html, body {
   pointer-events: none;
 }
 
-/* Floating "Action terminal": the scratchpad's liquid glass, as a bottom-right card */
+/* Floating "Action terminal": the scratchpad's liquid glass, as a movable, resizable window */
 .action-terminal-panel {
   background:
     linear-gradient(
@@ -175,21 +175,9 @@ html, body {
   }
 }
 
-/* Opened under its action button: drops down from it, like the bar's popovers. */
-.action-terminal-panel--anchored {
-  animation-name: action-terminal-drop;
-  transform-origin: top center;
-}
-
-@keyframes action-terminal-drop {
-  from {
-    transform: translateY(-6px) scale(0.98);
-    opacity: 0.6;
-  }
-  to {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
+/* Dragged or resized: the panel follows the mouse, no easing. */
+.action-terminal-panel--moving {
+  transition: none;
 }
 
 /* Textarea scrollbar inside scratchpad */
