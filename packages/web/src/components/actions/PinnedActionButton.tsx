@@ -8,7 +8,6 @@ import { useUIStore } from '../../stores/uiStore';
 import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
 import { Tooltip } from '../ui/Tooltip';
 import { renderIcon } from '../sidebar/PinnedIcons';
-import { setTerminalAnchor } from './terminalAnchor';
 import { STATUS_LABEL, compactBadge, formatAgo, runDuration, statusDotClass, statusTextClass, truncate } from './actionStatus';
 
 const ICON_BTN =
@@ -118,8 +117,6 @@ export function PinnedActionButton({
               menu.openAt(rect.left, rect.bottom + 4);
               return;
             }
-            // The terminal panel, if this click opens one, hangs under this button.
-            setTerminalAnchor(e.currentTarget);
             onRun();
           }}
           onContextMenu={(e) => {

@@ -2,11 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 
 export type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
 
-/** Clamp position so the panel stays fully within the viewport */
-export function clampPosition(x: number, y: number, w: number, h: number): { x: number; y: number } {
+/** Clamp position so the panel stays fully within the viewport (below `minY`, e.g. a title bar drawn over the page) */
+export function clampPosition(x: number, y: number, w: number, h: number, minY = 0): { x: number; y: number } {
   return {
     x: Math.max(0, Math.min(x, window.innerWidth - w)),
-    y: Math.max(0, Math.min(y, window.innerHeight - h)),
+    y: Math.max(minY, Math.min(y, window.innerHeight - h)),
   };
 }
 
@@ -35,13 +35,15 @@ export function useFloatingResize(options: {
   initialOffset?: number;
   /** Where to open instead of centred (e.g. under the button that opened the panel). */
   initialPosition?: { x: number; y: number };
+  /** The panel never goes above this (default 0). */
+  minY?: number;
   onResizeMove?: () => void;
   onResizeEnd?: () => void;
 }) {
-  const { minWidth, minHeight, defaultWidth, defaultHeight, initialOffset = 0, initialPosition, onResizeMove, onResizeEnd } = options;
+  const { minWidth, minHeight, defaultWidth, defaultHeight, initialOffset = 0, initialPosition, minY = 0, onResizeMove, onResizeEnd } = options;
 
   const [position, setPosition] = useState<{ x: number; y: number } | null>(
-    initialPosition ? clampPosition(initialPosition.x, initialPosition.y, defaultWidth, defaultHeight) : null,
+    initialPosition ? clampPosition(initialPosition.x, initialPosition.y, defaultWidth, defaultHeight, minY) : null,
   );
   const [size, setSize] = useState({ width: defaultWidth, height: defaultHeight });
   const resizeRef = useRef({
@@ -60,19 +62,19 @@ export function useFloatingResize(options: {
     if (position !== null) return;
     const rawX = (window.innerWidth - defaultWidth) / 2 + initialOffset;
     const rawY = (window.innerHeight - defaultHeight) / 2 - 40 + initialOffset;
-    setPosition(clampPosition(rawX, rawY, defaultWidth, defaultHeight));
-  }, [position, initialOffset, defaultWidth, defaultHeight]);
+    setPosition(clampPosition(rawX, rawY, defaultWidth, defaultHeight, minY));
+  }, [position, initialOffset, defaultWidth, defaultHeight, minY]);
 
   const effectivePos = position ?? { x: 0, y: 0 };
 
   // Re-clamp when window resizes
   useEffect(() => {
     function handleWindowResize() {
-      setPosition((prev) => prev ? clampPosition(prev.x, prev.y, size.width, size.height) : prev);
+      setPosition((prev) => prev ? clampPosition(prev.x, prev.y, size.width, size.height, minY) : prev);
     }
     window.addEventListener('resize', handleWindowResize);
     return () => window.removeEventListener('resize', handleWindowResize);
-  }, [size.width, size.height]);
+  }, [size.width, size.height, minY]);
 
   const handleResizeMouseDown = useCallback((direction: ResizeDirection) => (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -108,9 +110,11 @@ export function useFloatingResize(options: {
       if (MOVES_TOP.has(d)) newH = Math.max(minHeight, ref.startH - dy);
       else if (MOVES_BOTTOM.has(d)) newH = Math.max(minHeight, ref.startH + dy);
 
-      // Cap to viewport
-      newW = Math.min(newW, window.innerWidth);
-      newH = Math.min(newH, window.innerHeight);
+      // Cap to viewport: an edge pulled past it stops there, the opposite edge stays put.
+      if (MOVES_LEFT.has(d)) newW = Math.min(newW, ref.startPosX + ref.startW);
+      else if (MOVES_RIGHT.has(d)) newW = Math.min(newW, window.innerWidth - ref.startPosX);
+      if (MOVES_TOP.has(d)) newH = Math.min(newH, ref.startPosY + ref.startH - minY);
+      else if (MOVES_BOTTOM.has(d)) newH = Math.min(newH, window.innerHeight - ref.startPosY);
 
       // Position shifts for left/top directions
       let newX = ref.startPosX;
@@ -119,7 +123,7 @@ export function useFloatingResize(options: {
       if (MOVES_TOP.has(d)) newY = ref.startPosY + (ref.startH - newH);
 
       setSize({ width: newW, height: newH });
-      setPosition(clampPosition(newX, newY, newW, newH));
+      setPosition(clampPosition(newX, newY, newW, newH, minY));
       onResizeMove?.();
     };
 
@@ -133,7 +137,7 @@ export function useFloatingResize(options: {
 
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
-  }, [size, effectivePos, minWidth, minHeight, onResizeMove, onResizeEnd]);
+  }, [size, effectivePos, minWidth, minHeight, minY, onResizeMove, onResizeEnd]);
 
   return { size, setSize, position, setPosition, effectivePos, handleResizeMouseDown };
 }

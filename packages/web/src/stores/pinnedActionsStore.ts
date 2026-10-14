@@ -39,7 +39,7 @@ export interface LiveOutput {
   floorSeq: number;
 }
 
-/** One tab of the floating "Action terminal" panel — one per source. */
+/** Where the floating "Action terminal" panel sits — the last place and size the user gave it. */
 export interface TerminalGeometry {
   x: number;
   y: number;
@@ -47,6 +47,7 @@ export interface TerminalGeometry {
   height: number;
 }
 
+/** One tab of the floating "Action terminal" panel — one per action command. */
 export interface TerminalTab {
   /** `runSlotKey(sourceId, slot)`: one tab per action command, so two rules of one action get two terminals. */
   key: string;
@@ -126,6 +127,27 @@ function clearStartToast(runId: string): void {
 }
 
 /** Test seam: forget pending start toasts and run origins. */
+export const TERMINAL_GEOMETRY_KEY = 'fleex_action_terminal_geometry';
+
+function readTerminalGeometry(): TerminalGeometry | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const g = JSON.parse(localStorage.getItem(TERMINAL_GEOMETRY_KEY) ?? 'null') as TerminalGeometry | null;
+    return g && [g.x, g.y, g.width, g.height].every(Number.isFinite) ? g : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeTerminalGeometry(geometry: TerminalGeometry): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(TERMINAL_GEOMETRY_KEY, JSON.stringify(geometry));
+  } catch {
+    /* quota / private mode — the geometry lives in memory only */
+  }
+}
+
 export function resetPinnedActionsTransient(): void {
   for (const id of [...startToasts.keys()]) clearStartToast(id);
   runRequests.clear();
@@ -152,7 +174,7 @@ interface PinnedActionsState {
    * the action again brings it back where it was. Closing a tab is what ends a session.
    */
   terminalMinimized: boolean;
-  /** Where the user resized the panel to; kept while any terminal is open. */
+  /** The panel's last place and size (saved in this browser); null until it has been opened once. */
   terminalGeometry: TerminalGeometry | null;
 
   loadStatuses: () => Promise<void>;
@@ -250,7 +272,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
   activeTerminal: null,
   terminalFocusNonce: 0,
   terminalMinimized: false,
-  terminalGeometry: null,
+  terminalGeometry: readTerminalGeometry(),
 
   loadStatuses: async () => {
     try {
@@ -428,7 +450,10 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
 
   minimizeTerminal: () => set({ terminalMinimized: true }),
 
-  setTerminalGeometry: (terminalGeometry) => set({ terminalGeometry }),
+  setTerminalGeometry: (terminalGeometry) => {
+    writeTerminalGeometry(terminalGeometry);
+    set({ terminalGeometry });
+  },
 
   closeTerminal: (key) => {
     const tab = get().terminals.find((t) => t.key === key);
@@ -438,7 +463,7 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
     set((s) => {
       const terminals = s.terminals.filter((t) => t.key !== key);
       const activeTerminal = s.activeTerminal === key ? terminals.at(-1)?.key ?? null : s.activeTerminal;
-      return { terminals, activeTerminal, ...(terminals.length === 0 ? { terminalMinimized: false, terminalGeometry: null } : {}) };
+      return { terminals, activeTerminal, ...(terminals.length === 0 ? { terminalMinimized: false } : {}) };
     });
   },
 
