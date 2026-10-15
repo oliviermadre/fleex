@@ -10,12 +10,14 @@ function waitingMention(id: string, agent: string): TicketMentionEntity {
   return m;
 }
 
-function makeUseCase(waiting: TicketMentionEntity[]) {
+function makeUseCase(waiting: TicketMentionEntity[], threadOf: Record<string, string> = {}) {
   const woken: string[] = [];
   const mentionStore = { getWaitingByTicket: async () => waiting } as never;
   const executeAgent = { wakeUp: async (m: TicketMentionEntity) => { woken.push(m.targetAgent); } } as never;
   const logger = { info() {}, warn() {}, error() {}, debug() {} } as never;
-  return { useCase: new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger), woken };
+  // `c-<mentionId>` → the comment that created the mention, in a thread or not.
+  const commentStore = { getById: async (id: string) => ({ threadId: threadOf[id.replace(/^c-/, '')] ?? null }) } as never;
+  return { useCase: new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger, commentStore), woken };
 }
 
 describe('WakeWaitingAgentsUseCase — exclusion', () => {
@@ -39,5 +41,40 @@ describe('WakeWaitingAgentsUseCase — exclusion', () => {
     ]);
     await useCase.execute('T', ['A', 'C']);
     expect(woken).toEqual(['B']);
+  });
+});
+
+describe('WakeWaitingAgentsUseCase — assistant thread scope', () => {
+  it('a main-stream comment wakes main-stream agents only; agents parked in a thread stay parked', async () => {
+    // The user's message goes to the assistant, who relays to its thread agents itself.
+    const { useCase, woken } = makeUseCase([waitingMention('m1', 'A'), waitingMention('m2', 'B')], { m2: 'th1' });
+    await useCase.execute('T', [], { threadId: null });
+    expect(woken).toEqual(['A']);
+  });
+
+  it('no scope given behaves as the main stream (deliverable created, legacy callers)', async () => {
+    const { useCase, woken } = makeUseCase([waitingMention('m1', 'A'), waitingMention('m2', 'B')], { m2: 'th1' });
+    await useCase.execute('T');
+    expect(woken).toEqual(['A']);
+  });
+
+  it('a turn posted inside a thread wakes that thread\'s agent only', async () => {
+    const { useCase, woken } = makeUseCase(
+      [waitingMention('m1', 'A'), waitingMention('m2', 'B'), waitingMention('m3', 'C')],
+      { m2: 'th1', m3: 'th2' },
+    );
+    await useCase.execute('T', [], { threadId: 'th1' });
+    expect(woken).toEqual(['B']);
+  });
+
+  it('without a comment store (older wiring) every waiting agent still wakes', async () => {
+    const woken: string[] = [];
+    const uc = new WakeWaitingAgentsUseCase(
+      { getWaitingByTicket: async () => [waitingMention('m1', 'A'), waitingMention('m2', 'B')] } as never,
+      { wakeUp: async (m: TicketMentionEntity) => { woken.push(m.targetAgent); } } as never,
+      { info() {}, warn() {}, error() {}, debug() {} } as never,
+    );
+    await uc.execute('T', [], { threadId: null });
+    expect(woken.sort()).toEqual(['A', 'B']);
   });
 });
