@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { fromMarkdown } from 'mdast-util-from-markdown';
 import { getProxiedImageSrc } from '../../lib/image';
 
 // ── Lightbox (shared by thumbnail & placeholder) ─────────────────────────────
@@ -143,40 +144,56 @@ export function ImageGalleryStrip({ images }: ImageGalleryStripProps) {
 
 // ── Markdown image extraction utility ────────────────────────────────────────
 
-const MD_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g;
-/** Fenced code blocks (``` or ~~~) and single-line inline code spans. */
-const CODE_RE = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/g;
+/** The few mdast fields the extraction reads (avoids depending on @types/mdast). */
+interface MdNode {
+  type: string;
+  alt?: string | null;
+  url?: string;
+  position?: { start: { offset?: number }; end: { offset?: number } };
+  children?: MdNode[];
+}
+
+/** Image nodes of the tree, in document order. Code spans/blocks hold text, never image nodes. */
+function collectImages(node: MdNode, out: MdNode[]): void {
+  if (node.type === 'image') {
+    out.push(node);
+    return;
+  }
+  for (const child of node.children ?? []) collectImages(child, out);
+}
 
 /**
  * Extracts all markdown images from content.
  * Returns the image list (with proxied src) and the cleaned markdown
  * where images are replaced with placeholder link markers.
+ *
+ * The markdown is parsed (CommonMark) rather than matched by regex: whether a
+ * `![alt](url)` is an image or just text quoted in a code span, a fenced or indented
+ * code block, or escaped, depends on the whole document (e.g. a lone ``` in prose does
+ * not open a span, backtick runs only pair with a run of the same length). Only real
+ * image nodes are rewritten, by their source range.
  */
 export function extractMarkdownImages(markdown: string): {
   images: MarkdownImage[];
   cleaned: string;
 } {
   const images: MarkdownImage[] = [];
-  let idx = 0;
+  if (!markdown.includes('![')) return { images, cleaned: markdown };
 
-  // Image syntax quoted in a code span or a code block is text to show, not an image
-  // to load: split the markdown on code and only rewrite the parts outside of it.
-  // (The capture group keeps the code parts, at the odd indexes.)
-  const cleaned = markdown
-    .split(CODE_RE)
-    .map((part, i) =>
-      i % 2 === 1
-        ? part
-        : part.replace(MD_IMAGE_RE, (_match, alt: string, src: string) => {
-            const proxiedSrc = getProxiedImageSrc(src);
-            images.push({ src: proxiedSrc, alt: alt || '' });
-            const label = alt || `Image ${idx + 1}`;
-            const placeholder = `[🖼 ${label}](#fleex-img:${idx})`;
-            idx++;
-            return placeholder;
-          }),
-    )
-    .join('');
+  const nodes: MdNode[] = [];
+  collectImages(fromMarkdown(markdown) as unknown as MdNode, nodes);
 
-  return { images, cleaned };
+  let cleaned = '';
+  let cursor = 0;
+  for (const node of nodes) {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined || start < cursor) continue;
+    const alt = node.alt ?? '';
+    images.push({ src: getProxiedImageSrc(node.url ?? ''), alt });
+    const label = alt || `Image ${images.length}`;
+    cleaned += `${markdown.slice(cursor, start)}[🖼 ${label}](#fleex-img:${images.length - 1})`;
+    cursor = end;
+  }
+  return { images, cleaned: cleaned + markdown.slice(cursor) };
 }
