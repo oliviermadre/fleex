@@ -1,4 +1,4 @@
-import type { AgentThreadStatus, AgentThreadTargetType } from '@fleex/shared';
+import type { AgentThreadStatus, AgentThreadTargetType, AgentExecution } from '@fleex/shared';
 import { AgentThreadEntity } from '../../../domain/entities/agent-thread.entity.js';
 import type { ThreadStorePort } from '../../../application/ports/thread-store.port.js';
 import type { PgConnection } from './connection.js';
@@ -56,5 +56,70 @@ export class PgThreadStore implements ThreadStorePort {
        JSON.stringify(t.forwardedContext), t.status, t.currentMentionId, t.exchanges, t.summary,
        t.createdAt.toISOString(), t.updatedAt.toISOString(), t.concludedAt?.toISOString() ?? null, t.failures, t.targetType],
     );
+  }
+
+  async getRunsByThreadAndStatus(threadId: string, activeStatuses: string[]): Promise<AgentExecution[]> {
+    // Query path: thread → comments (by thread_id) → mentions (by comment_id) → executions (by mention_id)
+    const { rows } = await this.db.query(
+      `SELECT DISTINCT
+        e.execution_id as id,
+        e.persona_id as personaId,
+        e.ticket_id as ticketId,
+        e.mention_id as mentionId,
+        e.event_count as eventCount,
+        e.status,
+        e.started_at as startedAt,
+        e.completed_at as completedAt,
+        e.last_event_at as lastEventAt,
+        e.sdk_session_id as sdkSessionId,
+        e.model,
+        e.effective_mode as effectiveMode,
+        e.effort,
+        e.fast_mode as fast,
+        e.duration_ms as durationMs,
+        e.cost_usd as costUsd,
+        e.input_tokens as inputTokens,
+        e.output_tokens as outputTokens,
+        e.cache_read_tokens as cacheReadTokens,
+        e.cache_creation_tokens as cacheCreationTokens,
+        e.source,
+        e.comment_id as commentId,
+        e.deliverable_id as deliverableId,
+        e.auto_terminated_at_conclusion as autoTerminatedAtConclusion,
+        e.manually_terminated_by_user as manuallyTerminatedByUser
+      FROM agent_event_executions e
+      INNER JOIN mentions m ON e.mention_id = m.id
+      INNER JOIN comments c ON m.comment_id = c.id
+      WHERE c.thread_id = $1 AND e.status = ANY($2)`,
+      [threadId, activeStatuses],
+    );
+
+    return rows.map(row => ({
+      id: row.id,
+      personaId: row.personaId,
+      ticketId: row.ticketId,
+      mentionId: row.mentionId,
+      eventCount: row.eventCount,
+      status: row.status,
+      startedAt: row.startedAt,
+      completedAt: row.completedAt,
+      lastEventAt: row.lastEventAt,
+      sdkSessionId: row.sdkSessionId,
+      model: row.model,
+      effectiveMode: row.effectiveMode,
+      effort: row.effort,
+      fast: row.fast ? Boolean(row.fast) : null,
+      durationMs: row.durationMs,
+      costUsd: row.costUsd,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheReadTokens: row.cacheReadTokens,
+      cacheCreationTokens: row.cacheCreationTokens,
+      source: row.source,
+      commentId: row.commentId,
+      deliverableId: row.deliverableId,
+      autoTerminatedAtConclusion: row.autoTerminatedAtConclusion ? Boolean(row.autoTerminatedAtConclusion) : null,
+      manuallyTerminatedByUser: row.manuallyTerminatedByUser ? Boolean(row.manuallyTerminatedByUser) : null,
+    }));
   }
 }
