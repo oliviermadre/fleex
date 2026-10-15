@@ -103,4 +103,14 @@ export interface AgentEventStorePort {
   getExecutionsByPersona(personaId: string, limit?: number): Promise<AgentExecution[]>;
 
   getAllExecutions(): Promise<AgentExecution[]>;
+
+  /**
+   * Update multiple executions with a given status and flags (e.g., auto_terminated_at_conclusion).
+   * Used when concluding a thread to auto-terminate all its active runs.
+   */
+  updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void>;
 }

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 import { TicketNotFoundError } from '../../domain/errors.js';
 
-type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'config' | 'eventBus'>;
+type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'config' | 'eventBus' | 'agentEventStore'>;
 
 /**
  * Work view Phase 3: the assistant entry point and the thread read/write routes.
@@ -188,8 +188,26 @@ export function assistantThreadsRoutes(container: Deps) {
       const thread = await container.threadStore.getById(request.params.id);
       if (!thread) return reply.code(404).send({ error: 'Thread not found' });
       if (thread.isTerminal) return reply.code(409).send({ error: 'Thread is closed' });
+
+      // Auto-terminate all active runs associated with this thread
+      // Active statuses: running, idle, waiting (exclude already-terminal states)
+      const activeRuns = await container.threadStore.getRunsByThreadAndStatus(
+        thread.id,
+        ['running', 'idle', 'waiting']
+      );
+
+      if (activeRuns.length > 0) {
+        const runIds = activeRuns.map(r => r.id);
+        // Update all active runs with status=completed and flag auto_terminated_at_conclusion=true
+        await container.agentEventStore.updateExecutionsByIds(
+          runIds,
+          'completed',
+          { autoTerminatedAtConclusion: true }
+        );
+      }
+
       void container.runAssistantTurn.execute({ ticketId: thread.ticketId, trigger: { kind: 'conclude_request', threadId: thread.id } });
-      return reply.code(202).send({ accepted: true });
+      return reply.code(202).send({ accepted: true, runsAutoTerminated: activeRuns.length });
     });
   };
 }

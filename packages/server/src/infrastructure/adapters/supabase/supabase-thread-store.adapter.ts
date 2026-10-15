@@ -1,4 +1,4 @@
-import type { AgentThreadStatus, AgentThreadTargetType } from '@fleex/shared';
+import type { AgentThreadStatus, AgentThreadTargetType, AgentExecution } from '@fleex/shared';
 import { AgentThreadEntity } from '../../../domain/entities/agent-thread.entity.js';
 import type { ThreadStorePort } from '../../../application/ports/thread-store.port.js';
 import type { SupabaseConnection } from './connection.js';
@@ -60,5 +60,75 @@ export class SupabaseThreadStore implements ThreadStorePort {
       concluded_at: t.concludedAt?.toISOString() ?? null, target_type: t.targetType,
     });
     if (error) throw new Error(`SupabaseThreadStore.save failed: ${error.message}`);
+  }
+
+  async getRunsByThreadAndStatus(threadId: string, activeStatuses: string[]): Promise<AgentExecution[]> {
+    // Query path: thread → comments (by thread_id) → mentions (by comment_id) → executions (by mention_id)
+    const { data, error } = await this.conn.client
+      .from('agent_event_executions')
+      .select(`
+        execution_id, persona_id, ticket_id, mention_id, event_count, status,
+        started_at, completed_at, last_event_at, sdk_session_id, model,
+        effective_mode, effort, fast_mode, duration_ms, cost_usd,
+        input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+        source, comment_id, deliverable_id,
+        auto_terminated_at_conclusion, manually_terminated_by_user
+      `)
+      .in('mention_id',
+        await this.getThreadMentionIds(threadId)
+      )
+      .in('status', activeStatuses);
+
+    if (error) throw new Error(`SupabaseThreadStore.getRunsByThreadAndStatus failed: ${error.message}`);
+
+    return (data as any[]).map(row => ({
+      id: row.execution_id,
+      personaId: row.persona_id,
+      ticketId: row.ticket_id,
+      mentionId: row.mention_id,
+      eventCount: row.event_count,
+      status: row.status,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      lastEventAt: row.last_event_at,
+      sdkSessionId: row.sdk_session_id,
+      model: row.model,
+      effectiveMode: row.effective_mode,
+      effort: row.effort,
+      fast: row.fast_mode ? Boolean(row.fast_mode) : null,
+      durationMs: row.duration_ms,
+      costUsd: row.cost_usd,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cacheReadTokens: row.cache_read_tokens,
+      cacheCreationTokens: row.cache_creation_tokens,
+      source: row.source,
+      commentId: row.comment_id,
+      deliverableId: row.deliverable_id,
+      autoTerminatedAtConclusion: row.auto_terminated_at_conclusion ? Boolean(row.auto_terminated_at_conclusion) : null,
+      manuallyTerminatedByUser: row.manually_terminated_by_user ? Boolean(row.manually_terminated_by_user) : null,
+    }));
+  }
+
+  private async getThreadMentionIds(threadId: string): Promise<string[]> {
+    const { data, error } = await this.conn.client
+      .from('mentions')
+      .select('id')
+      .in('comment_id',
+        await this.getThreadCommentIds(threadId)
+      );
+
+    if (error) throw new Error(`SupabaseThreadStore.getThreadMentionIds failed: ${error.message}`);
+    return (data as any[]).map(m => m.id);
+  }
+
+  private async getThreadCommentIds(threadId: string): Promise<string[]> {
+    const { data, error } = await this.conn.client
+      .from('comments')
+      .select('id')
+      .eq('thread_id', threadId);
+
+    if (error) throw new Error(`SupabaseThreadStore.getThreadCommentIds failed: ${error.message}`);
+    return (data as any[]).map(c => c.id);
   }
 }

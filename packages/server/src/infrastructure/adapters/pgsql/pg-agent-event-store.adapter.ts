@@ -206,6 +206,41 @@ export class PgAgentEventStore implements AgentEventStorePort {
     }
     return result;
   }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+
+    // Build the UPDATE statement dynamically based on which flags are set
+    let updateParts = ['status = $1', 'completed_at = $2'];
+    const updateValues: any[] = [status, now];
+    let paramIdx = 3;
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateParts.push(`auto_terminated_at_conclusion = $${paramIdx}`);
+      updateValues.push(flags.autoTerminatedAtConclusion);
+      paramIdx++;
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateParts.push(`manually_terminated_by_user = $${paramIdx}`);
+      updateValues.push(flags.manuallyTerminatedByUser);
+      paramIdx++;
+    }
+
+    // Build the WHERE IN clause with parameters
+    const inPlaceholders = executionIds.map((_, i) => `$${paramIdx + i}`).join(',');
+    updateValues.push(...executionIds);
+
+    await this.db.query(
+      `UPDATE agent_event_executions SET ${updateParts.join(', ')} WHERE execution_id IN (${inPlaceholders})`,
+      updateValues,
+    );
+  }
 }
 
 function rowToExecution(row: Record<string, unknown>): AgentExecution {
