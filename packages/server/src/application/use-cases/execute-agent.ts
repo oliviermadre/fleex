@@ -18,6 +18,7 @@ import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { questionsToKeep } from '../utils/agent-questions.js';
 import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
+import { resolveExecutionConfig } from '../utils/resolve-execution-config.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult, isEmptyRun } from '../utils/stream-sdk-query.js';
 import { meterSdkRun, type CostBasis, type SdkSessionBaseline, type SdkUsageTotals } from '../utils/sdk-run-usage.js';
 
@@ -191,6 +192,8 @@ ${typeLines}
     "Should the bundle target Apple silicon only?"). Do NOT write a status report about
     having asked (e.g. "I posed a question to @nas", "Awaiting reply from X") — the system
     does not post any separate question; only what you write in \`comment\` reaches the reader.
+    \`"waiting_for_info"\` is ONLY for a question you cannot answer yourself. It never means
+    "work in progress": your execution ENDS the moment you return this output.
     **Rule:** whenever a question in your \`comment\` offers alternatives — "(a) … (b) …",
     "1) … 2) …", "X or Y?", "do you validate?" — you MUST declare them in \`questions\` too,
     so the human gets one button per answer instead of having to type it.
@@ -201,6 +204,10 @@ ${typeLines}
   you are not waiting (\`"resolved"\`) or when every question is open ("what name for…?").
   \`comment\` must stay complete and readable without the buttons — restate the questions in it —
   because the CLI, memory and exports only see the text.
+- **No background work**: never launch a sub-agent or a task in the background (Agent tool with
+  \`run_in_background\`, \`&\` in Bash, "I'll report when it completes"). Everything still running
+  when you return is killed and nobody collects its result. Do the search or the work yourself,
+  synchronously, and return only once you hold the result.
 - Both deliverable and comment can be non-null, or both null (silent completion — only valid with "resolved").
 
 ## CRITICAL — Handoff Rules (ENFORCED BY THE SYSTEM)
@@ -804,27 +811,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     persona: AgentPersonaEntity,
     ticket: TicketEntity | null,
   ): { mode: MentionExecutionMode; model: string; effort?: EffortLevel; fast: boolean } {
-    const conversationMode: MentionExecutionMode = ticket?.conversationMode ?? 'plan';
-    const mode: MentionExecutionMode = persona.executionMode === 'message'
-      ? 'talk'
-      : conversationMode;
-
-    const model = ticket?.modelOverride ?? persona.model;
-    const caps = inferModelCapabilities(model);
-
-    const requestedEffort = ticket?.effortOverride ?? null;
-    const effort = resolveEffortLevel(model, requestedEffort);
-    if (requestedEffort && effort !== requestedEffort) {
-      this.logger.warn('Effort override not supported by model — adjusted', {
-        model,
-        requested: requestedEffort,
-        applied: effort ?? 'none',
-        supported: caps.effortLevels,
-      });
-    }
-    const fast = caps.supportsFastMode && (ticket?.fastMode ?? false);
-
-    return { mode, model, effort, fast };
+    return resolveExecutionConfig(persona, ticket, this.logger);
   }
 
   private async executeForMention(
@@ -1706,12 +1693,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const announceAuthor = opts?.workflowContext
       ? `workflow:${opts.workflowContext.workflowName} → ${opts.workflowContext.stepName}`
       : (persona.displayName || persona.name);
+    // Launched from a thread turn: the run (announce, then its replies) stays in that thread.
+    const triggerCommentId = opts?.mentionId ? (await this.mentionStore.getById(opts.mentionId))?.commentId : undefined;
     const { comment: announceComment } = await this.postComment.execute({
       ticketId,
       body: announceBody,
       authorName: announceAuthor,
       authorType: 'agent',
       humanMentionNames: [],
+      ...(triggerCommentId ? { threadOf: triggerCommentId } : {}),
     });
 
     if (this.eventBus) {
@@ -2039,6 +2029,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
               title: structured.deliverable.title,
               content: structured.deliverable.markdown,
               status: structured.deliverable.status,
+              // Same link as a persona's deliverable: whoever reads the mention (a thread) finds it.
+              ...(opts?.mentionId ? { mentionId: opts.mentionId } : {}),
             });
             resultDeliverableId = deliverable.id;
 
@@ -2993,8 +2985,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       sourceId: mention.commentId,
       ticketId: context.ticket.id,
     };
+    // trackResolved, not track: the request is where a screenshot usually sits, and
+    // as plain text the agent gets a dead `/api/files/<uuid>` link instead of the image.
     if (isWakeUp) {
-      composer.track(
+      await composer.trackResolved(
         taskDescriptor,
         `\n---\n\n**Resuming your task.** You paused waiting for input. Review the latest activity on the ticket: `
         + `if it answers what you were waiting for, finish your task and resolve; if it redirects you, follow the new direction. `
@@ -3003,7 +2997,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         + (ownComment ? `\n\n**Your original request** (from ${mention.sourceAgent}):\n> ${ownComment.replace(/\n/g, '\n> ')}` : ''),
       );
     } else {
-      composer.track(
+      await composer.trackResolved(
         taskDescriptor,
         `\n---\n\n**Your task** — respond to this request from ${mention.sourceAgent}:\n`
         + (ownComment ? `> ${ownComment.replace(/\n/g, '\n> ')}\n\n` : `(comment ${mention.commentId})\n\n`)

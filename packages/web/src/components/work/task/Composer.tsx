@@ -49,9 +49,11 @@ interface Props {
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
   /** Show ticket-browser element chips and send them with the message (Work view). */
   withElements?: boolean;
+  /** Set when the last post had to bypass the assistant (none configured). */
+  assistantMissing?: boolean;
 }
 
-export function Composer({ ticketId, value, onChange, disabled, posting, onSend, placeholder, submitOn = 'enter', showExecBar = true, showSend = true, bare, textareaRef, withElements }: Props) {
+export function Composer({ ticketId, value, onChange, disabled, posting, onSend, placeholder, submitOn = 'enter', showExecBar = true, showSend = true, bare, textareaRef, withElements, assistantMissing = false }: Props) {
   const ownRef = useRef<HTMLTextAreaElement>(null);
   const ref = textareaRef ?? ownRef;
 
@@ -125,6 +127,11 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend,
       {...fileUpload.dragProps}
     >
       {withElements && <ElementChips ticketId={ticketId} />}
+      {assistantMissing && (
+        <div className="mb-2 rounded-md border border-[var(--tint-yellow-border)] bg-[var(--tint-yellow-bg)] px-2.5 py-1.5 text-[11.5px] text-[var(--tint-yellow-text)]">
+          No assistant configured — pick one below (◆) or set a default in Settings. Your message was posted as a plain comment.
+        </div>
+      )}
       <MarkdownEditor
         variant="composer"
         surfaceKind="comment"
@@ -182,7 +189,7 @@ export function Composer({ ticketId, value, onChange, disabled, posting, onSend,
         }
         actions={
           <>
-            {showExecBar && <ComposerExecBar exec={exec} />}
+            {showExecBar && <ComposerExecBar exec={exec} assistantPicker={!bare} />}
             {submitOn !== 'none' && (
               <span className="ml-auto text-[11px] text-[var(--theme-text-faint)]">{submitOn === 'mod-enter' ? '⌘⏎ envoyer' : '⇧⏎ newline'}</span>
             )}

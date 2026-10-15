@@ -1,4 +1,4 @@
-import type { AgentQuestion, CommentVisibility } from '@fleex/shared';
+import type { AgentQuestion, CommentVisibility, CommentAuthorType } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
 import type { CommentSummary, CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -14,6 +14,7 @@ interface CommentRow {
   mentions: string;
   parent_id: string | null;
   questions: string | null;
+  thread_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -71,10 +72,10 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO comments
         (id, ticket_id, author_type, author_name, body, visibility,
-         private_recipients, mentions, parent_id, questions, created_at, updated_at)
+         private_recipients, mentions, parent_id, questions, thread_id, created_at, updated_at)
       VALUES
         (@id, @ticket_id, @author_type, @author_name, @body, @visibility,
-         @private_recipients, @mentions, @parent_id, @questions, @created_at, @updated_at)
+         @private_recipients, @mentions, @parent_id, @questions, @thread_id, @created_at, @updated_at)
     `);
 
     stmt.run({
@@ -88,6 +89,7 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       mentions: JSON.stringify(comment.mentions),
       parent_id: comment.parentId,
       questions: comment.questions ? JSON.stringify(comment.questions) : null,
+      thread_id: comment.threadId,
       created_at: comment.createdAt.toISOString(),
       updated_at: comment.updatedAt.toISOString(),
     });
@@ -101,7 +103,7 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
     return new TicketCommentEntity(
       row.id,
       row.ticket_id,
-      row.author_type as 'user' | 'agent',
+      row.author_type as CommentAuthorType,
       row.author_name,
       row.body,
       row.visibility as CommentVisibility,
@@ -111,6 +113,7 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       new Date(row.created_at),
       new Date(row.updated_at),
       parseQuestions(row.questions),
+      row.thread_id ?? null,
     );
   }
 }

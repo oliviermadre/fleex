@@ -9,7 +9,11 @@ point across context resets — update it as work progresses.
 **Phases 0, 1, 2a AND 2b are DONE, committed and pushed.**
 See "Phase 2b" below (sessions 4–9 log) for what was built and the deferred items.
 
-**Phase 3 is deliberately OUT of PR #278's scope** (decided 2026-09-19). It was part of the original
+**Phase 3 (assistant ⇄ agent threads) is BUILT on branch `ticket/534e5b-vue-tasks-phase-3-threads-assistant-agen`**
+(from `main` after #278). See "Phase 3 — built" below for what landed, the QA strategy and the accepted limitations.
+Spec: `docs/superpowers/specs/2026-09-21-work-threads-phase-3-design.md` · plan: `docs/superpowers/plans/2026-09-21-work-threads-phase-3.md`.
+
+**Phase 3 was deliberately OUT of PR #278's scope** (decided 2026-09-19). It was part of the original
 intent, but phases 0 → 2b took enough fine-tuning to fill the PR on their own. It stays a firm
 intention and gets **its own PR, branched from `main` after #278 merges** — see "Phase 3" below and
 `docs/work-view/handoff/DATA_MODEL.md` § Phase 3 for the design.
@@ -374,9 +378,95 @@ while open (or refresh on an `agent_event` Edit/Write tool_result).
 
 </details>
 
-### Phase 3 (~1-2 weeks, server) — assistant ⇄ agent threads
-- `agent_thread` entity, ticket-scoped assistant runs, `delegate_to_persona` tool, WS thread events,
-  Threads panel + delegation cards. See `docs/work-view/handoff/DATA_MODEL.md` § Phase 3, and `screenshots/02-agent-threads-panel.jpg`.
+### Phase 3 — built (2026-09-21) — assistant ⇄ agent threads
+
+Decisions (with the user): the assistant runs on the **Claude Agent SDK** like the agents (one `query()` in `talk`
+mode per turn, JSON structured output, session `resume`); **every Work composer message goes through the assistant**;
+the assistant is an **ordinary persona** (`AppConfig.defaultAssistantPersonaId`, per-ticket `assistantPersonaId`
+override in the conversation config); UI = **design A** of the Claude Design canvas (card in the stream links to the
+Threads panel; turns only read in the panel).
+
+**Server** (`feat(threads)` commits):
+- `AgentThreadEntity` (`running|waiting|concluded|failed`, terminal states guarded) + `ThreadStorePort` with
+  sqlite / pgsql / supabase adapters. Migration **`035_agent_threads`** (additive: table + RLS, nullable
+  `comments.thread_id`, nullable `tickets.assistant_persona_id`; idempotent; `NOTIFY pgrst` on supabase).
+- Turns = comments with `threadId` (inherited from `parentId`, so `ExecuteAgent` replies land in the thread with zero
+  change). `authorType: 'assistant'` comments **create mentions** (agents' still don't); `suppressAgentMentions` on
+  the user's Work message (the assistant reads `@agent:x` as a delegation instruction; skills/workflows untouched).
+- `RunAssistantTurnUseCase` — one action per turn (`reply` / `delegate` / `continue_thread` / `conclude_thread`),
+  per-ticket lane, 8-turn cap per thread, `conclude_request` forces `conclude_thread`, invalid output → short
+  assistant comment. Executions carry `mentionId = 'assistant:<uuid>'` and show as run cards in the Work stream like any agent run.
+  Prompt/schema/parser in `application/assistant/assistant-protocol.ts`; `resolveExecutionConfig` extracted to
+  `application/utils/` and shared with `ExecuteAgent`.
+- `AssistantThreadListener` (local bus only): `mention.resolved|waiting_for_info|execution_failed` on the thread's
+  mention → thread status + `thread.updated` + assistant turn; `mention.woken_up` → running; user comment in thread →
+  exchange counted. Assistant comments do **not** wake waiting agents via the generic `comment.posted` path
+  (targeted `ExecuteAgent.wakeUp` instead).
+- Routes: `POST /api/tickets/:id/assistant/messages` (→ `{comment:null, assistant:null}` when no assistant is
+  configured, client falls back to a plain comment), `GET /api/tickets/:id/threads`, `GET /api/threads/open`,
+  `GET /api/threads/:id`, `POST /api/threads/:id/messages`, `POST /api/threads/:id/conclude`;
+  `PATCH /execution-config` accepts `assistantPersonaId`. WS: `thread:created|updated|concluded` on `tickets`.
+
+**Web** (`feat(work)` commits): `threadStore` + `useTicketThreads`/`useOpenThreads`/`useThreadTurns`; composer →
+`postAssistantMessage` with fallback + « No assistant configured » hint; `◆ Assistant` picker in the exec bar;
+« <name> is thinking… » line; `buildStream` hides turns / assistant executions and inserts a `delegation` entry;
+`DelegationCard` (4 states, inline answer in `waiting`); `ThreadsPanel` (list · Conversation / Agent SDK stream tabs ·
+Step into the thread · Conclude now · Terminate); Threads tool in the strip (amber dot when a thread is open); queue
+label `<persona> · in thread with assistant`; Settings › General « Default assistant »; Kanban/mobile label assistant
+comments. Flag `workThreadsEnabled` (settings, default on) restores the Phase 1 composer when off.
+
+**QA rounds (2026-09-22) — behaviour changes:**
+- Thread states: `running` (mention open: queued or executing) · `idle` (agent answered, the assistant has the hand)
+  · `waiting` (user asked: agent question or mode request) · `failed` (relaunchable, `failures` counter, migration
+  `036`) · `concluded` (final). The Threads panel tells queued / working / starting / idle / waiting apart.
+- Project-manager protocol: the team never contacts the user; agent questions are answered in the thread; a status-only
+  agent reply (« en cours », « résultats bientôt ») is an ended run → the assistant relaunches until a real result;
+  up to 3 consecutive failures are retried before reporting back.
+- Execution mode stays HITL: the assistant cannot switch talk/plan/edit. It emits `request_mode`; the Work stream
+  renders a CTA card (`ModeRequestCard`, marker `<!-- fleex:mode-request … -->`) whose click PATCHes the ticket mode
+  and tells the assistant.
+- New task: « Hand over to the assistant » (default on) → `POST /api/tickets/:id/assistant/start` (`ticket_created`
+  turn). Runs / crash / waiting cards of thread agents are hidden from the main stream (`threadMentionIds`).
+
+**Runtime switch (2026-09-22, QA):** the assistant no longer runs on the Claude Agent SDK. An SDK turn loaded the
+user's Claude Code settings/hooks (superpowers), kept `Read` available in `dontAsk` mode and thought for minutes in the
+server's cwd. It now runs like the companion: a **streamed Messages-API tool loop** (`@anthropic-ai/sdk`, key from
+`ANTHROPIC_API_KEY` or `~/.fleex/config`), no extended thinking, model = ticket override or persona model. Thread
+actions are **tools** (`delegate_to_persona`, `continue_thread`, `conclude_thread`, `request_mode`) and the CLI surface
+is exposed as `fleex_*` tools built from `fleex documentation --format json` (`application/assistant/fleex-cli-tools.ts`,
+destructive leaves excluded, `--workspace`/`--json` injected). The hard-coded prompt head carries the ticket ids and the
+workspace; the CLI docs are NOT inlined (the tool schemas replace them). The final text of a turn is the message to the
+user, streamed live in the Work stream (`AssistantLiveReply`) and posted as the assistant comment; the run card + log
+stay. Spec §Décisions 1 is superseded by this.
+
+**QA round 3 (2026-09-22) — the thread lane:** a user message in the main stream used to reach the ticket's
+generic wake-up (`comment.posted` → `WakeWaitingAgents`) and woke the thread agent directly, in parallel with the
+assistant; the assistant's own `continue_thread` then opened a second mention that queued behind the first on the
+(agent, ticket) lane and never ran (« queued — waiting for a free agent slot »). Fixes: `comment.posted` carries a
+`threadId` scope and `WakeWaitingAgents` wakes only main-stream agents for a main-stream comment (a thread turn wakes
+its thread's agent only); `continue_thread` while the current mention is `pending`/`acknowledged` sends nothing and
+tells the model to wait for the callback; the threads GET read-repair closes an older `waiting_for_info` turn stuck
+behind a `pending` one and kicks the scheduler. Protocol: the failure trigger now carries the scheduler's verdict
+(`reason` + `message`, e.g. `max_turns`, read as « not a permissions problem »), plan mode is spelled out as
+read/search allowed (`request_mode` only for explicit write refusals or a task that writes), and a `waiting_for_info`
+that is a status (« investigation launched ») is a relaunch demanding synchronous work. Agent side (structured output
+instructions): `waiting_for_info` is for questions only, and no background sub-agent/task — the execution ends with the
+output and kills whatever still runs.
+
+**QA strategy (agreed):** recette on the **QA sqlite instance only** (`FLEEX_STORAGE_DRIVER=sqlite`,
+`FLEEX_SQLITE_PATH` dedicated) — migrations run at boot with no opt-out, so the branch must NOT boot on the prod
+Supabase during the phase. Before the single end-of-phase pass on prod: `pg_dump` via `FLEEX_SUPABASE_DB_URL`, and
+start the branch only when no agent is running (`ExecuteAgent.init()` marks every `running` execution interrupted,
+other instances included). `main` keeps booting afterwards (unknown applied migrations are ignored).
+
+**Accepted limitations:** the Kanban `TicketDetail` shows thread turns as ordinary comments; agents receive all
+visible comments in their context (other threads' turns included); the FORWARDED chips show keys
+(`ticket`/`worktrees`/`pr`/`deliverables`), not resolved labels. **Deferred:** cost per thread relies on the
+ticket's mentions being loaded (best effort); a keyboard shortcut for the Threads tool.
+
+Verified green at the last commit: shared tsc · server tsc + vitest (1564) · web tsc + vitest (942) + palette 0.
+Bun sqlite tests: 109 pass; `memory-event-listener.bun.test.ts` (19) fails under `bun test` with
+`vi.advanceTimersByTimeAsync is not a function` — pre-existing, unrelated to this phase.
 
 ## Key facts / gotchas (learned during impl)
 

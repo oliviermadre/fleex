@@ -1960,3 +1960,56 @@ export function openWorktreeHooksDir(repo: string): Promise<{ dir: string }> {
   return request('/worktree-actions/hooks/open', { method: 'POST', body: JSON.stringify({ repo }) });
 }
 
+// ── Assistant threads (Work view Phase 3) ──
+
+export interface AssistantMessageResult {
+  comment: import('@fleex/shared').TicketComment | null;
+  assistant: { personaId: string; displayName: string } | null;
+}
+
+/**
+ * Work composer entry point: posts the user's comment and starts one assistant
+ * turn. `assistant: null` means no assistant persona is configured — the caller
+ * falls back to `postTicketComment`.
+ */
+export async function postAssistantMessage(ticketId: string, body: string): Promise<AssistantMessageResult> {
+  return request<AssistantMessageResult>(`/tickets/${encodeURIComponent(ticketId)}/assistant/messages`, {
+    method: 'POST', body: JSON.stringify({ body }),
+  });
+}
+
+export async function fetchTicketThreads(ticketId: string): Promise<import('@fleex/shared').AgentThread[]> {
+  return request<import('@fleex/shared').AgentThread[]>(`/tickets/${encodeURIComponent(ticketId)}/threads`);
+}
+
+export async function fetchOpenThreads(): Promise<import('@fleex/shared').AgentThread[]> {
+  return request<import('@fleex/shared').AgentThread[]>('/threads/open');
+}
+
+export async function fetchThread(threadId: string): Promise<{ thread: import('@fleex/shared').AgentThread; turns: import('@fleex/shared').TicketComment[] }> {
+  return request(`/threads/${encodeURIComponent(threadId)}`);
+}
+
+export async function postThreadMessage(threadId: string, body: string): Promise<import('@fleex/shared').TicketComment> {
+  return request<import('@fleex/shared').TicketComment>(`/threads/${encodeURIComponent(threadId)}/messages`, {
+    method: 'POST', body: JSON.stringify({ body }),
+  });
+}
+
+export async function concludeThread(threadId: string): Promise<{ runsAutoTerminated: number }> {
+  const result = await request<{ accepted: boolean; runsAutoTerminated: number }>(`/threads/${encodeURIComponent(threadId)}/conclude`, { method: 'POST' });
+  return { runsAutoTerminated: result.runsAutoTerminated };
+}
+
+/** Manually terminate a running execution. Sets manually_terminated_by_user flag and interrupts the run. */
+export async function terminateExecution(executionId: string): Promise<{ accepted: boolean }> {
+  return request<{ accepted: boolean }>(`/executions/${encodeURIComponent(executionId)}/terminate-manual`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'user_requested' }),
+  });
+}
+
+/** Hand a freshly created ticket to the assistant (one turn primed with its description). */
+export async function startAssistant(ticketId: string): Promise<{ assistant: { personaId: string; displayName: string } | null }> {
+  return request(`/tickets/${encodeURIComponent(ticketId)}/assistant/start`, { method: 'POST' });
+}
