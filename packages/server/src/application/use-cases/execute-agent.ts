@@ -2985,8 +2985,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       sourceId: mention.commentId,
       ticketId: context.ticket.id,
     };
+    // trackResolved, not track: the request is where a screenshot usually sits, and
+    // as plain text the agent gets a dead `/api/files/<uuid>` link instead of the image.
     if (isWakeUp) {
-      composer.track(
+      await composer.trackResolved(
         taskDescriptor,
         `\n---\n\n**Resuming your task.** You paused waiting for input. Review the latest activity on the ticket: `
         + `if it answers what you were waiting for, finish your task and resolve; if it redirects you, follow the new direction. `
@@ -2995,7 +2997,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         + (ownComment ? `\n\n**Your original request** (from ${mention.sourceAgent}):\n> ${ownComment.replace(/\n/g, '\n> ')}` : ''),
       );
     } else {
-      composer.track(
+      await composer.trackResolved(
         taskDescriptor,
         `\n---\n\n**Your task** — respond to this request from ${mention.sourceAgent}:\n`
         + (ownComment ? `> ${ownComment.replace(/\n/g, '\n> ')}\n\n` : `(comment ${mention.commentId})\n\n`)

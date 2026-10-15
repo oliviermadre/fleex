@@ -7,7 +7,7 @@ import { EventBus } from '../../src/application/event-bus.js';
 import { AgentPersonaEntity } from '../../src/domain/entities/agent-persona.entity.js';
 import { AgentThreadEntity } from '../../src/domain/entities/agent-thread.entity.js';
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
-import type { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.entity.js';
+import { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.entity.js';
 import type { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
 import type { CliTool } from '../../src/application/assistant/fleex-cli-tools.js';
 
@@ -384,6 +384,35 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
     await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'failed' } });
     expect(h.mentions.saved).toHaveLength(1);
     expect(thread.status).toBe('failed');
+  });
+
+  describe('relaying a screenshot to an agent (the assistant retypes the /api/files uuid by hand)', () => {
+    const REAL = '9a822289-c6a3-4c70-8f13-064ed046e9a6';
+    const TYPO = '9a822289-c6a3-4c70-8f13-064ed046e9c6'; // last block retyped wrongly, as seen in production
+    const withScreenshot = async (turn: string) => {
+      const h = harness([{ tools: [{ name: 'delegate', input: { targetType: 'agent', name: 'builder', brief: 'A', turn } }] }, { text: '' }]);
+      h.comments.saved.push(TicketCommentEntity.create({ id: 'c0', ticketId: 't1', authorType: 'user', authorName: 'Nas', body: `cassé ![image.png](/api/files/${REAL})` }));
+      await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+      return h;
+    };
+
+    it('a slightly wrong id is corrected to the attachment the user sent, so the agent gets the image', async () => {
+      const h = await withScreenshot(`regarde ![image.png](/api/files/${TYPO})`);
+      const relayed = h.comments.saved.find((c) => c.threadId)!;
+      expect(relayed.body).toContain(`/api/files/${REAL}`);
+      expect(relayed.body).not.toContain(TYPO);
+    });
+
+    it('an id matching nothing on the ticket sends nothing and tells the model the valid ids', async () => {
+      const h = await withScreenshot('regarde ![image.png](/api/files/00000000-1111-2222-3333-444444444444)');
+      expect(h.comments.saved.some((c) => c.threadId)).toBe(false);
+      expect(h.threads.saved.size).toBe(0);
+      const results = h.llmCalls.at(-1)!.messages.flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+        .filter((b): b is Anthropic.ToolResultBlockParam => b.type === 'tool_result');
+      const text = JSON.stringify(results);
+      expect(text).toContain("n'existe pas sur ce ticket");
+      expect(text).toContain(REAL);
+    });
   });
 
   it('ticket_created runs a turn without a user comment', async () => {
