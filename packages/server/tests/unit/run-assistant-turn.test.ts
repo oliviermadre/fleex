@@ -39,6 +39,9 @@ class FakeAgentEventStore {
   async appendEvent(e: { eventType: string; data: unknown }) { this.events.push(e); }
   completed: Array<{ status: string; metrics: Record<string, unknown> }> = [];
   async completeExecution(_id: string, status: string, metrics: Record<string, unknown> = {}) { this.completed.push({ status, metrics }); }
+  /** Latest execution per mention id; tests seed it to simulate a run the user (or a conclude) stopped. */
+  byMention: Record<string, { manuallyTerminatedByUser?: boolean; autoTerminatedAtConclusion?: boolean }> = {};
+  async getExecutionByMentionId(mentionId: string) { return this.byMention[mentionId] ?? null; }
 }
 class FakeExecuteAgent {
   cancelled: string[] = []; woken: string[] = [];
@@ -365,6 +368,22 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
     await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'failed' } });
     expect(thread.status).toBe('concluded');
     expect(h.comments.saved.at(-1)!.body).toMatch(/tentatives/);
+  });
+
+  it.each([
+    ['the user stopped the run', { manuallyTerminatedByUser: true }],
+    ['the run was auto-terminated at conclusion', { autoTerminatedAtConclusion: true }],
+  ])('continue_thread leaves a failed thread alone when %s (no relaunch, no fight with the user)', async (_label, flags) => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'reprends' })]));
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.markFailed(); await h.mentions.save(m);
+    h.agentEvents.byMention[m.id] = flags;
+    thread.fail(); await h.threads.save(thread);
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'failed' } });
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(thread.status).toBe('failed');
   });
 
   it('ticket_created runs a turn without a user comment', async () => {

@@ -281,7 +281,7 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
 
     // Build the UPDATE statement dynamically based on which flags are set
     let updateParts = ['status = ?', 'completed_at = ?'];
-    const updateValues = [status, now];
+    const updateValues: Array<string | number> = [status, now];
 
     if (flags?.autoTerminatedAtConclusion !== undefined) {
       updateParts.push('auto_terminated_at_conclusion = ?');
