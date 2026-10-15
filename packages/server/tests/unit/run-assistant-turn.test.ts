@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
-import { RunAssistantTurnUseCase } from '../../src/application/use-cases/run-assistant-turn.js';
+import { RunAssistantTurnUseCase, assistantTurnCostUsd } from '../../src/application/use-cases/run-assistant-turn.js';
 import type { AssistantLlm } from '../../src/application/assistant/assistant-llm.js';
 import { PostCommentUseCase } from '../../src/application/use-cases/post-comment.js';
 import { EventBus } from '../../src/application/event-bus.js';
@@ -37,7 +37,8 @@ class FakeAgentEventStore {
   executions: unknown[] = []; events: Array<{ eventType: string; data: unknown }> = [];
   async startExecution(p: unknown) { this.executions.push(p); }
   async appendEvent(e: { eventType: string; data: unknown }) { this.events.push(e); }
-  async completeExecution() {}
+  completed: Array<{ status: string; metrics: Record<string, unknown> }> = [];
+  async completeExecution(_id: string, status: string, metrics: Record<string, unknown> = {}) { this.completed.push({ status, metrics }); }
 }
 class FakeExecuteAgent {
   cancelled: string[] = []; woken: string[] = [];
@@ -124,7 +125,7 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
       }),
     } as never,
     agentEventStore: agentEvents as never, executeAgent: executeAgent as never,
-    config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: opts.workThreadsEnabled }) } as never,
+    config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: 'workThreadsEnabled' in opts ? opts.workThreadsEnabled : true }) } as never,
     eventBus, logger: logger as never,
     skillStore: {
       getEnabled: async () => (opts.skills ?? []).filter((x) => x.enabled),
@@ -498,10 +499,47 @@ describe('RunAssistantTurnUseCase — workThreadsEnabled kill switch', () => {
     expect(await h.uc.resolveAssistantPersona(h.ticket)).toBeNull();
   });
 
-  it('absent means on', async () => {
-    const h = harness([{ text: 'Bonjour' }]);
+  // Opt-in: merging the feature must change nothing until it is switched on.
+  it('absent means off', async () => {
+    const h = harness([{ text: 'Bonjour' }], { workThreadsEnabled: undefined });
+    expect(await h.uc.resolveAssistantPersona(h.ticket)).toBeNull();
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.llmCalls).toHaveLength(0);
+  });
+
+  it('true turns it on', async () => {
+    const h = harness([{ text: 'Bonjour' }], { workThreadsEnabled: true });
     expect((await h.uc.resolveAssistantPersona(h.ticket))?.id).toBe('p-nas');
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
     expect(h.comments.saved).toHaveLength(1);
+  });
+});
+
+// The assistant persona shows in the per-persona stats like any other; that is only
+// useful if its turns carry a cost — they used to be recorded at 0 $.
+describe('RunAssistantTurnUseCase — cost of a turn', () => {
+  it('records the turn cost from the tokens of every round (Haiku 4.5: $1 / $5 per MTok)', async () => {
+    const h = harness([{ text: 'Je regarde.', tools: [{ name: 'fleex_ticket_show', input: { id: 't1' } }] }, { text: 'Fait.' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const done = h.agentEvents.completed.at(-1)!;
+    expect(done.status).toBe('completed');
+    // 2 rounds × (10 input + 5 output tokens) = 20 × 1e-6 + 10 × 5e-6
+    expect(done.metrics).toMatchObject({ inputTokens: 20, outputTokens: 10 });
+    expect(done.metrics.costUsd as number).toBeCloseTo(20 * 1e-6 + 10 * 5e-6, 12);
+  });
+
+  it('records what was billed even when the turn fails afterwards', async () => {
+    const h = harness([{ text: 'x' }]);
+    h.setLlm(async () => { throw new Error('overloaded'); });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const failed = h.agentEvents.completed.at(-1)!;
+    expect(failed.status).toBe('failed');
+    expect(failed.metrics).toHaveProperty('costUsd', 0);
+  });
+
+  it('prices cache reads and writes, and leaves an unpriced model unknown rather than free', () => {
+    const u = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 1_000_000, cacheCreationTokens: 1_000_000 };
+    expect(assistantTurnCostUsd('claude-haiku-4-5', u)).toBeCloseTo(0.1 + 1.25, 9);
+    expect(assistantTurnCostUsd('some-unknown-model', u)).toBeUndefined();
   });
 });
