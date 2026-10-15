@@ -207,9 +207,6 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
       {showThreadList ? (
         // LEVEL 1: Thread List View
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-[var(--theme-border)] px-3 py-2">
-            <h2 className="text-[13px] font-semibold text-[var(--theme-text-primary)]">Threads ({threads.length})</h2>
-          </div>
           <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
             {sortedThreads.map((t) => {
               const isNonConcluded = t.status !== 'concluded' && t.status !== 'failed';
@@ -269,74 +266,63 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
         // LEVEL 2: Thread Detail View
         thread && (
           <>
-            {/* Back Button + Thread Header */}
-            <div className="shrink-0 border-b border-[var(--theme-border)] px-3 py-2 flex items-center gap-2">
+          {/* One header line: back · who · status · title · participants · cost · conclude, then the tabs */}
+          <div className="shrink-0 px-3 pt-2">
+            <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--theme-text-primary)]">
               <button
                 type="button"
+                aria-label="Back to the thread list"
+                title="Back to the thread list"
                 onClick={() => setShowThreadList(true)}
-                className="shrink-0 rounded-lg border border-[var(--theme-border)] px-2 py-1.5 text-[12px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] transition-colors"
-                title="Back to thread list"
+                className="-ml-1.5 shrink-0 rounded px-1.5 py-0.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]"
               >
-                ← Threads
+                ←
               </button>
-              <span className="flex-1" />
+              <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
+              <span className="text-[var(--theme-text-faint)]" aria-hidden>⇄</span>
+              <span className="text-[var(--tint-purple-text)]" aria-hidden>⌬</span>
+              <span className="min-w-0 truncate">{personaName(thread)}</span>
+              <ThreadStatusPill status={thread.status} />
+              {thread.generatedTitle ? (
+                <span className="min-w-0 flex-1 truncate text-[12px] font-normal text-[var(--theme-text-secondary)]" title={thread.generatedTitle}>
+                  {thread.generatedTitle}
+                </span>
+              ) : (
+                <span className="flex-1" />
+              )}
+              {thread.participants && thread.participants.length > 0 && (
+                <div className="flex shrink-0 items-center gap-1">
+                  {thread.participants.slice(0, 5).map((p) => (
+                    <div
+                      key={p.userId}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[9px] font-semibold text-[var(--theme-text-primary)]"
+                      title={p.displayName}
+                    >
+                      {p.avatar ? (
+                        <img src={p.avatar} alt={p.displayName} className="h-full w-full rounded-full object-cover" />
+                      ) : (
+                        p.displayName.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                  ))}
+                  {thread.participants.length > 5 && (
+                    <span className="text-[10px] font-semibold text-[var(--theme-text-secondary)]">+{thread.participants.length - 5}</span>
+                  )}
+                </div>
+              )}
+              {cost > 0 && (
+                <span className="shrink-0 font-mono text-[11px] font-normal text-[var(--theme-text-faint)]">${cost.toFixed(2)}</span>
+              )}
               {!terminal && (
                 <button
                   type="button"
                   onClick={() => void conclude()}
                   disabled={busy}
                   title="Stop the agent and ask the assistant to bring the result back"
-                  className="shrink-0 whitespace-nowrap rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5 text-[12px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] disabled:opacity-50"
+                  className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[11.5px] font-normal text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)] disabled:opacity-50"
                 >
-                  Conclude now ↩
+                  Conclude ↩
                 </button>
-              )}
-            </div>
-
-            {/* Thread Label: Title + Participants */}
-            {(thread.generatedTitle || (thread.participants && thread.participants.length > 0)) && (
-              <div className="shrink-0 border-b border-[var(--theme-border-subtle)] px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-[var(--theme-text-secondary)]" aria-hidden>🧵</span>
-                  <span className="text-[12.5px] font-medium text-[var(--theme-text-primary)]">
-                    {thread.generatedTitle || 'Thread'}
-                  </span>
-                  {thread.participants && thread.participants.length > 0 && (
-                    <div className="ml-auto flex items-center gap-1.5">
-                      {thread.participants.slice(0, 5).map((p) => (
-                        <div
-                          key={p.userId}
-                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[10px] font-semibold text-[var(--theme-text-primary)] hover:ring-2 hover:ring-[var(--theme-accent)]"
-                          title={p.displayName}
-                        >
-                          {p.avatar ? (
-                            <img src={p.avatar} alt={p.displayName} className="h-full w-full rounded-full object-cover" />
-                          ) : (
-                            p.displayName.charAt(0).toUpperCase()
-                          )}
-                        </div>
-                      ))}
-                      {thread.participants.length > 5 && (
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[10px] font-semibold text-[var(--theme-text-secondary)]">
-                          +{thread.participants.length - 5}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-          {/* Header + tabs */}
-          <div className="shrink-0 px-3 pt-2.5">
-            <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--theme-text-primary)]">
-              <span className="text-[var(--theme-accent)]" aria-hidden>◆</span>
-              <span className="text-[var(--theme-text-faint)]" aria-hidden>⇄</span>
-              <span className="text-[var(--tint-purple-text)]" aria-hidden>⌬</span>
-              <span className="min-w-0 truncate">{personaName(thread)}</span>
-              <ThreadStatusPill status={thread.status} />
-              {cost > 0 && (
-                <span className="ml-auto font-mono text-[11px] font-normal text-[var(--theme-text-faint)]">${cost.toFixed(2)}</span>
               )}
             </div>
             <div className="mt-2 flex gap-4 border-b border-[var(--theme-border)] text-[12px]">
