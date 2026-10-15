@@ -90,3 +90,90 @@ describe('PostCommentUseCase — mention conflict suppression', () => {
     expect(createdMentions.map((m) => m.targetAgent)).toEqual(['reviewer']);
   });
 });
+
+describe('PostCommentUseCase — assistant threads', () => {
+  class ThreadAwareCommentStore extends FakeCommentStore {
+    async getById(id: string): Promise<TicketCommentEntity | null> {
+      return this.saved.find((c) => c.id === id) ?? null;
+    }
+  }
+
+  let comments: ThreadAwareCommentStore;
+  let mentions: FakeMentionStore;
+  let useCase: PostCommentUseCase;
+
+  beforeEach(() => {
+    comments = new ThreadAwareCommentStore();
+    mentions = new FakeMentionStore();
+    useCase = new PostCommentUseCase(
+      comments as unknown as CommentStorePort,
+      mentions as unknown as MentionStorePort,
+      new FakeTicketStore() as unknown as TicketStorePort,
+      new FakeLogger() as unknown as LoggerPort,
+    );
+  });
+
+  it('an assistant-authored comment DOES create agent mentions', async () => {
+    const { createdMentions, comment } = await useCase.execute({
+      ticketId: 't1', authorType: 'assistant', authorName: 'Nas', body: '@agent:builder fix it', threadId: 'th1',
+    });
+    expect(createdMentions.map((m) => m.targetAgent)).toEqual(['builder']);
+    expect(comment.threadId).toBe('th1');
+    expect(comment.toDTO().threadId).toBe('th1');
+  });
+
+  it('an agent-authored comment still creates no mention', async () => {
+    const { createdMentions } = await useCase.execute({
+      ticketId: 't1', authorType: 'agent', authorName: 'The Builder', body: '@agent:pm look',
+    });
+    expect(createdMentions).toHaveLength(0);
+  });
+
+  // The assistant now delegates to skills and workflows too (tracked threads):
+  // a direct mention from the Work composer would launch them a second time.
+  it('suppressAgentMentions skips every launchable mention: agents, panels, skills and workflows', async () => {
+    const { createdMentions } = await useCase.execute({
+      ticketId: 't1', authorType: 'user', authorName: 'olivier',
+      body: '@agent:builder @panel:leadership @skill:lint @workflow:review', suppressAgentMentions: true,
+    });
+    expect(createdMentions).toEqual([]);
+  });
+
+  it('without suppressAgentMentions a user comment still launches skills and workflows directly', async () => {
+    const { createdMentions } = await useCase.execute({
+      ticketId: 't1', authorType: 'user', authorName: 'olivier', body: '@skill:lint @workflow:review',
+    });
+    expect(createdMentions.map((m) => m.targetType).sort()).toEqual(['skill', 'workflow']);
+  });
+
+  it('threadOf joins the thread of a comment without replying to it', async () => {
+    const { comment: turn } = await useCase.execute({
+      ticketId: 't1', authorType: 'assistant', authorName: 'Nas', body: '@skill:lint go', threadId: 'th1',
+    });
+    const { comment: announce } = await useCase.execute({
+      ticketId: 't1', authorType: 'agent', authorName: 'The Builder', body: 'Running skill: Lint', threadOf: turn.id,
+    });
+    expect(announce.threadId).toBe('th1');
+    expect(announce.parentId).toBeNull();
+  });
+
+  it('inherits threadId from the parent comment when parentId is given', async () => {
+    const { comment: parent } = await useCase.execute({
+      ticketId: 't1', authorType: 'assistant', authorName: 'Nas', body: '@agent:builder go', threadId: 'th1',
+    });
+    const { comment: reply } = await useCase.execute({
+      ticketId: 't1', authorType: 'agent', authorName: 'The Builder', body: 'done', parentId: parent.id,
+    });
+    expect(reply.threadId).toBe('th1');
+  });
+
+  it('an explicit threadId: null on a reply is kept (no inheritance)', async () => {
+    const { comment: parent } = await useCase.execute({
+      ticketId: 't1', authorType: 'assistant', authorName: 'Nas', body: 'x', threadId: 'th1',
+    });
+    const { comment: reply } = await useCase.execute({
+      ticketId: 't1', authorType: 'user', authorName: 'olivier', body: 'y', parentId: parent.id, threadId: null,
+    });
+    expect(reply.threadId).toBeNull();
+  });
+});

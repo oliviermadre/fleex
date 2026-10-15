@@ -103,6 +103,8 @@ export interface Ticket {
   readonly effortOverride: EffortLevel | null;
   /** When true, request fast mode (if the resolved model supports it). */
   readonly fastMode: boolean;
+  /** Persona that plays the assistant on this ticket. null = the workspace default. */
+  readonly assistantPersonaId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -119,6 +121,8 @@ export interface UpdateTicketExecutionConfigRequest {
   /** Pass null to clear the override. */
   readonly effortOverride?: EffortLevel | null;
   readonly fastMode?: boolean;
+  /** Pass null to clear the override (use the workspace default assistant). */
+  readonly assistantPersonaId?: string | null;
 }
 
 export interface Board {
@@ -207,6 +211,7 @@ export interface AgentTokenCreated extends AgentToken {
 // ── Comments ──
 
 export type CommentVisibility = 'public' | 'private';
+export type CommentAuthorType = 'user' | 'agent' | 'assistant';
 
 /** A closed question an agent asks, answered with one of its options (one button each). */
 export interface AgentQuestion {
@@ -219,7 +224,7 @@ export interface AgentQuestion {
 export interface TicketComment {
   readonly id: string;
   readonly ticketId: string;
-  readonly authorType: 'user' | 'agent';
+  readonly authorType: CommentAuthorType;
   readonly authorName: string;
   readonly body: string;
   readonly visibility: CommentVisibility;
@@ -228,6 +233,8 @@ export interface TicketComment {
   readonly parentId: string | null;
   /** Closed questions the agent declared with `waiting_for_info`; null/absent = free reply only. */
   readonly questions?: AgentQuestion[] | null;
+  /** Set when this comment is a turn inside an assistant ⇄ agent thread. */
+  readonly threadId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -680,7 +687,10 @@ export type TicketWsMessageType =
   | 'mention:execution_failed'
   | 'deliverable:created'
   | 'deliverable:updated'
-  | 'deliverable:deleted';
+  | 'deliverable:deleted'
+  | 'thread:created'
+  | 'thread:updated'
+  | 'thread:concluded';
 
 export interface TicketWsMessage {
   readonly type: TicketWsMessageType;
