@@ -37,6 +37,7 @@ import migration035 from './migrations/034_memory_pgvector_search.js';
 import migration036 from './migrations/035_comment_questions.js';
 import migration037 from './migrations/036_claude_code_skills.js';
 import migration038 from './migrations/037_execution_sdk_session_totals.js';
+import migration039 from './migrations/038_domain_event_log_prefix_index.js';
 
 /**
  * Ordered array of all migrations.
@@ -81,4 +82,5 @@ export const allMigrations: Migration[] = [
   migration036,
   migration037,
   migration038,
+  migration039,
 ];
