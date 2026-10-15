@@ -434,7 +434,7 @@ function AssistantSwitch() {
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
   const [saving, setSaving] = useState(false);
-  const enabled = settings.workThreadsEnabled !== false;
+  const enabled = settings.workThreadsEnabled === true;
   const toggle = async (next: boolean) => {
     setSaving(true);
     try {

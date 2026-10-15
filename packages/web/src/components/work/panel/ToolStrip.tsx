@@ -144,7 +144,7 @@ export function ToolStrip({
   // center and the drawer never renders, so the button is disabled instead.
   const shellActive = shellOpen && !shellMode;
   const sessionCount = task?.sessionCount ?? 0;
-  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) !== false;
+  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) === true;
   const openThreads = useThreadStore((s) => (task ? selectOpenByTicket(s, task.id).length : 0));
   const tools = TOOLS.filter((t) => (t.key !== 'browser' || hasDesktop()) && (t.key !== 'thread' || threadsEnabled));
   const sessionBadge = sessionCount > 0 ? (sessionCount > 99 ? '99+' : String(sessionCount)) : null;

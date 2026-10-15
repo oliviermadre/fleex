@@ -39,7 +39,7 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
   const [error, setError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [assistantMissing, setAssistantMissing] = useState(false);
-  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) !== false;
+  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) === true;
   const reqId = useRef(0);
 
   const load = useCallback(async (id: string) => {
