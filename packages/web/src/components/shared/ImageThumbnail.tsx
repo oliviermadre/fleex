@@ -144,6 +144,8 @@ export function ImageGalleryStrip({ images }: ImageGalleryStripProps) {
 // ── Markdown image extraction utility ────────────────────────────────────────
 
 const MD_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g;
+/** Fenced code blocks (``` or ~~~) and single-line inline code spans. */
+const CODE_RE = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/g;
 
 /**
  * Extracts all markdown images from content.
@@ -157,14 +159,24 @@ export function extractMarkdownImages(markdown: string): {
   const images: MarkdownImage[] = [];
   let idx = 0;
 
-  const cleaned = markdown.replace(MD_IMAGE_RE, (_match, alt: string, src: string) => {
-    const proxiedSrc = getProxiedImageSrc(src);
-    images.push({ src: proxiedSrc, alt: alt || '' });
-    const label = alt || `Image ${idx + 1}`;
-    const placeholder = `[🖼 ${label}](#fleex-img:${idx})`;
-    idx++;
-    return placeholder;
-  });
+  // Image syntax quoted in a code span or a code block is text to show, not an image
+  // to load: split the markdown on code and only rewrite the parts outside of it.
+  // (The capture group keeps the code parts, at the odd indexes.)
+  const cleaned = markdown
+    .split(CODE_RE)
+    .map((part, i) =>
+      i % 2 === 1
+        ? part
+        : part.replace(MD_IMAGE_RE, (_match, alt: string, src: string) => {
+            const proxiedSrc = getProxiedImageSrc(src);
+            images.push({ src: proxiedSrc, alt: alt || '' });
+            const label = alt || `Image ${idx + 1}`;
+            const placeholder = `[🖼 ${label}](#fleex-img:${idx})`;
+            idx++;
+            return placeholder;
+          }),
+    )
+    .join('');
 
   return { images, cleaned };
 }
