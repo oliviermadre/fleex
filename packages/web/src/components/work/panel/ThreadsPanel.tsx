@@ -78,6 +78,15 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
   const personas = useAgentPersonaStore((s) => s.personas);
   const executions = useAgentEventStore((s) => s.executionsByTicket[task.id]);
 
+  // Two-level navigation: show list of threads OR detail of selected thread
+  const [showThreadList, setShowThreadList] = useState(false);
+  useEffect(() => {
+    // Auto-close list when a thread is selected
+    if (selectedThreadId) {
+      setShowThreadList(false);
+    }
+  }, [selectedThreadId]);
+
   const thread = resolveSelectedThread(threads, selectedThreadId);
   const turns = useThreadTurns(thread?.id ?? null);
   const personaName = (t: AgentThread) => threadTargetLabel(t, personas.find((p) => p.id === t.personaId)?.displayName);
@@ -197,30 +206,83 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Dropdown Navigation */}
-      <div className="shrink-0 border-b border-[var(--theme-border)] px-3 py-2">
-        <label htmlFor="thread-selector" className="sr-only">Select a thread</label>
-        <select
-          id="thread-selector"
-          value={selectedThreadId || ''}
-          onChange={(e) => setSelectedThreadId(e.target.value)}
-          className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-2.5 py-1.5 text-[12.5px] text-[var(--theme-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-        >
-          {sortedThreads.map((t) => {
-            const isNonConcluded = t.status !== 'concluded' && t.status !== 'failed';
-            const label = `${isNonConcluded ? '🔵 ' : '✓ '}${personaName(t)} — ${t.brief || '(no brief)'}`;
-            return (
-              <option key={t.id} value={t.id}>
-                {label}
-              </option>
-            );
-          })}
-        </select>
-      </div>
+      {/* Two-Level Navigation: List or Detail */}
+      {showThreadList ? (
+        // LEVEL 1: Thread List View
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 border-b border-[var(--theme-border)] px-3 py-2">
+            <h2 className="text-[13px] font-semibold text-[var(--theme-text-primary)]">Threads ({threads.length})</h2>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
+            {sortedThreads.map((t) => {
+              const isNonConcluded = t.status !== 'concluded' && t.status !== 'failed';
+              const isSelected = t.id === selectedThreadId;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSelectedThreadId(t.id)}
+                  className={cn(
+                    'group flex min-h-0 flex-col gap-1.5 rounded-lg border px-3 py-2 text-left transition-colors',
+                    isSelected
+                      ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
+                      : 'border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]'
+                  )}
+                >
+                  {/* Status dot + Name + Age */}
+                  <div className="flex items-center gap-2">
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT[t.status])} aria-hidden />
+                    <span className="truncate text-[12.5px] font-semibold text-[var(--theme-text-primary)]">{personaName(t)}</span>
+                    <span className="ml-auto shrink-0 text-[11px] text-[var(--theme-text-faint)]">{formatAge(t.createdAt)}</span>
+                  </div>
 
-      {thread && (
-        <>
-          {/* Thread Label: Title + Participants */}
+                  {/* Brief & Participants */}
+                  <div className="flex items-start gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--theme-text-secondary)]">{t.brief || '(no brief)'}</span>
+                    {t.participants && t.participants.length > 0 && (
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        {t.participants.slice(0, 3).map((p) => (
+                          <div
+                            key={p.userId}
+                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[8px] font-semibold text-[var(--theme-text-primary)]"
+                            title={p.displayName}
+                          >
+                            {p.avatar ? (
+                              <img src={p.avatar} alt={p.displayName} className="h-full w-full rounded-full object-cover" />
+                            ) : (
+                              p.displayName.charAt(0).toUpperCase()
+                            )}
+                          </div>
+                        ))}
+                        {t.participants.length > 3 && (
+                          <span className="text-[9px] font-semibold text-[var(--theme-text-faint)]">+{t.participants.length - 3}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        // LEVEL 2: Thread Detail View
+        thread && (
+          <>
+            {/* Back Button + Thread Header */}
+            <div className="shrink-0 border-b border-[var(--theme-border)] px-3 py-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowThreadList(true)}
+                className="shrink-0 rounded-lg border border-[var(--theme-border)] px-2 py-1.5 text-[12px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] transition-colors"
+                title="Back to thread list"
+              >
+                ← Threads
+              </button>
+              <span className="flex-1" />
+            </div>
+
+            {/* Thread Label: Title + Participants */}
           {(thread.generatedTitle || (thread.participants && thread.participants.length > 0)) && (
             <div className="shrink-0 border-b border-[var(--theme-border-subtle)] px-3 py-2">
               <div className="flex items-center gap-2">
