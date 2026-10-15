@@ -770,4 +770,4 @@ export { diffTemplates, isEmptyDiff } from './workflow/apply/diff.js';
 export type { DiffEntry, TemplateDiff, DiffableTemplate } from './workflow/apply/diff.js';
 export { buildApplyDocumentation, renderApplyDocumentationMarkdown } from './workflow/apply/documentation.js';
 export type { ApplyDocumentation, DocumentationInput } from './workflow/apply/documentation.js';
-export type { AgentThread, AgentThreadStatus, AgentThreadTargetType } from './types/agent-thread.js';
+export type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParticipant } from './types/agent-thread.js';

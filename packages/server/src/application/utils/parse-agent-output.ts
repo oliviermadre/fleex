@@ -110,12 +110,22 @@ function validateShape(obj: unknown, options: ParseAgentOutputOptions): AgentStr
             status: ((deliverable as Record<string, unknown>)['status'] as DeliverableStatus) ?? 'draft',
           }
         : null,
-    comment: (comment as string) ?? null,
+    comment: typeof comment === 'string' ? unescapeLiteralNewlines(comment) : null,
     ...(mentionStatus === 'resolved' || mentionStatus === 'waiting_for_info'
       ? { mentionStatus: mentionStatus as 'resolved' | 'waiting_for_info' }
       : {}),
     ...(questions ? { questions } : {}),
   };
+}
+
+/**
+ * Agents sometimes double-escape the comment, so it holds a literal backslash-n
+ * instead of a line break and the markdown renders as one giant line. When the
+ * text has no real newline at all, treat the literal `\n` / `\r\n` as line breaks.
+ */
+function unescapeLiteralNewlines(text: string): string {
+  if (text.includes('\n') || !text.includes('\\n')) return text;
+  return text.replace(/\\r\\n|\\n/g, '\n');
 }
 
 /**
