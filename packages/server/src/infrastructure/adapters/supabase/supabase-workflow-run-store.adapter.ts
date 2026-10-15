@@ -22,6 +22,9 @@ interface WorkflowRunRow {
   updated_at: string;
 }
 
+/** PostgREST's max-rows cap (Supabase default) — the page size we paginate on. */
+const PAGE = 1000;
+
 const ACTIVE: WorkflowRunStatus[] = ['running', 'needs_review'];
 
 function rowToEntity(r: WorkflowRunRow): WorkflowRunEntity {
@@ -112,12 +115,21 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
   }
 
   async getAll(): Promise<WorkflowRunEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('workflow_runs')
-      .select('*')
-      .order('started_at', { ascending: false });
-    if (error) throw new Error(`SupabaseWorkflowRunStore.getAll failed: ${error.message}`);
-    return (data as WorkflowRunRow[]).map(rowToEntity);
+    // Paginated: an unpaginated select is silently truncated at max-rows.
+    const rows: WorkflowRunRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('workflow_runs')
+        .select('*')
+        .order('started_at', { ascending: false })
+        .order('id')
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseWorkflowRunStore.getAll failed: ${error.message}`);
+      const page = data as WorkflowRunRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(rowToEntity);
   }
 
   async save(run: WorkflowRunEntity): Promise<void> {

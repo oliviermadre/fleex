@@ -3,6 +3,9 @@ import { SupabaseCommentStore } from '../../src/infrastructure/adapters/supabase
 import { SupabaseDeliverableStore } from '../../src/infrastructure/adapters/supabase/supabase-deliverable-store.adapter.js';
 import { SupabaseMentionStore } from '../../src/infrastructure/adapters/supabase/supabase-mention-store.adapter.js';
 import { SupabaseAgentEventStore } from '../../src/infrastructure/adapters/supabase/supabase-agent-event-store.adapter.js';
+import { SupabaseStepRunStore } from '../../src/infrastructure/adapters/supabase/supabase-step-run-store.adapter.js';
+import { SupabaseWorkflowRunStore } from '../../src/infrastructure/adapters/supabase/supabase-workflow-run-store.adapter.js';
+import { SupabaseDomainEventLogStore } from '../../src/infrastructure/adapters/supabase/supabase-domain-event-log-store.adapter.js';
 import type { SupabaseConnection } from '../../src/infrastructure/adapters/supabase/connection.js';
 
 /**
@@ -29,6 +32,9 @@ function makeFakeClient(rowsByTable: Record<string, Record<string, unknown>[]>) 
         // Filters are not evaluated: these tests are about paging, not matching.
         gte: () => builder,
         lte: () => builder,
+        lt: () => builder,
+        eq: () => builder,
+        or: () => builder,
         order: () => builder,
         range: (f: number, t: number) => {
           from = f;
@@ -260,11 +266,75 @@ describe('slim per-ticket reads (unread counts / Logs badges)', () => {
     expect(new Set(selects)).toEqual(new Set(['ticket_id, created_at, author_type']));
   });
 
+  it('countByType pages past the cap and reads only the type column', async () => {
+    // The Deliverable Types store is loaded at app start on every view: a full
+    // read with `content` hit the statement timeout (seen on the Stats view).
+    const rows = Array.from({ length: 2300 }, (_, i) => ({ ...deliverableRow(i, 'ticket-a'), type: i < 2000 ? 'report' : 'code' }));
+    const { client, selects } = recordingClient({ deliverables: rows });
+    const store = new SupabaseDeliverableStore({ client } as unknown as SupabaseConnection);
+    expect(await store.countByType()).toEqual({ report: 2000, code: 300 });
+    expect(new Set(selects)).toEqual(new Set(['type']));
+  });
+
   it('both return [] without querying when no ticket is asked', async () => {
     const { client, selects } = recordingClient({});
     const conn = { client } as unknown as SupabaseConnection;
     expect(await new SupabaseDeliverableStore(conn).getRefsByTicketIds([])).toEqual([]);
     expect(await new SupabaseCommentStore(conn).getSummariesByTicketIds([])).toEqual([]);
     expect(selects).toEqual([]);
+  });
+});
+
+// The activity heatmap tells scheduled routine runs apart by joining every
+// step run to its workflow run. Unpaginated, the oldest-first step-run read
+// stopped at 1000 rows and dropped the most recent ones — the scheduled runs
+// of the week — so nothing was ever recognised as scheduled.
+describe('Supabase workflow stores — getAll pagination', () => {
+  const at = (i: number) => new Date(1700000000000 + i * 1000).toISOString();
+
+  it('SupabaseStepRunStore.getAll returns every step run past the cap', async () => {
+    const rows = Array.from({ length: 1456 }, (_, i) => ({
+      id: `sr-${i}`, workflow_run_id: `run-${i}`, step_id: 'primitive', attempt: 1,
+      status: 'completed', result: 'ok', output: null, next_edge_id: null,
+      execution_id: `exec-${i}`, started_at: at(i), completed_at: at(i), created_at: at(i),
+    }));
+    const store = new SupabaseStepRunStore({ client: makeFakeClient({ step_runs: rows }) } as unknown as SupabaseConnection);
+    const result = await store.getAll();
+    expect(result).toHaveLength(1456);
+    expect(result[1455]!.executionId).toBe('exec-1455');
+  });
+
+  it('SupabaseWorkflowRunStore.getAll returns every run past the cap', async () => {
+    const rows = Array.from({ length: 2001 }, (_, i) => ({
+      id: `run-${i}`, ticket_id: null, routine_id: 'rt-1', template_id: null,
+      template_snapshot: { name: 's' }, status: 'completed', current_step_id: null,
+      triggered_by: 'routine-scheduler', triggered_from: 'schedule',
+      started_at: at(i), completed_at: at(i), created_at: at(i), updated_at: at(i),
+    }));
+    const store = new SupabaseWorkflowRunStore({ client: makeFakeClient({ workflow_runs: rows }) } as unknown as SupabaseConnection);
+    const result = await store.getAll();
+    expect(result).toHaveLength(2001);
+    expect(result[2000]!.id).toBe('run-2000');
+  });
+});
+
+describe('SupabaseDomainEventLogStore.list pagination', () => {
+  const rows = Array.from({ length: 2533 }, (_, i) => ({
+    id: `ev-${i}`, event_type: 'ticket.moved', payload: { ticketId: `t-${i}` }, instance_id: 'x',
+    occurred_at: new Date(1700000000000 - i * 1000).toISOString(),
+  }));
+  const store = () => new SupabaseDomainEventLogStore({
+    client: makeFakeClient({ domain_event_log: rows }),
+  } as unknown as SupabaseConnection);
+
+  it('returns up to `limit` rows past the 1000 cap (Stats asks for every ticket move)', async () => {
+    // A single .limit(50_000) came back with 1000 rows: lead time and the CFD
+    // only saw the 1000 most recent of 2533 moves.
+    const result = await store().list({ limit: 50_000, eventType: 'ticket.moved' });
+    expect(result).toHaveLength(2533);
+  });
+
+  it('still honours a small limit', async () => {
+    expect(await store().list({ limit: 100, eventType: 'ticket.moved' })).toHaveLength(100);
   });
 });

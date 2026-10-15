@@ -10,6 +10,9 @@ interface EventLogRow {
   occurred_at: string;
 }
 
+/** PostgREST's max-rows cap (Supabase default) — the page size we paginate on. */
+const PAGE = 1000;
+
 function rowToEntity(r: EventLogRow): DomainEventLogEntity {
   return new DomainEventLogEntity(
     r.id,
@@ -42,12 +45,7 @@ export class SupabaseDomainEventLogStore implements DomainEventLogStorePort {
     since?: Date;
     until?: Date;
   }): Promise<DomainEventLogEntity[]> {
-    let query = this.conn.client
-      .from('domain_event_log')
-      .select('*')
-      .order('occurred_at', { ascending: false })
-      .limit(params.limit);
-
+    let cursorAt: string | null = null;
     if (params.before) {
       // Get the cursor row first
       const { data: cursorData } = await this.conn.client
@@ -55,30 +53,36 @@ export class SupabaseDomainEventLogStore implements DomainEventLogStorePort {
         .select('occurred_at')
         .eq('id', params.before)
         .maybeSingle();
-      if (cursorData) {
-        query = query.lt('occurred_at', cursorData.occurred_at);
+      if (cursorData) cursorAt = cursorData.occurred_at as string;
+    }
+
+    // Paginated: PostgREST caps every response at max-rows, so a single
+    // `.limit(50_000)` silently returned 1000 rows — Statistics' lead time and
+    // CFD only ever saw the 1000 most recent ticket moves.
+    const rows: EventLogRow[] = [];
+    for (let offset = 0; offset < params.limit; offset += PAGE) {
+      const end = Math.min(offset + PAGE, params.limit) - 1;
+      let query = this.conn.client
+        .from('domain_event_log')
+        .select('*')
+        .order('occurred_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(offset, end);
+      if (cursorAt) query = query.lt('occurred_at', cursorAt);
+      if (params.eventType) {
+        query = query.or(`event_type.eq.${params.eventType},event_type.like.${params.eventType}.%`);
       }
-    }
+      if (params.instanceId) query = query.eq('instance_id', params.instanceId);
+      if (params.since) query = query.gte('occurred_at', params.since.toISOString());
+      if (params.until) query = query.lte('occurred_at', params.until.toISOString());
 
-    if (params.eventType) {
-      query = query.or(`event_type.eq.${params.eventType},event_type.like.${params.eventType}.%`);
+      const { data, error } = await query;
+      if (error) throw new Error(`SupabaseDomainEventLogStore.list failed: ${error.message}`);
+      const page = data as EventLogRow[];
+      rows.push(...page);
+      if (page.length < end - offset + 1) break;
     }
-
-    if (params.instanceId) {
-      query = query.eq('instance_id', params.instanceId);
-    }
-
-    if (params.since) {
-      query = query.gte('occurred_at', params.since.toISOString());
-    }
-
-    if (params.until) {
-      query = query.lte('occurred_at', params.until.toISOString());
-    }
-
-    const { data, error } = await query;
-    if (error) throw new Error(`SupabaseDomainEventLogStore.list failed: ${error.message}`);
-    return (data as EventLogRow[]).map(rowToEntity);
+    return rows.map(rowToEntity);
   }
 
   async count(): Promise<number> {

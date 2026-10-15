@@ -362,3 +362,124 @@ describe('GetStatisticsUseCase — routine leaderboard', () => {
     expect(result.routineLeaderboard[0]!.routineId).toBe('gone');
   });
 });
+
+// ── Activity heatmap: human activity vs scheduled routine runs ──────────────
+
+describe('GetStatisticsUseCase — activity heatmap', () => {
+  const params = { from: '2026-06-01', to: '2026-06-08', granularity: 'day' as const };
+
+  const exec = (id: string, startedAt: string) => ({
+    id, mentionId: `workflow:${id}`, personaId: 'p1', ticketId: null,
+    startedAt, completedAt: null, status: 'completed',
+  });
+  const run = (id: string, triggeredBy: string, parentRunId: string | null = null) => ({
+    id, routineId: 'rt-1', templateId: null, templateSnapshot: { name: 's' }, status: 'completed',
+    triggeredBy, parentRunId,
+    startedAt: new Date('2026-06-01T03:00:00Z'), completedAt: new Date('2026-06-01T03:10:00Z'),
+  });
+
+  function useCaseWith(executions: unknown[], runs: unknown[], stepRuns: unknown[]) {
+    const empty = () => ({
+      getAll: vi.fn().mockResolvedValue([]),
+      getAllSummaries: vi.fn().mockResolvedValue([]),
+      getCreatedAtBetween: vi.fn().mockResolvedValue([]),
+    });
+    return new GetStatisticsUseCase(
+      { getAllTickets: vi.fn().mockResolvedValue([]), getAllBoards: vi.fn().mockResolvedValue([]) } as unknown as TicketStorePort,
+      empty() as unknown as CommentStorePort,
+      empty() as unknown as MentionStorePort,
+      empty() as unknown as DeliverableStorePort,
+      { getAllExecutions: vi.fn().mockResolvedValue(executions) } as unknown as AgentEventStorePort,
+      empty() as unknown as PersonaStorePort,
+      empty() as unknown as SessionStorePort,
+      undefined,
+      undefined,
+      { getAll: vi.fn().mockResolvedValue(runs) } as never,
+      { getAll: vi.fn().mockResolvedValue([]) } as never,
+      { getAll: vi.fn().mockResolvedValue(stepRuns) } as never,
+    );
+  }
+
+  it('keeps scheduler-launched routine runs out of the human count, so a nightly cron does not read as my activity', async () => {
+    // Monday 2026-06-01, 03:00 UTC — the same night hour, three origins.
+    const result = await useCaseWith(
+      [
+        exec('e-cron', '2026-06-01T03:05:00Z'), // scheduler → not me
+        exec('e-manual', '2026-06-01T03:20:00Z'), // `routine run` by hand → me
+        exec('e-child', '2026-06-01T03:30:00Z'), // spawned by the cron run → not me
+        { ...exec('e-mention', '2026-06-01T03:40:00Z'), mentionId: 'm-1', ticketId: 't-1' }, // mention → me
+      ],
+      [
+        run('run-cron', 'routine-scheduler'),
+        run('run-manual', 'user'),
+        run('run-child', 'workflow', 'run-cron'),
+      ],
+      [
+        { workflowRunId: 'run-cron', executionId: 'e-cron' },
+        { workflowRunId: 'run-manual', executionId: 'e-manual' },
+        { workflowRunId: 'run-child', executionId: 'e-child' },
+        { workflowRunId: 'run-cron', executionId: null }, // native step: no execution
+      ],
+    ).execute(params);
+
+    expect(result.activityHeatmap).toEqual([{ dow: 1, hour: 3, count: 2, scheduledCount: 2 }]);
+  });
+
+  it('counts an execution with no step-run link as human (unknown origin is never hidden)', async () => {
+    const result = await useCaseWith([exec('e-1', '2026-06-01T03:05:00Z')], [run('r', 'routine-scheduler')], [])
+      .execute(params);
+
+    expect(result.activityHeatmap).toEqual([{ dow: 1, hour: 3, count: 1, scheduledCount: 0 }]);
+  });
+});
+
+// ── Cumulative flow: rebuilt backwards from the current status ──────────────
+
+describe('GetStatisticsUseCase — cumulative flow', () => {
+  const params = { from: '2026-06-01', to: '2026-06-04', granularity: 'day' as const };
+
+  function ticketIn(status: 'todo' | 'doing' | 'done' | 'backlog', createdAt: string): TicketEntity {
+    const t = TicketEntity.create({ id: randomUUID(), boardId: 'b', displayId: 1, title: 'T', status });
+    (t as unknown as { createdAt: Date }).createdAt = new Date(createdAt);
+    return t;
+  }
+
+  async function cfd(tickets: TicketEntity[], events: DomainEventLogEntity[]) {
+    const empty = () => ({
+      getAll: vi.fn().mockResolvedValue([]),
+      getAllSummaries: vi.fn().mockResolvedValue([]),
+      getCreatedAtBetween: vi.fn().mockResolvedValue([]),
+    });
+    const result = await new GetStatisticsUseCase(
+      { getAllTickets: vi.fn().mockResolvedValue(tickets), getAllBoards: vi.fn().mockResolvedValue([]) } as unknown as TicketStorePort,
+      empty() as unknown as CommentStorePort,
+      empty() as unknown as MentionStorePort,
+      empty() as unknown as DeliverableStorePort,
+      { getAllExecutions: vi.fn().mockResolvedValue([]) } as unknown as AgentEventStorePort,
+      empty() as unknown as PersonaStorePort,
+      empty() as unknown as SessionStorePort,
+      undefined,
+      { list: vi.fn().mockResolvedValue(events) } as unknown as DomainEventLogStorePort,
+    ).execute(params);
+    return result.cumulativeFlow;
+  }
+
+  it('the last bucket matches the board today, even for tickets with no move history', async () => {
+    // Created straight into todo / done (or before the move log existed): no
+    // ticket.moved event. Replaying from an assumed "backlog" put them all in
+    // backlog — the CFD showed 356 backlog for 75 real ones.
+    const flow = await cfd([ticketIn('todo', '2026-05-01T00:00:00Z'), ticketIn('done', '2026-05-01T00:00:00Z')], []);
+    expect(flow.at(-1)).toMatchObject({ backlog: 0, todo: 1, done: 1 });
+  });
+
+  it('reads past statuses from fromStatus, so a truncated history cannot fall back to backlog', async () => {
+    // Only the latest move survived (older ones cut off): before it, the ticket
+    // was in "doing" — not backlog.
+    const t = ticketIn('done', '2026-05-01T00:00:00Z');
+    const flow = await cfd([t], [
+      logEntry('ticket.moved', { ticketId: t.id, fromStatus: 'doing', toStatus: 'done' }, '2026-06-02T12:00:00Z'),
+    ]);
+    expect(flow[0]).toMatchObject({ backlog: 0, doing: 1, done: 0 }); // 06-01
+    expect(flow.at(-1)).toMatchObject({ doing: 0, done: 1 });
+  });
+});

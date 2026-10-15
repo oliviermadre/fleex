@@ -3,6 +3,9 @@ import type { StepRunStorePort } from '../../../application/ports/step-run-store
 import type { SupabaseConnection } from './connection.js';
 import type { StepRunStatus, StepRunResult, StepOutput } from '@fleex/shared';
 
+/** PostgREST's max-rows cap (Supabase default) — the page size we paginate on. */
+const PAGE = 1000;
+
 interface StepRunRow {
   id: string;
   workflow_run_id: string;
@@ -73,13 +76,24 @@ export class SupabaseStepRunStore implements StepRunStorePort {
   }
 
   async getAll(): Promise<StepRunEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('step_runs')
-      .select('*')
-      .order('created_at')
-      .order('attempt');
-    if (error) throw new Error(`SupabaseStepRunStore.getAll failed: ${error.message}`);
-    return (data as StepRunRow[]).map(rowToEntity);
+    // Paginated: an unpaginated select is silently truncated at max-rows and,
+    // ordered oldest-first, the cap drops the *most recent* step runs — which
+    // hid every scheduled routine run from the activity heatmap.
+    const rows: StepRunRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('step_runs')
+        .select('*')
+        .order('created_at')
+        .order('attempt')
+        .order('id')
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseStepRunStore.getAll failed: ${error.message}`);
+      const page = data as StepRunRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(rowToEntity);
   }
 
   async save(stepRun: StepRunEntity): Promise<void> {

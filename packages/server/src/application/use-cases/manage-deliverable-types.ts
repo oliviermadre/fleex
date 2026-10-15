@@ -46,12 +46,7 @@ export class ManageDeliverableTypesUseCase {
 
   /** Count deliverables grouped by their stored `type` value. */
   async usage(): Promise<Record<string, number>> {
-    const all = await this.deliverableStore.getAll();
-    const counts: Record<string, number> = {};
-    for (const d of all) {
-      counts[d.type] = (counts[d.type] ?? 0) + 1;
-    }
-    return counts;
+    return this.deliverableStore.countByType();
   }
 
   async list(): Promise<DeliverableTypesView> {
