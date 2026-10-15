@@ -24,6 +24,7 @@ import type { PostCommentUseCase } from './post-comment.js';
 import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { ExecuteAgentUseCase } from './execute-agent.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
+import { priceFor } from '../utils/cli-session-ingest.js';
 import type { AssistantEnvironmentPort } from '../assistant/assistant-environment.js';
 import type { AssistantLlm } from '../assistant/assistant-llm.js';
 import { cliToolArgv, cliToolsToAnthropic, type CliTool } from '../assistant/fleex-cli-tools.js';
@@ -55,6 +56,21 @@ export const ASSISTANT_DELTA_CHUNK_CHARS = 60;
 export const ASSISTANT_DELTA_FLUSH_MS = 150;
 /** Between the text of two model rounds (around a tool call), in the stream and in the posted comment alike. */
 export const ROUND_SEPARATOR = '\n\n';
+
+/**
+ * What one assistant turn cost, from the tokens its completions billed (same
+ * price list as manual CLI sessions; cache writes at the 5-minute rate, the
+ * only TTL the assistant would use). Undefined for an unpriced model: an
+ * unknown cost, not a free one.
+ */
+export function assistantTurnCostUsd(
+  model: string,
+  u: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number },
+): number | undefined {
+  const p = priceFor(model);
+  if (!p) return undefined;
+  return u.inputTokens * p.inp + u.outputTokens * p.out + u.cacheReadTokens * p.read + u.cacheCreationTokens * p.w5;
+}
 
 /** Machine-readable tail of a mode-request comment; the web renders it as a CTA. Invisible in markdown. */
 export function modeRequestMarker(mode: string, threadId: string): string {
@@ -99,9 +115,9 @@ export class RunAssistantTurnUseCase {
     private readonly llm: AssistantLlm,
   ) {}
 
-  /** The `workThreadsEnabled` kill switch, read on every call so it applies without a restart. */
+  /** The `workThreadsEnabled` switch (opt-in: absent = off), read on every call so it applies without a restart. */
   get enabled(): boolean {
-    return this.deps.config.get().workThreadsEnabled !== false;
+    return this.deps.config.get().workThreadsEnabled === true;
   }
 
   /** Null when the assistant is switched off: callers then behave as if none were configured. */
@@ -113,7 +129,7 @@ export class RunAssistantTurnUseCase {
 
   execute(params: { ticketId: string; trigger: AssistantTrigger }): Promise<void> {
     if (!this.enabled) {
-      this.deps.logger.info('Assistant switched off (workThreadsEnabled=false); turn skipped', { ticketId: params.ticketId, trigger: params.trigger.kind });
+      this.deps.logger.info('Assistant switched off (workThreadsEnabled is not true); turn skipped', { ticketId: params.ticketId, trigger: params.trigger.kind });
       return Promise.resolve();
     }
     const prev = this.lanes.get(params.ticketId) ?? Promise.resolve();
@@ -220,7 +236,9 @@ export class RunAssistantTurnUseCase {
     await emitEvent('execution_context', { executionId, systemPrompt: system, promptBlocks: [{ type: 'text', text: userPrompt }], model, effectiveMode: 'talk', maxTurns: ASSISTANT_MAX_ROUNDS });
 
     const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
-    const usage = { inputTokens: 0, outputTokens: 0 };
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+    // Billed even when the turn fails afterwards: the failure path records it too.
+    const metrics = () => ({ model, effectiveMode: 'talk', ...usage, costUsd: assistantTurnCostUsd(model, usage) });
     // Everything the model says to the user this turn, one entry per round that
     // spoke. The posted comment is exactly what was streamed: all rounds, joined
     // by a blank line — the same separator the live deltas carry.
@@ -246,6 +264,8 @@ export class RunAssistantTurnUseCase {
         await chain;
         usage.inputTokens += res.usage?.inputTokens ?? 0;
         usage.outputTokens += res.usage?.outputTokens ?? 0;
+        usage.cacheReadTokens += res.usage?.cacheReadTokens ?? 0;
+        usage.cacheCreationTokens += res.usage?.cacheCreationTokens ?? 0;
         messages.push({ role: 'assistant', content: res.content });
 
         const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
@@ -314,12 +334,12 @@ export class RunAssistantTurnUseCase {
         await this.postAssistant(ticket, assistant, null, "Je n'ai pas pu traiter ce message. Reformule, ou réessaie.");
       }
 
-      await this.deps.agentEventStore.completeExecution(executionId, 'completed', { model, effectiveMode: 'talk', ...usage });
-      await emitEvent('execution_end', { status: 'completed', ticketId, effectiveMode: 'talk', model, ...usage });
+      await this.deps.agentEventStore.completeExecution(executionId, 'completed', metrics());
+      await emitEvent('execution_end', { status: 'completed', ticketId, ...metrics() });
     } catch (err) {
       flushText();
-      await this.deps.agentEventStore.completeExecution(executionId, 'failed', { model, effectiveMode: 'talk' });
-      await emitEvent('execution_end', { status: 'failed', ticketId, effectiveMode: 'talk', model, error: err instanceof Error ? err.message : String(err) });
+      await this.deps.agentEventStore.completeExecution(executionId, 'failed', metrics());
+      await emitEvent('execution_end', { status: 'failed', ticketId, ...metrics(), error: err instanceof Error ? err.message : String(err) });
       throw err;
     }
   }

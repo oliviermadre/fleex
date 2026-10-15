@@ -7,7 +7,15 @@ import type Anthropic from '@anthropic-ai/sdk';
 export type AssistantLlm = (
   params: { model: string; system: string; messages: Anthropic.MessageParam[]; tools: Anthropic.Tool[] },
   onText: (delta: string) => void,
-) => Promise<{ content: Anthropic.ContentBlock[]; stopReason: string | null; usage?: { inputTokens?: number; outputTokens?: number } }>;
+) => Promise<{ content: Anthropic.ContentBlock[]; stopReason: string | null; usage?: AssistantUsage }>;
+
+/** Tokens one completion billed, cache included — what the turn's cost is computed from. */
+export interface AssistantUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+}
 
 /**
  * No extended thinking on purpose: the assistant is a project manager who
@@ -27,7 +35,12 @@ export function createAnthropicAssistantLlm(client: Anthropic, maxTokens = 4096)
     return {
       content: final.content,
       stopReason: final.stop_reason,
-      usage: { inputTokens: final.usage?.input_tokens, outputTokens: final.usage?.output_tokens },
+      usage: {
+        inputTokens: final.usage?.input_tokens,
+        outputTokens: final.usage?.output_tokens,
+        cacheReadTokens: final.usage?.cache_read_input_tokens ?? undefined,
+        cacheCreationTokens: final.usage?.cache_creation_input_tokens ?? undefined,
+      },
     };
   };
 }
