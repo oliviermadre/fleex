@@ -30,6 +30,7 @@ import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js'
 import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
 import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
 import { assistantThreadsRoutes } from './infrastructure/http/assistant-threads.routes.js';
+import { agentExecutionRoutes } from './infrastructure/http/agent-execution.routes.js';
 import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
 import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
 import { agentAnnotationsRoutes } from './infrastructure/http/agent-annotations.routes.js';
@@ -145,6 +146,7 @@ async function main() {
     invalidatePulls: (org, name) => container.repositoryCache.invalidate(`pulls-all:${org}/${name}`),
   }));
   await app.register(assistantThreadsRoutes(container));
+  await app.register(agentExecutionRoutes(container));
   await app.register(personaRoutes(container));
   await app.register(skillRoutes(container));
   await app.register(claudeCodeSkillRoutes(container));
