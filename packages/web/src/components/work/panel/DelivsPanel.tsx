@@ -4,9 +4,10 @@
  * unseen ones (toggles read via unreadStore) · author · generation date. The
  * list is passed down from WorkView (one shared WS-live subscription); clicking
  * a card opens the existing deliverable overlay; the hover trash deletes it
- * (after confirmation).
+ * (after confirmation). "+ Add deliverable" opens the ticket detail's own
+ * creation modal — the new card arrives through the shared WS subscription.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
 import { useUIStore } from '../../../stores/uiStore';
 import { useUnreadStore } from '../../../stores/unreadStore';
@@ -14,6 +15,7 @@ import { tint, tintText } from '../../../lib/tints';
 import { cn } from '../../../lib/cn';
 import { DeliverableTypeBadge } from '../../ui/DeliverableTypeBadge';
 import { DeleteDeliverableButton } from '../task/DeleteDeliverableButton';
+import { DeliverableFormModal } from '../../tickets/DeliverableFormModal';
 
 /** Local relative-time, matching the Deliverables tab's own formatter. */
 function relativeTime(dateStr: string): string {
@@ -38,18 +40,11 @@ export function DelivsPanel({ ticketId, deliverables, onDeleted }: Props) {
   const seenSet = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
   const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
   const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     void loadSeenDeliverables(ticketId);
   }, [ticketId, loadSeenDeliverables]);
-
-  if (deliverables.length === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center px-4 text-center text-[12px] text-[var(--theme-text-faint)]">
-        Nothing delivered yet.
-      </div>
-    );
-  }
 
   // Most recent first.
   const ordered = [...deliverables].sort(
@@ -57,7 +52,21 @@ export function DelivsPanel({ ticketId, deliverables, onDeleted }: Props) {
   );
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-2">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
+      <div className="mb-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setShowCreateModal(true)}
+          className="cursor-pointer rounded-md border border-[var(--theme-border)] px-2.5 py-1 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+        >
+          + Add deliverable
+        </button>
+      </div>
+      {ordered.length === 0 && (
+        <div className="flex flex-1 items-center justify-center px-4 text-center text-[12px] text-[var(--theme-text-faint)]">
+          Nothing delivered yet.
+        </div>
+      )}
       <div className="flex flex-col gap-1.5">
         {ordered.map((d) => {
           const isSeen = seenSet?.has(d.id) ?? false;
@@ -112,6 +121,7 @@ export function DelivsPanel({ ticketId, deliverables, onDeleted }: Props) {
           );
         })}
       </div>
+      <DeliverableFormModal open={showCreateModal} onClose={() => setShowCreateModal(false)} ticketId={ticketId} />
     </div>
   );
 }
