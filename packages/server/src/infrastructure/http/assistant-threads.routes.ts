@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 import { TicketNotFoundError } from '../../domain/errors.js';
+import type { AgentThreadEntity } from '../../domain/entities/agent-thread.entity.js';
+import { computeParticipants } from '../../application/use-cases/thread-label.js';
 
-type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'config' | 'eventBus' | 'agentEventStore'>;
+type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'generateThreadTitle' | 'config' | 'eventBus' | 'agentEventStore'>;
 
 /**
  * Work view Phase 3: the assistant entry point and the thread read/write routes.
@@ -123,18 +125,28 @@ export function assistantThreadsRoutes(container: Deps) {
       return threads;
     }
 
-    app.get<{ Params: { id: string } }>('/api/tickets/:id/threads', async (request) =>
-      (await reconcile(await container.threadStore.getByTicket(request.params.id))).map((t) => t.toDTO()));
+    /** DTOs with participants (authors of the thread's comments) computed at read time. */
+    async function withParticipants(threads: AgentThreadEntity[]) {
+      const commentsByTicket = new Map<string, Awaited<ReturnType<typeof container.commentStore.getByTicket>>>();
+      for (const t of threads) {
+        if (!commentsByTicket.has(t.ticketId)) commentsByTicket.set(t.ticketId, await container.commentStore.getByTicket(t.ticketId));
+      }
+      return threads.map((t) => ({ ...t.toDTO(), participants: computeParticipants(commentsByTicket.get(t.ticketId)!, t.id) }));
+    }
 
-    app.get('/api/threads/open', async () => (await container.threadStore.getOpen()).map((t) => t.toDTO()));
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/threads', async (request) =>
+      withParticipants(await reconcile(await container.threadStore.getByTicket(request.params.id))));
+
+    app.get('/api/threads/open', async () => withParticipants(await container.threadStore.getOpen()));
 
     app.get<{ Params: { id: string } }>('/api/threads/:id', async (request, reply) => {
       const thread = await container.threadStore.getById(request.params.id);
       if (!thread) return reply.code(404).send({ error: 'Thread not found' });
-      const turns = (await container.commentStore.getByTicket(thread.ticketId))
+      const allComments = await container.commentStore.getByTicket(thread.ticketId);
+      const turns = allComments
         .filter((c) => c.threadId === thread.id)
         .map((c) => c.toDTO());
-      return { thread: thread.toDTO(), turns };
+      return { thread: { ...thread.toDTO(), participants: computeParticipants(allComments, thread.id) }, turns };
     });
 
     // "Step into the thread": a user turn. Wakes a waiting agent, or re-mentions it.
@@ -162,6 +174,8 @@ export function assistantThreadsRoutes(container: Deps) {
         humanMentionNames: humanMentionName ? [humanMentionName] : [],
         suppressMentionForAgents: waiting ? [thread.personaName] : [],
       });
+      // Name the thread from its first user message, in the background (never blocks the reply).
+      if (!thread.generatedTitle) container.generateThreadTitle.trigger(thread.id, request.body.body);
       const now = new Date();
       for (const m of createdMentions) {
         if (m.targetAgent === thread.personaName && m.targetType === thread.targetType) {

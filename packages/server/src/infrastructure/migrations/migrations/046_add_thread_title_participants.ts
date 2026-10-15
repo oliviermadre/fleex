@@ -16,7 +16,7 @@ import type { Migration } from '../types.js';
  * Additive and idempotent.
  */
 const migration: Migration = {
-  name: '044_add_thread_title_participants',
+  name: '046_add_thread_title_participants',
 
   async up(ctx) {
     const columns: [string, string][] = [

@@ -14,7 +14,7 @@ import type { Migration } from '../types.js';
  * Additive and idempotent.
  */
 const migration: Migration = {
-  name: '043_add_run_termination_flags',
+  name: '045_add_run_termination_flags',
 
   async up(ctx) {
     const columns: [string, string][] = [
