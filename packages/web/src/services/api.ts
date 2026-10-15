@@ -2036,7 +2036,7 @@ export async function concludeThread(threadId: string): Promise<{ runsAutoTermin
 
 /** Manually terminate a running execution. Sets manually_terminated_by_user flag and interrupts the run. */
 export async function terminateExecution(executionId: string): Promise<{ accepted: boolean }> {
-  return request<{ accepted: boolean }>(`/api/executions/${encodeURIComponent(executionId)}/terminate-manual`, {
+  return request<{ accepted: boolean }>(`/executions/${encodeURIComponent(executionId)}/terminate-manual`, {
     method: 'POST',
     body: JSON.stringify({ reason: 'user_requested' }),
   });

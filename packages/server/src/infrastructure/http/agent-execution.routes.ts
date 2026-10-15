@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 
-type Deps = Pick<Container, 'agentEventStore'>;
+type Deps = Pick<Container, 'agentEventStore' | 'executeAgent'>;
 
 /**
  * Agent execution management routes: terminate runs manually, manage execution state.
@@ -23,12 +23,15 @@ export function agentExecutionRoutes(container: Deps) {
       async (request, reply) => {
         const { executionId } = request.params;
 
-        // Update the execution with manually_terminated_by_user flag and interrupted status
+        // Flag first: cancelling fails the mention, which wakes the assistant, and it
+        // must already see manually_terminated_by_user to leave the run alone.
         await container.agentEventStore.updateExecutionsByIds(
           [executionId],
           'interrupted',
           { manuallyTerminatedByUser: true }
         );
+        // Then actually stop the agent process (no-op if the run already ended).
+        await container.executeAgent.cancelExecution(executionId).catch(() => false);
 
         return reply.code(200).send({ accepted: true, executionId });
       }
