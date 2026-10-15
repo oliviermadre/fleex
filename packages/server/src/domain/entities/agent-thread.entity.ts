@@ -1,4 +1,4 @@
-import type { AgentThread, AgentThreadStatus, AgentThreadTargetType } from '@fleex/shared';
+import type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParticipant } from '@fleex/shared';
 
 /**
  * A delegation the assistant opened with one target (persona, skill, panel or
@@ -27,6 +27,8 @@ export class AgentThreadEntity {
     public updatedAt: Date,
     public concludedAt: Date | null,
     public readonly targetType: AgentThreadTargetType = 'agent',
+    public generatedTitle: string | null = null,
+    public participants: ThreadParticipant[] = [],
   ) {}
 
   static create(params: {
@@ -44,6 +46,8 @@ export class AgentThreadEntity {
       params.id, params.ticketId, 'assistant', params.personaId, params.personaName,
       params.assistantPersonaId, params.brief, [...params.forwardedContext],
       'running', null, 0, 0, null, now, now, null, params.targetType ?? 'agent',
+      null, // generatedTitle
+      [],   // participants
     );
   }
 
@@ -144,6 +148,8 @@ export class AgentThreadEntity {
       exchanges: this.exchanges,
       failures: this.failures,
       summary: this.summary,
+      generatedTitle: this.generatedTitle,
+      participants: this.participants,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
       concludedAt: this.concludedAt?.toISOString() ?? null,
