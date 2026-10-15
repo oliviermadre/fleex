@@ -268,6 +268,38 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     }
     return result;
   }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+    const placeholders = executionIds.map(() => '?').join(',');
+
+    // Build the UPDATE statement dynamically based on which flags are set
+    let updateParts = ['status = ?', 'completed_at = ?'];
+    const updateValues = [status, now];
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateParts.push('auto_terminated_at_conclusion = ?');
+      updateValues.push(flags.autoTerminatedAtConclusion ? 1 : 0);
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateParts.push('manually_terminated_by_user = ?');
+      updateValues.push(flags.manuallyTerminatedByUser ? 1 : 0);
+    }
+
+    updateValues.push(...executionIds);
+
+    this.conn.db.prepare(`
+      UPDATE agent_event_executions
+      SET ${updateParts.join(', ')}
+      WHERE execution_id IN (${placeholders})
+    `).run(...updateValues);
+  }
 }
 
 function rowToExecution(row: ExecutionRow): AgentExecution {

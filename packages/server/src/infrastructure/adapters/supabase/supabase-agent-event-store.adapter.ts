@@ -287,6 +287,33 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     }
     return result;
   }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+    const updateData: any = {
+      status,
+      completed_at: now,
+    };
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateData.auto_terminated_at_conclusion = flags.autoTerminatedAtConclusion;
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateData.manually_terminated_by_user = flags.manuallyTerminatedByUser;
+    }
+
+    const { error } = await this.conn.client
+      .from('agent_event_executions')
+      .update(updateData)
+      .in('execution_id', executionIds);
+    if (error) throw new Error(`SupabaseAgentEventStore.updateExecutionsByIds failed: ${error.message}`);
+  }
 }
 
 function rowToExecution(row: ExecutionRow): AgentExecution {
