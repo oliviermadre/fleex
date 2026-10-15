@@ -28,19 +28,38 @@ const STATUS_TINT: Record<AgentThreadStatus, 'yellow' | 'green' | 'red' | 'gray'
   failed: 'red',
 };
 
-export function ThreadStatusPill({ status, className }: { status: AgentThreadStatus; className?: string }) {
+/** What each state means, as the pill's tooltip. */
+export const STATUS_HINT: Record<AgentThreadStatus, string> = {
+  running: 'The agent has an open turn (queued or working)',
+  idle: 'The agent answered; the assistant has the hand',
+  waiting: 'Waiting for your answer',
+  concluded: 'Thread concluded',
+  failed: 'The last agent run failed',
+};
+
+interface PillProps {
+  status: AgentThreadStatus;
+  className?: string;
+  /** Overrides the default label (e.g. "run in progress"). */
+  label?: string;
+  /** Overrides the default tooltip. */
+  title?: string;
+  /** Pulsing dot: an agent run is executing right now. Defaults to `status === 'running'`. */
+  live?: boolean;
+}
+
+export function ThreadStatusPill({ status, className, label, title, live = status === 'running' }: PillProps) {
   return (
     <span
+      title={title ?? STATUS_HINT[status]}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
         tint(STATUS_TINT[status]),
         className,
       )}
     >
-      {status === 'running' && (
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--theme-accent)]" aria-hidden />
-      )}
-      {STATUS_LABEL[status]}
+      {live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--theme-accent)]" aria-hidden />}
+      {label ?? STATUS_LABEL[status]}
     </span>
   );
 }

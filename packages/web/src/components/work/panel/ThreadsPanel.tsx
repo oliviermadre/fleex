@@ -22,17 +22,11 @@ import { Composer } from '../task/Composer';
 import { DeliverableCard } from '../task/DeliverableCard';
 import type { WorkTask } from '../types';
 import { useTicketThreads } from './useTicketThreads';
+import { useThreadStats } from './useThreadStats';
+import { NO_STATS } from './threadStats';
 import { useThreadTurns } from './useThreadTurns';
 import { resolveSelectedThread } from './threadSelection';
 import { threadTargetLabel } from '../selectors';
-
-const DOT: Record<AgentThread['status'], string> = {
-  running: 'bg-[var(--theme-accent)] animate-pulse',
-  idle: 'bg-[var(--tint-gray-solid)]',
-  waiting: 'bg-[var(--tint-yellow-solid)]',
-  concluded: 'bg-[var(--tint-green-solid)]',
-  failed: 'bg-[var(--tint-red-solid)]',
-};
 
 function Turn({ turn }: { turn: TicketComment }) {
   if (turn.authorType === 'user') {
@@ -72,6 +66,7 @@ function Turn({ turn }: { turn: TicketComment }) {
 
 export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: WorkTask; deliverables: TicketDeliverable[]; onOpenExecution: (executionId: string, title: string) => void }) {
   const threads = useTicketThreads(task.id);
+  const stats = useThreadStats(task.id);
   const selectedThreadId = useWorkStore((s) => s.selectedThreadId);
   const setSelectedThreadId = useWorkStore((s) => s.setSelectedThreadId);
   const threadTab = useWorkStore((s) => s.threadTab);
@@ -209,8 +204,8 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
             {sortedThreads.map((t) => {
-              const isNonConcluded = t.status !== 'concluded' && t.status !== 'failed';
               const isSelected = t.id === selectedThreadId;
+              const st = stats.get(t.id) ?? NO_STATS;
               return (
                 <button
                   key={t.id}
@@ -226,11 +221,31 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
                       : 'border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]'
                   )}
                 >
-                  {/* Status dot + Name + Age */}
+                  {/* Name + self-explaining state + counters + age */}
                   <div className="flex items-center gap-2">
-                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT[t.status])} aria-hidden />
-                    <span className="truncate text-[12.5px] font-semibold text-[var(--theme-text-primary)]">{personaName(t)}</span>
-                    <span className="ml-auto shrink-0 text-[11px] text-[var(--theme-text-faint)]">{formatAge(t.createdAt)}</span>
+                    <span className="min-w-0 truncate text-[12.5px] font-semibold text-[var(--theme-text-primary)]">{personaName(t)}</span>
+                    <ThreadStatusPill
+                      status={t.status}
+                      live={st.activeRuns > 0}
+                      label={st.activeRuns > 0 ? 'run in progress' : undefined}
+                      title={st.activeRuns > 0 ? `${st.activeRuns} SDK run${st.activeRuns > 1 ? 's' : ''} executing right now` : undefined}
+                      className="shrink-0"
+                    />
+                    <span className="ml-auto flex shrink-0 items-center gap-2.5 text-[11px] text-[var(--theme-text-faint)]">
+                      <span className="inline-flex items-center gap-1" title={`${st.messages} message${st.messages === 1 ? '' : 's'}`}>
+                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                        </svg>
+                        {st.messages}
+                      </span>
+                      <span className="inline-flex items-center gap-1" title={`${st.runs} SDK run${st.runs === 1 ? '' : 's'}${st.activeRuns > 0 ? ` (${st.activeRuns} running)` : ''}`}>
+                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                        </svg>
+                        {st.runs}
+                      </span>
+                      <span>{formatAge(t.createdAt)}</span>
+                    </span>
                   </div>
 
                   {/* Brief & Participants */}
