@@ -3,7 +3,8 @@
  * Delivs panel card — kind badge · title · author · draft/version — but inline in
  * the conversation, right after the comment that produced it. Clicking opens the
  * existing deliverable overlay (globally mounted) via the uiStore, marking it seen
- * first, exactly like the Delivs panel does.
+ * first, exactly like the Delivs panel does. When `onDeleted` is given, a trash
+ * button shows on hover (with confirmation) — it never opens the overlay.
  */
 import type { TicketDeliverable } from '@fleex/shared';
 import { useUIStore } from '../../../stores/uiStore';
@@ -11,8 +12,15 @@ import { useUnreadStore } from '../../../stores/unreadStore';
 import { tint, tintText } from '../../../lib/tints';
 import { cn } from '../../../lib/cn';
 import { DeliverableTypeBadge } from '../../ui/DeliverableTypeBadge';
+import { DeleteDeliverableButton } from './DeleteDeliverableButton';
 
-export function DeliverableCard({ deliverable: d }: { deliverable: TicketDeliverable }) {
+export function DeliverableCard({
+  deliverable: d,
+  onDeleted,
+}: {
+  deliverable: TicketDeliverable;
+  onDeleted?: (id: string) => void;
+}) {
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
   const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
 
@@ -39,6 +47,14 @@ export function DeliverableCard({ deliverable: d }: { deliverable: TicketDeliver
           {d.version > 1 && <span>v{d.version}</span>}
         </span>
       </span>
+      {onDeleted && d.ticketId && (
+        <DeleteDeliverableButton
+          ticketId={d.ticketId}
+          deliverable={d}
+          onDeleted={onDeleted}
+          className="opacity-0 group-hover:opacity-100"
+        />
+      )}
       <span className="shrink-0 text-[10.5px] text-[var(--theme-text-faint)] group-hover:text-[var(--theme-accent)]">open ›</span>
     </button>
   );

@@ -50,3 +50,38 @@ describe('ToolStrip — bottom panels', () => {
     expect(sep.nextElementSibling).toBe(screen.getByRole('button', { name: /Timeline/ }));
   });
 });
+
+describe('ToolStrip — Mentions', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useWorkStore.setState({ rightPanel: null });
+  });
+
+  it('sits right after Docs', () => {
+    render(<ToolStrip task={task} />);
+    const docs = screen.getByRole('button', { name: /Docs/ });
+    expect(docs.nextElementSibling).toBe(screen.getByRole('button', { name: /Mentions/ }));
+  });
+
+  it('badges the open mentions, hidden at 0 and capped at 99+', () => {
+    const { rerender } = render(<ToolStrip task={task} mentionCount={0} />);
+    expect(screen.getByRole('button', { name: /Mentions/ }).textContent).toBe('Mentions');
+    rerender(<ToolStrip task={task} mentionCount={3} />);
+    expect(screen.getByRole('button', { name: /Mentions/ }).textContent).toBe('3Mentions');
+    rerender(<ToolStrip task={task} mentionCount={150} />);
+    expect(screen.getByRole('button', { name: /Mentions/ }).textContent).toBe('99+Mentions');
+  });
+
+  it('toggles the Mentions right panel', () => {
+    render(<ToolStrip task={task} />);
+    fireEvent.click(screen.getByRole('button', { name: /Mentions/ }));
+    expect(useWorkStore.getState().rightPanel).toBe('mentions');
+    fireEvent.click(screen.getByRole('button', { name: /Mentions/ }));
+    expect(useWorkStore.getState().rightPanel).toBeNull();
+  });
+
+  it('is disabled without a task', () => {
+    render(<ToolStrip task={null} />);
+    expect(screen.getByRole('button', { name: /Mentions/ })).toHaveProperty('disabled', true);
+  });
+});

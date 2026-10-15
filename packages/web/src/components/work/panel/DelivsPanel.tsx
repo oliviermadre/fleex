@@ -3,7 +3,8 @@
  * detail's Deliverables tab: kind badge · title · draft flag · a NEW badge for
  * unseen ones (toggles read via unreadStore) · author · generation date. The
  * list is passed down from WorkView (one shared WS-live subscription); clicking
- * a card opens the existing deliverable overlay.
+ * a card opens the existing deliverable overlay; the hover trash deletes it
+ * (after confirmation).
  */
 import { useEffect } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
@@ -12,6 +13,7 @@ import { useUnreadStore } from '../../../stores/unreadStore';
 import { tint, tintText } from '../../../lib/tints';
 import { cn } from '../../../lib/cn';
 import { DeliverableTypeBadge } from '../../ui/DeliverableTypeBadge';
+import { DeleteDeliverableButton } from '../task/DeleteDeliverableButton';
 
 /** Local relative-time, matching the Deliverables tab's own formatter. */
 function relativeTime(dateStr: string): string {
@@ -27,9 +29,11 @@ function relativeTime(dateStr: string): string {
 interface Props {
   ticketId: string;
   deliverables: TicketDeliverable[];
+  /** Drops the card at once after a delete (the WS frame follows). */
+  onDeleted?: (id: string) => void;
 }
 
-export function DelivsPanel({ ticketId, deliverables }: Props) {
+export function DelivsPanel({ ticketId, deliverables, onDeleted }: Props) {
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
   const seenSet = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
   const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
@@ -81,6 +85,12 @@ export function DelivsPanel({ ticketId, deliverables }: Props) {
                 >
                   NEW
                 </button>
+                <DeleteDeliverableButton
+                  ticketId={ticketId}
+                  deliverable={d}
+                  onDeleted={onDeleted}
+                  className="-my-1 opacity-0 group-hover/deliv:opacity-100"
+                />
               </div>
 
               <button

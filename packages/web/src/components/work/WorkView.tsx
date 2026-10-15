@@ -34,6 +34,7 @@ import { ShellDrawer } from './shell/ShellDrawer';
 import { TimelineDrawer } from './timeline/TimelineDrawer';
 import { CodeEditor } from './panel/CodeEditor';
 import { useTicketDeliverables } from './panel/useTicketDeliverables';
+import { useTicketMentions } from './panel/useTicketMentions';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 
 export function WorkView() {
@@ -97,7 +98,9 @@ export function WorkView() {
   );
   // One deliverables subscription for the whole view: feeds the tool-strip badge
   // count and the Delivs panel, both live via WS.
-  const { deliverables } = useTicketDeliverables(selectedTask?.id ?? null);
+  const { deliverables, removeDeliverable } = useTicketDeliverables(selectedTask?.id ?? null);
+  // Same for mentions: one subscription feeds the tool-strip badge.
+  const { openCount: mentionCount } = useTicketMentions(selectedTask?.id ?? null);
 
   // A single execution-log panel for the whole view — opened from a queue row's
   // running badge or a timeline run card.
@@ -137,13 +140,23 @@ export function WorkView() {
               ) : workflowMode && selectedTask && hasWorkflowRuns ? (
                 <TicketWorkflowTab ticketId={selectedTask.id} />
               ) : (
-                <TaskPane task={selectedTask} deliverables={deliverables} onOpenExecution={openExecution} />
+                <TaskPane
+                  task={selectedTask}
+                  deliverables={deliverables}
+                  onDeliverableDeleted={removeDeliverable}
+                  onOpenExecution={openExecution}
+                />
               )}
             </main>
           )}
 
           {view === 'task' && rightPanel && selectedTask && (
-            <RightPanel task={selectedTask} deliverables={deliverables} onDeleteTask={(id) => void deleteTask(id)} />
+            <RightPanel
+              task={selectedTask}
+              deliverables={deliverables}
+              onDeliverableDeleted={removeDeliverable}
+              onDeleteTask={(id) => void deleteTask(id)}
+            />
           )}
         </div>
 
@@ -151,7 +164,7 @@ export function WorkView() {
             buttons stay next to the band they toggle. */}
         {view === 'task' && (
           <div className="col-start-3 row-span-2 row-start-2 flex min-h-0">
-            <ToolStrip task={selectedTask} delivCount={deliverables.length} />
+            <ToolStrip task={selectedTask} delivCount={deliverables.length} mentionCount={mentionCount} />
           </div>
         )}
 

@@ -13,7 +13,7 @@ import { useBrowserStore } from './browserStore';
  */
 
 export type WorkView = 'task' | 'new';
-export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'scratch' | 'browser' | null;
+export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'mentions' | 'scratch' | 'browser' | null;
 /** A remembered `browser` panel means nothing outside the desktop shell. */
 export function effectiveRightPanel(panel: RightPanel, desktop: boolean): RightPanel {
   return panel === 'browser' && !desktop ? null : panel;

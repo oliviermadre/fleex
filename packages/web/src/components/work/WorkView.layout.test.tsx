@@ -8,7 +8,10 @@ vi.mock('./useWorkQueue', () => ({
   useWorkQueue: () => ({ selectedTask: task, orderedIds: ['t1'], counts: { total: 1 } }),
 }));
 vi.mock('./keyboard', () => ({ useWorkKeyboard: () => {} }));
-vi.mock('./panel/useTicketDeliverables', () => ({ useTicketDeliverables: () => ({ deliverables: [] }) }));
+vi.mock('./panel/useTicketDeliverables', () => ({
+  useTicketDeliverables: () => ({ deliverables: [], removeDeliverable: () => {} }),
+}));
+vi.mock('./panel/useTicketMentions', () => ({ useTicketMentions: () => ({ mentions: [], openCount: 0 }) }));
 vi.mock('./queue/WorkQueue', () => ({ WorkQueue: () => <aside data-testid="queue" /> }));
 vi.mock('./queue/CollapsedQueueRail', () => ({ CollapsedQueueRail: () => <aside data-testid="queue" /> }));
 vi.mock('./WorkTopBar', () => ({ WorkTopBar: () => <header data-testid="top-bar" /> }));

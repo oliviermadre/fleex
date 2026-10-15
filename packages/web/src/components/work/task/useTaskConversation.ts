@@ -19,6 +19,8 @@ export interface TaskConversation {
   posting: boolean;
   post: (body: string) => Promise<void>;
   reload: () => void;
+  /** Drop a comment locally (after a delete) — the WS `comment:deleted` that follows is a no-op. */
+  removeComment: (id: string) => void;
 }
 
 export function useTaskConversation(ticketId: string | null): TaskConversation {
@@ -117,5 +119,9 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
     if (ticketId) void load(ticketId);
   }, [ticketId, load]);
 
-  return { comments, events, loading, error, posting, post, reload };
+  const removeComment = useCallback((id: string) => {
+    setComments((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  return { comments, events, loading, error, posting, post, reload, removeComment };
 }

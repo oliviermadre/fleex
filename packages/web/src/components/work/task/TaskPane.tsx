@@ -24,10 +24,12 @@ import { useTaskConversation } from './useTaskConversation';
 export function TaskPane({
   task,
   deliverables,
+  onDeliverableDeleted,
   onOpenExecution,
 }: {
   task: WorkTask | null;
   deliverables: TicketDeliverable[];
+  onDeliverableDeleted?: (id: string) => void;
   onOpenExecution: (executionId: string, title: string) => void;
 }) {
   const description = useTicketStore((s) =>
@@ -76,6 +78,9 @@ export function TaskPane({
         error={convo.error}
         onAnswer={convo.post}
         onOpenExecution={onOpenExecution}
+        editable
+        onCommentDeleted={convo.removeComment}
+        onDeliverableDeleted={onDeliverableDeleted}
       />
       <Composer
         ticketId={task.id}

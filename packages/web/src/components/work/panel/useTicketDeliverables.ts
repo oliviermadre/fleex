@@ -4,7 +4,7 @@
  * ticket detail uses. Lifted to WorkView so both the tool-strip badge count and
  * the Delivs panel share one subscription and stay in sync.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
 import * as api from '../../../services/api';
 import { appWs } from '../../../services/websocket';
@@ -12,6 +12,8 @@ import { appWs } from '../../../services/websocket';
 export function useTicketDeliverables(ticketId: string | null): {
   deliverables: TicketDeliverable[];
   loading: boolean;
+  /** Drop a deliverable locally (after a delete) — the WS `deliverable:deleted` that follows is a no-op. */
+  removeDeliverable: (id: string) => void;
 } {
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
   const [loading, setLoading] = useState(false);
@@ -62,5 +64,9 @@ export function useTicketDeliverables(ticketId: string | null): {
     return unsub;
   }, [ticketId]);
 
-  return { deliverables, loading };
+  const removeDeliverable = useCallback((id: string) => {
+    setDeliverables((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  return { deliverables, loading, removeDeliverable };
 }
