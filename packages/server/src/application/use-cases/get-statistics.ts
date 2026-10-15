@@ -455,27 +455,34 @@ export class GetStatisticsUseCase {
     }));
 
     // Per-ticket move timelines (sorted ascending).
-    const movesByTicket = new Map<string, Array<{ at: Date; to: string }>>();
+    const movesByTicket = new Map<string, Array<{ at: Date; to: string; from: string | null }>>();
     for (const ev of moveEvents) {
       const tid = ev.payload['ticketId'] as string | undefined;
       const toStatus = ev.payload['toStatus'] as string | undefined;
       if (!tid || !toStatus) continue;
       const list = movesByTicket.get(tid) ?? [];
-      list.push({ at: ev.occurredAt, to: toStatus });
+      list.push({ at: ev.occurredAt, to: toStatus, from: (ev.payload['fromStatus'] as string | undefined) ?? null });
       movesByTicket.set(tid, list);
     }
     for (const list of movesByTicket.values()) list.sort((a, b) => a.at.getTime() - b.at.getTime());
 
     // Status of a ticket as of a point in time (null before it existed).
-    const statusAtTime = (ticket: { id: string; createdAt: string }, time: Date): string | null => {
+    // Rebuilt *backwards* from the ticket's current status: the status at
+    // `time` is the `fromStatus` of the first move after it, or the current
+    // status if it has not moved since. Replaying forwards from an assumed
+    // 'backlog' was wrong for every ticket created straight into another
+    // status or older than the move log (122 of 607): they all read backlog.
+    const statusAtTime = (
+      ticket: { id: string; createdAt: string; status: string },
+      time: Date,
+    ): string | null => {
       const created = new Date(ticket.createdAt);
       if (Number.isNaN(created.getTime()) || created > time) return null;
-      let status = 'backlog';
-      for (const mv of movesByTicket.get(ticket.id) ?? []) {
-        if (mv.at <= time) status = mv.to;
-        else break;
-      }
-      return status;
+      const moves = movesByTicket.get(ticket.id) ?? [];
+      const nextIdx = moves.findIndex((mv) => mv.at > time);
+      if (nextIdx === -1) return ticket.status;
+      const next = moves[nextIdx]!;
+      return next.from ?? (nextIdx > 0 ? moves[nextIdx - 1]!.to : 'backlog');
     };
 
     // Per-ticket interaction counts (full history, used by C14).

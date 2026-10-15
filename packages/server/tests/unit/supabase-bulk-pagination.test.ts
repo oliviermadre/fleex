@@ -5,6 +5,7 @@ import { SupabaseMentionStore } from '../../src/infrastructure/adapters/supabase
 import { SupabaseAgentEventStore } from '../../src/infrastructure/adapters/supabase/supabase-agent-event-store.adapter.js';
 import { SupabaseStepRunStore } from '../../src/infrastructure/adapters/supabase/supabase-step-run-store.adapter.js';
 import { SupabaseWorkflowRunStore } from '../../src/infrastructure/adapters/supabase/supabase-workflow-run-store.adapter.js';
+import { SupabaseDomainEventLogStore } from '../../src/infrastructure/adapters/supabase/supabase-domain-event-log-store.adapter.js';
 import type { SupabaseConnection } from '../../src/infrastructure/adapters/supabase/connection.js';
 
 /**
@@ -31,6 +32,9 @@ function makeFakeClient(rowsByTable: Record<string, Record<string, unknown>[]>) 
         // Filters are not evaluated: these tests are about paging, not matching.
         gte: () => builder,
         lte: () => builder,
+        lt: () => builder,
+        eq: () => builder,
+        or: () => builder,
         order: () => builder,
         range: (f: number, t: number) => {
           from = f;
@@ -311,5 +315,26 @@ describe('Supabase workflow stores — getAll pagination', () => {
     const result = await store.getAll();
     expect(result).toHaveLength(2001);
     expect(result[2000]!.id).toBe('run-2000');
+  });
+});
+
+describe('SupabaseDomainEventLogStore.list pagination', () => {
+  const rows = Array.from({ length: 2533 }, (_, i) => ({
+    id: `ev-${i}`, event_type: 'ticket.moved', payload: { ticketId: `t-${i}` }, instance_id: 'x',
+    occurred_at: new Date(1700000000000 - i * 1000).toISOString(),
+  }));
+  const store = () => new SupabaseDomainEventLogStore({
+    client: makeFakeClient({ domain_event_log: rows }),
+  } as unknown as SupabaseConnection);
+
+  it('returns up to `limit` rows past the 1000 cap (Stats asks for every ticket move)', async () => {
+    // A single .limit(50_000) came back with 1000 rows: lead time and the CFD
+    // only saw the 1000 most recent of 2533 moves.
+    const result = await store().list({ limit: 50_000, eventType: 'ticket.moved' });
+    expect(result).toHaveLength(2533);
+  });
+
+  it('still honours a small limit', async () => {
+    expect(await store().list({ limit: 100, eventType: 'ticket.moved' })).toHaveLength(100);
   });
 });
