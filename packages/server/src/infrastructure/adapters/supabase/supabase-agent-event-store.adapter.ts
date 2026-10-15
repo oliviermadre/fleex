@@ -37,6 +37,8 @@ interface ExecutionRow {
   source: string | null;
   comment_id: string | null;
   deliverable_id: string | null;
+  auto_terminated_at_conclusion?: boolean | null;
+  manually_terminated_by_user?: boolean | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -389,5 +391,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: row.comment_id ?? null,
     deliverableId: row.deliverable_id ?? null,
+    autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    manuallyTerminatedByUser: !!row.manually_terminated_by_user,
   };
 }
