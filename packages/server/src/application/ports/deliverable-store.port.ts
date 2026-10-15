@@ -74,6 +74,11 @@ export interface DeliverableStorePort {
    */
   getCreatedAtBetween(from: Date, to: Date): Promise<string[]>;
   /**
+   * Number of deliverables per stored `type`, without loading any `content`
+   * (a full read ~22 MB hits Supabase's statement timeout).
+   */
+  countByType(): Promise<Record<string, number>>;
+  /**
    * One page of deliverables, newest-updated first, plus the total number of
    * rows matching the filters. Backs the Documents view: the list stays bounded
    * while the header and the "load more" affordance know the real size.

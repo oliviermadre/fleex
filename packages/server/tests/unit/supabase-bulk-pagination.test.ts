@@ -262,6 +262,16 @@ describe('slim per-ticket reads (unread counts / Logs badges)', () => {
     expect(new Set(selects)).toEqual(new Set(['ticket_id, created_at, author_type']));
   });
 
+  it('countByType pages past the cap and reads only the type column', async () => {
+    // The Deliverable Types store is loaded at app start on every view: a full
+    // read with `content` hit the statement timeout (seen on the Stats view).
+    const rows = Array.from({ length: 2300 }, (_, i) => ({ ...deliverableRow(i, 'ticket-a'), type: i < 2000 ? 'report' : 'code' }));
+    const { client, selects } = recordingClient({ deliverables: rows });
+    const store = new SupabaseDeliverableStore({ client } as unknown as SupabaseConnection);
+    expect(await store.countByType()).toEqual({ report: 2000, code: 300 });
+    expect(new Set(selects)).toEqual(new Set(['type']));
+  });
+
   it('both return [] without querying when no ticket is asked', async () => {
     const { client, selects } = recordingClient({});
     const conn = { client } as unknown as SupabaseConnection;

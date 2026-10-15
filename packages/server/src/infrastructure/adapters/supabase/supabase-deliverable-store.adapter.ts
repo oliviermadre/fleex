@@ -169,6 +169,24 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     return rows.map((r) => new Date(r.created_at).toISOString());
   }
 
+  async countByType(): Promise<Record<string, number>> {
+    // Only `type`, paginated: PostgREST cannot GROUP BY, and reading `content`
+    // for every row (~22 MB) hit Supabase's statement timeout.
+    const counts: Record<string, number> = {};
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('deliverables')
+        .select('type')
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (error) throw new Error(`SupabaseDeliverableStore.countByType failed: ${error.message}`);
+      const page = data as { type: string }[];
+      for (const r of page) counts[r.type] = (counts[r.type] ?? 0) + 1;
+      if (page.length < PAGE) break;
+    }
+    return counts;
+  }
+
   /**
    * The Documents view reads the `deliverables_search` view (migration 029) so
    * PostgREST — which cannot join — still sees the origin columns and can match

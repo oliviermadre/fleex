@@ -123,6 +123,13 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     return rows.map((r) => r.created_at);
   }
 
+  async countByType(): Promise<Record<string, number>> {
+    const rows = this.conn.db
+      .prepare('SELECT type, COUNT(*) AS n FROM deliverables GROUP BY type')
+      .all() as { type: string; n: number }[];
+    return Object.fromEntries(rows.map((r) => [r.type, Number(r.n)]));
+  }
+
   async query(options: DeliverableQueryOptions): Promise<DeliverableQueryResult> {
     const { sql: where, params } = buildWhere(options);
     const { count } = this.conn.db

@@ -262,3 +262,9 @@ describe('getCreatedAtBetween', () => {
     ]);
   });
 });
+
+describe('countByType', () => {
+  it('counts every deliverable per type, past the 1000 cap that used to hide recent types', async () => {
+    expect(await store.countByType()).toEqual({ report: 1200, fireflies: 5 });
+  });
+});

@@ -102,6 +102,11 @@ export class PgDeliverableStore implements DeliverableStorePort {
     return rows.map((r) => new Date(r.created_at as string | Date).toISOString());
   }
 
+  async countByType(): Promise<Record<string, number>> {
+    const { rows } = await this.db.query('SELECT type, COUNT(*) AS n FROM deliverables GROUP BY type');
+    return Object.fromEntries(rows.map((r) => [r.type as string, Number(r.n)]));
+  }
+
   async query(options: DeliverableQueryOptions): Promise<DeliverableQueryResult> {
     const { sql: where, params } = buildWhere(options);
     const countRes = await this.db.query(
