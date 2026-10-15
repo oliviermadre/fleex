@@ -21,7 +21,7 @@ const METRICS = {
   cacheCreationTokens: 1_110_000,
 };
 
-function makeUseCase() {
+function makeUseCase(baseline: { priorRuns: number; latest: { totals: Record<string, number>; cliVersion: string | null } | null } = { priorRuns: 0, latest: null }) {
   // executionMode 'message' → effectiveMode 'talk' → skips worktree creation.
   const persona = { id: 'p1', name: 'Builder', executionMode: 'message', model: 'claude-opus-4-8' } as never;
 
@@ -32,6 +32,7 @@ function makeUseCase() {
     appendEvent: vi.fn(async () => {}),
     updateSessionId,
     completeExecution,
+    getSdkSessionBaseline: vi.fn(async () => baseline),
   } as never;
 
   const personaStore = { getByName: async () => persona } as never;
@@ -85,6 +86,7 @@ describe('ExecuteAgentUseCase.executeForWorkflowStep — cost/token attribution'
     mockedStream.mockReset();
     mockedStream.mockResolvedValue({
       sessionId: 'sess-abc-123',
+      cliVersion: '2.1.284',
       resultText: 'done',
       structuredOutput: { mentionStatus: 'resolved' },
       resultSubtype: undefined,
@@ -120,4 +122,55 @@ describe('ExecuteAgentUseCase.executeForWorkflowStep — cost/token attribution'
     // And the execution is linked to its transcript for resume + backfill.
     expect(updateSessionId).toHaveBeenCalledWith(expect.any(String), 'sess-abc-123');
   });
+
+  it('records only this run\'s share when the SDK session was resumed', async () => {
+    // The SDK reports SESSION totals: a resumed session starts from what its
+    // transcript saved. Ticket #636: runs displayed $8.23 → $8.39 → … → $14.40
+    // although each mention cost a few cents — every run re-billed the history.
+    const previousRun = {
+      costUsd: 10.0,
+      inputTokens: 500,
+      outputTokens: 200_000,
+      cacheReadTokens: 28_000_000,
+      cacheCreationTokens: 1_000_000,
+    };
+    const { useCase, completeExecution } = makeUseCase({ priorRuns: 1, latest: { totals: previousRun, cliVersion: '2.1.284' } });
+
+    await useCase.executeForWorkflowStep({
+      personaName: 'Builder',
+      ticketId: 'T1',
+      outputFormat: {} as never,
+      workflowContextPrompt: 'context',
+      mode: 'edit',
+    });
+
+    const metrics = (completeExecution.mock.calls[0] as unknown[])[2] as Record<string, unknown>;
+    expect(metrics['costUsd']).toBeCloseTo(2.34, 10);
+    expect(metrics['inputTokens']).toBe(40);
+    expect(metrics['outputTokens']).toBe(7_600);
+    expect(metrics['cacheReadTokens']).toBe(610_000);
+    expect(metrics['cacheCreationTokens']).toBe(110_000);
+    // Raw totals are kept as the baseline for the next resumed run.
+    expect(metrics['sdkTotals']).toEqual(METRICS_TOTALS);
+    expect(metrics['cliVersion']).toBe('2.1.284');
+    expect(metrics['costBasis']).toBe('per_run');
+  });
+
+  it('keeps the raw value, flagged unverified, when the baseline comes from another CLI regime', async () => {
+    const { useCase, completeExecution } = makeUseCase({ priorRuns: 1, latest: { totals: { costUsd: 10 }, cliVersion: '2.1.270' } });
+    await useCase.executeForWorkflowStep({
+      personaName: 'Builder', ticketId: 'T1', outputFormat: {} as never, workflowContextPrompt: 'context', mode: 'edit',
+    });
+    const metrics = (completeExecution.mock.calls[0] as unknown[])[2] as Record<string, unknown>;
+    expect(metrics['costUsd']).toBe(METRICS.costUsd);
+    expect(metrics['costBasis']).toBe('unverified');
+  });
 });
+
+const METRICS_TOTALS = {
+  costUsd: METRICS.costUsd,
+  inputTokens: METRICS.inputTokens,
+  outputTokens: METRICS.outputTokens,
+  cacheReadTokens: METRICS.cacheReadTokens,
+  cacheCreationTokens: METRICS.cacheCreationTokens,
+};

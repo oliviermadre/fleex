@@ -1,5 +1,6 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
+import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../utils/sdk-run-usage.js';
 
 /** Params for `upsertCliExecution` — a fully-computed CLI session execution row. */
 export interface CliExecutionUpsert {
@@ -53,7 +54,23 @@ export interface AgentEventStorePort {
     commentId?: string;
     /** Deliverable produced by this run (persona/skill/panel path, known at completion). */
     deliverableId?: string;
+    /**
+     * Raw usage the SDK reported for this run (a running session total on a
+     * carrying CLI). `costUsd`/tokens above are this run's share; the raw values
+     * are the baseline the next resumed run of the session is measured against.
+     */
+    sdkTotals?: SdkUsageTotals;
+    /** Claude Code CLI version that produced the run (from the SDK `init` message). */
+    cliVersion?: string;
+    /** How `costUsd` must be read — see `CostBasis`. */
+    costBasis?: CostBasis;
   }): Promise<void>;
+
+  /**
+   * Earlier executions of `sdkSessionId` other than `executionId`: how many, and
+   * the raw totals + CLI version of the latest one that saw spend.
+   */
+  getSdkSessionBaseline(sdkSessionId: string, executionId: string): Promise<SdkSessionBaseline>;
 
   /**
    * Link an already-completed execution to the artifacts it produced. Used by the
