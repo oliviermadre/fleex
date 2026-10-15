@@ -204,6 +204,8 @@ export function assistantThreadsRoutes(container: Deps) {
           'completed',
           { autoTerminatedAtConclusion: true }
         );
+        // Flags are set; now really stop the agent processes still running.
+        await Promise.all(runIds.map((id) => container.executeAgent.cancelExecution(id).catch(() => false)));
       }
 
       void container.runAssistantTurn.execute({ ticketId: thread.ticketId, trigger: { kind: 'conclude_request', threadId: thread.id } });

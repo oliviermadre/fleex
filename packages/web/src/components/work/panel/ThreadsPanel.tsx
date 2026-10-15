@@ -18,6 +18,7 @@ import { AgentEventStream } from '../../main-panel/AgentEventStream';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import { ThreadStatusPill } from '../task/DelegationCard';
 import { RunCard } from '../task/RunCard';
+import { Composer } from '../task/Composer';
 import { DeliverableCard } from '../task/DeliverableCard';
 import type { WorkTask } from '../types';
 import { useTicketThreads } from './useTicketThreads';
@@ -78,14 +79,10 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
   const personas = useAgentPersonaStore((s) => s.personas);
   const executions = useAgentEventStore((s) => s.executionsByTicket[task.id]);
 
-  // Two-level navigation: show list of threads OR detail of selected thread
+  // Two-level navigation: show list of threads OR detail of selected thread.
+  // Opening a thread closes the list from the click handler (not from an effect on
+  // selectedThreadId, which never fires when the clicked thread is already selected).
   const [showThreadList, setShowThreadList] = useState(false);
-  useEffect(() => {
-    // Auto-close list when a thread is selected
-    if (selectedThreadId) {
-      setShowThreadList(false);
-    }
-  }, [selectedThreadId]);
 
   const thread = resolveSelectedThread(threads, selectedThreadId);
   const turns = useThreadTurns(thread?.id ?? null);
@@ -141,14 +138,29 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
             ? 'answered'
             : 'none';
 
+  // The list shows the newest thread first, by the same date as the age on each card;
+  // the status dot says what is still open. Hooks stay above the empty-state return.
+  const sortedThreads = useMemo(() => [...threads].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)), [threads]);
+
+  // Default selection: the most recent thread that is not concluded, else the most recent one.
+  useEffect(() => {
+    if (!selectedThreadId && sortedThreads.length > 0) {
+      const open = sortedThreads.find((t) => t.status !== 'concluded' && t.status !== 'failed');
+      setSelectedThreadId((open ?? sortedThreads[0]!).id);
+    }
+  }, [sortedThreads, selectedThreadId, setSelectedThreadId]);
+
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
-  const stepIn = async () => {
-    if (!thread || !reply.trim() || busy) return;
+  // Called by the shared Composer (rich editor: image paste, attach, @-mentions) with the final body.
+  const stepIn = async (body: string) => {
+    if (!thread || !body.trim() || busy) return;
     setBusy(true);
     try {
-      await api.postThreadMessage(thread.id, reply.trim());
-      setReply('');
+      await api.postThreadMessage(thread.id, body.trim());
+    } catch (err) {
+      useToastStore.getState().addToast('error', 'Failed to send message', { detail: err instanceof Error ? err.message : 'Unknown error' });
+      throw err; // Composer keeps the draft when onSend throws
     } finally {
       setBusy(false);
     }
@@ -189,21 +201,6 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
 
   const terminal = thread ? thread.status === 'concluded' || thread.status === 'failed' : true;
 
-  // Sort threads: non-concluded (DESC by date) on top, concluded (DESC by date) below
-  const sortedThreads = useMemo(() => {
-    const nonConcluded = threads.filter((t) => t.status !== 'concluded' && t.status !== 'failed').sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    const concluded = threads.filter((t) => t.status === 'concluded' || t.status === 'failed').sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    return [...nonConcluded, ...concluded];
-  }, [threads]);
-
-  // Default: last non-concluded thread, or last thread if all concluded
-  useEffect(() => {
-    if (!selectedThreadId && threads.length > 0) {
-      const nonConcluded = threads.find((t) => t.status !== 'concluded' && t.status !== 'failed');
-      setSelectedThreadId(nonConcluded?.id ?? threads[threads.length - 1]?.id ?? '');
-    }
-  }, [threads, selectedThreadId, setSelectedThreadId]);
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Two-Level Navigation: List or Detail */}
@@ -221,7 +218,10 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setSelectedThreadId(t.id)}
+                  onClick={() => {
+                    setSelectedThreadId(t.id);
+                    setShowThreadList(false);
+                  }}
                   className={cn(
                     'group flex min-h-0 flex-col gap-1.5 rounded-lg border px-3 py-2 text-left transition-colors',
                     isSelected
@@ -265,7 +265,7 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
             })}
           </div>
         </div>
-      ) : (
+      ) :
         // LEVEL 2: Thread Detail View
         thread && (
           <>
@@ -280,41 +280,52 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
                 ← Threads
               </button>
               <span className="flex-1" />
+              {!terminal && (
+                <button
+                  type="button"
+                  onClick={() => void conclude()}
+                  disabled={busy}
+                  title="Stop the agent and ask the assistant to bring the result back"
+                  className="shrink-0 whitespace-nowrap rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5 text-[12px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] disabled:opacity-50"
+                >
+                  Conclude now ↩
+                </button>
+              )}
             </div>
 
             {/* Thread Label: Title + Participants */}
-          {(thread.generatedTitle || (thread.participants && thread.participants.length > 0)) && (
-            <div className="shrink-0 border-b border-[var(--theme-border-subtle)] px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] text-[var(--theme-text-secondary)]" aria-hidden>🧵</span>
-                <span className="text-[12.5px] font-medium text-[var(--theme-text-primary)]">
-                  {thread.generatedTitle || 'Thread'}
-                </span>
-                {thread.participants && thread.participants.length > 0 && (
-                  <div className="ml-auto flex items-center gap-1.5">
-                    {thread.participants.slice(0, 5).map((p) => (
-                      <div
-                        key={p.userId}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[10px] font-semibold text-[var(--theme-text-primary)] hover:ring-2 hover:ring-[var(--theme-accent)]"
-                        title={p.displayName}
-                      >
-                        {p.avatar ? (
-                          <img src={p.avatar} alt={p.displayName} className="h-full w-full rounded-full object-cover" />
-                        ) : (
-                          p.displayName.charAt(0).toUpperCase()
-                        )}
-                      </div>
-                    ))}
-                    {thread.participants.length > 5 && (
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[10px] font-semibold text-[var(--theme-text-secondary)]">
-                        +{thread.participants.length - 5}
-                      </div>
-                    )}
-                  </div>
-                )}
+            {(thread.generatedTitle || (thread.participants && thread.participants.length > 0)) && (
+              <div className="shrink-0 border-b border-[var(--theme-border-subtle)] px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] text-[var(--theme-text-secondary)]" aria-hidden>🧵</span>
+                  <span className="text-[12.5px] font-medium text-[var(--theme-text-primary)]">
+                    {thread.generatedTitle || 'Thread'}
+                  </span>
+                  {thread.participants && thread.participants.length > 0 && (
+                    <div className="ml-auto flex items-center gap-1.5">
+                      {thread.participants.slice(0, 5).map((p) => (
+                        <div
+                          key={p.userId}
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[10px] font-semibold text-[var(--theme-text-primary)] hover:ring-2 hover:ring-[var(--theme-accent)]"
+                          title={p.displayName}
+                        >
+                          {p.avatar ? (
+                            <img src={p.avatar} alt={p.displayName} className="h-full w-full rounded-full object-cover" />
+                          ) : (
+                            p.displayName.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                      ))}
+                      {thread.participants.length > 5 && (
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[10px] font-semibold text-[var(--theme-text-secondary)]">
+                          +{thread.participants.length - 5}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Header + tabs */}
           <div className="shrink-0 px-3 pt-2.5">
@@ -456,36 +467,18 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
             </div>
           )}
           {!terminal && (
-            <div className="flex shrink-0 gap-2 border-t border-[var(--theme-border)] px-3 py-2">
-              <label htmlFor="thread-step-in" className="sr-only">Step into the thread</label>
-              <input
-                id="thread-step-in"
-                type="text"
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    void stepIn();
-                  }
-                }}
-                placeholder="Step into the thread…"
-                disabled={busy}
-                className="min-w-0 flex-1 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-2.5 py-1.5 text-[12.5px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-              />
-              <button
-                type="button"
-                onClick={() => void conclude()}
-                disabled={busy}
-                title="Stop the agent and ask the assistant to bring the result back"
-                className="shrink-0 whitespace-nowrap rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5 text-[12px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] disabled:opacity-50"
-              >
-                Conclude now ↩
-              </button>
-            </div>
+            <Composer
+              ticketId={task.id}
+              value={reply}
+              onChange={setReply}
+              onSend={stepIn}
+              posting={busy}
+              showExecBar={false}
+              placeholder="Step into the thread…"
+            />
           )}
         </>
-      )}
+        )}
     </div>
   );
 }
