@@ -3,6 +3,8 @@ import { SupabaseCommentStore } from '../../src/infrastructure/adapters/supabase
 import { SupabaseDeliverableStore } from '../../src/infrastructure/adapters/supabase/supabase-deliverable-store.adapter.js';
 import { SupabaseMentionStore } from '../../src/infrastructure/adapters/supabase/supabase-mention-store.adapter.js';
 import { SupabaseAgentEventStore } from '../../src/infrastructure/adapters/supabase/supabase-agent-event-store.adapter.js';
+import { SupabaseStepRunStore } from '../../src/infrastructure/adapters/supabase/supabase-step-run-store.adapter.js';
+import { SupabaseWorkflowRunStore } from '../../src/infrastructure/adapters/supabase/supabase-workflow-run-store.adapter.js';
 import type { SupabaseConnection } from '../../src/infrastructure/adapters/supabase/connection.js';
 
 /**
@@ -266,5 +268,38 @@ describe('slim per-ticket reads (unread counts / Logs badges)', () => {
     expect(await new SupabaseDeliverableStore(conn).getRefsByTicketIds([])).toEqual([]);
     expect(await new SupabaseCommentStore(conn).getSummariesByTicketIds([])).toEqual([]);
     expect(selects).toEqual([]);
+  });
+});
+
+// The activity heatmap tells scheduled routine runs apart by joining every
+// step run to its workflow run. Unpaginated, the oldest-first step-run read
+// stopped at 1000 rows and dropped the most recent ones — the scheduled runs
+// of the week — so nothing was ever recognised as scheduled.
+describe('Supabase workflow stores — getAll pagination', () => {
+  const at = (i: number) => new Date(1700000000000 + i * 1000).toISOString();
+
+  it('SupabaseStepRunStore.getAll returns every step run past the cap', async () => {
+    const rows = Array.from({ length: 1456 }, (_, i) => ({
+      id: `sr-${i}`, workflow_run_id: `run-${i}`, step_id: 'primitive', attempt: 1,
+      status: 'completed', result: 'ok', output: null, next_edge_id: null,
+      execution_id: `exec-${i}`, started_at: at(i), completed_at: at(i), created_at: at(i),
+    }));
+    const store = new SupabaseStepRunStore({ client: makeFakeClient({ step_runs: rows }) } as unknown as SupabaseConnection);
+    const result = await store.getAll();
+    expect(result).toHaveLength(1456);
+    expect(result[1455]!.executionId).toBe('exec-1455');
+  });
+
+  it('SupabaseWorkflowRunStore.getAll returns every run past the cap', async () => {
+    const rows = Array.from({ length: 2001 }, (_, i) => ({
+      id: `run-${i}`, ticket_id: null, routine_id: 'rt-1', template_id: null,
+      template_snapshot: { name: 's' }, status: 'completed', current_step_id: null,
+      triggered_by: 'routine-scheduler', triggered_from: 'schedule',
+      started_at: at(i), completed_at: at(i), created_at: at(i), updated_at: at(i),
+    }));
+    const store = new SupabaseWorkflowRunStore({ client: makeFakeClient({ workflow_runs: rows }) } as unknown as SupabaseConnection);
+    const result = await store.getAll();
+    expect(result).toHaveLength(2001);
+    expect(result[2000]!.id).toBe('run-2000');
   });
 });
