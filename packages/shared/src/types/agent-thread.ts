@@ -10,6 +10,16 @@ export type AgentThreadStatus = 'running' | 'idle' | 'waiting' | 'concluded' | '
 export type AgentThreadTargetType = 'agent' | 'skill' | 'panel' | 'workflow';
 
 /**
+ * Participant in a thread: userId, display name, and avatar URL.
+ * Used for rendering the participants row in the thread label.
+ */
+export interface ThreadParticipant {
+  readonly userId: string;
+  readonly displayName: string;
+  readonly avatar?: string;
+}
+
+/**
  * A delegation opened by the assistant with one target (a persona, a skill, a
  * panel or a workflow) on a ticket.
  * Turns are ticket comments carrying `threadId === id`.
@@ -34,6 +44,10 @@ export interface AgentThread {
   /** Consecutive agent run failures on this thread (reset when a run completes). */
   readonly failures: number;
   readonly summary: string | null;
+  /** Haiku-generated title, computed serverside at the first message. Immutable. */
+  readonly generatedTitle?: string | null;
+  /** Participants who sent messages in this thread. Aggregated serverside. */
+  readonly participants?: ThreadParticipant[] | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly concludedAt: string | null;
