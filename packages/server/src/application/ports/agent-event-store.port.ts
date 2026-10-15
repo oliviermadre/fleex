@@ -102,6 +102,8 @@ export interface AgentEventStorePort {
 
   getExecutionsByPersona(personaId: string, limit?: number): Promise<AgentExecution[]>;
 
+  getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null>;
+
   getAllExecutions(): Promise<AgentExecution[]>;
 
   /**

@@ -300,6 +300,13 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       WHERE execution_id IN (${placeholders})
     `).run(...updateValues);
   }
+
+  async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
+    const row = this.conn.db
+      .prepare('SELECT * FROM agent_event_executions WHERE mention_id = ? ORDER BY started_at DESC LIMIT 1')
+      .get(mentionId) as ExecutionRow | undefined;
+    return row ? rowToExecution(row) : null;
+  }
 }
 
 function rowToExecution(row: ExecutionRow): AgentExecution {
