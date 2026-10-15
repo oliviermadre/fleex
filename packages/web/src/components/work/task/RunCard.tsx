@@ -4,10 +4,13 @@
  * little meta (duration · cost). Clicking opens the execution log — the same
  * FloatingExecutionPanel the Kanban conversation uses — via `onOpen`.
  */
+import { useState } from 'react';
 import type { AgentExecution } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
+import { useToastStore } from '../../../stores/toastStore';
 import { cn } from '../../../lib/cn';
 import { tintText } from '../../../lib/tints';
+import * as api from '../../../services/api';
 
 type RunState = AgentExecution['status'];
 
@@ -35,11 +38,29 @@ export function RunCard({
   execution: AgentExecution;
   onOpen: (executionId: string, title: string) => void;
 }) {
+  const [terminatingId, setTerminatingId] = useState<string | null>(null);
   const personaName = useAgentPersonaStore(
     (s) => s.personas.find((p) => p.id === execution.personaId)?.displayName,
   );
   const name = personaName ?? execution.model ?? 'Agent';
   const state = execution.status;
+
+  const handleManualTerminate = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (state !== 'running') return;
+
+    setTerminatingId(execution.id);
+    try {
+      await api.terminateExecution(execution.id);
+      useToastStore.getState().addToast('success', `Terminated ${name}'s run.`);
+    } catch (err) {
+      useToastStore.getState().addToast('error', `Failed to terminate run`, {
+        detail: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setTerminatingId(null);
+    }
+  };
 
   const stateText =
     state === 'completed'
@@ -65,6 +86,14 @@ export function RunCard({
       className="group flex w-full items-center gap-2 rounded-md border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 text-left transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]"
     >
       <span aria-hidden className="text-[12px] text-[var(--tint-purple-text)]">⌬</span>
+
+      {/* Manually-terminated badge */}
+      {execution.manuallyTerminatedByUser && (
+        <span className="shrink-0 text-[11px] font-semibold text-[var(--tint-red-text)]" title="Manually terminated by user">
+          🛑
+        </span>
+      )}
+
       <span className="truncate text-[12px] text-[var(--theme-text-secondary)]">{name}</span>
       <span className={cn('flex items-center gap-1 text-[11px]', stateText)}>
         {state === 'running' && (
@@ -75,9 +104,25 @@ export function RunCard({
       {meta.length > 0 && (
         <span className="font-mono text-[10.5px] text-[var(--theme-text-faint)]">{meta.join(' · ')}</span>
       )}
-      <span className="ml-auto shrink-0 text-[10.5px] text-[var(--theme-text-faint)] group-hover:text-[var(--theme-accent-fg)]">
-        view log ›
-      </span>
+
+      {/* Manual termination button (Priority 4) */}
+      {state === 'running' && (
+        <button
+          type="button"
+          onClick={handleManualTerminate}
+          disabled={terminatingId === execution.id}
+          title="Stop this run immediately"
+          className="ml-auto shrink-0 rounded-md border border-[var(--tint-red-border)] bg-[var(--tint-red-bg)] px-1.5 py-0.5 text-[10px] text-[var(--tint-red-text)] transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {terminatingId === execution.id ? '⏳' : '🛑'} Stop
+        </button>
+      )}
+
+      {state !== 'running' && (
+        <span className="ml-auto shrink-0 text-[10.5px] text-[var(--theme-text-faint)] group-hover:text-[var(--theme-accent-fg)]">
+          view log ›
+        </span>
+      )}
     </button>
   );
 }
