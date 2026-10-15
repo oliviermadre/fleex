@@ -447,6 +447,15 @@ export class RunAssistantTurnUseCase {
       if (busy) return `Un autre workflow tourne sur ce ticket (run ${busy.id}) : un seul run actif par ticket. Rien n'a été relancé.`;
     }
     const current = thread.currentMentionId ? await this.deps.mentionStore.getById(thread.currentMentionId) : null;
+
+    // Skip re-launching if the execution was manually terminated by user or auto-terminated at conclusion
+    if (thread.currentMentionId) {
+      const execution = await this.deps.agentEventStore.getExecutionByMentionId(thread.currentMentionId);
+      if (execution && (execution.manuallyTerminatedByUser || execution.autoTerminatedAtConclusion)) {
+        return `${thread.personaName} a été arrêté manuellement ou lors de la conclusion du thread : rien n'a été relancé. Consulte le fil pour plus de détails.`;
+      }
+    }
+
     // The agent is still on its previous turn (queued or running): a new mention
     // would queue behind it on the same lane and go stale. The assistant is called
     // back when the turn settles, with the whole conversation in context.

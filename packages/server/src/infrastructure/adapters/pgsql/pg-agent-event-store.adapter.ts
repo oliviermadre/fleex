@@ -241,6 +241,14 @@ export class PgAgentEventStore implements AgentEventStorePort {
       updateValues,
     );
   }
+
+  async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
+    const { rows } = await this.db.query(
+      `SELECT * FROM agent_event_executions WHERE mention_id = $1 ORDER BY started_at DESC LIMIT 1`,
+      [mentionId]
+    );
+    return rows.length > 0 ? rowToExecution(rows[0]) : null;
+  }
 }
 
 function rowToExecution(row: Record<string, unknown>): AgentExecution {
