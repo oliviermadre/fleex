@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { FocusItem, FocusRunning } from '@fleex/shared';
+import type { FocusItem, FocusItemKind, FocusRunning } from '@fleex/shared';
 import * as api from '../services/api';
 import { useToastStore } from './toastStore';
 import { useSessionStore } from './sessionStore';
 import { applyCliSessions } from '../components/focus/focusSessions';
+import type { FocusSort } from '../components/focus/focusModel';
 
 /**
  * Focus — the human-attention queue (Doing/Reviewing tickets waiting on you).
@@ -51,6 +52,11 @@ export interface FocusPrefs {
   showRunning: boolean;
   /** Which tab the detail popup opens on: the conversation thread or the deliverables list. */
   detailTab: 'thread' | 'deliverables';
+  /** List filters and sort — kept here so leaving the page doesn't reset them. */
+  kindFilter: FocusItemKind | 'all';
+  /** Board id, or 'all'. */
+  boardFilter: string;
+  sort: FocusSort;
 }
 
 interface PendingAction {
@@ -110,7 +116,16 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-const DEFAULT_PREFS: FocusPrefs = { zen: false, chain: true, showIdle: true, showRunning: false, detailTab: 'thread' };
+const DEFAULT_PREFS: FocusPrefs = {
+  zen: false,
+  chain: true,
+  showIdle: true,
+  showRunning: false,
+  detailTab: 'thread',
+  kindFilter: 'all',
+  boardFilter: 'all',
+  sort: 'age',
+};
 
 function loadPersisted() {
   const now = Date.now();

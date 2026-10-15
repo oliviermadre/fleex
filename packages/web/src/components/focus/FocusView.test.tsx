@@ -98,7 +98,7 @@ beforeEach(() => {
   vi.mocked(api.fetchFocus).mockResolvedValue({ items: [GATE, QUESTION], running: [] });
   useFocusStore.setState({
     items: [GATE, QUESTION], running: [], loaded: true, pending: {}, settled: {}, snoozed: {},
-    log: [], clearedAt: [], prefs: { zen: false, chain: true, showIdle: true, showRunning: false, detailTab: 'thread' },
+    log: [], clearedAt: [], prefs: { zen: false, chain: true, showIdle: true, showRunning: false, detailTab: 'thread', kindFilter: 'all', boardFilter: 'all', sort: 'age' },
   });
 });
 afterEach(() => {
@@ -279,6 +279,34 @@ describe('FocusView', () => {
     expect(within(screen.getByRole('dialog')).getByText(/Dev a une question/)).toBeTruthy();
     await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_MS); });
     expect(api.postTicketComment).toHaveBeenCalledWith('t1', '@agent:dev corrige le hover');
+  });
+
+  it('remembers the board filter and sort when the user leaves Focus and comes back', () => {
+    useTicketStore.setState({
+      tickets: [ticket('t1', 1284, 'Refonte du flux New task'), { ...ticket('t2', 1291, 'Timeout configurable'), boardId: 'b2' }],
+      boards: [
+        { id: 'b1', name: 'Fleex', emoji: '⚡', createdAt: '', updatedAt: '', ticketCounts: {} } as BoardWithCounts,
+        { id: 'b2', name: 'Odys AI', emoji: '🤖', createdAt: '', updatedAt: '', ticketCounts: {} } as BoardWithCounts,
+      ],
+    });
+    const keys = () => [...document.querySelectorAll('[data-focus-key]')].map((r) => r.getAttribute('data-focus-key'));
+    const first = renderView();
+    fireEvent.change(screen.getByLabelText('Board'), { target: { value: 'b2' } });
+    fireEvent.change(screen.getByLabelText('Tri'), { target: { value: 'priority' } });
+    expect(keys()).toEqual(['question:m1']);
+    first.unmount(); // navigating to Tasks unmounts the page
+
+    renderView();
+    expect((screen.getByLabelText('Board') as HTMLSelectElement).value).toBe('b2');
+    expect((screen.getByLabelText('Tri') as HTMLSelectElement).value).toBe('priority');
+    expect(keys()).toEqual(['question:m1']);
+  });
+
+  it('a remembered board that no longer exists falls back to every board instead of an empty list', () => {
+    useFocusStore.setState((s) => ({ prefs: { ...s.prefs, boardFilter: 'gone' } }));
+    renderView();
+    expect((screen.getByLabelText('Board') as HTMLSelectElement).value).toBe('all');
+    expect(document.querySelectorAll('[data-focus-key]')).toHaveLength(2);
   });
 
   it('shows the empty state when nothing waits', () => {

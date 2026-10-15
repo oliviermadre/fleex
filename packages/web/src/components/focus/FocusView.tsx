@@ -81,9 +81,13 @@ export function FocusView() {
   );
   const { commit, undo, snooze, unsnooze, unsnoozeAll, setPref, load } = useFocusStore.getState();
 
-  const [kindFilter, setKindFilter] = useState<FocusItemKind | 'all'>('all');
-  const [boardFilter, setBoardFilter] = useState<string>('all');
-  const [sort, setSort] = useState<FocusSort>('age');
+  // Filters live in the persisted prefs so they survive leaving the page.
+  const { kindFilter, sort } = prefs;
+  // A remembered board that no longer exists would silently empty the list: fall back to all.
+  const boardFilter = prefs.boardFilter === 'all' || boards.some((b) => b.id === prefs.boardFilter) ? prefs.boardFilter : 'all';
+  const setKindFilter = (k: FocusItemKind | 'all') => setPref('kindFilter', k);
+  const setBoardFilter = (id: string) => setPref('boardFilter', id);
+  const setSort = (v: FocusSort) => setPref('sort', v);
   const [cursor, setCursor] = useState(0);
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Which way the popup last moved through the queue — its card slides that way.
