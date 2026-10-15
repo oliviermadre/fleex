@@ -85,7 +85,7 @@ export function NewTaskCompose({
   }, [repositories, tickets, effectiveBoardId]);
 
   const pr = draft.source?.pr;
-  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) !== false;
+  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) === true;
   const handOver = threadsEnabled && draft.startWithAssistant;
 
   async function start() {

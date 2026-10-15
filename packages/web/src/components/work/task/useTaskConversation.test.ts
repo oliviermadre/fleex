@@ -17,7 +17,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 describe('useTaskConversation.post', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useSettingsStore.setState((s) => ({ settings: { ...s.settings, workThreadsEnabled: undefined } }));
+    useSettingsStore.setState((s) => ({ settings: { ...s.settings, workThreadsEnabled: true } }));
   });
 
   it('sends the message to the assistant when threads are enabled', async () => {
@@ -35,6 +35,15 @@ describe('useTaskConversation.post', () => {
     await act(() => result.current.post('hello'));
     expect(api.postTicketComment).toHaveBeenCalledWith('t1', 'hello');
     expect(result.current.assistantMissing).toBe(true);
+  });
+
+  // Opt-in: shipping the feature must not change how a message is posted until it is switched on.
+  it('posts a plain comment when the flag was never set', async () => {
+    useSettingsStore.setState((s) => ({ settings: { ...s.settings, workThreadsEnabled: undefined } }));
+    const { result } = renderHook(() => useTaskConversation('t1'));
+    await act(() => result.current.post('hello'));
+    expect(api.postAssistantMessage).not.toHaveBeenCalled();
+    expect(api.postTicketComment).toHaveBeenCalledWith('t1', 'hello');
   });
 
   it('posts a plain comment when the flag is off', async () => {
