@@ -1,4 +1,5 @@
 import type { AgentThreadStatus, AgentThreadTargetType, AgentExecution } from '@fleex/shared';
+import { parseParticipants } from '../sqlite/sqlite-thread-store.adapter.js';
 import { AgentThreadEntity } from '../../../domain/entities/agent-thread.entity.js';
 import type { ThreadStorePort } from '../../../application/ports/thread-store.port.js';
 import type { PgConnection } from './connection.js';
@@ -11,6 +12,7 @@ function rowToThread(row: Record<string, unknown>): AgentThreadEntity {
     Number(row.failures ?? 0), (row.summary as string | null) ?? null, new Date(row.created_at as string), new Date(row.updated_at as string),
     row.concluded_at ? new Date(row.concluded_at as string) : null,
     ((row.target_type as string | null) ?? 'agent') as AgentThreadTargetType,
+    (row.generated_title as string | null) ?? null, parseParticipants(row.participants as string | null),
   );
 }
 
@@ -48,13 +50,15 @@ export class PgThreadStore implements ThreadStorePort {
   async save(t: AgentThreadEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO agent_threads (id, ticket_id, initiator, persona_id, persona_name, assistant_persona_id, brief,
-         forwarded_context, status, current_mention_id, exchanges, summary, created_at, updated_at, concluded_at, failures, target_type)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         forwarded_context, status, current_mention_id, exchanges, summary, created_at, updated_at, concluded_at, failures, target_type, generated_title, participants)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
        ON CONFLICT (id) DO UPDATE SET status = $9, current_mention_id = $10, exchanges = $11, summary = $12,
-         updated_at = $14, concluded_at = $15, failures = $16`,
+         updated_at = $14, concluded_at = $15, failures = $16,
+         generated_title = $18, participants = $19`,
       [t.id, t.ticketId, t.initiator, t.personaId, t.personaName, t.assistantPersonaId, t.brief,
        JSON.stringify(t.forwardedContext), t.status, t.currentMentionId, t.exchanges, t.summary,
-       t.createdAt.toISOString(), t.updatedAt.toISOString(), t.concludedAt?.toISOString() ?? null, t.failures, t.targetType],
+       t.createdAt.toISOString(), t.updatedAt.toISOString(), t.concludedAt?.toISOString() ?? null, t.failures, t.targetType,
+       t.generatedTitle, JSON.stringify(t.participants)],
     );
   }
 

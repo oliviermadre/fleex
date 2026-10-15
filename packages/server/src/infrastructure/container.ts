@@ -78,6 +78,7 @@ import { CreatePanelUseCase } from '../application/use-cases/create-panel.js';
 import { UpdatePanelUseCase } from '../application/use-cases/update-panel.js';
 import { DeletePanelUseCase } from '../application/use-cases/delete-panel.js';
 import { RunPanelUseCase } from '../application/use-cases/run-panel.js';
+import { GenerateThreadTitleUseCase } from '../application/use-cases/thread-label.js';
 import { GenerateTicketSummaryUseCase } from '../application/use-cases/generate-ticket-summary.js';
 import { GenerateCliSessionSummaryUseCase } from '../application/use-cases/generate-cli-session-summary.js';
 import { AgentStepExecutor } from '../application/services/step-executors/agent-step-executor.js';
@@ -497,6 +498,8 @@ export async function createContainer() {
     environment: assistantEnvironment,
     skillStore, panelStore, workflowTemplateStore, workflowRunStore,
   }, createAnthropicAssistantLlm(new Anthropic({ apiKey: anthropicApiKey || 'missing' })));
+
+  const generateThreadTitle = new GenerateThreadTitleUseCase(threadStore, sdkLimiter, eventBus, logger);
 
   const domainEventListener = new DomainEventListener({
     eventBus,
@@ -973,6 +976,7 @@ export async function createContainer() {
     executeAgent,
     wakeWaitingAgents,
     runAssistantTurn,
+    generateThreadTitle,
     generateTicketSummary,
     getRelevantSummaries,
     retrieveContext,

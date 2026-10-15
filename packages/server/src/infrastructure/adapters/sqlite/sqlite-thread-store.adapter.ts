@@ -1,4 +1,4 @@
-import type { AgentThreadStatus, AgentThreadTargetType, AgentExecution } from '@fleex/shared';
+import type { AgentThreadStatus, AgentThreadTargetType, AgentExecution, ThreadParticipant } from '@fleex/shared';
 import { AgentThreadEntity } from '../../../domain/entities/agent-thread.entity.js';
 import type { ThreadStorePort } from '../../../application/ports/thread-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -8,6 +8,18 @@ interface ThreadRow {
   assistant_persona_id: string; brief: string; forwarded_context: string; status: string;
   current_mention_id: string | null; exchanges: number; failures: number; summary: string | null;
   created_at: string; updated_at: string; concluded_at: string | null; target_type: string | null;
+  generated_title: string | null; participants: string | null;
+}
+
+/** `participants` is a JSON array in a TEXT column; rows written before migration 044 hold NULL. */
+export function parseParticipants(raw: string | null | undefined): ThreadParticipant[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ThreadParticipant[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function threadRowToEntity(r: ThreadRow): AgentThreadEntity {
@@ -16,6 +28,7 @@ export function threadRowToEntity(r: ThreadRow): AgentThreadEntity {
     JSON.parse(r.forwarded_context) as string[], r.status as AgentThreadStatus, r.current_mention_id,
     Number(r.exchanges), Number(r.failures ?? 0), r.summary, new Date(r.created_at), new Date(r.updated_at),
     r.concluded_at ? new Date(r.concluded_at) : null, (r.target_type ?? 'agent') as AgentThreadTargetType,
+    r.generated_title ?? null, parseParticipants(r.participants),
   );
 }
 
@@ -27,6 +40,7 @@ export function threadEntityToRow(t: AgentThreadEntity): ThreadRow {
     current_mention_id: t.currentMentionId, exchanges: t.exchanges, failures: t.failures, summary: t.summary,
     created_at: t.createdAt.toISOString(), updated_at: t.updatedAt.toISOString(),
     concluded_at: t.concludedAt?.toISOString() ?? null, target_type: t.targetType,
+    generated_title: t.generatedTitle, participants: JSON.stringify(t.participants),
   };
 }
 
@@ -63,10 +77,12 @@ export class SqliteThreadStoreAdapter implements ThreadStorePort {
     this.conn.db.prepare(`
       INSERT OR REPLACE INTO agent_threads
         (id, ticket_id, initiator, persona_id, persona_name, assistant_persona_id, brief, forwarded_context,
-         status, current_mention_id, exchanges, failures, summary, created_at, updated_at, concluded_at, target_type)
+         status, current_mention_id, exchanges, failures, summary, created_at, updated_at, concluded_at, target_type,
+         generated_title, participants)
       VALUES
         (@id, @ticket_id, @initiator, @persona_id, @persona_name, @assistant_persona_id, @brief, @forwarded_context,
-         @status, @current_mention_id, @exchanges, @failures, @summary, @created_at, @updated_at, @concluded_at, @target_type)
+         @status, @current_mention_id, @exchanges, @failures, @summary, @created_at, @updated_at, @concluded_at, @target_type,
+         @generated_title, @participants)
     `).run(threadEntityToRow(thread));
   }
 

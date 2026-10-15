@@ -276,5 +276,7 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: (row.comment_id as string) ?? null,
     deliverableId: (row.deliverable_id as string) ?? null,
+    autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    manuallyTerminatedByUser: !!row.manually_terminated_by_user,
   };
 }
