@@ -18,6 +18,7 @@ import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entit
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import { knownFileIds, repairFileReferences } from '../utils/repair-file-references.js';
 import type { EventBus } from '../event-bus.js';
 import type { AnyDomainEvent } from '../../domain/events.js';
 import type { PostCommentUseCase } from './post-comment.js';
@@ -351,6 +352,11 @@ export class RunAssistantTurnUseCase {
     action: AssistantAction,
     threads: AgentThreadEntity[],
   ): Promise<string> {
+    if (action.action === 'delegate' || action.action === 'continue_thread') {
+      const relayed = await this.relayAttachments(ticket, action.turn);
+      if ('error' in relayed) return relayed.error;
+      if (relayed.text !== action.turn) action = { ...action, turn: relayed.text };
+    }
     switch (action.action) {
       case 'reply':
         await this.postAssistant(ticket, assistant, null, action.message + renderQuestion(action.question), { questions: assistantQuestions(action.question) });
@@ -419,6 +425,25 @@ export class RunAssistantTurnUseCase {
         return `Thread conclu ; le résumé a été posté dans le fil.`;
       }
     }
+  }
+
+  /**
+   * A turn that relays a screenshot carries a `/api/files/<uuid>` the model retyped by
+   * hand. Fix a slightly wrong id to the attachment it meant; refuse (before anything
+   * is sent) an id that matches nothing on the ticket, telling the model the valid ones.
+   */
+  private async relayAttachments(ticket: TicketEntity, turn: string): Promise<{ text: string } | { error: string }> {
+    if (!turn.includes('/api/files/')) return { text: turn };
+    const known = knownFileIds((await this.deps.commentStore.getByTicket(ticket.id)).map((c) => c.body));
+    const { text, repaired, unresolved } = repairFileReferences(turn, known);
+    for (const r of repaired) this.deps.logger.warn('Assistant retyped an attachment id wrongly; corrected', { ticketId: ticket.id, ...r });
+    if (unresolved.length > 0) {
+      return {
+        error: `Rien n'a été envoyé : la pièce jointe ${unresolved.join(', ')} n'existe pas sur ce ticket (identifiant mal recopié). `
+          + `Recopie l'identifiant EXACTEMENT depuis le message de l'utilisateur. Pièces jointes connues : ${[...known].join(', ') || 'aucune'}.`,
+      };
+    }
+    return { text };
   }
 
   /** Assistant turn inside a thread: wake a waiting mention, or open a new one. */
