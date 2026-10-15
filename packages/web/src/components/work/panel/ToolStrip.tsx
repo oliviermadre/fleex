@@ -1,7 +1,7 @@
 /**
  * The right tool strip (60px): icon + label buttons that toggle the one-at-a-time
  * right tool window (JetBrains model — clicking the active tool closes it). Ships
- * Context, Diff, Code and Deliverables; Threads (Phase 3) is still absent. Diff
+ * Context, Diff, Code, Deliverables and Mentions; Threads (Phase 3) is still absent. Diff
  * shows a dot when the branch has changes. The bottom Shell button toggles the
  * drawer rather than a right panel, so it lives outside the panel-toggling group,
  * with the Timeline button right above it: both toggle the one bottom slot
@@ -69,6 +69,17 @@ const TOOLS: Tool[] = [
     ),
   },
   {
+    key: 'mentions',
+    label: 'Mentions',
+    // An "@": the agents asked on this ticket.
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3.5" />
+        <path d="M15.5 8.5v4.75a2.25 2.25 0 0 0 4.5 0V12a8 8 0 1 0-3.2 6.4" />
+      </svg>
+    ),
+  },
+  {
     key: 'scratch',
     label: 'Notes',
     icon: (
@@ -93,7 +104,18 @@ const TOOLS: Tool[] = [
   },
 ];
 
-export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; delivCount?: number }) {
+const countBadge = (n: number) => (n > 0 ? (n > 99 ? '99+' : String(n)) : null);
+
+export function ToolStrip({
+  task,
+  delivCount = 0,
+  mentionCount = 0,
+}: {
+  task: WorkTask | null;
+  delivCount?: number;
+  /** Mentions on the ticket not yet resolved. */
+  mentionCount?: number;
+}) {
   const rightPanel = useEffectiveRightPanel();
   const tools = hasDesktop() ? TOOLS : TOOLS.filter((t) => t.key !== 'browser');
   const toggleRightPanel = useWorkStore((s) => s.toggleRightPanel);
@@ -116,7 +138,8 @@ export function ToolStrip({ task, delivCount = 0 }: { task: WorkTask | null; del
         // Code is a center-takeover mode, not a right panel.
         const isCode = tool.key === 'code';
         const active = isCode ? codeMode : rightPanel === tool.key;
-        const badge = tool.key === 'deliv' && delivCount > 0 ? (delivCount > 99 ? '99+' : String(delivCount)) : null;
+        const badge =
+          tool.key === 'deliv' ? countBadge(delivCount) : tool.key === 'mentions' ? countBadge(mentionCount) : null;
         const dot = tool.key === 'diff' && (task?.changedLines ?? 0) > 0;
         return (
           <button

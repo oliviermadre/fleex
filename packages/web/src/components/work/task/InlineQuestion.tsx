@@ -12,15 +12,18 @@ import type { AgentQuestion } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { MessageMarkdown } from './MessageMarkdown';
 import { QuestionPicker } from './QuestionPicker';
+import { CommentDeleteButton } from './CommentDeleteButton';
 
 interface Props {
   authorName: string;
   body: string;
   questions: AgentQuestion[];
   onAnswer: (text: string) => void | Promise<void>;
+  /** Shows a hover trash next to the author name (the confirmation is the caller's). */
+  onDelete?: () => void;
 }
 
-export function InlineQuestion({ authorName, body, questions, onAnswer }: Props) {
+export function InlineQuestion({ authorName, body, questions, onAnswer, onDelete }: Props) {
   const single = questions.length === 1;
   const [answered, setAnswered] = useState<string | null>(null);
 
@@ -30,7 +33,7 @@ export function InlineQuestion({ authorName, body, questions, onAnswer }: Props)
   };
 
   return (
-    <div className="flex gap-2">
+    <div className="group/comment flex gap-2">
       <div
         className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--tint-purple-bg)] text-[12px] text-[var(--tint-purple-text)]"
         aria-hidden
@@ -38,7 +41,10 @@ export function InlineQuestion({ authorName, body, questions, onAnswer }: Props)
         ⌬
       </div>
       <div className="min-w-0 flex-1">
-        <div className="mb-0.5 text-[11px] font-medium text-[var(--theme-text-secondary)]">{authorName || 'Agent'}</div>
+        <div className="mb-0.5 flex items-center text-[11px] font-medium text-[var(--theme-text-secondary)]">
+          {authorName || 'Agent'}
+          {onDelete && <CommentDeleteButton onClick={onDelete} className="-my-1 ml-auto" />}
+        </div>
         <div
           className={cn(
             'rounded-xl border px-3 py-2',

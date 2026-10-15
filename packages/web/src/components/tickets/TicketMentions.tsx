@@ -162,7 +162,11 @@ function MentionModeToggle({
   );
 }
 
-export function TicketMentions({ ticketId }: { ticketId: string }) {
+/**
+ * `compact`: for narrow hosts (the Work view's right panel, 260px min) — the
+ * filter pills and each mention's action row wrap instead of overflowing.
+ */
+export function TicketMentions({ ticketId, compact = false }: { ticketId: string; compact?: boolean }) {
   const [mentions, setMentions] = useState<TicketMention[]>([]);
   const [filter, setFilter] = useState<FilterStatus>('all');
   // The parent ticket drives the missing-repo guard: executing a mention spins
@@ -385,7 +389,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       {/* Filter pills */}
-      <div className="mb-3 flex flex-shrink-0 items-center gap-1.5">
+      <div className={`mb-3 flex flex-shrink-0 items-center gap-1.5 ${compact ? 'flex-wrap' : ''}`}>
         {filterOptions.map((opt) => {
           const count = counts[opt.key];
           if (opt.key !== 'all' && count === 0) return null;
@@ -420,7 +424,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                 className="group rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2.5"
               >
                 {/* Top row: source -> target + status + delete */}
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 ${compact ? 'flex-wrap gap-y-1.5' : ''}`}>
                   {/* Source */}
                   <span className={`text-xs font-medium ${tintText('blue')}`}>
                     {displaySource(m.sourceAgent)}

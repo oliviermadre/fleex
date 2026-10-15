@@ -1,5 +1,5 @@
 /**
- * The one-at-a-time right tool window (Context / Delivs). User-resizable from its
+ * The one-at-a-time right tool window (Context / Delivs / Mentions…). User-resizable from its
  * left edge — the width lives in workStore (persisted, clamped) so it survives
  * reloads, mirroring the app's right-sidebar handle. The tool strip sits to its
  * right, so the panel grows leftward.
@@ -14,10 +14,12 @@ import { DelivsPanel } from './DelivsPanel';
 import { DiffPanel } from './DiffPanel';
 import { ScratchpadTabsPanel } from './ScratchpadTabsPanel';
 import { BrowserPanel } from './browser/BrowserPanel';
+import { TicketMentions } from '../../tickets/TicketMentions';
 
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
   deliv: 'DELIVERABLES',
+  mentions: 'MENTIONS',
   thread: 'THREADS',
   diff: 'DIFF',
   code: 'CODE',
@@ -33,10 +35,12 @@ const CENTER_MIN_WIDTH = 280;
 export function RightPanel({
   task,
   deliverables,
+  onDeliverableDeleted,
   onDeleteTask,
 }: {
   task: WorkTask;
   deliverables: TicketDeliverable[];
+  onDeliverableDeleted?: (id: string) => void;
   onDeleteTask: (id: string) => void;
 }) {
   const rightPanel = useEffectiveRightPanel();
@@ -103,7 +107,14 @@ export function RightPanel({
       )}
       {rightPanel === 'context' && <ContextPanel task={task} onDelete={() => onDeleteTask(task.id)} />}
       {rightPanel === 'diff' && <DiffPanel ticketId={task.id} />}
-      {rightPanel === 'deliv' && <DelivsPanel ticketId={task.id} deliverables={deliverables} />}
+      {rightPanel === 'deliv' && (
+        <DelivsPanel ticketId={task.id} deliverables={deliverables} onDeleted={onDeliverableDeleted} />
+      )}
+      {rightPanel === 'mentions' && (
+        <div className="flex min-h-0 flex-1 flex-col p-2">
+          <TicketMentions key={task.id} ticketId={task.id} compact />
+        </div>
+      )}
       {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}
       {rightPanel === 'browser' && <BrowserPanel key={task.id} ticketId={task.id} />}
     </section>

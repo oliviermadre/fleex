@@ -5,16 +5,23 @@
  * to the execution log; a deliverable card sits after and opens the deliverable
  * overlay. When the task is waiting on the user, the agent's last comment — if it
  * parses into options — renders as an answerable inline question card.
+ *
+ * With `editable` (the Work task pane, not the read-only Focus popup) the stream
+ * also carries the ticket-detail actions: inline description editing, and
+ * deleting a comment or a deliverable — each delete behind a confirmation.
  */
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import { StreamItem } from './StreamItem';
 import { EventLine } from './EventLine';
 import { RunCard } from './RunCard';
 import { DeliverableCard } from './DeliverableCard';
 import { InlineQuestion } from './InlineQuestion';
-import { MessageMarkdown } from './MessageMarkdown';
+import { DescriptionBlock } from './DescriptionBlock';
 import { TicketActionCards } from '../../tickets/TicketActionCards';
+import { ConfirmModal } from '../../ui/ConfirmModal';
+import * as api from '../../../services/api';
+import { useToastStore } from '../../../stores/toastStore';
 import { buildStream, type QueueActivity } from '../selectors';
 
 interface Props {
@@ -34,6 +41,12 @@ interface Props {
    * cards). Off when the host already owns those actions, e.g. the Focus popup.
    */
   showActionCards?: boolean;
+  /** Turns on description editing and comment / deliverable deletion. */
+  editable?: boolean;
+  /** Called once a comment is deleted server-side, to drop it from the list at once. */
+  onCommentDeleted?: (commentId: string) => void;
+  /** Called once a deliverable is deleted server-side, to drop it from the list at once. */
+  onDeliverableDeleted?: (deliverableId: string) => void;
 }
 
 export function TaskStream({
@@ -49,8 +62,28 @@ export function TaskStream({
   onAnswer,
   onOpenExecution,
   showActionCards = true,
+  editable = false,
+  onCommentDeleted,
+  onDeliverableDeleted,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDeleteComment = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await api.deleteTicketComment(ticketId, pendingDelete);
+      onCommentDeleted?.(pendingDelete);
+    } catch (e) {
+      useToastStore.getState().addToast('error', e instanceof Error ? e.message : "Couldn't delete comment");
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
+    }
+  };
+  const askDelete = (commentId: string) => (editable ? () => setPendingDelete(commentId) : undefined);
 
   const stream = useMemo(
     () => buildStream(comments, events, executions, deliverables),
@@ -79,22 +112,7 @@ export function TaskStream({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
-        {description && description.trim().length > 0 && (
-          <div className="overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2.5">
-            <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.08em] text-[var(--theme-text-muted)]">
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 2h5l3 3v9H4z" />
-                <path d="M9 2v3h3" />
-                <line x1="6" y1="8.5" x2="10" y2="8.5" />
-                <line x1="6" y1="11" x2="9" y2="11" />
-              </svg>
-              DESCRIPTION
-            </div>
-            <div className="min-w-0 text-[13px] text-[var(--theme-text-primary)]">
-              <MessageMarkdown body={description} />
-            </div>
-          </div>
-        )}
+        <DescriptionBlock key={ticketId} ticketId={ticketId} description={description} editable={editable} />
 
         {stream.map((entry) => {
           switch (entry.kind) {
@@ -103,7 +121,13 @@ export function TaskStream({
             case 'run':
               return <RunCard key={`r-${entry.execution.id}`} execution={entry.execution} onOpen={onOpenExecution} />;
             case 'deliverable':
-              return <DeliverableCard key={`d-${entry.deliverable.id}`} deliverable={entry.deliverable} />;
+              return (
+                <DeliverableCard
+                  key={`d-${entry.deliverable.id}`}
+                  deliverable={entry.deliverable}
+                  onDeleted={editable ? (id) => onDeliverableDeleted?.(id) : undefined}
+                />
+              );
             case 'comment':
               return entry.comment.id === questionCommentId ? (
                 <InlineQuestion
@@ -112,9 +136,10 @@ export function TaskStream({
                   body={entry.comment.body}
                   questions={entry.comment.questions ?? []}
                   onAnswer={onAnswer}
+                  onDelete={askDelete(entry.comment.id)}
                 />
               ) : (
-                <StreamItem key={entry.comment.id} comment={entry.comment} />
+                <StreamItem key={entry.comment.id} comment={entry.comment} onDelete={askDelete(entry.comment.id)} />
               );
           }
         })}
@@ -144,6 +169,16 @@ export function TaskStream({
         )}
         <div ref={bottomRef} />
       </div>
+      <ConfirmModal
+        open={pendingDelete !== null}
+        title="Delete comment?"
+        message="This comment will be permanently removed from the discussion."
+        confirmLabel="Delete"
+        danger
+        busy={deleting}
+        onConfirm={() => void confirmDeleteComment()}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
