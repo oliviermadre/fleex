@@ -29,6 +29,9 @@ import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { RoutineStorePort } from '../ports/routine-store.port.js';
+import type { StepRunStorePort } from '../ports/step-run-store.port.js';
+import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
+import { SCHEDULER_TRIGGERED_BY } from '../../domain/services/routine-scheduler.js';
 
 interface CacheEntry {
   data: StatisticsResponse;
@@ -73,6 +76,7 @@ export class GetStatisticsUseCase {
     private readonly domainEventLogStore?: DomainEventLogStorePort,
     private readonly workflowRunStore?: WorkflowRunStorePort | null,
     private readonly routineStore?: RoutineStorePort | null,
+    private readonly stepRunStore?: StepRunStorePort | null,
   ) {}
 
   async execute(params: {
@@ -380,24 +384,6 @@ export class GetStatisticsUseCase {
     // All derived from data already loaded above plus the domain event log
     // (audit trail) — no schema changes or new persistence.
 
-    // Activity heatmap (C4): every agent/skill execution by weekday × hour, in
-    // the *client's* local time. We shift the absolute instant by the client's
-    // tz offset and read UTC getters, so the result is independent of the
-    // server's timezone (no double-shift if the server isn't UTC).
-    const tzShiftMs = tzOffsetMinutes * 60_000;
-    const heatCounts = new Map<string, number>();
-    for (const e of filteredExecutions) {
-      const t = new Date(e.startedAt).getTime();
-      if (Number.isNaN(t)) continue;
-      const local = new Date(t - tzShiftMs);
-      const key = `${local.getUTCDay()}:${local.getUTCHours()}`;
-      heatCounts.set(key, (heatCounts.get(key) ?? 0) + 1);
-    }
-    const activityHeatmap: ActivityHeatmapCell[] = [...heatCounts.entries()].map(([key, count]) => {
-      const [dow, hour] = key.split(':').map(Number) as [number, number];
-      return { dow, hour, count };
-    });
-
     // Full ticket-move history (audit log) + every workflow run. Moves are
     // fetched with no lower bound so lead time / CFD can see transitions that
     // happened before `from`. Workflow stats come from the run store (richer:
@@ -414,6 +400,33 @@ export class GetStatisticsUseCase {
     const filteredRuns = allRuns.filter((r) => {
       const t = r.startedAt.getTime();
       return t >= from.getTime() && t <= to.getTime();
+    });
+
+    // Activity heatmap (C4): every agent/skill execution by weekday × hour, in
+    // the *client's* local time. We shift the absolute instant by the client's
+    // tz offset and read UTC getters, so the result is independent of the
+    // server's timezone (no double-shift if the server isn't UTC).
+    //
+    // Runs the routine scheduler launched are counted apart (`scheduledCount`):
+    // an hourly routine lights every cell of the night and drowns the user's
+    // own activity. A routine launched by hand (`routine run`, Launch button)
+    // is a human act and stays in `count`.
+    const scheduledExecIds = await this.scheduledExecutionIds(allRuns);
+    const tzShiftMs = tzOffsetMinutes * 60_000;
+    const heatCounts = new Map<string, { count: number; scheduledCount: number }>();
+    for (const e of filteredExecutions) {
+      const t = new Date(e.startedAt).getTime();
+      if (Number.isNaN(t)) continue;
+      const local = new Date(t - tzShiftMs);
+      const key = `${local.getUTCDay()}:${local.getUTCHours()}`;
+      const cell = heatCounts.get(key) ?? { count: 0, scheduledCount: 0 };
+      if (scheduledExecIds.has(e.id)) cell.scheduledCount += 1;
+      else cell.count += 1;
+      heatCounts.set(key, cell);
+    }
+    const activityHeatmap: ActivityHeatmapCell[] = [...heatCounts.entries()].map(([key, cell]) => {
+      const [dow, hour] = key.split(':').map(Number) as [number, number];
+      return { dow, hour, ...cell };
     });
 
     // Workflows started within the selected window (summary KPI).
@@ -718,5 +731,34 @@ export class GetStatisticsUseCase {
     }
 
     return buckets;
+  }
+
+  /**
+   * Ids of the agent executions that belong to a run the routine scheduler
+   * launched — directly, or through a `workflow.trigger` child of such a run.
+   * The link is `step_run.executionId`, stamped as soon as a step's execution
+   * starts (so failed steps are covered too).
+   */
+  private async scheduledExecutionIds(runs: WorkflowRunEntity[]): Promise<Set<string>> {
+    if (!this.stepRunStore) return new Set();
+    const byId = new Map(runs.map((r) => [r.id, r]));
+    const isScheduled = (run: WorkflowRunEntity): boolean => {
+      const seen = new Set<string>();
+      let cur: WorkflowRunEntity | undefined = run;
+      while (cur && !seen.has(cur.id)) {
+        if (cur.triggeredBy === SCHEDULER_TRIGGERED_BY) return true;
+        seen.add(cur.id);
+        cur = cur.parentRunId ? byId.get(cur.parentRunId) : undefined;
+      }
+      return false;
+    };
+    const scheduledRunIds = new Set(runs.filter(isScheduled).map((r) => r.id));
+    if (scheduledRunIds.size === 0) return new Set();
+    const stepRuns = await this.stepRunStore.getAll();
+    return new Set(
+      stepRuns
+        .filter((sr) => sr.executionId && scheduledRunIds.has(sr.workflowRunId))
+        .map((sr) => sr.executionId!),
+    );
   }
 }

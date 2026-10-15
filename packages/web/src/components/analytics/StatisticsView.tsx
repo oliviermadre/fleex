@@ -464,6 +464,7 @@ function DashboardContent({
   focus: Focus;
 }) {
   const kpis = KPI_GROUPS[focus as Exclude<Focus, 'catalogue'>];
+  const [heatmapIncludesRoutines, setHeatmapIncludesRoutines] = useState(false);
 
   const sparkData = (key: keyof StatisticsTimeBucket): number[] =>
     data.timeSeries.map((b) => Number(b[key] ?? 0));
@@ -513,8 +514,21 @@ function DashboardContent({
 
       {focus === 'overview' && (
         <>
-          <ChartCard title="Activity Heatmap" subtitle="Agent runs by weekday × hour (your local time) — when Fleex works, including off-hours.">
-            <ActivityHeatmap data={data.activityHeatmap} />
+          <ChartCard
+            title="Activity Heatmap"
+            subtitle="Agent runs you set off, by weekday × hour (your local time). Scheduled routine runs are hidden unless included."
+            action={
+              <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-[var(--theme-text-muted)]">
+                <input
+                  type="checkbox"
+                  checked={heatmapIncludesRoutines}
+                  onChange={(e) => setHeatmapIncludesRoutines(e.target.checked)}
+                />
+                Include routines
+              </label>
+            }
+          >
+            <ActivityHeatmap data={data.activityHeatmap} includeRoutines={heatmapIncludesRoutines} />
           </ChartCard>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

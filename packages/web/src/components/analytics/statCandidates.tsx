@@ -203,14 +203,27 @@ const DOW_ROWS: { label: string; dow: number }[] = [
   { label: 'Sun', dow: 0 },
 ];
 
-export function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHeatmap'] }) {
-  if (data.length === 0) return <EmptyChart message="No agent activity to map" />;
-  const grid = new Map<string, number>();
+/**
+ * Runs the routine scheduler launched are hidden unless `includeRoutines`: an
+ * hourly routine lights every night cell and drowns the user's own activity.
+ */
+export function ActivityHeatmap({
+  data,
+  includeRoutines = false,
+}: {
+  data: StatisticsResponse['activityHeatmap'];
+  includeRoutines?: boolean;
+}) {
+  const grid = new Map<string, { total: number; scheduled: number }>();
   let max = 0;
   for (const c of data) {
-    grid.set(`${c.dow}:${c.hour}`, c.count);
-    if (c.count > max) max = c.count;
+    const scheduled = includeRoutines ? c.scheduledCount : 0;
+    const total = c.count + scheduled;
+    if (total === 0) continue;
+    grid.set(`${c.dow}:${c.hour}`, { total, scheduled });
+    if (total > max) max = total;
   }
+  if (grid.size === 0) return <EmptyChart message="No agent activity to map" />;
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[560px]">
@@ -225,12 +238,14 @@ export function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHe
             <div key={dow} className="contents">
               <div className="flex items-center text-[9px] text-[var(--theme-text-muted)]">{label}</div>
               {Array.from({ length: 24 }, (_, h) => {
-                const v = grid.get(`${dow}:${h}`) ?? 0;
+                const cell = grid.get(`${dow}:${h}`);
+                const v = cell?.total ?? 0;
                 const intensity = max > 0 ? v / max : 0;
+                const viaRoutines = cell?.scheduled ? ` (${cell.scheduled} by scheduled routines)` : '';
                 return (
                   <div
                     key={h}
-                    title={`${label} ${h}:00 — ${v} run${v === 1 ? '' : 's'}`}
+                    title={`${label} ${h}:00 — ${v} run${v === 1 ? '' : 's'}${viaRoutines}`}
                     className="aspect-square rounded-sm"
                     style={{
                       backgroundColor: v === 0 ? 'var(--theme-bg-overlay)' : 'var(--theme-accent)',

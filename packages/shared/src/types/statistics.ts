@@ -82,7 +82,10 @@ export interface UsageByTypeBucket {
 export interface ActivityHeatmapCell {
   readonly dow: number; // 0 = Sunday … 6 = Saturday
   readonly hour: number; // 0 … 23
+  /** Executions a human set off: mentions, CLI sessions, manual routine launches. */
   readonly count: number;
+  /** Executions of runs the routine scheduler launched (cron / one-shot). */
+  readonly scheduledCount: number;
 }
 
 /** Interaction counts for one ticket completed in the period (C14). */
