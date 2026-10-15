@@ -1996,8 +1996,17 @@ export async function postThreadMessage(threadId: string, body: string): Promise
   });
 }
 
-export async function concludeThread(threadId: string): Promise<void> {
-  await request<{ accepted: boolean }>(`/threads/${encodeURIComponent(threadId)}/conclude`, { method: 'POST' });
+export async function concludeThread(threadId: string): Promise<{ runsAutoTerminated: number }> {
+  const result = await request<{ accepted: boolean; runsAutoTerminated: number }>(`/threads/${encodeURIComponent(threadId)}/conclude`, { method: 'POST' });
+  return { runsAutoTerminated: result.runsAutoTerminated };
+}
+
+/** Manually terminate a running execution. Sets manually_terminated_by_user flag and interrupts the run. */
+export async function terminateExecution(executionId: string): Promise<{ accepted: boolean }> {
+  return request<{ accepted: boolean }>(`/api/executions/${encodeURIComponent(executionId)}/terminate-manual`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'user_requested' }),
+  });
 }
 
 /** Hand a freshly created ticket to the assistant (one turn primed with its description). */
