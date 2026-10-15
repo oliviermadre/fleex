@@ -13,6 +13,7 @@ import * as api from '../../../services/api';
 import { useWorkStore } from '../../../stores/workStore';
 import { useAgentEventStore } from '../../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
+import { useToastStore } from '../../../stores/toastStore';
 import { AgentEventStream } from '../../main-panel/AgentEventStream';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import { ThreadStatusPill } from '../task/DelegationCard';
@@ -156,7 +157,14 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
     if (!thread || busy) return;
     setBusy(true);
     try {
-      await api.concludeThread(thread.id);
+      const result = await api.concludeThread(thread.id);
+      // Show confirmation toast with count of auto-terminated runs
+      const addToast = useToastStore.getState().addToast;
+      if (result.runsAutoTerminated > 0) {
+        addToast('success', `Thread concluded. ${result.runsAutoTerminated} run${result.runsAutoTerminated !== 1 ? 's' : ''} auto-terminated.`);
+      } else {
+        addToast('success', 'Thread concluded.');
+      }
     } finally {
       setBusy(false);
     }
@@ -172,30 +180,80 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
 
   const terminal = thread ? thread.status === 'concluded' || thread.status === 'failed' : true;
 
+  // Sort threads: non-concluded (DESC by date) on top, concluded (DESC by date) below
+  const sortedThreads = useMemo(() => {
+    const nonConcluded = threads.filter((t) => t.status !== 'concluded' && t.status !== 'failed').sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const concluded = threads.filter((t) => t.status === 'concluded' || t.status === 'failed').sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    return [...nonConcluded, ...concluded];
+  }, [threads]);
+
+  // Default: last non-concluded thread, or last thread if all concluded
+  useEffect(() => {
+    if (!selectedThreadId && threads.length > 0) {
+      const nonConcluded = threads.find((t) => t.status !== 'concluded' && t.status !== 'failed');
+      setSelectedThreadId(nonConcluded?.id ?? threads[threads.length - 1]?.id ?? '');
+    }
+  }, [threads, selectedThreadId, setSelectedThreadId]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Thread list */}
-      <div className="max-h-[38%] shrink-0 overflow-y-auto border-b border-[var(--theme-border)]">
-        {threads.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setSelectedThreadId(t.id)}
-            className={cn(
-              'flex w-full items-center gap-2 border-b border-[var(--theme-border-subtle)] px-3 py-2 text-left text-[12.5px] hover:bg-[var(--theme-bg-hover)]',
-              thread?.id === t.id && 'bg-[var(--theme-accent-muted)]',
-            )}
-          >
-            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT[t.status])} aria-hidden />
-            <span className="shrink-0 font-semibold text-[var(--theme-text-primary)]">{personaName(t)}</span>
-            <span className="min-w-0 truncate text-[var(--theme-text-secondary)]">{t.brief}</span>
-            <span className="ml-auto shrink-0 text-[11px] text-[var(--theme-text-faint)]">{formatAge(t.createdAt)}</span>
-          </button>
-        ))}
+      {/* Dropdown Navigation */}
+      <div className="shrink-0 border-b border-[var(--theme-border)] px-3 py-2">
+        <label htmlFor="thread-selector" className="sr-only">Select a thread</label>
+        <select
+          id="thread-selector"
+          value={selectedThreadId || ''}
+          onChange={(e) => setSelectedThreadId(e.target.value)}
+          className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-2.5 py-1.5 text-[12.5px] text-[var(--theme-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
+        >
+          {sortedThreads.map((t) => {
+            const isNonConcluded = t.status !== 'concluded' && t.status !== 'failed';
+            const label = `${isNonConcluded ? '🔵 ' : '✓ '}${personaName(t)} — ${t.brief || '(no brief)'}`;
+            return (
+              <option key={t.id} value={t.id}>
+                {label}
+              </option>
+            );
+          })}
+        </select>
       </div>
 
       {thread && (
         <>
+          {/* Thread Label: Title + Participants */}
+          {(thread.generatedTitle || (thread.participants && thread.participants.length > 0)) && (
+            <div className="shrink-0 border-b border-[var(--theme-border-subtle)] px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-[var(--theme-text-secondary)]" aria-hidden>🧵</span>
+                <span className="text-[12.5px] font-medium text-[var(--theme-text-primary)]">
+                  {thread.generatedTitle || 'Thread'}
+                </span>
+                {thread.participants && thread.participants.length > 0 && (
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {thread.participants.slice(0, 5).map((p) => (
+                      <div
+                        key={p.userId}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[10px] font-semibold text-[var(--theme-text-primary)] hover:ring-2 hover:ring-[var(--theme-accent)]"
+                        title={p.displayName}
+                      >
+                        {p.avatar ? (
+                          <img src={p.avatar} alt={p.displayName} className="h-full w-full rounded-full object-cover" />
+                        ) : (
+                          p.displayName.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                    ))}
+                    {thread.participants.length > 5 && (
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-bg-secondary)] text-[10px] font-semibold text-[var(--theme-text-secondary)]">
+                        +{thread.participants.length - 5}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Header + tabs */}
           <div className="shrink-0 px-3 pt-2.5">
             <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--theme-text-primary)]">
