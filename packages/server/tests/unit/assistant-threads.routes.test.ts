@@ -47,7 +47,7 @@ describe('assistant threads routes', () => {
 
   it('GET /api/threads/open lists open threads', async () => {
     const app = Fastify();
-    await app.register(assistantThreadsRoutes({ threadStore: { getOpen: async () => [thread()] } } as never));
+    await app.register(assistantThreadsRoutes({ threadStore: { getOpen: async () => [thread()] }, commentStore: { getByTicket: async () => [] } } as never));
     const res = await app.inject({ method: 'GET', url: '/api/threads/open' });
     expect(res.json()).toHaveLength(1);
   });
@@ -68,7 +68,7 @@ describe('assistant threads routes', () => {
     await app.register(assistantThreadsRoutes({
       threadStore: { getById: async () => t, save: async () => {} },
       mentionStore: { getById: async () => null },
-      config: { get: () => ({}) }, eventBus: new EventBus(),
+      config: { get: () => ({}) }, eventBus: new EventBus(), generateThreadTitle: { trigger: () => {} },
       postComment: { execute: async (p: Record<string, unknown>) => { posted.push(p); return { comment: { id: 'c2', toDTO: () => ({ id: 'c2' }) }, createdMentions: [{ id: 'm9', targetAgent: 'b', targetType: 'agent', sourceAgent: 'user' }] }; } },
     } as never));
     const res = await app.inject({ method: 'POST', url: '/api/threads/th/messages', payload: { body: 'check the fallback' } });
@@ -101,6 +101,7 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const turns: unknown[] = [];
     await app.register(assistantThreadsRoutes({
       threadStore: { getByTicket: async () => [t], save: async (x: { status: string }) => { saved.push(x.status); } },
+      commentStore: { getByTicket: async () => [] },
       mentionStore: { getById: async () => ({ status: 'resolved' }) },
       runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); } },
     } as never));
@@ -137,7 +138,7 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
         save: async (m: { id: string }) => { resolved.push(m.id); },
       },
       // m-other waits in ANOTHER thread: it is not ours to close.
-      commentStore: { getById: async (id: string) => ({ threadId: id === 'c-old' ? 'th' : 'th-2' }) },
+      commentStore: { getById: async (id: string) => ({ threadId: id === 'c-old' ? 'th' : 'th-2' }), getByTicket: async () => [] },
       executeAgent: { execute: async (personaId: string) => { kicked.push(personaId); } },
       runAssistantTurn: { execute: async () => {} },
     } as never));
@@ -165,6 +166,7 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const turns: unknown[] = [];
     await app.register(assistantThreadsRoutes({
       threadStore: { getByTicket: async () => [t], save: async () => {} },
+      commentStore: { getByTicket: async () => [] },
       mentionStore: { getById: async () => ({ status: 'resolved' }) },
       runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); }, workflowRunOf: async () => ({ id: 'r1', status: 'running', isActive: () => true }) },
     } as never));
@@ -179,6 +181,7 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const turns: unknown[] = [];
     await app.register(assistantThreadsRoutes({
       threadStore: { getByTicket: async () => [t], save: async () => {} },
+      commentStore: { getByTicket: async () => [] },
       mentionStore: { getById: async () => ({ status: 'resolved' }) },
       runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); }, workflowRunOf: async () => ({ id: 'r1', status: 'failed', isActive: () => false }) },
     } as never));
@@ -195,10 +198,59 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     await app.register(assistantThreadsRoutes({
       threadStore: { getById: async () => t, save: async () => {} },
       mentionStore: { getById: async () => null },
-      config: { get: () => ({}) }, eventBus: new EventBus(),
+      config: { get: () => ({}) }, eventBus: new EventBus(), generateThreadTitle: { trigger: () => {} },
       postComment: { execute: async (p: Record<string, unknown>) => { posted.push(p); return { comment: { id: 'c', toDTO: () => ({}) }, createdMentions: [] }; } },
     } as never));
     await app.inject({ method: 'POST', url: '/api/threads/thw/messages', payload: { body: 'gate validée' } });
     expect(posted[0]).toMatchObject({ body: 'gate validée', threadId: 'thw' });
+  });
+});
+
+describe('thread label: participants and title', () => {
+  const comment = (threadId: string | null, authorType: string, authorName: string) => ({ threadId, authorType, authorName, toDTO: () => ({ threadId, authorName }) });
+
+  it('GET /api/threads/:id returns the distinct authors who posted in that thread, users and agents', async () => {
+    const app = Fastify();
+    await app.register(assistantThreadsRoutes({
+      threadStore: { getById: async () => thread() },
+      commentStore: {
+        getByTicket: async () => [
+          comment('th', 'assistant', 'jarvis'), comment('th', 'user', 'Olivier'), comment('th', 'agent', 'b'),
+          comment('th', 'user', 'Olivier'), // duplicate author
+          comment('other', 'user', 'Someone Else'), comment(null, 'user', 'Main Thread Only'), // not in this thread
+        ],
+      },
+    } as never));
+    const res = await app.inject({ method: 'GET', url: '/api/threads/th' });
+    expect(res.json().thread.participants.map((p: { displayName: string }) => p.displayName)).toEqual(['jarvis', 'Olivier', 'b']);
+  });
+
+  const messageApp = async (t: AgentThreadEntity, triggered: Array<[string, string]>) => {
+    const app = Fastify();
+    await app.register(assistantThreadsRoutes({
+      threadStore: { getById: async () => t, save: async () => {} },
+      mentionStore: { getById: async () => null },
+      config: { get: () => ({}) }, eventBus: new EventBus(),
+      generateThreadTitle: { trigger: (id: string, msg: string) => { triggered.push([id, msg]); } },
+      postComment: { execute: async () => ({ comment: { id: 'c', toDTO: () => ({}) }, createdMentions: [] }) },
+    } as never));
+    return app;
+  };
+
+  it('POST /api/threads/:id/messages asks for a title from the user message while the thread has none', async () => {
+    const triggered: Array<[string, string]> = [];
+    const app = await messageApp(thread(), triggered);
+    const res = await app.inject({ method: 'POST', url: '/api/threads/th/messages', payload: { body: 'check the fallback' } });
+    expect(res.statusCode).toBe(201);
+    expect(triggered).toEqual([['th', 'check the fallback']]);
+  });
+
+  it('POST /api/threads/:id/messages does not ask again once the thread has a title', async () => {
+    const triggered: Array<[string, string]> = [];
+    const t = thread();
+    t.generatedTitle = 'Already named';
+    const app = await messageApp(t, triggered);
+    await app.inject({ method: 'POST', url: '/api/threads/th/messages', payload: { body: 'more' } });
+    expect(triggered).toEqual([]);
   });
 });

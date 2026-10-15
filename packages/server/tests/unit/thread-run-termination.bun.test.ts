@@ -8,6 +8,9 @@ import { SqliteConnection } from '../../src/infrastructure/adapters/sqlite/conne
 import { SqliteThreadStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-thread-store.adapter.js';
 import { SqliteAgentEventStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-agent-event-store.adapter.js';
 import { runPendingMigrations } from '../../src/infrastructure/migrations/run-migrations.js';
+import Fastify from 'fastify';
+import { assistantThreadsRoutes } from '../../src/infrastructure/http/assistant-threads.routes.js';
+import { agentExecutionRoutes } from '../../src/infrastructure/http/agent-execution.routes.js';
 import { AgentThreadEntity } from '../../src/domain/entities/agent-thread.entity.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -89,5 +92,66 @@ describe('getRunsByThreadAndStatus + updateExecutionsByIds on the real schema', 
     const back = await events.getExecutionByMentionId('m1');
     expect(back?.status).toBe('interrupted');
     expect(back?.manuallyTerminatedByUser).toBe(true);
+  });
+});
+
+type ExecRow = { status: string; a: number | null; m: number | null };
+const execRow = (id: string) =>
+  conn.db.prepare('SELECT status, auto_terminated_at_conclusion a, manually_terminated_by_user m FROM agent_event_executions WHERE execution_id = ?').get(id) as ExecRow;
+
+/** executeAgent fake that records what the DB looked like at the moment the process is killed. */
+function fakeExecuteAgent() {
+  const cancelled: Array<{ id: string; row: ExecRow }> = [];
+  return { cancelled, cancelExecution: async (id: string) => { cancelled.push({ id, row: execRow(id) }); return true; } };
+}
+
+describe('POST /api/threads/:id/conclude on a real database', () => {
+  it('terminates the running runs of the thread only, flags them, and kills their processes after flagging', async () => {
+    const t = AgentThreadEntity.create({ id: 'th1', ticketId: 't1', personaId: 'p', personaName: 'builder', assistantPersonaId: 'pa', brief: 'b', forwardedContext: [] });
+    await threads.save(t);
+    const r1 = seedRun('th1', '1', 'running');
+    const r2 = seedRun('th1', '2', 'running');
+    const done = seedRun('th1', '3', 'completed');
+    const elsewhere = seedRun('other', '4', 'running');
+    const executeAgent = fakeExecuteAgent();
+    const turns: unknown[] = [];
+
+    const app = Fastify();
+    await app.register(assistantThreadsRoutes({
+      threadStore: threads, agentEventStore: events, executeAgent,
+      runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); } },
+    } as never));
+    const res = await app.inject({ method: 'POST', url: '/api/threads/th1/conclude' });
+
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toEqual({ accepted: true, runsAutoTerminated: 2 });
+    expect(execRow(r1)).toMatchObject({ status: 'completed', a: 1 });
+    expect(execRow(r2)).toMatchObject({ status: 'completed', a: 1 });
+    expect(execRow(done)).toMatchObject({ status: 'completed', a: 0 });
+    expect(execRow(elsewhere)).toMatchObject({ status: 'running', a: 0 });
+    // Flag before kill: killing fails the mention and wakes the assistant, which must already see the flag.
+    expect(executeAgent.cancelled.map((c) => c.id).sort()).toEqual([r1, r2]);
+    for (const c of executeAgent.cancelled) expect(c.row.a).toBe(1);
+    expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'conclude_request', threadId: 'th1' } }]);
+  });
+});
+
+describe('POST /api/executions/:id/terminate-manual on a real database', () => {
+  it('flags the run as stopped by the user before killing it, and the flag is what the assistant reads back', async () => {
+    const run = seedRun('th1', '1', 'running');
+    const sibling = seedRun('th1', '2', 'running');
+    const executeAgent = fakeExecuteAgent();
+    const app = Fastify();
+    await app.register(agentExecutionRoutes({ agentEventStore: events, executeAgent } as never));
+
+    const res = await app.inject({ method: 'POST', url: `/api/executions/${run}/terminate-manual`, payload: { reason: 'user_requested' } });
+
+    expect(res.statusCode).toBe(200);
+    expect(execRow(run)).toMatchObject({ status: 'interrupted', m: 1 });
+    expect(execRow(sibling)).toMatchObject({ status: 'running', m: 0 });
+    expect(executeAgent.cancelled).toHaveLength(1);
+    expect(executeAgent.cancelled[0]!.row.m).toBe(1); // already flagged when the process was killed
+    // run-assistant-turn's skip-logic reads exactly this to decide not to relaunch (covered in run-assistant-turn.test.ts)
+    expect((await events.getExecutionByMentionId('m1'))?.manuallyTerminatedByUser).toBe(true);
   });
 });
