@@ -194,8 +194,9 @@ describe('TicketTimeline — annotations', () => {
     expect((screen.getByRole('checkbox', { name: 'Annotations' }) as HTMLInputElement).checked).toBe(false);
   });
 
-  // AC1: clicking the band asks to annotate the instant under the cursor.
-  it('asks to annotate the instant under the cursor when the band is clicked', () => {
+  // AC1, narrowed by ticket feedback: hovering the band shows the "+" bubble and its instant,
+  // but only a click ON the bubble annotates — clicking beside a card (to blur it) must not.
+  it('annotates the hovered instant only when its "+" bubble is clicked', () => {
     const { onCreateAt } = setupAnnotated([]);
     const content = screen.getByTestId('timeline-content');
     fireEvent.mouseMove(content, { clientX: 300, clientY: 4 });
@@ -203,6 +204,8 @@ describe('TicketTimeline — annotations', () => {
     expect(ghost.querySelector('svg')).not.toBeNull();
     expect(ghost.textContent).toMatch(/\d{2}:\d{2}/);
     fireEvent.click(content, { clientX: 300, clientY: 4 });
+    expect(onCreateAt).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('annotation-ghost-add'));
     expect(onCreateAt).toHaveBeenCalledTimes(1);
     const [instant] = onCreateAt.mock.calls[0]!;
     expect(instant).toBeGreaterThan(Date.parse(at(8, 0)) - 86_400_000);

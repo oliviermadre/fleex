@@ -2,7 +2,8 @@
  * The annotation band above the frieze (SPEC annotations §5.1): always-visible
  * cards (title, time, author, thumbnail) — nothing to hover — each hung from a
  * dotted line in its tone that stops on the lifeline at its exact instant; plus
- * the ghost "+" that follows the cursor to annotate a new instant.
+ * the ghost "+" that follows the cursor. Only that "+" bubble is clickable
+ * (it lights up on hover): a click elsewhere in the band never creates.
  * Pure rendering: placement comes from layoutAnnotations, clicks go up.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -47,6 +48,8 @@ interface Props {
   ghost: CursorInstant | null;
   highlight: { id: string; nonce: number } | null;
   onOpenCard: (card: PlacedCard<UiAnnotation>, el: HTMLElement) => void;
+  /** The ghost "+" bubble was clicked: annotate this instant. */
+  onCreate: (at: number, el: HTMLElement) => void;
 }
 
 /** The dotted anchors (an SVG over the whole content) — drawn under the cards and pictos. */
@@ -82,7 +85,7 @@ export function AnnotationAnchors({ band, width }: { band: AnnotationBand<UiAnno
   );
 }
 
-export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCard }: Props) {
+export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCard, onCreate }: Props) {
   const h = band.height;
   const [pulsing, setPulsing] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -202,15 +205,24 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
             className={cn('absolute left-0 w-0 border-l', ghost.snappedTo ? 'border-solid border-[var(--theme-accent)]' : 'border-dashed border-[var(--theme-text-secondary)]')}
             style={{ top: Math.max(0, h - 30) + 22, height: h + GEOMETRY.spineY - Math.max(0, h - 30) - 22 }}
           />
-          <div
+          <button
+            type="button"
+            data-testid="annotation-ghost-add"
+            aria-label={`Annoter ici, ${longWhen(ghost.at)}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreate(ghost.at, e.currentTarget);
+            }}
             className={cn(
-              'absolute -left-[11px] flex h-[22px] w-[22px] items-center justify-center rounded-full border bg-[var(--theme-bg-surface)] font-bold',
+              'pointer-events-auto absolute -left-[11px] flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-full border bg-[var(--theme-bg-surface)] transition-[background-color,border-color,color,box-shadow]',
+              'hover:border-solid hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent)] hover:text-[var(--theme-accent-fg)] hover:shadow-[0_0_0_4px_var(--theme-accent-muted)]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]',
               ghost.snappedTo ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-dashed border-[var(--theme-text-secondary)] text-[var(--theme-text-primary)]',
             )}
             style={{ top: Math.max(0, h - 30) }}
           >
             <PlusIcon size={12} />
-          </div>
+          </button>
           <div
             className={cn(
               'absolute left-[14px] flex items-center gap-1 whitespace-nowrap rounded border bg-[var(--theme-bg-base)] px-1.5 font-mono text-[10.5px]',

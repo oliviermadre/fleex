@@ -170,6 +170,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
   );
 
   // Hover → the instant under the cursor: anywhere in the band, or on the frieze with ⌥ held.
+  // Hovering only shows the ghost: in the band, only its "+" bubble creates.
   const canAnnotate = !!annotations && filters.annotations && !!layout;
   const cursorAt = (e: React.MouseEvent): { inBand: boolean; x: number } | null => {
     const el = content.current;
@@ -190,7 +191,8 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
   const onContentClick = (e: React.MouseEvent) => {
     if (!canAnnotate || (e.target as HTMLElement).closest('button')) return;
     const c = cursorAt(e);
-    if (!c || (!c.inBand && !e.altKey)) return;
+    // A plain click in the band (e.g. to blur a card) must not annotate: only ⌥ + click does.
+    if (!c || !e.altKey) return;
     const hit = instantAtCursor(layout!, anchors, c.x);
     const r = content.current!.getBoundingClientRect();
     annotations!.onCreateAt(hit.at, { left: r.left + hit.x - 1, top: r.top + Math.max(0, bandH - 30), width: 2, height: 22 });
@@ -352,6 +354,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
               ghost={ghost}
               highlight={annotations.highlight}
               onOpenCard={(card, el) => annotations.onOpenCard(card, rectOf(el))}
+              onCreate={(at, el) => annotations.onCreateAt(at, rectOf(el))}
             />
           )}
           </div>
