@@ -1,3 +1,5 @@
+import type { AnnotationStorePort } from '../../src/application/ports/annotation-store.port.js';
+import type { TimelineAnnotationEntity } from '../../src/domain/entities/timeline-annotation.entity.js';
 import type { TmuxPort, TmuxSessionInfo, ManagedSessionsWithPanes } from '../../src/application/ports/tmux.port.js';
 import type { SessionStorePort } from '../../src/application/ports/session-store.port.js';
 import type { GitPort } from '../../src/application/ports/git.port.js';
@@ -267,5 +269,36 @@ export class FakeHostFs implements HostFs {
 
   async realpath(path: string): Promise<string | null> {
     return path;
+  }
+}
+
+/** In-memory AnnotationStorePort — same ordering contract as the adapters (instant, then creation). */
+export class FakeAnnotationStore implements AnnotationStorePort {
+  readonly rows = new Map<string, TimelineAnnotationEntity>();
+
+  async listByTicket(ticketId: string): Promise<TimelineAnnotationEntity[]> {
+    return [...this.rows.values()]
+      .filter((a) => a.ticketId === ticketId)
+      .sort((a, b) => a.at.getTime() - b.at.getTime() || a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async getById(id: string): Promise<TimelineAnnotationEntity | null> {
+    return this.rows.get(id) ?? null;
+  }
+
+  async getBySourceComment(commentId: string): Promise<TimelineAnnotationEntity | null> {
+    return [...this.rows.values()].find((a) => a.sourceCommentId === commentId) ?? null;
+  }
+
+  async save(annotation: TimelineAnnotationEntity): Promise<void> {
+    this.rows.set(annotation.id, annotation);
+  }
+
+  async remove(id: string): Promise<void> {
+    this.rows.delete(id);
+  }
+
+  async clearSourceComment(commentId: string): Promise<void> {
+    for (const a of this.rows.values()) if (a.sourceCommentId === commentId) a.sourceCommentId = null;
   }
 }

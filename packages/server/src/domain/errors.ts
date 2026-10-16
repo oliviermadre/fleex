@@ -366,3 +366,22 @@ export class ConnectorError extends DomainError {
     super(message, code);
   }
 }
+
+export class AnnotationNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Annotation not found: ${id}`, 'ANNOTATION_NOT_FOUND');
+  }
+}
+
+export class InvalidAnnotationError extends DomainError {
+  constructor(message: string) {
+    super(message, 'INVALID_ANNOTATION');
+  }
+}
+
+/** A comment can be promoted to the Timeline only once. */
+export class CommentAlreadyAnnotatedError extends DomainError {
+  constructor(commentId: string, public readonly annotationId: string) {
+    super(`Comment ${commentId} is already pinned to the timeline (annotation ${annotationId})`, 'COMMENT_ALREADY_ANNOTATED');
+  }
+}

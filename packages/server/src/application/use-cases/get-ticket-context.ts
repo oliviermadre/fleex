@@ -5,8 +5,12 @@ import type { CommentStorePort } from '../ports/comment-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
+import type { AnnotationStorePort } from '../ports/annotation-store.port.js';
 import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
 import type { MemorySnippet, RetrieveContextUseCase } from './retrieve-context.js';
+
+/** Annotation bodies are truncated in the agent context (the full text stays on the ticket). */
+export const ANNOTATION_CONTEXT_BODY_MAX = 500;
 
 export class GetTicketContextUseCase {
   constructor(
@@ -22,6 +26,8 @@ export class GetTicketContextUseCase {
      * this use case for non-agentic reads stay unchanged.
      */
     private readonly retrieveContext?: RetrieveContextUseCase,
+    /** Timeline annotations — what was flagged as worth remembering, and when. */
+    private readonly annotationStore?: AnnotationStorePort,
   ) {}
 
   async execute(params: {
@@ -50,6 +56,16 @@ export class GetTicketContextUseCase {
 
     // Get deliverables
     const deliverables = await this.deliverableStore.getByTicket(params.ticketId);
+
+    // Timeline annotations: the body is cut so a long one can't crowd the prompt.
+    const annotations = this.annotationStore
+      ? (await this.annotationStore.listByTicket(params.ticketId).catch(() => [])).map((a) => {
+          const dto = a.toDTO();
+          return dto.body.length > ANNOTATION_CONTEXT_BODY_MAX
+            ? { ...dto, body: `${dto.body.slice(0, ANNOTATION_CONTEXT_BODY_MAX)}…` }
+            : dto;
+        })
+      : [];
 
     // Get activity
     const activity = await this.ticketStore.getActivitiesByTicket(params.ticketId, activityLimit);
@@ -108,6 +124,7 @@ export class GetTicketContextUseCase {
         all: allMentions.map((m) => m.toDTO()),
       },
       deliverables: deliverables.map((d) => d.toDTO()),
+      annotations,
       activity: activity.map((a) => a.toDTO()),
       relevantSummaries,
       epics,

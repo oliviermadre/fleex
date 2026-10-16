@@ -101,6 +101,19 @@ export class BroadcastRegistrar {
       }
     });
 
+    // ── Timeline annotation broadcasts (the event carries the DTO) ──
+    bus.on('annotation.created', (e) => {
+      if (e.type === 'annotation.created') this.ticketBroadcast('annotation:created', e.annotation);
+    });
+    bus.on('annotation.updated', (e) => {
+      if (e.type === 'annotation.updated') this.ticketBroadcast('annotation:updated', e.annotation);
+    });
+    bus.on('annotation.deleted', (e) => {
+      if (e.type === 'annotation.deleted') {
+        this.ticketBroadcast('annotation:deleted', { id: e.annotationId, ticketId: e.ticketId });
+      }
+    });
+
     // ── Mention broadcasts ──
     bus.on('mention.created', (e) => this.broadcastMentionEntity(e, 'mention:created'));
     bus.on('mention.acknowledged', (e) => this.broadcastMentionEntity(e, 'mention:acknowledged'));

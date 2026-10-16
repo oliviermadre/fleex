@@ -190,6 +190,7 @@ export function agentCommentsRoutes(container: Container) {
       }
 
       await container.commentStore.remove(comment.id);
+      await container.timelineAnnotations.onCommentDeleted(comment.id);
       emit({ type: 'comment.deleted', commentId: comment.id, ticketId: comment.ticketId, occurredAt: new Date() });
       return reply.code(204).send();
     });
