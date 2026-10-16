@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useWorkStore, filtersRevealing } from './workStore';
+import { useWorkStore, filtersRevealing, TIMELINE_MAX_HEIGHT } from './workStore';
 
 // Each ticket keeps its own center mode, shell split and pane bindings — switching
 // tickets must never apply one ticket's shells or layout to another.
@@ -291,15 +291,30 @@ describe('workStore — one bottom panel at a time', () => {
     s().setTimelineHeight(10);
     expect(s().timelineHeight).toBe(160);
     s().setTimelineHeight(9999);
-    expect(s().timelineHeight).toBe(360);
+    expect(s().timelineHeight).toBe(TIMELINE_MAX_HEIGHT);
     s().setTimelineOpen(true);
     s().toggleTimelineFilter('comments');
     const stored = JSON.parse(localStorage.getItem('fleex_work')!);
     expect(stored.timelineOpen).toBe(true);
-    expect(stored.timelineHeight).toBe(360);
+    expect(stored.timelineHeight).toBe(TIMELINE_MAX_HEIGHT);
     expect(stored.timelineFilters.comments).toBe(false);
     expect(stored.timelineFilters.status).toBe(true);
     s().toggleTimelineFilter('comments');
+  });
+
+  it('persists the frieze zoom, snapped to a known level', () => {
+    s().setTimelineZoom(4);
+    expect(s().timelineZoom).toBe(4);
+    expect(JSON.parse(localStorage.getItem('fleex_work')!).timelineZoom).toBe(4);
+    s().setTimelineZoom(3.1); // between levels → nearest
+    expect(s().timelineZoom).toBe(4);
+    s().setTimelineZoom(1);
+  });
+
+  it('defaults the zoom to ×1 for an old blob, and repairs a garbage one', async () => {
+    localStorage.setItem('fleex_work', JSON.stringify({ timelineZoom: 'abc' }));
+    vi.resetModules();
+    expect((await import('./workStore')).useWorkStore.getState().timelineZoom).toBe(1);
   });
 
   it('repairs a stored blob that had both bottom panels open (the shell wins)', async () => {
@@ -309,6 +324,6 @@ describe('workStore — one bottom panel at a time', () => {
     const st = fresh.getState();
     expect([st.shellOpen, st.timelineOpen]).toEqual([true, false]);
     expect(st.timelineHeight).toBe(160);
-    expect(st.timelineFilters).toEqual({ status: true, cli: true, pr: true, deliverables: true, comments: true });
+    expect(st.timelineFilters).toEqual({ status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true });
   });
 });

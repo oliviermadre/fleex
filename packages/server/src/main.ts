@@ -31,6 +31,7 @@ import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
 import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
 import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
 import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
+import { agentAnnotationsRoutes } from './infrastructure/http/agent-annotations.routes.js';
 import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
 import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
 import { agentContextRoutes } from './infrastructure/http/agent-context.routes.js';
@@ -228,6 +229,7 @@ async function main() {
     v1.addHook('preHandler', authHook);
     await v1.register(agentApiRoutes(container));
     await v1.register(agentCommentsRoutes(container));
+    await v1.register(agentAnnotationsRoutes(container));
     await v1.register(agentMentionsRoutes(container));
     await v1.register(agentDeliverablesRoutes(container));
     await v1.register(agentContextRoutes(container));

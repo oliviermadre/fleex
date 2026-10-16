@@ -789,6 +789,39 @@ export async function deleteTicketComment(ticketId: string, commentId: string): 
   if (!res.ok) throw new Error(`Failed to delete comment: ${res.statusText}`);
 }
 
+// ── Timeline annotations API ──
+
+type AnnotationInput = { at?: string; title?: string; body?: string; tone?: import('@fleex/shared').AnnotationTone };
+
+export async function fetchTicketAnnotations(ticketId: string): Promise<import('@fleex/shared').TimelineAnnotation[]> {
+  return request<import('@fleex/shared').TimelineAnnotation[]>(`/tickets/${encodeURIComponent(ticketId)}/annotations`);
+}
+
+export async function createTicketAnnotation(ticketId: string, input: AnnotationInput): Promise<import('@fleex/shared').TimelineAnnotation> {
+  return request<import('@fleex/shared').TimelineAnnotation>(`/tickets/${encodeURIComponent(ticketId)}/annotations`, {
+    method: 'POST', body: JSON.stringify(input),
+  });
+}
+
+/** Pin a comment to the Timeline (409 when it already is). */
+export async function annotateComment(ticketId: string, commentId: string, input: AnnotationInput): Promise<import('@fleex/shared').TimelineAnnotation> {
+  return request<import('@fleex/shared').TimelineAnnotation>(
+    `/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}/annotate`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+}
+
+export async function updateTicketAnnotation(ticketId: string, annotationId: string, patch: AnnotationInput): Promise<import('@fleex/shared').TimelineAnnotation> {
+  return request<import('@fleex/shared').TimelineAnnotation>(
+    `/tickets/${encodeURIComponent(ticketId)}/annotations/${encodeURIComponent(annotationId)}`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  );
+}
+
+export async function deleteTicketAnnotation(ticketId: string, annotationId: string): Promise<void> {
+  await request<void>(`/tickets/${encodeURIComponent(ticketId)}/annotations/${encodeURIComponent(annotationId)}`, { method: 'DELETE' });
+}
+
 // ── Read Cursors API ──
 
 export async function fetchReadCursors(ticketId: string): Promise<import('@fleex/shared').TicketReadCursors> {

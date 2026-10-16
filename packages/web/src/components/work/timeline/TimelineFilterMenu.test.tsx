@@ -7,7 +7,7 @@ import type { TimelineFilterKey } from '../../../stores/workStore';
 
 afterEach(cleanup);
 
-const ALL: TimelineFilters = { status: true, cli: true, pr: true, deliverables: true, comments: true };
+const ALL: TimelineFilters = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true };
 
 /** Wires the menu to real state, like the store does, to observe what a user sees. */
 function Harness({ initial, spy }: { initial: TimelineFilters; spy: (k: TimelineFilterKey) => void }) {
@@ -44,11 +44,11 @@ describe('TimelineFilterMenu', () => {
     expect(button.getAttribute('title')).toBe('Masqués : PR, Commentaires');
   });
 
-  it('lists the 5 categories in order, toggles immediately and stays open', () => {
+  it('lists the 6 categories in order, toggles immediately and stays open', () => {
     const { button, spy } = setup();
     fireEvent.click(button);
     const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.map((b) => b.parentElement!.textContent)).toEqual(['Statuts', 'CLI', 'PR', 'Livrables', 'Commentaires']);
+    expect(boxes.map((b) => b.parentElement!.textContent)).toEqual(['Statuts', 'CLI', 'PR', 'Livrables', 'Commentaires', 'Annotations']);
     expect(boxes.every((b) => (b as HTMLInputElement).checked)).toBe(true);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Commentaires' }));
     expect(spy).toHaveBeenCalledWith('comments');

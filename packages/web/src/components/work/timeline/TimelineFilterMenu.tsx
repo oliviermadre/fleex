@@ -28,6 +28,7 @@ export const FILTERS: { key: TimelineFilterKey; label: string }[] = [
   { key: 'pr', label: 'PR' },
   { key: 'deliverables', label: 'Livrables' },
   { key: 'comments', label: 'Commentaires' },
+  { key: 'annotations', label: 'Annotations' },
 ];
 
 export function TimelineFilterMenu({

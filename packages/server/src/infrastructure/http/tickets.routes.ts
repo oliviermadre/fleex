@@ -1665,6 +1665,8 @@ export function ticketRoutes(container: Container) {
           }
         }
 
+        // Before remove(): on pg/supabase the FK ON DELETE SET NULL would hide the link.
+        await container.timelineAnnotations.onCommentDeleted(comment.id);
         await container.commentStore.remove(comment.id);
         emit({
           type: 'comment.deleted',
@@ -1672,6 +1674,55 @@ export function ticketRoutes(container: Container) {
           ticketId: comment.ticketId,
           occurredAt: new Date(),
         });
+        return reply.code(204).send();
+      },
+    );
+
+    // ── Timeline annotations (web) ──
+
+    const webActor = () => {
+      const { humanDisplayName, humanMentionName } = container.config.get();
+      return { type: 'user' as const, name: humanDisplayName || humanMentionName || 'user' };
+    };
+
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/annotations', async (request) => {
+      const annotations = await container.timelineAnnotations.list(request.params.id);
+      return annotations.map((a) => a.toDTO());
+    });
+
+    app.post<{
+      Params: { id: string };
+      Body: { at: string; title: string; body?: string; tone?: string };
+    }>('/api/tickets/:id/annotations', async (request, reply) => {
+      const body = request.body ?? ({} as { at: string; title: string });
+      const annotation = await container.timelineAnnotations.create(request.params.id, body, webActor());
+      return reply.code(201).send(annotation.toDTO());
+    });
+
+    app.post<{
+      Params: { id: string; commentId: string };
+      Body: { at?: string; title?: string; body?: string; tone?: string };
+    }>('/api/tickets/:id/comments/:commentId/annotate', async (request, reply) => {
+      const annotation = await container.timelineAnnotations.promote(
+        request.params.id, request.params.commentId, request.body ?? {}, webActor(),
+      );
+      return reply.code(201).send(annotation.toDTO());
+    });
+
+    app.patch<{
+      Params: { id: string; annotationId: string };
+      Body: { at?: string; title?: string; body?: string; tone?: string };
+    }>('/api/tickets/:id/annotations/:annotationId', async (request) => {
+      const annotation = await container.timelineAnnotations.update(
+        request.params.id, request.params.annotationId, request.body ?? {}, webActor(),
+      );
+      return annotation.toDTO();
+    });
+
+    app.delete<{ Params: { id: string; annotationId: string } }>(
+      '/api/tickets/:id/annotations/:annotationId',
+      async (request, reply) => {
+        await container.timelineAnnotations.remove(request.params.id, request.params.annotationId, webActor());
         return reply.code(204).send();
       },
     );

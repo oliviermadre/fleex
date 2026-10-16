@@ -202,6 +202,8 @@ export type {
   CommentVisibility,
   TicketComment,
   AgentQuestion,
+  AnnotationTone,
+  TimelineAnnotation,
   MentionStatus,
   MentionTargetType,
   MentionExecutionMode,
@@ -251,6 +253,11 @@ export {
   colorForType,
   isValidDeliverableTypeId,
   stripHtmlCodeFence,
+  ANNOTATION_TONES,
+  ANNOTATION_TITLE_MAX,
+  ANNOTATION_BODY_MAX,
+  isAnnotationTone,
+  annotationTitleFromComment,
 } from './types/ticket.js';
 
 export type {

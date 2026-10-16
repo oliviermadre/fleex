@@ -12,14 +12,15 @@ import type { AgentQuestion } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { MessageMarkdown } from './MessageMarkdown';
 import { QuestionPicker } from './QuestionPicker';
-import { CommentDeleteButton } from './CommentDeleteButton';
+import { CommentActionsMenu } from './CommentActionsMenu';
+import { commentActions } from './StreamItem';
 
 interface Props {
   authorName: string;
   body: string;
   questions: AgentQuestion[];
   onAnswer: (text: string) => void | Promise<void>;
-  /** Shows a hover trash next to the author name (the confirmation is the caller's). */
+  /** Offers « Supprimer » in the comment's "⋯" menu (the confirmation is the caller's). */
   onDelete?: () => void;
 }
 
@@ -43,7 +44,7 @@ export function InlineQuestion({ authorName, body, questions, onAnswer, onDelete
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-center text-[11px] font-medium text-[var(--theme-text-secondary)]">
           {authorName || 'Agent'}
-          {onDelete && <CommentDeleteButton onClick={onDelete} className="-my-1 ml-auto" />}
+          <CommentActionsMenu actions={commentActions({ onDelete })} className="-my-1 ml-auto" />
         </div>
         <div
           className={cn(

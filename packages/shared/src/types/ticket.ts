@@ -232,6 +232,55 @@ export interface TicketComment {
   readonly updatedAt: string;
 }
 
+// ── Timeline annotations ──
+
+/** Colour of an annotation card on the Timeline frieze. */
+export type AnnotationTone = 'info' | 'highlight' | 'warning' | 'success';
+
+export const ANNOTATION_TONES: readonly AnnotationTone[] = ['info', 'highlight', 'warning', 'success'];
+export const ANNOTATION_TITLE_MAX = 80;
+export const ANNOTATION_BODY_MAX = 4000;
+
+export function isAnnotationTone(v: unknown): v is AnnotationTone {
+  return typeof v === 'string' && (ANNOTATION_TONES as readonly string[]).includes(v);
+}
+
+/**
+ * Default title of a comment pinned to the Timeline: its first meaningful
+ * line, markdown stripped, cut to the title limit. Shared so the composer's
+ * pre-fill and the server's default agree.
+ */
+export function annotationTitleFromComment(body: string): string {
+  const line = body
+    .split('\n')
+    .map((l) => l.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>~]/g, '').trim())
+    .find((l) => l.length > 0) ?? '';
+  return line.length > ANNOTATION_TITLE_MAX ? `${line.slice(0, ANNOTATION_TITLE_MAX - 1)}…` : line;
+}
+
+/**
+ * A highlighted piece of information pinned to an instant of the ticket's
+ * Timeline — always readable on the frieze, unlike a comment. Either dropped
+ * freely on the frieze or promoted from a comment (`sourceCommentId`).
+ */
+export interface TimelineAnnotation {
+  readonly id: string;
+  readonly ticketId: string;
+  /** Instant on the frieze (ISO), between the ticket's creation and now. */
+  readonly at: string;
+  /** Short title, always shown. 1..80 chars. */
+  readonly title: string;
+  /** Optional markdown (text, links, `![](/api/files/:id)` images). ≤ 4000 chars. */
+  readonly body: string;
+  readonly tone: AnnotationTone;
+  /** The comment it was promoted from; null once that comment is deleted. */
+  readonly sourceCommentId: string | null;
+  readonly authorType: 'user' | 'agent';
+  readonly authorName: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 // ── Mentions ──
 
 export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info' | 'failed';
@@ -639,6 +688,8 @@ export interface TicketContext {
     readonly all: TicketMention[];
   };
   readonly deliverables: TicketDeliverable[];
+  /** Timeline annotations: what humans/agents flagged as worth remembering, and when. */
+  readonly annotations?: TimelineAnnotation[];
   readonly activity: TicketActivity[];
   readonly relevantSummaries: TicketSummaryRef[];
   readonly epics: TicketContextEpic[];
@@ -680,7 +731,10 @@ export type TicketWsMessageType =
   | 'mention:execution_failed'
   | 'deliverable:created'
   | 'deliverable:updated'
-  | 'deliverable:deleted';
+  | 'deliverable:deleted'
+  | 'annotation:created'
+  | 'annotation:updated'
+  | 'annotation:deleted';
 
 export interface TicketWsMessage {
   readonly type: TicketWsMessageType;

@@ -2498,6 +2498,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         );
       }
     }
+    this.composeAnnotations(composer, context);
+
     if (context.deliverables.length > 0) {
       composer.scaffold('\n## Deliverables\n');
       for (const d of context.deliverables) {
@@ -2570,6 +2572,23 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     return { blocks: composer.getBlocks(), manifest: composer.getManifest() };
   }
 
+  /** The ticket's Timeline annotations — what was flagged as worth remembering, and when. */
+  private composeAnnotations(
+    composer: PromptComposer,
+    context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
+  ): void {
+    if (context.annotations && context.annotations.length > 0) {
+      composer.scaffold('\n## Timeline Annotations\n');
+      composer.scaffold('Facts the team pinned on the ticket timeline as worth remembering, oldest first.\n');
+      for (const a of context.annotations) {
+        composer.track(
+          { kind: 'annotation', section: 'Timeline Annotations', label: a.title, provenance: `${a.tone} by ${a.authorName} — ${a.at}`, ticketId: context.ticket.id },
+          `- **${a.title}** (${a.at.slice(0, 16).replace('T', ' ')} UTC, ${a.tone}, by ${a.authorName})${a.body.trim() ? `\n  ${a.body.trim().replace(/\n/g, '\n  ')}` : ''}\n`,
+        );
+      }
+    }
+  }
+
   /**
    * The ticket background every non-mention run shares: header, description,
    * comments, deliverables. Factored out so skill and workflow-step prompts
@@ -2603,6 +2622,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         );
       }
     }
+
+    this.composeAnnotations(composer, context);
 
     if (context.deliverables.length > 0) {
       composer.scaffold('\n## Deliverables\n');

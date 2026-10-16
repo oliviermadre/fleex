@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind, PrMergeMethod } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind, PrMergeMethod, TimelineAnnotation } from '@fleex/shared';
 
 // ── Base ──
 
@@ -145,6 +145,29 @@ export interface CommentDeletedEvent extends DomainEvent {
   type: 'comment.deleted';
   commentId: string;
   ticketId: string;
+}
+
+// ── Timeline annotation events ──
+// They carry the DTO: the broadcast (local or relayed by the hub) needs no store read.
+
+export interface AnnotationCreatedEvent extends DomainEvent {
+  type: 'annotation.created';
+  ticketId: string;
+  annotationId: string;
+  annotation: TimelineAnnotation;
+}
+
+export interface AnnotationUpdatedEvent extends DomainEvent {
+  type: 'annotation.updated';
+  ticketId: string;
+  annotationId: string;
+  annotation: TimelineAnnotation;
+}
+
+export interface AnnotationDeletedEvent extends DomainEvent {
+  type: 'annotation.deleted';
+  ticketId: string;
+  annotationId: string;
 }
 
 // ── Mention events ──
@@ -614,6 +637,9 @@ export type AnyDomainEvent =
   | CommentPostedEvent
   | CommentUpdatedEvent
   | CommentDeletedEvent
+  | AnnotationCreatedEvent
+  | AnnotationUpdatedEvent
+  | AnnotationDeletedEvent
   | MentionCreatedEvent
   | MentionAcknowledgedEvent
   | MentionResolvedEvent
