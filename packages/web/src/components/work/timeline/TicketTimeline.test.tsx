@@ -74,4 +74,20 @@ describe('TicketTimeline', () => {
     // Next in time: the Backlog status pill (same instant, ranked after creation).
     expect((document.activeElement as HTMLElement).dataset.timelineNode).toBe('status:0');
   });
+
+  it('shows each phase\'s duration and human interventions on the frieze, and hides them with the status filter', () => {
+    setup();
+    const metrics = screen.getAllByTestId('timeline-zone-metrics').map((n) => n.textContent);
+    // #591: Todo lasted 2 h 15 with the @PM request + both spec gates; Doing still runs (3 h 35, 1 comment).
+    expect(metrics).toContain('2 h 15·3');
+    expect(metrics).toContain('3 h 35·1');
+    cleanup();
+    setup({ ...ALL, status: false });
+    expect(screen.queryAllByTestId('timeline-zone-metrics')).toHaveLength(0);
+  });
+
+  it('exposes the phase duration and interventions on the status pill for assistive tech', () => {
+    setup();
+    expect(screen.getByRole('button', { name: /^Statut Todo par @PM, \d\d:\d\d, durée 2 h 15, 3 interventions humaines$/ })).toBeTruthy();
+  });
 });
