@@ -43,6 +43,12 @@ const renderStream = (comments: TicketComment[], activity: 'waiting' | 'running'
     />,
   );
 
+/** Open the "⋯" menu of the n-th comment, and return its items. */
+function openActions(n: number) {
+  fireEvent.click(screen.getAllByRole('button', { name: 'Actions du commentaire' })[n]!);
+  return screen.getAllByRole('menuitem');
+}
+
 describe('TaskStream — inline question card', () => {
   it('renders no choice card for a waiting comment without declared questions (#604)', () => {
     renderStream([agentComment()], 'waiting');
@@ -78,21 +84,31 @@ describe('TaskStream — deleting a comment', () => {
     return onCommentDeleted;
   };
 
-  it('offers a trash on every comment, user and agent alike', () => {
+  // Ticket feedback: one "⋯" menu per comment, always after the comment (on its right), user or agent alike.
+  it('offers one "⋯" menu per comment, user and agent alike, holding « Supprimer »', () => {
     renderEditable();
-    expect(screen.getAllByRole('button', { name: 'Delete comment' })).toHaveLength(2);
+    const menus = screen.getAllByRole('button', { name: 'Actions du commentaire' });
+    expect(menus).toHaveLength(2);
+    for (const m of menus) {
+      const row = m.closest('[data-comment-id]')!;
+      // Last focusable control of the row = rightmost: the menu never sits before (left of) the bubble.
+      const buttons = [...row.querySelectorAll('button')];
+      expect(buttons[buttons.length - 1]).toBe(m);
+    }
+    expect(openActions(1).map((i) => i.textContent)).toContain('Supprimer');
+    expect(screen.queryByRole('button', { name: 'Delete comment' })).toBeNull(); // no stray icon left
   });
 
-  it('shows no trash in a read-only stream (Focus popup)', () => {
+  it('shows no menu in a read-only stream (Focus popup)', () => {
     renderEditable(vi.fn(), false);
-    expect(screen.queryByRole('button', { name: 'Delete comment' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Actions du commentaire' })).toBeNull();
   });
 
   it('deletes only after confirmation, then drops the comment', async () => {
     deleteTicketComment.mockResolvedValue(undefined);
     const onDeleted = renderEditable();
-    const [, userTrash] = screen.getAllByRole('button', { name: 'Delete comment' });
-    fireEvent.click(userTrash!);
+    fireEvent.click(openActions(1).find((i) => i.textContent === 'Supprimer')!);
+    expect(screen.queryByRole('menu')).toBeNull(); // the menu closes on select
     expect(screen.getByText('Delete comment?')).toBeTruthy();
     expect(deleteTicketComment).not.toHaveBeenCalled();
 
@@ -103,7 +119,7 @@ describe('TaskStream — deleting a comment', () => {
 
   it('cancelling the confirmation deletes nothing', () => {
     const onDeleted = renderEditable();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete comment' })[0]!);
+    fireEvent.click(openActions(0).find((i) => i.textContent === 'Supprimer')!);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(deleteTicketComment).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
@@ -125,7 +141,7 @@ describe('TaskStream — pinning a comment to the Timeline', () => {
   it('opens the Timeline composer pre-filled with the first line, the whole body and the posting instant', () => {
     useWorkStore.getState().setTimelineOpen(false);
     renderEditable();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Épingler sur la timeline' })[1]!);
+    fireEvent.click(openActions(1).find((i) => i.textContent === 'Épingler sur la timeline')!);
     expect(useWorkStore.getState().timelineOpen).toBe(true);
     expect(useAnnotationStore.getState().composer).toEqual({
       mode: 'promote', ticketId: 't1', commentId: 'c2',
@@ -141,7 +157,9 @@ describe('TaskStream — pinning a comment to the Timeline', () => {
     }]);
     renderEditable();
     const badge = await screen.findByRole('button', { name: "Voir l'annotation" });
-    expect(screen.getAllByRole('button', { name: 'Épingler sur la timeline' })).toHaveLength(1);
+    // The pinned comment's menu offers to go to its annotation, not to pin it again.
+    expect(openActions(1).map((i) => i.textContent)).toEqual(["Voir l'annotation", 'Supprimer']);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     // SVG pushpin, not the 📌 emoji (renders differently on every OS).
     expect(badge.textContent).toBe('Épinglé');
     expect(badge.querySelector('svg')).not.toBeNull();
@@ -156,6 +174,6 @@ describe('TaskStream — pinning a comment to the Timeline', () => {
         deliverables={[]} activity="idle" loading={false} error={null} onAnswer={vi.fn()} onOpenExecution={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('button', { name: 'Épingler sur la timeline' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Actions du commentaire' })).toBeNull();
   });
 });

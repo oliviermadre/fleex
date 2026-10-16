@@ -1,7 +1,7 @@
 /**
  * Pinning a comment to the Timeline from the conversation (SPEC annotations
- * §5.4): a hover pushpin next to the trash, and — once pinned — an "Épinglé"
- * badge (pin icon + label) that opens the Timeline on the annotation.
+ * §5.4): « Épingler sur la timeline » in the comment's "⋯" menu, and — once
+ * pinned — an "Épinglé" badge (pin icon + label) that opens the Timeline on the annotation.
  */
 import { cn } from '../../../lib/cn';
 import { PinIcon } from '../../ui/icons/AnnotationIcons';
@@ -13,23 +13,6 @@ export interface CommentPin {
   onPin: () => void;
   /** Open the Timeline and pulse the annotation. */
   onShow: () => void;
-}
-
-export function CommentPinButton({ onClick, className }: { onClick: () => void; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="Épingler sur la timeline"
-      aria-label="Épingler sur la timeline"
-      className={cn(
-        'shrink-0 rounded p-1 leading-none text-[var(--theme-text-faint)] opacity-0 transition-opacity hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] focus-visible:opacity-100 group-hover/comment:opacity-100',
-        className,
-      )}
-    >
-      <PinIcon size={14} />
-    </button>
-  );
 }
 
 export function PinnedBadge({ onClick, className }: { onClick: () => void; className?: string }) {
