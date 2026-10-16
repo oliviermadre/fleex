@@ -48,6 +48,7 @@ ${SECTION('Examples:')}
   ${DIM('$')} fleex ticket unlink 42 --repo github/fleex  ${DIM('# unlink a repo / --pr / --issue')}
   ${DIM('$')} fleex ticket deliverable list 42           ${DIM('# list deliverables')}
   ${DIM('$')} fleex ticket deliverable add 42 --title T --type prd --file ./prd.md
+  ${DIM('$')} fleex ticket annotation add 42 --title "Pivot" --tone highlight  ${DIM('# pin a fact on the Timeline')}
   ${DIM('$')} fleex ticket delete 42 -f                  ${DIM('# delete without confirm')}
 `,
   action: (...args: unknown[]) => {
