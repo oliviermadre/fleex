@@ -14,7 +14,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useWorkStore, filtersRevealing, type QueueGroupBy } from '../../stores/workStore';
-import { partitionQueue, type QueueItem } from './selectors';
+import { partitionQueue, idleActivitySource, type QueueItem } from './selectors';
 import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
 import type { WorkTask, WorkWorktree, QueueGroup } from './types';
@@ -255,7 +255,7 @@ export function useWorkQueue(): WorkQueueModel {
         activity,
         activityDetail: detailByTicket[t.id] ?? null,
         since: toMs(sinceByTicket[t.id]),
-        lastActivityAt: toMs(lastActivityAtByTicket[t.id]) ?? toMs(t.updatedAt),
+        lastActivityAt: toMs(idleActivitySource(t, lastActivityAtByTicket[t.id])),
         cost: costByTicket[t.id] ?? null,
         runningExecutionId: runningExecutionIdByTicket[t.id] ?? null,
         progress,

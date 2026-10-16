@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
 import {
   partitionQueue,
+  idleActivitySource,
   suggestionsFor,
   formatActivity,
   buildStream,
@@ -374,5 +375,27 @@ describe('personasForTicket', () => {
 
   it('returns [] when no persona ran the ticket', () => {
     expect(personasForTicket([], personas, {})).toEqual([]);
+  });
+});
+
+describe('idleActivitySource', () => {
+  // Ticket #168: closed on 24/04, then `fleex worktree cleanup` unlinked its
+  // worktree on 13/10, bumping updatedAt. It must not read "2d idle".
+  const closedLongAgo = {
+    updatedAt: '2026-10-13T12:56:01.483Z',
+    statusChangedAt: '2026-04-24T16:12:41.260Z',
+  };
+
+  it('measures a closed ticket without SDK activity from its closure, not from a later technical write', () => {
+    expect(idleActivitySource({ ...closedLongAgo, status: 'done' }, undefined)).toBe('2026-04-24T16:12:41.260Z');
+    expect(idleActivitySource({ ...closedLongAgo, status: 'cancelled' }, null)).toBe('2026-04-24T16:12:41.260Z');
+  });
+
+  it('keeps updatedAt for an open ticket so a manual edit still bumps it', () => {
+    expect(idleActivitySource({ ...closedLongAgo, status: 'reviewing' }, undefined)).toBe('2026-10-13T12:56:01.483Z');
+  });
+
+  it('prefers the last SDK activity whatever the status', () => {
+    expect(idleActivitySource({ ...closedLongAgo, status: 'done' }, '2026-05-01T00:00:00.000Z')).toBe('2026-05-01T00:00:00.000Z');
   });
 });
