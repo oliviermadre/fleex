@@ -15,22 +15,40 @@ import { GlyphIcon } from './TimelineGlyph';
 
 /** Below this width a zone only shows the status dot. */
 const PILL_MIN = 64;
+/**
+ * Max width of a pill (the actor name truncates past it). Real cap, not just an
+ * estimate: the metrics badge is placed against it, so both must agree.
+ */
 const PILL_EST = 150;
 /** Rough width of one 11px character (no DOM measuring: the layout stays pure and testable). */
 const CHAR_W = 6.5;
 const METRICS_GAP = 8;
 
-/** Sticky x of a zone's pill: follows the viewport's left edge while the zone is on screen. */
-function pillLeft(z: PlacedZone, scrollLeft: number): number {
+/**
+ * Sticky x of a zone's pill: follows the viewport's left edge while the zone is
+ * on screen, without running past the zone's end (`pillWidth`: the pill's width,
+ * wider than PILL_EST when the metrics are folded into it).
+ */
+function pillLeft(z: PlacedZone, scrollLeft: number, pillWidth = Math.min(PILL_EST, z.x1 - z.x0)): number {
   const width = z.x1 - z.x0;
   if (width < PILL_MIN) return z.x0 + 4;
-  return Math.max(z.x0 + 6, Math.min(scrollLeft + 6, z.x1 - Math.min(PILL_EST, width) - 6));
+  return Math.max(z.x0 + 6, Math.min(scrollLeft + 6, z.x1 - pillWidth - 6));
 }
 
-function estimatePillWidth(z: PlacedZone): number {
+function pillTextWidth(z: PlacedZone): number {
   const label = TICKET_STATUS_LABELS[z.status] ?? z.status;
   const text = label.length + (z.actorName ? 5 + z.actorName.length : 0) + (z.approximate ? 2 : 0);
-  return Math.min(PILL_EST, z.x1 - z.x0 - 12, 30 + text * CHAR_W);
+  return 30 + text * CHAR_W;
+}
+
+/** Width of a pill without metrics: capped at PILL_EST, like the rendered pill. */
+function estimatePillWidth(z: PlacedZone): number {
+  return Math.min(PILL_EST, z.x1 - z.x0 - 12, pillTextWidth(z));
+}
+
+/** Width of a pill with the metrics folded in: only capped by the zone. */
+function estimateFusedPillWidth(z: PlacedZone): number {
+  return Math.min(z.x1 - z.x0 - 12, pillTextWidth(z) + estimateMetricsWidth(z));
 }
 
 function estimateMetricsWidth(z: PlacedZone): number {
@@ -178,8 +196,8 @@ export function TimelineZonePills({
       {zones.map((z, i) => {
         const width = z.x1 - z.x0;
         const narrow = width < PILL_MIN;
-        const left = pillLeft(z, scrollLeft);
         const inPill = placeZoneMetrics(z, { scrollLeft, viewportWidth, nowX, last: i === zones.length - 1 }).mode === 'pill';
+        const left = pillLeft(z, scrollLeft, inPill ? estimateFusedPillWidth(z) : undefined);
         const event = events.get(z.eventId);
         const label = TICKET_STATUS_LABELS[z.status] ?? z.status;
         const pill = (
@@ -192,7 +210,7 @@ export function TimelineZonePills({
               narrow ? 'w-5 justify-center' : 'px-2',
               getStatusBadgeClass(z.status),
             )}
-            style={{ left: narrow ? z.x0 + 4 : left, top: GEOMETRY.statusY, maxWidth: Math.max(20, width - 12) }}
+            style={{ left: narrow ? z.x0 + 4 : left, top: GEOMETRY.statusY, maxWidth: Math.max(20, inPill ? width - 12 : Math.min(PILL_EST, width - 12)) }}
           >
             <span className={cn('h-2 w-2 shrink-0 rounded-full', STATUS_COLORS[z.status]?.bar)} />
             {!narrow && (
