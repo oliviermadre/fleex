@@ -27,6 +27,22 @@ export interface QueueItem {
   lastActivityAt: number | null;
 }
 
+/**
+ * The ISO timestamp an idle task's age (and IDLE ordering) is measured from.
+ * The last SDK activity wins. Without one, a closed ticket falls back to when it
+ * was closed: its `updatedAt` keeps moving on technical writes long after
+ * closure (e.g. `fleex worktree cleanup` unlinking its worktree), which made
+ * months-old Done tickets read "2d" and float to the top. Open tickets keep
+ * `updatedAt`, so a manual edit still bumps them.
+ */
+export function idleActivitySource(
+  ticket: { status: string; updatedAt: string; statusChangedAt: string },
+  lastSdkActivityAt: string | null | undefined,
+): string {
+  if (lastSdkActivityAt) return lastSdkActivityAt;
+  return ticket.status === 'done' || ticket.status === 'cancelled' ? ticket.statusChangedAt : ticket.updatedAt;
+}
+
 export interface PartitionedQueue {
   needs: QueueItem[];
   running: QueueItem[];
