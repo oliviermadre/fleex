@@ -138,6 +138,26 @@ describe('TimelineAnnotationsUseCase', () => {
     await expect(uc.remove('t1', 'missing', user)).rejects.toMatchObject({ code: 'ANNOTATION_NOT_FOUND' });
   });
 
+  // AC8 under concurrency: both pins read « not annotated yet », the UNIQUE
+  // index refuses the second save — the caller must get the 409, not a 500.
+  it('maps a lost pin race to CommentAlreadyAnnotatedError', async () => {
+    addComment('c1', 'x');
+    const winner = await uc.promote('t1', 'c1', {}, user);
+    const realGet = store.getBySourceComment.bind(store);
+    let reads = 0;
+    store.getBySourceComment = async (id) => (reads++ === 0 ? null : realGet(id));
+    store.save = async () => { throw new Error('UNIQUE constraint failed: timeline_annotations.source_comment_id'); };
+    events = [];
+    await expect(uc.promote('t1', 'c1', {}, builder)).rejects.toMatchObject({ code: 'COMMENT_ALREADY_ANNOTATED', annotationId: winner.id });
+    expect(events).toEqual([]);
+  });
+
+  it('lets an unrelated save failure surface as is', async () => {
+    addComment('c1', 'x');
+    store.save = async () => { throw new Error('disk full'); };
+    await expect(uc.promote('t1', 'c1', {}, user)).rejects.toThrow('disk full');
+  });
+
   // AC16: deleting the comment keeps the annotation, only the link goes — and open friezes learn it.
   it('keeps a promoted annotation when its comment is deleted, unlinked and re-broadcast', async () => {
     addComment('c1', 'x');

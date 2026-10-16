@@ -72,6 +72,16 @@ describe('timeline_annotations on SQLite', () => {
     `)).toThrow();
   });
 
+  // AC8 under concurrency (migration 041): a comment is pinned at most once,
+  // while free annotations (no source) never collide with each other.
+  it('refuses a second annotation for the same source comment, not for free ones', async () => {
+    await store.save(make('a', '2026-10-15T08:00:00.000Z', { sourceCommentId: 'c-1' }));
+    await expect(store.save(make('b', '2026-10-15T09:00:00.000Z', { sourceCommentId: 'c-1' }))).rejects.toThrow();
+    await store.save(make('free-1', '2026-10-15T10:00:00.000Z'));
+    await store.save(make('free-2', '2026-10-15T11:00:00.000Z'));
+    expect((await store.listByTicket('t-1')).map((x) => x.id)).toEqual(['a', 'free-1', 'free-2']);
+  });
+
   it('deletes a ticket\'s annotations with the ticket (cascade)', async () => {
     await store.save(make('a', '2026-10-15T08:00:00.000Z'));
     conn.db.exec(`DELETE FROM tickets WHERE id = 't-1'`);

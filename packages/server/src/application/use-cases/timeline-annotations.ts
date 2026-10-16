@@ -89,7 +89,16 @@ export class TimelineAnnotationsUseCase {
       authorType: actor.type,
       authorName: actor.name,
     });
-    return this.persistNew(annotation, actor);
+    try {
+      await this.annotationStore.save(annotation);
+    } catch (err) {
+      // A concurrent pin won the race: the UNIQUE index (migration 041) refused
+      // this one. Any other failure is not ours to translate.
+      const winner = await this.annotationStore.getBySourceComment(commentId);
+      if (winner && winner.id !== annotation.id) throw new CommentAlreadyAnnotatedError(commentId, winner.id);
+      throw err;
+    }
+    return this.announceNew(annotation, actor);
   }
 
   async update(
@@ -117,6 +126,9 @@ export class TimelineAnnotationsUseCase {
   /**
    * The comment is being deleted: its annotation stays, only the link goes.
    * Broadcast the unlinked annotation so open frieze drop "see the comment".
+   * Call it BEFORE removing the comment: on pg/supabase the FK
+   * `ON DELETE SET NULL` clears the link first, so the annotation would no
+   * longer be found and nothing would be broadcast.
    */
   async onCommentDeleted(commentId: string): Promise<void> {
     const linked = await this.annotationStore.getBySourceComment(commentId);
@@ -134,6 +146,10 @@ export class TimelineAnnotationsUseCase {
 
   private async persistNew(annotation: TimelineAnnotationEntity, actor: AnnotationActor): Promise<TimelineAnnotationEntity> {
     await this.annotationStore.save(annotation);
+    return this.announceNew(annotation, actor);
+  }
+
+  private async announceNew(annotation: TimelineAnnotationEntity, actor: AnnotationActor): Promise<TimelineAnnotationEntity> {
     await this.recordActivity(annotation.ticketId, 'annotation_added', null, annotation.title, actor);
     this.emit({
       type: 'annotation.created',

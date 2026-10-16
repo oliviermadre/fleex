@@ -2572,12 +2572,6 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     return { blocks: composer.getBlocks(), manifest: composer.getManifest() };
   }
 
-  /**
-   * The ticket background every non-mention run shares: header, description,
-   * comments, deliverables. Factored out so skill and workflow-step prompts
-   * cannot drift apart from each other in either the text they send or the
-   * manifest they declare.
-   */
   /** The ticket's Timeline annotations — what was flagged as worth remembering, and when. */
   private composeAnnotations(
     composer: PromptComposer,
@@ -2595,6 +2589,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     }
   }
 
+  /**
+   * The ticket background every non-mention run shares: header, description,
+   * comments, deliverables. Factored out so skill and workflow-step prompts
+   * cannot drift apart from each other in either the text they send or the
+   * manifest they declare.
+   */
   private async composeTicketBackground(
     composer: PromptComposer,
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,

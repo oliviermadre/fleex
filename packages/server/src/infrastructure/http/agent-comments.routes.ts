@@ -189,8 +189,9 @@ export function agentCommentsRoutes(container: Container) {
         }
       }
 
-      await container.commentStore.remove(comment.id);
+      // Before remove(): on pg/supabase the FK ON DELETE SET NULL would hide the link.
       await container.timelineAnnotations.onCommentDeleted(comment.id);
+      await container.commentStore.remove(comment.id);
       emit({ type: 'comment.deleted', commentId: comment.id, ticketId: comment.ticketId, occurredAt: new Date() });
       return reply.code(204).send();
     });
