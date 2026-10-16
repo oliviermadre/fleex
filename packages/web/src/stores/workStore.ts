@@ -3,6 +3,7 @@ import type { TicketType, TicketPriority, TicketLink, ImportSourceId } from '@fl
 import { EMPTY_DRAFT, migrateDraft } from '../components/work/new/draftMigration';
 import { paneCount } from '../components/work/shell/shellLayout';
 import { useBrowserStore } from './browserStore';
+import { ZOOM_LEVELS } from '../components/work/timeline/layoutTimeline';
 
 /**
  * Client-only UI state for the Work view. The ticket is the source of truth for
@@ -123,6 +124,8 @@ export interface WorkState {
   timelineHeight: number;
   /** Which event categories the Timeline shows. */
   timelineFilters: TimelineFilters;
+  /** Horizontal zoom of the Timeline frieze (one of ZOOM_LEVELS). */
+  timelineZoom: number;
   /** Width in px of the right tool window (Context / Delivs), user-resizable. */
   rightPanelWidth: number;
   /** Width in px of the left queue, user-resizable. */
@@ -191,6 +194,7 @@ export interface WorkState {
   setTimelineOpen: (open: boolean) => void;
   setTimelineHeight: (height: number) => void;
   toggleTimelineFilter: (key: TimelineFilterKey) => void;
+  setTimelineZoom: (zoom: number) => void;
   updateDraft: (patch: Partial<WorkDraft>) => void;
   /** Clear the draft after a task is created — keeping its board (default: the draft's) for the next one. */
   resetDraft: (boardId?: string | null) => void;
@@ -259,6 +263,7 @@ type PersistedWork = Pick<
   | 'timelineOpen'
   | 'timelineHeight'
   | 'timelineFilters'
+  | 'timelineZoom'
   | 'rightPanelWidth'
   | 'queueWidth'
   | 'queueCollapsed'
@@ -288,6 +293,13 @@ const clampShellHeight = (h: number) =>
 /** Clamp the bottom Timeline drawer height — the frieze itself is ~196px tall. */
 export const TIMELINE_MIN_HEIGHT = 160;
 export const TIMELINE_MAX_HEIGHT = 360;
+/** Snap to the nearest zoom level; anything unreadable (old blob, NaN) → 1. */
+const clampTimelineZoom = (z: unknown): number => {
+  const n = Number(z);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return ZOOM_LEVELS.reduce((best, l) => (Math.abs(l - n) < Math.abs(best - n) ? l : best), 1 as number);
+};
+
 const clampTimelineHeight = (h: number) =>
   Math.min(TIMELINE_MAX_HEIGHT, Math.max(TIMELINE_MIN_HEIGHT, Math.round(h)));
 
@@ -351,6 +363,7 @@ const DEFAULTS: PersistedWork = {
   timelineOpen: false,
   timelineHeight: 212,
   timelineFilters: DEFAULT_TIMELINE_FILTERS,
+  timelineZoom: 1,
   rightPanelWidth: 296,
   queueWidth: 300,
   queueCollapsed: false,
@@ -372,6 +385,7 @@ function load(): PersistedWork {
       timelineOpen: merged.timelineOpen === true && !merged.shellOpen,
       timelineHeight: clampTimelineHeight(Number(merged.timelineHeight) || DEFAULTS.timelineHeight),
       timelineFilters: { ...DEFAULT_TIMELINE_FILTERS, ...(parsed.timelineFilters ?? {}) },
+      timelineZoom: clampTimelineZoom(merged.timelineZoom),
     };
   } catch {
     return DEFAULTS;
@@ -407,6 +421,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
       timelineOpen: s.timelineOpen,
       timelineHeight: s.timelineHeight,
       timelineFilters: s.timelineFilters,
+      timelineZoom: s.timelineZoom,
       rightPanelWidth: s.rightPanelWidth,
       queueWidth: s.queueWidth,
       queueCollapsed: s.queueCollapsed,
@@ -482,6 +497,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
     setShellOpen: (shellOpen) => commit({ shellOpen, ...(shellOpen ? { timelineOpen: false } : {}) }),
     setTimelineOpen: (timelineOpen) => commit({ timelineOpen, ...(timelineOpen ? { shellOpen: false } : {}) }),
     setTimelineHeight: (height) => commit({ timelineHeight: clampTimelineHeight(height) }),
+    setTimelineZoom: (zoom) => commit({ timelineZoom: clampTimelineZoom(zoom) }),
     toggleTimelineFilter: (key) =>
       commit({ timelineFilters: { ...get().timelineFilters, [key]: !get().timelineFilters[key] } }),
     // Shell mode and Code mode both take over the center — entering one exits the other.

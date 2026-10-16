@@ -53,6 +53,8 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
   const setTimelineHeight = useWorkStore((s) => s.setTimelineHeight);
   const filters = useWorkStore((s) => s.timelineFilters);
   const toggleTimelineFilter = useWorkStore((s) => s.toggleTimelineFilter);
+  const zoom = useWorkStore((s) => s.timelineZoom);
+  const setZoom = useWorkStore((s) => s.setTimelineZoom);
   const onMouseDown = useBottomDrawerResize(setTimelineHeight);
   const { model } = useTicketTimeline(task, deliverables);
   const ticketCreatedAt = useTicketStore((s) => s.tickets.find((t) => t.id === task.id)?.createdAt ?? null);
@@ -174,6 +176,8 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
         onAction={onAction}
         annotations={annotations}
         onContentHeight={setContentH}
+        zoom={zoom}
+        onZoom={setZoom}
       />
       {composer && composerAnchor && (
         <AnnotationComposer

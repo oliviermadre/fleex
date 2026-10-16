@@ -1,7 +1,7 @@
 /**
  * The annotation band above the frieze (SPEC annotations §5.1): always-visible
  * cards (title, time, author, thumbnail) — nothing to hover — each hung from a
- * dotted line in its tone down to the bottom lane at its exact instant; plus
+ * dotted line in its tone that stops on the lifeline at its exact instant; plus
  * the ghost "+" that follows the cursor to annotate a new instant.
  * Pure rendering: placement comes from layoutAnnotations, clicks go up.
  */
@@ -51,7 +51,7 @@ interface Props {
 /** The dotted anchors (an SVG over the whole content) — drawn under the cards and pictos. */
 export function AnnotationAnchors({ band, width }: { band: AnnotationBand<UiAnnotation>; width: number }) {
   const h = band.height;
-  const bottom = h + GEOMETRY.bottomY + 14;
+  // The anchor lands ON the lifeline (its dot), never past it.
   const spine = h + GEOMETRY.spineY;
   return (
     <svg className="pointer-events-none absolute left-0 top-0" width={width} height={h + GEOMETRY.height} aria-hidden>
@@ -64,7 +64,7 @@ export function AnnotationAnchors({ band, width }: { band: AnnotationBand<UiAnno
           return (
             <g key={`anchor-${a.id}`} data-testid="annotation-anchor">
               <path
-                d={`M${cx} ${y0} L${cx} ${y0 + 3} L${x} ${y0 + 7} L${x} ${bottom}`}
+                d={`M${cx} ${y0} L${cx} ${y0 + 3} L${x} ${y0 + 7} L${x} ${spine}`}
                 fill="none"
                 stroke={solid(a)}
                 strokeWidth={1}
@@ -196,7 +196,7 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
         <div className="pointer-events-none absolute top-0 z-[6]" style={{ left: ghost.x }} data-testid="annotation-ghost">
           <div
             className={cn('absolute left-0 w-0 border-l', ghost.snappedTo ? 'border-solid border-[var(--theme-accent)]' : 'border-dashed border-[var(--theme-text-secondary)]')}
-            style={{ top: Math.max(0, h - 30) + 22, height: h + GEOMETRY.bottomY + 14 - Math.max(0, h - 30) - 22 }}
+            style={{ top: Math.max(0, h - 30) + 22, height: h + GEOMETRY.spineY - Math.max(0, h - 30) - 22 }}
           />
           <div
             className={cn(

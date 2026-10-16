@@ -302,6 +302,21 @@ describe('workStore — one bottom panel at a time', () => {
     s().toggleTimelineFilter('comments');
   });
 
+  it('persists the frieze zoom, snapped to a known level', () => {
+    s().setTimelineZoom(4);
+    expect(s().timelineZoom).toBe(4);
+    expect(JSON.parse(localStorage.getItem('fleex_work')!).timelineZoom).toBe(4);
+    s().setTimelineZoom(3.1); // between levels → nearest
+    expect(s().timelineZoom).toBe(4);
+    s().setTimelineZoom(1);
+  });
+
+  it('defaults the zoom to ×1 for an old blob, and repairs a garbage one', async () => {
+    localStorage.setItem('fleex_work', JSON.stringify({ timelineZoom: 'abc' }));
+    vi.resetModules();
+    expect((await import('./workStore')).useWorkStore.getState().timelineZoom).toBe(1);
+  });
+
   it('repairs a stored blob that had both bottom panels open (the shell wins)', async () => {
     localStorage.setItem('fleex_work', JSON.stringify({ shellOpen: true, timelineOpen: true, timelineHeight: 5 }));
     vi.resetModules();

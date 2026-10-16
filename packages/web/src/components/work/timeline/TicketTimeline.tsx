@@ -22,7 +22,8 @@ import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { PrBadgeGroup } from '../../ui/PrBadgeGroup';
 import { parseGithubPrRef } from '../../../lib/prRef';
 import type { TimelineFilterKey } from '../../../stores/workStore';
-import { TicketTypeIcon } from '../../tickets/TicketTypeBadge';
+import { TicketTypeIconSvg } from '../../tickets/TicketTypeIconSvg';
+import { TimelineZoomControl } from './TimelineZoomControl';
 import type { TimelineAction, TimelineEvent, TimelineModel } from './buildTimeline';
 import { GEOMETRY, layoutTimeline, type TimelineFilters } from './layoutTimeline';
 import { LanePicto, SpineNode } from './TimelineNode';
@@ -66,6 +67,9 @@ export interface TicketTimelineProps {
   annotations?: TimelineAnnotationsProps;
   /** Total content height (band + frieze), so the host can make room for it. */
   onContentHeight?: (height: number) => void;
+  /** Horizontal zoom of the frieze (ZOOM_LEVELS); `onZoom` omitted → no zoom control. */
+  zoom?: number;
+  onZoom?: (zoom: number) => void;
 }
 
 const rectOf = (el: Element): AnchorRect => {
@@ -73,7 +77,7 @@ const rectOf = (el: Element): AnchorRect => {
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 };
 
-export function TicketTimeline({ header, model, filters, onToggleFilter, onAction, annotations, onContentHeight }: TicketTimelineProps) {
+export function TicketTimeline({ header, model, filters, onToggleFilter, onAction, annotations, onContentHeight, zoom = 1, onZoom }: TicketTimelineProps) {
   const viewport = useRef<HTMLDivElement>(null);
   // Viewport width: a short frieze is stretched to fill it.
   const [viewportW, setViewportW] = useState(0);
@@ -86,7 +90,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const layout = useMemo(() => (model ? layoutTimeline(model, filters, viewportW) : null), [model, filters, viewportW]);
+  const layout = useMemo(() => (model ? layoutTimeline(model, filters, viewportW, zoom) : null), [model, filters, viewportW, zoom]);
   const anchors = useMemo(() => (layout && model ? timeAnchors(layout, model.now) : []), [layout, model]);
   const band = useMemo(
     () => (layout && annotations ? layoutAnnotationBand(annotations.list, anchors, layout.width, filters.annotations) : { cards: [], height: 0 }),
@@ -205,12 +209,15 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <TicketTypeIcon type={(header.type as TicketType | null) ?? null} />
+            <TicketTypeIconSvg type={(header.type as TicketType | null) ?? null} size={15} className="shrink-0" />
             <span className="text-[15px] font-semibold text-[var(--theme-text-primary)]">
               {header.number != null ? `#${header.number}` : 'Ticket'}
             </span>
           </div>
-          <TimelineFilterMenu filters={filters} onToggleFilter={onToggleFilter} />
+          <div className="flex shrink-0 items-center gap-0.5">
+            {onZoom && <TimelineZoomControl zoom={zoom} onZoom={onZoom} />}
+            <TimelineFilterMenu filters={filters} onToggleFilter={onToggleFilter} />
+          </div>
         </div>
         <div className="truncate text-[13px] text-[var(--theme-text-primary)]" title={header.title}>{header.title}</div>
         <div className="truncate text-[11px] text-[var(--theme-text-muted)]">

@@ -12,7 +12,7 @@ import { cn } from '../../../lib/cn';
 import { useFileUpload } from '../../../hooks/useFileUpload';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import type { AnnotationDraft, ComposerRequest, UiAnnotation } from '../../../stores/annotationStore';
-import { TONE_HUE, TONE_LABEL } from './layoutAnnotations';
+import { TONE_HUE, TONE_LABEL, firstImage } from './layoutAnnotations';
 import { AlertIcon, CloseIcon, CommentLineIcon, ImageIcon, PencilIcon, PinIcon } from '../../ui/icons/AnnotationIcons';
 import { TrashIcon } from '../../ui/TrashIcon';
 
@@ -411,20 +411,25 @@ export function AnnotationStackList({
     <Popover anchor={anchor} width={300} onClose={onClose} label={`${annotations.length} annotations`}>
       <div className="mb-1 text-[12px] text-[var(--theme-text-secondary)]">{annotations.length} annotations</div>
       <div className="flex flex-col">
-        {annotations.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => onOpen(a.id)}
-            className="flex items-stretch gap-2 rounded-md px-1.5 py-1.5 text-left hover:bg-[var(--theme-bg-hover)]"
-          >
-            <i className="w-[3px] shrink-0 rounded" style={{ background: `var(--tint-${TONE_HUE[a.tone]}-solid)` }} />
-            <span className="min-w-0">
-              <span className="block truncate text-[12px] font-semibold text-[var(--theme-text-primary)]">{a.title}</span>
-              <span className="font-mono text-[10px] text-[var(--theme-text-muted)]">{longWhen(a.at)} · {a.authorName}</span>
-            </span>
-          </button>
-        ))}
+        {annotations.map((a) => {
+          const img = firstImage(a.body);
+          return (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onOpen(a.id)}
+              data-testid="annotation-stack-item"
+              className="flex items-stretch gap-2 rounded-md px-1.5 py-1.5 text-left hover:bg-[var(--theme-bg-hover)]"
+            >
+              <i className="w-[3px] shrink-0 rounded" style={{ background: `var(--tint-${TONE_HUE[a.tone]}-solid)` }} />
+              {img && <img src={img} alt="" className="h-10 w-10 shrink-0 self-center rounded border border-[var(--theme-border)] object-cover" />}
+              <span className="min-w-0 self-center">
+                <span className="block truncate text-[12px] font-semibold text-[var(--theme-text-primary)]">{a.title}</span>
+                <span className="font-mono text-[10px] text-[var(--theme-text-muted)]">{longWhen(a.at)} · {a.authorName}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </Popover>
   );

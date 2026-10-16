@@ -7,7 +7,10 @@
  * ~180px and are flagged by a "⋯ 3 j" break instead of a screen of void.
  *
  * Each lane (status / top / spine / bottom) keeps its own minimum spacing, so
- * a burst in one lane spreads that lane only. Pictos attached to a spine node
+ * a burst in one lane spreads that lane only. That floor wins over time: two
+ * spine nodes are never closer than one label slot (124px), whatever their Δt —
+ * at zoom 1, any Δt under ~8 h reads as the same distance. The zoom multiplies
+ * the time gap so short Δt rise above that floor again. Pictos attached to a spine node
  * (the deliverable a step produced, the comment a run posted) stack under
  * their parent instead of widening the frieze.
  */
@@ -45,6 +48,9 @@ export const GEOMETRY = {
   labelY: 136,
   bottomY: 170,
 } as const;
+
+/** Zoom factors of the time gap, from the most compact to the most spread out. */
+export const ZOOM_LEVELS = [0.5, 1, 2, 4, 8] as const;
 
 /** Compressed time → px: 1 min ≈ 14px, 1 h ≈ 83px, 1 day ≈ 147px, capped at 180. */
 export function gap(dtMs: number): number {
@@ -129,11 +135,12 @@ function dayLabel(t: number): string {
 // ── Sweep ─────────────────────────────────────────────────────────────────────
 
 /**
+ * `zoom` multiplies every time gap (ZOOM_LEVELS); lane slots don't scale.
  * `minWidth` = the viewport width: a frieze shorter than that is stretched
  * (every x scaled away from the left pad, up to MAX_STRETCH — gaps only grow,
  * so order and non-overlap hold) and the last status zone runs to the edge.
  */
-export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, minWidth = 0): TimelineLayout {
+export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, minWidth = 0, zoom = 1): TimelineLayout {
   const visible = model.events.filter((e) => isVisible(e, filters));
   const items: PlacedEvent[] = [];
   const byId = new Map<string, PlacedEvent>();
@@ -164,7 +171,7 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, m
       prevAt = e.at;
     } else {
       const dt = e.at - prevAt;
-      at = Math.max(x + gap(dt), floor, lastRight[e.lane] + w / 2);
+      at = Math.max(x + gap(dt) * zoom, floor, lastRight[e.lane] + w / 2);
       if (dt > BREAK_THRESHOLD_MS) breaks.push({ x: (x + at) / 2, label: breakLabel(dt) });
       x = at;
       prevAt = e.at;
@@ -178,7 +185,7 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, m
   }
 
   const maxX = items.reduce((m, i) => Math.max(m, i.x), PAD_LEFT);
-  let nowX = maxX + Math.max(LANE_WIDTH.spine / 2 + 16, gap(model.now - lastPrimaryAt));
+  let nowX = maxX + Math.max(LANE_WIDTH.spine / 2 + 16, gap(model.now - lastPrimaryAt) * zoom);
   const fork = model.pendingFork && byId.has(model.pendingFork.anchorId) ? model.pendingFork : null;
   const tail = PAD_RIGHT + (fork ? FORK_WIDTH : 0);
 

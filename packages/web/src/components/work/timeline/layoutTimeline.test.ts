@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildTimeline } from './buildTimeline';
-import { LANE_WIDTH, MAX_STRETCH, gap, layoutTimeline, type TimelineLayout } from './layoutTimeline';
+import { LANE_WIDTH, MAX_STRETCH, ZOOM_LEVELS, gap, layoutTimeline, type TimelineLayout } from './layoutTimeline';
 import { NOW, at, comment, emptySources, execution, fixture591 } from './timeline.fixture';
 
 const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true };
@@ -185,5 +185,55 @@ describe('layoutTimeline — short frieze & now label', () => {
     const l = layoutTimeline(buildTimeline(fixture591(), NOW), ALL, 300);
     expect(l.stretch).toBe(1);
     expect(l.width).toBe(natural.width);
+  });
+});
+
+// Ticket feedback: "two things in the same minute are as far apart as two things 3 min apart".
+// That is the spine's label slot (124px) winning over time; the zoom lets time win again.
+describe('layoutTimeline — zoom', () => {
+  const src = emptySources();
+  src.executions = [
+    execution({ id: 'a', startedAt: at(9, 30) }),
+    execution({ id: 'b', startedAt: at(9, 30) }),
+    execution({ id: 'c', startedAt: at(9, 33) }),
+  ];
+  const model = buildTimeline(src, NOW);
+  const spacing = (zoom: number) => {
+    const l = layoutTimeline(model, ALL, 0, zoom);
+    const [a, b, c] = ['run:a', 'run:b', 'run:c'].map((id) => l.byId.get(id)!.x);
+    return { same: b! - a!, threeMin: c! - b! };
+  };
+
+  it('at ×1 a 3-minute gap is no wider than the same minute: the label slot is the floor', () => {
+    const { same, threeMin } = spacing(1);
+    expect(same).toBe(LANE_WIDTH.spine);
+    expect(threeMin).toBe(LANE_WIDTH.spine);
+  });
+
+  it('zooming in makes short Δt readable again, without squeezing below the slot', () => {
+    const { same, threeMin } = spacing(8);
+    expect(same).toBe(LANE_WIDTH.spine);
+    expect(threeMin).toBeCloseTo(8 * gap(3 * 60_000));
+    expect(threeMin).toBeGreaterThan(same);
+  });
+
+  it('zooming out tightens long gaps (down to the slot, never below)', () => {
+    const late = emptySources();
+    late.executions = [execution({ id: 'late', startedAt: new Date(2026, 9, 9, 9, 0).toISOString() })];
+    const m = buildTimeline(late, new Date(2026, 9, 9, 12, 0).getTime());
+    const span = (z: number) => {
+      const l = layoutTimeline(m, ALL, 0, z);
+      return l.byId.get('run:late')!.x - l.byId.get('created')!.x;
+    };
+    expect(span(1)).toBe(180);
+    expect(span(0.5)).toBe(LANE_WIDTH.spine);
+  });
+
+  it('keeps every lane free of overlap and the frieze monotonic at every level', () => {
+    for (const z of ZOOM_LEVELS) {
+      const l = layoutTimeline(buildTimeline(fixture591(), NOW), ALL, 0, z);
+      expectNoOverlap(l);
+      expectMonotonic(l);
+    }
   });
 });

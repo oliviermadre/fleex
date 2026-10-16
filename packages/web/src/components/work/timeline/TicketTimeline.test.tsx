@@ -6,7 +6,8 @@ import { NOW, activity, at, emptySources, fixture591 } from './timeline.fixture'
 import type { TimelineAnnotation } from '@fleex/shared';
 import type { TimelineAnnotationsProps } from './TicketTimeline';
 import { BAND } from './layoutAnnotations';
-import { AnnotationViewer } from './AnnotationPopovers';
+import { GEOMETRY } from './layoutTimeline';
+import { AnnotationStackList, AnnotationViewer } from './AnnotationPopovers';
 
 afterEach(cleanup);
 
@@ -227,6 +228,31 @@ describe('TicketTimeline — annotations', () => {
     expect(onCreateAt).toHaveBeenCalledWith(ev.at, expect.anything());
   });
 
+  // Ticket feedback 1/: the dotted anchor lands on the lifeline, it doesn't run past it.
+  it('stops every anchor on the lifeline, at its dot', () => {
+    setupAnnotated([ann('a', at(9, 0))]);
+    const g = screen.getByTestId('annotation-anchor');
+    const d = g.querySelector('path')!.getAttribute('d')!;
+    const lastY = Number(d.trim().split(/\s+/).pop());
+    const spineY = BAND.oneRow + GEOMETRY.spineY;
+    expect(lastY).toBe(spineY);
+    expect(Number(g.querySelector('circle')!.getAttribute('cy'))).toBe(spineY);
+  });
+
+  // Ticket feedback 2/: a stacked screenshot must be visible from the list, not only once opened.
+  it('shows the screenshot thumbnail of each stacked annotation in the list', () => {
+    render(
+      <AnnotationStackList
+        annotations={[ann('a', at(9, 0), { body: 'voir ![shot](/api/files/x)' }), ann('b', at(9, 1))]}
+        anchor={{ left: 0, top: 0, width: 10, height: 10 }}
+        onClose={vi.fn()} onOpen={vi.fn()}
+      />,
+    );
+    const [withShot, without] = screen.getAllByTestId('annotation-stack-item');
+    expect(withShot!.querySelector('img')?.getAttribute('src')).toBe('/api/files/x');
+    expect(without!.querySelector('img')).toBeNull();
+  });
+
   it('draws the card markers as SVG icons, never as emoji', () => {
     setupAnnotated([ann('a', at(9, 0), { body: 'Un détail en plus', sourceCommentId: 'c1' })]);
     const card = screen.getByTestId('annotation-card');
@@ -254,5 +280,39 @@ describe('TicketTimeline — annotations', () => {
     const { onOpenCard } = setupAnnotated([ann('a', at(9, 0))]);
     fireEvent.click(screen.getByTestId('annotation-card'));
     expect(onOpenCard).toHaveBeenCalledWith(expect.objectContaining({ kind: 'card' }), expect.anything());
+  });
+});
+
+describe('TicketTimeline — control column', () => {
+  // Ticket feedback 4/: the type is the app's SVG type icon, not the emoji.
+  it('shows the ticket type as an SVG icon, never an emoji', () => {
+    setup();
+    const column = screen.getByTestId('ticket-timeline').querySelector('aside')!;
+    expect(column.textContent).not.toMatch(GLYPH);
+    expect(column.querySelector('svg')).not.toBeNull();
+  });
+
+  it('steps the zoom through its levels and resets it from the label', () => {
+    const onZoom = vi.fn();
+    render(
+      <TicketTimeline
+        header={header} model={buildTimeline(fixture591(), NOW)} filters={ALL}
+        onToggleFilter={vi.fn()} onAction={vi.fn()} zoom={2} onZoom={onZoom}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Étaler la frise' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resserrer la frise' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Zoom ×2/ }));
+    expect(onZoom.mock.calls.map((c) => c[0])).toEqual([4, 1, 1]);
+  });
+
+  it('disables zooming past the last level', () => {
+    render(
+      <TicketTimeline
+        header={header} model={buildTimeline(fixture591(), NOW)} filters={ALL}
+        onToggleFilter={vi.fn()} onAction={vi.fn()} zoom={8} onZoom={vi.fn()}
+      />,
+    );
+    expect((screen.getByRole('button', { name: 'Étaler la frise' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
