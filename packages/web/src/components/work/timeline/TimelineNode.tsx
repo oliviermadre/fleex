@@ -25,13 +25,12 @@ function clickHandler(e: TimelineEvent, onAction: NodeProps['onAction']) {
   return e.action ? () => onAction(e.action!, e) : undefined;
 }
 
-/** A round spine node + its label, sub-label, note and replay badge. */
+/** A round spine node + its label, its time, note and replay badge. */
 export const SpineNode = memo(function SpineNode({ item, onAction }: NodeProps) {
   const e = item.event;
   const hue = glyphHue(e.glyph);
   const size = e.gate ? 36 : 32;
   const labelWidth = item.width - 12;
-  const sub = e.sub ? `${e.sub} · ${e.clock}` : e.clock;
 
   return (
     <>
@@ -98,7 +97,8 @@ export const SpineNode = memo(function SpineNode({ item, onAction }: NodeProps) 
         <div className={cn('truncate text-[12px] font-semibold', e.gate ? tintText('yellow') : 'text-[var(--theme-text-primary)]')}>
           {e.label}
         </div>
-        <div className="truncate text-[11px] text-[var(--theme-text-muted)]">{sub}</div>
+        {/* Time only: who / which trigger lives in the node's tooltip. */}
+        <div className="truncate text-[11px] text-[var(--theme-text-muted)]">{e.clock}</div>
       </div>
     </>
   );

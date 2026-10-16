@@ -142,6 +142,8 @@ describe('buildTimeline — out-of-workflow runs', () => {
     expect(runs.map((r) => r.id)).toEqual(['run:x-pm']);
     expect(runs[0]!.label).toBe('@PM · talk');
     expect(runs[0]!.sub).toBe('clarifie le besoin stp');
+    // The frieze shows only the time under the node, so the trigger must survive in the tooltip.
+    expect(runs[0]!.tooltip.rows).toContainEqual(['Message', 'clarifie le besoin stp']);
   });
 
   it('groups every member execution of one panel mention into a single node', () => {

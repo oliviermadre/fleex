@@ -840,6 +840,8 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
     const sub = trigger ? excerpt(trigger.body, 24) || null : null;
     const state = execState(e.status);
     const rows: [string, string][] = [['Qui', label.split(' · ')[0]!], ['Quand', whenLabel(at, now)]];
+    // The frieze shows only the time under the node: the trigger lives here.
+    if (trigger) rows.push(['Message', excerpt(trigger.body, 80)]);
     const dur = durationLabel(e.startedAt, e.completedAt);
     if (dur) rows.push(['Durée', dur]);
     if (e.costUsd != null) rows.push(['Coût', `$${e.costUsd.toFixed(2)}`]);
@@ -880,6 +882,7 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
     const cost = sorted.reduce((s, e) => s + (e.costUsd ?? 0), 0);
     const rows: [string, string][] = [['Qui', panelName]];
     if (members.length > 0) rows.push(['Membres', members.map((m) => `@${m}`).join(', ')]);
+    if (trigger) rows.push(['Message', excerpt(trigger.body, 80)]);
     rows.push(['Quand', whenLabel(at, now)]);
     if (cost > 0) rows.push(['Coût', `$${cost.toFixed(2)}`]);
     rows.push(['Source', 'Mention']);

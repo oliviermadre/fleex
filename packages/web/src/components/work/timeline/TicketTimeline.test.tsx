@@ -283,6 +283,20 @@ describe('TicketTimeline — annotations', () => {
   });
 });
 
+// Ticket feedback: under a spine node, keep the bold label and only the time —
+// who ran it / what triggered it is in the node's tooltip.
+describe('TicketTimeline — spine labels', () => {
+  it('shows the label and the time only, never the sub-label', () => {
+    setup();
+    const step = buildTimeline(fixture591(), NOW).events.find((e) => e.id === 'step:sr-impl-1')!;
+    expect(step.sub).toBe('@Dev');
+    const content = screen.getByTestId('ticket-timeline');
+    expect(content.textContent).not.toContain(`@Dev · ${step.clock}`);
+    const label = within(content).getAllByText(step.label).find((el) => el.nextElementSibling?.textContent === step.clock);
+    expect(label).toBeDefined();
+  });
+});
+
 describe('TicketTimeline — control column', () => {
   // Ticket feedback 4/: the type is the app's SVG type icon, not the emoji.
   it('shows the ticket type as an SVG icon, never an emoji', () => {
