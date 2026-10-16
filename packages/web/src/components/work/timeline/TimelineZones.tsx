@@ -178,6 +178,35 @@ export function TimelineZoneBands({ zones, fadeFrom }: { zones: PlacedZone[]; fa
   );
 }
 
+/**
+ * Hatches the final Done/Cancelled run of a closed ticket: time out of the
+ * ticket's life, not counted in the « Temps » block (the frieze itself is not
+ * bounded). Starts below the status pills; an accent line marks the end of life.
+ */
+export function TimelineOutOfLifeBand({ zones, closedAt }: { zones: PlacedZone[]; closedAt: number | null }) {
+  if (closedAt == null) return null;
+  const first = zones.find((z) => z.from === closedAt && (z.status === 'done' || z.status === 'cancelled'));
+  if (!first) return null;
+  const x1 = zones[zones.length - 1]!.x1;
+  const top = GEOMETRY.statusY + 22;
+  return (
+    <div
+      aria-hidden
+      data-testid="timeline-out-of-life"
+      title="Hors durée de vie : non compté dans le temps du ticket"
+      className="pointer-events-none absolute"
+      style={{
+        left: first.x0,
+        width: Math.max(0, x1 - first.x0),
+        top,
+        height: GEOMETRY.height - top,
+        borderLeft: '2px solid var(--theme-accent)',
+        background: 'repeating-linear-gradient(135deg, color-mix(in srgb, var(--theme-text-muted) 14%, transparent) 0 6px, transparent 6px 12px)',
+      }}
+    />
+  );
+}
+
 export function TimelineZonePills({
   zones,
   events,

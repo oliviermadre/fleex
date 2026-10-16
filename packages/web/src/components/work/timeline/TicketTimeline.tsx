@@ -1,6 +1,6 @@
 /**
  * The ticket Timeline frieze (SPEC §6): a fixed 232px column (ticket identity,
- * category filters, undatable PRs) beside a horizontally scrolling viewport.
+ * filter menu, « Temps » block, undatable PRs) beside a horizontally scrolling viewport.
  * The content band is 196px tall, drawn in two layers — an SVG for lines
  * (spine, connectors, now line, fork, day separators) and absolutely placed
  * HTML for everything focusable. Independent of WorkView (props only), so the
@@ -13,7 +13,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TicketType } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
-import { cn } from '../../../lib/cn';
 import { PrBadgeGroup } from '../../ui/PrBadgeGroup';
 import { parseGithubPrRef } from '../../../lib/prRef';
 import type { TimelineFilterKey } from '../../../stores/workStore';
@@ -21,20 +20,14 @@ import { TicketTypeIcon } from '../../tickets/TicketTypeBadge';
 import type { TimelineAction, TimelineEvent, TimelineModel } from './buildTimeline';
 import { GEOMETRY, layoutTimeline, type TimelineFilters } from './layoutTimeline';
 import { LanePicto, SpineNode } from './TimelineNode';
-import { TimelineZoneBands, TimelineZoneMetrics, TimelineZonePills } from './TimelineZones';
+import { TimelineOutOfLifeBand, TimelineZoneBands, TimelineZoneMetrics, TimelineZonePills } from './TimelineZones';
+import { TimelineFilterMenu } from './TimelineFilterMenu';
+import { TimelineTimeSummary } from './TimelineTimeSummary';
 import { TimelineForkCurves, TimelineForkOptions } from './TimelineFork';
 import { glyphHue } from './TimelineGlyph';
 
 const COLUMN_W = 232;
 const STICK_SLACK = 40;
-
-const FILTERS: { key: TimelineFilterKey; label: string }[] = [
-  { key: 'status', label: 'Statuts' },
-  { key: 'cli', label: 'CLI' },
-  { key: 'pr', label: 'PR' },
-  { key: 'deliverables', label: 'Livrables' },
-  { key: 'comments', label: 'Commentaires' },
-];
 
 export interface TicketTimelineHeader {
   number: number | null;
@@ -133,36 +126,24 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
         className="flex shrink-0 flex-col gap-1.5 overflow-y-auto border-r border-[var(--theme-border)] px-3 py-2.5"
         style={{ width: COLUMN_W }}
       >
-        <div className="flex items-center gap-2">
-          <TicketTypeIcon type={(header.type as TicketType | null) ?? null} />
-          <span className="text-[15px] font-semibold text-[var(--theme-text-primary)]">
-            {header.number != null ? `#${header.number}` : 'Ticket'}
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <TicketTypeIcon type={(header.type as TicketType | null) ?? null} />
+            <span className="text-[15px] font-semibold text-[var(--theme-text-primary)]">
+              {header.number != null ? `#${header.number}` : 'Ticket'}
+            </span>
+          </div>
+          <TimelineFilterMenu filters={filters} onToggleFilter={onToggleFilter} />
         </div>
         <div className="truncate text-[13px] text-[var(--theme-text-primary)]" title={header.title}>{header.title}</div>
         <div className="truncate text-[11px] text-[var(--theme-text-muted)]">
           {[header.boardName, TICKET_STATUS_LABELS[header.status] ?? header.status].filter(Boolean).join(' · ')}
         </div>
-        <div className="mt-1 flex flex-wrap gap-1" role="group" aria-label="Filtres de la timeline">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              aria-pressed={filters[f.key]}
-              onClick={() => onToggleFilter(f.key)}
-              className={cn(
-                'rounded-full border px-2 py-0.5 text-[11px] transition-colors',
-                filters[f.key]
-                  ? 'border-[var(--theme-border-input)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
-                  : 'border-transparent text-[var(--theme-text-faint)] line-through decoration-[var(--theme-text-faint)]/50',
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <div className="mt-0.5 border-t border-dashed border-[var(--theme-border-input)]" />
+        <TimelineTimeSummary summary={model?.summary ?? null} />
         {filters.pr && model && model.undatedPrs.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1" title="PR sans date connue">
+          <div className="mt-1 flex flex-wrap items-center gap-1" title="PR sans date connue">
+            <span className="text-[10px] text-[var(--theme-text-faint)]">PR sans date :</span>
             <PrBadgeGroup
               density="full"
               prs={model.undatedPrs.flatMap((pr) => {
@@ -195,6 +176,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
         ) : (
           <div className="relative shrink-0" style={{ width: layout.width, height: GEOMETRY.height }}>
             <TimelineZoneBands zones={layout.zones} fadeFrom={layout.nowX} />
+            <TimelineOutOfLifeBand zones={layout.zones} closedAt={model.summary.closedAt} />
 
             <svg className="pointer-events-none absolute inset-0" width={layout.width} height={GEOMETRY.height} aria-hidden>
               {layout.days.map((d) => (
