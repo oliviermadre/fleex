@@ -33,7 +33,7 @@ import { TimelineTimeSummary } from './TimelineTimeSummary';
 import { TimelineForkCurves, TimelineForkOptions } from './TimelineFork';
 import { glyphHue } from './TimelineGlyph';
 import type { UiAnnotation } from '../../../stores/annotationStore';
-import { instantAtCursor, layoutAnnotationBand, rowsForBudget, timeAnchors, type CursorInstant, type PlacedCard } from './layoutAnnotations';
+import { instantAtCursor, layoutAnnotationBand, overAnnotation, rowsForBudget, timeAnchors, type CursorInstant, type PlacedCard } from './layoutAnnotations';
 import { AnnotationAnchors, TimelineAnnotationBand, cardNodeId } from './TimelineAnnotationBand';
 import type { AnchorRect } from './AnnotationPopovers';
 
@@ -180,18 +180,21 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
   // Hover → the instant under the cursor: anywhere in the band, or on the frieze with ⌥ held.
   // Hovering only shows the ghost: in the band, only its "+" bubble creates.
   const canAnnotate = !!annotations && filters.annotations && !!layout;
-  const cursorAt = (e: React.MouseEvent): { inBand: boolean; x: number } | null => {
+  const cursorAt = (e: React.MouseEvent): { inBand: boolean; x: number; y: number } | null => {
     const el = content.current;
     if (!el || !layout) return null;
     const r = el.getBoundingClientRect();
     const x = e.clientX - r.left;
     if (x < layout.spine.x0 - 12 || x > layout.nowX + 2) return null;
-    return { inBand: e.clientY - r.top < bandH, x };
+    return { inBand: e.clientY - r.top < bandH, x, y: e.clientY - r.top };
   };
   const onContentMove = (e: React.MouseEvent) => {
     if (!canAnnotate) return;
     const c = cursorAt(e);
-    const overCard = (e.target as HTMLElement).closest('[data-timeline-node^="annotation"]');
+    // By position, not by event target: once shown, the "+" bubble sits under the
+    // cursor and would hide the annotation it is moving onto (pills especially).
+    const overCard =
+      (e.target as HTMLElement).closest('[data-timeline-node^="annotation"]') || (c && overAnnotation(band, c.x, c.y));
     const overNode = (e.target as HTMLElement).closest('button');
     const show = c && !overCard && (c.inBand || (e.altKey && !overNode));
     setGhost(show ? instantAtCursor(layout!, anchors, c.x) : null);

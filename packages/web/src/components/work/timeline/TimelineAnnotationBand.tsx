@@ -114,11 +114,18 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
   return (
     <div ref={root} className="contents">
       {h > 0 && <div className="pointer-events-none absolute left-0 border-t border-dashed border-[var(--theme-border)]" style={{ top: h, width }} />}
-      {band.cards.length === 0 && (
-        <div className="pointer-events-none absolute left-2 top-0 whitespace-nowrap text-[10px] leading-[14px] text-[var(--theme-text-faint)]">
-          + survoler ici pour annoter
-        </div>
-      )}
+      {/* Sticky label: the band reads as its own row whatever the scroll. In-flow and 0-tall,
+          so it pins to the viewport's left edge without pushing anything. */}
+      <div className="pointer-events-none sticky left-0 z-[7] h-0 w-max" aria-hidden>
+        <span
+          data-testid="annotation-band-label"
+          className="absolute left-1.5 whitespace-nowrap rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-1.5 text-[9.5px] font-semibold uppercase leading-[14px] tracking-[0.06em] text-[var(--theme-text-muted)]"
+          style={{ top: band.mode === 'mini' ? (h - 16) / 2 : 0 }}
+        >
+          Annotations
+          {band.cards.length === 0 && <span className="ml-1.5 font-normal normal-case tracking-normal text-[var(--theme-text-faint)]">survoler pour en ajouter</span>}
+        </span>
+      </div>
 
       {band.cards.map((card) => {
         const id = cardNodeId(card);

@@ -28,6 +28,10 @@ export const BAND = { hidden: 0, empty: 16, mini: 26, oneRow: 72, twoRows: 132 }
 /** Diameter of a pill in the mini band (a stack pill is a bit wider). */
 export const PILL = 18;
 export const PILL_STACK_W = 24;
+/** Room kept at the band's left edge for its sticky "Annotations" label (cards start right of it). */
+export const BAND_LABEL_W = 104;
+/** Half the width of the ghost "+" bubble, plus a little air. */
+const GHOST_HALF = 13;
 
 /** Card rows the band may use: 2, 1, or 0 (pills only). */
 export type BandRows = 0 | 1 | 2;
@@ -150,7 +154,7 @@ export interface AnnotationBand<A extends TimelineAnnotation = TimelineAnnotatio
 const itemsOf = <A extends TimelineAnnotation>(c: PlacedCard<A>) => (c.kind === 'card' ? [c.item] : c.items);
 
 function centeredLeft(x: number, width: number): number {
-  return Math.max(4, Math.min(x - CARD_W / 2, width - CARD_W - 4));
+  return Math.max(BAND_LABEL_W, Math.min(x - CARD_W / 2, width - CARD_W - 4));
 }
 
 /**
@@ -225,6 +229,24 @@ function layoutPills<A extends TimelineAnnotation>(items: PlacedAnnotation<A>[])
     if (g.length === 1) return { kind: 'card', item: g[0]!, left: g[0]!.x - PILL / 2, row: 0 };
     const mx = (g[0]!.x + g[g.length - 1]!.x) / 2;
     return { kind: 'stack', items: g, left: mx - PILL_STACK_W / 2, row: 0 };
+  });
+}
+
+/**
+ * Whether the cursor at (x, y) — content coordinates — is over an annotation,
+ * where the ghost "+" must step aside so the annotation stays clickable. A
+ * card counts by its box; a pill (tiny, and the bubble is wider than it) by
+ * its column, so the bubble never lands on top of it.
+ */
+export function overAnnotation<A extends TimelineAnnotation>(band: AnnotationBand<A>, x: number, y: number): boolean {
+  if (y < 0 || y >= band.height) return false;
+  return band.cards.some((c) => {
+    if (band.mode === 'mini') {
+      const w = c.kind === 'card' ? PILL : PILL_STACK_W;
+      return x >= c.left - GHOST_HALF && x <= c.left + w + GHOST_HALF;
+    }
+    const top = cardTop(c.row, band.height);
+    return x >= c.left && x <= c.left + CARD_W && y >= top && y <= top + CARD_H;
   });
 }
 

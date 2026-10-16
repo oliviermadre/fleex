@@ -245,6 +245,40 @@ describe('TicketTimeline — annotations', () => {
     expect(onOpenCard).toHaveBeenCalledWith(expect.objectContaining({ kind: 'card' }), expect.anything());
   });
 
+  // Ticket feedback: in the mini band the "+" bubble (wider than a pill) slid on top of the pill and ate its click.
+  it('steps the "+" bubble aside over a pill, so the pill stays clickable', () => {
+    setupAnnotated([ann('a', at(9, 0))], ALL, BAND.oneRow - 1);
+    const pill = screen.getByTestId('annotation-pill');
+    const centre = parseFloat(pill.style.left) + 9;
+    const content = screen.getByTestId('timeline-content');
+    fireEvent.mouseMove(content, { clientX: centre + 60, clientY: 13 });
+    expect(screen.getByTestId('annotation-ghost')).toBeTruthy();
+    for (const dx of [0, 15, -15]) {
+      fireEvent.mouseMove(content, { clientX: centre + dx, clientY: 13 });
+      expect(screen.queryByTestId('annotation-ghost'), `dx=${dx}`).toBeNull();
+    }
+  });
+
+  it('steps the "+" bubble aside over a card too', () => {
+    setupAnnotated([ann('a', at(9, 0))]);
+    const card = screen.getByTestId('annotation-card');
+    const content = screen.getByTestId('timeline-content');
+    fireEvent.mouseMove(content, { clientX: parseFloat(card.style.left) + 100, clientY: parseFloat(card.style.top) + 20 });
+    expect(screen.queryByTestId('annotation-ghost')).toBeNull();
+  });
+
+  // Ticket feedback: a label pinned on the band says it is the annotations row.
+  it('labels the band "Annotations", and drops the label with the band', () => {
+    setupAnnotated([ann('a', at(9, 0))]);
+    expect(screen.getByTestId('annotation-band-label').textContent).toBe('Annotations');
+    cleanup();
+    setupAnnotated([]);
+    expect(screen.getByTestId('annotation-band-label').textContent).toMatch(/^Annotations.*ajouter/);
+    cleanup();
+    setupAnnotated([ann('a', at(9, 0))], { ...ALL, annotations: false });
+    expect(screen.queryByTestId('annotation-band-label')).toBeNull();
+  });
+
   it('keeps full cards when the drawer has room for a row', () => {
     setupAnnotated([ann('a', at(9, 0))], ALL, BAND.oneRow);
     expect(screen.getByTestId('annotation-card')).toBeTruthy();

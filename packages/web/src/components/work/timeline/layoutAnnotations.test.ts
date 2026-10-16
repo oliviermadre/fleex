@@ -4,12 +4,14 @@ import { buildTimeline } from './buildTimeline';
 import { layoutTimeline } from './layoutTimeline';
 import {
   BAND,
+  BAND_LABEL_W,
   CARD_W,
   PILL,
   SNAP_PX,
   firstImage,
   instantAtCursor,
   layoutAnnotationBand,
+  overAnnotation,
   rowsForBudget,
   timeAnchors,
   timeAtX,
@@ -160,6 +162,25 @@ describe('layoutAnnotationBand', () => {
     expect(lone.kind === 'card' && lone.left + PILL / 2).toBe(800);
     // No annotation at all still keeps the thin hover strip, never the mini band.
     expect(layoutAnnotationBand([], lin, 5000, true, 0).height).toBe(BAND.empty);
+  });
+
+  it('keeps cards clear of the band label at the left edge', () => {
+    const lin = [{ at: 0, x: 0 }, { at: 1_000_000, x: 1_000_000 }];
+    const band = layoutAnnotationBand([annotation('a', new Date(10).toISOString())], lin, 5000);
+    expect(band.cards[0]!.left).toBe(BAND_LABEL_W);
+  });
+
+  it('tells when a point is over an annotation (card box, or a pill column)', () => {
+    const lin = [{ at: 0, x: 0 }, { at: 1_000_000, x: 1_000_000 }];
+    const iso = (x: number) => new Date(x).toISOString();
+    const cards = layoutAnnotationBand([annotation('a', iso(500))], lin, 5000);
+    expect(overAnnotation(cards, 500, cards.height - 20)).toBe(true);
+    expect(overAnnotation(cards, 500 + CARD_W, cards.height - 20)).toBe(false);
+    expect(overAnnotation(cards, 500, cards.height + 5)).toBe(false); // below the band
+    const mini = layoutAnnotationBand([annotation('a', iso(500))], lin, 5000, true, 0);
+    expect(overAnnotation(mini, 500, 0)).toBe(true);
+    expect(overAnnotation(mini, 500 + PILL, 20)).toBe(true); // the bubble would still touch it
+    expect(overAnnotation(mini, 560, 13)).toBe(false);
   });
 
   it('keeps a card inside the frieze while its anchor stays on the exact instant', () => {
