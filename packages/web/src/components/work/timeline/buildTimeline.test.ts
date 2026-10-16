@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { StepRun } from '@fleex/shared';
-import { buildTimeline, classifyExecution, formatPhaseDuration, type TimelineEvent, type TimelineSources } from './buildTimeline';
+import {
+  buildTimeline, classifyExecution, formatPhaseDuration, formatSince, summarizeZones,
+  type TimelineEvent, type TimelineSources, type TimelineZone,
+} from './buildTimeline';
 import {
   NOW, RUN, STEP_RUNS, activity, at, comment, deliverable, emptySources, execution, fixture591, mention, stepRun,
 } from './timeline.fixture';
@@ -451,5 +454,158 @@ describe('buildTimeline — phase metrics (duration and human interventions per 
   it('on the #591 fixture: the todo phase holds the @PM request and both spec gates, doing the last comment', () => {
     const m = buildTimeline(fixture591(), NOW);
     expect(m.zones.map((z) => [z.status, z.humanActions.total])).toEqual([['backlog', 0], ['todo', 3], ['doing', 1]]);
+  });
+});
+
+// ── « Temps » block (ticket follow-up of 683, spec v3) ──
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
+
+/** Zones from [status, start offset ms, human interventions?, approximate?]; the last one runs to `now`. */
+function zonesOf(spec: [TimelineZone['status'], number, number?, boolean?][], now: number): TimelineZone[] {
+  return spec.map(([status, from, human = 0, approximate = false], i) => {
+    const to = i < spec.length - 1 ? spec[i + 1]![1] : now;
+    return {
+      status, from, to, actorName: null, approximate, eventId: `status:${i}`,
+      durationMs: to - from, durationLabel: '', current: i === spec.length - 1,
+      humanActions: { total: human, comments: human, gates: 0, routes: 0 },
+    };
+  });
+}
+const summarize = (spec: Parameters<typeof zonesOf>[0], now: number) => summarizeZones(zonesOf(spec, now), 0, now);
+const rows = (s: ReturnType<typeof summarizeZones>) => s.byStatus.map((b) => [b.status, b.durationLabel, b.passages, b.interventions]);
+
+describe('summarizeZones — end of life of a closed ticket', () => {
+  // The case that motivated the bound: a 1 h 30 ticket Done for 3 months must
+  // read "lived 1 h 30", not drown its work in 3 months of Done.
+  it('A: stops the life at the entry into the final Done; the months after are only "Done depuis"', () => {
+    const s = summarize([['doing', 0, 2], ['reviewing', 30 * MIN, 1], ['done', 90 * MIN, 4]], 90 * MIN + 92 * DAY);
+    expect(s.closed).toBe(true);
+    expect(s.lifetime).toMatchObject({ kind: 'leadTime', label: '1 h 30' });
+    expect(s.since).toMatchObject({ status: 'done', closed: true, label: '3 mois' });
+    // No Done row, and the 4 interventions on the closed ticket are out of its life.
+    expect(rows(s)).toEqual([['doing', '30 min', 1, 2], ['reviewing', '1 h', 1, 1]]);
+    expect(s.byStatus.map((b) => Math.round(b.share * 100))).toEqual([33, 67]);
+    expect(s.byStatus.some((b) => b.current)).toBe(false);
+  });
+
+  it('a closed ticket is frozen: moving `now` only changes "depuis"', () => {
+    const spec: Parameters<typeof zonesOf>[0] = [['doing', 0], ['reviewing', 30 * MIN], ['done', 90 * MIN]];
+    const a = summarize(spec, 2 * DAY);
+    const b = summarize(spec, 400 * DAY);
+    expect(b.lifetime).toEqual(a.lifetime);
+    expect(b.byStatus).toEqual(a.byStatus);
+    expect(b.since.label).not.toBe(a.since.label);
+  });
+
+  it('B: Done then Cancelled — the end of life is the entry into Done (first of the run)', () => {
+    const s = summarize([['backlog', 0], ['doing', 3 * HOUR], ['done', 5 * HOUR], ['cancelled', 5 * HOUR + DAY]], 5 * HOUR + 3 * DAY);
+    expect(s.closedAt).toBe(5 * HOUR);
+    expect(s.lifetime.label).toBe('5 h');
+    expect(s.since.status).toBe('done');
+    expect(s.since.hint).toMatch(/Puis Cancelled le/);
+    expect(s.byStatus.map((b) => b.status)).toEqual(['backlog', 'doing']);
+  });
+
+  it('C: reopened and running — the months of the earlier Done are part of its life', () => {
+    const now = 30 * MIN + 92 * DAY + 2 * HOUR;
+    const s = summarize([['doing', 0, 1], ['done', 30 * MIN], ['doing', 30 * MIN + 92 * DAY, 3]], now);
+    expect(s.closed).toBe(false);
+    expect(s.lifetime).toMatchObject({ kind: 'age', label: formatPhaseDuration(now) });
+    expect(s.lifetime.hint).toMatch(/Rouvert — dernière fermeture le/);
+    expect(s.since).toMatchObject({ status: 'doing', closed: false, label: '2 h' });
+    expect(rows(s)).toEqual([['doing', '2 h 30', 2, 4], ['done', '92 j', 1, 0]]);
+    expect(s.byStatus.find((b) => b.status === 'doing')!.current).toBe(true);
+  });
+
+  it('D: reopened then closed again — the LAST closing counts; the first Done is in the life', () => {
+    const reclose = 30 * MIN + 92 * DAY + 5 * HOUR;
+    const s = summarize(
+      [['doing', 0], ['done', 30 * MIN], ['doing', 30 * MIN + 92 * DAY], ['reviewing', 30 * MIN + 92 * DAY + 2 * HOUR], ['done', reclose]],
+      reclose + 7 * DAY,
+    );
+    expect(s.closedAt).toBe(reclose);
+    expect(s.lifetime.ms).toBe(reclose);
+    expect(s.lifetime.hint).toMatch(/Rouvert 1 fois/);
+    expect(s.byStatus.find((b) => b.status === 'done')!.durationMs).toBe(92 * DAY);
+  });
+
+  it('E: never in Doing — "—" with a hint, lead time up to the cancellation', () => {
+    const s = summarize([['backlog', 0], ['cancelled', 10 * DAY]], 55 * DAY);
+    expect(s.timeToFirstDoing).toEqual({ ms: null, label: '—', hint: 'Jamais passé en Doing' });
+    expect(s.lifetime.label).toBe('10 j');
+    expect(s.since).toMatchObject({ status: 'cancelled', label: '1 mois' });
+  });
+
+  it('F: closed at creation — "< 1 min", nothing to split, no division by zero', () => {
+    const s = summarize([['done', 0]], 20 * DAY);
+    expect(s.lifeMs).toBe(0);
+    expect(s.lifetime.label).toBe('< 1 min');
+    expect(s.byStatus).toEqual([]);
+  });
+});
+
+describe('summarizeZones — figures', () => {
+  it('time before the 1st Doing: created T, Todo T+1 h, Doing T+3 h → 3 h', () => {
+    expect(summarize([['backlog', 0], ['todo', HOUR], ['doing', 3 * HOUR]], 4 * HOUR).timeToFirstDoing.label).toBe('3 h');
+  });
+
+  it('a ticket created in Doing reads "Créé en Doing"', () => {
+    expect(summarize([['doing', 0], ['reviewing', HOUR]], 2 * HOUR).timeToFirstDoing.label).toBe('Créé en Doing');
+  });
+
+  it('adds up every passage of a status: Doing 2 h → Reviewing 1 h → Doing 3 h → Done', () => {
+    const s = summarize([['doing', 0, 1], ['reviewing', 2 * HOUR], ['doing', 3 * HOUR, 2], ['done', 6 * HOUR]], 7 * HOUR);
+    expect(rows(s)).toEqual([['doing', '5 h', 2, 3], ['reviewing', '1 h', 1, 0]]);
+    expect(s.byStatus.reduce((sum, b) => sum + b.share, 0)).toBeCloseTo(1);
+  });
+
+  it('prefixes "≈" when a zone used by a figure is approximate — never the age', () => {
+    const closed = summarize([['backlog', 0], ['doing', 30 * HOUR, 0, true], ['done', 96 * HOUR, 0, true]], 100 * HOUR);
+    expect(closed.timeToFirstDoing.label).toBe('≈ 1 j 6 h');
+    expect(closed.lifetime.label).toBe('≈ 4 j');
+    expect(closed.since.label).toBe('≈ 4 h');
+    expect(closed.byStatus.find((b) => b.status === 'doing')!.durationLabel).toBe('≈ 2 j 18 h');
+    const open = summarize([['backlog', 0], ['doing', 30 * HOUR, 0, true]], 40 * HOUR);
+    expect(open.lifetime.label).toBe('1 j 16 h');
+  });
+
+  it('a ticket that never closed: age to now, "{status} depuis" = the running zone', () => {
+    const s = summarize([['doing', 0], ['reviewing', 6 * HOUR]], 30 * HOUR);
+    expect(s.lifetime).toMatchObject({ kind: 'age', label: '1 j 6 h' });
+    expect(s.since).toMatchObject({ status: 'reviewing', closed: false, label: '1 j' });
+    expect(s.endAt).toBe(30 * HOUR);
+  });
+});
+
+describe('formatSince', () => {
+  it('stays precise under 30 days, then months, then years', () => {
+    expect(formatSince(29 * DAY + 23 * HOUR)).toBe('29 j 23 h');
+    expect(formatSince(30 * DAY)).toBe('1 mois');
+    expect(formatSince(92 * DAY)).toBe('3 mois');
+    expect(formatSince(365 * DAY)).toBe('1 an');
+    expect(formatSince(430 * DAY)).toBe('1 an 2 mois');
+    expect(formatSince(800 * DAY)).toBe('2 ans 2 mois');
+  });
+});
+
+describe('buildTimeline — summary', () => {
+  it('derives the « Temps » block from the zones, and keeps the 683 "Total {Statut}" tooltip unbounded', () => {
+    const src = emptySources();
+    src.ticket = { ...src.ticket, status: 'done' };
+    src.activities = [
+      activity({ id: 'm1', action: 'moved', createdAt: at(9, 30), changes: { status: { from: 'todo', to: 'doing' } } }),
+      activity({ id: 'm2', action: 'moved', createdAt: at(10, 0), changes: { status: { from: 'doing', to: 'done' } } }),
+      activity({ id: 'm3', action: 'moved', createdAt: at(10, 10), changes: { status: { from: 'done', to: 'doing' } } }),
+      activity({ id: 'm4', action: 'moved', createdAt: at(10, 20), changes: { status: { from: 'doing', to: 'done' } } }),
+    ];
+    const m = buildTimeline(src, NOW);
+    expect(m.summary.timeToFirstDoing.label).toBe('30 min');
+    expect(m.summary.lifetime).toMatchObject({ kind: 'leadTime', label: '1 h 20' });
+    expect(m.summary.byStatus.find((b) => b.status === 'done')!.durationLabel).toBe('10 min');
+    // The frieze's pill still totals every Done zone up to now (10 + 20 min).
+    const lastDone = m.events.find((e) => e.id === 'status:4')!;
+    expect(lastDone.tooltip.rows).toContainEqual(['Total Done', '30 min']);
   });
 });

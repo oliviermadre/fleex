@@ -17,6 +17,7 @@ import {
   getByPath,
   normalizeEdgeCondition,
   TICKET_STATUS_LABELS,
+  TICKET_STATUSES,
 } from '@fleex/shared';
 import type {
   AgentExecution,
@@ -158,9 +159,54 @@ export interface PendingFork {
   options: ForkOption[];
 }
 
+/** A figure of the « Temps » block: `ms` null → shown as "—". */
+export interface TimelineTimeMetric {
+  ms: number | null;
+  /** Displayed value: "≈ 2 j 4 h", "3 mois", "Créé en Doing", "—". */
+  label: string;
+  /** Native tooltip (special cases). */
+  hint: string | null;
+}
+
+/** Time spent in one status over the ticket's life (the final Done/Cancelled excluded). */
+export interface TimelineStatusTotal {
+  status: TicketStatus;
+  durationMs: number;
+  durationLabel: string;
+  passages: number;
+  interventions: number;
+  approximate: boolean;
+  /** Holds the running zone — always false once the ticket is closed. */
+  current: boolean;
+  /** 0..1 of `lifeMs`. */
+  share: number;
+}
+
+/**
+ * The ticket-level time overview (« Temps » block). The ticket's life ends when
+ * it enters its FINAL run of Done/Cancelled zones (`closedAt`): what comes after
+ * is not counted, so a ticket closed for months still reads "lived 1 h 30".
+ * Earlier Done/Cancelled zones (the ticket was reopened) are part of its life.
+ */
+export interface TimelineSummary {
+  closed: boolean;
+  closedAt: number | null;
+  /** `closedAt` when closed, else `now`. */
+  endAt: number;
+  lifeMs: number;
+  timeToFirstDoing: TimelineTimeMetric;
+  /** Closed: customer lead time (frozen). Open: age (grows). */
+  lifetime: TimelineTimeMetric & { kind: 'leadTime' | 'age' };
+  /** Closed: `now − closedAt` (out of the ticket's life). Open: time in the current status. */
+  since: TimelineTimeMetric & { status: TicketStatus; closed: boolean };
+  /** In TICKET_STATUSES order, statuses with time in the ticket's life only. */
+  byStatus: TimelineStatusTotal[];
+}
+
 export interface TimelineModel {
   events: TimelineEvent[];
   zones: TimelineZone[];
+  summary: TimelineSummary;
   pendingFork: PendingFork | null;
   /** PRs we could not date — listed in the fixed column instead. */
   undatedPrs: WorkPrLink[];
@@ -297,6 +343,110 @@ export function formatPhaseDuration(durationMs: number): string {
   const d = Math.floor(totalMin / (60 * 24));
   const h = Math.floor((totalMin % (60 * 24)) / 60);
   return h ? `${d} j ${h} h` : `${d} j`;
+}
+
+const DAY_MS = 24 * 3_600_000;
+
+/**
+ * Coarse duration for the time spent AFTER a ticket closed ("Done depuis 3 mois"):
+ * `formatPhaseDuration` under 30 days, then months, then years (+ months).
+ */
+export function formatSince(durationMs: number): string {
+  const days = Math.floor(durationMs / DAY_MS);
+  if (days < 30) return formatPhaseDuration(durationMs);
+  if (days < 365) return `${Math.floor(days / 30)} mois`;
+  const years = Math.floor(days / 365);
+  const months = Math.floor((days % 365) / 30);
+  return `${years} an${years > 1 ? 's' : ''}${months ? ` ${months} mois` : ''}`;
+}
+
+const isTerminal = (s: TicketStatus) => s === 'done' || s === 'cancelled';
+const approx = (approximate: boolean, label: string) => `${approximate ? '≈ ' : ''}${label}`;
+
+/**
+ * The « Temps » block, from zones whose `durationMs` / `humanActions` are filled.
+ * Pure: `createdAt` and `now` are injected. The frieze is NOT bounded — only this
+ * summary stops at the ticket's end of life.
+ */
+export function summarizeZones(zones: readonly TimelineZone[], createdAt: number, now: number): TimelineSummary {
+  // k = first zone of the final Done/Cancelled run (zones.length when open).
+  let k = zones.length;
+  while (k > 0 && isTerminal(zones[k - 1]!.status)) k--;
+  const closed = k < zones.length;
+  const closing = closed ? zones[k]! : null;
+  const closedAt = closing ? closing.from : null;
+  const endAt = closedAt ?? now;
+  const life = zones.slice(0, k);
+  const lifeMs = Math.max(0, endAt - createdAt);
+  const current = zones[zones.length - 1];
+  // Each earlier closing (entry into a Done/Cancelled run) the ticket was reopened from.
+  const earlierClosings = life.filter((z, i) => isTerminal(z.status) && (i === 0 || !isTerminal(life[i - 1]!.status)));
+  const lastEarlierClosing = earlierClosings[earlierClosings.length - 1] ?? null;
+
+  const firstDoing = life.find((z) => z.status === 'doing');
+  const timeToFirstDoing: TimelineTimeMetric = !firstDoing
+    ? { ms: null, label: '—', hint: 'Jamais passé en Doing' }
+    : firstDoing.from <= createdAt
+      ? { ms: 0, label: 'Créé en Doing', hint: 'Le ticket a été créé directement en Doing' }
+      : {
+        ms: firstDoing.from - createdAt,
+        label: approx(firstDoing.approximate, formatPhaseDuration(firstDoing.from - createdAt)),
+        hint: 'Création → 1er passage en Doing',
+      };
+
+  const lifetime: TimelineSummary['lifetime'] = closing
+    ? {
+      kind: 'leadTime',
+      ms: lifeMs,
+      label: approx(closing.approximate, formatPhaseDuration(lifeMs)),
+      hint: `Création → passage en ${statusLabel(closing.status)} le ${ddmmhhmm(closing.from)}. Le temps passé ensuite n'est pas compté.`
+        + (earlierClosings.length ? ` Rouvert ${earlierClosings.length} fois.` : ''),
+    }
+    : {
+      kind: 'age',
+      ms: Math.max(0, now - createdAt),
+      label: formatPhaseDuration(Math.max(0, now - createdAt)),
+      hint: 'Création → maintenant. Ticket non terminé.'
+        + (lastEarlierClosing ? ` Rouvert — dernière fermeture le ${ddmmhhmm(lastEarlierClosing.from)}.` : ''),
+    };
+
+  const after = closing ? zones[k + 1] : undefined;
+  const since: TimelineSummary['since'] = closing
+    ? {
+      status: closing.status,
+      closed: true,
+      ms: Math.max(0, now - closing.from),
+      label: approx(closing.approximate, formatSince(Math.max(0, now - closing.from))),
+      hint: `Fermé le ${ddmmhhmm(closing.from)}, hors durée de vie`
+        + (after ? `. Puis ${statusLabel(after.status)} le ${ddmmhhmm(after.from)}` : ''),
+    }
+    : {
+      status: current?.status ?? 'backlog',
+      closed: false,
+      ms: current ? Math.max(0, now - current.from) : 0,
+      label: current ? approx(current.approximate, formatPhaseDuration(Math.max(0, now - current.from))) : '—',
+      hint: current ? `Entrée en ${statusLabel(current.status)} le ${ddmmhhmm(current.from)}` : null,
+    };
+
+  const byStatus: TimelineStatusTotal[] = [];
+  for (const status of TICKET_STATUSES) {
+    const zs = life.filter((z) => z.status === status);
+    const durationMs = zs.reduce((sum, z) => sum + z.durationMs, 0);
+    if (durationMs <= 0) continue;
+    const approximate = zs.some((z) => z.approximate);
+    byStatus.push({
+      status,
+      durationMs,
+      durationLabel: approx(approximate, formatPhaseDuration(durationMs)),
+      passages: zs.length,
+      interventions: zs.reduce((sum, z) => sum + z.humanActions.total, 0),
+      approximate,
+      current: !closed && !!current && zs.includes(current),
+      share: lifeMs > 0 ? durationMs / lifeMs : 0,
+    });
+  }
+
+  return { closed, closedAt, endAt, lifeMs, timeToFirstDoing, lifetime, since, byStatus };
 }
 
 function interventionsLabel(h: HumanActionCounts): string {
@@ -1013,7 +1163,9 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
     };
   }
 
-  return { events, zones, pendingFork, undatedPrs, activeSpan, now };
+  const summary = summarizeZones(zones, createdAt, now);
+
+  return { events, zones, summary, pendingFork, undatedPrs, activeSpan, now };
 }
 
 /** The pending decision of an active run, if any (logic of gateCards.ts). */
