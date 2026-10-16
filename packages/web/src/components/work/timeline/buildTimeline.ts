@@ -468,8 +468,11 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
 
   // ── Status zones ──
   const zones: TimelineZone[] = [];
+  // A status change is logged as `moved` by `/move` and native steps, but as
+  // `updated` (with a status diff) by `PATCH /api/tickets/:id` — the context
+  // sidebar's picker. Both are real moves: the status diff is the signal.
   const moves = activities
-    .filter((a) => a.action === 'moved' && a.changes?.status)
+    .filter((a) => (a.action === 'moved' || a.action === 'updated') && a.changes?.status)
     .map((a) => ({
       at: clamp(ms(a.createdAt) ?? createdAt),
       from: a.changes.status!.from as TicketStatus,

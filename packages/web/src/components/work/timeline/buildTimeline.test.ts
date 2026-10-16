@@ -38,6 +38,33 @@ describe('buildTimeline — status zones', () => {
     expect(m.zones[2]!.from).toBe(new Date(at(9, 30)).getTime());
   });
 
+  // PATCH /api/tickets/:id (the context sidebar's status picker) goes through
+  // `TicketEntity.update()` and logs `action: 'updated'` with a status diff, not
+  // `'moved'`. Ignoring it made the first zone take the *current* status and
+  // erased the phase the ticket was really in (doing painted as reviewing).
+  it('treats a status change logged as an "updated" activity (PATCH) as a move', () => {
+    const src = emptySources();
+    src.ticket = { ...src.ticket, status: 'reviewing' };
+    src.activities = [
+      activity({ id: 'u', action: 'updated', createdAt: at(9, 10), actorType: 'user', changes: { status: { from: 'doing', to: 'reviewing' } } }),
+    ];
+    const m = buildTimeline(src, NOW);
+    expect(m.zones.map((z) => [z.status, z.approximate])).toEqual([['doing', false], ['reviewing', false]]);
+    expect(m.zones[1]!.from).toBe(new Date(at(9, 10)).getTime());
+  });
+
+  it('chains PATCH status edits and /move moves in time order', () => {
+    const src = emptySources();
+    src.ticket = { ...src.ticket, status: 'done' };
+    src.activities = [
+      activity({ id: 'm1', action: 'moved', createdAt: at(9, 10), changes: { status: { from: 'todo', to: 'doing' } } }),
+      activity({ id: 'u1', action: 'updated', createdAt: at(9, 20), changes: { status: { from: 'doing', to: 'reviewing' }, priority: { from: 'none', to: 'high' } } }),
+      activity({ id: 'm2', action: 'moved', createdAt: at(9, 30), changes: { status: { from: 'reviewing', to: 'done' } } }),
+    ];
+    const m = buildTimeline(src, NOW);
+    expect(m.zones.map((z) => [z.status, z.approximate])).toEqual([['todo', false], ['doing', false], ['reviewing', false], ['done', false]]);
+  });
+
   it('inserts a gap zone when two moves do not chain (a move in between was never logged)', () => {
     const src = emptySources();
     src.ticket = { ...src.ticket, status: 'done' };
