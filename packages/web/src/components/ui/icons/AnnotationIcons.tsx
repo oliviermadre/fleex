@@ -103,6 +103,36 @@ export function AlertIcon(props: IconProps) {
   );
 }
 
+/** Circled "i": an `info` annotation. */
+export function InfoIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 16v-5M12 8h.01" />
+    </Icon>
+  );
+}
+
+/** Circled tick: a `success` annotation. */
+export function CircleCheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+    </Icon>
+  );
+}
+
+/** Highlighter pen: a `highlight` annotation. */
+export function HighlighterIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m9 11-6 6v3h9l3-3" />
+      <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+    </Icon>
+  );
+}
+
 /** Magnet: the cursor snapped onto a picto's exact instant. */
 export function MagnetIcon(props: IconProps) {
   return (

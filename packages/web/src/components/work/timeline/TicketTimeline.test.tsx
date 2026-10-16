@@ -7,7 +7,7 @@ import type { TimelineAnnotation } from '@fleex/shared';
 import type { TimelineAnnotationsProps } from './TicketTimeline';
 import { BAND } from './layoutAnnotations';
 import { GEOMETRY } from './layoutTimeline';
-import { AnnotationStackList, AnnotationViewer } from './AnnotationPopovers';
+import { AnnotationComposer, AnnotationStackList, AnnotationViewer } from './AnnotationPopovers';
 
 afterEach(cleanup);
 
@@ -253,10 +253,39 @@ describe('TicketTimeline — annotations', () => {
     expect(without!.querySelector('img')).toBeNull();
   });
 
+  // Ticket feedback: one icon per tone, in the tone's colour, the same on the card, the stack and the chips.
+  it("shows each card's tone icon, in the tone's colour", () => {
+    setupAnnotated([ann('a', at(9, 0), { tone: 'success' }), ann('b', at(14, 0), { tone: 'warning' })]);
+    const [ok, warn] = screen.getAllByTestId('annotation-card');
+    const okIcon = ok!.querySelector('[data-tone-icon]') as HTMLElement;
+    expect(okIcon.dataset.toneIcon).toBe('success');
+    expect(okIcon.style.color).toBe('var(--tint-green-solid)');
+    expect((warn!.querySelector('[data-tone-icon]') as HTMLElement).dataset.toneIcon).toBe('warning');
+  });
+
+  it('lists the tone of every stacked annotation by its icon', () => {
+    setupAnnotated(['info', 'highlight', 'warning', 'success'].map((tone, i) => ann(`s${i}`, at(9, i), { tone: tone as TimelineAnnotation['tone'] })));
+    const stack = screen.getByRole('button', { name: '4 annotations' });
+    expect([...stack.querySelectorAll<HTMLElement>('[data-tone-icon]')].map((el) => el.dataset.toneIcon)).toEqual(['info', 'highlight', 'warning', 'success']);
+  });
+
+  it('picks the tone on chips carrying the same icons', () => {
+    render(
+      <AnnotationComposer
+        request={{ mode: 'create', ticketId: 't-591', draft: { at: at(9, 0), title: '', body: '', tone: 'info' } }}
+        anchor={{ left: 0, top: 0, width: 10, height: 10 }}
+        ticketCreatedAt={null} onSubmit={vi.fn()} onCancel={vi.fn()}
+      />,
+    );
+    const chips = within(screen.getByRole('radiogroup', { name: 'Ton' })).getAllByRole('radio');
+    expect(chips.map((c) => (c.querySelector('[data-tone-icon]') as HTMLElement).dataset.toneIcon)).toEqual(['info', 'highlight', 'warning', 'success']);
+    expect(chips.map((c) => c.textContent)).toEqual(['info', 'mise en avant', 'attention', 'succès']);
+  });
+
   it('draws the card markers as SVG icons, never as emoji', () => {
     setupAnnotated([ann('a', at(9, 0), { body: 'Un détail en plus', sourceCommentId: 'c1' })]);
     const card = screen.getByTestId('annotation-card');
-    expect(card.querySelectorAll('svg')).toHaveLength(2); // detail + pinned from a comment
+    expect(card.querySelectorAll('svg')).toHaveLength(3); // tone + detail + pinned from a comment
     expect(card.textContent).not.toMatch(GLYPH);
   });
 

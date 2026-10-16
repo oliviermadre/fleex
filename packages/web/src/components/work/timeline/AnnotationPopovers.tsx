@@ -13,6 +13,7 @@ import { useFileUpload } from '../../../hooks/useFileUpload';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import type { AnnotationDraft, ComposerRequest, UiAnnotation } from '../../../stores/annotationStore';
 import { TONE_HUE, TONE_LABEL, firstImage } from './layoutAnnotations';
+import { AnnotationToneIcon } from './AnnotationToneIcon';
 import { AlertIcon, CloseIcon, CommentLineIcon, ImageIcon, PencilIcon, PinIcon } from '../../ui/icons/AnnotationIcons';
 import { TrashIcon } from '../../ui/TrashIcon';
 
@@ -99,10 +100,6 @@ function Popover({
   );
 }
 
-function ToneDot({ tone, size = 9 }: { tone: AnnotationTone; size?: number }) {
-  return <i className="inline-block shrink-0 rounded-full" style={{ width: size, height: size, background: `var(--tint-${TONE_HUE[tone]}-solid)` }} />;
-}
-
 function TonePicker({ value, onChange, compact = false }: { value: AnnotationTone; onChange: (t: AnnotationTone) => void; compact?: boolean }) {
   return (
     <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Ton">
@@ -121,7 +118,7 @@ function TonePicker({ value, onChange, compact = false }: { value: AnnotationTon
           )}
           style={value === t ? { borderColor: `var(--tint-${TONE_HUE[t]}-solid)`, background: `var(--tint-${TONE_HUE[t]}-bg)` } : undefined}
         >
-          <ToneDot tone={t} />
+          <AnnotationToneIcon tone={t} size={13} />
           {!compact && TONE_LABEL[t]}
         </button>
       ))}
@@ -331,7 +328,7 @@ export function AnnotationViewer({
     <Popover anchor={anchor} width={520} onClose={onClose} label={`Annotation : ${a.title}`}>
       <div data-testid="annotation-viewer">
         <div className="flex items-center gap-2">
-          <ToneDot tone={a.tone} size={10} />
+          <AnnotationToneIcon tone={a.tone} size={14} />
           <span className="font-mono text-[10px] uppercase text-[var(--theme-text-muted)]">{TONE_LABEL[a.tone]}</span>
           <button type="button" onClick={onClose} aria-label="Fermer" className="ml-auto rounded p-1 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]">
             <CloseIcon size={14} />
@@ -424,7 +421,10 @@ export function AnnotationStackList({
               <i className="w-[3px] shrink-0 rounded" style={{ background: `var(--tint-${TONE_HUE[a.tone]}-solid)` }} />
               {img && <img src={img} alt="" className="h-10 w-10 shrink-0 self-center rounded border border-[var(--theme-border)] object-cover" />}
               <span className="min-w-0 self-center">
-                <span className="block truncate text-[12px] font-semibold text-[var(--theme-text-primary)]">{a.title}</span>
+                <span className="flex items-center gap-1.5">
+                  <AnnotationToneIcon tone={a.tone} size={12} />
+                  <span className="truncate text-[12px] font-semibold text-[var(--theme-text-primary)]">{a.title}</span>
+                </span>
                 <span className="font-mono text-[10px] text-[var(--theme-text-muted)]">{longWhen(a.at)} · {a.authorName}</span>
               </span>
             </button>

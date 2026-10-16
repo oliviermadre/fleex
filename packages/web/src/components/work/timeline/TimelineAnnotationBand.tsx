@@ -21,6 +21,7 @@ import {
   type PlacedCard,
 } from './layoutAnnotations';
 import { AgentTag, longWhen } from './AnnotationPopovers';
+import { AnnotationToneIcon } from './AnnotationToneIcon';
 import { AlertIcon, CommentLineIcon, MagnetIcon, PlusIcon, TextLinesIcon } from '../../ui/icons/AnnotationIcons';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -135,7 +136,7 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
               <span className="text-[12.5px] font-semibold text-[var(--theme-text-primary)]">{card.items.length} annotations</span>
               <span className="flex items-center gap-0.5 truncate font-mono text-[10px] text-[var(--theme-text-muted)]">
                 {card.items.map(({ annotation: a }) => (
-                  <i key={a.id} className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: solid(a) }} />
+                  <AnnotationToneIcon key={a.id} tone={a.tone} size={11} hue={a.uiState === 'error' ? 'red' : undefined} />
                 ))}
                 <span className="ml-1 truncate">{shortWhen(first.at)} → {shortWhen(last.at)}</span>
               </span>
@@ -170,7 +171,10 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
           >
             {img && <img src={img} alt="" className="h-10 w-10 shrink-0 rounded border border-[var(--theme-border)] object-cover" />}
             <span className="flex min-w-0 flex-col justify-between">
-              <span className="line-clamp-2 text-[12px] font-semibold leading-[15px] text-[var(--theme-text-primary)]">{a.title}</span>
+              <span className="flex items-start gap-1.5">
+                <AnnotationToneIcon tone={a.tone} size={13} hue={hue} className="mt-px" />
+                <span className="line-clamp-2 text-[12px] font-semibold leading-[15px] text-[var(--theme-text-primary)]">{a.title}</span>
+              </span>
               <span className={cn('flex items-center gap-1 truncate font-mono text-[10px]', a.uiState === 'error' ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-text-muted)]')}>
                 {a.uiState === 'error' ? (
                   <>
