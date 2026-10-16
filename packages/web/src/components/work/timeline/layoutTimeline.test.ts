@@ -3,7 +3,7 @@ import { buildTimeline } from './buildTimeline';
 import { LANE_WIDTH, MAX_STRETCH, gap, layoutTimeline, type TimelineLayout } from './layoutTimeline';
 import { NOW, at, comment, emptySources, execution, fixture591 } from './timeline.fixture';
 
-const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true };
+const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true };
 
 /** Every pair of pictos sharing a lane must not overlap (the point of the ticket). */
 function expectNoOverlap(l: TimelineLayout) {
@@ -82,7 +82,7 @@ describe('layoutTimeline — ticket #591 (screenshots)', () => {
 
 describe('layoutTimeline — filters', () => {
   it('hides categories but never the spine', () => {
-    const none = { status: false, cli: false, pr: false, deliverables: false, comments: false };
+    const none = { status: false, cli: false, pr: false, deliverables: false, comments: false, annotations: false };
     const l = layoutTimeline(buildTimeline(fixture591(), NOW), none);
     expect(l.zones).toEqual([]);
     expect(new Set(l.items.map((i) => i.event.lane))).toEqual(new Set(['spine', 'top'])); // workflowStart stays

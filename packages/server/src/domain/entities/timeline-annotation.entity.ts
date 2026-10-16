@@ -1,5 +1,5 @@
 import type { AnnotationTone, TimelineAnnotation } from '@fleex/shared';
-import { ANNOTATION_BODY_MAX, ANNOTATION_TITLE_MAX, isAnnotationTone, sanitizeForStorage } from '@fleex/shared';
+import { ANNOTATION_BODY_MAX, ANNOTATION_TITLE_MAX, annotationTitleFromComment, isAnnotationTone, sanitizeForStorage } from '@fleex/shared';
 import { InvalidAnnotationError } from '../errors.js';
 
 /** What may change on an existing annotation (all optional). */
@@ -94,17 +94,8 @@ export class TimelineAnnotationEntity {
   }
 }
 
-/**
- * Default title for a comment promoted to the Timeline: its first meaningful
- * line, markdown stripped, cut to the title limit.
- */
-export function titleFromCommentBody(body: string): string {
-  const line = body
-    .split('\n')
-    .map((l) => l.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>~]/g, '').trim())
-    .find((l) => l.length > 0) ?? '';
-  return line.length > ANNOTATION_TITLE_MAX ? `${line.slice(0, ANNOTATION_TITLE_MAX - 1)}…` : line;
-}
+/** Default title for a comment promoted to the Timeline (shared with the web composer). */
+export const titleFromCommentBody = annotationTitleFromComment;
 
 function validTitle(raw: string): string {
   const title = sanitizeForStorage(String(raw ?? '')).trim();

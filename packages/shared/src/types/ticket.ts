@@ -246,6 +246,19 @@ export function isAnnotationTone(v: unknown): v is AnnotationTone {
 }
 
 /**
+ * Default title of a comment pinned to the Timeline: its first meaningful
+ * line, markdown stripped, cut to the title limit. Shared so the composer's
+ * pre-fill and the server's default agree.
+ */
+export function annotationTitleFromComment(body: string): string {
+  const line = body
+    .split('\n')
+    .map((l) => l.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>~]/g, '').trim())
+    .find((l) => l.length > 0) ?? '';
+  return line.length > ANNOTATION_TITLE_MAX ? `${line.slice(0, ANNOTATION_TITLE_MAX - 1)}…` : line;
+}
+
+/**
  * A highlighted piece of information pinned to an instant of the ticket's
  * Timeline — always readable on the frieze, unlike a comment. Either dropped
  * freely on the frieze or promoted from a comment (`sourceCommentId`).

@@ -257,6 +257,7 @@ export {
   ANNOTATION_TITLE_MAX,
   ANNOTATION_BODY_MAX,
   isAnnotationTone,
+  annotationTitleFromComment,
 } from './types/ticket.js';
 
 export type {

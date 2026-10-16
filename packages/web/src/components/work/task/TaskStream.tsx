@@ -8,7 +8,8 @@
  *
  * With `editable` (the Work task pane, not the read-only Focus popup) the stream
  * also carries the ticket-detail actions: inline description editing, and
- * deleting a comment or a deliverable — each delete behind a confirmation.
+ * deleting a comment or a deliverable — each delete behind a confirmation — and
+ * pinning a comment to the Timeline (an annotation, SPEC annotations §5.4).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
@@ -22,6 +23,10 @@ import { TicketActionCards } from '../../tickets/TicketActionCards';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import * as api from '../../../services/api';
 import { useToastStore } from '../../../stores/toastStore';
+import { useWorkStore } from '../../../stores/workStore';
+import { annotationForComment, useAnnotationStore } from '../../../stores/annotationStore';
+import { annotationTitleFromComment } from '@fleex/shared';
+import type { CommentPin } from './CommentPin';
 import { buildStream, type QueueActivity } from '../selectors';
 
 interface Props {
@@ -85,6 +90,37 @@ export function TaskStream({
   };
   const askDelete = (commentId: string) => (editable ? () => setPendingDelete(commentId) : undefined);
 
+  // ── Pin to the Timeline ──
+  const annotations = useAnnotationStore((s) => s.byTicket[ticketId]);
+  useEffect(() => {
+    if (editable) void useAnnotationStore.getState().load(ticketId);
+  }, [editable, ticketId]);
+  const pinOf = (c: TicketComment): CommentPin | undefined => {
+    if (!editable) return undefined;
+    const pinned = annotationForComment(annotations, c.id);
+    const store = useAnnotationStore.getState();
+    const openTimeline = () => {
+      const work = useWorkStore.getState();
+      if (!work.timelineOpen) work.setTimelineOpen(true);
+      if (!work.timelineFilters.annotations) work.toggleTimelineFilter('annotations');
+    };
+    return {
+      pinned: !!pinned,
+      onPin: () => {
+        openTimeline();
+        store.openComposer({
+          mode: 'promote', ticketId, commentId: c.id,
+          draft: { at: c.createdAt, title: annotationTitleFromComment(c.body), body: c.body, tone: 'highlight' },
+        });
+      },
+      onShow: () => {
+        if (!pinned) return;
+        openTimeline();
+        store.pulse(pinned.id);
+      },
+    };
+  };
+
   const stream = useMemo(
     () => buildStream(comments, events, executions, deliverables),
     [comments, events, executions, deliverables],
@@ -139,7 +175,7 @@ export function TaskStream({
                   onDelete={askDelete(entry.comment.id)}
                 />
               ) : (
-                <StreamItem key={entry.comment.id} comment={entry.comment} onDelete={askDelete(entry.comment.id)} />
+                <StreamItem key={entry.comment.id} comment={entry.comment} onDelete={askDelete(entry.comment.id)} pin={pinOf(entry.comment)} />
               );
           }
         })}

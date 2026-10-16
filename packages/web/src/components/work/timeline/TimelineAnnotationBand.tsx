@@ -1,0 +1,221 @@
+/**
+ * The annotation band above the frieze (SPEC annotations §5.1): always-visible
+ * cards (title, time, author, thumbnail) — nothing to hover — each hung from a
+ * dotted line in its tone down to the bottom lane at its exact instant; plus
+ * the ghost "+" that follows the cursor to annotate a new instant.
+ * Pure rendering: placement comes from layoutAnnotations, clicks go up.
+ */
+import { useEffect, useRef, useState } from 'react';
+import { cn } from '../../../lib/cn';
+import type { UiAnnotation } from '../../../stores/annotationStore';
+import { GEOMETRY } from './layoutTimeline';
+import {
+  CARD_H,
+  CARD_W,
+  TONE_HUE,
+  cardTop,
+  firstImage,
+  hasMoreThanTitle,
+  type AnnotationBand,
+  type CursorInstant,
+  type PlacedCard,
+} from './layoutAnnotations';
+import { AgentTag, longWhen } from './AnnotationPopovers';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** "14:32" today, "14 oct. 14:32" otherwise. */
+function shortWhen(iso: string): string {
+  const d = new Date(iso);
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return d.toDateString() === new Date().toDateString()
+    ? hm
+    : `${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${hm}`;
+}
+
+const solid = (a: UiAnnotation) => (a.uiState === 'error' ? 'var(--tint-red-solid)' : `var(--tint-${TONE_HUE[a.tone]}-solid)`);
+
+export function cardNodeId(card: PlacedCard<UiAnnotation>): string {
+  return card.kind === 'card' ? `annotation:${card.item.annotation.id}` : `annotation-stack:${card.items[0]!.annotation.id}`;
+}
+
+interface Props {
+  band: AnnotationBand<UiAnnotation>;
+  width: number;
+  ghost: CursorInstant | null;
+  highlight: { id: string; nonce: number } | null;
+  onOpenCard: (card: PlacedCard<UiAnnotation>, el: HTMLElement) => void;
+}
+
+/** The dotted anchors (an SVG over the whole content) — drawn under the cards and pictos. */
+export function AnnotationAnchors({ band, width }: { band: AnnotationBand<UiAnnotation>; width: number }) {
+  const h = band.height;
+  const bottom = h + GEOMETRY.bottomY + 14;
+  const spine = h + GEOMETRY.spineY;
+  return (
+    <svg className="pointer-events-none absolute left-0 top-0" width={width} height={h + GEOMETRY.height} aria-hidden>
+      {band.cards.flatMap((card) => {
+        const y0 = cardTop(card.row, h) + CARD_H;
+        const items = card.kind === 'card' ? [card.item] : card.items;
+        const lines = items.map(({ annotation: a, x }) => {
+          // A card pushed sideways keeps its anchor on the exact instant: short elbow.
+          const cx = Math.min(Math.max(x, card.left + 10), card.left + CARD_W - 10);
+          return (
+            <g key={`anchor-${a.id}`} data-testid="annotation-anchor">
+              <path
+                d={`M${cx} ${y0} L${cx} ${y0 + 3} L${x} ${y0 + 7} L${x} ${bottom}`}
+                fill="none"
+                stroke={solid(a)}
+                strokeWidth={1}
+                strokeDasharray="3 3"
+                strokeOpacity={0.8}
+              />
+              <circle cx={x} cy={spine} r={3} fill={solid(a)} />
+            </g>
+          );
+        });
+        return lines;
+      })}
+    </svg>
+  );
+}
+
+export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCard }: Props) {
+  const h = band.height;
+  const [pulsing, setPulsing] = useState<string | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+
+  // Pulse (and reveal) a card on request — e.g. from the comment's "Épinglé" badge.
+  useEffect(() => {
+    if (!highlight) return;
+    const card = band.cards.find((c) => (c.kind === 'card' ? [c.item] : c.items).some((i) => i.annotation.id === highlight.id));
+    if (!card) return;
+    const id = cardNodeId(card);
+    setPulsing(id);
+    root.current?.querySelector<HTMLElement>(`[data-timeline-node="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    const t = setTimeout(() => setPulsing(null), 1200);
+    return () => clearTimeout(t);
+    // Only a new highlight request triggers it, not every re-layout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlight?.nonce]);
+
+  if (h === 0) return null;
+
+  return (
+    <div ref={root} className="contents">
+      {h > 0 && <div className="pointer-events-none absolute left-0 border-t border-dashed border-[var(--theme-border)]" style={{ top: h, width }} />}
+      {band.cards.length === 0 && (
+        <div className="pointer-events-none absolute left-2 top-0 whitespace-nowrap text-[10px] leading-[14px] text-[var(--theme-text-faint)]">
+          + survoler ici pour annoter
+        </div>
+      )}
+
+      {band.cards.map((card) => {
+        const id = cardNodeId(card);
+        const top = cardTop(card.row, h);
+        const pulse = pulsing === id;
+        if (card.kind === 'stack') {
+          const first = card.items[0]!.annotation;
+          const last = card.items[card.items.length - 1]!.annotation;
+          return (
+            <button
+              key={id}
+              type="button"
+              data-timeline-node={id}
+              aria-label={`${card.items.length} annotations`}
+              onClick={(e) => onOpenCard(card, e.currentTarget)}
+              className={cn(
+                'absolute z-[4] flex flex-col justify-between overflow-hidden rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-overlay)] px-2.5 py-1.5 text-left',
+                'shadow-[3px_-3px_0_-1px_var(--theme-bg-overlay),3px_-3px_0_0_var(--theme-border-input),6px_-6px_0_-1px_var(--theme-bg-overlay),6px_-6px_0_0_var(--theme-border-input)]',
+                pulse && 'ring-2 ring-[var(--theme-accent)]',
+              )}
+              style={{ left: card.left, top, width: CARD_W, height: CARD_H }}
+            >
+              <span className="text-[12.5px] font-semibold text-[var(--theme-text-primary)]">{card.items.length} annotations</span>
+              <span className="flex items-center gap-0.5 truncate font-mono text-[10px] text-[var(--theme-text-muted)]">
+                {card.items.map(({ annotation: a }) => (
+                  <i key={a.id} className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: solid(a) }} />
+                ))}
+                <span className="ml-1 truncate">{shortWhen(first.at)} → {shortWhen(last.at)}</span>
+              </span>
+            </button>
+          );
+        }
+        const a = card.item.annotation;
+        const img = firstImage(a.body);
+        const hue = a.uiState === 'error' ? 'red' : TONE_HUE[a.tone];
+        return (
+          <button
+            key={id}
+            type="button"
+            data-timeline-node={id}
+            data-testid="annotation-card"
+            aria-label={`Annotation : ${a.title}, ${longWhen(a.at)}`}
+            onClick={(e) => onOpenCard(card, e.currentTarget)}
+            className={cn(
+              'absolute z-[4] flex gap-2 overflow-hidden rounded-md border py-1.5 pl-3 pr-2 text-left transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-lg',
+              a.uiState === 'saving' && 'opacity-60',
+              pulse && 'ring-2 ring-[var(--theme-accent)]',
+            )}
+            style={{
+              left: card.left,
+              top,
+              width: CARD_W,
+              height: CARD_H,
+              background: `var(--tint-${hue}-bg)`,
+              borderColor: `var(--tint-${hue}-border)`,
+              boxShadow: `inset 3px 0 0 var(--tint-${hue}-solid)`,
+            }}
+          >
+            {img && <img src={img} alt="" className="h-10 w-10 shrink-0 rounded border border-[var(--theme-border)] object-cover" />}
+            <span className="flex min-w-0 flex-col justify-between">
+              <span className="line-clamp-2 text-[12px] font-semibold leading-[15px] text-[var(--theme-text-primary)]">{a.title}</span>
+              <span className={cn('flex items-center gap-1 truncate font-mono text-[10px]', a.uiState === 'error' ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-text-muted)]')}>
+                {a.uiState === 'error' ? (
+                  '⚠ échec — cliquer pour réessayer'
+                ) : (
+                  <>
+                    {shortWhen(a.at)} ·{a.authorType === 'agent' && <AgentTag />}
+                    <span className="truncate">{a.authorName}</span>
+                    {hasMoreThanTitle(a.body) && ' · 📎'}
+                    {a.sourceCommentId && ' · 💬'}
+                    {a.uiState === 'saving' && ' · enregistrement…'}
+                  </>
+                )}
+              </span>
+            </span>
+          </button>
+        );
+      })}
+
+      {ghost && (
+        <div className="pointer-events-none absolute top-0 z-[6]" style={{ left: ghost.x }} data-testid="annotation-ghost">
+          <div
+            className={cn('absolute left-0 w-0 border-l', ghost.snappedTo ? 'border-solid border-[var(--theme-accent)]' : 'border-dashed border-[var(--theme-text-secondary)]')}
+            style={{ top: Math.max(0, h - 30) + 22, height: h + GEOMETRY.bottomY + 14 - Math.max(0, h - 30) - 22 }}
+          />
+          <div
+            className={cn(
+              'absolute -left-[11px] flex h-[22px] w-[22px] items-center justify-center rounded-full border bg-[var(--theme-bg-surface)] font-bold',
+              ghost.snappedTo ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-dashed border-[var(--theme-text-secondary)] text-[var(--theme-text-primary)]',
+            )}
+            style={{ top: Math.max(0, h - 30) }}
+          >
+            +
+          </div>
+          <div
+            className={cn(
+              'absolute left-[14px] whitespace-nowrap rounded border bg-[var(--theme-bg-base)] px-1.5 font-mono text-[10.5px]',
+              ghost.snappedTo ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-[var(--theme-border-input)] text-[var(--theme-text-secondary)]',
+            )}
+            style={{ top: Math.max(0, h - 30) + 3 }}
+          >
+            {ghost.snappedTo ? '⇥ ' : '≈ '}
+            {longWhen(ghost.at)}
+            {ghost.snappedTo && ` · ${ghost.snappedTo.label}`}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

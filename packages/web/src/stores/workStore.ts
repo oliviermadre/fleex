@@ -28,7 +28,7 @@ export type DraftType = TicketType;
 /** How the queue groups its rows. 'activity' is the handoff default. */
 export type QueueGroupBy = 'activity' | 'repo' | 'type' | 'priority' | 'board' | 'status';
 /** Event categories the Timeline can hide (the spine — runs, steps — never is). */
-export type TimelineFilterKey = 'status' | 'cli' | 'pr' | 'deliverables' | 'comments';
+export type TimelineFilterKey = 'status' | 'cli' | 'pr' | 'deliverables' | 'comments' | 'annotations';
 export type TimelineFilters = Record<TimelineFilterKey, boolean>;
 
 /**
@@ -292,7 +292,7 @@ const clampTimelineHeight = (h: number) =>
   Math.min(TIMELINE_MAX_HEIGHT, Math.max(TIMELINE_MIN_HEIGHT, Math.round(h)));
 
 const DEFAULT_TIMELINE_FILTERS: TimelineFilters = {
-  status: true, cli: true, pr: true, deliverables: true, comments: true,
+  status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true,
 };
 
 type ModeFlags = Pick<WorkState, 'shellMode' | 'codeMode' | 'workflowMode'>;

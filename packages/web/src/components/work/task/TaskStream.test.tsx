@@ -4,15 +4,23 @@ import type { TicketComment } from '@fleex/shared';
 
 vi.mock('../../tickets/TicketActionCards', () => ({ TicketActionCards: () => null }));
 const deleteTicketComment = vi.fn();
+const fetchTicketAnnotations = vi.fn();
 vi.mock('../../../services/api', () => ({
   deleteTicketComment: (t: string, c: string) => deleteTicketComment(t, c),
+  fetchTicketAnnotations: (t: string) => fetchTicketAnnotations(t),
 }));
 vi.mock('../../markdown/useAllMentionOptions', () => ({ useAllMentionOptions: () => [] }));
 
 import { TaskStream } from './TaskStream';
+import { useAnnotationStore } from '../../../stores/annotationStore';
+import { useWorkStore } from '../../../stores/workStore';
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
+});
+beforeEach(() => {
+  fetchTicketAnnotations.mockReset().mockResolvedValue([]);
+  useAnnotationStore.setState({ byTicket: {}, composer: null, highlight: null });
 });
 afterEach(cleanup);
 
@@ -99,5 +107,52 @@ describe('TaskStream — deleting a comment', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(deleteTicketComment).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskStream — pinning a comment to the Timeline', () => {
+  const userComment = agentComment({ id: 'c2', authorType: 'user', authorName: 'Me', body: '**Pivot** : on lâche Redis\n\ndétails' });
+  const renderEditable = () =>
+    render(
+      <TaskStream
+        ticketId="t1" description={null} comments={[agentComment(), userComment]} events={[]} executions={[]}
+        deliverables={[]} activity="idle" loading={false} error={null} onAnswer={vi.fn()} onOpenExecution={vi.fn()}
+        editable
+      />,
+    );
+
+  // AC7: the pin opens the Timeline with the composer pre-filled from the comment.
+  it('opens the Timeline composer pre-filled with the first line, the whole body and the posting instant', () => {
+    useWorkStore.getState().setTimelineOpen(false);
+    renderEditable();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Épingler sur la timeline' })[1]!);
+    expect(useWorkStore.getState().timelineOpen).toBe(true);
+    expect(useAnnotationStore.getState().composer).toEqual({
+      mode: 'promote', ticketId: 't1', commentId: 'c2',
+      draft: { at: userComment.createdAt, title: 'Pivot : on lâche Redis', body: userComment.body, tone: 'highlight' },
+    });
+  });
+
+  // AC8: a pinned comment cannot be pinned again — it shows the badge, which leads to the annotation.
+  it('shows "Épinglé" instead of the pin once the comment has an annotation, and pulses it on click', async () => {
+    fetchTicketAnnotations.mockResolvedValue([{
+      id: 'a1', ticketId: 't1', at: userComment.createdAt, title: 'Pivot', body: '', tone: 'info', sourceCommentId: 'c2',
+      authorType: 'user', authorName: 'Me', createdAt: userComment.createdAt, updatedAt: userComment.createdAt,
+    }]);
+    renderEditable();
+    const badge = await screen.findByRole('button', { name: "Voir l'annotation" });
+    expect(screen.getAllByRole('button', { name: 'Épingler sur la timeline' })).toHaveLength(1);
+    fireEvent.click(badge);
+    expect(useAnnotationStore.getState().highlight?.id).toBe('a1');
+  });
+
+  it('offers no pin in a read-only stream', () => {
+    render(
+      <TaskStream
+        ticketId="t1" description={null} comments={[userComment]} events={[]} executions={[]}
+        deliverables={[]} activity="idle" loading={false} error={null} onAnswer={vi.fn()} onOpenExecution={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Épingler sur la timeline' })).toBeNull();
   });
 });

@@ -3,10 +3,13 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 import { TicketTimeline } from './TicketTimeline';
 import { buildTimeline } from './buildTimeline';
 import { NOW, activity, at, emptySources, fixture591 } from './timeline.fixture';
+import type { TimelineAnnotation } from '@fleex/shared';
+import type { TimelineAnnotationsProps } from './TicketTimeline';
+import { BAND } from './layoutAnnotations';
 
 afterEach(cleanup);
 
-const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true };
+const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true };
 const header = { number: 591, title: 'Importer une tâche depuis Slack', boardName: 'Fleex', status: 'doing', type: 'build' };
 
 function setup(filters = ALL) {
@@ -64,7 +67,7 @@ describe('TicketTimeline', () => {
     const { onToggleFilter } = setup();
     expect(screen.queryByRole('group', { name: 'Filtres de la timeline' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Commentaires' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Filtres de la timeline' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Filtres de la timeline/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Commentaires' }));
     expect(onToggleFilter).toHaveBeenCalledWith('comments');
   });
@@ -133,5 +136,92 @@ describe('TicketTimeline', () => {
     render(<TicketTimeline header={header} model={null} filters={ALL} onToggleFilter={vi.fn()} onAction={vi.fn()} />);
     const block = within(screen.getByRole('region', { name: 'Temps du ticket' }));
     expect(block.getAllByText('—')).toHaveLength(3);
+  });
+});
+
+describe('TicketTimeline — annotations', () => {
+  const ann = (id: string, iso: string, over: Partial<TimelineAnnotation> = {}): TimelineAnnotation => ({
+    id, ticketId: 't-591', at: iso, title: `Titre ${id}`, body: '', tone: 'info', sourceCommentId: null,
+    authorType: 'user', authorName: 'nas', createdAt: iso, updatedAt: iso, ...over,
+  });
+
+  function setupAnnotated(list: TimelineAnnotation[], filters = ALL) {
+    const props = {
+      list, highlight: null, onCreateAt: vi.fn<TimelineAnnotationsProps['onCreateAt']>(), onOpenCard: vi.fn<TimelineAnnotationsProps['onOpenCard']>(),
+    };
+    const onContentHeight = vi.fn();
+    render(
+      <TicketTimeline
+        header={header} model={buildTimeline(fixture591(), NOW)} filters={filters}
+        onToggleFilter={vi.fn()} onAction={vi.fn()} annotations={props} onContentHeight={onContentHeight}
+      />,
+    );
+    return { ...props, onContentHeight };
+  }
+
+  // AC9: readable without hovering — the title, time and author are in the card itself.
+  it('renders every annotation as an always-visible card hung from a dotted anchor', () => {
+    setupAnnotated([
+      ann('a', at(9, 0), { title: 'Pivot : on lâche Redis', body: '![shot](/api/files/x)' }),
+      ann('b', at(10, 0), { authorType: 'agent', authorName: 'builder' }),
+    ]);
+    const cards = screen.getAllByTestId('annotation-card');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]!.textContent).toContain('Pivot : on lâche Redis');
+    expect(cards[0]!.textContent).toContain('nas');
+    expect(cards[0]!.querySelector('img')?.getAttribute('src')).toBe('/api/files/x');
+    expect(cards[1]!.textContent).toContain('agent');
+    expect(document.querySelectorAll('[data-testid="annotation-anchor"]')).toHaveLength(2);
+  });
+
+  // AC12: the band is only as tall as it must be.
+  it('reserves a thin strip when empty, a row with cards, nothing when filtered out', () => {
+    expect(setupAnnotated([]).onContentHeight).toHaveBeenLastCalledWith(BAND.empty + 196);
+    cleanup();
+    expect(setupAnnotated([ann('a', at(9, 0))]).onContentHeight).toHaveBeenLastCalledWith(BAND.oneRow + 196);
+    cleanup();
+    setupAnnotated([ann('a', at(9, 0))], { ...ALL, annotations: false });
+    expect(screen.queryByTestId('annotation-card')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Filtres de la timeline/ }));
+    expect((screen.getByRole('checkbox', { name: 'Annotations' }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  // AC1: clicking the band asks to annotate the instant under the cursor.
+  it('asks to annotate the instant under the cursor when the band is clicked', () => {
+    const { onCreateAt } = setupAnnotated([]);
+    const content = screen.getByTestId('timeline-content');
+    fireEvent.mouseMove(content, { clientX: 300, clientY: 4 });
+    expect(screen.getByTestId('annotation-ghost').textContent).toMatch(/^\+(≈|⇥) /);
+    fireEvent.click(content, { clientX: 300, clientY: 4 });
+    expect(onCreateAt).toHaveBeenCalledTimes(1);
+    const [instant] = onCreateAt.mock.calls[0]!;
+    expect(instant).toBeGreaterThan(Date.parse(at(8, 0)) - 86_400_000);
+    expect(instant).toBeLessThanOrEqual(NOW);
+  });
+
+  it('ignores a plain click on the frieze below the band (⌥ is needed there)', () => {
+    const { onCreateAt } = setupAnnotated([]);
+    const content = screen.getByTestId('timeline-content');
+    fireEvent.click(content, { clientX: 300, clientY: 100 });
+    expect(onCreateAt).not.toHaveBeenCalled();
+    fireEvent.click(content, { clientX: 300, clientY: 100, altKey: true });
+    expect(onCreateAt).toHaveBeenCalledTimes(1);
+  });
+
+  // AC6: A on a focused picto annotates its exact instant.
+  it('annotates the exact instant of a focused picto with the A key', () => {
+    const { onCreateAt } = setupAnnotated([]);
+    const created = screen.getByRole('button', { name: /^Ticket créé/ });
+    created.focus();
+    fireEvent.keyDown(created, { key: 'a' });
+    const ev = buildTimeline(fixture591(), NOW).events.find((e) => e.id === created.dataset.timelineNode)!;
+    expect(onCreateAt).toHaveBeenCalledWith(ev.at, expect.anything());
+  });
+
+  // AC14: click (or Enter — it is a button) opens it.
+  it('reports a card click to the host', () => {
+    const { onOpenCard } = setupAnnotated([ann('a', at(9, 0))]);
+    fireEvent.click(screen.getByTestId('annotation-card'));
+    expect(onOpenCard).toHaveBeenCalledWith(expect.objectContaining({ kind: 'card' }), expect.anything());
   });
 });
