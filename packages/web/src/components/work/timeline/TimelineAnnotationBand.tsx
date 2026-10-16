@@ -21,6 +21,7 @@ import {
   type PlacedCard,
 } from './layoutAnnotations';
 import { AgentTag, longWhen } from './AnnotationPopovers';
+import { AlertIcon, CommentLineIcon, MagnetIcon, PlusIcon, TextLinesIcon } from '../../ui/icons/AnnotationIcons';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -172,13 +173,16 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
               <span className="line-clamp-2 text-[12px] font-semibold leading-[15px] text-[var(--theme-text-primary)]">{a.title}</span>
               <span className={cn('flex items-center gap-1 truncate font-mono text-[10px]', a.uiState === 'error' ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-text-muted)]')}>
                 {a.uiState === 'error' ? (
-                  '⚠ échec — cliquer pour réessayer'
+                  <>
+                    <AlertIcon size={11} className="shrink-0" />
+                    échec — cliquer pour réessayer
+                  </>
                 ) : (
                   <>
                     {shortWhen(a.at)} ·{a.authorType === 'agent' && <AgentTag />}
                     <span className="truncate">{a.authorName}</span>
-                    {hasMoreThanTitle(a.body) && ' · 📎'}
-                    {a.sourceCommentId && ' · 💬'}
+                    {hasMoreThanTitle(a.body) && <TextLinesIcon size={11} className="shrink-0" />}
+                    {a.sourceCommentId && <CommentLineIcon size={11} className="shrink-0" />}
                     {a.uiState === 'saving' && ' · enregistrement…'}
                   </>
                 )}
@@ -201,16 +205,16 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
             )}
             style={{ top: Math.max(0, h - 30) }}
           >
-            +
+            <PlusIcon size={12} />
           </div>
           <div
             className={cn(
-              'absolute left-[14px] whitespace-nowrap rounded border bg-[var(--theme-bg-base)] px-1.5 font-mono text-[10.5px]',
+              'absolute left-[14px] flex items-center gap-1 whitespace-nowrap rounded border bg-[var(--theme-bg-base)] px-1.5 font-mono text-[10.5px]',
               ghost.snappedTo ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-[var(--theme-border-input)] text-[var(--theme-text-secondary)]',
             )}
             style={{ top: Math.max(0, h - 30) + 3 }}
           >
-            {ghost.snappedTo ? '⇥ ' : '≈ '}
+            {ghost.snappedTo ? <MagnetIcon size={11} className="shrink-0" /> : '≈ '}
             {longWhen(ghost.at)}
             {ghost.snappedTo && ` · ${ghost.snappedTo.label}`}
           </div>

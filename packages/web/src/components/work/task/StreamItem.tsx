@@ -5,7 +5,7 @@
  * so a wide code block never spills past the bubble. With `onDelete`, a trash
  * button shows on hover/focus — top-right for agent bubbles, to the left of the
  * right-aligned user bubbles. With `pin`, a pushpin next to it pins the comment
- * to the Timeline; once pinned, a "📌 Épinglé" badge shows the annotation instead.
+ * to the Timeline; once pinned, an "Épinglé" badge shows the annotation instead.
  */
 import type { TicketComment } from '@fleex/shared';
 import { MessageMarkdown } from './MessageMarkdown';

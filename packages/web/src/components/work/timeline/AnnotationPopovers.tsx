@@ -13,6 +13,8 @@ import { useFileUpload } from '../../../hooks/useFileUpload';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import type { AnnotationDraft, ComposerRequest, UiAnnotation } from '../../../stores/annotationStore';
 import { TONE_HUE, TONE_LABEL } from './layoutAnnotations';
+import { AlertIcon, CloseIcon, CommentLineIcon, ImageIcon, PencilIcon, PinIcon } from '../../ui/icons/AnnotationIcons';
+import { TrashIcon } from '../../ui/TrashIcon';
 
 export interface AnchorRect {
   left: number;
@@ -131,7 +133,7 @@ function TonePicker({ value, onChange, compact = false }: { value: AnnotationTon
 
 const TITLES: Record<ComposerRequest['mode'], string> = {
   create: 'Annoter',
-  promote: '📌 Épingler sur la timeline',
+  promote: 'Épingler sur la timeline',
   edit: "Modifier l'annotation",
   retry: 'Réessayer',
 };
@@ -209,6 +211,7 @@ export function AnnotationComposer({
         data-testid="annotation-composer"
       >
         <div className="mb-2 flex items-center gap-1.5 text-[12px] text-[var(--theme-text-secondary)]">
+          {request.mode === 'promote' && <PinIcon size={13} className="shrink-0 text-[var(--theme-accent)]" />}
           <span>{TITLES[request.mode]} ·</span>
           <span className="text-[var(--theme-text-primary)]">{longWhen(draft.at)}</span>
           <button type="button" onClick={() => setEditAt((v) => !v)} className="ml-auto text-[11px] text-[var(--theme-accent)] underline underline-offset-2">
@@ -224,7 +227,12 @@ export function AnnotationComposer({
             className="mb-2 rounded border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--theme-text-primary)]"
           />
         )}
-        {atError && <div role="alert" className="mb-2 text-[11px] text-[var(--theme-danger)]">⚠ {atError}</div>}
+        {atError && (
+          <div role="alert" className="mb-2 flex items-center gap-1 text-[11px] text-[var(--theme-danger)]">
+            <AlertIcon size={12} className="shrink-0" />
+            {atError}
+          </div>
+        )}
         {atNote && <div className="mb-2 text-[11px] text-[var(--theme-text-muted)]">{atNote}</div>}
 
         <div {...upload.dragProps} className={cn('rounded-md', upload.isDragOver && 'outline-dashed outline-1 outline-[var(--theme-accent)]')}>
@@ -252,8 +260,9 @@ export function AnnotationComposer({
             className="mt-1 w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2 py-1.5 text-[12px] text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
           />
           <div className="mt-0.5 flex items-center">
-            <button type="button" onClick={upload.openFilePicker} className="text-[11px] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]">
-              📎 Joindre une capture
+            <button type="button" onClick={upload.openFilePicker} className="inline-flex items-center gap-1 text-[11px] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]">
+              <ImageIcon size={13} />
+              Joindre une capture
             </button>
             {upload.isUploading && <span className="ml-2 text-[11px] text-[var(--theme-text-muted)]">envoi…</span>}
             <span className={cn('ml-auto font-mono text-[10px]', draft.body.length > ANNOTATION_BODY_MAX ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-text-faint)]')}>
@@ -324,7 +333,9 @@ export function AnnotationViewer({
         <div className="flex items-center gap-2">
           <ToneDot tone={a.tone} size={10} />
           <span className="font-mono text-[10px] uppercase text-[var(--theme-text-muted)]">{TONE_LABEL[a.tone]}</span>
-          <button type="button" onClick={onClose} aria-label="Fermer" className="ml-auto rounded px-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]">✕</button>
+          <button type="button" onClick={onClose} aria-label="Fermer" className="ml-auto rounded p-1 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]">
+            <CloseIcon size={14} />
+          </button>
         </div>
         <div className="mb-1 mt-2 text-[15px] font-semibold leading-snug text-[var(--theme-text-primary)]">{a.title}</div>
         <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-[var(--theme-text-muted)]">
@@ -332,8 +343,8 @@ export function AnnotationViewer({
           <span>{a.authorName}</span>
           <span>· {longWhen(a.at)}</span>
           {a.sourceCommentId && (
-            <button type="button" onClick={() => onSeeComment(a.sourceCommentId!)} className="text-[var(--theme-accent)] underline underline-offset-2">
-              · 💬 Voir le commentaire
+            <button type="button" onClick={() => onSeeComment(a.sourceCommentId!)} className="inline-flex items-center gap-1 text-[var(--theme-accent)] underline underline-offset-2">
+              · <CommentLineIcon size={12} /> Voir le commentaire
             </button>
           )}
         </div>
@@ -361,10 +372,12 @@ export function AnnotationViewer({
             </span>
           ) : (
             <>
-              <button type="button" onClick={onEdit} className="rounded-md border border-[var(--theme-border-input)] px-2.5 py-1 text-[12px] hover:bg-[var(--theme-bg-hover)]">
-                ✎ Modifier
+              <button type="button" onClick={onEdit} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--theme-border-input)] px-2.5 py-1 text-[12px] hover:bg-[var(--theme-bg-hover)]">
+                <PencilIcon size={13} />
+                Modifier
               </button>
-              <button type="button" onClick={() => setConfirmDelete(true)} className="rounded-md border border-[var(--theme-border-input)] px-2.5 py-1 text-[12px] text-[var(--theme-danger)] hover:bg-[var(--theme-bg-hover)]">
+              <button type="button" onClick={() => setConfirmDelete(true)} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--theme-border-input)] px-2.5 py-1 text-[12px] text-[var(--theme-danger)] hover:bg-[var(--theme-bg-hover)]">
+                <TrashIcon size={13} />
                 Supprimer
               </button>
             </>

@@ -142,6 +142,9 @@ describe('TaskStream — pinning a comment to the Timeline', () => {
     renderEditable();
     const badge = await screen.findByRole('button', { name: "Voir l'annotation" });
     expect(screen.getAllByRole('button', { name: 'Épingler sur la timeline' })).toHaveLength(1);
+    // SVG pushpin, not the 📌 emoji (renders differently on every OS).
+    expect(badge.textContent).toBe('Épinglé');
+    expect(badge.querySelector('svg')).not.toBeNull();
     fireEvent.click(badge);
     expect(useAnnotationStore.getState().highlight?.id).toBe('a1');
   });

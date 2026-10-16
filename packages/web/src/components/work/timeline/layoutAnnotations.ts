@@ -203,7 +203,7 @@ export function firstImage(body: string): string | null {
   return /!\[[^\]]*\]\(([^)\s]+)[^)]*\)/.exec(body)?.[1] ?? null;
 }
 
-/** Whether the body says more than the title (📎 on the card). */
+/** Whether the body says more than the title (text icon on the card). */
 export function hasMoreThanTitle(body: string): boolean {
   return body.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim().length > 0;
 }

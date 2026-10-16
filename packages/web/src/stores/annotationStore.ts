@@ -1,6 +1,6 @@
 /**
  * Timeline annotations, per ticket — shared by the Timeline drawer (cards,
- * composer) and the conversation (the "📌 Épinglé" badge on a pinned comment).
+ * composer) and the conversation (the "Épinglé" badge on a pinned comment).
  *
  * Live over the `tickets` WS channel (annotation:created/updated/deleted).
  * Creation is optimistic: the card shows at once in a `saving` state, and on

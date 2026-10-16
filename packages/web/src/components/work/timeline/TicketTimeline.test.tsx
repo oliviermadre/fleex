@@ -6,8 +6,15 @@ import { NOW, activity, at, emptySources, fixture591 } from './timeline.fixture'
 import type { TimelineAnnotation } from '@fleex/shared';
 import type { TimelineAnnotationsProps } from './TicketTimeline';
 import { BAND } from './layoutAnnotations';
+import { AnnotationViewer } from './AnnotationPopovers';
 
 afterEach(cleanup);
+
+/**
+ * Pictographs and dingbats (📌 📎 💬 ✎ ✕ ⚠ ⇥…) render differently on every OS
+ * and read as amateurish: the annotation UI draws its icons in SVG only.
+ */
+const GLYPH = /[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
 
 const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true };
 const header = { number: 591, title: 'Importer une tâche depuis Slack', boardName: 'Fleex', status: 'doing', type: 'build' };
@@ -191,7 +198,9 @@ describe('TicketTimeline — annotations', () => {
     const { onCreateAt } = setupAnnotated([]);
     const content = screen.getByTestId('timeline-content');
     fireEvent.mouseMove(content, { clientX: 300, clientY: 4 });
-    expect(screen.getByTestId('annotation-ghost').textContent).toMatch(/^\+(≈|⇥) /);
+    const ghost = screen.getByTestId('annotation-ghost');
+    expect(ghost.querySelector('svg')).not.toBeNull();
+    expect(ghost.textContent).toMatch(/\d{2}:\d{2}/);
     fireEvent.click(content, { clientX: 300, clientY: 4 });
     expect(onCreateAt).toHaveBeenCalledTimes(1);
     const [instant] = onCreateAt.mock.calls[0]!;
@@ -216,6 +225,28 @@ describe('TicketTimeline — annotations', () => {
     fireEvent.keyDown(created, { key: 'a' });
     const ev = buildTimeline(fixture591(), NOW).events.find((e) => e.id === created.dataset.timelineNode)!;
     expect(onCreateAt).toHaveBeenCalledWith(ev.at, expect.anything());
+  });
+
+  it('draws the card markers as SVG icons, never as emoji', () => {
+    setupAnnotated([ann('a', at(9, 0), { body: 'Un détail en plus', sourceCommentId: 'c1' })]);
+    const card = screen.getByTestId('annotation-card');
+    expect(card.querySelectorAll('svg')).toHaveLength(2); // detail + pinned from a comment
+    expect(card.textContent).not.toMatch(GLYPH);
+  });
+
+  it('draws the reader icons (close, comment link, edit, delete) as SVG, never as emoji', () => {
+    render(
+      <AnnotationViewer
+        annotation={ann('a', at(9, 0), { body: 'Détail', sourceCommentId: 'c1' })}
+        anchor={{ left: 0, top: 0, width: 10, height: 10 }}
+        onClose={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} onTone={vi.fn()} onSeeComment={vi.fn()}
+      />,
+    );
+    const viewer = screen.getByTestId('annotation-viewer');
+    expect(viewer.textContent).not.toMatch(GLYPH);
+    for (const name of ['Fermer', /Voir le commentaire/, /Modifier/, /Supprimer/]) {
+      expect(within(viewer).getByRole('button', { name }).querySelector('svg')).not.toBeNull();
+    }
   });
 
   // AC14: click (or Enter — it is a button) opens it.
