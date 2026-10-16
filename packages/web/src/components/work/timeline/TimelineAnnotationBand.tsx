@@ -13,11 +13,13 @@ import { GEOMETRY } from './layoutTimeline';
 import {
   CARD_H,
   CARD_W,
+  CREATE_STRIP,
   PILL,
   PILL_STACK_W,
   PILL_TOP,
   TONE_HUE,
   cardTop,
+  ghostTop,
   firstImage,
   hasMoreThanTitle,
   type AnnotationBand,
@@ -114,13 +116,19 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
   return (
     <div ref={root} className="contents">
       {h > 0 && <div className="pointer-events-none absolute left-0 border-t border-dashed border-[var(--theme-border)]" style={{ top: h, width }} />}
+      {/* The create strip: where the "+" lives — faintly tinted so it reads as a place to aim. */}
+      <div
+        className="pointer-events-none absolute left-0 bg-[var(--theme-bg-hover)] opacity-50"
+        style={{ top: h - CREATE_STRIP, height: CREATE_STRIP, width }}
+        data-testid="annotation-create-strip"
+      />
       {/* Sticky label: the band reads as its own row whatever the scroll. In-flow and 0-tall,
           so it pins to the viewport's left edge without pushing anything. */}
       <div className="pointer-events-none sticky left-0 z-[7] h-0 w-max" aria-hidden>
         <span
           data-testid="annotation-band-label"
           className="absolute left-1.5 whitespace-nowrap rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-1.5 text-[9.5px] font-semibold uppercase leading-[14px] tracking-[0.06em] text-[var(--theme-text-muted)]"
-          style={{ top: band.mode === 'mini' ? (h - 16) / 2 : 0 }}
+          style={{ top: band.cards.length === 0 ? (h - 16) / 2 : band.mode === 'mini' ? PILL_TOP - 1 : 0 }}
         >
           Annotations
           {band.cards.length === 0 && <span className="ml-1.5 font-normal normal-case tracking-normal text-[var(--theme-text-faint)]">survoler pour en ajouter</span>}
@@ -216,7 +224,7 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
         <div className="pointer-events-none absolute top-0 z-[6]" style={{ left: ghost.x }} data-testid="annotation-ghost">
           <div
             className={cn('absolute left-0 w-0 border-l', ghost.snappedTo ? 'border-solid border-[var(--theme-accent)]' : 'border-dashed border-[var(--theme-text-secondary)]')}
-            style={{ top: Math.max(0, h - 30) + 22, height: h + GEOMETRY.spineY - Math.max(0, h - 30) - 22 }}
+            style={{ top: ghostTop(h) + 22, height: h + GEOMETRY.spineY - ghostTop(h) - 22 }}
           />
           <button
             type="button"
@@ -232,7 +240,7 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]',
               ghost.snappedTo ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-dashed border-[var(--theme-text-secondary)] text-[var(--theme-text-primary)]',
             )}
-            style={{ top: Math.max(0, h - 30) }}
+            style={{ top: ghostTop(h) }}
           >
             <PlusIcon size={12} />
           </button>
@@ -241,7 +249,7 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
               'absolute left-[14px] flex items-center gap-1 whitespace-nowrap rounded border bg-[var(--theme-bg-base)] px-1.5 font-mono text-[10.5px]',
               ghost.snappedTo ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-[var(--theme-border-input)] text-[var(--theme-text-secondary)]',
             )}
-            style={{ top: Math.max(0, h - 30) + 3 }}
+            style={{ top: ghostTop(h) + 3 }}
           >
             {ghost.snappedTo ? <MagnetIcon size={11} className="shrink-0" /> : '≈ '}
             {longWhen(ghost.at)}

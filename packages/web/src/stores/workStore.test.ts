@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useWorkStore, filtersRevealing } from './workStore';
+import { useWorkStore, filtersRevealing, TIMELINE_MAX_HEIGHT } from './workStore';
 
 // Each ticket keeps its own center mode, shell split and pane bindings — switching
 // tickets must never apply one ticket's shells or layout to another.
@@ -291,12 +291,12 @@ describe('workStore — one bottom panel at a time', () => {
     s().setTimelineHeight(10);
     expect(s().timelineHeight).toBe(160);
     s().setTimelineHeight(9999);
-    expect(s().timelineHeight).toBe(360);
+    expect(s().timelineHeight).toBe(TIMELINE_MAX_HEIGHT);
     s().setTimelineOpen(true);
     s().toggleTimelineFilter('comments');
     const stored = JSON.parse(localStorage.getItem('fleex_work')!);
     expect(stored.timelineOpen).toBe(true);
-    expect(stored.timelineHeight).toBe(360);
+    expect(stored.timelineHeight).toBe(TIMELINE_MAX_HEIGHT);
     expect(stored.timelineFilters.comments).toBe(false);
     expect(stored.timelineFilters.status).toBe(true);
     s().toggleTimelineFilter('comments');

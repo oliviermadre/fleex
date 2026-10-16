@@ -33,7 +33,7 @@ import { TimelineTimeSummary } from './TimelineTimeSummary';
 import { TimelineForkCurves, TimelineForkOptions } from './TimelineFork';
 import { glyphHue } from './TimelineGlyph';
 import type { UiAnnotation } from '../../../stores/annotationStore';
-import { instantAtCursor, layoutAnnotationBand, overAnnotation, rowsForBudget, timeAnchors, type CursorInstant, type PlacedCard } from './layoutAnnotations';
+import { ghostTop, inCreateStrip, instantAtCursor, layoutAnnotationBand, rowsForBudget, timeAnchors, type CursorInstant, type PlacedCard } from './layoutAnnotations';
 import { AnnotationAnchors, TimelineAnnotationBand, cardNodeId } from './TimelineAnnotationBand';
 import type { AnchorRect } from './AnnotationPopovers';
 
@@ -177,26 +177,22 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     [order, annotations, filters.annotations, layout],
   );
 
-  // Hover → the instant under the cursor: anywhere in the band, or on the frieze with ⌥ held.
-  // Hovering only shows the ghost: in the band, only its "+" bubble creates.
+  // Hover → the instant under the cursor: in the band's create strip (below the cards and
+  // pills, so the "+" never covers them), or on the frieze with ⌥ held. Only the "+" creates.
   const canAnnotate = !!annotations && filters.annotations && !!layout;
-  const cursorAt = (e: React.MouseEvent): { inBand: boolean; x: number; y: number } | null => {
+  const cursorAt = (e: React.MouseEvent): { x: number; y: number } | null => {
     const el = content.current;
     if (!el || !layout) return null;
     const r = el.getBoundingClientRect();
     const x = e.clientX - r.left;
     if (x < layout.spine.x0 - 12 || x > layout.nowX + 2) return null;
-    return { inBand: e.clientY - r.top < bandH, x, y: e.clientY - r.top };
+    return { x, y: e.clientY - r.top };
   };
   const onContentMove = (e: React.MouseEvent) => {
     if (!canAnnotate) return;
     const c = cursorAt(e);
-    // By position, not by event target: once shown, the "+" bubble sits under the
-    // cursor and would hide the annotation it is moving onto (pills especially).
-    const overCard =
-      (e.target as HTMLElement).closest('[data-timeline-node^="annotation"]') || (c && overAnnotation(band, c.x, c.y));
     const overNode = (e.target as HTMLElement).closest('button');
-    const show = c && !overCard && (c.inBand || (e.altKey && !overNode));
+    const show = c && (inCreateStrip(c.y, bandH) || (e.altKey && c.y >= bandH && !overNode));
     setGhost(show ? instantAtCursor(layout!, anchors, c.x) : null);
   };
   const onContentClick = (e: React.MouseEvent) => {
@@ -206,7 +202,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     if (!c || !e.altKey) return;
     const hit = instantAtCursor(layout!, anchors, c.x);
     const r = content.current!.getBoundingClientRect();
-    annotations!.onCreateAt(hit.at, { left: r.left + hit.x - 1, top: r.top + Math.max(0, bandH - 30), width: 2, height: 22 });
+    annotations!.onCreateAt(hit.at, { left: r.left + hit.x - 1, top: r.top + ghostTop(bandH), width: 2, height: 22 });
   };
 
   const eventsById = useMemo(() => new Map(model?.events.map((e) => [e.id, e]) ?? []), [model]);

@@ -5,13 +5,19 @@ import { layoutTimeline } from './layoutTimeline';
 import {
   BAND,
   BAND_LABEL_W,
+  CARD_H,
   CARD_W,
   PILL,
   SNAP_PX,
   firstImage,
   instantAtCursor,
   layoutAnnotationBand,
-  overAnnotation,
+  inCreateStrip,
+  ghostTop,
+  cardTop,
+  CREATE_STRIP,
+  GHOST_SIZE,
+  PILL_TOP,
   rowsForBudget,
   timeAnchors,
   timeAtX,
@@ -170,17 +176,22 @@ describe('layoutAnnotationBand', () => {
     expect(band.cards[0]!.left).toBe(BAND_LABEL_W);
   });
 
-  it('tells when a point is over an annotation (card box, or a pill column)', () => {
-    const lin = [{ at: 0, x: 0 }, { at: 1_000_000, x: 1_000_000 }];
-    const iso = (x: number) => new Date(x).toISOString();
-    const cards = layoutAnnotationBand([annotation('a', iso(500))], lin, 5000);
-    expect(overAnnotation(cards, 500, cards.height - 20)).toBe(true);
-    expect(overAnnotation(cards, 500 + CARD_W, cards.height - 20)).toBe(false);
-    expect(overAnnotation(cards, 500, cards.height + 5)).toBe(false); // below the band
-    const mini = layoutAnnotationBand([annotation('a', iso(500))], lin, 5000, true, 0);
-    expect(overAnnotation(mini, 500, 0)).toBe(true);
-    expect(overAnnotation(mini, 500 + PILL, 20)).toBe(true); // the bubble would still touch it
-    expect(overAnnotation(mini, 560, 13)).toBe(false);
+  // The "+" has its own strip at the bottom of the band: no card nor pill ever reaches into it.
+  it('keeps every card and pill above the create strip, where the "+" sits', () => {
+    for (const h of [BAND.oneRow, BAND.twoRows]) {
+      expect(cardTop(0, h) + CARD_H).toBeLessThanOrEqual(h - CREATE_STRIP);
+    }
+    expect(cardTop(0, BAND.oneRow)).toBeGreaterThanOrEqual(0);
+    expect(cardTop(1, BAND.twoRows)).toBeGreaterThanOrEqual(0);
+    expect(cardTop(0, BAND.twoRows) - cardTop(1, BAND.twoRows)).toBeGreaterThanOrEqual(CARD_H);
+    expect(PILL_TOP + PILL).toBeLessThanOrEqual(BAND.mini - CREATE_STRIP);
+    for (const h of [BAND.empty, BAND.mini, BAND.oneRow, BAND.twoRows]) {
+      expect(ghostTop(h)).toBeGreaterThanOrEqual(h - CREATE_STRIP);
+      expect(ghostTop(h) + GHOST_SIZE).toBeLessThanOrEqual(h);
+      expect(inCreateStrip(h - 1, h)).toBe(true);
+      expect(inCreateStrip(h - CREATE_STRIP - 1, h)).toBe(false);
+      expect(inCreateStrip(h, h)).toBe(false);
+    }
   });
 
   it('keeps a card inside the frieze while its anchor stays on the exact instant', () => {

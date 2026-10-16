@@ -23,15 +23,41 @@ export const SNAP_PX = 8;
 /** More than this many cards within one card width are grouped into a stack. */
 const STACK_OVER = 3;
 
-/** Band height: none when filtered out, a thin strip to hover when empty, pills only, one or two rows. */
-export const BAND = { hidden: 0, empty: 16, mini: 26, oneRow: 72, twoRows: 132 } as const;
+/**
+ * The band's bottom strip, reserved for creating: the ghost "+" lives there and
+ * only there, so it never sits on a card or a pill — you can annotate right
+ * under an existing annotation and still click that annotation.
+ */
+export const CREATE_STRIP = 24;
+/** Diameter of the ghost "+" bubble (centred in the create strip). */
+export const GHOST_SIZE = 22;
+const CARD_TOP_PAD = 4;
+const CARD_STRIP_GAP = 4;
+const PILL_ROW = 22;
+
+/** Band height: none when filtered out, the create strip alone when empty, pills only, one or two rows — each above the strip. */
+export const BAND = {
+  hidden: 0,
+  empty: CREATE_STRIP,
+  mini: PILL_ROW + CREATE_STRIP,
+  oneRow: CARD_TOP_PAD + CARD_H + CARD_STRIP_GAP + CREATE_STRIP,
+  twoRows: CARD_TOP_PAD + 2 * CARD_H + ROW_GAP + CARD_STRIP_GAP + CREATE_STRIP,
+} as const;
+
+/** Top y of the ghost "+" bubble in a band of `bandHeight`. */
+export function ghostTop(bandHeight: number): number {
+  return bandHeight - CREATE_STRIP + (CREATE_STRIP - GHOST_SIZE) / 2;
+}
+
+/** Whether content y falls in the band's create strip (the only place the "+" shows). */
+export function inCreateStrip(y: number, bandHeight: number): boolean {
+  return bandHeight > 0 && y >= bandHeight - CREATE_STRIP && y < bandHeight;
+}
 /** Diameter of a pill in the mini band (a stack pill is a bit wider). */
 export const PILL = 18;
 export const PILL_STACK_W = 24;
 /** Room kept at the band's left edge for its sticky "Annotations" label (cards start right of it). */
 export const BAND_LABEL_W = 104;
-/** Half the width of the ghost "+" bubble, plus a little air. */
-const GHOST_HALF = 13;
 
 /** Card rows the band may use: 2, 1, or 0 (pills only). */
 export type BandRows = 0 | 1 | 2;
@@ -232,30 +258,12 @@ function layoutPills<A extends TimelineAnnotation>(items: PlacedAnnotation<A>[])
   });
 }
 
-/**
- * Whether the cursor at (x, y) — content coordinates — is over an annotation,
- * where the ghost "+" must step aside so the annotation stays clickable. A
- * card counts by its box; a pill (tiny, and the bubble is wider than it) by
- * its column, so the bubble never lands on top of it.
- */
-export function overAnnotation<A extends TimelineAnnotation>(band: AnnotationBand<A>, x: number, y: number): boolean {
-  if (y < 0 || y >= band.height) return false;
-  return band.cards.some((c) => {
-    if (band.mode === 'mini') {
-      const w = c.kind === 'card' ? PILL : PILL_STACK_W;
-      return x >= c.left - GHOST_HALF && x <= c.left + w + GHOST_HALF;
-    }
-    const top = cardTop(c.row, band.height);
-    return x >= c.left && x <= c.left + CARD_W && y >= top && y <= top + CARD_H;
-  });
-}
-
-/** Top y of a pill in the mini band. */
-export const PILL_TOP = (BAND.mini - PILL) / 2;
+/** Top y of a pill in the mini band (its row sits above the create strip). */
+export const PILL_TOP = (PILL_ROW - PILL) / 2;
 
 /** Top y of a card in a band of `bandHeight` (row 0 sits right above the frieze). */
 export function cardTop(row: 0 | 1, bandHeight: number): number {
-  return bandHeight - 8 - CARD_H - (row === 0 ? 0 : CARD_H + ROW_GAP);
+  return bandHeight - CREATE_STRIP - CARD_STRIP_GAP - CARD_H - (row === 0 ? 0 : CARD_H + ROW_GAP);
 }
 
 /** The card's thumbnail: the first image of the body, if any. */

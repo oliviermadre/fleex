@@ -5,7 +5,7 @@ import { buildTimeline } from './buildTimeline';
 import { NOW, activity, at, emptySources, fixture591 } from './timeline.fixture';
 import type { TimelineAnnotation } from '@fleex/shared';
 import type { TimelineAnnotationsProps } from './TicketTimeline';
-import { BAND } from './layoutAnnotations';
+import { BAND, CREATE_STRIP, PILL, PILL_TOP } from './layoutAnnotations';
 import { GEOMETRY } from './layoutTimeline';
 import { AnnotationComposer, AnnotationStackList, AnnotationViewer } from './AnnotationPopovers';
 
@@ -246,25 +246,33 @@ describe('TicketTimeline — annotations', () => {
   });
 
   // Ticket feedback: in the mini band the "+" bubble (wider than a pill) slid on top of the pill and ate its click.
-  it('steps the "+" bubble aside over a pill, so the pill stays clickable', () => {
-    setupAnnotated([ann('a', at(9, 0))], ALL, BAND.oneRow - 1);
+  // Ticket feedback (twice): the "+" must never sit on a pill/card (the annotation stays clickable),
+  // yet one must be able to annotate right on/next to an existing one. The "+" lives in its own
+  // strip at the bottom of the band, under the annotations.
+  it('pills: hovering one shows no "+", the strip right under it does — at that very spot', () => {
+    const { onCreateAt } = setupAnnotated([ann('a', at(9, 0))], ALL, BAND.oneRow - 1);
     const pill = screen.getByTestId('annotation-pill');
-    const centre = parseFloat(pill.style.left) + 9;
+    const centre = parseFloat(pill.style.left) + PILL / 2;
     const content = screen.getByTestId('timeline-content');
-    fireEvent.mouseMove(content, { clientX: centre + 60, clientY: 13 });
-    expect(screen.getByTestId('annotation-ghost')).toBeTruthy();
-    for (const dx of [0, 15, -15]) {
-      fireEvent.mouseMove(content, { clientX: centre + dx, clientY: 13 });
-      expect(screen.queryByTestId('annotation-ghost'), `dx=${dx}`).toBeNull();
-    }
+    fireEvent.mouseMove(content, { clientX: centre, clientY: PILL_TOP + PILL / 2 });
+    expect(screen.queryByTestId('annotation-ghost')).toBeNull();
+    fireEvent.mouseMove(content, { clientX: centre, clientY: BAND.mini - CREATE_STRIP / 2 });
+    const add = screen.getByTestId('annotation-ghost-add');
+    expect(parseFloat(add.style.top)).toBeGreaterThanOrEqual(PILL_TOP + PILL); // below the pill, never over it
+    fireEvent.click(add);
+    expect(onCreateAt).toHaveBeenCalledTimes(1);
   });
 
-  it('steps the "+" bubble aside over a card too', () => {
+  it('cards: hovering one shows no "+", the strip under it does, without covering the card', () => {
     setupAnnotated([ann('a', at(9, 0))]);
     const card = screen.getByTestId('annotation-card');
     const content = screen.getByTestId('timeline-content');
-    fireEvent.mouseMove(content, { clientX: parseFloat(card.style.left) + 100, clientY: parseFloat(card.style.top) + 20 });
+    const x = parseFloat(card.style.left) + 100;
+    fireEvent.mouseMove(content, { clientX: x, clientY: parseFloat(card.style.top) + 20 });
     expect(screen.queryByTestId('annotation-ghost')).toBeNull();
+    fireEvent.mouseMove(content, { clientX: x, clientY: BAND.oneRow - CREATE_STRIP / 2 });
+    const add = screen.getByTestId('annotation-ghost-add');
+    expect(parseFloat(add.style.top)).toBeGreaterThanOrEqual(parseFloat(card.style.top) + 56);
   });
 
   // Ticket feedback: a label pinned on the band says it is the annotations row.

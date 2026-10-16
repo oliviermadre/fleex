@@ -292,7 +292,7 @@ const clampShellHeight = (h: number) =>
 
 /** Clamp the bottom Timeline drawer height — the frieze itself is ~196px tall. */
 export const TIMELINE_MIN_HEIGHT = 160;
-export const TIMELINE_MAX_HEIGHT = 360;
+export const TIMELINE_MAX_HEIGHT = 380;
 /** Snap to the nearest zoom level; anything unreadable (old blob, NaN) → 1. */
 const clampTimelineZoom = (z: unknown): number => {
   const n = Number(z);
@@ -361,7 +361,7 @@ const DEFAULTS: PersistedWork = {
   shellPaneIdsByTicket: {},
   shellHeight: 240,
   timelineOpen: false,
-  timelineHeight: 284,
+  timelineHeight: 300,
   timelineFilters: DEFAULT_TIMELINE_FILTERS,
   timelineZoom: 1,
   rightPanelWidth: 296,
