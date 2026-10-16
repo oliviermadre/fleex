@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildTimeline, classifyExecution, type TimelineEvent } from './buildTimeline';
+import type { StepRun } from '@fleex/shared';
+import { buildTimeline, classifyExecution, formatPhaseDuration, type TimelineEvent, type TimelineSources } from './buildTimeline';
 import {
   NOW, RUN, STEP_RUNS, activity, at, comment, deliverable, emptySources, execution, fixture591, mention, stepRun,
 } from './timeline.fixture';
@@ -277,5 +278,151 @@ describe('buildTimeline — robustness', () => {
     const m = buildTimeline(src, new Date(2026, 8, 30, 12, 0).getTime());
     expect(byId(m.events, 'created').clock).toBe('09:00');
     expect(byId(m.events, 'run:x').clock).toBe('30/09 08:05');
+  });
+});
+
+describe('formatPhaseDuration', () => {
+  const MIN = 60_000;
+  it.each([
+    [30_000, '< 1 min'],
+    [59 * MIN, '59 min'],
+    [60 * MIN, '1 h'],
+    [(5 * 60 + 20) * MIN, '5 h 20'],
+    [(5 * 60 + 5) * MIN, '5 h 05'],
+    [24 * 60 * MIN, '1 j'],
+    [(52 * 60 + 30) * MIN, '2 j 4 h'],
+  ])('%d ms → %s', (input, expected) => {
+    expect(formatPhaseDuration(input)).toBe(expected);
+  });
+});
+
+describe('buildTimeline — phase metrics (duration and human interventions per status zone)', () => {
+  const T = (h: number, m: number) => new Date(at(h, m)).getTime();
+  const rowsOf = (m: ReturnType<typeof buildTimeline>, i: number) =>
+    Object.fromEntries(byId(m.events, m.zones[i]!.eventId).tooltip.rows);
+
+  /** Todo at 08:00 → Doing at 09:00 → Review at 14:00, now = 14:30. */
+  function phases() {
+    const src = emptySources();
+    src.ticket = { ...src.ticket, status: 'reviewing', createdAt: at(8, 0) };
+    src.activities = [
+      activity({ id: 'm1', action: 'moved', createdAt: at(9, 0), changes: { status: { from: 'todo', to: 'doing' } } }),
+      activity({ id: 'm2', action: 'moved', createdAt: at(14, 0), changes: { status: { from: 'doing', to: 'reviewing' } } }),
+    ];
+    return src;
+  }
+
+  /** A gate step and a routed step, so the doing phase can hold workflow decisions. */
+  function withRun(src: TimelineSources, stepRuns: StepRun[]) {
+    src.runs = [{ run: { ...RUN, startedAt: at(9, 5), createdAt: at(9, 5) }, stepRuns }];
+    return src;
+  }
+
+  it('shows the calendar time of every phase — the X axis is compressed, so the width cannot tell it', () => {
+    const m = buildTimeline(phases(), T(14, 30));
+    expect(m.zones.map((z) => z.durationLabel)).toEqual(['1 h', '5 h', '30 min']);
+    expect(m.zones.map((z) => z.current)).toEqual([false, false, true]);
+    expect(rowsOf(m, 2)['Durée']).toBe('30 min · en cours');
+    expect(rowsOf(m, 1)['Durée']).toBe('5 h');
+  });
+
+  it('the running phase grows with `now`, without any new source', () => {
+    const src = phases();
+    expect(buildTimeline(src, T(14, 30)).zones[2]!.durationLabel).toBe('30 min');
+    expect(buildTimeline(src, T(15, 45)).zones[2]!.durationLabel).toBe('1 h 45');
+  });
+
+  it('flags a phase whose start is a guess (untracked move) with ≈', () => {
+    const src = emptySources();
+    src.ticket = { ...src.ticket, status: 'reviewing', statusChangedAt: at(9, 30) };
+    src.activities = [activity({ id: 'm', action: 'moved', createdAt: at(9, 10), changes: { status: { from: 'todo', to: 'doing' } } })];
+    const m = buildTimeline(src, NOW);
+    expect(m.zones[2]!.durationLabel).toBe('≈ 1 h 10');
+    expect(m.zones[1]!.durationLabel).toBe('20 min');
+  });
+
+  it('a status visited twice keeps one duration per band and gives the cumulated total in the tooltip', () => {
+    const src = phases();
+    src.ticket = { ...src.ticket, status: 'doing' };
+    src.activities = [
+      ...src.activities,
+      activity({ id: 'm3', action: 'moved', createdAt: at(14, 20), changes: { status: { from: 'reviewing', to: 'doing' } } }),
+    ];
+    const m = buildTimeline(src, T(15, 0));
+    expect(m.zones.map((z) => z.durationLabel)).toEqual(['1 h', '5 h', '20 min', '40 min']);
+    expect(rowsOf(m, 1)['Total Doing']).toBe('5 h 40');
+    expect(rowsOf(m, 3)['Total Doing']).toBe('5 h 40');
+    // A status seen once has no total row.
+    expect(rowsOf(m, 0)['Total Todo']).toBeUndefined();
+  });
+
+  it('counts user comments and decided gates, never the agent echo of the decision', () => {
+    const src = withRun(phases(), [
+      stepRun({ id: 'g', stepId: 'gate-spec', startedAt: at(10, 0), completedAt: at(10, 30), output: { schemaFields: {}, result: 'ok', outcome: 'validé' } }),
+    ]);
+    src.comments = [
+      comment({ id: 'c1', body: '@workflow:feature go', createdAt: at(9, 10) }),
+      comment({ id: 'c2', body: 'précision', createdAt: at(11, 0) }),
+      comment({ id: 'c-echo', authorType: 'agent', authorName: 'workflow:Feature → PR → Valider la spec', body: '**User decision :** validé', createdAt: at(10, 30) }),
+    ];
+    const m = buildTimeline(src, T(14, 30));
+    expect(m.zones[1]!.humanActions).toEqual({ total: 3, comments: 2, gates: 1, routes: 0 });
+    expect(rowsOf(m, 1)['Interventions']).toBe('3 (2 commentaires, 1 gate)');
+    expect(byId(m.events, m.zones[1]!.eventId).ariaLabel).toMatch(/, durée 5 h, 3 interventions humaines$/);
+  });
+
+  it('a waiting_for_info answer counts once: the user comment, not the humanResponse copy on the step run', () => {
+    const src = withRun(phases(), [
+      stepRun({ id: 's', stepId: 'impl', startedAt: at(10, 0), completedAt: at(10, 40), output: { schemaFields: {}, result: 'ok', humanResponse: '/api/tickets/:id' } }),
+    ]);
+    src.comments = [comment({ id: 'answer', body: '/api/tickets/:id', createdAt: at(10, 20) })];
+    expect(buildTimeline(src, T(14, 30)).zones[1]!.humanActions.total).toBe(1);
+  });
+
+  it('counts a route someone arbitrated, and a decided gate only once even if it carries routing', () => {
+    const src = withRun(phases(), [
+      stepRun({ id: 'r', stepId: 'triage', startedAt: at(10, 0), output: { schemaFields: {}, result: 'ok', routing: { candidateEdgeIds: ['e1'], decidedBy: 'nas', chosenEdgeId: 'e1' } } }),
+      stepRun({
+        id: 'g', stepId: 'gate-spec', startedAt: at(11, 0),
+        output: { schemaFields: {}, result: 'ok', outcome: 'validé', routing: { candidateEdgeIds: ['e4'], decidedBy: 'nas', chosenEdgeId: 'e4' } },
+      }),
+    ]);
+    expect(buildTimeline(src, T(14, 30)).zones[1]!.humanActions).toEqual({ total: 2, comments: 0, gates: 1, routes: 1 });
+  });
+
+  it('a gate still waiting for its decision is not an intervention yet', () => {
+    const src = withRun(phases(), [
+      stepRun({ id: 'g', stepId: 'merge', startedAt: at(10, 0), status: 'needs_review', result: null }),
+    ]);
+    expect(buildTimeline(src, T(14, 30)).zones[1]!.humanActions.total).toBe(0);
+  });
+
+  it('an intervention exactly on a boundary belongs to the phase that starts there', () => {
+    const src = phases();
+    src.comments = [comment({ id: 'c', body: 'go review', createdAt: at(14, 0) })];
+    const m = buildTimeline(src, T(14, 30));
+    expect(m.zones.map((z) => z.humanActions.total)).toEqual([0, 0, 1]);
+  });
+
+  it('a phase without intervention says so in the tooltip and keeps the aria label to the duration', () => {
+    const m = buildTimeline(phases(), T(14, 30));
+    expect(rowsOf(m, 0)['Interventions']).toBe('Aucune');
+    expect(byId(m.events, m.zones[0]!.eventId).ariaLabel).toMatch(/, durée 1 h$/);
+  });
+
+  it('ignores status moves, field edits, links and agent comments', () => {
+    const src = phases();
+    src.activities = [
+      ...src.activities,
+      activity({ id: 'p', action: 'updated', createdAt: at(10, 0), changes: { priority: { from: 'low', to: 'high' } } }),
+      activity({ id: 'l', action: 'linked', createdAt: at(11, 0), changes: { link: { from: null, to: { type: 'github_pr', ref: 'o/r#1' } } } }),
+    ];
+    src.comments = [comment({ id: 'a', authorType: 'agent', authorName: 'Dev', body: 'done', createdAt: at(12, 0) })];
+    expect(buildTimeline(src, T(14, 30)).zones.map((z) => z.humanActions.total)).toEqual([0, 0, 0]);
+  });
+
+  it('on the #591 fixture: the todo phase holds the @PM request and both spec gates, doing the last comment', () => {
+    const m = buildTimeline(fixture591(), NOW);
+    expect(m.zones.map((z) => [z.status, z.humanActions.total])).toEqual([['backlog', 0], ['todo', 3], ['doing', 1]]);
   });
 });

@@ -127,6 +127,21 @@ export interface TimelineZone {
   approximate: boolean;
   /** The status event heading the zone. */
   eventId: string;
+  /** Calendar time spent in the zone (`to − from`). */
+  durationMs: number;
+  /** Pre-formatted: "≈ 2 h", "5 h 20", "< 1 min". */
+  durationLabel: string;
+  humanActions: HumanActionCounts;
+  /** The last zone: the phase is still running (its duration grows with `now`). */
+  current: boolean;
+}
+
+/** Human interventions within a status zone (SPEC "durée et interventions par phase"). */
+export interface HumanActionCounts {
+  total: number;
+  comments: number;
+  gates: number;
+  routes: number;
 }
 
 export interface ForkOption {
@@ -264,6 +279,33 @@ export function whenLabel(t: number, now: number): string {
   else if (min < 60 * 24) ago = `il y a ${Math.floor(min / 60)} h`;
   else ago = `il y a ${Math.floor(min / (60 * 24))} j`;
   return `${sameLocalDay(t, now) ? hhmm(t) : ddmmhhmm(t)} · ${ago}`;
+}
+
+/**
+ * Duration of a status phase: "< 1 min", "12 min", "5 h", "5 h 20", "2 j", "2 j 4 h"
+ * (minutes are dropped past a day). Same vocabulary as `durationLabel`.
+ */
+export function formatPhaseDuration(durationMs: number): string {
+  if (durationMs < 60_000) return '< 1 min';
+  const totalMin = Math.round(durationMs / 60_000);
+  if (totalMin < 60) return `${totalMin} min`;
+  if (totalMin < 60 * 24) {
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return m ? `${h} h ${pad(m)}` : `${h} h`;
+  }
+  const d = Math.floor(totalMin / (60 * 24));
+  const h = Math.floor((totalMin % (60 * 24)) / 60);
+  return h ? `${d} j ${h} h` : `${d} j`;
+}
+
+function interventionsLabel(h: HumanActionCounts): string {
+  if (h.total === 0) return 'Aucune';
+  const parts: string[] = [];
+  if (h.comments) parts.push(`${h.comments} commentaire${h.comments > 1 ? 's' : ''}`);
+  if (h.gates) parts.push(`${h.gates} gate${h.gates > 1 ? 's' : ''}`);
+  if (h.routes) parts.push(`${h.routes} arbitrage${h.routes > 1 ? 's' : ''} de route`);
+  return `${h.total} (${parts.join(', ')})`;
 }
 
 function durationLabel(fromIso: string | null, toIso: string | null): string | null {
@@ -439,7 +481,11 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
     const prev = zones[zones.length - 1];
     if (prev) prev.to = from;
     const id = `status:${zones.length}`;
-    zones.push({ status, from, to: now, actorName, approximate, eventId: id });
+    zones.push({
+      status, from, to: now, actorName, approximate, eventId: id,
+      // Filled once every zone is known (see "Phase metrics" below).
+      durationMs: 0, durationLabel: '', humanActions: { total: 0, comments: 0, gates: 0, routes: 0 }, current: false,
+    });
     const tooltip = blankTooltip(
       prev ? `${statusLabel(prev.status)} → ${statusLabel(status)}` : statusLabel(status),
       'Statut',
@@ -877,6 +923,59 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
         ariaLabel: `PR #${num} mergée, ${hhmm(mAt)}`,
       });
     }
+  }
+
+  // ── Phase metrics: duration and human interventions per status zone ──
+  // An intervention is a human action that unblocks or steers the work:
+  //  - a user comment (mentions and answers to a waiting_for_info included — the
+  //    front posts the answer as a user comment);
+  //  - a decided human gate (`outcome` set; a gate still needs_review is not one);
+  //  - a route arbitrated by someone (`routing.decidedBy`, human gates excluded:
+  //    already counted above).
+  // Deliberately NOT counted: `output.humanResponse` (same answer as the user
+  // comment → double count), agent comments (incl. the "workflow:X → Step"
+  // decision echo), status moves (they are the phase boundary), field edits,
+  // links, deliverable reads, retries (manual and automatic look the same).
+  const interventions: { at: number; type: 'comments' | 'gates' | 'routes' }[] = [];
+  for (const c of src.comments) {
+    if (c.authorType === 'user') interventions.push({ at: clamp(ms(c.createdAt) ?? now), type: 'comments' });
+  }
+  for (const { run, stepRuns } of src.runs) {
+    const steps = new Map((run.templateSnapshot?.steps ?? []).map((s) => [s.id, s]));
+    for (const sr of stepRuns) {
+      const isGate = steps.get(sr.stepId)?.executorType === 'human_gate';
+      const type = isGate && sr.output?.outcome ? 'gates' : !isGate && sr.output?.routing?.decidedBy ? 'routes' : null;
+      if (!type) continue;
+      interventions.push({ at: clamp(ms(sr.completedAt ?? sr.startedAt ?? sr.createdAt) ?? now), type });
+    }
+  }
+  for (const it of interventions) {
+    // Half-open [from, to): on a boundary it belongs to the next zone; before the
+    // first zone, to the first one.
+    let idx = 0;
+    for (let i = 0; i < zones.length; i++) if (zones[i]!.from <= it.at) idx = i;
+    const h = zones[idx]!.humanActions;
+    h[it.type]++;
+    h.total++;
+  }
+  const totalByStatus = new Map<TicketStatus, { count: number; ms: number }>();
+  zones.forEach((z, i) => {
+    z.durationMs = Math.max(0, z.to - z.from);
+    z.durationLabel = `${z.approximate ? '≈ ' : ''}${formatPhaseDuration(z.durationMs)}`;
+    z.current = i === zones.length - 1;
+    const t = totalByStatus.get(z.status) ?? { count: 0, ms: 0 };
+    totalByStatus.set(z.status, { count: t.count + 1, ms: t.ms + z.durationMs });
+  });
+  // The status pill's tooltip / aria depend on `to`, known only now.
+  for (const z of zones) {
+    const d = drafts.find((x) => x.id === z.eventId);
+    if (!d) continue;
+    d.tooltip.rows.push(['Durée', `${z.durationLabel}${z.current ? ' · en cours' : ''}`]);
+    const total = totalByStatus.get(z.status)!;
+    if (total.count > 1) d.tooltip.rows.push([`Total ${statusLabel(z.status)}`, formatPhaseDuration(total.ms)]);
+    d.tooltip.rows.push(['Interventions', interventionsLabel(z.humanActions)]);
+    const n = z.humanActions.total;
+    d.ariaLabel += `, durée ${z.durationLabel}${n ? `, ${n} intervention${n > 1 ? 's' : ''} humaine${n > 1 ? 's' : ''}` : ''}`;
   }
 
   // ── Sort, clocks, active span ──

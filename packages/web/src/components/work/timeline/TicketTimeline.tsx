@@ -21,7 +21,7 @@ import { TicketTypeIcon } from '../../tickets/TicketTypeBadge';
 import type { TimelineAction, TimelineEvent, TimelineModel } from './buildTimeline';
 import { GEOMETRY, layoutTimeline, type TimelineFilters } from './layoutTimeline';
 import { LanePicto, SpineNode } from './TimelineNode';
-import { TimelineZoneBands, TimelineZonePills } from './TimelineZones';
+import { TimelineZoneBands, TimelineZoneMetrics, TimelineZonePills } from './TimelineZones';
 import { TimelineForkCurves, TimelineForkOptions } from './TimelineFork';
 import { glyphHue } from './TimelineGlyph';
 
@@ -250,7 +250,14 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
               <text x={layout.nowX + 4} y={11} fontSize={10} fontFamily="ui-monospace, monospace" fill="var(--theme-text-muted)">maintenant</text>
             </svg>
 
-            <TimelineZonePills zones={layout.zones} events={eventsById} scrollLeft={scrollLeft} />
+            <TimelineZonePills
+              zones={layout.zones}
+              events={eventsById}
+              scrollLeft={scrollLeft}
+              viewportWidth={viewportW}
+              nowX={layout.nowX}
+            />
+            <TimelineZoneMetrics zones={layout.zones} scrollLeft={scrollLeft} viewportWidth={viewportW} nowX={layout.nowX} />
 
             {layout.items.map((it) =>
               it.event.lane === 'spine' ? (

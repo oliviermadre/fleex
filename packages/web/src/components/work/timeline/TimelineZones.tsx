@@ -11,10 +11,117 @@ import { Tooltip } from '../../ui/Tooltip';
 import type { TimelineEvent } from './buildTimeline';
 import { GEOMETRY, type PlacedZone } from './layoutTimeline';
 import { TimelineTooltip } from './TimelineTooltip';
+import { GlyphIcon } from './TimelineGlyph';
 
 /** Below this width a zone only shows the status dot. */
 const PILL_MIN = 64;
 const PILL_EST = 150;
+/** Rough width of one 11px character (no DOM measuring: the layout stays pure and testable). */
+const CHAR_W = 6.5;
+const METRICS_GAP = 8;
+
+/** Sticky x of a zone's pill: follows the viewport's left edge while the zone is on screen. */
+function pillLeft(z: PlacedZone, scrollLeft: number): number {
+  const width = z.x1 - z.x0;
+  if (width < PILL_MIN) return z.x0 + 4;
+  return Math.max(z.x0 + 6, Math.min(scrollLeft + 6, z.x1 - Math.min(PILL_EST, width) - 6));
+}
+
+function estimatePillWidth(z: PlacedZone): number {
+  const label = TICKET_STATUS_LABELS[z.status] ?? z.status;
+  const text = label.length + (z.actorName ? 5 + z.actorName.length : 0) + (z.approximate ? 2 : 0);
+  return Math.min(PILL_EST, z.x1 - z.x0 - 12, 30 + text * CHAR_W);
+}
+
+function estimateMetricsWidth(z: PlacedZone): number {
+  const count = z.humanActions.total;
+  return 16 + z.durationLabel.length * CHAR_W + (count > 0 ? 30 + String(count).length * CHAR_W : 0);
+}
+
+export type ZoneMetricsPlacement =
+  | { mode: 'badge'; left: number }
+  | { mode: 'pill' }
+  | { mode: 'none' };
+
+/**
+ * Where a zone's "duration · 👤 n" goes: a badge centred on the VISIBLE part of
+ * the zone (the last zone stops at the now line); pushed right of the pill when
+ * they would overlap; folded into the pill when there is no room for both; only
+ * in the tooltip on a narrow zone. `viewportWidth` 0 = not measured yet: the
+ * whole zone counts as visible.
+ */
+export function placeZoneMetrics(
+  z: PlacedZone,
+  { scrollLeft, viewportWidth, nowX, last }: { scrollLeft: number; viewportWidth: number; nowX: number; last: boolean },
+): ZoneMetricsPlacement {
+  if (z.x1 - z.x0 < PILL_MIN) return { mode: 'none' };
+  const end = last ? Math.min(z.x1, nowX) : z.x1;
+  const v0 = Math.max(z.x0, scrollLeft);
+  const v1 = viewportWidth > 0 ? Math.min(end, scrollLeft + viewportWidth) : end;
+  const w = estimateMetricsWidth(z);
+  let left = (v0 + v1) / 2 - w / 2;
+  const pillRight = pillLeft(z, scrollLeft) + estimatePillWidth(z);
+  if (left < pillRight + METRICS_GAP) left = pillRight + METRICS_GAP;
+  if (left + w > end - 6) return { mode: 'pill' };
+  return { mode: 'badge', left };
+}
+
+function MetricsContent({ z }: { z: PlacedZone }) {
+  const count = z.humanActions.total;
+  return (
+    <>
+      <span>{z.durationLabel}</span>
+      {count > 0 && (
+        <>
+          <span className="opacity-60">·</span>
+          <span className="flex items-center gap-0.5 [&_svg]:h-3 [&_svg]:w-3">
+            <GlyphIcon glyph={{ type: 'human' }} size={12} />
+            {count}
+          </span>
+        </>
+      )}
+    </>
+  );
+}
+
+/** The "5 h 20 · 👤 3" badge of each wide-enough zone (decorative: the pill carries the a11y). */
+export function TimelineZoneMetrics({
+  zones,
+  scrollLeft,
+  viewportWidth,
+  nowX,
+}: {
+  zones: PlacedZone[];
+  scrollLeft: number;
+  viewportWidth: number;
+  nowX: number;
+}) {
+  return (
+    <>
+      {zones.map((z, i) => {
+        const p = placeZoneMetrics(z, { scrollLeft, viewportWidth, nowX, last: i === zones.length - 1 });
+        if (p.mode !== 'badge') return null;
+        const hue = STATUS_HUES[z.status] ?? 'gray';
+        return (
+          <div
+            key={z.eventId}
+            aria-hidden
+            data-testid="timeline-zone-metrics"
+            className="pointer-events-none absolute flex h-5 items-center gap-1 whitespace-nowrap rounded-full px-2 text-[11px] font-medium tabular-nums"
+            style={{
+              left: p.left,
+              top: GEOMETRY.statusY,
+              color: `var(--tint-${hue}-solid)`,
+              background: `var(--tint-${hue}-bg)`,
+            }}
+          >
+            <MetricsContent z={z} />
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 /**
  * `fadeFrom`: x (the now line) past which the last zone — the current status —
@@ -57,18 +164,22 @@ export function TimelineZonePills({
   zones,
   events,
   scrollLeft,
+  viewportWidth,
+  nowX,
 }: {
   zones: PlacedZone[];
   events: Map<string, TimelineEvent>;
   scrollLeft: number;
+  viewportWidth: number;
+  nowX: number;
 }) {
   return (
     <>
-      {zones.map((z) => {
+      {zones.map((z, i) => {
         const width = z.x1 - z.x0;
         const narrow = width < PILL_MIN;
-        // Sticky: follow the viewport's left edge while the zone is on screen.
-        const left = Math.max(z.x0 + 6, Math.min(scrollLeft + 6, z.x1 - Math.min(PILL_EST, width) - 6));
+        const left = pillLeft(z, scrollLeft);
+        const inPill = placeZoneMetrics(z, { scrollLeft, viewportWidth, nowX, last: i === zones.length - 1 }).mode === 'pill';
         const event = events.get(z.eventId);
         const label = TICKET_STATUS_LABELS[z.status] ?? z.status;
         const pill = (
@@ -88,7 +199,13 @@ export function TimelineZonePills({
               <>
                 <span>{label}</span>
                 {z.actorName && <span className="truncate italic text-[var(--theme-text-muted)]">par {z.actorName}</span>}
-                {z.approximate && <span className="italic text-[var(--theme-text-muted)]">≈</span>}
+                {z.approximate && !inPill && <span className="italic text-[var(--theme-text-muted)]">≈</span>}
+                {inPill && (
+                  <span data-testid="timeline-zone-metrics" className="flex shrink-0 items-center gap-1 tabular-nums">
+                    <span className="opacity-60">·</span>
+                    <MetricsContent z={z} />
+                  </span>
+                )}
               </>
             )}
           </button>
