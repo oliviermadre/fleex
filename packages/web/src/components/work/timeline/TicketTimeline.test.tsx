@@ -153,7 +153,7 @@ describe('TicketTimeline — annotations', () => {
     authorType: 'user', authorName: 'nas', createdAt: iso, updatedAt: iso, ...over,
   });
 
-  function setupAnnotated(list: TimelineAnnotation[], filters = ALL) {
+  function setupAnnotated(list: TimelineAnnotation[], filters = ALL, maxBandHeight?: number) {
     const props = {
       list, highlight: null, onCreateAt: vi.fn<TimelineAnnotationsProps['onCreateAt']>(), onOpenCard: vi.fn<TimelineAnnotationsProps['onOpenCard']>(),
     };
@@ -162,6 +162,7 @@ describe('TicketTimeline — annotations', () => {
       <TicketTimeline
         header={header} model={buildTimeline(fixture591(), NOW)} filters={filters}
         onToggleFilter={vi.fn()} onAction={vi.fn()} annotations={props} onContentHeight={onContentHeight}
+        maxBandHeight={maxBandHeight}
       />,
     );
     return { ...props, onContentHeight };
@@ -229,6 +230,25 @@ describe('TicketTimeline — annotations', () => {
     fireEvent.keyDown(created, { key: 'a' });
     const ev = buildTimeline(fixture591(), NOW).events.find((e) => e.id === created.dataset.timelineNode)!;
     expect(onCreateAt).toHaveBeenCalledWith(ev.at, expect.anything());
+  });
+
+  // Ticket feedback: a short drawer collapses the cards into pills, still on the lifeline, still clickable.
+  it('shows pills only when the drawer leaves no room for a card row', () => {
+    const { onOpenCard, onContentHeight } = setupAnnotated([ann('a', at(9, 0), { tone: 'success' })], ALL, BAND.oneRow - 1);
+    expect(screen.queryByTestId('annotation-card')).toBeNull();
+    const pill = screen.getByTestId('annotation-pill');
+    expect((pill.querySelector('[data-tone-icon]') as HTMLElement).dataset.toneIcon).toBe('success');
+    expect(onContentHeight).toHaveBeenLastCalledWith(BAND.mini + 196);
+    const d = screen.getByTestId('annotation-anchor').querySelector('path')!.getAttribute('d')!;
+    expect(Number(d.trim().split(/\s+/).pop())).toBe(BAND.mini + GEOMETRY.spineY);
+    fireEvent.click(pill);
+    expect(onOpenCard).toHaveBeenCalledWith(expect.objectContaining({ kind: 'card' }), expect.anything());
+  });
+
+  it('keeps full cards when the drawer has room for a row', () => {
+    setupAnnotated([ann('a', at(9, 0))], ALL, BAND.oneRow);
+    expect(screen.getByTestId('annotation-card')).toBeTruthy();
+    expect(screen.queryByTestId('annotation-pill')).toBeNull();
   });
 
   // Ticket feedback 1/: the dotted anchor lands on the lifeline, it doesn't run past it.

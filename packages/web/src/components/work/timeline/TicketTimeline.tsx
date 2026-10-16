@@ -33,7 +33,7 @@ import { TimelineTimeSummary } from './TimelineTimeSummary';
 import { TimelineForkCurves, TimelineForkOptions } from './TimelineFork';
 import { glyphHue } from './TimelineGlyph';
 import type { UiAnnotation } from '../../../stores/annotationStore';
-import { instantAtCursor, layoutAnnotationBand, timeAnchors, type CursorInstant, type PlacedCard } from './layoutAnnotations';
+import { instantAtCursor, layoutAnnotationBand, rowsForBudget, timeAnchors, type CursorInstant, type PlacedCard } from './layoutAnnotations';
 import { AnnotationAnchors, TimelineAnnotationBand, cardNodeId } from './TimelineAnnotationBand';
 import type { AnchorRect } from './AnnotationPopovers';
 
@@ -70,6 +70,11 @@ export interface TicketTimelineProps {
   /** Horizontal zoom of the frieze (ZOOM_LEVELS); `onZoom` omitted → no zoom control. */
   zoom?: number;
   onZoom?: (zoom: number) => void;
+  /**
+   * Room (px) the host gives the annotation band above the frieze: it picks
+   * two rows, one row (more stacking) or pills only. Omitted → as tall as needed.
+   */
+  maxBandHeight?: number;
 }
 
 const rectOf = (el: Element): AnchorRect => {
@@ -77,7 +82,7 @@ const rectOf = (el: Element): AnchorRect => {
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 };
 
-export function TicketTimeline({ header, model, filters, onToggleFilter, onAction, annotations, onContentHeight, zoom = 1, onZoom }: TicketTimelineProps) {
+export function TicketTimeline({ header, model, filters, onToggleFilter, onAction, annotations, onContentHeight, zoom = 1, onZoom, maxBandHeight }: TicketTimelineProps) {
   const viewport = useRef<HTMLDivElement>(null);
   // Viewport width: a short frieze is stretched to fill it.
   const [viewportW, setViewportW] = useState(0);
@@ -93,8 +98,11 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
   const layout = useMemo(() => (model ? layoutTimeline(model, filters, viewportW, zoom) : null), [model, filters, viewportW, zoom]);
   const anchors = useMemo(() => (layout && model ? timeAnchors(layout, model.now) : []), [layout, model]);
   const band = useMemo(
-    () => (layout && annotations ? layoutAnnotationBand(annotations.list, anchors, layout.width, filters.annotations) : { cards: [], height: 0 }),
-    [layout, annotations, anchors, filters.annotations],
+    () =>
+      layout && annotations
+        ? layoutAnnotationBand(annotations.list, anchors, layout.width, filters.annotations, maxBandHeight == null ? 2 : rowsForBudget(maxBandHeight))
+        : { cards: [], height: 0, mode: 'cards' as const },
+    [layout, annotations, anchors, filters.annotations, maxBandHeight],
   );
   const bandH = band.height;
   const contentH = bandH + GEOMETRY.height;

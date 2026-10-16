@@ -23,6 +23,10 @@ import { TicketTimeline, type TimelineAnnotationsProps } from './TicketTimeline'
 import { AnnotationComposer, AnnotationStackList, AnnotationViewer, type AnchorRect } from './AnnotationPopovers';
 import type { PlacedCard } from './layoutAnnotations';
 import { useTicketTimeline } from './useTicketTimeline';
+import { GEOMETRY } from './layoutTimeline';
+
+/** Vertical padding of the drawer around the timeline content. */
+const DRAWER_PAD = 16;
 
 interface Props {
   task: WorkTask;
@@ -160,7 +164,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
       ref={root}
       className="relative flex shrink-0 flex-col border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
       // The annotation band sits on top of the frieze: grow to show it whole.
-      style={{ height: Math.max(height, contentH + 16) }}
+      style={{ height: Math.max(height, contentH + DRAWER_PAD) }}
       data-testid="timeline-drawer"
     >
       <div
@@ -178,6 +182,9 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
         onContentHeight={setContentH}
         zoom={zoom}
         onZoom={setZoom}
+        // What the user's drawer height leaves above the frieze decides the band:
+        // two rows, one row, then pills only as it shrinks.
+        maxBandHeight={height - DRAWER_PAD - GEOMETRY.height}
       />
       {composer && composerAnchor && (
         <AnnotationComposer

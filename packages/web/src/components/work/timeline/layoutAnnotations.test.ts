@@ -5,10 +5,12 @@ import { layoutTimeline } from './layoutTimeline';
 import {
   BAND,
   CARD_W,
+  PILL,
   SNAP_PX,
   firstImage,
   instantAtCursor,
   layoutAnnotationBand,
+  rowsForBudget,
   timeAnchors,
   timeAtX,
   xAtTime,
@@ -91,7 +93,7 @@ describe('layoutAnnotationBand', () => {
 
   it('collapses to a thin hover strip when empty, and disappears when filtered out (AC12)', () => {
     expect(layoutAnnotationBand([], anchors, layout.width).height).toBe(BAND.empty);
-    expect(layoutAnnotationBand([annotation('a', at(9, 0))], anchors, layout.width, false)).toEqual({ cards: [], height: BAND.hidden });
+    expect(layoutAnnotationBand([annotation('a', at(9, 0))], anchors, layout.width, false)).toEqual({ cards: [], height: BAND.hidden, mode: 'cards' });
   });
 
   it('orders cards chronologically and anchors each on its instant', () => {
@@ -121,6 +123,43 @@ describe('layoutAnnotationBand', () => {
 
     const apart = layoutAnnotationBand([annotation('a', iso(500)), annotation('b', iso(500 + CARD_W + 20))], lin, 5000);
     expect(apart.cards.map((c) => c.row)).toEqual([0, 0]);
+  });
+
+  // Ticket feedback: the band follows the drawer height — two rows, one row (regrouped), then pills only.
+  it('picks two rows, one row or pills from the room above the frieze', () => {
+    expect(rowsForBudget(BAND.twoRows)).toBe(2);
+    expect(rowsForBudget(BAND.twoRows - 1)).toBe(1);
+    expect(rowsForBudget(BAND.oneRow)).toBe(1);
+    expect(rowsForBudget(BAND.oneRow - 1)).toBe(0);
+    expect(rowsForBudget(-50)).toBe(0);
+  });
+
+  it('regroups into a stack instead of opening a second row when only one row fits', () => {
+    const lin = [{ at: 0, x: 0 }, { at: 1_000_000, x: 1_000_000 }];
+    const iso = (x: number) => new Date(x).toISOString();
+    const one = layoutAnnotationBand([annotation('a', iso(500)), annotation('b', iso(600))], lin, 5000, true, 1);
+    expect(one.height).toBe(BAND.oneRow);
+    expect(one.cards).toHaveLength(1);
+    expect(one.cards[0]).toMatchObject({ kind: 'stack', row: 0 });
+    expect(one.cards[0]!.kind === 'stack' && one.cards[0]!.items.map((i) => i.annotation.id)).toEqual(['a', 'b']);
+  });
+
+  it('shows pills only when no card row fits, merging pills that would touch', () => {
+    const lin = [{ at: 0, x: 0 }, { at: 1_000_000, x: 1_000_000 }];
+    const iso = (x: number) => new Date(x).toISOString();
+    const mini = layoutAnnotationBand(
+      [annotation('a', iso(500)), annotation('b', iso(510)), annotation('c', iso(800))],
+      lin, 5000, true, 0,
+    );
+    expect(mini.mode).toBe('mini');
+    expect(mini.height).toBe(BAND.mini);
+    expect(mini.height).toBeLessThan(BAND.oneRow);
+    expect(mini.cards.map((c) => c.kind)).toEqual(['stack', 'card']);
+    // A lone pill is centred on its exact instant.
+    const lone = mini.cards[1]!;
+    expect(lone.kind === 'card' && lone.left + PILL / 2).toBe(800);
+    // No annotation at all still keeps the thin hover strip, never the mini band.
+    expect(layoutAnnotationBand([], lin, 5000, true, 0).height).toBe(BAND.empty);
   });
 
   it('keeps a card inside the frieze while its anchor stays on the exact instant', () => {

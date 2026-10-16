@@ -361,7 +361,7 @@ const DEFAULTS: PersistedWork = {
   shellPaneIdsByTicket: {},
   shellHeight: 240,
   timelineOpen: false,
-  timelineHeight: 212,
+  timelineHeight: 284,
   timelineFilters: DEFAULT_TIMELINE_FILTERS,
   timelineZoom: 1,
   rightPanelWidth: 296,

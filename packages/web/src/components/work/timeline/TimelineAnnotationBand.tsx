@@ -13,6 +13,9 @@ import { GEOMETRY } from './layoutTimeline';
 import {
   CARD_H,
   CARD_W,
+  PILL,
+  PILL_STACK_W,
+  PILL_TOP,
   TONE_HUE,
   cardTop,
   firstImage,
@@ -60,11 +63,13 @@ export function AnnotationAnchors({ band, width }: { band: AnnotationBand<UiAnno
   return (
     <svg className="pointer-events-none absolute left-0 top-0" width={width} height={h + GEOMETRY.height} aria-hidden>
       {band.cards.flatMap((card) => {
-        const y0 = cardTop(card.row, h) + CARD_H;
+        const mini = band.mode === 'mini';
+        const y0 = mini ? PILL_TOP + PILL : cardTop(card.row, h) + CARD_H;
+        const cardW = mini ? (card.kind === 'card' ? PILL : PILL_STACK_W) : CARD_W;
         const items = card.kind === 'card' ? [card.item] : card.items;
         const lines = items.map(({ annotation: a, x }) => {
           // A card pushed sideways keeps its anchor on the exact instant: short elbow.
-          const cx = Math.min(Math.max(x, card.left + 10), card.left + CARD_W - 10);
+          const cx = Math.min(Math.max(x, card.left + Math.min(10, cardW / 2)), card.left + cardW - Math.min(10, cardW / 2));
           return (
             <g key={`anchor-${a.id}`} data-testid="annotation-anchor">
               <path
@@ -119,6 +124,7 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
         const id = cardNodeId(card);
         const top = cardTop(card.row, h);
         const pulse = pulsing === id;
+        if (band.mode === 'mini') return <AnnotationPill key={id} id={id} card={card} pulse={pulse} onOpen={onOpenCard} />;
         if (card.kind === 'stack') {
           const first = card.items[0]!.annotation;
           const last = card.items[card.items.length - 1]!.annotation;
@@ -237,5 +243,66 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Mini band (drawer too short for cards): one pill per annotation — its tone
+ * icon in its tone colour — or a counted pill when several would touch. Same
+ * click targets as the cards: a pill opens the reader, a counted pill the list.
+ */
+function AnnotationPill({
+  id,
+  card,
+  pulse,
+  onOpen,
+}: {
+  id: string;
+  card: PlacedCard<UiAnnotation>;
+  pulse: boolean;
+  onOpen: (card: PlacedCard<UiAnnotation>, el: HTMLElement) => void;
+}) {
+  const ring = pulse && 'ring-2 ring-[var(--theme-accent)]';
+  if (card.kind === 'stack') {
+    return (
+      <button
+        type="button"
+        data-timeline-node={id}
+        data-testid="annotation-pill"
+        aria-label={`${card.items.length} annotations`}
+        title={`${card.items.length} annotations`}
+        onClick={(e) => onOpen(card, e.currentTarget)}
+        className={cn(
+          'absolute z-[4] flex items-center justify-center rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-overlay)] font-mono text-[10px] font-semibold text-[var(--theme-text-primary)] transition-transform hover:scale-110',
+          ring,
+        )}
+        style={{ left: card.left, top: PILL_TOP, width: PILL_STACK_W, height: PILL }}
+      >
+        {card.items.length}
+      </button>
+    );
+  }
+  const a = card.item.annotation;
+  const hue = a.uiState === 'error' ? 'red' : TONE_HUE[a.tone];
+  return (
+    <button
+      type="button"
+      data-timeline-node={id}
+      data-testid="annotation-pill"
+      aria-label={`Annotation : ${a.title}, ${longWhen(a.at)}`}
+      title={a.title}
+      onClick={(e) => onOpen(card, e.currentTarget)}
+      className={cn('absolute z-[4] flex items-center justify-center rounded-full border transition-transform hover:scale-110', a.uiState === 'saving' && 'opacity-60', ring)}
+      style={{
+        left: card.left,
+        top: PILL_TOP,
+        width: PILL,
+        height: PILL,
+        background: `var(--tint-${hue}-bg)`,
+        borderColor: `var(--tint-${hue}-border)`,
+      }}
+    >
+      <AnnotationToneIcon tone={a.tone} size={11} hue={hue} />
+    </button>
   );
 }

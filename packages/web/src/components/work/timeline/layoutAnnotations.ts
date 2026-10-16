@@ -7,6 +7,8 @@
  * monotonic, so the time ↔ x mapping is too), and the inverse mapping turns a
  * cursor position into the instant to annotate. Cards live in their own band
  * above the frieze, with their own collision handling (2nd row, then stacks).
+ * When the drawer is too short for cards, the band collapses to a strip of
+ * pills (one tone icon per annotation), still hung from the lifeline.
  */
 import type { AnnotationTone, TimelineAnnotation } from '@fleex/shared';
 import type { TintHue } from '../../../lib/tints';
@@ -21,8 +23,19 @@ export const SNAP_PX = 8;
 /** More than this many cards within one card width are grouped into a stack. */
 const STACK_OVER = 3;
 
-/** Band height: none when filtered out, a thin strip to hover when empty, one or two rows. */
-export const BAND = { hidden: 0, empty: 16, oneRow: 72, twoRows: 132 } as const;
+/** Band height: none when filtered out, a thin strip to hover when empty, pills only, one or two rows. */
+export const BAND = { hidden: 0, empty: 16, mini: 26, oneRow: 72, twoRows: 132 } as const;
+/** Diameter of a pill in the mini band (a stack pill is a bit wider). */
+export const PILL = 18;
+export const PILL_STACK_W = 24;
+
+/** Card rows the band may use: 2, 1, or 0 (pills only). */
+export type BandRows = 0 | 1 | 2;
+
+/** How many card rows fit in `budget` px above the frieze — fewer rows regroup more, 0 → pills only. */
+export function rowsForBudget(budget: number): BandRows {
+  return budget >= BAND.twoRows ? 2 : budget >= BAND.oneRow ? 1 : 0;
+}
 
 export const TONE_HUE: Record<AnnotationTone, TintHue> = {
   info: 'blue',
@@ -130,6 +143,8 @@ export type PlacedCard<A extends TimelineAnnotation = TimelineAnnotation> =
 export interface AnnotationBand<A extends TimelineAnnotation = TimelineAnnotation> {
   cards: PlacedCard<A>[];
   height: number;
+  /** 'mini': `cards` are pills (left = pill's left edge, row 0). */
+  mode: 'cards' | 'mini';
 }
 
 const itemsOf = <A extends TimelineAnnotation>(c: PlacedCard<A>) => (c.kind === 'card' ? [c.item] : c.items);
@@ -148,13 +163,16 @@ export function layoutAnnotationBand<A extends TimelineAnnotation>(
   anchors: readonly TimeAnchor[],
   width: number,
   enabled = true,
+  maxRows: BandRows = 2,
 ): AnnotationBand<A> {
-  if (!enabled) return { cards: [], height: BAND.hidden };
-  if (annotations.length === 0) return { cards: [], height: BAND.empty };
+  if (!enabled) return { cards: [], height: BAND.hidden, mode: 'cards' };
+  if (annotations.length === 0) return { cards: [], height: BAND.empty, mode: 'cards' };
 
   const items = annotations
     .map((a) => ({ annotation: a, x: xAtTime(anchors, Date.parse(a.at)) }))
     .sort((p, q) => p.x - q.x || Date.parse(p.annotation.at) - Date.parse(q.annotation.at));
+
+  if (maxRows === 0) return { cards: layoutPills(items), height: BAND.mini, mode: 'mini' };
 
   // 1) Dense clusters become stacks up front.
   const groups: PlacedAnnotation<A>[][] = [];
@@ -175,7 +193,7 @@ export function layoutAnnotationBand<A extends TimelineAnnotation>(
   for (const g of groups) {
     const x = g.length === 1 ? g[0]!.x : (g[0]!.x + g[g.length - 1]!.x) / 2;
     const left = centeredLeft(x, width);
-    const row = ([0, 1] as const).find((r) => {
+    const row = ([0, 1] as const).filter((r) => r < maxRows).find((r) => {
       const last = rows[r][rows[r].length - 1];
       return !last || left >= last.left + CARD_W + CARD_GAP;
     });
@@ -183,15 +201,35 @@ export function layoutAnnotationBand<A extends TimelineAnnotation>(
       rows[row].push(g.length === 1 ? { kind: 'card', item: g[0]!, left, row } : { kind: 'stack', items: g, left, row });
       continue;
     }
-    const prev = rows[1].pop()!;
+    // No room on any allowed row: merge into the last card of the bottom-most one.
+    const lastRow = (maxRows - 1) as 0 | 1;
+    const prev = rows[lastRow].pop()!;
     const merged = [...itemsOf(prev), ...g];
     const mx = (merged[0]!.x + merged[merged.length - 1]!.x) / 2;
-    rows[1].push({ kind: 'stack', items: merged, left: centeredLeft(mx, width), row: 1 });
+    rows[lastRow].push({ kind: 'stack', items: merged, left: centeredLeft(mx, width), row: lastRow });
   }
 
   const cards = [...rows[0], ...rows[1]];
-  return { cards, height: rows[1].length > 0 ? BAND.twoRows : BAND.oneRow };
+  return { cards, height: rows[1].length > 0 ? BAND.twoRows : BAND.oneRow, mode: 'cards' };
 }
+
+/** Mini band: one pill per annotation at its exact x; pills that would touch merge into a counted one. */
+function layoutPills<A extends TimelineAnnotation>(items: PlacedAnnotation<A>[]): PlacedCard<A>[] {
+  const groups: PlacedAnnotation<A>[][] = [];
+  for (const it of items) {
+    const g = groups[groups.length - 1];
+    if (g && it.x - g[g.length - 1]!.x < PILL + 4) g.push(it);
+    else groups.push([it]);
+  }
+  return groups.map((g) => {
+    if (g.length === 1) return { kind: 'card', item: g[0]!, left: g[0]!.x - PILL / 2, row: 0 };
+    const mx = (g[0]!.x + g[g.length - 1]!.x) / 2;
+    return { kind: 'stack', items: g, left: mx - PILL_STACK_W / 2, row: 0 };
+  });
+}
+
+/** Top y of a pill in the mini band. */
+export const PILL_TOP = (BAND.mini - PILL) / 2;
 
 /** Top y of a card in a band of `bandHeight` (row 0 sits right above the frieze). */
 export function cardTop(row: 0 | 1, bandHeight: number): number {
