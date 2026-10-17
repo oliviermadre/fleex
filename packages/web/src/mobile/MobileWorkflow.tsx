@@ -6,6 +6,7 @@ import { postTicketComment } from '../services/api';
 import { countCompletedSteps } from '../components/workflows/workflowProgress';
 import { tint, tintText } from '../lib/tints';
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
+import { orderStepsByFlow } from './orderSteps';
 
 /**
  * Mobile workflow run view: the desktop DAG (xyflow) doesn't fit a phone, so
@@ -141,14 +142,17 @@ function MobileRunView({
     return m;
   }, [stepRuns]);
 
+  const { steps, edges, entryStepId } = run.templateSnapshot;
+  const orderedSteps = useMemo(() => orderStepsByFlow(steps, edges, entryStepId), [steps, edges, entryStepId]);
+
   // Auto-expand the step waiting on a human, else the current step.
   const actionStepId = useMemo(() => {
-    const needsHuman = run.templateSnapshot.steps.find((s) => {
+    const needsHuman = orderedSteps.find((s) => {
       const st = latestPerStep.get(s.id)?.status;
       return st === 'needs_review' || st === 'awaiting_routing' || st === 'failed';
     });
     return needsHuman?.id ?? run.currentStepId ?? null;
-  }, [run.templateSnapshot.steps, run.currentStepId, latestPerStep]);
+  }, [orderedSteps, run.currentStepId, latestPerStep]);
 
   // null = follow actionStepId; 'none' = user explicitly collapsed everything
   const [expandedId, setExpandedId] = useState<string | 'none' | null>(null);
@@ -184,7 +188,7 @@ function MobileRunView({
 
       {/* Step list */}
       <div className="flex flex-col gap-1.5">
-        {run.templateSnapshot.steps.map((step) => {
+        {orderedSteps.map((step) => {
           const sr = latestPerStep.get(step.id);
           const status = sr?.status ?? 'pending';
           const badge = STEP_STATUS_ICON[status];

@@ -20,6 +20,7 @@ import { MobileFocus } from './MobileFocus';
 import { MobileTasks } from './MobileTasks';
 import { MobileTicketDetail } from './MobileTicketDetail';
 import { MobileAssistant } from './MobileAssistant';
+import { MobileDeliverableOverlayHost } from './MobileDeliverableReader';
 import { MobileMoreSheet, MobileMorePageHost, MoreDotsIcon } from './MobileMore';
 import { useMobileNavStore, type MobileView } from './mobileNavStore';
 
@@ -137,6 +138,10 @@ export function MobileApp() {
       {/* Assistant sheet: mounted once, slid off-screen (not unmounted) when
           closed so the conversation survives. */}
       <AssistantSheet open={assistantOpen} onClose={() => setAssistantOpen(false)} ticket={ticket} />
+
+      {/* Last, so it covers the Focus sheet (same z-50): opened by the shared
+          deliverable cards (Focus thread…) through the uiStore. */}
+      <MobileDeliverableOverlayHost />
     </div>
   );
 }
