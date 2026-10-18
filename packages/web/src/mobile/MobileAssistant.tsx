@@ -70,6 +70,11 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
     maybeStick();
   }, [items, maybeStick]);
 
+  // Opening or switching conversation lands at its bottom, following.
+  useLayoutEffect(() => {
+    scrollToBottom();
+  }, [activeId, scrollToBottom]);
+
   const activeSession = sessions.find((s) => s.id === activeId) ?? null;
   const busy = activeSession ? activeSession.status !== 'idle' : false;
 
