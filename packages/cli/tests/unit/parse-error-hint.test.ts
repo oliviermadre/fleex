@@ -94,6 +94,19 @@ describe('a positional argument passed as a flag', () => {
       .toContain('Try: fleex memory ask "say \\"hi\\" \\$HOME"');
   });
 
+  it('keeps a value that starts with a dash, after `--` so the suggestion still parses', () => {
+    // Found in QA: `"<question>" "-1 bug"` was suggested, and replaying it failed
+    // with `unknown option '-1 bug'`. A suggestion that fails is worse than none.
+    expect(run('memory', 'ask', '--question', '-1 bug', '--repo', 'o/r').stderr)
+      .toContain('Try: fleex memory ask --repo o/r -- "-1 bug"');
+    expect(run('memory', 'ask', '--question=-1', '--repo', 'o/r').stderr)
+      .toContain('Try: fleex memory ask --repo o/r -- "-1"');
+    // A long flag is still never taken as the value.
+    expect(run('memory', 'ask', '--question', '--foo').stderr).toContain('Try: fleex memory ask "<question>" --foo');
+    const replay = run('memory', 'ask', '--repo', 'o/r', '--', '-1 bug');
+    expect(replay.reached).toBe(true);
+  });
+
   it('suggests the canonical command name when an alias was typed', () => {
     expect(run('memory', 'a', '--question', 'q').stderr).toContain('Try: fleex memory ask "q"');
   });

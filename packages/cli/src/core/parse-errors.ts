@@ -41,6 +41,14 @@ function tokensAfterPath(cmd: Command, rawArgs: readonly string[]): string[] {
   return rawArgs.slice(Math.min(i, rawArgs.length));
 }
 
+/** `--repo`, `--foo=x`, `-r`, `-h`: a token that reads as a flag rather than a value like `-1 bug`. */
+function isOption(cmd: Command, token: string): boolean {
+  if (!token.startsWith('-')) return false;
+  const flag = token.split('=')[0];
+  if (/^--[a-z]/i.test(token)) return true; // a long flag, known or not, is never the value
+  return flag === '-h' || flag === '--' || cmd.options.some((o) => o.short === flag);
+}
+
 /** `fleex memory ask` — the canonical path, without aliases. */
 function commandPath(cmd: Command): string {
   const names: string[] = [];
@@ -65,13 +73,16 @@ export function positionalHint(flag: string, cmd: Command, rawArgs: readonly str
   let consumed = 1;
   if (eq !== -1) {
     value = flag.slice(eq + 1);
-  } else if (at !== -1 && tokens[at + 1] !== undefined && !tokens[at + 1]!.startsWith('-')) {
+  } else if (at !== -1 && tokens[at + 1] !== undefined && !isOption(cmd, tokens[at + 1]!)) {
     value = tokens[at + 1]!;
     consumed = 2;
   }
-  const rest = at === -1 ? tokens : [...tokens.slice(0, at), ...tokens.slice(at + consumed)];
-  const shown = value === null ? `"<${argument.name()}>"` : quote(value);
-  const tryLine = [commandPath(cmd), shown, ...rest.map(shellToken)].join(' ');
+  const rest = (at === -1 ? tokens : [...tokens.slice(0, at), ...tokens.slice(at + consumed)]).map(shellToken);
+  const path = commandPath(cmd);
+  // A value like `-1 bug` would be read back as an option: it goes after `--`.
+  const tryLine = value === null ? [path, `"<${argument.name()}>"`, ...rest].join(' ')
+    : value.startsWith('-') ? [path, ...rest, '--', quote(value)].join(' ')
+    : [path, quote(value), ...rest].join(' ');
 
   return `error: --${name} is not an option — <${argument.name()}> is a positional argument.\n`
     + `  Try: ${tryLine}`;
