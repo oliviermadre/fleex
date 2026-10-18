@@ -21,6 +21,9 @@ import { useFocusStore, UNDO_MS } from '../stores/focusStore';
 import { useMobileNavStore } from './mobileNavStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { MobileFocus } from './MobileFocus';
+import { MemoryRouter } from 'react-router-dom';
+import { Toaster } from '../components/ui/toast/Toaster';
+import { resetToasts } from '../stores/toastStore';
 
 function ticket(id: string, displayId: number, title: string): Ticket {
   return {
@@ -44,8 +47,19 @@ const GATE: FocusItem = {
   question: null, error: null, idle: null, lastAgentComment: null, costUsd: 0,
 };
 
+/** The page plus the app's one Toaster, where the "Annuler" undo window lives. */
+function renderFocus() {
+  return render(
+    <MemoryRouter>
+      <MobileFocus />
+      <Toaster linksEnabled={false} />
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
   localStorage.clear();
+  resetToasts();
   vi.mocked(api.resolveWorkflowGate).mockClear();
   useMobileNavStore.setState({ requestedDetailTab: null });
   useTicketStore.setState({
@@ -80,14 +94,14 @@ function swipe(el: Element, dx: number) {
 
 describe('MobileFocus', () => {
   it('lists items as compact rows — no action buttons until one is opened', () => {
-    render(<MobileFocus />);
+    renderFocus();
     expect(screen.getByText('Refonte du flux New task')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'approve' })).toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('opens the sheet on a tap, not the ticket', () => {
-    render(<MobileFocus />);
+    renderFocus();
     fireEvent.click(screen.getByText('Refonte du flux New task'));
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'approve' })).toBeTruthy();
@@ -95,7 +109,7 @@ describe('MobileFocus', () => {
   });
 
   it('opens the ticket on its Workflow tab from the sheet', () => {
-    render(<MobileFocus />);
+    renderFocus();
     fireEvent.click(screen.getByText('Refonte du flux New task'));
     fireEvent.click(screen.getByRole('button', { name: /Ouvrir le ticket/ }));
     expect(useTicketStore.getState().selectedTicketId).toBe('t1');
@@ -104,7 +118,7 @@ describe('MobileFocus', () => {
 
   it('holds a gate decision for the undo window, then sends it', async () => {
     vi.useFakeTimers();
-    render(<MobileFocus />);
+    renderFocus();
     fireEvent.click(screen.getByText('Refonte du flux New task'));
     fireEvent.click(screen.getByRole('button', { name: 'approve' }));
     expect(api.resolveWorkflowGate).not.toHaveBeenCalled();
@@ -113,14 +127,16 @@ describe('MobileFocus', () => {
       await vi.advanceTimersByTimeAsync(UNDO_MS + 10);
     });
     expect(api.resolveWorkflowGate).toHaveBeenCalledWith('r1', 's1', { outcome: 'approve', notes: undefined });
+    expect(screen.queryByRole('button', { name: 'Annuler' })).toBeNull();
   });
 
   it('cancels the decision when the user undoes it', async () => {
     vi.useFakeTimers();
-    render(<MobileFocus />);
+    renderFocus();
     fireEvent.click(screen.getByText('Refonte du flux New task'));
     fireEvent.click(screen.getByRole('button', { name: 'approve' }));
     fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('button', { name: 'Annuler' })).toBeNull();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(UNDO_MS + 10);
     });
@@ -128,7 +144,7 @@ describe('MobileFocus', () => {
   });
 
   it('swiping left uncovers "1 h"; snoozing takes a tap on it', () => {
-    render(<MobileFocus />);
+    renderFocus();
     swipe(screen.getByText('Refonte du flux New task'), -120);
     expect(useFocusStore.getState().snoozed['gate:s1']).toBeUndefined();
     fireEvent.click(screen.getByRole('button', { name: 'Plus tard : 1 h' }));
@@ -139,7 +155,7 @@ describe('MobileFocus', () => {
   });
 
   it('swiping right uncovers "Demain 9 h"', () => {
-    render(<MobileFocus />);
+    renderFocus();
     swipe(screen.getByText('Refonte du flux New task'), 120);
     fireEvent.click(screen.getByRole('button', { name: 'Plus tard : Demain 9 h' }));
     const until = new Date(useFocusStore.getState().snoozed['gate:s1']!);
@@ -148,7 +164,7 @@ describe('MobileFocus', () => {
   });
 
   it('the click ending a swipe does not open the sheet', () => {
-    render(<MobileFocus />);
+    renderFocus();
     const row = screen.getByText('Refonte du flux New task');
     swipe(row, -120);
     fireEvent.click(row);
@@ -166,7 +182,7 @@ describe('MobileFocus', () => {
     const front = () => document.querySelector('[data-focus-sheet-page]:not([aria-hidden="true"])');
 
     it('a sideways swipe in the sheet moves to the next item', () => {
-      render(<MobileFocus />);
+      renderFocus();
       fireEvent.click(screen.getByText('Refonte du flux New task'));
       expect(front()?.getAttribute('data-focus-sheet-page')).toBe('gate:s1');
       swipe(screen.getByRole('dialog'), -200);
@@ -176,7 +192,7 @@ describe('MobileFocus', () => {
     });
 
     it('acting on an item slides the next one in', () => {
-      render(<MobileFocus />);
+      renderFocus();
       fireEvent.click(screen.getByText('Refonte du flux New task'));
       fireEvent.click(screen.getByRole('button', { name: 'approve' }));
       expect(front()?.getAttribute('data-focus-sheet-page')).toBe('error:e1');
@@ -198,7 +214,7 @@ describe('MobileFocus', () => {
     });
 
     it('offers Commenter first; the composer opens once it is picked', () => {
-      render(<MobileFocus />);
+      renderFocus();
       fireEvent.click(screen.getByText('Refonte du flux New task'));
       expect(screen.queryByPlaceholderText(/Ton commentaire/)).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Commenter' }));
@@ -208,7 +224,7 @@ describe('MobileFocus', () => {
 
     it('opens the composer right away on a ticket that has a draft', () => {
       localStorage.setItem('comment_draft_t1', 'déjà commencé');
-      render(<MobileFocus />);
+      renderFocus();
       fireEvent.click(screen.getByText('Refonte du flux New task'));
       expect((screen.getByPlaceholderText(/Ton commentaire/) as HTMLTextAreaElement).value).toBe('déjà commencé');
     });
@@ -216,7 +232,7 @@ describe('MobileFocus', () => {
     it('sends the comment through the undo window and clears the draft', async () => {
       vi.useFakeTimers();
       localStorage.setItem('comment_draft_t1', 'relance stp');
-      render(<MobileFocus />);
+      renderFocus();
       fireEvent.click(screen.getByText('Refonte du flux New task'));
       fireEvent.click(screen.getByRole('button', { name: 'Envoyer le commentaire' }));
       expect(localStorage.getItem('comment_draft_t1') ?? '').toBe('');
@@ -227,7 +243,7 @@ describe('MobileFocus', () => {
     });
 
     it('has the conversation composer: mode, config, @ mentions', () => {
-      render(<MobileFocus />);
+      renderFocus();
       fireEvent.click(screen.getByText('Refonte du flux New task'));
       fireEvent.click(screen.getByRole('button', { name: 'Commenter' }));
       expect(screen.getByRole('button', { name: /Plan/ })).toBeTruthy();
@@ -240,7 +256,7 @@ describe('MobileFocus', () => {
     });
 
     it('switches the conversation mode of the ticket', () => {
-      render(<MobileFocus />);
+      renderFocus();
       fireEvent.click(screen.getByText('Refonte du flux New task'));
       fireEvent.click(screen.getByRole('button', { name: 'Commenter' }));
       fireEvent.click(screen.getByRole('button', { name: /Plan/ }));

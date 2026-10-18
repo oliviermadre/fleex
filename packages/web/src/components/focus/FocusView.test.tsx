@@ -23,6 +23,8 @@ import { useWorkStore } from '../../stores/workStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { FocusView } from './FocusView';
+import { Toaster } from '../ui/toast/Toaster';
+import { resetToasts } from '../../stores/toastStore';
 
 beforeAll(() => {
   class Obs { observe() {} unobserve() {} disconnect() {} }
@@ -83,12 +85,14 @@ function renderView() {
       <Routes>
         <Route path="/focus" element={<FocusView />} />
       </Routes>
+      <Toaster />
     </MemoryRouter>,
   );
 }
 
 beforeEach(() => {
   localStorage.clear();
+  resetToasts();
   useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
   useUnreadStore.setState({ loadSeenDeliverables: vi.fn().mockResolvedValue(undefined) } as never);
   useTicketStore.setState({

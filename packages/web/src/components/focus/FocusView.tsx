@@ -4,7 +4,6 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import {
-  UNDO_MS,
   focusStats,
   snoozedFocusItems,
   useFocusStore,
@@ -79,7 +78,7 @@ export function FocusView() {
     () => applyCliSessions(serverItems, serverRunning, sessionGroups),
     [serverItems, serverRunning, sessionGroups],
   );
-  const { commit, undo, snooze, unsnooze, unsnoozeAll, setPref, load } = useFocusStore.getState();
+  const { commit, snooze, unsnooze, unsnoozeAll, setPref, load } = useFocusStore.getState();
 
   // Filters live in the persisted prefs so they survive leaving the page.
   const { kindFilter, sort } = prefs;
@@ -238,7 +237,6 @@ export function FocusView() {
     () => [...boards].sort((a, b) => a.name.localeCompare(b.name)),
     [boards],
   );
-  const pendingList = Object.entries(pending);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--theme-bg-base)]">
@@ -406,14 +404,6 @@ export function FocusView() {
         <span><Kbd>O</Kbd> ouvrir dans Tasks</span>
       </div>
 
-      {/* Undo window */}
-      {pendingList.length > 0 && (
-        <div className="pointer-events-none fixed bottom-12 left-1/2 z-40 grid -translate-x-1/2 gap-1.5">
-          {pendingList.slice(-3).map(([key, p]) => (
-            <UndoToast key={key} label={p.label} onUndo={() => undo(key)} />
-          ))}
-        </div>
-      )}
 
       {openItem && (
         <FocusDetailModal
@@ -574,30 +564,6 @@ function EmptyState() {
       <p className="max-w-[52ch] text-[13px] text-[var(--theme-text-muted)]">
         Les agents ont tout ce qu’il leur faut. Les nouvelles gates, questions et erreurs apparaîtront ici dès qu’elles se présentent.
       </p>
-    </div>
-  );
-}
-
-function UndoToast({ label, onUndo }: { label: string; onUndo: () => void }) {
-  return (
-    <div
-      role="status"
-      className="pointer-events-auto relative flex items-center gap-2.5 overflow-hidden rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-overlay)] py-1.5 pl-3.5 pr-1.5 text-[12.5px] text-[var(--theme-text-primary)] shadow-xl"
-    >
-      <span className="max-w-[60vw] truncate">{label}</span>
-      <button
-        type="button"
-        onClick={onUndo}
-        className="rounded-full bg-[var(--theme-bg-surface)] px-2.5 py-0.5 text-xs font-semibold text-[var(--theme-accent)] hover:bg-[var(--theme-bg-hover)]"
-      >
-        Annuler
-      </button>
-      <span
-        aria-hidden
-        className="absolute bottom-0 left-0 h-[2px] bg-[var(--theme-accent)]"
-        style={{ animation: `focus-undo ${UNDO_MS}ms linear forwards` }}
-      />
-      <style>{'@keyframes focus-undo{from{width:100%}to{width:0}}'}</style>
     </div>
   );
 }

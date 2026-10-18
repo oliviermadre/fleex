@@ -11,6 +11,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useFocusCount } from '../stores/focusStore';
 import { FocusIcon, TasksIcon } from '../components/sidebar/icons';
 import { cn } from '../lib/cn';
+import { useToastOffset } from '../lib/toast';
 import { useLockViewport } from './useLockViewport';
 import { useNoDevReloadOnWake, usePersistMobileNav } from './usePersistMobileNav';
 import { SHEET_EASING, SHEET_MS, useSheetDrag } from './useSheetDrag';
@@ -58,6 +59,8 @@ export function MobileApp() {
   const setMoreSheetOpen = useMobileNavStore((s) => s.setMoreSheetOpen);
   const morePage = useMobileNavStore((s) => s.morePage);
   const focusCount = useFocusCount();
+  // Keep toasts clear of the floating bar (80 px + the Toaster's 1.5 rem gap = 104 px).
+  useToastOffset(ticket ? 0 : 80);
 
   const tab = (id: MobileView) => (view === id ? 'flex min-h-0 flex-1 flex-col' : 'hidden');
 
