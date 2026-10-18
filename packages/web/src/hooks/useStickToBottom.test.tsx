@@ -51,7 +51,7 @@ function mountLate() {
     setGeometry(el, scrollHeight);
     view.rerender(<Harness ready items={items} apiRef={apiRef} />);
   };
-  return { el, apiRef, stream };
+  return { el, apiRef, stream, view };
 }
 
 afterEach(() => cleanup());
@@ -150,5 +150,62 @@ describe('useStickToBottom', () => {
   it('exposes the mounted element on containerRef.current', () => {
     const { el, apiRef } = mountLate();
     expect(apiRef.current!.containerRef.current).toBe(el);
+  });
+
+  // Companion reconnect: the conversation unmounts behind the empty state and
+  // comes back with a new container. It must start pinned, not inherit "scrolled up".
+  it('starts following again on a freshly attached container (companion reconnected)', () => {
+    const { apiRef, view } = mountLate();
+    fireEvent.wheel(view.getByTestId('scroller'), { deltaY: -40 });
+    view.rerender(<Harness ready={false} items={1} apiRef={apiRef} />);
+    view.rerender(<Harness ready items={1} apiRef={apiRef} />);
+    const el = view.getByTestId('scroller');
+    setGeometry(el, 1200);
+    view.rerender(<Harness ready items={2} apiRef={apiRef} />);
+    expect(el.scrollTop).toBe(1200);
+  });
+
+  // Content shorter than the viewport: wheeling up moves nothing and emits no
+  // scroll event, so unpinning there would never be undone.
+  it('keeps following after an upward wheel on a container that cannot scroll up', () => {
+    const { el, stream } = mountLate();
+    el.scrollTop = 0;
+    fireEvent.wheel(el, { deltaY: -40 });
+    stream(2, 1200);
+    expect(el.scrollTop).toBe(1200);
+  });
+
+  // Scrolling a tool output (<pre overflow-auto>) up moves the <pre>, not the
+  // conversation: the user is still at the bottom and must keep following.
+  it('keeps following when an upward wheel is taken by a nested scroller', () => {
+    const { el, stream } = mountLate();
+    const pre = document.createElement('pre');
+    el.appendChild(pre);
+    Object.defineProperty(pre, 'scrollHeight', { configurable: true, value: 600 });
+    Object.defineProperty(pre, 'clientHeight', { configurable: true, value: 256 });
+    pre.scrollTop = 100;
+    fireEvent.wheel(pre, { deltaY: -40 });
+    stream(2, 1200);
+    expect(el.scrollTop).toBe(1200);
+  });
+
+  it('stops following on an upward wheel from a nested scroller already at its top (scroll chains up)', () => {
+    const { el, stream } = mountLate();
+    const pre = document.createElement('pre');
+    el.appendChild(pre);
+    Object.defineProperty(pre, 'scrollHeight', { configurable: true, value: 600 });
+    Object.defineProperty(pre, 'clientHeight', { configurable: true, value: 256 });
+    fireEvent.wheel(pre, { deltaY: -40 });
+    stream(2, 1200);
+    expect(el.scrollTop).toBe(500);
+  });
+
+  it('keeps following after a finger drag on a container that cannot scroll up', () => {
+    const { el, stream } = mountLate();
+    el.scrollTop = 0;
+    fireEvent.touchStart(el, { touches: [{ clientY: 100 }] });
+    fireEvent.touchMove(el, { touches: [{ clientY: 140 }] });
+    stream(2, 1200);
+    expect(el.scrollTop).toBe(1200);
   });
 });

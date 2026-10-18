@@ -50,7 +50,7 @@ export function AssistantConversation() {
     scrollToBottom();
   }, [activeId, scrollToBottom]);
 
-  // Stable by construction (`scrollToBottom` is a `useCallback([])`), so the
+  // Stable by construction (`scrollToBottom` only depends on the memoized `containerRef`), so the
   // composer never re-renders because of this prop.
   const handleSent = useCallback(() => {
     scrollToBottom();

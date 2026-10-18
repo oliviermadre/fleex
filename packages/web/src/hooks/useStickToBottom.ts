@@ -44,6 +44,13 @@ export function useStickToBottom<T extends HTMLElement = HTMLDivElement>(thresho
 
   useLayoutEffect(() => {
     if (!el) return;
+    // A freshly attached container starts pinned, whatever the previous one
+    // was doing: after the companion reconnects (empty state → conversation)
+    // the user expects to land at the bottom and follow the reply.
+    wasAtBottomRef.current = true;
+    setIsAtBottom(true);
+    el.scrollTop = el.scrollHeight;
+
     const measure = () => el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
     const setPinned = (pinned: boolean) => {
       wasAtBottomRef.current = pinned;
@@ -61,10 +68,21 @@ export function useStickToBottom<T extends HTMLElement = HTMLDivElement>(thresho
       if (atBottom && touchActive) return;
       setPinned(atBottom);
     };
+    // An upward gesture only moves *the container* if it isn't already at the
+    // top and no nested scroller (tool output, code block) between the target
+    // and the container can still scroll up and take the gesture. Otherwise no
+    // scroll event would follow to re-pin, so we must not unpin.
+    const containerWillScrollUp = (target: EventTarget | null) => {
+      if (el.scrollTop <= 0) return false;
+      for (let n = target as HTMLElement | null; n && n !== el; n = n.parentElement) {
+        if (n.scrollHeight > n.clientHeight && n.scrollTop > 0) return false;
+      }
+      return true;
+    };
     // Unpin on the *start* of an upward gesture, before the browser emits the
     // scroll event, so a chunk landing in between cannot yank the view back.
     const onWheel = (e: WheelEvent) => {
-      if (e.deltaY < 0) setPinned(false);
+      if (e.deltaY < 0 && containerWillScrollUp(e.target)) setPinned(false);
     };
     const onTouchStart = (e: TouchEvent) => {
       touchActive = true;
@@ -73,7 +91,7 @@ export function useStickToBottom<T extends HTMLElement = HTMLDivElement>(thresho
     const onTouchMove = (e: TouchEvent) => {
       const y = e.touches[0]?.clientY ?? lastTouchY;
       // Finger moving down = content scrolling up.
-      if (y > lastTouchY) setPinned(false);
+      if (y > lastTouchY && containerWillScrollUp(e.target)) setPinned(false);
       lastTouchY = y;
     };
     const onTouchEnd = () => {
