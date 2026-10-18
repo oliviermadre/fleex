@@ -1,5 +1,9 @@
 # Fleex — Claude Code Guidelines
 
+## Front-end (`packages/web`)
+
+Any UI work: read `packages/web/CLAUDE.md` first — reusable primitives (one `toast()` for every notification) and how to treat HTML prototypes.
+
 ## Migrations
 
 **Never modify an existing migration file once it has been committed.** Migrations may have already been executed on production databases (SQLite, PostgreSQL, Supabase). Always create a new migration file with the next sequence number to apply fixes or schema changes.
