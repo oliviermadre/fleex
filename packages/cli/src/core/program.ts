@@ -12,6 +12,7 @@ import { Command } from 'commander';
 import type { CommandDef } from './types.ts';
 import { applyPrettyHelp, recordExtraHelp, setRootProgram } from './help.ts';
 import { activateWorkspace } from './workspaces.ts';
+import { FleexCommand } from './parse-errors.ts';
 import { isJsonMode, setJsonMode } from './colors.ts';
 
 // `import.meta.dir` is a Bun runtime extra; it is erased when this module goes
@@ -208,7 +209,9 @@ async function loadAndRegister(
  * print help, or exit — the caller decides what to do with the tree.
  */
 export async function buildProgram(): Promise<Command> {
-  const program = new Command();
+  // Leaves report parsing errors in a short block with a fix (see parse-errors.ts);
+  // `showHelpAfterError` below still applies to groups such as `fleex memory`.
+  const program = new FleexCommand();
   program
     .name('fleex')
     .description('Local dev-stack manager (multi-instance) — manage gateway/server/web and tickets')
