@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 import type { PulseNotification } from '../notifications/types';
+import { toast } from '../lib/toast';
+import { useTicketStore } from './ticketStore';
 
 /**
- * Fleex Pulse store — the single in-memory source of truth for both surfaces:
- * the persistent notification center (the bell) and the ephemeral toasts.
+ * Fleex Pulse store — the single in-memory source of truth for the persistent
+ * notification center (the bell). Each live push also raises one `toast()`
+ * (the app's single toast surface); history rebuilt from the audit never does.
  *
  * The live list is in-memory, but it is not lost on reload: `hydrate` rebuilds
  * the recent history from the server-side audit trail on app load (see
@@ -14,15 +17,12 @@ import type { PulseNotification } from '../notifications/types';
  */
 
 const MAX_NOTIFICATIONS = 50; // persistent list cap (newest kept)
-const MAX_TOASTS = 4; // simultaneously visible toasts
-const TOAST_DISMISS_MS = 6_000;
+const TOAST_DURATION_MS = 6_000;
 const MAX_PROCESSED_KEYS = 500; // dedup memory cap
 
 interface NotificationState {
   /** Persistent center, newest first, capped at MAX_NOTIFICATIONS. */
   notifications: PulseNotification[];
-  /** Currently visible ephemeral toasts (subset of recent pushes). */
-  toasts: PulseNotification[];
   /** Whether the bell dropdown is open. */
   panelOpen: boolean;
   /** Count of notifications not yet seen — drives the bell badge. */
@@ -39,8 +39,6 @@ interface NotificationState {
    * registered for dedup so the matching live broadcast is collapsed.
    */
   hydrate: (incoming: PulseNotification[]) => void;
-  /** Remove a toast (auto or manual). */
-  dismissToast: (id: string) => void;
   /** Open the bell: reveals the list and marks everything as seen. */
   openPanel: () => void;
   /** Close the bell. */
@@ -49,7 +47,7 @@ interface NotificationState {
   togglePanel: () => void;
   /** Mark every notification as seen and reset the badge. */
   markAllSeen: () => void;
-  /** Empty the persistent list and visible toasts (keeps dedup memory). */
+  /** Empty the persistent list (keeps dedup memory). */
   clear: () => void;
 }
 
@@ -69,7 +67,6 @@ function trimKeys(keys: Set<string>): Set<string> {
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
-  toasts: [],
   panelOpen: false,
   unseenCount: 0,
   processedKeys: new Set<string>(),
@@ -85,17 +82,25 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set((state) => {
       const keys = trimKeys(new Set(state.processedKeys).add(n.id));
       const notifications = [entry, ...state.notifications].slice(0, MAX_NOTIFICATIONS);
-      const toasts = [entry, ...state.toasts].slice(0, MAX_TOASTS);
       return {
         processedKeys: keys,
         notifications,
-        toasts,
         unseenCount: countUnseen(notifications),
       };
     });
 
-    // Auto-dismiss the toast surface (the entry stays in the persistent list).
-    setTimeout(() => get().dismissToast(n.id), TOAST_DISMISS_MS);
+    // The ephemeral surface (the entry stays in the persistent list). The ticket
+    // reference is resolved now: a live event arrives after the ticket list loaded.
+    const ticket = n.ticketId ? useTicketStore.getState().tickets.find((t) => t.id === n.ticketId) : undefined;
+    toast.show({
+      id: n.id,
+      tone: n.level,
+      icon: n.emoji,
+      title: n.title,
+      message: ticket ? `${n.body} · #${ticket.displayId} ${ticket.title}` : n.body,
+      link: n.link,
+      durationMs: TOAST_DURATION_MS,
+    });
   },
 
   hydrate: (incoming) => {
@@ -117,10 +122,6 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         unseenCount: countUnseen(notifications),
       };
     });
-  },
-
-  dismissToast: (id) => {
-    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
   },
 
   openPanel: () => {
@@ -151,5 +152,5 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     }));
   },
 
-  clear: () => set({ notifications: [], toasts: [], unseenCount: 0 }),
+  clear: () => set({ notifications: [], unseenCount: 0 }),
 }));

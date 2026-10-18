@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useNotificationStore } from './notificationStore';
 import type { PulseNotification } from '../notifications/types';
+import type { Ticket } from '@fleex/shared';
+import { resetToasts, useToastStore } from './toastStore';
+import { useTicketStore } from './ticketStore';
+
+/** What the app's one Toaster currently shows. */
+const toasts = () => useToastStore.getState().toasts;
 
 function makeNotification(id: string, overrides: Partial<PulseNotification> = {}): PulseNotification {
   return {
@@ -17,14 +23,15 @@ function makeNotification(id: string, overrides: Partial<PulseNotification> = {}
   };
 }
 
-const reset = () =>
+const reset = () => {
+  resetToasts();
   useNotificationStore.setState({
     notifications: [],
-    toasts: [],
     panelOpen: false,
     unseenCount: 0,
     processedKeys: new Set<string>(),
   });
+};
 
 describe('notificationStore', () => {
   beforeEach(reset);
@@ -33,7 +40,7 @@ describe('notificationStore', () => {
     useNotificationStore.getState().push(makeNotification('a'));
     const s = useNotificationStore.getState();
     expect(s.notifications).toHaveLength(1);
-    expect(s.toasts).toHaveLength(1);
+    expect(toasts()).toHaveLength(1);
     expect(s.unseenCount).toBe(1);
   });
 
@@ -85,21 +92,26 @@ describe('notificationStore', () => {
     expect(s.unseenCount).toBe(50);
   });
 
-  it('caps the number of visible toasts', () => {
-    const { push } = useNotificationStore.getState();
-    for (let i = 0; i < 6; i++) push(makeNotification(`t${i}`));
-    const s = useNotificationStore.getState();
-    expect(s.toasts).toHaveLength(4); // MAX_TOASTS
-    expect(s.notifications).toHaveLength(6);
+  it('raises the one toast with the Pulse look: tone, emoji, title, deep link, 6 s', () => {
+    useNotificationStore.getState().push(makeNotification('wf', { level: 'action', emoji: '🚦', title: 'Needs review' }));
+    expect(toasts()[0]).toMatchObject({
+      id: 'wf', tone: 'action', icon: '🚦', title: 'Needs review', message: 'Body wf', link: '/t/wf', durationMs: 6_000,
+    });
   });
 
-  it('dismissToast removes a toast but leaves the persistent entry', () => {
-    const { push, dismissToast } = useNotificationStore.getState();
-    push(makeNotification('keep'));
-    dismissToast('keep');
-    const s = useNotificationStore.getState();
-    expect(s.toasts).toHaveLength(0);
-    expect(s.notifications).toHaveLength(1);
+  it('names the ticket in the toast, resolved at push time from the ticket store', () => {
+    useTicketStore.setState({ tickets: [{ id: 'tk', displayId: 123, title: 'Harmoniser les toasts' } as Ticket] });
+    useNotificationStore.getState().push(makeNotification('d', { ticketId: 'tk' }));
+    expect(toasts()[0]!.message).toBe('Body d · #123 Harmoniser les toasts');
+    useNotificationStore.getState().push(makeNotification('e', { ticketId: 'unknown' }));
+    expect(toasts()[1]!.message).toBe('Body e');
+  });
+
+  it('keeps every entry in the bell even when the toast stack evicts older toasts', () => {
+    const { push } = useNotificationStore.getState();
+    for (let i = 0; i < 6; i++) push(makeNotification(`t${i}`));
+    expect(toasts()).toHaveLength(3); // the Toaster's cap
+    expect(useNotificationStore.getState().notifications).toHaveLength(6);
   });
 
   it('clear empties the list and toasts but still deduplicates afterwards', () => {
@@ -133,7 +145,7 @@ describe('notificationStore', () => {
       expect(s.notifications).toHaveLength(2);
       expect(s.notifications.every((n) => n.seen)).toBe(true);
       expect(s.unseenCount).toBe(0);
-      expect(s.toasts).toHaveLength(0);
+      expect(toasts()).toHaveLength(0);
     });
 
     it('orders the merged list newest-first by createdAt', () => {
@@ -179,10 +191,10 @@ describe('notificationStore', () => {
     it('removes the toast after the timeout but keeps the entry', () => {
       reset();
       useNotificationStore.getState().push(makeNotification('auto'));
-      expect(useNotificationStore.getState().toasts).toHaveLength(1);
+      expect(toasts()).toHaveLength(1);
       vi.advanceTimersByTime(6_000);
       const s = useNotificationStore.getState();
-      expect(s.toasts).toHaveLength(0);
+      expect(toasts()).toHaveLength(0);
       expect(s.notifications).toHaveLength(1);
     });
   });

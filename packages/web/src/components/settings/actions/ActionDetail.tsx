@@ -15,7 +15,7 @@ import { resolveTemplate } from '../../../lib/templateUtils';
 import * as api from '../../../services/api';
 import { useActionsSettingsStore } from '../../../stores/actionsSettingsStore';
 import { DRAFT_SOURCE_PREFIX, usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
-import { toast } from '../../../lib/toast';
+import { toast, useToastOffset } from '../../../lib/toast';
 import { requestLeave, setLeaveGuard, useUIStore, withoutLeaveGuard, type ActionsScope } from '../../../stores/uiStore';
 import { STATUS_LABEL, runDuration, statusDotClass, statusTextClass } from '../../actions/actionStatus';
 import { renderIcon } from '../../sidebar/PinnedIcons';
@@ -111,6 +111,8 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
   }, [initial]);
 
   const dirty = isNew || JSON.stringify(draft) !== baseline;
+  // Toasts rise above the floating "Unsaved changes" bar while it shows.
+  useToastOffset(dirty ? 64 : 0);
   const errors = validateDraft(draft, scope);
   const hasErrors = Object.keys(errors).length > 0;
   const warnings = draftWarnings(draft, scope);

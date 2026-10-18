@@ -4,7 +4,6 @@ import { CreateTaskModal } from './components/modals/CreateTaskModal';
 import { CommandPalette } from './components/command-palette/CommandPalette';
 import { AskMemoryModal } from './components/modals/AskMemoryModal';
 import { Toaster } from './components/ui/toast/Toaster';
-import { NotificationToasts } from './components/notifications/NotificationToasts';
 import { VersionBanner } from './components/ui/VersionBanner';
 import { RouterSync } from './router/RouterSync';
 import { useTheme } from './hooks/useTheme';
@@ -33,7 +32,6 @@ export function App() {
       <CreateTaskModal />
       <CommandPalette />
       <AskMemoryModal />
-      <NotificationToasts />
       <VersionBanner />
       <Toaster />
     </BrowserRouter>
