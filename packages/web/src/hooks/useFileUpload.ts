@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import type { RefObject, ClipboardEvent, DragEvent } from 'react';
 import { uploadFile } from '../services/api';
-import { useToastStore } from '../stores/toastStore';
+import { toast } from '../lib/toast';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -43,12 +43,12 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 
   const uploadAndInsert = useCallback(async (file: File) => {
     if (file.size > MAX_FILE_SIZE) {
-      useToastStore.getState().addToast('error', 'File too large (max 10 MB)');
+      toast.error('File too large (max 10 MB)');
       return;
     }
 
     if (!ALLOWED_TYPES.has(file.type) && file.type !== '') {
-      useToastStore.getState().addToast('error', `File type ${file.type} is not supported`);
+      toast.error(`File type ${file.type} is not supported`);
       return;
     }
 
@@ -83,7 +83,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
       const updated = valueRef.current.replace(placeholder, '');
       onChange(updated);
       valueRef.current = updated;
-      useToastStore.getState().addToast('error', `Upload failed: ${err instanceof Error ? err.message : file.name}`);
+      toast.error(`Upload failed: ${err instanceof Error ? err.message : file.name}`);
     } finally {
       setIsUploading(false);
     }

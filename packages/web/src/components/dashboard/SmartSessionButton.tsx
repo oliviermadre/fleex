@@ -12,7 +12,7 @@ import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useFrequentLaunchStore, buildFrequentItems } from '../../stores/frequentLaunchStore';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { PrimitiveIcon, PRIMITIVE_META } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
@@ -478,7 +478,6 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const skills = useSkillStore((s) => s.skills);
   const claudeCodeSkills = useSkillStore((s) => s.claudeCodeSkills);
   const ticketLinks = useTicketStore((s) => (ticketId ? s.tickets.find((t) => t.id === ticketId)?.links : undefined));
-  const addToast = useToastStore((s) => s.addToast);
   const { open: dropdownOpen, setOpen: setDropdownOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ maxHeight: LAUNCHER_MAX_HEIGHT });
   const [internalCreating, setInternalCreating] = useState(false);
   // Transient acknowledgement while a workflow/skill/panel/persona launch is in flight.
@@ -574,10 +573,10 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         setLaunching(true);
         try {
           await onExecuteSkill(skillId);
-          addToast('success', `🧩 Skill ${label} lancé`);
+          toast.success(`🧩 Skill ${label} lancé`);
         } catch (err) {
           console.error('Failed to execute skill:', err);
-          addToast('error', `Échec du lancement du skill ${label}`);
+          toast.error(`Échec du lancement du skill ${label}`);
         } finally {
           setLaunching(false);
         }
@@ -592,10 +591,10 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         setLaunching(true);
         try {
           await startRun(ticketId, templateId);
-          addToast('success', `🚦 Workflow "${name}" lancé`);
+          toast.success(`🚦 Workflow "${name}" lancé`);
         } catch (err) {
           console.error('Failed to start workflow:', err);
-          addToast('error', `Échec du lancement du workflow "${name}"`);
+          toast.error(`Échec du lancement du workflow "${name}"`);
         } finally {
           setLaunching(false);
         }
@@ -608,10 +607,10 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         setLaunching(true);
         try {
           await api.executePanel(panelId, ticketId);
-          addToast('success', `🏛️ Panel "${name}" lancé`);
+          toast.success(`🏛️ Panel "${name}" lancé`);
         } catch (err) {
           console.error('Failed to execute panel:', err);
-          addToast('error', `Échec du lancement du panel "${name}"`);
+          toast.error(`Échec du lancement du panel "${name}"`);
         } finally {
           setLaunching(false);
         }
@@ -624,10 +623,10 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         setLaunching(true);
         try {
           await api.postTicketComment(ticketId, `@agent:${personaName}`);
-          addToast('success', `🧠 Persona "${displayName}" lancé`);
+          toast.success(`🧠 Persona "${displayName}" lancé`);
         } catch (err) {
           console.error('Failed to launch persona:', err);
-          addToast('error', `Échec du lancement du persona "${displayName}"`);
+          toast.error(`Échec du lancement du persona "${displayName}"`);
         } finally {
           setLaunching(false);
         }

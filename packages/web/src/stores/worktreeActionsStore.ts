@@ -16,7 +16,7 @@ import * as api from '../services/api';
 import { usePinnedActionsStore } from './pinnedActionsStore';
 import { useBrowserStore } from './browserStore';
 import { useWorkStore } from './workStore';
-import { useToastStore } from './toastStore';
+import { toast } from '../lib/toast';
 
 /** Short repo name of a worktree: `fleex` for `oliviermadre/fleex`, else the folder name. */
 export function worktreeName(view: Pick<WorktreeActionsView, 'repo' | 'path'>): string {
@@ -123,7 +123,7 @@ export const useWorktreeActionsStore = create<WorktreeActionsState>((set, get) =
   openHooksDir: async (repo) => {
     try {
       const { dir } = await api.openWorktreeHooksDir(repo);
-      useToastStore.getState().addToast('info', `Dossier des hooks : ${dir}`);
+      toast.info(`Dossier des hooks : ${dir}`);
     } catch { /* toasted */ }
   },
 
@@ -204,7 +204,7 @@ function showServerLogs(view: WorktreeActionsView, runId: string | undefined, se
   const sourceId = worktreeSourceId(view.path);
   const label = `${worktreeName(view)} · ${view.start?.label ?? 'start'}`;
   if (!runId) {
-    useToastStore.getState().addToast('info', server.tmuxSession
+    toast.info(server.tmuxSession
       ? `${worktreeName(view)}: started before this Fleex session — tmux attach -t ${server.tmuxSession}`
       : `${worktreeName(view)}: no server run yet`);
     return;

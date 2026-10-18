@@ -13,7 +13,7 @@ import {
   type StatusSnapshot,
 } from '@fleex/shared';
 import * as api from '../services/api';
-import { useToastStore } from './toastStore';
+import { toast } from '../lib/toast';
 
 /** Runs started from Settings ("Try") are shown inline there, never as a toast. */
 export const DRAFT_SOURCE_PREFIX = 'draft:';
@@ -122,7 +122,7 @@ function clearStartToast(runId: string): void {
   const entry = startToasts.get(runId);
   if (!entry) return;
   if (entry.timer) clearTimeout(entry.timer);
-  if (entry.toastId) useToastStore.getState().removeToast(entry.toastId);
+  if (entry.toastId) toast.dismiss(entry.toastId);
   startToasts.delete(runId);
 }
 
@@ -224,7 +224,6 @@ export function announceRun(
   openLogs: (t: LogsTarget) => void,
   rerunInTerminal?: (run: ActionRun) => void,
 ): void {
-  const { addToast } = useToastStore.getState();
   const hint = diagnoseRun(run);
   // A background run that needed a TTY or the .zshrc: the useful next step is a terminal, not the logs.
   const wantsTerminal = !!rerunInTerminal && run.mode !== 'terminal' && (hint?.code === 'no-tty' || hint?.code === 'not-found') && hint.suggest.includes('run-in-terminal');
@@ -232,23 +231,23 @@ export function announceRun(
     ? { label: 'Run in a terminal', onClick: () => rerunInTerminal!(run) }
     : { label: 'View logs', onClick: () => openLogs({ sourceId: run.sourceId, label: run.label, runId: run.runId }) };
   if (hint?.code === 'cancelled') {
-    addToast('info', `${run.label} — stopped`);
+    toast.info(`${run.label} — stopped`);
     return;
   }
   if (run.timedOut) {
-    addToast('warning', `${run.label} — ${hint?.title ?? 'timed out'}`, { action, durationMs: 8000 });
+    toast.warning(`${run.label} — ${hint?.title ?? 'timed out'}`, { action, durationMs: 8000 });
     return;
   }
   if (run.exitCode === 0) {
-    addToast('success', `✓ ${run.label} (${durationSec(run)})`);
+    toast.success(`✓ ${run.label} (${durationSec(run)})`);
     return;
   }
   if (hint) {
-    addToast('error', `✗ ${run.label} — ${hint.title}`, { action, durationMs: 8000 });
+    toast.error(`✗ ${run.label} — ${hint.title}`, { action, durationMs: 8000 });
     return;
   }
   const code = run.exitCode === undefined ? 'failed' : `exit ${run.exitCode}`;
-  addToast('error', `✗ ${run.label} — ${code}`, {
+  toast.error(`✗ ${run.label} — ${code}`, {
     detail: firstLine(run.stderr) || firstLine(run.stdout) || undefined,
     action,
     durationMs: 8000,
@@ -491,7 +490,7 @@ function scheduleStartToast(run: ActionRun): void {
       startToasts.delete(run.runId);
       return;
     }
-    entry.toastId = useToastStore.getState().addToast('info', `${run.label} running…`, {
+    entry.toastId = toast.info(`${run.label} running…`, {
       action: { label: 'View output', onClick: () => usePinnedActionsStore.getState().openLogs({ sourceId: run.sourceId, label: run.label, runId: run.runId }) },
       // Dismissed by the final toast; the cap only guards against a lost `finished`.
       durationMs: ACTION_MAX_TIMEOUT_SEC * 1000,

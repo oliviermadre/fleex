@@ -28,7 +28,7 @@ import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import * as api from '../../services/api';
@@ -773,7 +773,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     try {
       await api.runMention(mentionId);
     } catch (err) {
-      useToastStore.getState().addToast('error', `Échec du relancement : ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`Échec du relancement : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setRelaunching((prev) => {
         const { [mentionId]: _drop, ...rest } = prev;

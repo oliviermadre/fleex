@@ -22,7 +22,7 @@ import { DescriptionBlock } from './DescriptionBlock';
 import { TicketActionCards } from '../../tickets/TicketActionCards';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import * as api from '../../../services/api';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import { useWorkStore } from '../../../stores/workStore';
 import { annotationForComment, useAnnotationStore } from '../../../stores/annotationStore';
 import { annotationTitleFromComment } from '@fleex/shared';
@@ -82,7 +82,7 @@ export function TaskStream({
       await api.deleteTicketComment(ticketId, pendingDelete);
       onCommentDeleted?.(pendingDelete);
     } catch (e) {
-      useToastStore.getState().addToast('error', e instanceof Error ? e.message : "Couldn't delete comment");
+      toast.error(e instanceof Error ? e.message : "Couldn't delete comment");
     } finally {
       setDeleting(false);
       setPendingDelete(null);

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Modal } from '../ui/Modal';
 import * as api from '../../services/api';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { tint } from '../../lib/tints';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
@@ -53,7 +53,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
         status,
         agentName: 'user',
       });
-      useToastStore.getState().addToast('success', 'Deliverable created');
+      toast.success('Deliverable created');
       handleClose();
     } catch {
       // error toast handled by api.ts

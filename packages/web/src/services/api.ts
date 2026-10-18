@@ -49,7 +49,7 @@ import type {
   WorktreeFile,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
-import { useToastStore } from '../stores/toastStore';
+import { toast } from '../lib/toast';
 
 function extractErrorMessage(body: string, statusText: string): string {
   try {
@@ -70,7 +70,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     const message = extractErrorMessage(body, res.statusText);
-    useToastStore.getState().addToast('error', message);
+    toast.error(message);
     throw new Error(`API error ${res.status}: ${body || res.statusText}`);
   }
   if (res.status === 204) return undefined as T;
@@ -1749,7 +1749,7 @@ export async function startActionRun(
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const message = extractErrorMessage(text, res.statusText);
-    useToastStore.getState().addToast('error', message);
+    toast.error(message);
     throw new Error(message);
   }
   const { runId, run } = (await res.json()) as { runId: string; run?: import('@fleex/shared').ActionRun };
@@ -1766,7 +1766,7 @@ export async function cancelActionRun(runId: string): Promise<boolean> {
     if (res.ok) return true;
     if (res.status !== 404) {
       const message = extractErrorMessage(await res.text().catch(() => ''), res.statusText);
-      useToastStore.getState().addToast('error', message);
+      toast.error(message);
     }
     return false;
   } catch {
@@ -1950,7 +1950,7 @@ export async function runWorktreeAction(
   } catch { /* not JSON */ }
   if (res.ok && json) return json;
   const message = json?.error ?? extractErrorMessage(text, res.statusText);
-  useToastStore.getState().addToast('error', message);
+  toast.error(message);
   throw new Error(message);
 }
 

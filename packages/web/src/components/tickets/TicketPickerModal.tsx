@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Ticket, TicketDeliverable } from '@fleex/shared';
 import * as api from '../../services/api';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { STATUS_COLORS } from '../../lib/statusColors';
 
 interface TicketPickerModalProps {
@@ -77,7 +77,7 @@ export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }
         status: deliverable.status,
         agentName: 'user',
       });
-      useToastStore.getState().addToast('success', `Copied to #${targetTicket.displayId} ${targetTicket.title}`);
+      toast.success(`Copied to #${targetTicket.displayId} ${targetTicket.title}`);
       onClose();
     } catch {
       // error toast handled by api.ts

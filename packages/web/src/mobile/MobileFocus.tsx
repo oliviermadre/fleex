@@ -5,13 +5,13 @@ import { useTicketStore } from '../stores/ticketStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import {
-  UNDO_MS,
   focusStats,
   snoozedFocusItems,
   useFocusStore,
   visibleFocusItems,
 } from '../stores/focusStore';
 import { cn } from '../lib/cn';
+import { useToastAnchor } from '../lib/toast';
 import { tint, tintClasses, type TintHue } from '../lib/tints';
 import { FocusIcon } from '../components/sidebar/icons';
 import { KindIcon } from '../components/focus/FocusIcons';
@@ -65,7 +65,7 @@ export function MobileFocus() {
   const clearedAt = useFocusStore((s) => s.clearedAt);
   const serverRunning = useFocusStore((s) => s.running);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
-  const { commit, undo, snooze, unsnoozeAll, setPref, load } = useFocusStore.getState();
+  const { commit, snooze, unsnoozeAll, setPref, load } = useFocusStore.getState();
 
   const { items, running } = useMemo(
     () => applyCliSessions(serverItems, serverRunning, sessionGroups),
@@ -95,7 +95,6 @@ export function MobileFocus() {
   const stats = useMemo(() => focusStats(log, clearedAt, now), [log, clearedAt, now]);
   const oldest = useMemo(() => Math.max(0, ...base.map((i) => waitedMs(i, now) ?? 0)), [base, now]);
   const countOf = (k: FocusItemKind | 'all') => (k === 'all' ? base.length : base.filter((i) => i.kind === k).length);
-  const pendingList = Object.entries(pending);
 
   // No floating terminal on a phone: session actions ("Ouvrir CLI") are left out.
   const actionsOf = useCallback(
@@ -128,6 +127,8 @@ export function MobileFocus() {
   // One row swiped open at a time; the sheet shows one item of the list.
   const [openRow, setOpenRow] = useState<{ key: string; side: RowSide } | null>(null);
   const [sheetKey, setSheetKey] = useState<string | null>(null);
+  // The sheet covers the bottom: toasts move over its header while it is open.
+  useToastAnchor(sheetKey ? 'top' : null);
   const closeSheet = useCallback(() => setSheetKey(null), []);
 
   return (
@@ -246,20 +247,6 @@ export function MobileFocus() {
           }}
           onClose={closeSheet}
         />
-      )}
-
-      {/* Undo window — just above the floating bar, or over the sheet's header while it is open */}
-      {pendingList.length > 0 && (
-        <div
-          className={cn(
-            'pointer-events-none inset-x-3 grid gap-1.5',
-            sheetKey ? 'fixed top-[calc(env(safe-area-inset-top)+40px)] z-[60]' : 'absolute bottom-[104px] z-30',
-          )}
-        >
-          {pendingList.slice(-3).map(([key, p]) => (
-            <UndoToast key={key} label={p.label} onUndo={() => undo(key)} />
-          ))}
-        </div>
       )}
     </div>
   );
@@ -467,26 +454,6 @@ function EmptyState({ filtered, onReset }: { filtered: boolean; onReset: () => v
       <FocusIcon size={36} className={tintClasses('green').solidText} />
       <h2 className="text-lg font-bold">Liste vide</h2>
       <p className="text-[13px] text-[var(--theme-text-muted)]">Rien n’attend ton intervention.</p>
-    </div>
-  );
-}
-
-function UndoToast({ label, onUndo }: { label: string; onUndo: () => void }) {
-  return (
-    <div
-      role="status"
-      className="pointer-events-auto relative flex items-center gap-3 overflow-hidden rounded-xl border border-[var(--theme-border-input)] bg-[var(--theme-bg-overlay)] py-2 pl-3.5 pr-2 text-[13px] text-[var(--theme-text-primary)] shadow-[0_10px_30px_rgba(0,0,0,.4)]"
-    >
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <button type="button" onClick={onUndo} className="min-h-11 px-3 text-sm font-semibold text-[var(--theme-accent)]">
-        Annuler
-      </button>
-      <span
-        aria-hidden
-        className="absolute bottom-0 left-0 h-[2px] bg-[var(--theme-accent)]"
-        style={{ animation: `focus-undo ${UNDO_MS}ms linear forwards` }}
-      />
-      <style>{'@keyframes focus-undo{from{width:100%}to{width:0}}'}</style>
     </div>
   );
 }

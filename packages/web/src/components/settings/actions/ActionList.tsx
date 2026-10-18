@@ -3,7 +3,7 @@ import type { PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { runningRunOf, usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import { useUIStore, type ActionsScope } from '../../../stores/uiStore';
 import { useActionsSettingsStore } from '../../../stores/actionsSettingsStore';
 import { PinnedActionButton } from '../../actions/PinnedActionButton';
@@ -55,7 +55,6 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
   const aiAvailable = useActionsSettingsStore((s) => s.aiAvailable);
   const setComposeOpen = useActionsSettingsStore((s) => s.setComposeOpen);
   const setPendingNew = useActionsSettingsStore((s) => s.setPendingNew);
-  const addToast = useToastStore((s) => s.addToast);
   const runFromSettings = useRunFromSettings(scope);
   const [filter, setFilter] = useState('');
   const rowsRef = useRef<HTMLDivElement>(null);
@@ -63,9 +62,9 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
   const reorder = useCallback(
     (next: AnyAction[]) => {
       void save(next);
-      addToast('info', 'Order updated', { durationMs: 1800 });
+      toast.info('Order updated', { durationMs: 1800 });
     },
-    [save, addToast],
+    [save],
   );
   const { rowProps, dropIndicator, draggingId } = useReorderableList(list, reorder, `application/x-fleex-action-${scope}`);
 
@@ -96,7 +95,7 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
     const removed = list[index];
     if (!removed) return;
     void save(list.filter((a) => a.id !== id));
-    addToast('info', `“${removed.label || 'Untitled'}” deleted`, {
+    toast.info(`“${removed.label || 'Untitled'}” deleted`, {
       durationMs: UNDO_MS,
       action: {
         label: 'Undo',
@@ -116,7 +115,7 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
     if (!target) return;
     const nowEnabled = !isEnabled(target);
     void save(list.map((a) => (a.id === id ? { ...a, enabled: nowEnabled } : a)));
-    addToast('info', nowEnabled ? `“${target.label}” visible again` : `“${target.label}” hidden from the bar`, {
+    toast.info(nowEnabled ? `“${target.label}” visible again` : `“${target.label}” hidden from the bar`, {
       action: {
         label: 'Undo',
         onClick: () => {
@@ -137,7 +136,7 @@ export function ActionList({ scope }: { scope: ActionsScope }) {
     const next = [...list];
     next.splice(index + 1, 0, copy);
     void save(next);
-    addToast('success', `Duplicated “${source.label}”`);
+    toast.success(`Duplicated “${source.label}”`);
   };
 
   const focusRow = (id: string) => {

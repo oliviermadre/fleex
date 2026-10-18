@@ -9,7 +9,7 @@ import { useTicketStore } from '../../../stores/ticketStore';
 import { useWorkStore } from '../../../stores/workStore';
 import { usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
 import { usePopover, FloatingPortal } from '../../../hooks/usePopover';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import type { ActionsScope } from '../../../stores/uiStore';
 
 /** The AI hue: theme tint, so it stays legible on light and dark themes. */
@@ -193,7 +193,7 @@ export function useRunFromSettings(scope: ActionsScope) {
       return;
     }
     if (!context) {
-      useToastStore.getState().addToast('info', 'Open a ticket first: ticket actions run in its workspace.');
+      toast.info('Open a ticket first: ticket actions run in its workspace.');
       return;
     }
     executeWorkspaceAction(action, context);

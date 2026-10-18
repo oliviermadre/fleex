@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
 import * as api from '../../../services/api';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import { tintClasses } from '../../../lib/tints';
 import { cn } from '../../../lib/cn';
 import { ConfirmModal } from '../../ui/ConfirmModal';
@@ -33,7 +33,7 @@ export function DeleteDeliverableButton({ ticketId, deliverable, onDeleted, clas
       await api.deleteDeliverable(ticketId, deliverable.id);
       onDeleted?.(deliverable.id);
     } catch (e) {
-      useToastStore.getState().addToast('error', e instanceof Error ? e.message : "Couldn't delete deliverable");
+      toast.error(e instanceof Error ? e.message : "Couldn't delete deliverable");
     } finally {
       setBusy(false);
       setConfirming(false);

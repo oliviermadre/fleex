@@ -3,8 +3,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { CreateTaskModal } from './components/modals/CreateTaskModal';
 import { CommandPalette } from './components/command-palette/CommandPalette';
 import { AskMemoryModal } from './components/modals/AskMemoryModal';
-import { ToastContainer } from './components/ui/ToastContainer';
-import { NotificationToasts } from './components/notifications/NotificationToasts';
+import { Toaster } from './components/ui/toast/Toaster';
 import { VersionBanner } from './components/ui/VersionBanner';
 import { RouterSync } from './router/RouterSync';
 import { useTheme } from './hooks/useTheme';
@@ -21,7 +20,7 @@ export function App() {
     return (
       <BrowserRouter>
         <MobileApp />
-        <ToastContainer />
+        <Toaster linksEnabled={false} />
       </BrowserRouter>
     );
   }
@@ -33,9 +32,8 @@ export function App() {
       <CreateTaskModal />
       <CommandPalette />
       <AskMemoryModal />
-      <ToastContainer />
-      <NotificationToasts />
       <VersionBanner />
+      <Toaster />
     </BrowserRouter>
   );
 }

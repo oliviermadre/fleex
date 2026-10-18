@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { FocusItem, FocusItemKind, FocusRunning } from '@fleex/shared';
 import * as api from '../services/api';
-import { useToastStore } from './toastStore';
+import { toast } from '../lib/toast';
 import { useSessionStore } from './sessionStore';
 import { applyCliSessions } from '../components/focus/focusSessions';
 import type { FocusSort } from '../components/focus/focusModel';
@@ -25,6 +25,8 @@ import type { FocusSort } from '../components/focus/focusModel';
  */
 
 export const UNDO_MS = 5000;
+/** Toast id of an item's undo window — one per key, so a re-commit updates it in place. */
+const undoToastId = (key: string) => `focus:${key}`;
 const RELOAD_DEBOUNCE_MS = 500;
 /** Safety net: a settled key the server keeps returning reappears after this. */
 const SETTLED_TTL_MS = 30_000;
@@ -176,6 +178,7 @@ export const useFocusStore = create<FocusState>((set, get) => {
     const p = get().pending[key];
     if (!p) return;
     clearTimeout(p.timer);
+    toast.dismiss(undoToastId(key));
     set((s) => {
       const { [key]: _drop, ...pending } = s.pending;
       return { pending, settled: { ...s.settled, [key]: Date.now() + SETTLED_TTL_MS } };
@@ -197,7 +200,7 @@ export const useFocusStore = create<FocusState>((set, get) => {
           return { settled };
         });
         if (!(err instanceof Error && err.message.startsWith('API error'))) {
-          useToastStore.getState().addToast('error', `Action impossible : ${err instanceof Error ? err.message : String(err)}`);
+          toast.error(`Action impossible : ${err instanceof Error ? err.message : String(err)}`);
         }
       })
       .finally(() => get().scheduleReload());
@@ -254,12 +257,22 @@ export const useFocusStore = create<FocusState>((set, get) => {
       if (get().pending[item.key]) return;
       const timer = setTimeout(() => execute(item.key), UNDO_MS);
       set((s) => ({ pending: { ...s.pending, [item.key]: { label, timer, run: action, item } } }));
+      // The countdown that matters is this store's timer, so the toast must not
+      // pretend hovering buys time (pauseOnHover: false).
+      toast.show({
+        id: undoToastId(item.key),
+        message: label,
+        action: { label: 'Annuler', onClick: () => get().undo(item.key) },
+        durationMs: UNDO_MS,
+        pauseOnHover: false,
+      });
     },
 
     undo: (key) => {
       const p = get().pending[key];
       if (!p) return;
       clearTimeout(p.timer);
+      toast.dismiss(undoToastId(key));
       set((s) => {
         const { [key]: _drop, ...pending } = s.pending;
         return { pending };

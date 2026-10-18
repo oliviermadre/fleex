@@ -8,7 +8,7 @@ import { tintClasses } from '../../lib/tints';
 import { usePrCi } from '../../hooks/usePrCi';
 import { FloatingPortal, usePopover } from '../../hooks/usePopover';
 import { usePrCiStore } from '../../stores/prCiStore';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { PrCiMenu } from './PrCiMenu';
 import { PrMergeConfirm } from './PrMergeConfirm';
 
@@ -111,7 +111,6 @@ function PrCiSegment({ prRef, label, prUrl, status, borderColor, summary, error,
   const detail = usePrCiStore((s) => s.details[prRef]);
   const loadDetail = usePrCiStore((s) => s.loadDetail);
   const merge = usePrCiStore((s) => s.merge);
-  const addToast = useToastStore((s) => s.addToast);
   const retries = useRef(0);
 
   const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
@@ -159,7 +158,7 @@ function PrCiSegment({ prRef, label, prUrl, status, borderColor, summary, error,
     setMergeError(null);
     try {
       await merge(prRef, confirm.method, confirm.detail.headSha);
-      addToast('success', `${label} merged (${confirm.method})`);
+      toast.success(`${label} merged (${confirm.method})`);
       setConfirm(null);
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : String(err));
