@@ -1,11 +1,18 @@
 import { useEffect } from 'react';
 import { NOOP } from './noop';
 import type { TicketDeliverable } from '@fleex/shared';
+import { stripHtmlCodeFence } from '@fleex/shared';
 import { useUnreadStore } from '../stores/unreadStore';
+import { useUIStore } from '../stores/uiStore';
+import { useDeliverableTypesStore } from '../stores/deliverableTypesStore';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { tint } from '../lib/tints';
 
-/** Full-screen markdown reader for a deliverable; marks it seen on open. */
+/**
+ * Full-screen reader for a deliverable; marks it seen on open. HTML-rendered
+ * types (mockups…) play in an iframe, like the desktop overlay — the rest is
+ * markdown.
+ */
 export function MobileDeliverableReader({
   ticketId,
   deliverable,
@@ -17,9 +24,10 @@ export function MobileDeliverableReader({
 }) {
   const seen = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
   const toggleSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
+  const isHtml = useDeliverableTypesStore((s) => s.rendererFor)(deliverable.type) === 'html';
 
   useEffect(() => {
-    if (!seen?.has(deliverable.id)) {
+    if (ticketId && !seen?.has(deliverable.id)) {
       toggleSeen(ticketId, deliverable.id, true).catch(() => {});
     }
   }, [ticketId, deliverable.id, seen, toggleSeen]);
@@ -55,12 +63,33 @@ export function MobileDeliverableReader({
           {deliverable.status}
         </span>
       </header>
-      <div
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
-      >
-        <MarkdownRenderer content={deliverable.content} onToggleCheckbox={NOOP} />
-      </div>
+      {isHtml ? (
+        <iframe
+          srcDoc={stripHtmlCodeFence(deliverable.content).replace(/<\\\/script\s*>/gi, '</script>')}
+          title={deliverable.title}
+          className="min-h-0 w-full flex-1 border-0 bg-white"
+          style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+        />
+      ) : (
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
+        >
+          <MarkdownRenderer content={deliverable.content} onToggleCheckbox={NOOP} />
+        </div>
+      )}
     </div>
   );
+}
+
+/**
+ * The desktop overlay (`DeliverableReadingOverlay`, mounted by AppLayout) never
+ * exists on the phone, so cards calling `openDeliverableOverlay` did nothing on
+ * tap. This renders the mobile reader for them instead.
+ */
+export function MobileDeliverableOverlayHost() {
+  const deliverable = useUIStore((s) => s.deliverableOverlay);
+  const close = useUIStore((s) => s.closeDeliverableOverlay);
+  if (!deliverable) return null;
+  return <MobileDeliverableReader ticketId={deliverable.ticketId ?? ''} deliverable={deliverable} onClose={close} />;
 }
