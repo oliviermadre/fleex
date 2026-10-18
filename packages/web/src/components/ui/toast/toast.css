@@ -1,0 +1,41 @@
+/* Fleex's one toast surface — see Toaster.tsx and docs/adr/0001-single-toast.md. */
+
+@keyframes fleex-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+@keyframes fleex-toast-in-top {
+  from { opacity: 0; transform: translateY(-8px); }
+}
+
+/* Expiry bar: full → empty over the toast's duration (paused on hover). */
+@keyframes fleex-toast-progress {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.fleex-toast {
+  animation: fleex-toast-in 200ms ease-out;
+}
+
+.fleex-toaster[data-anchor='top'] .fleex-toast {
+  animation-name: fleex-toast-in-top;
+}
+
+.fleex-toast-progress {
+  transform-origin: left;
+  animation-name: fleex-toast-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.fleex-toast[data-paused='true'] .fleex-toast-progress {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fleex-toast,
+  .fleex-toast-progress {
+    animation: none;
+  }
+}

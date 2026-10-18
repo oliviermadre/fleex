@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { DELIVERABLE_RENDERERS, DELIVERABLE_COLOR_PRESETS, type DeliverableRenderer, type DeliverableTypeColor } from '@fleex/shared';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
@@ -165,7 +165,6 @@ export function DeliverableTypesTab() {
   const rename = useDeliverableTypesStore((s) => s.rename);
   const remove = useDeliverableTypesStore((s) => s.remove);
   const reassign = useDeliverableTypesStore((s) => s.reassign);
-  const addToast = useToastStore((s) => s.addToast);
 
   // New-type form
   const [newId, setNewId] = useState('');
@@ -187,13 +186,13 @@ export function DeliverableTypesTab() {
 
   const handleAdd = async () => {
     if (!newId.trim() || !newLabel.trim()) {
-      addToast('error', 'Id and label are required');
+      toast.error('Id and label are required');
       return;
     }
     try {
       await create({ id: newId.trim(), label: newLabel.trim(), description: newDescription.trim(), renderer: newRenderer, color: newColor });
       setNewId(''); setNewLabel(''); setNewDescription(''); setNewRenderer('markdown'); setNewColor(null);
-      addToast('success', 'Type created');
+      toast.success('Type created');
     } catch { /* toast handled by api.ts */ }
   };
 
@@ -205,7 +204,7 @@ export function DeliverableTypesTab() {
     if (!next || next.trim() === id) return;
     try {
       const migrated = await rename(id, next.trim());
-      addToast('success', `Renamed to "${next.trim()}" (${migrated} deliverable(s) migrated)`);
+      toast.success(`Renamed to "${next.trim()}" (${migrated} deliverable(s) migrated)`);
     } catch { /* toast handled by api.ts */ }
   };
 
@@ -213,18 +212,18 @@ export function DeliverableTypesTab() {
     if (!window.confirm(`Delete type "${id}"? This cannot be undone.`)) return;
     try {
       await remove(id);
-      addToast('success', 'Type deleted');
+      toast.success('Type deleted');
     } catch { /* toast handled by api.ts */ }
   };
 
   const handleReassign = async () => {
     if (!reassignFrom || !reassignTo || reassignFrom === reassignTo) {
-      addToast('error', 'Pick two different types');
+      toast.error('Pick two different types');
       return;
     }
     try {
       const migrated = await reassign(reassignFrom, reassignTo);
-      addToast('success', `${migrated} deliverable(s) moved from "${reassignFrom}" to "${reassignTo}"`);
+      toast.success(`${migrated} deliverable(s) moved from "${reassignFrom}" to "${reassignTo}"`);
       setReassignFrom(''); setReassignTo('');
     } catch { /* toast handled by api.ts */ }
   };

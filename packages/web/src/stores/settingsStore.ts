@@ -7,7 +7,7 @@ import type { Theme } from '../lib/themes';
 import * as api from '../services/api';
 import { useRepositoryStore } from './repositoryStore';
 import { DRAFT_SOURCE_PREFIX, getRunOrigin, usePinnedActionsStore } from './pinnedActionsStore';
-import { useToastStore } from './toastStore';
+import { toast } from '../lib/toast';
 
 // Shape owned by @fleex/shared so the server can read the probes; re-exported
 // here because every web caller already imports them from this store.
@@ -333,7 +333,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       pinned ? get().savePinnedIcons(items as PinnedIcon[]) : get().saveWorkspaceActions(items as WorkspaceAction[]);
 
     await save(withMode(list, 'terminal'));
-    useToastStore.getState().addToast('success', `${rule ? rule.label || action.label : action.label} will always run in a terminal`, {
+    toast.success(`${rule ? rule.label || action.label : action.label} will always run in a terminal`, {
       durationMs: 8000,
       action: {
         label: 'Undo',

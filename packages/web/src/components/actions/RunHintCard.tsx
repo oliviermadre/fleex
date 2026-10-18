@@ -3,7 +3,7 @@ import { extractBinaries, scriptFromAlias, type BinaryDiagnosis, type RunHint } 
 import { cn } from '../../lib/cn';
 import { tint, tintText } from '../../lib/tints';
 import * as api from '../../services/api';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { Button } from '../ui/Button';
 
 /** One diagnosis per program per page life: the answer only changes when the user edits their shell config. */
@@ -40,7 +40,7 @@ export function useBinaryDiagnosis(binary: string | undefined): BinaryDiagnosis 
 export function copyAliasScript(d: BinaryDiagnosis): void {
   if (!d.aliasDefinition) return;
   void navigator.clipboard?.writeText(scriptFromAlias(d.binary, d.aliasDefinition));
-  useToastStore.getState().addToast('success', `Script for ${d.binary} copied`, {
+  toast.success(`Script for ${d.binary} copied`, {
     detail: `Save it as ~/.local/bin/${d.binary}, chmod +x it, and remove the alias from your .zshrc.`,
     durationMs: 8000,
   });

@@ -82,7 +82,7 @@ function messages(): string[] {
 }
 
 function toastTypeFor(message: string) {
-  return useToastStore.getState().toasts.find((t) => t.message === message)?.type;
+  return useToastStore.getState().toasts.find((t) => t.message === message)?.tone;
 }
 
 beforeEach(() => {

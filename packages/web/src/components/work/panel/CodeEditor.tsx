@@ -9,7 +9,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import type { WorktreeTree } from '@fleex/shared';
 import * as api from '../../../services/api';
 import { useWorkStore } from '../../../stores/workStore';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import { useCodeEditorStore, tabKey } from '../../../stores/codeEditorStore';
 import { cn } from '../../../lib/cn';
 import { FileTree } from './FileTree';
@@ -26,7 +26,6 @@ const EMPTY_TABS: { repo: string; path: string }[] = [];
 const EMPTY_FILES: Record<string, import('../../../stores/codeEditorStore').EditorFile> = {};
 
 export function CodeEditor({ ticketId }: { ticketId: string }) {
-  const addToast = useToastStore((s) => s.addToast);
 
   const tabs = useCodeEditorStore((s) => s.tabsByTicket[ticketId]) ?? EMPTY_TABS;
   const activeKey = useCodeEditorStore((s) => s.activeByTicket[ticketId]) ?? null;
@@ -109,13 +108,13 @@ export function CodeEditor({ ticketId }: { ticketId: string }) {
       try {
         await api.saveWorktreeFile(ticketId, repo, path, st.content);
         patchFile(ticketId, key, { original: st.content, dirty: false, saving: false });
-        addToast('success', `Saved ${path.split('/').pop()}`);
+        toast.success(`Saved ${path.split('/').pop()}`);
         void loadTree();
       } catch {
         patchFile(ticketId, key, { saving: false });
       }
     },
-    [ticketId, patchFile, addToast, loadTree],
+    [ticketId, patchFile, loadTree],
   );
 
   const createFile = useCallback(
@@ -137,12 +136,12 @@ export function CodeEditor({ ticketId }: { ticketId: string }) {
         await api.deleteWorktreeFile(ticketId, repo, path);
         closeTabStore(ticketId, tabKey(repo, path));
         await loadTree();
-        addToast('success', `Deleted ${path.split('/').pop()}`);
+        toast.success(`Deleted ${path.split('/').pop()}`);
       } catch {
         /* toast surfaced by request helper */
       }
     },
-    [ticketId, closeTabStore, loadTree, addToast],
+    [ticketId, closeTabStore, loadTree],
   );
 
   // Reset to Edit view whenever the active file changes.

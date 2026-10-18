@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { useWorkStore } from '../../../stores/workStore';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
 import { useBoardEpics } from '../../../hooks/useBoardEpics';
 import { topReposForBoard } from '../../../lib/repoStatus';
@@ -44,7 +44,6 @@ export function NewTaskCompose({
   const resetDraft = useWorkStore((s) => s.resetDraft);
   const setView = useWorkStore((s) => s.setView);
   const selectTicket = useWorkStore((s) => s.selectTicket);
-  const addToast = useToastStore((s) => s.addToast);
   const [creating, setCreating] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
 
@@ -107,7 +106,7 @@ export function NewTaskCompose({
         try {
           await addTicketToGroup(epicId, ticket.id);
         } catch (e) {
-          addToast('error', `Couldn't add to ${name}: ${e instanceof Error ? e.message : 'unknown error'}`);
+          toast.error(`Couldn't add to ${name}: ${e instanceof Error ? e.message : 'unknown error'}`);
         }
       }
       // Attach each selected repo (keeps going on failure). A direct checkout wins
@@ -124,7 +123,7 @@ export function NewTaskCompose({
             ...(checkoutRef ? { checkoutRef } : baseBranch ? { baseBranch } : {}),
           });
         } catch (e) {
-          addToast('error', `Couldn't attach ${key}: ${extractLinkError(e)}`);
+          toast.error(`Couldn't attach ${key}: ${extractLinkError(e)}`);
         }
       }
       // Issue metadata: recovered via the existing sync-github route after creation,
@@ -140,7 +139,7 @@ export function NewTaskCompose({
       selectTicket(ticket.id);
       setView('task');
     } catch (e) {
-      addToast('error', e instanceof Error ? e.message : 'Failed to create task');
+      toast.error(e instanceof Error ? e.message : 'Failed to create task');
     } finally {
       setCreating(false);
       setProgress(null);

@@ -46,7 +46,7 @@ describe('run feedback', () => {
 
     handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 3, stderr: '\nerror: VPN required\nmore' }) });
     const toast = useToastStore.getState().toasts[0]!;
-    expect(toast.type).toBe('error');
+    expect(toast.tone).toBe('error');
     expect(toast.message).toContain('exit 3');
     expect(toast.detail).toBe('error: VPN required');
 
@@ -57,17 +57,17 @@ describe('run feedback', () => {
 
   it('toasts a success with its duration', () => {
     usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 0 }) });
-    expect(useToastStore.getState().toasts[0]).toMatchObject({ type: 'success', message: '✓ K8s prod (3.2 s)' });
+    expect(useToastStore.getState().toasts[0]).toMatchObject({ tone: 'success', message: '✓ K8s prod (3.2 s)' });
   });
 
   it('says "timed out" instead of a bare exit code', () => {
     usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 1, timedOut: true }) });
-    expect(useToastStore.getState().toasts[0]).toMatchObject({ type: 'warning', message: 'K8s prod — Timed out' });
+    expect(useToastStore.getState().toasts[0]).toMatchObject({ tone: 'warning', message: 'K8s prod — Timed out' });
   });
 
   it('says why when it can: a command not found names the program instead of "exit 127"', () => {
     usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ exitCode: 127, stderr: 'zsh:1: command not found: platool' }) });
-    expect(useToastStore.getState().toasts[0]).toMatchObject({ type: 'error', message: '✗ K8s prod — Command not found: platool' });
+    expect(useToastStore.getState().toasts[0]).toMatchObject({ tone: 'error', message: '✗ K8s prod — Command not found: platool' });
   });
 
   it('says "needs a terminal" for a docker run -it without TTY', () => {
@@ -216,7 +216,7 @@ describe('start toast', () => {
     expect(useToastStore.getState().toasts).toHaveLength(0);
     vi.advanceTimersByTime(1);
     const toast = useToastStore.getState().toasts[0]!;
-    expect(toast).toMatchObject({ type: 'info', message: 'K8s prod running…' });
+    expect(toast).toMatchObject({ tone: 'info', message: 'K8s prod running…' });
     expect(toast.action?.label).toBe('View output');
     toast.action!.onClick();
     expect(usePinnedActionsStore.getState().logs).toMatchObject({ sourceId: 'kp', runId: 'r1' });
@@ -262,7 +262,7 @@ describe('failures that need a terminal', () => {
 
   it('says "stopped" for a cancelled run', () => {
     usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ cancelled: true, exitCode: 130 }) });
-    expect(useToastStore.getState().toasts[0]).toMatchObject({ type: 'info', message: 'K8s prod — stopped' });
+    expect(useToastStore.getState().toasts[0]).toMatchObject({ tone: 'info', message: 'K8s prod — stopped' });
   });
 });
 

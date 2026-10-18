@@ -13,7 +13,7 @@ import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { useAgentEventStore } from '../stores/agentEventStore';
 import { useCommentDraft } from '../hooks/useCommentDraft';
-import { useToastStore } from '../stores/toastStore';
+import { toast } from '../lib/toast';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
@@ -220,9 +220,9 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     try {
       const result = await api.runMention(m.id);
       if (result.status === 'no_work') {
-        useToastStore.getState().addToast('info', `Rien à exécuter pour ${m.targetAgent}`);
+        toast.info(`Rien à exécuter pour ${m.targetAgent}`);
       } else if (result.status === 'already_running') {
-        useToastStore.getState().addToast('info', `${m.targetAgent} tourne déjà`);
+        toast.info(`${m.targetAgent} tourne déjà`);
       }
     } catch {
       // toast raised by the api layer

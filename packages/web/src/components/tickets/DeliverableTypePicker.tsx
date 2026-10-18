@@ -3,7 +3,7 @@ import type { TicketDeliverable } from '@fleex/shared';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useDocumentsStore } from '../../stores/documentsStore';
 import { useRoutineStore } from '../../stores/routineStore';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { themedTypeColor } from '../../lib/tints';
@@ -42,7 +42,7 @@ export function DeliverableTypePicker({
       if (docs.deliverables.length > 0) docs.fetchAll(); // refresh rows + sidebar counts
       useRoutineStore.getState().applyDeliverableUpdate(updated); // routine run lists
       useDeliverableTypesStore.getState().load(); // refresh usage counts
-      useToastStore.getState().addToast('success', `Type changed to ${labelFor(typeId)}`);
+      toast.success(`Type changed to ${labelFor(typeId)}`);
     } catch {
       // error toast handled by api.ts
     }

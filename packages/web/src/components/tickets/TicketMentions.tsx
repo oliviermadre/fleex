@@ -5,7 +5,7 @@ import { tint, tintText, tintClasses } from '../../lib/tints';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -228,7 +228,7 @@ export function TicketMentions({ ticketId, compact = false }: { ticketId: string
               ...prev,
               [d.mentionId]: { reason: d.reason, message: d.message },
             }));
-            useToastStore.getState().addToast('error', `${d.targetAgent}: ${d.message}`);
+            toast.error(`${d.targetAgent}: ${d.message}`);
           }
         } else if (msg.type === 'mention:deleted') {
           const d = msg.data as { id: string; ticketId: string };
@@ -292,9 +292,9 @@ export function TicketMentions({ ticketId, compact = false }: { ticketId: string
     try {
       const result = await api.runMention(mention.id);
       if (result.status === 'no_work') {
-        useToastStore.getState().addToast('info', `Nothing to execute for ${agentName}`);
+        toast.info(`Nothing to execute for ${agentName}`);
       } else if (result.status === 'already_running') {
-        useToastStore.getState().addToast('info', `${agentName} is already running`);
+        toast.info(`${agentName} is already running`);
       }
     } catch {
       // ignore

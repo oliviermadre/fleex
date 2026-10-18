@@ -6,7 +6,7 @@ import { cn } from '../../lib/cn';
 import { tint, type TintHue } from '../../lib/tints';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSkillStore } from '../../stores/skillStore';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import * as api from '../../services/api';
 
 const ORIGIN_HUE: Record<ClaudeCodeSkillOrigin, TintHue> = { user: 'green', project: 'orange', plugin: 'blue', synced: 'pink' };
@@ -22,7 +22,6 @@ const chip = (hue: TintHue) => cn('inline-flex shrink-0 items-center rounded px-
 export function ClaudeCodeSkillsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const personas = useAgentPersonaStore((s) => s.personas);
   const reloadRunnable = useSkillStore((s) => s.loadClaudeCodeSkills);
-  const addToast = useToastStore((s) => s.addToast);
 
   const [skills, setSkills] = useState<ClaudeCodeSkill[]>([]);
   const [hostId, setHostId] = useState('');
@@ -41,11 +40,11 @@ export function ClaudeCodeSkillsModal({ open, onClose }: { open: boolean; onClos
       setSkills(res.skills);
       setHostId(res.hostId);
     } catch (err) {
-      addToast('error', `Chargement des skills Claude Code impossible : ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`Chargement des skills Claude Code impossible : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, []);
 
   useEffect(() => {
     if (open) void refresh();
@@ -59,10 +58,10 @@ export function ClaudeCodeSkillsModal({ open, onClose }: { open: boolean; onClos
     setScanning(true);
     try {
       const r = await api.scanClaudeCodeSkills();
-      addToast('success', `Scan terminé : ${r.added} ajouté(s), ${r.changed} modifié(s), ${r.missing} manquant(s), ${r.back} revenu(s), ${r.invalid} invalide(s)`);
+      toast.success(`Scan terminé : ${r.added} ajouté(s), ${r.changed} modifié(s), ${r.missing} manquant(s), ${r.back} revenu(s), ${r.invalid} invalide(s)`);
       await afterChange();
     } catch (err) {
-      addToast('error', `Scan impossible : ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`Scan impossible : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setScanning(false);
     }
@@ -73,7 +72,7 @@ export function ClaudeCodeSkillsModal({ open, onClose }: { open: boolean; onClos
       await api.updateClaudeCodeSkill(id, req);
       await afterChange();
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -81,7 +80,7 @@ export function ClaudeCodeSkillsModal({ open, onClose }: { open: boolean; onClos
     const ids = [...selected];
     const { updated } = await api.bulkSetClaudeCodeSkillsEnabled(ids, enabled);
     setSelected(new Set());
-    addToast('success', `${enabled ? 'Activé(s)' : 'Désactivé(s)'} : ${updated} skill(s)`);
+    toast.success(`${enabled ? 'Activé(s)' : 'Désactivé(s)'} : ${updated} skill(s)`);
     await afterChange();
   };
 

@@ -2,18 +2,18 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 
 const deleteDeliverable = vi.fn();
-const addToast = vi.fn();
+const toastError = vi.fn();
 vi.mock('../../../services/api', () => ({
   deleteDeliverable: (t: string, d: string) => deleteDeliverable(t, d),
 }));
-vi.mock('../../../stores/toastStore', () => ({ useToastStore: { getState: () => ({ addToast }) } }));
+vi.mock('../../../lib/toast', () => ({ toast: { error: (m: string) => toastError(m) } }));
 
 import { DeleteDeliverableButton } from './DeleteDeliverableButton';
 
 afterEach(cleanup);
 beforeEach(() => {
   deleteDeliverable.mockReset();
-  addToast.mockReset();
+  toastError.mockReset();
 });
 
 const deliv = { id: 'd1', title: 'SPEC v1' };
@@ -55,7 +55,7 @@ describe('DeleteDeliverableButton', () => {
     const { onDeleted } = renderInCard();
     fireEvent.click(screen.getByRole('button', { name: 'Delete deliverable' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('error', 'boom'));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith('boom'));
     expect(onDeleted).not.toHaveBeenCalled();
   });
 });

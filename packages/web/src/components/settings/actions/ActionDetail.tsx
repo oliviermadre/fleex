@@ -15,7 +15,7 @@ import { resolveTemplate } from '../../../lib/templateUtils';
 import * as api from '../../../services/api';
 import { useActionsSettingsStore } from '../../../stores/actionsSettingsStore';
 import { DRAFT_SOURCE_PREFIX, usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import { requestLeave, setLeaveGuard, useUIStore, withoutLeaveGuard, type ActionsScope } from '../../../stores/uiStore';
 import { STATUS_LABEL, runDuration, statusDotClass, statusTextClass } from '../../actions/actionStatus';
 import { renderIcon } from '../../sidebar/PinnedIcons';
@@ -73,7 +73,6 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
   const setPendingNew = useActionsSettingsStore((s) => s.setPendingNew);
   const setComposeOpen = useActionsSettingsStore((s) => s.setComposeOpen);
   const aiAvailable = !!useActionsSettingsStore((s) => s.aiAvailable);
-  const addToast = useToastStore((s) => s.addToast);
   const isNew = id === 'new';
   const saved = isNew ? null : list.find((a) => a.id === id) ?? null;
 
@@ -155,14 +154,14 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
     setBaseline(JSON.stringify(savedDraft));
     setAiFields([]);
     setFromAi(false);
-    addToast('success', 'Saved', scope === 'pinned' && 'status' in value && value.status ? { detail: 'Probe scheduled — first check now' } : undefined);
+    toast.success('Saved', scope === 'pinned' && 'status' in value && value.status ? { detail: 'Probe scheduled — first check now' } : undefined);
     if (isNew) {
       setPendingNew(null);
       // Saved: moving from `new` to the action's own route is not leaving.
       withoutLeaveGuard(() => openActionSettings(scope, value.id));
     }
     return true;
-  }, [hasErrors, draft, scope, list, save, addToast, isNew, setPendingNew, openActionSettings]);
+  }, [hasErrors, draft, scope, list, save, isNew, setPendingNew, openActionSettings]);
 
   const discard = () => {
     if (isNew) {
@@ -296,7 +295,7 @@ export function ActionDetail({ scope, id }: { scope: ActionsScope; id: string })
     if (!removed) return;
     void save(list.filter((a) => a.id !== id));
     withoutLeaveGuard(() => openActionSettings(scope));
-    addToast('info', `“${removed.label || 'Untitled'}” deleted`, {
+    toast.info(`“${removed.label || 'Untitled'}” deleted`, {
       durationMs: 8000,
       action: {
         label: 'Undo',

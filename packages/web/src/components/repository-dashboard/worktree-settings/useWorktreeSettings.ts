@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { keyScope, type WorktreeConfigKey, type WorktreeHook, type WorktreeSettingsResponse } from '@fleex/shared';
 import * as api from '../../../services/api';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 
 export type Layer = 'personal' | 'shared';
 
@@ -61,7 +61,7 @@ export function useWorktreeSettings(repo: string, path: string | null) {
         return false; // toasted
       }
       if (next) setSettings(next);
-      if (touchedShared) useToastStore.getState().addToast('info', SHARED_TOAST);
+      if (touchedShared) toast.info(SHARED_TOAST);
       return true;
     },
     [settings, layerOf, repo, path, reload],
@@ -73,7 +73,7 @@ export function useWorktreeSettings(repo: string, path: string | null) {
       try {
         const res = await api.shareWorktreeKeys(path, keys);
         setSettings(res.settings);
-        useToastStore.getState().addToast('success', `Ajouté à .fleex/worktree.json, à committer`);
+        toast.success(`Ajouté à .fleex/worktree.json, à committer`);
       } catch { /* toasted */ }
     },
     [path],
@@ -85,7 +85,7 @@ export function useWorktreeSettings(repo: string, path: string | null) {
       try {
         const res = await api.unshareWorktreeKeys(path, keys, removeFromFile);
         setSettings(res.settings);
-        useToastStore.getState().addToast('success', removeFromFile ? 'Gardé pour toi et retiré de .fleex/worktree.json (à committer)' : 'Gardé pour toi : ta version masque celle de l\'équipe');
+        toast.success(removeFromFile ? 'Gardé pour toi et retiré de .fleex/worktree.json (à committer)' : 'Gardé pour toi : ta version masque celle de l\'équipe');
       } catch { /* toasted */ }
     },
     [path],

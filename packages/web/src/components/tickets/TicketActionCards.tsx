@@ -27,7 +27,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
-import { useToastStore } from '../../stores/toastStore';
+import { toast } from '../../lib/toast';
 import { Button } from '../ui/Button';
 import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
@@ -253,7 +253,7 @@ export function TicketActionCards({ ticketId, deliverables, onOpenExecution, sho
     try {
       await api.runMention(mentionId);
     } catch (err) {
-      useToastStore.getState().addToast('error', `Échec du relancement : ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`Échec du relancement : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setRelaunching((prev) => {
         const { [mentionId]: _drop, ...rest } = prev;

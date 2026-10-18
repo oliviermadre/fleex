@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { FocusItem, FocusItemKind, FocusRunning } from '@fleex/shared';
 import * as api from '../services/api';
-import { useToastStore } from './toastStore';
+import { toast } from '../lib/toast';
 import { useSessionStore } from './sessionStore';
 import { applyCliSessions } from '../components/focus/focusSessions';
 import type { FocusSort } from '../components/focus/focusModel';
@@ -197,7 +197,7 @@ export const useFocusStore = create<FocusState>((set, get) => {
           return { settled };
         });
         if (!(err instanceof Error && err.message.startsWith('API error'))) {
-          useToastStore.getState().addToast('error', `Action impossible : ${err instanceof Error ? err.message : String(err)}`);
+          toast.error(`Action impossible : ${err instanceof Error ? err.message : String(err)}`);
         }
       })
       .finally(() => get().scheduleReload());

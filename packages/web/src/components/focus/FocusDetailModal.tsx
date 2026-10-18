@@ -20,7 +20,6 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
 import { executeSkill } from '../../services/api';
-import { useToastStore } from '../../stores/toastStore';
 import { useFocusStore } from '../../stores/focusStore';
 import { FocusThread } from './FocusThread';
 import { ChevronDownIcon, KindIcon, SnoozeIcon } from './FocusIcons';
