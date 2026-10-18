@@ -45,7 +45,12 @@ export function AssistantConversation() {
     maybeStick();
   }, [items, maybeStick]);
 
-  // Stable by construction (`scrollToBottom` is a `useCallback([])`), so the
+  // Opening or switching conversation lands at its bottom, following.
+  useLayoutEffect(() => {
+    scrollToBottom();
+  }, [activeId, scrollToBottom]);
+
+  // Stable by construction (`scrollToBottom` only depends on the memoized `containerRef`), so the
   // composer never re-renders because of this prop.
   const handleSent = useCallback(() => {
     scrollToBottom();
