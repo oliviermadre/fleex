@@ -1,0 +1,257 @@
+# « Atelier Nova » — a fictional company whose backlog always looks presentable.
+# Atelier Nova sells creative workshops (ceramics, bookbinding, watercolour…)
+# booked online. Dates are relative to `fleex demo reset` (-30m, -2h, -3d, -1w).
+# Format: docs/releases.md. Keep it believable: real titles, varied statuses,
+# a few agents at work, a few humans in the loop.
+
+personas:
+  - { name: catalyst, displayName: The Catalyst, emoji: "💡", role: "Transforme une idée en PRD." }
+  - { name: builder, displayName: The Builder, emoji: "🔨", role: "Transforme une spec en PR." }
+  - { name: guardian, displayName: The Guardian, emoji: "🛡️", role: "Relit le code avant le merge." }
+  - { name: herald, displayName: Herald, emoji: "📣", role: "Raconte ce que la feature change pour l'utilisateur." }
+
+boards:
+  - { key: nova, name: "Atelier Nova", emoji: "🎨", createdAt: -60d }
+  - { key: ops, name: "Animateurs & Ops", emoji: "🧑‍🎨", createdAt: -45d }
+
+epics:
+  - { key: checkout, name: "Tunnel de réservation", emoji: "🛒", boards: [nova], timeframe: now, description: "Réserver un atelier en moins d'une minute." }
+  - { key: hosts, name: "Espace animateur", emoji: "🧑‍🏫", boards: [nova, ops], timeframe: now, description: "Donner aux animateurs une vitrine et des outils." }
+  - { key: growth, name: "Fidélisation", emoji: "🌱", boards: [nova], timeframe: next, description: "Faire revenir les participants." }
+
+tickets:
+  # ── Done ───────────────────────────────────────────────────────────────
+  - key: nova-03
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Carte des ateliers à Lyon"
+    status: done
+    priority: medium
+    tags: [découverte]
+    persona: builder
+    createdAt: -21d
+    statusAt: -6d
+    deliverables:
+      - title: "Récap de livraison — Carte des ateliers"
+        type: report
+        persona: builder
+        at: -12d
+        content: |
+          # Carte des ateliers à Lyon — livré
+
+          - 38 ateliers géolocalisés, regroupés par quartier.
+          - Filtre par discipline et par date directement sur la carte.
+          - Temps de chargement : 380 ms sur mobile 4G.
+  - key: nova-05
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Avis clients vérifiés"
+    status: done
+    priority: medium
+    tags: [confiance]
+    epic: growth
+    persona: builder
+    createdAt: -18d
+    statusAt: -4d
+  - key: nova-08
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Réservation sans compte"
+    status: done
+    priority: high
+    tags: [checkout]
+    epic: checkout
+    persona: builder
+    createdAt: -10d
+    statusAt: -1d
+    description: |
+      Permettre de réserver avec un simple e-mail. Le compte est proposé **après** le paiement.
+    comments:
+      - { persona: builder, at: -2d, body: "PR #212 ouverte : tunnel invité + e-mail de confirmation." }
+      - { persona: guardian, at: -36h, body: "Revue OK, deux suggestions non bloquantes (voir le livrable)." }
+      - { author: Nas, at: -1d, body: "Mergé 🎉 On surveille le taux de conversion cette semaine." }
+    deliverables:
+      - { title: "Revue de code — réservation invité", type: review, persona: guardian, at: -36h, file: deliverables/nova-08-review.md }
+    workflowRun:
+      name: "Spec Dev PR"
+      steps:
+        - { name: Spec, persona: catalyst, at: -9d }
+        - { name: Check Spec, gate: true, at: -8d }
+        - { name: Build, persona: builder, at: -3d }
+        - { name: Review, persona: guardian, at: -36h }
+  - key: nova-10
+    board: ops
+    repos: [atelier-nova/back-office]
+    title: "Export comptable mensuel des animateurs"
+    status: done
+    priority: low
+    tags: [ops]
+    persona: builder
+    createdAt: -14d
+    statusAt: -5d
+
+  # ── Review ─────────────────────────────────────────────────────────────
+  - key: nova-15
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Fiche animateur avec portfolio"
+    status: reviewing
+    priority: medium
+    tags: [animateurs]
+    epic: hosts
+    persona: guardian
+    createdAt: -6d
+    statusAt: -3h
+    description: |
+      Chaque animateur présente ses réalisations : 12 photos maximum, légendées, sur sa fiche publique.
+    comments:
+      - { persona: builder, at: -5h, body: "Implémenté selon le plan. Captures avant/après dans la PR #219." }
+      - { persona: guardian, at: -40m, body: "Je relis. Premier passage : l'ordre des photos n'est pas conservé à l'upload." }
+    deliverables:
+      - { title: "Plan d'implémentation", type: plan, persona: builder, at: -2d, file: deliverables/nova-15-plan.md }
+    workflowRun:
+      name: "Spec Dev PR"
+      status: running
+      steps:
+        - { name: Spec, persona: catalyst, at: -5d }
+        - { name: Check Spec, gate: true, at: -4d }
+        - { name: Build, persona: builder, at: -2d }
+        - { name: Review, persona: guardian, at: -40m }
+  - key: nova-16
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Galerie photos par atelier"
+    status: reviewing
+    priority: low
+    tags: [découverte]
+    persona: guardian
+    createdAt: -8d
+    statusAt: -1h
+
+  # ── Doing ──────────────────────────────────────────────────────────────
+  - key: nova-12
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Paiement en 3 fois"
+    status: doing
+    priority: high
+    tags: [checkout, paiement]
+    epic: checkout
+    persona: builder
+    createdAt: -4d
+    statusAt: -2h
+    description: |
+      Proposer Alma 3× sans frais entre 150 € et 3 000 €, avec le récapitulatif des échéances avant validation.
+    comments:
+      - { persona: catalyst, at: -3d, body: "PRD prêt. Point d'attention : le plafond Alma est à 3 000 €." }
+      - { author: Nas, at: -2d, body: "Validé. On garde le 4× pour plus tard." }
+      - { persona: builder, at: -2h, body: "Je démarre : intégration Alma côté serveur, puis le récapitulatif." }
+    deliverables:
+      - { title: "PRD — Paiement en 3 fois", type: prd, persona: catalyst, at: -3d, file: deliverables/nova-12-prd.md }
+    annotations:
+      - { at: -50h, title: "Plafond Alma : 3 000 € max", tone: warning, body: "Au-delà, on masque l'option." }
+      - { at: -26h, title: "Wording du récap validé", tone: success }
+    workflowRun:
+      name: "Spec Dev PR"
+      status: running
+      steps:
+        - { name: Spec, persona: catalyst, at: -3d }
+        - { name: Check Spec, gate: true, at: -2d }
+        - { name: Build, persona: builder, at: -2h }
+  - key: nova-18
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Rappels SMS la veille de l'atelier"
+    status: doing
+    priority: medium
+    tags: [notifications]
+    epic: growth
+    persona: builder
+    createdAt: -5d
+    statusAt: -4h
+  - key: nova-19
+    board: ops
+    repos: [atelier-nova/back-office]
+    title: "Planning des salles partagé avec les animateurs"
+    status: doing
+    priority: medium
+    tags: [ops]
+    epic: hosts
+    createdAt: -7d
+    statusAt: -1d
+
+  # ── Todo ───────────────────────────────────────────────────────────────
+  - key: nova-20
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Cartes cadeaux personnalisées"
+    status: todo
+    priority: high
+    tags: [fidélisation]
+    epic: growth
+    persona: catalyst
+    createdAt: -3d
+    comments:
+      - { persona: catalyst, at: -1d, body: "Je prépare le PRD : montant libre ou atelier précis ? Je propose les deux." }
+    deliverables:
+      - title: "PRD (brouillon) — Cartes cadeaux"
+        type: prd
+        status: draft
+        persona: catalyst
+        at: -20h
+        content: |
+          # Cartes cadeaux personnalisées
+
+          **Deux formats :** montant libre (25 € à 500 €) ou atelier précis.
+          Message personnalisé, envoi immédiat ou programmé, PDF imprimable.
+
+          *Question ouverte :* durée de validité, 12 ou 24 mois ?
+  - key: nova-21
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Filtre « ateliers en anglais »"
+    status: todo
+    priority: low
+    tags: [découverte]
+    createdAt: -6d
+  - key: nova-22
+    board: ops
+    repos: [atelier-nova/back-office]
+    title: "Contrat animateur signé en ligne"
+    status: todo
+    priority: medium
+    tags: [ops, légal]
+    epic: hosts
+    createdAt: -4d
+  - key: nova-23
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Page atelier : bloc « Ce que vous repartez avec »"
+    status: todo
+    priority: medium
+    tags: [conversion]
+    createdAt: -2d
+
+  # ── Backlog ────────────────────────────────────────────────────────────
+  - { key: nova-24, board: nova, repos: [atelier-nova/web], title: "Liste d'attente quand un atelier est complet", status: backlog, priority: high, tags: [checkout], epic: checkout, createdAt: -3d }
+  - { key: nova-25, board: nova, repos: [atelier-nova/web], title: "Code promo de parrainage", status: backlog, priority: medium, tags: [fidélisation], epic: growth, createdAt: -5d }
+  - { key: nova-26, board: nova, repos: [atelier-nova/web], title: "Export iCal des réservations", status: backlog, priority: low, tags: [agenda], createdAt: -6d }
+  - { key: nova-27, board: nova, repos: [atelier-nova/web], title: "Ateliers privés pour les entreprises", status: backlog, priority: medium, tags: [b2b], createdAt: -9d }
+  - { key: nova-28, board: ops, repos: [atelier-nova/back-office], title: "Inventaire du matériel par atelier", status: backlog, priority: low, tags: [ops], createdAt: -11d }
+  - { key: nova-29, board: ops, repos: [atelier-nova/back-office], title: "Notation des animateurs après chaque séance", status: backlog, priority: medium, tags: [qualité], epic: hosts, createdAt: -8d }
+  - { key: nova-30, board: nova, repos: [atelier-nova/web], title: "Abonnement « 1 atelier par mois »", status: backlog, priority: high, tags: [fidélisation], epic: growth, createdAt: -2d }
+  - { key: nova-31, board: nova, repos: [atelier-nova/web], title: "Pages ateliers traduites en anglais", status: backlog, priority: low, tags: [international], createdAt: -12d }
+  - { key: nova-32, board: ops, repos: [atelier-nova/back-office], title: "Alertes météo pour les ateliers en extérieur", status: backlog, priority: low, tags: [ops], createdAt: -4d }
+
+  # ── Cancelled ──────────────────────────────────────────────────────────
+  - key: nova-14
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Chat en direct avec les animateurs"
+    status: cancelled
+    priority: low
+    tags: [support]
+    createdAt: -20d
+    statusAt: -5d
+    comments:
+      - { author: Nas, at: -15d, body: "On abandonne : la messagerie asynchrone suffit, et la charge pour les animateurs est trop forte." }
