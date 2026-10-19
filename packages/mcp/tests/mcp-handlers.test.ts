@@ -78,4 +78,26 @@ describe('callToolResult', () => {
     await callToolResult(tools, 'fleex_ticket_list', {}, { exec: spyExec as never });
     expect(seenJson).toBe(true);
   });
+
+  it('prefixes the failure with the command and keeps both streams', async () => {
+    const both = async (): Promise<ExecResult> => ({
+      ok: false, exitCode: 2, stdout: 'partial progress', stderr: 'Error: ECONNREFUSED', argv: [],
+    });
+    const res = await callToolResult(tools, 'fleex_ticket_list', {}, { exec: both });
+    expect(res.isError).toBe(true);
+    expect(res.content[0]!.text).toBe(
+      'fleex ticket list failed: exited with code 2\npartial progress\nstderr:\nError: ECONNREFUSED',
+    );
+  });
+
+  it('rejects an unknown field before spawning anything', async () => {
+    // Real execFleex with a binary that cannot start: had a process been
+    // spawned, the text would say "could not start".
+    const res = await callToolResult(tools, 'fleex_ticket_list', { state: 'doing' }, {
+      execOpts: { bin: '/nonexistent/fleex' },
+    });
+    expect(res.isError).toBe(true);
+    expect(res.content[0]!.text).toContain('unknown field "state" for fleex_ticket_list — did you mean "status"?');
+    expect(res.content[0]!.text).not.toContain('could not start');
+  });
 });

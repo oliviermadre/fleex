@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
 import { generateTools } from '../src/generator.ts';
-import { execFleex, runFleexArgv } from '../src/executor.ts';
+import { classifyExecError, execFleex, runFleexArgv } from '../src/executor.ts';
 import type { GeneratedTool } from '../src/types.ts';
 
 // Use the current node binary as a stand-in for `fleex`, echoing its argv so we
@@ -77,5 +77,40 @@ describe('execFleex', () => {
     const argv = JSON.parse(res.stdout) as string[];
     expect(argv).not.toContain('--workspace');
     expect(argv).toEqual(['ticket', 'create', '--title', 'Fix bug']);
+  });
+});
+
+describe('classifyExecError', () => {
+  const ctx = { bin: '/nope/fleex', timeoutMs: 50, maxBuffer: 100 };
+
+  // exitCode keeps its historical value (1 for every non-numeric failure) so no
+  // existing caller breaks; the reason moves to `failure` instead of being lost.
+  it.each([
+    [{ code: null, killed: true, signal: 'SIGTERM' as const }, 1, 'timeout', 'killed after 50 ms timeout (SIGTERM)'],
+    [{ code: null, killed: false, signal: 'SIGKILL' as const }, 1, 'signal', 'killed by SIGKILL'],
+    [{ code: 'ENOENT' }, 1, 'spawn', 'could not start /nope/fleex: ENOENT'],
+    [{ code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }, 1, 'output-limit', 'output exceeded 100 bytes'],
+    [{ code: 3, killed: false, signal: null }, 3, 'exit', 'exited with code 3'],
+  ])('%o → exit %i, %s', (err, exitCode, kind, detail) => {
+    expect(classifyExecError(err, ctx)).toEqual({ exitCode, failure: { kind, detail } });
+  });
+});
+
+describe('runFleexArgv failure reasons', () => {
+  it('reports a timeout instead of a bare exit code', async () => {
+    const res = await runFleexArgv([], { bin: NODE, prefixArgs: ['-e', 'setTimeout(() => {}, 5000)'], timeoutMs: 50 });
+    expect(res).toMatchObject({ ok: false, exitCode: 1, failure: { kind: 'timeout' } });
+  });
+
+  it('reports a binary that cannot start', async () => {
+    const res = await runFleexArgv([], { bin: '/nonexistent/fleex' });
+    expect(res).toMatchObject({ ok: false, exitCode: 1, failure: { kind: 'spawn' } });
+    expect(res.failure!.detail).toContain('ENOENT');
+  });
+
+  it('leaves failure unset on success', async () => {
+    const res = await runFleexArgv([], { bin: NODE, prefixArgs: ['-e', ''] });
+    expect(res.ok).toBe(true);
+    expect(res.failure).toBeUndefined();
   });
 });

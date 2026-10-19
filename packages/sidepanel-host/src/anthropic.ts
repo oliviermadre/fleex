@@ -3,7 +3,7 @@
  * a streaming Claude completion and a CLI executor.
  */
 import Anthropic from '@anthropic-ai/sdk';
-import { execFleex, type ExecOptions } from '@fleex/mcp';
+import { execFleex, formatExecFailure, type ExecOptions } from '@fleex/mcp';
 import { inferModelCapabilities } from '@fleex/shared';
 import type { ExecFn, LlmComplete } from './assistant.ts';
 
@@ -46,7 +46,7 @@ export function createExec(execOpts: ExecOptions = {}): ExecFn {
       ? res.data !== undefined
         ? JSON.stringify(res.data)
         : res.stdout.trim() || 'OK'
-      : res.stdout.trim() || res.stderr.trim() || `fleex exited with code ${res.exitCode}`;
+      : formatExecFailure(res, tool.commandPath);
     return { ok: res.ok, text };
   };
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
 import { generateTools } from '../src/generator.ts';
-import { buildArgv } from '../src/argv.ts';
+import { buildArgv, suggestField } from '../src/argv.ts';
 import type { GeneratedTool } from '../src/types.ts';
 
 /** Build a small fleex-like tree mirroring real command shapes. */
@@ -224,5 +224,53 @@ describe('buildArgv', () => {
   it('throws when a required positional argument is missing', () => {
     const move = byName(tools, 'fleex_ticket_move');
     expect(() => buildArgv(move, { id: '42' })).toThrow(/missing required argument: status/);
+  });
+});
+
+// An ignored key used to return an unfiltered result as a success — worse than
+// an error, since the caller reasons on wrong data. Reject, and say how to fix.
+describe('buildArgv unknown fields', () => {
+  const tools = generateTools(fakeProgram());
+
+  it('reports every unknown key, in input order, then the accepted fields once', () => {
+    const create = byName(tools, 'fleex_ticket_create');
+    expect(() => buildArgv(create, { titel: 'x', zzz: 1, title: 'ok' })).toThrow(
+      'unknown field "titel" for fleex_ticket_create — did you mean "title"?\n' +
+        'unknown field "zzz" for fleex_ticket_create\n' +
+        'accepted fields: title, board, description, tag',
+    );
+  });
+
+  it('rejects host-owned workspace/json with a dedicated hint', () => {
+    const list = byName(tools, 'fleex_ticket_list');
+    let msg = '';
+    try { buildArgv(list, { workspace: 'x', json: true }); } catch (e) { msg = (e as Error).message; }
+    expect(msg).toContain('unknown field "workspace" for fleex_ticket_list — the workspace is set by the host, remove this field');
+    expect(msg).toContain('unknown field "json" for fleex_ticket_list — JSON output is always on, remove this field');
+  });
+
+  it('rejects an unknown key set to null but ignores one set to undefined', () => {
+    const list = byName(tools, 'fleex_ticket_list');
+    expect(() => buildArgv(list, { bogus: null })).toThrow(/unknown field "bogus"/);
+    expect(buildArgv(list, { bogus: undefined, status: 'doing' })).toEqual(['ticket', 'list', '--status', 'doing']);
+  });
+
+  it('keeps the existing validation messages intact', () => {
+    const move = byName(tools, 'fleex_ticket_move');
+    expect(() => buildArgv(move, { id: '42' })).toThrow('missing required argument: status');
+  });
+});
+
+describe('suggestField', () => {
+  it.each([
+    ['json_full', ['board', 'status', 'jsonFull'], 'jsonFull'],
+    ['repository', ['question', 'limit', 'repo', 'sources'], 'repo'],
+    ['quest', ['question', 'limit', 'repo', 'sources'], 'question'],
+    ['state', ['board', 'status', 'tag', 'epic', 'all', 'limit', 'jsonFull'], 'status'],
+    ['limt', ['question', 'limit', 'repo', 'sources'], 'limit'],
+    ['zzz', ['question', 'limit', 'repo', 'sources'], undefined],
+    ['re', ['question', 'limit', 'repo', 'sources'], undefined],
+  ])('%s → %s', (unknown, accepted, expected) => {
+    expect(suggestField(unknown, accepted)).toBe(expected);
   });
 });
