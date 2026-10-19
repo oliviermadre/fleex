@@ -18,5 +18,8 @@
   },
   "devDependencies": {
     "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "yaml": "^2.8.0"
   }
 }
