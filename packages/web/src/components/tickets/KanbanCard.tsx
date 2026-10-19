@@ -139,6 +139,7 @@ export function KanbanCard({
   return (
     <>
     <div
+      data-testid="ticket-card"
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData('application/x-ticket-id', ticket.id);

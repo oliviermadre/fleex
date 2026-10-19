@@ -239,7 +239,7 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
   ];
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
+    <div data-testid="ticket-detail" className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {!embedded && <TicketDetailHeader ticket={ticket} />}
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}

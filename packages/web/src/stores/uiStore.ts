@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { TicketDeliverable } from '@fleex/shared';
 
-type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
+type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus' | 'releases';
 export type SettingsTab = 'general' | 'appearance' | 'actions' | 'agent-tokens' | 'deliverable-types' | 'memory' | 'connectors';
 /** Settings › Actions: which scope's list, and which action's detail (`'new'` = unsaved draft). */
 export type ActionsScope = 'pinned' | 'ticket';

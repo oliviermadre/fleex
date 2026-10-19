@@ -126,7 +126,10 @@ async function main() {
   await app.register(repositoryRoutes(container));
   await app.register(worktreeDiffRoutes(container));
   await app.register(healthRoutes(container));
+  // Demo workspace only (FLEEX_DEMO_MODE=1): seeds a presentable backlog for screenshots.
+  if (isDemoMode()) await app.register(demoRoutes(container));
   await app.register(versionRoutes());
+  await app.register(releasesRoutes({ logger: container.logger }));
   await app.register(memoryRoutes(container));
   await app.register(configRoutes(container));
   await app.register(deliverableTypesRoutes(container));

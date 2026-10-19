@@ -97,7 +97,7 @@ export function AppLayout() {
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
   // Hide the content panel when editing a workflow so the editor takes the full viewport width
   const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId;
-  const hideContentPanel = activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'focus' || activePanel === 'execution-log' || activePanel === 'documents' || activePanel === 'work' || editingWorkflow;
+  const hideContentPanel = activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'focus' || activePanel === 'execution-log' || activePanel === 'documents' || activePanel === 'work' || activePanel === 'releases' || editingWorkflow;
   const effectiveContentWidth = hideContentPanel
     ? 0
     : contentPanelCollapsed

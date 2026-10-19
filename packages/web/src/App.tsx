@@ -10,6 +10,10 @@ import { useTheme } from './hooks/useTheme';
 import { useTerminalFont } from './hooks/useTerminalFont';
 import { useMobileMode } from './mobile/useMobileMode';
 import { MobileApp } from './mobile/MobileApp';
+import { DEMO_MODE, DEMO_MODE_CSS } from './lib/demoMode';
+
+/** `?demo=1` (screenshots): no banner, no toasts, no animation. */
+const demoStyle = DEMO_MODE ? <style>{DEMO_MODE_CSS}</style> : null;
 
 export function App() {
   useTheme();
@@ -19,21 +23,23 @@ export function App() {
   if (isMobile) {
     return (
       <BrowserRouter>
+        {demoStyle}
         <MobileApp />
-        <Toaster linksEnabled={false} />
+        {!DEMO_MODE && <Toaster linksEnabled={false} />}
       </BrowserRouter>
     );
   }
 
   return (
     <BrowserRouter>
+      {demoStyle}
       <RouterSync />
       <AppLayout />
       <CreateTaskModal />
       <CommandPalette />
       <AskMemoryModal />
-      <VersionBanner />
-      <Toaster />
+      {!DEMO_MODE && <VersionBanner />}
+      {!DEMO_MODE && <Toaster />}
     </BrowserRouter>
   );
 }
