@@ -142,9 +142,9 @@ export function NewTaskCompose({
         setProgress('Handing over to the assistant…');
         try {
           const res = await startAssistant(ticket.id);
-          if (!res.assistant) addToast('info', 'No assistant configured — the ticket was created without hand-over.');
+          if (!res.assistant) toast.info('No assistant configured — the ticket was created without hand-over.');
         } catch (e) {
-          addToast('error', `Couldn't start the assistant: ${e instanceof Error ? e.message : 'unknown error'}`);
+          toast.error(`Couldn't start the assistant: ${e instanceof Error ? e.message : 'unknown error'}`);
         }
       }
       resetDraft(effectiveBoardId);
