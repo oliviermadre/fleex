@@ -28,8 +28,9 @@ const GLOBAL_SCRATCHPAD_KEY = '__global__';
 /**
  * Kinds a full walk is authoritative for, and may therefore prune.
  *
- * `qa_pair`, `execution_trace`, `curated_note` and `assistant_conversation` are
- * absent on purpose: nothing walks them, so every one of them would look orphaned.
+ * `qa_pair`, `execution_trace`, `curated_note`, `assistant_conversation` and
+ * `correction` are absent on purpose: nothing here walks them, so every one of
+ * them would look orphaned.
  */
 const PRUNABLE_KINDS: readonly MemorySourceKind[] = [
   'ticket', 'comment_thread', 'deliverable', 'ticket_summary', 'cli_session_summary',

@@ -64,6 +64,12 @@ export interface MemorySnippet {
    * content heuristic would be guesswork.
    */
   tags?: string[];
+  /**
+   * Agent the chunk is about, for the kinds that have one (`qa_pair`,
+   * `correction`, `curated_note`). Lets the coach keep another agent's lessons
+   * out of this one's memory.
+   */
+  agentName?: string | null;
 }
 
 export interface RetrieveContextResult {
@@ -258,6 +264,19 @@ export class RetrieveContextUseCase {
       repo: params.repo ?? null,
       embeddingModel: this.embeddings!.id,
     });
+  }
+
+  /**
+   * Every chunk of a kind about one agent, newest first, as snippets.
+   *
+   * For the kinds a consumer wants in full rather than ranked against a query —
+   * the coach reads an agent's corrections, all of which are relevant by
+   * construction.
+   */
+  async listForAgent(params: { kind: MemorySourceKind; agentName: string; limit: number }): Promise<MemorySnippet[]> {
+    if (!this.isSemanticEnabled()) return [];
+    const chunks = await this.memoryStore!.listByAgent(params.kind, params.agentName, params.limit);
+    return this.toSnippets(chunks.map((chunk) => ({ chunk, similarity: 0, score: 0 })), { includeSummaries: true });
   }
 
   /**
@@ -518,6 +537,7 @@ export class RetrieveContextUseCase {
         repo: hit.chunk.metadata.repo ?? null,
         updatedAt: hit.chunk.sourceUpdatedAt?.toISOString() ?? null,
         tags: hit.chunk.metadata.tags ?? [],
+        agentName: hit.chunk.metadata.agentName ?? null,
       });
     }
     return out;

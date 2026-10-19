@@ -78,6 +78,38 @@ export function memoryRoutes(container: Container) {
       return reply.code(202).send({ started: true });
     });
 
+    /**
+     * Run the nightly consolidation now: the same pass the timer runs.
+     *
+     * Synchronous, unlike reindex: a pass is a handful of model calls, and the
+     * caller wants the verdicts. Not gated on the scheduler role — running it by
+     * hand is an explicit choice, the role only stops a QA worktree from doing it
+     * on its own.
+     */
+    app.post<{ Body: { sinceDays?: number; dryRun?: boolean } }>(
+      '/api/memory/consolidate',
+      async (request, reply) => {
+        const consolidator = container.memoryConsolidator;
+        if (!consolidator) {
+          return reply.code(503).send({ error: 'No memory index is available on this storage driver.' });
+        }
+        const sinceDays = request.body?.sinceDays;
+        if (sinceDays !== undefined && (!Number.isFinite(sinceDays) || sinceDays <= 0)) {
+          return reply.code(400).send({ error: '`sinceDays` must be a positive number of days.' });
+        }
+        const result = await consolidator.run({ sinceDays, dryRun: !!request.body?.dryRun });
+        if (result.status === 'unavailable') {
+          return reply.code(409).send({
+            error: 'The semantic memory engine is not enabled. Turn it on in Settings › Memory.',
+          });
+        }
+        if (result.status === 'busy') {
+          return reply.code(409).send({ error: 'A consolidation pass is already running.' });
+        }
+        return result;
+      },
+    );
+
     app.get<{ Querystring: { q?: string; limit?: string; repo?: string; kind?: string } }>(
       '/api/memory/search',
       async (request, reply) => {
@@ -420,6 +452,7 @@ export function memoryRoutes(container: Container) {
         index: stats,
         injectionCharBudget: settings.memoryInjectionCharBudget ?? null,
         reindexing: running !== null,
+        consolidation: container.memoryConsolidator ? await container.memoryConsolidator.status() : null,
       };
     });
   };

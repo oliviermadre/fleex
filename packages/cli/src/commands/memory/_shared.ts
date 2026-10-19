@@ -76,6 +76,7 @@ export const MEMORY_FEATURE_KEYS = [
   'relatedNotes',
   'executionTraces',
   'cliSessions',
+  'consolidation',
 ] as const;
 
 /**
@@ -99,4 +100,10 @@ export const MEMORY_SOURCE_KINDS = [
   'qa_pair',
   'curated_note',
   'assistant_conversation',
+  'correction',
 ] as const;
+
+/** An ISO timestamp as this machine's local date and time, to the minute. */
+export function localTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+}

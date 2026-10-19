@@ -1,5 +1,5 @@
 import type { DraftChunk } from './chunker.js';
-import { splitMarkdown } from './chunker.js';
+import { HUMAN_FEEDBACK_TAG, MAX_CHUNK_CHARS, splitMarkdown } from './chunker.js';
 
 /**
  * Tag marking content a human chose to keep.
@@ -60,6 +60,14 @@ export interface QaPairInput {
   agentName: string;
   /** What the agent asked for before it paused. */
   question: string;
+  /**
+   * The agent's own question could not be found, so `question` holds the human
+   * request that started the exchange instead. Labelled as such, so the chunk
+   * never puts a human's words in the agent's mouth.
+   */
+  requestOnly?: boolean;
+  /** Who wrote the request, when `requestOnly` is set. */
+  requesterName?: string | null;
   /** The reply that unblocked it. */
   answer: string;
   repo?: string | null;
@@ -91,7 +99,9 @@ export function chunkQaPair(input: QaPairInput): DraftChunk[] {
     sourceId: input.mentionId,
     chunkIndex: 0,
     title: `${label}: ${input.ticketTitle} > ${input.agentName} asked`,
-    content: `**Question** (${input.agentName}):\n${question}\n\n**Answer**:\n${answer}`,
+    content: input.requestOnly
+      ? `**Request** (${input.requesterName ?? 'user'}):\n${question}\n\n**Answer**:\n${answer}`
+      : `**Question** (${input.agentName}):\n${question}\n\n**Answer**:\n${answer}`,
     metadata: {
       ticketId: input.ticketId,
       boardId: input.boardId ?? null,
@@ -103,6 +113,98 @@ export function chunkQaPair(input: QaPairInput): DraftChunk[] {
     },
     sourceUpdatedAt: input.answeredAt ?? null,
   }];
+}
+
+export interface CorrectionInput {
+  /** The mention the correction created — the identity of this exchange. */
+  mentionId: string;
+  ticketId: string;
+  ticketTitle: string;
+  ticketDisplayId?: number | string | null;
+  /** The agent that was corrected. */
+  agentName: string;
+  /** Who corrected it. */
+  humanName: string;
+  /** The generalisable lesson the judge drew from the exchange. */
+  lesson: string;
+  /** What the agent had said, when the correction replies to it directly. */
+  agentSaid?: string | null;
+  correction: string;
+  response: string;
+  repo?: string | null;
+  boardId?: string | null;
+  tags?: string[];
+  respondedAt?: Date | null;
+}
+
+/** Per-block ceilings, so the whole correction fits one chunk. */
+const SAID_MAX = 400;
+const CORRECTION_MAX = 700;
+const RESPONSE_MAX = 500;
+
+/**
+ * Chunk a correction a human made without being asked.
+ *
+ * An agent asks when it doubts; when it is confidently wrong it asks nothing, and
+ * the human steps in. That exchange is the most valuable lesson an agent can get,
+ * and until now it left no trace but a comment in a thread.
+ *
+ * The lesson leads, because a short chunk retrieves on its opening. Kept as one
+ * chunk: the lesson without the exchange is an unsupported claim, and the coach
+ * is told to check one against the other.
+ */
+export function chunkCorrection(input: CorrectionInput): DraftChunk[] {
+  const lesson = input.lesson.trim();
+  const correction = input.correction.trim();
+  const response = input.response.trim();
+  if (!lesson || !correction || !response) return [];
+
+  const blocks = {
+    said: truncate(input.agentSaid?.trim() ?? '', SAID_MAX),
+    response: truncate(response, RESPONSE_MAX),
+    correction: truncate(correction, CORRECTION_MAX),
+  };
+  const render = () => [
+    `**Lesson**: ${lesson}`,
+    blocks.said ? `**Agent said** (${input.agentName}):\n${blocks.said}` : null,
+    `**Human correction** (${input.humanName}):\n${blocks.correction}`,
+    `**Agent response** (${input.agentName}):\n${blocks.response}`,
+  ].filter(Boolean).join('\n\n');
+
+  // Over the ceiling, give up context in order of how little it adds: the
+  // original claim first (the correction restates it), then the reply, and the
+  // correction itself last.
+  let content = render();
+  for (const key of ['said', 'response', 'correction'] as const) {
+    const excess = content.length - MAX_CHUNK_CHARS;
+    if (excess <= 0) break;
+    blocks[key] = truncate(blocks[key], Math.max(0, blocks[key].length - excess - 1));
+    content = render();
+  }
+  content = content.slice(0, MAX_CHUNK_CHARS);
+
+  const label = input.ticketDisplayId ? `Ticket #${input.ticketDisplayId}` : 'Ticket';
+  return [{
+    sourceKind: 'correction',
+    sourceId: input.mentionId,
+    chunkIndex: 0,
+    title: `${label}: ${input.ticketTitle} > ${input.humanName} corrected ${input.agentName}`,
+    content,
+    metadata: {
+      ticketId: input.ticketId,
+      boardId: input.boardId ?? null,
+      repo: input.repo ?? null,
+      agentName: input.agentName,
+      tags: [...new Set([...(input.tags ?? []), CURATED_TAG, HUMAN_FEEDBACK_TAG])],
+    },
+    sourceUpdatedAt: input.respondedAt ?? null,
+  }];
+}
+
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  if (max <= 1) return '';
+  return `${text.slice(0, max - 1)}…`;
 }
 
 export interface AssistantDigestInput {

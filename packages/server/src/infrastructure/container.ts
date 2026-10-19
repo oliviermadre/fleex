@@ -104,6 +104,7 @@ import { RetrieveContextUseCase } from '../application/use-cases/retrieve-contex
 import { MemoryKernel } from '../application/memory/memory-kernel.js';
 import { MemoryEventListener } from '../application/memory/memory-event-listener.js';
 import { MemorySweeper } from '../application/memory/memory-sweeper.js';
+import { MemoryConsolidator } from '../application/memory/memory-consolidator.js';
 import { buildEmbeddingProvider } from './adapters/embeddings/build-embedding-provider.js';
 import { BackfillMemoryUseCase } from '../application/use-cases/backfill-memory.js';
 import { AskMemoryUseCase } from '../application/use-cases/ask-memory.js';
@@ -519,6 +520,23 @@ export async function createContainer() {
   // is fetched once, and everything written while that is in flight would
   // otherwise stay in the table and out of every query. Started in main.ts.
   const memorySweeper = memoryKernel ? new MemorySweeper(memoryKernel, config, logger) : null;
+
+  // Learns, once a night, from the times a human corrected an agent unprompted —
+  // the exchanges `mention.woken_up` never sees. Started in main.ts; armed only
+  // where routines are, so a QA worktree does not consolidate with unmerged code.
+  const memoryConsolidator = memoryKernel
+    ? new MemoryConsolidator({
+        config,
+        kernel: memoryKernel,
+        mentionStore,
+        commentStore,
+        ticketStore: ticketStore_,
+        kvStore: kvStore ?? null,
+        synthesiser: memorySynthesiser,
+        logger,
+        schedulerArmed: schedulerRole.armed,
+      })
+    : null;
 
   const curateMemory = new CurateMemoryUseCase(
     agentEventStore_, retrieveContext, logger, memoryKernel ?? undefined,
@@ -956,6 +974,7 @@ export async function createContainer() {
     askMemory,
     memoryEventListener,
     memorySweeper,
+    memoryConsolidator,
     rememberCliSession,
     coachPersona,
     synthesiseMemory,

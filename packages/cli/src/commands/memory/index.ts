@@ -25,11 +25,13 @@ const def: CommandDef = {
   ${DIM('$')} fleex memory engine --disable ask curation
   ${DIM('$')} fleex memory status                         ${DIM('# what the index holds')}
   ${DIM('$')} fleex memory reindex                        ${DIM('# walk the corpus again (safe to re-run)')}
+  ${DIM('$')} fleex memory consolidate --since 120 --dry-run ${DIM('# what the nightly pass would learn')}
   ${DIM('$')} fleex memory bench                          ${DIM('# how well retrieval finds things here')}
 
 ${SECTION('Notes:')}
   ${DIM('search')}, ${DIM('similar')}, ${DIM('links')} and ${DIM('bench')} are local and free — no network, no model.
   ${DIM('ask')}, ${DIM('compile')} and ${DIM('coach')} each spend one LLM call.
+  ${DIM('consolidate')} runs by itself once a night; it spends one LLM call per 10 candidate exchanges.
   All of them need the semantic engine on (Settings › Memory).
   Looking for what you keep repeating by hand? That is ${DIM('fleex routine suggest')}.
 `,

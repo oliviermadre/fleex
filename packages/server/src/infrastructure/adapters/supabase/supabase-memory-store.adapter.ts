@@ -279,6 +279,20 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
     return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
   }
 
+  async listByAgent(sourceKind: MemorySourceKind, agentName: string, limit: number): Promise<MemoryChunkEntity[]> {
+    // `ilike` for case-insensitivity; the name's own wildcards are escaped so
+    // `my_agent` cannot match `myXagent`.
+    const pattern = agentName.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+    const { data, error } = await this.conn.client
+      .from(TABLE).select(COLUMNS)
+      .eq('source_kind', sourceKind)
+      .ilike('agent_name', pattern)
+      .order('source_updated_at', { ascending: false, nullsFirst: false })
+      .limit(limit);
+    if (error) throw new Error(`memory agent read failed: ${error.message}`);
+    return (data as unknown as MemoryChunkRow[] ?? []).map(toEntity);
+  }
+
   async getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>> {
     const { data, error } = await this.conn.client
       .from(TABLE).select('chunk_index, content_hash')

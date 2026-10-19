@@ -259,6 +259,22 @@ describe('keyword search', () => {
   });
 });
 
+describe('listByAgent', () => {
+  it('reads one kind for one agent, newest first, whatever the name casing', async () => {
+    await store.upsertChunks([
+      await chunk({ sourceKind: 'correction', sourceId: 'old', content: 'old lesson', metadata: { agentName: 'builder' }, sourceUpdatedAt: new Date('2026-09-01T00:00:00Z') }),
+      await chunk({ sourceKind: 'correction', sourceId: 'new', content: 'new lesson', metadata: { agentName: 'builder' }, sourceUpdatedAt: new Date('2026-10-18T00:00:00Z') }),
+      await chunk({ sourceKind: 'correction', sourceId: 'other', content: 'not ours', metadata: { agentName: 'catalyst' } }),
+      await chunk({ sourceKind: 'qa_pair', sourceId: 'qa', content: 'other kind', metadata: { agentName: 'builder' } }),
+    ]);
+
+    const rows = await store.listByAgent('correction', 'Builder', 10);
+
+    expect(rows.map((r) => r.sourceId)).toEqual(['new', 'old']);
+    expect((await store.listByAgent('correction', 'builder', 1)).map((r) => r.sourceId)).toEqual(['new']);
+  });
+});
+
 describe('embedding sweep', () => {
   it('lists chunks awaiting a vector, oldest first', async () => {
     await store.upsertChunks([

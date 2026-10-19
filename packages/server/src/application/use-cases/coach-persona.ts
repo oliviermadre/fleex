@@ -4,8 +4,20 @@ import { HUMAN_FEEDBACK_TAG } from '../memory/chunker.js';
 import { MemorySynthesiser, NOTHING_SENTINEL, renderEvidence } from '../memory/memory-synthesiser.js';
 import type { MemorySnippet, RetrieveContextUseCase } from './retrieve-context.js';
 
-/** How many corrections to draw on. Enough for a pattern, not a transcript. */
+/** How many excerpts to draw on. Enough for a pattern, not a transcript. */
 const EVIDENCE_LIMIT = 20;
+
+/**
+ * Per-kind quotas, in reading order. Corrections first: they are the moments the
+ * agent was confidently wrong, which no other kind captures. Threads fill what
+ * is left.
+ */
+const CORRECTION_QUOTA = 10;
+const QA_PAIR_QUOTA = 6;
+const NOTE_QUOTA = 2;
+
+/** Search depth before the per-agent filter. The store's maximum. */
+const AGENT_FILTERED_LIMIT = 50;
 
 const SYSTEM_PROMPT = `
 You maintain the long-term memory of a coding agent: a short markdown document of
@@ -13,6 +25,11 @@ durable lessons that is prepended to every one of its future runs.
 
 You are given the agent's current memory and excerpts of past work where a human
 corrected it or answered its questions.
+
+A "correction" excerpt starts with a proposed lesson. Treat it as a hint, not as
+truth: keep it only if the exchange supports it, and merge it with any existing
+lesson on the same topic. Corrections the agent received are the strongest
+evidence you have: the agent was confidently wrong and did not ask.
 
 Write the complete replacement document. Rules:
 - Keep every existing lesson that the excerpts do not contradict. This is an
@@ -122,21 +139,38 @@ export class CoachPersonaUseCase {
   /**
    * Retrieve the corrections and answered questions involving this agent.
    *
-   * Two searches rather than one filtered pass: the corrections live in comment
-   * threads tagged as feedback, the answered questions in `qa_pair` chunks, and
-   * the two carry different vocabulary. A single query would let whichever kind is
-   * more verbose crowd out the other.
+   * One search per kind rather than one filtered pass: each kind carries its own
+   * vocabulary, and a single query let whichever was more verbose crowd out the
+   * rest — on a live instance the generic query matched a thread's "User
+   * decision: approve" and never the correction three fragments later.
+   *
+   * Corrections are read for this agent directly, newest first: the latest are
+   * the ones the memory has not absorbed yet. Q&A pairs are filtered to this
+   * agent after retrieval, so another agent's lessons cannot end up in this
+   * one's memory.
    */
   private async gatherEvidence(personaName: string): Promise<MemorySnippet[]> {
     const query = `corrections, decisions and answered questions involving the agent ${personaName}`;
+    const isThisAgent = (s: MemorySnippet) => sameAgent(s.agentName, personaName);
 
-    const [threads, pairs] = await Promise.all([
+    const [corrections, pairs, notes, threads] = await Promise.all([
+      // Read, not searched: every correction of this agent is relevant, and a
+      // kind-filtered vector search misses small kinds on Supabase.
+      this.retrieveContext.listForAgent({ kind: 'correction', agentName: personaName, limit: CORRECTION_QUOTA }),
+      this.retrieveContext.search({ query, limit: AGENT_FILTERED_LIMIT, kinds: ['qa_pair'] }),
+      this.retrieveContext.search({ query, limit: EVIDENCE_LIMIT, kinds: ['curated_note'] }),
       this.retrieveContext.search({ query, limit: EVIDENCE_LIMIT, kinds: ['comment_thread'] }),
-      this.retrieveContext.search({ query, limit: EVIDENCE_LIMIT, kinds: ['qa_pair', 'curated_note'] }),
     ]);
 
+    const ordered = [
+      ...corrections.filter((s) => s.sourceKind === 'correction' && isThisAgent(s)).slice(0, CORRECTION_QUOTA),
+      ...pairs.filter((s) => s.sourceKind === 'qa_pair' && isThisAgent(s)).slice(0, QA_PAIR_QUOTA),
+      ...notes.filter((s) => s.sourceKind === 'curated_note' && (!s.agentName || isThisAgent(s))).slice(0, NOTE_QUOTA),
+      ...threads.filter((s) => s.sourceKind === 'comment_thread'),
+    ];
+
     const seen = new Set<string>();
-    return [...pairs, ...threads]
+    return ordered
       .filter(teachesSomething)
       .filter((s) => {
         const key = `${s.sourceKind}:${s.sourceId}`;
@@ -149,6 +183,14 @@ export class CoachPersonaUseCase {
 }
 
 /**
+ * Whether a chunk's agent is this persona. Mentions target a slug
+ * (`@agent:builder`) while a persona has a display name (`Builder`).
+ */
+function sameAgent(agentName: string | null | undefined, personaName: string): boolean {
+  return !!agentName && agentName.trim().toLowerCase() === personaName.trim().toLowerCase();
+}
+
+/**
  * Whether a retrieved snippet carries a lesson.
  *
  * Stated over the snippet rather than left to the store's `kinds` filter, so the
@@ -157,7 +199,9 @@ export class CoachPersonaUseCase {
  * lesson; a Q&A pair or a note someone deliberately kept always is.
  */
 function teachesSomething(snippet: MemorySnippet): boolean {
-  if (snippet.sourceKind === 'qa_pair' || snippet.sourceKind === 'curated_note') return true;
+  if (snippet.sourceKind === 'correction' || snippet.sourceKind === 'qa_pair' || snippet.sourceKind === 'curated_note') {
+    return true;
+  }
   if (snippet.sourceKind === 'comment_thread') return !!snippet.tags?.includes(HUMAN_FEEDBACK_TAG);
   return false;
 }
@@ -176,6 +220,7 @@ export function buildCoachPrompt(
     current,
     '',
     '## Past work where a human corrected this agent or answered its questions',
+    '(Excerpts of kind "correction" come first: the agent was wrong and did not ask.)',
     '',
     renderEvidence(evidence),
     '',
