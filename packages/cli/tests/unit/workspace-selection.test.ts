@@ -5,6 +5,7 @@ import os from 'node:os';
 import {
   resolveWorkspaceSelection,
   ambientWorkspaceWarning,
+  DEFAULT_REPO_DIR,
   type InstanceContext,
 } from '../../src/core/instance.ts';
 import { stackNotRunningMessage } from '../../src/core/ports.ts';
@@ -45,7 +46,7 @@ function withDefault(name: string): void {
 /** Build an InstanceContext, defaulting every field so tests set only what matters. */
 function ctx(partial: Partial<InstanceContext>): InstanceContext {
   return {
-    repoDir: '/repo',
+    repoDir: DEFAULT_REPO_DIR, // canonical install unless a test says otherwise
     instanceSlug: 'default@main',
     instanceRun: '/run',
     instanceLog: '/log',
@@ -190,5 +191,32 @@ describe('stackNotRunningMessage', () => {
     expect(msg).toContain("instance 'feat-x'");
     expect(msg).toContain('fleex start');
     expect(msg).not.toContain('--workspace');
+  });
+
+  describe('from a worktree (not the canonical install)', () => {
+    const wt = (partial: Partial<InstanceContext> = {}) =>
+      ctx({ repoDir: tmpDir, branch: 'agent/697-x', instanceSlug: 'default@agent-697-x', ...partial });
+
+    it('points to "run it from outside the repo" — the #658 case: ticket link aimed at the worktree stack', () => {
+      withDefault('default');
+      const msg = stackNotRunningMessage(wt());
+      expect(msg).toContain("instance 'default@agent-697-x'");
+      expect(msg).toContain('inside a Fleex worktree');
+      expect(msg).toContain('run the command from outside the repo (e.g. cd ~)');
+    });
+
+    it('steers QA to the isolated qa workspace and never suggests a bare `fleex start` (it boots on shared storage)', () => {
+      withDefault('default');
+      const msg = stackNotRunningMessage(wt());
+      expect(msg).toContain('bun packages/cli/index.ts start --workspace qa');
+      expect(msg).not.toContain('Start it with:');
+      expect(msg).not.toMatch(/^\s*fleex start\s*$/m);
+    });
+
+    it('keeps the inherited-FLEEX_WORKSPACE note', () => {
+      withDefault('default');
+      const msg = stackNotRunningMessage(wt({ workspace: 'sqlite', workspaceSource: 'env', instanceSlug: 'sqlite@agent-697-x' }));
+      expect(msg).toContain('inherited $FLEEX_WORKSPACE');
+    });
   });
 });
