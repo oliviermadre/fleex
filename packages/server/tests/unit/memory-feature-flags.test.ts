@@ -54,7 +54,7 @@ describe('isMemoryFeatureEnabled', () => {
     const keys: Array<keyof MemoryFeatureFlags> = [
       'paletteSearch', 'ask', 'repoScope', 'duplicateDetection', 'humanFeedbackBoost',
       'personaCoach', 'synthesis', 'curation', 'assistantMemory', 'automationMining', 'relatedNotes',
-      'executionTraces', 'cliSessions',
+      'executionTraces', 'cliSessions', 'consolidation',
     ];
     expect([...MEMORY_FEATURE_KEYS].sort()).toEqual(keys.sort());
   });

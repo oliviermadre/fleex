@@ -279,9 +279,14 @@ export class MemoryEventListener {
    * Capture the question an agent asked and the answer that unblocked it.
    *
    * `mention.woken_up` is the one instant where the pairing is unambiguous: the
-   * mention names the question's comment, and the answer is the latest human
-   * comment on the ticket. A minute later the two are separated by whatever else
-   * was said, and reconstructing the pair becomes guesswork.
+   * answer is the latest human comment on the ticket. A minute later the two are
+   * separated by whatever else was said, and reconstructing the pair becomes
+   * guesswork.
+   *
+   * `mention.commentId` is the *human* request that created the mention, not the
+   * agent's question: the agent replies under it (`parentId`). So the question is
+   * the agent's last reply to that request before the answer. When there is none,
+   * the request is kept but labelled as one, rather than attributed to the agent.
    */
   private onMentionWokenUp(event: MentionWokenUpEvent): void {
     this.enqueue('qa_pair', event.mentionId, async () => {
@@ -295,10 +300,19 @@ export class MemoryEventListener {
       if (!ticket) return;
 
       const comments = await this.deps.commentStore.getByTicket(event.ticketId);
-      const question = comments.find((c) => c.id === mention.commentId);
       // The answer is the most recent human comment: whatever woke the agent.
       const answer = [...comments].reverse().find((c) => c.authorType === 'user');
-      if (!question || !answer) return;
+      if (!answer) return;
+
+      const agentQuestion = comments
+        .filter((c) => c.authorType === 'agent'
+          && c.parentId === mention.commentId
+          && c.createdAt.getTime() < answer.createdAt.getTime())
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+        .at(-1);
+      const request = agentQuestion ? null : comments.find((c) => c.id === mention.commentId);
+      const question = agentQuestion ?? request;
+      if (!question) return;
 
       await this.deps.kernel.ingest('qa_pair', event.mentionId, chunkQaPair({
         mentionId: event.mentionId,
@@ -307,6 +321,8 @@ export class MemoryEventListener {
         ticketDisplayId: ticket.displayId,
         agentName: mention.targetAgent,
         question: question.body,
+        requestOnly: !agentQuestion,
+        requesterName: request?.authorName ?? null,
         answer: answer.body,
         repo: primaryRepo(ticket),
         boardId: ticket.boardId,

@@ -84,6 +84,17 @@ export interface MemoryStorePort {
    */
   sampleChunks(limit: number): Promise<MemoryChunkEntity[]>;
 
+  /**
+   * The chunks of one kind written about one agent, newest first. Matches the
+   * agent name case-insensitively: mentions target a slug (`builder`), personas
+   * carry a display name (`Builder`).
+   *
+   * A plain read, not a vector search: a consumer that wants every chunk of a
+   * kind for an agent (the coach and its corrections) has nothing to rank them
+   * against, and recency is the order that matters.
+   */
+  listByAgent(sourceKind: MemorySourceKind, agentName: string, limit: number): Promise<MemoryChunkEntity[]>;
+
   /** Existing hashes for a source, so unchanged chunks are not re-embedded. */
   getHashesBySource(sourceKind: MemorySourceKind, sourceId: string): Promise<Map<number, string>>;
 

@@ -85,6 +85,12 @@ export interface AppConfig {
    */
   memoryFeatures?: MemoryFeatureFlags;
   /**
+   * Local hour (0-23) after which the nightly memory consolidation becomes due.
+   * Unset → 3. The pass runs on the first tick past this hour, so a laptop that
+   * was closed at that time catches up when it wakes.
+   */
+  memoryConsolidationHour?: number;
+  /**
    * Top-bar actions. Owned by the web UI (Settings › Actions); declared here so
    * the server can schedule their status probes.
    */
@@ -144,6 +150,12 @@ export interface MemoryFeatureFlags {
    * one fires on manual `claude` sessions, which a user may have many of per day.
    */
   cliSessions?: boolean;
+  /**
+   * Nightly pass that reads the day's resolved mentions and learns from the
+   * times a human corrected an agent unprompted. Gates the manual
+   * `memory consolidate` too.
+   */
+  consolidation?: boolean;
 }
 
 export const MEMORY_FEATURE_KEYS = [
@@ -160,6 +172,7 @@ export const MEMORY_FEATURE_KEYS = [
   'relatedNotes',
   'executionTraces',
   'cliSessions',
+  'consolidation',
 ] as const satisfies ReadonlyArray<keyof MemoryFeatureFlags>;
 
 /**

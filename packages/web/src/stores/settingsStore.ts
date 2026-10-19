@@ -81,6 +81,7 @@ export interface AppSettings {
     relatedNotes?: boolean;
     executionTraces?: boolean;
     cliSessions?: boolean;
+    consolidation?: boolean;
   };
   /** Catalogue id of the encoder that produces vectors. */
   memoryEmbeddingModel?: string;

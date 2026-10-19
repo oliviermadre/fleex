@@ -74,6 +74,8 @@ import { ModelService } from './application/services/model.service.js';
  * checking more often would only spend CPU discovering the same "not yet".
  */
 const MEMORY_SWEEP_INTERVAL_MS = 60_000;
+/** How often the nightly consolidation checks whether its pass is due. */
+const MEMORY_CONSOLIDATION_TICK_MS = 15 * 60_000;
 
 async function main() {
   const container = await createContainer();
@@ -310,6 +312,12 @@ async function main() {
   // downloading. The sweeper reads the engine setting per pass, so starting it
   // unconditionally costs nothing on the default engine.
   container.memorySweeper?.start(MEMORY_SWEEP_INTERVAL_MS);
+
+  // The nightly pass that learns from human corrections. Ticks every 15 minutes
+  // and runs on the first tick past the configured hour, so a machine that was
+  // asleep at 3 a.m. catches up on waking. It checks its own gates (engine, flag,
+  // scheduler role) per tick, so starting it unconditionally costs nothing.
+  container.memoryConsolidator?.start(MEMORY_CONSOLIDATION_TICK_MS);
 
   // Mirror this machine's Claude Code skills (SKILL.md). Background: the gateway
   // and bare clones may be slow, boot must not wait on them.

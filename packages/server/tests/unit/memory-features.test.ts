@@ -9,8 +9,8 @@ import { CoachPersonaUseCase, buildCoachPrompt } from '../../src/application/use
 import { SynthesiseMemoryUseCase, withProvenance } from '../../src/application/use-cases/synthesise-memory.js';
 import { RememberConversationUseCase, renderTranscript } from '../../src/application/use-cases/remember-conversation.js';
 import { CurateMemoryUseCase } from '../../src/application/use-cases/curate-memory.js';
-import { chunkCuratedNote, chunkAssistantDigest, CURATED_TAG } from '../../src/application/memory/chunk-curated.js';
-import { HUMAN_FEEDBACK_TAG } from '../../src/application/memory/chunker.js';
+import { chunkCuratedNote, chunkAssistantDigest, chunkCorrection, chunkQaPair, CURATED_TAG } from '../../src/application/memory/chunk-curated.js';
+import { HUMAN_FEEDBACK_TAG, MAX_CHUNK_CHARS } from '../../src/application/memory/chunker.js';
 import type { MemorySnippet, RetrieveContextUseCase } from '../../src/application/use-cases/retrieve-context.js';
 import type { SdkConcurrencyLimiter } from '../../src/application/services/sdk-concurrency-limiter.js';
 import type { PersonaStorePort } from '../../src/application/ports/persona-store.port.js';
@@ -58,6 +58,7 @@ function makeRetrieve(opts: { enabledFeature?: string; results?: MemorySnippet[]
     isSemanticEnabled: () => !!opts.enabledFeature,
     isFeatureEnabled: (feature: string) => feature === opts.enabledFeature,
     search: vi.fn(async () => opts.results ?? []),
+    listForAgent: vi.fn(async () => []),
   } as unknown as RetrieveContextUseCase;
 }
 
@@ -173,6 +174,39 @@ describe('CoachPersonaUseCase', () => {
     expect(saved).toEqual(['- the reviewed text']);
     // No model call: applying a fresh proposal would write something unread.
     expect(mockedQuery).not.toHaveBeenCalled();
+  });
+
+  it('reads corrections first, then Q&A pairs, then threads — and only this agent\'s', async () => {
+    sdkAnswers('- prefer sessions\n- try fleex start before reporting a missing stack');
+    const byKind: Record<string, MemorySnippet[]> = {
+      correction: [
+        snippet({ sourceKind: 'correction', sourceId: 'm694', title: '#694 > NaS corrected builder', agentName: 'builder', tags: [] }),
+        snippet({ sourceKind: 'correction', sourceId: 'mX', title: 'corrected catalyst', agentName: 'catalyst', tags: [] }),
+      ],
+      qa_pair: [
+        snippet({ sourceKind: 'qa_pair', sourceId: 'q1', agentName: 'builder', tags: [] }),
+        snippet({ sourceKind: 'qa_pair', sourceId: 'q2', agentName: 'catalyst', tags: [] }),
+      ],
+      curated_note: [],
+      comment_thread: [snippet()],
+    };
+    const retrieve = {
+      isSemanticEnabled: () => true,
+      isFeatureEnabled: (f: string) => f === 'personaCoach',
+      search: vi.fn(async ({ kinds }: { kinds: string[] }) => byKind[kinds[0]!] ?? []),
+      listForAgent: vi.fn(async ({ kind }: { kind: string }) => byKind[kind] ?? []),
+    } as unknown as RetrieveContextUseCase;
+    const { store } = makePersonaStore(persona);
+    const coach = new CoachPersonaUseCase(store, retrieve, new MemorySynthesiser(makeLimiter(), silent as never), silent as never);
+
+    const proposal = await coach.propose('p1');
+
+    // Persona "Builder" matches the mention slug "builder"; catalyst's lessons stay out.
+    expect(proposal.evidence.map((e) => `${e.sourceKind}:${e.sourceId}`)).toEqual([
+      'correction:m694', 'qa_pair:q1', 'comment_thread:t1',
+    ]);
+    const prompt = mockedQuery.mock.calls[0]![0].prompt as string;
+    expect(prompt.indexOf('NaS corrected builder')).toBeLessThan(prompt.indexOf('Fix login'));
   });
 
   it('states an empty memory explicitly in the prompt', () => {
@@ -296,6 +330,54 @@ describe('CurateMemoryUseCase', () => {
     const { kernel } = makeKernel();
     const useCase = new CurateMemoryUseCase(makeEventStore([]), makeRetrieve({ enabledFeature: 'curation' }), silent as never, kernel);
     expect((await useCase.curate({ executionId: 'x1' })).reason).toBe('empty');
+  });
+});
+
+describe('chunkCorrection', () => {
+  const base = {
+    mentionId: 'm694', ticketId: 't694', ticketTitle: 'memory compile', ticketDisplayId: 694,
+    agentName: 'builder', humanName: 'NaS', lesson: 'Try `fleex start` before reporting a missing stack.',
+    correction: 'je ne comprends pas pourquoi tu dis ne pas pouvoir tester', response: "You're right, there was no blocker.",
+    tags: ['memory'],
+  };
+
+  it('leads with the lesson and keeps the exchange in one curated chunk', () => {
+    const [chunk, ...rest] = chunkCorrection(base);
+    expect(rest).toHaveLength(0);
+    expect(chunk!.sourceKind).toBe('correction');
+    expect(chunk!.title).toBe('Ticket #694: memory compile > NaS corrected builder');
+    expect(chunk!.content.startsWith('**Lesson**: Try `fleex start`')).toBe(true);
+    expect(chunk!.content).toContain('**Human correction** (NaS):');
+    expect(chunk!.content).toContain('**Agent response** (builder):');
+    expect(chunk!.metadata.tags).toEqual(['memory', CURATED_TAG, HUMAN_FEEDBACK_TAG]);
+  });
+
+  it('stays within one chunk however long the exchange, dropping the claim before the correction', () => {
+    const [chunk] = chunkCorrection({ ...base, agentSaid: 'a'.repeat(5000), correction: 'c'.repeat(5000), response: 'r'.repeat(5000) });
+    expect(chunk!.content.length).toBeLessThanOrEqual(MAX_CHUNK_CHARS);
+    expect(chunk!.content).toContain('**Lesson**');
+    expect((chunk!.content.match(/c/g) ?? []).length).toBeGreaterThan((chunk!.content.match(/a/g) ?? []).length);
+  });
+
+  it('produces nothing without a lesson', () => {
+    expect(chunkCorrection({ ...base, lesson: '  ' })).toEqual([]);
+  });
+});
+
+describe('chunkQaPair', () => {
+  const base = {
+    mentionId: 'm1', ticketId: 't1', ticketTitle: 'idle time', ticketDisplayId: 687, agentName: 'builder',
+    question: 'Which date for idle time? (a) closure (b) last activity', answer: '(a)',
+  };
+
+  it('attributes the question to the agent when it was the agent\'s', () => {
+    expect(chunkQaPair(base)[0]!.content).toContain('**Question** (builder):\nWhich date');
+  });
+
+  it('labels a human request as such instead of putting it in the agent\'s mouth', () => {
+    const content = chunkQaPair({ ...base, question: '@agent:builder pourquoi ?', requestOnly: true, requesterName: 'NaS' })[0]!.content;
+    expect(content).toContain('**Request** (NaS):\n@agent:builder pourquoi ?');
+    expect(content).not.toContain('**Question** (builder)');
   });
 });
 

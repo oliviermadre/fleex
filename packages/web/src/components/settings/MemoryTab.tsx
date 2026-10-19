@@ -17,7 +17,7 @@ type MemoryEngine = 'legacy' | 'semantic';
 type MemoryFeatureKey =
   | 'paletteSearch' | 'ask' | 'repoScope' | 'duplicateDetection' | 'humanFeedbackBoost'
   | 'personaCoach' | 'synthesis' | 'curation' | 'assistantMemory' | 'automationMining' | 'relatedNotes'
-  | 'executionTraces' | 'cliSessions';
+  | 'executionTraces' | 'cliSessions' | 'consolidation';
 
 /**
  * The features that consume the index.
@@ -97,6 +97,12 @@ const FEATURES: Array<{ key: MemoryFeatureKey; label: string; description: strin
     label: 'Learn from finished runs',
     description: 'Distils what each agent run discovered about the codebase — what worked, what failed, which files mattered — so the next run starts from it.',
     cost: 'one LLM call per run',
+  },
+  {
+    key: 'consolidation',
+    label: 'Learn from corrections overnight',
+    description: 'Once a night, reads the day\'s exchanges with agents and keeps the times you corrected one without being asked — so `memory coach` learns from confident mistakes, not only from questions.',
+    cost: 'one LLM call per 10 candidate exchanges, once a night',
   },
 ];
 

@@ -171,6 +171,7 @@ fleex memory keep <executionId>          # keep a moment of a run
 fleex memory links owner/app             # backlinks, and related notes when relatedNotes is on
 fleex memory status                      # what the index holds
 fleex memory reindex                     # walk the corpus again (safe to re-run)
+fleex memory consolidate --dry-run       # what the nightly pass learns from your corrections
 fleex memory bench                       # how well retrieval does on this corpus
 ```
 

@@ -2,7 +2,7 @@ import type { CommandDef } from '../../../core/types.ts';
 import { apiGet } from '../../../core/api.ts';
 import { info, present, warn } from '../../../core/colors.ts';
 import { renderTable } from '../../../core/agentic.ts';
-import { memoryApi } from '../_shared.ts';
+import { localTime, memoryApi } from '../_shared.ts';
 
 interface MemoryStatusResponse {
   engine: 'legacy' | 'semantic';
@@ -17,6 +17,12 @@ interface MemoryStatusResponse {
     lastIndexedAt: string | null;
   } | null;
   reindexing: boolean;
+  consolidation?: {
+    scheduled: boolean;
+    lastRunAt: string | null;
+    stats: { candidates: number; judged: number; corrections: number } | null;
+    nextDueAfter: string | null;
+  } | null;
 }
 
 const def: CommandDef = {
@@ -60,6 +66,16 @@ const def: CommandDef = {
         warn(`Index holds vectors from ${index.embeddingModels.length} models (${index.embeddingModels.join(', ')}) — reindex to make retrieval trustworthy.`);
       }
       if (res.reindexing) info('A reindex is running.');
+      const c = res.consolidation;
+      if (c) {
+        const last = c.lastRunAt
+          ? `last pass ${localTime(c.lastRunAt)}${c.stats ? ` (${c.stats.candidates} candidate(s), ${c.stats.corrections} correction(s))` : ''}`
+          : 'no pass yet';
+        const next = c.scheduled && c.nextDueAfter
+          ? `next after ${localTime(c.nextDueAfter)}`
+          : 'not scheduled on this instance';
+        info(`Consolidation: ${last} · ${next}`);
+      }
     });
   },
 };
