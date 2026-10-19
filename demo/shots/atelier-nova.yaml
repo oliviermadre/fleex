@@ -1,0 +1,15 @@
+# Smoke shot list for the seed itself: the board and a ticket in progress.
+# fleex demo reset --workspace demo && fleex shoot demo/shots/atelier-nova.yaml --workspace demo
+feature: atelier-nova
+out: demo/.shots/atelier-nova          # not a release asset: checked by eye, git-ignored
+viewport: { width: 1440, height: 900, scale: 2 }
+themes: [dark, light]
+shots:
+  - id: board
+    goto: /tickets/board/{{board:nova}}
+    waitFor: '[data-testid="ticket-card"]'
+  - id: ticket
+    goto: /tickets/board/all/ticket/{{ticket:nova-12}}
+    waitFor: '[data-testid="ticket-detail"]'
+    clip: '[data-testid="ticket-detail"]'
+    padding: 0

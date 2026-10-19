@@ -706,3 +706,20 @@ export {
   parseCleanupOlderThan,
   parseCleanupStatuses,
 } from './types/worktree-cleanup.js';
+
+export {
+  RELEASE_CATEGORIES,
+  RELEASE_TITLE_MAX,
+  splitFrontMatter,
+  parseReleaseEntry,
+  parseReleaseHeader,
+  sortReleaseEntries,
+} from './releases.js';
+export type {
+  ReleaseCategory,
+  ReleaseImage,
+  ReleaseEntry,
+  ReleaseHeader,
+  Release,
+  ParseResult,
+} from './releases.js';

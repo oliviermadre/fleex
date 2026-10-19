@@ -21,6 +21,7 @@ import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { FocusView } from '../focus/FocusView';
 import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 import { RoutinesPage } from '../routines/RoutinesPage';
+import { ReleasesPage } from '../releases/ReleasesPage';
 import { DocumentsPage } from '../documents/DocumentsPage';
 import { AssistantConversation } from '../assistant/AssistantConversation';
 import { WorkView } from '../work/WorkView';
@@ -63,6 +64,10 @@ export function MainPanel() {
 
   if (activePanel === 'routines') {
     return <RoutinesPage />;
+  }
+
+  if (activePanel === 'releases') {
+    return <ReleasesPage />;
   }
 
   if (activePanel === 'analytics') {

@@ -124,6 +124,9 @@ export function KanbanColumn({
   if (collapsed) {
     return (
       <div
+        data-testid="kanban-column"
+        data-status={status}
+        data-collapsed="true"
         className={cn(
           'flex w-11 flex-shrink-0 flex-col items-center border-l border-[var(--theme-border)]',
           dragOver && 'ring-2 ring-inset ring-[var(--theme-accent)]/50',
@@ -159,6 +162,8 @@ export function KanbanColumn({
 
   return (
     <div
+      data-testid="kanban-column"
+      data-status={status}
       className={cn(
         'flex min-h-0 min-w-0 flex-1 flex-col border-l border-[var(--theme-border)]',
         dragOver && 'ring-2 ring-inset ring-[var(--theme-accent)]/50',

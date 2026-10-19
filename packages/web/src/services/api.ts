@@ -1377,6 +1377,17 @@ export interface RoutineListItem extends Routine {
   awaitingAttention: boolean;
 }
 
+/** `GET /api/releases` — illustrated release notes (docs/releases.md). Silent on failure: the nav loads it in the background. */
+export interface ReleasesResponse {
+  current: number | null;
+  releases: import('@fleex/shared').Release[];
+  unreleased?: import('@fleex/shared').ReleaseEntry[];
+}
+
+export function fetchReleases(opts: { unreleased?: boolean } = {}): Promise<ReleasesResponse> {
+  return browseRequest<ReleasesResponse>(opts.unreleased ? '/releases?unreleased=1' : '/releases');
+}
+
 export async function fetchRoutines(): Promise<RoutineListItem[]> {
   return request<RoutineListItem[]>('/routines');
 }

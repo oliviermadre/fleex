@@ -154,7 +154,7 @@ export function KanbanBoard() {
   const filteredColumns = filterColumnsByEpics(columns, selectedEpicIds, groupTicketIds);
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
+    <div data-testid="kanban-board" className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       <KanbanHeader
         board={board}
         isAllBoards={isAllBoards}

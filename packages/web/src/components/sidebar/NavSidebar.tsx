@@ -4,6 +4,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
+import { useReleaseStore, useHasUnseenRelease } from '../../stores/releaseStore';
+import { useReleaseAnnouncement } from '../../hooks/useReleaseAnnouncement';
 import { cn } from '../../lib/cn';
 import { RoutineIcon } from '../../lib/primitives';
 import { TasksIcon } from './icons';
@@ -47,6 +49,12 @@ export function NavSidebar() {
   // …and what keeps it live. A gate opening on a scheduled run must light the
   // badge up wherever the user happens to be, not on their next page reload.
   useRoutineLiveUpdates();
+  // Same for the « Nouveau » badge on Nouveautés, and the one-off
+  // "just updated" announcement.
+  const loadReleases = useReleaseStore((s) => s.load);
+  const hasUnseenRelease = useHasUnseenRelease();
+  useEffect(() => { void loadReleases(); }, [loadReleases]);
+  useReleaseAnnouncement();
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
@@ -191,6 +199,26 @@ export function NavSidebar() {
             onClick={() => navigate('/documents')}
           />
 
+          {/* Nouveautés — illustrated release notes (docs/releases.md) */}
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="8" width="18" height="4" rx="1" />
+                <path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8" />
+                <path d="M12 8v13" />
+                <path d="M12 8c-1.5-3-5-4.5-6-2.5S8.5 8 12 8z" />
+                <path d="M12 8c1.5-3 5-4.5 6-2.5S15.5 8 12 8z" />
+              </svg>
+            }
+            label="Nouveautés"
+            shortLabel="News"
+            active={activePanel === 'releases'}
+            collapsed={navCollapsed}
+            badge={hasUnseenRelease ? 'Nouveau' : undefined}
+            testId="release-nav-item"
+            onClick={() => navigate('/releases')}
+          />
+
           {/* Cluster - hidden for now */}
         </div>
 
@@ -285,6 +313,7 @@ function NavItem({
   active,
   collapsed,
   badge,
+  testId,
   onClick,
 }: {
   icon: React.ReactNode;
@@ -293,6 +322,7 @@ function NavItem({
   active: boolean;
   collapsed: boolean;
   badge?: string;
+  testId?: string;
   onClick: () => void;
 }) {
   return (
@@ -308,10 +338,15 @@ function NavItem({
       )}
       onClick={onClick}
       title={collapsed ? label : undefined}
+      data-testid={testId}
     >
       <span className="relative flex-shrink-0">
         {icon}
-        {badge && collapsed && (
+        {/* A word ("Nouveau") does not fit the collapsed bubble: a dot says it. */}
+        {badge && collapsed && badge.length > 3 && (
+          <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[var(--theme-accent-active)]" />
+        )}
+        {badge && collapsed && badge.length <= 3 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--theme-accent-active)] text-[8px] font-bold text-[var(--theme-accent-fg)]">
             {badge}
           </span>
