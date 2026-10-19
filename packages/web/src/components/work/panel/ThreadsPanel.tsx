@@ -13,7 +13,7 @@ import * as api from '../../../services/api';
 import { useWorkStore } from '../../../stores/workStore';
 import { useAgentEventStore } from '../../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import { AgentEventStream } from '../../main-panel/AgentEventStream';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import { ThreadStatusPill } from '../task/DelegationCard';
@@ -154,7 +154,7 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
     try {
       await api.postThreadMessage(thread.id, body.trim());
     } catch (err) {
-      useToastStore.getState().addToast('error', 'Failed to send message', { detail: err instanceof Error ? err.message : 'Unknown error' });
+      toast.error('Failed to send message', { detail: err instanceof Error ? err.message : 'Unknown error' });
       throw err; // Composer keeps the draft when onSend throws
     } finally {
       setBusy(false);
@@ -175,11 +175,10 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
     try {
       const result = await api.concludeThread(thread.id);
       // Show confirmation toast with count of auto-terminated runs
-      const addToast = useToastStore.getState().addToast;
       if (result.runsAutoTerminated > 0) {
-        addToast('success', `Thread concluded. ${result.runsAutoTerminated} run${result.runsAutoTerminated !== 1 ? 's' : ''} auto-terminated.`);
+        toast.success(`Thread concluded. ${result.runsAutoTerminated} run${result.runsAutoTerminated !== 1 ? 's' : ''} auto-terminated.`);
       } else {
-        addToast('success', 'Thread concluded.');
+        toast.success('Thread concluded.');
       }
     } finally {
       setBusy(false);

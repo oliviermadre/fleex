@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import type { AgentExecution } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
-import { useToastStore } from '../../../stores/toastStore';
+import { toast } from '../../../lib/toast';
 import { cn } from '../../../lib/cn';
 import { tintText } from '../../../lib/tints';
 import * as api from '../../../services/api';
@@ -52,9 +52,9 @@ export function RunCard({
     setTerminatingId(execution.id);
     try {
       await api.terminateExecution(execution.id);
-      useToastStore.getState().addToast('success', `Terminated ${name}'s run.`);
+      toast.success(`Terminated ${name}'s run.`);
     } catch (err) {
-      useToastStore.getState().addToast('error', `Failed to terminate run`, {
+      toast.error(`Failed to terminate run`, {
         detail: err instanceof Error ? err.message : 'Unknown error',
       });
     } finally {
