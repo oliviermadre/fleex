@@ -83,6 +83,24 @@ export const DROP_EMBEDDING_INDEX_SQL = 'DROP INDEX IF EXISTS idx_memory_chunks_
  * `filter_model` keeps vectors from a superseded encoder out of the ranking:
  * different models put their vectors in different spaces, so the distance between
  * two of them is a number that means nothing.
+ *
+ * Two paths, because an HNSW scan filters *after* it finds neighbours. It returns
+ * the `ef_search` nearest chunks of the whole table and only then applies the
+ * WHERE clause, so a kind with 23 chunks among 30,000 came back empty: measured on
+ * a live instance, `filter_kinds = {persona}` returned 0 rows while 23 persona
+ * chunks were embedded, and even `{deliverable}` returned 163 of 200. Being a
+ * generic function, the planner cannot see that a filter is selective and always
+ * picks the vector index.
+ *
+ * So a structural filter (kind, repo, board) narrows first — the btree indexes
+ * serve it — and the survivors are ordered exactly. The MATERIALIZED CTE is what
+ * forces that order: without it the planner may fold the filter back into an
+ * HNSW scan. With no structural filter the index path is kept unchanged; the
+ * model and ticket-exclusion filters let nearly every row through and the index
+ * is what keeps an unfiltered search fast.
+ *
+ * Chosen over `hnsw.iterative_scan`, which needs pgvector 0.8 — and a `SET` on an
+ * unknown parameter would fail the CREATE, leaving no search function at all.
  */
 export const matchFunctionSql = (dimensions = DEFAULT_VECTOR_DIMENSIONS): string => `
   CREATE OR REPLACE FUNCTION ${MATCH_FN}(
@@ -113,24 +131,47 @@ export const matchFunctionSql = (dimensions = DEFAULT_VECTOR_DIMENSIONS): string
     updated_at timestamptz,
     similarity float
   )
-  LANGUAGE sql STABLE
+  LANGUAGE plpgsql STABLE
   SET hnsw.ef_search = ${HNSW_EF_SEARCH}
   AS $$
-    SELECT
-      m.id, m.source_kind, m.source_id, m.chunk_index,
-      m.ticket_id, m.board_id, m.repo, m.agent_name, m.tags,
-      m.title, m.content, m.content_hash, m.embedding_model,
-      m.source_updated_at, m.created_at, m.updated_at,
-      1 - (m.embedding <=> query_embedding) AS similarity
-    FROM memory_chunks m
-    WHERE m.embedding IS NOT NULL
-      AND (filter_kinds IS NULL OR m.source_kind = ANY(filter_kinds))
-      AND (filter_repo IS NULL OR m.repo = filter_repo)
-      AND (filter_board_id IS NULL OR m.board_id = filter_board_id)
-      AND (exclude_ticket_id IS NULL OR m.ticket_id IS NULL OR m.ticket_id <> exclude_ticket_id)
-      AND (filter_model IS NULL OR m.embedding_model = filter_model)
-    ORDER BY m.embedding <=> query_embedding
-    LIMIT match_limit
+  #variable_conflict use_column
+  BEGIN
+    IF filter_kinds IS NULL AND filter_repo IS NULL AND filter_board_id IS NULL THEN
+      RETURN QUERY
+      SELECT
+        m.id, m.source_kind, m.source_id, m.chunk_index,
+        m.ticket_id, m.board_id, m.repo, m.agent_name, m.tags,
+        m.title, m.content, m.content_hash, m.embedding_model,
+        m.source_updated_at, m.created_at, m.updated_at,
+        1 - (m.embedding <=> query_embedding) AS similarity
+      FROM memory_chunks m
+      WHERE m.embedding IS NOT NULL
+        AND (exclude_ticket_id IS NULL OR m.ticket_id IS NULL OR m.ticket_id <> exclude_ticket_id)
+        AND (filter_model IS NULL OR m.embedding_model = filter_model)
+      ORDER BY m.embedding <=> query_embedding
+      LIMIT match_limit;
+    ELSE
+      RETURN QUERY
+      WITH scoped AS MATERIALIZED (
+        SELECT m.* FROM memory_chunks m
+        WHERE m.embedding IS NOT NULL
+          AND (filter_kinds IS NULL OR m.source_kind = ANY(filter_kinds))
+          AND (filter_repo IS NULL OR m.repo = filter_repo)
+          AND (filter_board_id IS NULL OR m.board_id = filter_board_id)
+          AND (exclude_ticket_id IS NULL OR m.ticket_id IS NULL OR m.ticket_id <> exclude_ticket_id)
+          AND (filter_model IS NULL OR m.embedding_model = filter_model)
+      )
+      SELECT
+        s.id, s.source_kind, s.source_id, s.chunk_index,
+        s.ticket_id, s.board_id, s.repo, s.agent_name, s.tags,
+        s.title, s.content, s.content_hash, s.embedding_model,
+        s.source_updated_at, s.created_at, s.updated_at,
+        1 - (s.embedding <=> query_embedding) AS similarity
+      FROM scoped s
+      ORDER BY s.embedding <=> query_embedding
+      LIMIT match_limit;
+    END IF;
+  END;
   $$
 `;
 
