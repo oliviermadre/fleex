@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Workspace } from './workspaces.ts';
+import { isPerInstanceSqlitePath } from './sqlite-path.ts';
 
 /**
  * Extensible (open-closed) validation for the global workspaces config.
@@ -113,6 +114,9 @@ const uniqueSqlitePathRule: WorkspacesRule = {
       if (w.env?.['FLEEX_STORAGE_DRIVER'] !== 'sqlite') continue;
       const dbPath = w.env['FLEEX_SQLITE_PATH'];
       if (!dbPath) continue;
+      // `{instance}` templates expand to `<workspace>@<branch>` — unique per
+      // workspace and per instance by construction.
+      if (isPerInstanceSqlitePath(dbPath)) continue;
       const key = normalizeBasePath(dbPath, ctx.homedir);
       const names = byNormalized.get(key) ?? [];
       names.push(w.name);

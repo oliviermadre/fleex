@@ -92,6 +92,22 @@ describe('unique-sqlite-path rule', () => {
     const issues = runRules(ctx([sqlite('a'), sqlite('b')]), ['config']);
     expect(issues.some((i) => i.rule === 'unique-sqlite-path')).toBe(false);
   });
+
+  it('accepts a shared {instance} template: it expands to <workspace>@<branch>, so files never collide', () => {
+    const tpl = '~/.fleex/qa/{instance}.db';
+    const issues = runRules(ctx([sqlite('qa', tpl), sqlite('qa2', tpl)]), ['config']);
+    expect(issues.some((i) => i.rule === 'unique-sqlite-path')).toBe(false);
+  });
+
+  it('still flags two fixed paths even when a template workspace is present', () => {
+    const issues = runRules(
+      ctx([sqlite('qa', '~/.fleex/qa/{instance}.db'), sqlite('a', '~/.fleex/fleex.db'), sqlite('b', '~/.fleex/fleex.db')]),
+      ['config'],
+    );
+    const e = issues.find((i) => i.rule === 'unique-sqlite-path');
+    expect(e?.message).toContain('a, b');
+    expect(e?.message).not.toContain('qa');
+  });
 });
 
 describe('state rules (doctor-only)', () => {

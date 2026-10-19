@@ -26,7 +26,7 @@ export async function listBoardsWithCounts(): Promise<void> {
     return;
   }
   if (boards.length === 0) {
-    info('No boards found.');
+    info('No boards found. Create one with: fleex board create --name <name>');
     return;
   }
   process.stdout.write('\n');
@@ -123,7 +123,7 @@ export async function resolveBoardIdOrDefault(specified?: string): Promise<strin
   if (specified && specified.trim()) return resolveBoardId(specified);
 
   const boards = await fetchBoards();
-  if (boards.length === 0) die('No boards found. Create one in the web UI first.');
+  if (boards.length === 0) die('No boards found. Create one with: fleex board create --name <name>');
   if (boards.length === 1) return boards[0]!.id;
   err('Multiple boards found. Specify one with --board (name, UUID, or 8-char id prefix):');
   for (const b of boards) {

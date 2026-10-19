@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadDotEnv } from '../../core/env.ts';
@@ -18,6 +19,7 @@ import { runStatus } from '../status/_impl.ts';
 import { launchDesktop } from '../desktop/_impl.ts';
 import { ensureCompanion } from '../companion/start/_impl.ts';
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
+import { expandSqlitePath, isPerInstanceSqlitePath } from '../../core/sqlite-path.ts';
 
 export interface StartOptions {
   port?: string;
@@ -88,6 +90,18 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   // Load repo .env so installer-written vars (e.g. FLEEX_STORAGE_DRIVER) are
   // honoured. Non-override: the workspace env (already injected) wins.
   loadDotEnv(path.join(ctx.repoDir, '.env'));
+
+  // Resolve FLEEX_SQLITE_PATH for this instance: `{instance}` → instance slug
+  // (one DB file per instance, e.g. the `qa` workspace) and `~` → home (the
+  // server opens the path verbatim).
+  const rawSqlitePath = process.env.FLEEX_SQLITE_PATH;
+  if (rawSqlitePath) {
+    const sqlitePath = expandSqlitePath(rawSqlitePath, ctx.instanceSlug, os.homedir());
+    if (isPerInstanceSqlitePath(rawSqlitePath)) {
+      fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
+    }
+    process.env.FLEEX_SQLITE_PATH = sqlitePath;
+  }
 
   // Persist instance metadata for `fleex status` (workspace, driver, branch).
   writeInstanceMeta(

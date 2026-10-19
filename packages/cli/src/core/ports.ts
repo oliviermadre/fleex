@@ -2,7 +2,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { die } from './colors.ts';
-import { resolveInstance, type InstanceContext } from './instance.ts';
+import { resolveInstance, DEFAULT_REPO_DIR, type InstanceContext } from './instance.ts';
 import { defaultWorkspaceName } from './workspaces.ts';
 
 export const SERVICES = ['gateway', 'server', 'web', 'desktop'] as const;
@@ -155,12 +155,26 @@ export function stackNotRunningMessage(ctx: InstanceContext = resolveInstance())
   }
 
   const def = defaultWorkspaceName();
-  // Plain `fleex start` resolves to the default workspace, so only add the flag
-  // when the target isn't the default (otherwise the command would start a
-  // *different* instance than the one reported missing).
-  const startCmd =
-    workspace && def !== workspace ? `fleex start --workspace ${workspace}` : 'fleex start';
-  lines.push('', 'Start it with:', `  ${startCmd}`);
+  if (isCanonicalRepo(ctx.repoDir)) {
+    // Plain `fleex start` resolves to the default workspace, so only add the flag
+    // when the target isn't the default (otherwise the command would start a
+    // *different* instance than the one reported missing).
+    const startCmd =
+      workspace && def !== workspace ? `fleex start --workspace ${workspace}` : 'fleex start';
+    lines.push('', 'Start it with:', `  ${startCmd}`);
+  } else {
+    // Inside a worktree, the CLI targets the worktree's own instance. Callers
+    // usually wanted their main Fleex (#284, #658), and a bare `fleex start`
+    // here would boot this branch on the shared default storage — so it is
+    // deliberately not suggested.
+    lines.push(
+      '',
+      "You are inside a Fleex worktree: commands target this worktree's own stack.",
+      '  • To reach your main Fleex (comment, link a PR): run the command from outside the repo (e.g. cd ~)',
+      '  • To QA this branch: start it on the isolated workspace (from the repo root, see CLAUDE.md):',
+      '      bun packages/cli/index.ts start --workspace qa',
+    );
+  }
 
   // The likely footgun: a stale env var silently steered us to another instance.
   if (source === 'env' && def && def !== workspace) {
@@ -172,6 +186,18 @@ export function stackNotRunningMessage(ctx: InstanceContext = resolveInstance())
   }
 
   return lines.join('\n');
+}
+
+/** True when `repoDir` is the canonical install (~/.fleex/repo), not a worktree. */
+export function isCanonicalRepo(repoDir: string, canonicalDir: string = DEFAULT_REPO_DIR): boolean {
+  const real = (p: string): string => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  return real(repoDir) === real(canonicalDir);
 }
 
 /** Throws (exits) if no ports file is found. */

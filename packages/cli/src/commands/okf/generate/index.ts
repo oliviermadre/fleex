@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import type { CommandDef } from '../../../core/types.ts';
 import { info, ok, warn, die } from '../../../core/colors.ts';
 import { FLEEX_HOME, resolveInstance } from '../../../core/instance.ts';
+import { isPerInstanceSqlitePath } from '../../../core/sqlite-path.ts';
 import {
   parseWorkspacesFile,
   resolveWorkspace,
@@ -79,6 +80,12 @@ ${SECTION('Examples:')}
     // the conventional DB even when a workspace omits the explicit path.
     const env: NodeJS.ProcessEnv = { ...process.env, ...(ws?.env ?? {}) };
     env.FLEEX_SQLITE_PATH = env.FLEEX_SQLITE_PATH ?? path.join(FLEEX_HOME, 'fleex.db');
+    if (isPerInstanceSqlitePath(env.FLEEX_SQLITE_PATH)) {
+      die(
+        `Workspace '${ws?.name ?? '(ambient env)'}' uses a per-instance SQLite path (${env.FLEEX_SQLITE_PATH}) — ` +
+          `there is no single database to export. Pick another workspace with --workspace.`,
+      );
+    }
 
     const args = ['run', script];
     if (opts.out) args.push('--out', path.resolve(opts.out));
