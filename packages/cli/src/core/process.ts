@@ -79,9 +79,13 @@ export function killGroup(pid: number, signal: NodeJS.Signals | number = 'SIGTER
  * SIGKILL anything still bound to `port` (TCP). Best-effort, needs `lsof`.
  * Catches orphans that escaped the PID/group kill (e.g. a `bun --watch` worker
  * reparented to init). Returns the PIDs it killed.
+ *
+ * Only the LISTENING side: a bare `lsof -ti tcp:<port>` also lists every
+ * process with a connection *to* that port — e.g. another instance's server
+ * talking to this one — and would SIGKILL it.
  */
 export function killByPort(port: number): number[] {
-  const r = spawnSync('lsof', ['-ti', `tcp:${port}`], { encoding: 'utf8' });
+  const r = spawnSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
   if (r.status !== 0 || !r.stdout.trim()) return [];
   const pids = r.stdout
     .split('\n')
