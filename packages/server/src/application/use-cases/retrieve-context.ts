@@ -245,6 +245,22 @@ export class RetrieveContextUseCase {
   }
 
   /**
+   * How many chunks `search` with the same filters had to choose from.
+   *
+   * Asked only after an empty result, to say whether the scope was empty or the
+   * ranking returned nothing from a populated one. Built like `search` builds its
+   * filters, model included, so the two answers describe the same set.
+   */
+  async countSearchable(params: { kinds?: MemorySourceKind[]; repo?: string | null }): Promise<number> {
+    if (!this.isSemanticEnabled()) return 0;
+    return this.memoryStore!.countSearchable({
+      kinds: params.kinds,
+      repo: params.repo ?? null,
+      embeddingModel: this.embeddings!.id,
+    });
+  }
+
+  /**
    * The exact-match pass, run only where it can pay for itself.
    *
    * A substring search with a leading wildcard cannot use an index, so it reads

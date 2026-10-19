@@ -122,6 +122,15 @@ export interface MemoryStorePort {
   search(queryVector: Float32Array, filters: MemorySearchFilters, limit: number): Promise<MemorySearchHit[]>;
 
   /**
+   * How many chunks a vector `search` with these filters would consider: same
+   * structural filters, same model, embedded only.
+   *
+   * What turns an empty result into an answer. Without it, "this kind has nothing
+   * indexed" and "the filter is broken" both read as an empty list.
+   */
+  countSearchable(filters: MemorySearchFilters): Promise<number>;
+
+  /**
    * Substring match over chunk content. Complements vector search for exact
    * identifiers — error codes, file paths — that embeddings blur away.
    */

@@ -406,3 +406,23 @@ describe('sampling for the benchmark', () => {
     expect(await store.sampleChunks(10)).toEqual([]);
   });
 });
+
+describe('countSearchable', () => {
+  // The number the search route reports when a filtered search is empty. It must
+  // count exactly what `search` would scan, or "nothing indexed" becomes a lie.
+  it('counts what search would scan: same kinds, repo and model, embedded only', async () => {
+    await store.upsertChunks([
+      await chunk({ sourceKind: 'persona', sourceId: 'p1', content: 'builder', metadata: { repo: 'org/app' } }),
+      await chunk({ sourceKind: 'persona', sourceId: 'p2', content: 'reviewer' }),
+      await chunk({ sourceKind: 'persona', sourceId: 'p3', content: 'not yet embedded', embed: false }),
+      await chunk({ sourceKind: 'deliverable', sourceId: 'd1', content: 'report', metadata: { repo: 'org/app' } }),
+    ]);
+
+    expect(await store.countSearchable({ kinds: ['persona'], embeddingModel: provider.id })).toBe(2);
+    expect(await store.countSearchable({ kinds: ['persona'], repo: 'org/app', embeddingModel: provider.id })).toBe(1);
+    expect(await store.countSearchable({ kinds: ['curated_note'], embeddingModel: provider.id })).toBe(0);
+    // A vector from another encoder is not searchable by this one.
+    expect(await store.countSearchable({ kinds: ['persona'], embeddingModel: 'other-model' })).toBe(0);
+    expect(await store.countSearchable({})).toBe(3);
+  });
+});

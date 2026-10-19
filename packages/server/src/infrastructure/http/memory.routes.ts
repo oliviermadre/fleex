@@ -2,12 +2,34 @@ import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 import { resolveEmbeddingModel } from '@fleex/shared';
 import { isMemoryFeatureEnabled } from '../../application/ports/config.port.js';
+import {
+  MEMORY_SOURCE_KINDS,
+  isMemorySourceKind,
+  type MemorySourceKind,
+} from '../../domain/entities/memory-chunk.entity.js';
 
 /** Parse a query-string limit, falling back and capping rather than erroring. */
 function clampLimit(raw: string | undefined, fallback: number, max: number): number {
   const parsed = Number.parseInt(raw ?? '', 10);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
   return Math.min(parsed, max);
+}
+
+/**
+ * Parse a comma-separated `kind` parameter.
+ *
+ * Rejected rather than dropped when a value is unknown: ignoring it would run
+ * an unfiltered search and hand back results of every kind, which reads as a
+ * filter that worked.
+ */
+function parseKinds(raw: string | undefined): { kinds?: MemorySourceKind[]; error?: string } {
+  const values = (raw ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+  if (values.length === 0) return {};
+  const unknown = values.find((v) => !isMemorySourceKind(v));
+  if (unknown !== undefined) {
+    return { error: `Unknown kind "${unknown}". Expected one of: ${MEMORY_SOURCE_KINDS.join(', ')}` };
+  }
+  return { kinds: [...new Set(values)] as MemorySourceKind[] };
 }
 
 /**
@@ -56,12 +78,14 @@ export function memoryRoutes(container: Container) {
       return reply.code(202).send({ started: true });
     });
 
-    app.get<{ Querystring: { q?: string; limit?: string; repo?: string } }>(
+    app.get<{ Querystring: { q?: string; limit?: string; repo?: string; kind?: string } }>(
       '/api/memory/search',
       async (request, reply) => {
         const retrieve = container.retrieveContext;
         const query = request.query.q?.trim();
         if (!query) return reply.code(400).send({ error: 'Missing query parameter `q`.' });
+        const { kinds, error } = parseKinds(request.query.kind);
+        if (error) return reply.code(400).send({ error });
         if (!retrieve.isSemanticEnabled()) {
           return reply.code(409).send({
             error: 'The semantic memory engine is not enabled. Turn it on in Settings › Memory.',
@@ -69,16 +93,33 @@ export function memoryRoutes(container: Container) {
         }
 
         const limit = clampLimit(request.query.limit, 10, 50);
+        const repo = request.query.repo ?? null;
         const results = await retrieve.search({
           query,
           limit,
-          repo: request.query.repo ?? null,
+          repo,
+          // Handed to the store, which filters before ranking. Narrowing the
+          // ranked list afterwards kept only the chunks of the kind that made the
+          // global top ten — so a kind of 23 chunks among 30,000 came back empty.
+          kinds,
           // Both consumers of this route — the command palette and the CLI — show a
           // list of references, where two passages of one document read as the same
           // result twice.
           oneChunkPerSource: true,
         });
-        return { query, results };
+
+        if (!kinds && !repo) return { query, results };
+        // A filtered search that found nothing says how much it searched, so the
+        // caller can tell an empty scope from an empty answer. Counted only then:
+        // a populated result already proves the scope was not empty.
+        const scope = {
+          kinds: kinds ?? null,
+          repo,
+          ...(results.length === 0
+            ? { searchableChunks: await retrieve.countSearchable({ kinds, repo }) }
+            : {}),
+        };
+        return { query, results, scope };
       },
     );
 

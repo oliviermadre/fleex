@@ -342,6 +342,21 @@ export class SupabaseMemoryStoreAdapter implements MemoryStorePort {
     }));
   }
 
+  async countSearchable(filters: MemorySearchFilters): Promise<number> {
+    // Mirrors what `match_memory_chunks` filters on: the structural filters, the
+    // model, and a vector being present. `applyFilters` covers the first; the RPC
+    // applies the other two itself, so they are spelled out here.
+    let query = this.conn.client
+      .from(TABLE)
+      .select('id', { count: 'exact', head: true })
+      .not('embedding', 'is', null);
+    if (filters.embeddingModel) query = query.eq('embedding_model', filters.embeddingModel);
+    query = applyFilters(query, filters);
+    const { count, error } = await query;
+    if (error) throw new Error(`memory count failed: ${error.message}`);
+    return count ?? 0;
+  }
+
   async searchKeyword(
     term: string,
     filters: MemorySearchFilters,

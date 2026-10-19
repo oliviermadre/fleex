@@ -4,6 +4,31 @@ import { apiGet } from '../../../core/api.ts';
 import { die, info, present } from '../../../core/colors.ts';
 import { describeOrigin, memoryApi, oneLine, MEMORY_SOURCE_KINDS, type MemorySnippet } from '../_shared.ts';
 
+/** How much a filtered search had to choose from, when it came back empty. */
+export interface SearchScope {
+  kinds: string[] | null;
+  repo: string | null;
+  searchableChunks?: number;
+}
+
+/**
+ * Why a search returned nothing, in words.
+ *
+ * An empty list on its own cannot tell "nothing of this kind is indexed" from
+ * "the filter is broken"; the scope the server sends back can.
+ */
+export function describeEmpty(query: string, scope: SearchScope | undefined): string {
+  const searchable = scope?.searchableChunks;
+  if (!scope || searchable === undefined) return `Nothing found for "${query}".`;
+  const what = scope.kinds?.length ? scope.kinds.map((k) => `"${k}"`).join(', ') : null;
+  if (searchable === 0) {
+    if (what && scope.repo) return `No ${what} chunks attached to ${scope.repo} are indexed.`;
+    if (what) return `No ${what} chunks are indexed yet — nothing to search in.`;
+    return `No chunks attached to ${scope.repo} are indexed.`;
+  }
+  return `Nothing returned from ${searchable} ${what ? `${what} ` : ''}chunk(s) — this should not happen, please report it.`;
+}
+
 interface SearchOptions {
   limit?: string;
   kind?: string;
@@ -34,20 +59,23 @@ const def: CommandDef = {
     const params = new URLSearchParams({ q: query });
     if (opts.limit) params.set('limit', opts.limit);
     if (opts.repo) params.set('repo', opts.repo);
+    // Filtered by the store, before ranking. Filtering the ranked list here only
+    // ever saw the global top ten, so a sparse kind came back empty.
+    if (opts.kind) params.set('kind', opts.kind);
 
-    const res = await apiGet<{ query: string; results: MemorySnippet[] }>(
+    const res = await apiGet<{ query: string; results: MemorySnippet[]; scope?: SearchScope }>(
       memoryApi(`/search?${params.toString()}`),
     );
-    // The kind filter is applied client-side: the endpoint takes one repo but the
-    // ranking is better served by retrieving broadly and narrowing after, so a
-    // filtered search does not silently return fewer results than asked for.
-    const results = opts.kind
-      ? res.results.filter((r) => r.sourceKind === opts.kind)
-      : res.results;
+    const results = res.results;
 
-    present(results, () => {
+    // The bare array stays the JSON shape, so existing callers keep working. Only
+    // an empty filtered result carries its scope, which is what lets a caller —
+    // the MCP tool included — tell an empty kind from a broken filter.
+    const json = results.length === 0 && res.scope ? { results, scope: res.scope } : results;
+
+    present(json, () => {
       if (results.length === 0) {
-        info(`Nothing found for "${query}".`);
+        info(describeEmpty(query, res.scope));
         return;
       }
       for (const [i, snippet] of results.entries()) {
