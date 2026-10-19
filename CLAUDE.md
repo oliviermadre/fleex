@@ -61,3 +61,17 @@ To talk to the real Fleex (comment, link a PR) from a worktree: run the command 
 Limits: the DB starts empty (create fixtures through the CLI), SQLite only — Supabase/pgsql-specific code → unit tests + say so in the report. No real agent runs (empty API key).
 
 QA report: commands run, branch vs `main` outputs, verdict, proof of cleanup.
+
+## Demo workspace and release notes
+
+To illustrate a feature with real screenshots, use the **`demo` workspace**. It works like `qa`, plus `FLEEX_DEMO_MODE=1`, and loads a presentable backlog called « Atelier Nova » from `demo/seed/`. Then drop a fragment into `releases/unreleased/`. The full contract is in `docs/releases.md`.
+
+```bash
+bun packages/cli/index.ts demo reset [--scenario <name>] --workspace demo   # recreates the DB + seed, (re)starts the stack
+bun packages/cli/index.ts shoot demo/shots/<name>.yaml --workspace demo     # headless Chromium → WebP, dark + light
+bun packages/cli/index.ts release validate
+bun packages/cli/index.ts stop --workspace demo && bun packages/cli/index.ts remove --workspace demo
+find ~/.fleex/demo -maxdepth 1 -name 'demo@<branch-slug>.db*' -delete
+```
+
+Look at every image before using it. If `demo` is missing from `~/.fleex/workspaces.json`, `docs/releases.md` explains how to add it. If Chromium is missing, run `bunx playwright install chromium`.
