@@ -6,6 +6,7 @@ import { c, info, ok, warn, die } from '../../core/colors.ts';
 import { FLEEX_HOME, DEFAULT_REPO_DIR } from '../../core/instance.ts';
 import { checkBun } from '../../core/version.ts';
 import { installClaudeHooks } from '../../core/claude-hooks.ts';
+import { isPerInstanceSqlitePath } from '../../core/sqlite-path.ts';
 import {
   parseWorkspacesFile,
   resolveWorkspace,
@@ -42,6 +43,12 @@ async function runMigrations(
   updateDir: string,
   installLog: string,
 ): Promise<void> {
+  if (isPerInstanceSqlitePath(envVars['FLEEX_SQLITE_PATH'])) {
+    // One DB per instance (`{instance}`): each is created and migrated by the
+    // server when that instance starts — there is no single file to migrate here.
+    info(`Skipping migrations${label ? ` for workspace '${label}'` : ''} — per-instance SQLite, migrated at each start.`);
+    return;
+  }
   info(`Running database migrations${label ? ` for workspace '${label}'` : ''}...`);
   const envExtra: NodeJS.ProcessEnv = { ...process.env, ...envVars };
   envExtra.FLEEX_SQLITE_PATH = envExtra.FLEEX_SQLITE_PATH ?? path.join(FLEEX_HOME, 'fleex.db');
