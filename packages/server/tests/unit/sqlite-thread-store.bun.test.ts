@@ -24,7 +24,7 @@ function make(id: string, ticketId = 't1') {
 }
 
 describe('SqliteThreadStoreAdapter', () => {
-  it('keeps what a thread delegates to (migration 042), and reads pre-existing rows as persona threads', async () => {
+  it('keeps what a thread delegates to (migration 044), and reads pre-existing rows as persona threads', async () => {
     const w = AgentThreadEntity.create({
       id: 'thw', ticketId: 't1', personaId: 'w1', personaName: 'review', assistantPersonaId: 'pa', brief: 'b',
       forwardedContext: [], targetType: 'workflow',
