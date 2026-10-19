@@ -150,6 +150,24 @@ describe('runAssistant gating', () => {
     expect(r && r.type === 'tool_result' && r.ok).toBe(false);
   });
 
+  it('rejects a misnamed field with a fix, instead of running an unfiltered call', async () => {
+    const exec = vi.fn();
+    const llm = scriptedLlm([
+      { content: [toolBlock('t1', 'fleex_ticket_list', { state: 'doing' })], stopReason: 'tool_use' },
+      { content: [textBlock('done')], stopReason: 'end_turn' },
+    ]);
+    const { onEvent } = collect();
+    const messages = await runAssistant({
+      llm, exec, confirm: vi.fn(async () => true), tools, anthropicTools,
+      system: 's', messages: [{ role: 'user', content: 'x' }], onEvent,
+    });
+    expect(exec).not.toHaveBeenCalled();
+    const results = messages.flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .filter((b): b is Anthropic.ToolResultBlockParam => b.type === 'tool_result');
+    expect(results[0]).toMatchObject({ is_error: true });
+    expect(results[0]!.content).toMatch(/^Invalid arguments: unknown field "state" for fleex_ticket_list — did you mean "status"\?/);
+  });
+
   it('reports autoApproved:false on a gated call when no allowlist is wired', async () => {
     const confirm = vi.fn(async () => true);
     const { onEvent, events } = collect();

@@ -26,14 +26,79 @@ function asString(value: unknown): string {
   throw new Error(`expected a string value, got ${typeof value}`);
 }
 
+/** Host-owned flags a model may still send; ignoring them would run elsewhere. */
+const RESERVED_FIELDS: Record<string, string> = {
+  workspace: 'the workspace is set by the host, remove this field',
+  json: 'JSON output is always on, remove this field',
+};
+
+const normalize = (s: string): string => s.toLowerCase().replace(/[_-]/g, '');
+
+function levenshtein(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length]!;
+}
+
 /**
- * @throws if a required positional argument is missing from `input`.
+ * Best guess for a misnamed field, or undefined. Rules in order, first hit
+ * wins (ties → first accepted field): normalized equality; prefix either way
+ * (shorter ≥ 3 chars); Levenshtein ≤ 2 (both ≥ 4 chars).
+ */
+export function suggestField(unknown: string, accepted: string[]): string | undefined {
+  const u = normalize(unknown);
+  const rules: Array<(a: string) => boolean> = [
+    (a) => a === u,
+    (a) => Math.min(a.length, u.length) >= 3 && (a.startsWith(u) || u.startsWith(a)),
+    (a) => a.length >= 4 && u.length >= 4 && levenshtein(u, a) <= 2,
+  ];
+  for (const rule of rules) {
+    const hit = accepted.find((a) => rule(normalize(a)));
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/**
+ * Reject every input key the tool does not declare. Neither the MCP server nor
+ * the side panel validates `additionalProperties:false`, so an ignored key
+ * (`state` for `status`) used to return an unfiltered result as a success.
+ * All offenders are reported at once so the caller fixes them in one retry.
+ */
+function assertKnownFields(tool: GeneratedTool, input: Record<string, unknown>): void {
+  const accepted = [...tool.arguments.map((a) => a.key), ...tool.options.map((o) => o.key)];
+  const known = new Set(accepted);
+  const lines: string[] = [];
+  for (const key of Object.keys(input)) {
+    if (known.has(key) || input[key] === undefined) continue;
+    let line = `unknown field "${key}" for ${tool.name}`;
+    const reserved = Object.hasOwn(RESERVED_FIELDS, key) ? RESERVED_FIELDS[key] : undefined;
+    const suggestion = reserved ? undefined : suggestField(key, accepted);
+    if (reserved) line += ` — ${reserved}`;
+    else if (suggestion) line += ` — did you mean "${suggestion}"?`;
+    lines.push(line);
+  }
+  if (lines.length === 0) return;
+  lines.push(`accepted fields: ${accepted.length ? accepted.join(', ') : '(none)'}`);
+  throw new Error(lines.join('\n'));
+}
+
+/**
+ * @throws if `input` carries a key the tool does not declare, or a required
+ *   positional argument is missing.
  */
 export function buildArgv(
   tool: GeneratedTool,
   input: Record<string, unknown>,
   opts: BuildArgvOptions = {},
 ): string[] {
+  assertKnownFields(tool, input);
   const argv: string[] = [...tool.commandPath];
 
   // Positional arguments, in declaration order.

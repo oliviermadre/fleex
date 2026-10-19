@@ -6,6 +6,7 @@
  * produces a `tools/call` result by executing the underlying CLI command.
  */
 import { execFleex, type ExecOptions, type ExecResult } from './executor.ts';
+import { formatExecFailure } from './format-failure.ts';
 import type { GeneratedTool } from './types.ts';
 
 const DESTRUCTIVE_LEAVES = new Set(['delete', 'rm', 'remove', 'unlink']);
@@ -51,12 +52,12 @@ export interface CallContext {
   execOpts?: ExecOptions;
 }
 
-function resultText(res: ExecResult): string {
+function resultText(res: ExecResult, tool: GeneratedTool): string {
   if (res.ok) {
     if (res.data !== undefined) return JSON.stringify(res.data, null, 2);
     return res.stdout.trim() || 'OK';
   }
-  return res.stdout.trim() || res.stderr.trim() || `fleex exited with code ${res.exitCode}`;
+  return formatExecFailure(res, tool.commandPath);
 }
 
 export async function callToolResult(
@@ -72,7 +73,7 @@ export async function callToolResult(
   const exec = ctx.exec ?? execFleex;
   try {
     const res = await exec(tool, args ?? {}, { ...ctx.execOpts, json: true, assumeYes: true });
-    return { content: [{ type: 'text', text: resultText(res) }], isError: !res.ok };
+    return { content: [{ type: 'text', text: resultText(res, tool) }], isError: !res.ok };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { content: [{ type: 'text', text: msg }], isError: true };
