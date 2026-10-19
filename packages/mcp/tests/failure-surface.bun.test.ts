@@ -60,11 +60,14 @@ describe('CLI errors reach the caller (real CLI)', () => {
 
   it('an application error ({"ok":false} on stdout) arrives under the status line', async () => {
     // An unknown workspace fails deterministically, whether a stack runs or not.
+    // The exact wording depends on the host: "workspace '…' not found" when
+    // ~/.fleex/workspaces.json exists, "… does not exist" on a fresh machine (CI).
+    // Both are application errors on stdout — that is what this test is about.
     const res = await callToolResult(tools, 'fleex_memory_ask', { question: ['x'] }, {
       execOpts: { ...realCli, workspace: 'zz-no-such-workspace-695' },
     });
     expect(res.isError).toBe(true);
-    expect(text(res)).toMatch(/^fleex memory ask failed: exited with code 1\n\{"ok":false,"error":"workspace 'zz-no-such-workspace-695' not found/);
+    expect(text(res)).toMatch(/^fleex memory ask failed: exited with code 1\n\{"ok":false,"error":"[^"]*'zz-no-such-workspace-695'/);
   });
 });
 
