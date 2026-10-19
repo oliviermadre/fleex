@@ -41,6 +41,11 @@ import migration039 from './migrations/038_domain_event_log_prefix_index.js';
 import migration040 from './migrations/039_memory_chunks_pending_index.js';
 import migration041 from './migrations/040_timeline_annotations.js';
 import migration042 from './migrations/041_timeline_annotations_unique_source_comment.js';
+import migration043 from './migrations/042_agent_threads.js';
+import migration044 from './migrations/043_agent_thread_failures.js';
+import migration045 from './migrations/044_agent_thread_target_type.js';
+import migration046 from './migrations/045_add_run_termination_flags.js';
+import migration047 from './migrations/046_add_thread_title_participants.js';
 
 /**
  * Ordered array of all migrations.
@@ -89,4 +94,9 @@ export const allMigrations: Migration[] = [
   migration040,
   migration041,
   migration042,
+  migration043,
+  migration044,
+  migration045,
+  migration046,
+  migration047,
 ];

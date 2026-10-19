@@ -206,6 +206,49 @@ export class PgAgentEventStore implements AgentEventStorePort {
     }
     return result;
   }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+
+    // Build the UPDATE statement dynamically based on which flags are set
+    let updateParts = ['status = $1', 'completed_at = $2'];
+    const updateValues: any[] = [status, now];
+    let paramIdx = 3;
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateParts.push(`auto_terminated_at_conclusion = $${paramIdx}`);
+      updateValues.push(flags.autoTerminatedAtConclusion);
+      paramIdx++;
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateParts.push(`manually_terminated_by_user = $${paramIdx}`);
+      updateValues.push(flags.manuallyTerminatedByUser);
+      paramIdx++;
+    }
+
+    // Build the WHERE IN clause with parameters
+    const inPlaceholders = executionIds.map((_, i) => `$${paramIdx + i}`).join(',');
+    updateValues.push(...executionIds);
+
+    await this.db.query(
+      `UPDATE agent_event_executions SET ${updateParts.join(', ')} WHERE execution_id IN (${inPlaceholders})`,
+      updateValues,
+    );
+  }
+
+  async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
+    const { rows } = await this.db.query(
+      `SELECT * FROM agent_event_executions WHERE mention_id = $1 ORDER BY started_at DESC LIMIT 1`,
+      [mentionId]
+    );
+    return rows.length > 0 ? rowToExecution(rows[0]) : null;
+  }
 }
 
 function rowToExecution(row: Record<string, unknown>): AgentExecution {
@@ -233,5 +276,7 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: (row.comment_id as string) ?? null,
     deliverableId: (row.deliverable_id as string) ?? null,
+    autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    manuallyTerminatedByUser: !!row.manually_terminated_by_user,
   };
 }

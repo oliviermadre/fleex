@@ -42,6 +42,17 @@ export interface AgentExecution {
    * from a first-class link rather than a heuristic.
    */
   readonly deliverableId?: string | null;
+  /**
+   * Set to true when a run is auto-terminated as a side effect of concluding
+   * its thread. Distinguishes from manual termination.
+   */
+  readonly autoTerminatedAtConclusion?: boolean | null;
+  /**
+   * Set to true when a user manually terminates a run. The assistant respects
+   * this flag and never attempts to reschedule or restart such runs, eliminating
+   * conflicts between user intent and assistant auto-relaunching.
+   */
+  readonly manuallyTerminatedByUser?: boolean | null;
 }
 
 export type AgentEventType =
@@ -81,7 +92,8 @@ export type ExecutionKind =
   | 'skill'
   | 'panel_member'
   | 'panel_orchestrator'
-  | 'workflow_step';
+  | 'workflow_step'
+  | 'assistant';
 
 /** Observability context window summary surfaced in the execution header. */
 export interface ExecutionStartContext {

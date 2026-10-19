@@ -305,6 +305,16 @@ Hope that helps!`;
     });
   });
 
+  it('turns a double-escaped comment (literal \\n) back into line breaks', () => {
+    const input = JSON.stringify({ deliverable: null, comment: '## Done\\n\\nAll good.' });
+    expect(parseAgentOutput(input)?.comment).toBe('## Done\n\nAll good.');
+  });
+
+  it('leaves a comment that already has real line breaks untouched', () => {
+    const input = JSON.stringify({ deliverable: null, comment: 'Use `\\n` in a regex.\nSecond line' });
+    expect(parseAgentOutput(input)?.comment).toBe('Use `\\n` in a regex.\nSecond line');
+  });
+
   it('accepts the output when questions is malformed, dropping it', () => {
     const input = JSON.stringify({ deliverable: null, comment: 'Hi', questions: 'nope' });
     expect(parseAgentOutput(input)).toEqual({ deliverable: null, comment: 'Hi' });

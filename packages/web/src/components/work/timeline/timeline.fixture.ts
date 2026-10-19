@@ -31,7 +31,7 @@ export function activity(p: Partial<TicketActivity> & Pick<TicketActivity, 'id' 
 export function comment(p: Partial<TicketComment> & Pick<TicketComment, 'id' | 'body' | 'createdAt'>): TicketComment {
   return {
     ticketId: TICKET_ID, authorType: 'user', authorName: 'nas', visibility: 'public', privateRecipients: [],
-    mentions: [], parentId: null, updatedAt: p.createdAt, ...p,
+    mentions: [], parentId: null, threadId: null, updatedAt: p.createdAt, ...p,
   };
 }
 
