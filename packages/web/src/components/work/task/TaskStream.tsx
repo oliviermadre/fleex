@@ -12,7 +12,7 @@
  * pinning a comment to the Timeline (an annotation, SPEC annotations §5.4).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentExecution, TicketActivity, TicketComment, TicketDeliverable } from '@fleex/shared';
+import type { AgentExecution, AgentThread, TicketActivity, TicketComment, TicketDeliverable, TicketMention } from '@fleex/shared';
 import { StreamItem } from './StreamItem';
 import { EventLine } from './EventLine';
 import { RunCard } from './RunCard';
@@ -27,7 +27,14 @@ import { useWorkStore } from '../../../stores/workStore';
 import { annotationForComment, useAnnotationStore } from '../../../stores/annotationStore';
 import { annotationTitleFromComment } from '@fleex/shared';
 import type { CommentPin } from './CommentPin';
-import { buildStream, type QueueActivity } from '../selectors';
+import { DelegationCard } from './DelegationCard';
+import { ModeRequestCard } from './ModeRequestCard';
+import { AssistantLiveReply } from './AssistantLiveReply';
+import { buildStream, parseModeRequest, threadTargetLabel, threadTurns, threadMentionIds, type ModeRequest, type QueueActivity } from '../selectors';
+
+const EMPTY_THREADS: AgentThread[] = [];
+const EMPTY_NAMES: Record<string, string> = {};
+const EMPTY_MENTIONS: TicketMention[] = [];
 
 interface Props {
   ticketId: string;
@@ -52,6 +59,18 @@ interface Props {
   onCommentDeleted?: (commentId: string) => void;
   /** Called once a deliverable is deleted server-side, to drop it from the list at once. */
   onDeliverableDeleted?: (deliverableId: string) => void;
+  /** Assistant ⇄ agent threads of the ticket (Phase 3); each renders a delegation card. */
+  threads?: AgentThread[];
+  /** Display name per persona id, for the cards. */
+  personaNames?: Record<string, string>;
+  /** The ticket's mentions: tells which runs / crash cards belong to a thread. */
+  mentions?: TicketMention[];
+  onOpenThread?: (threadId: string) => void;
+  onAnswerThread?: (threadId: string, text: string) => void | Promise<void>;
+  /** The ticket's current agents execution mode (talk / plan / edit). */
+  conversationMode?: string;
+  onGrantMode?: (request: ModeRequest) => void | Promise<void>;
+  onDeclineMode?: (request: ModeRequest) => void | Promise<void>;
 }
 
 export function TaskStream({
@@ -70,6 +89,14 @@ export function TaskStream({
   editable = false,
   onCommentDeleted,
   onDeliverableDeleted,
+  threads = EMPTY_THREADS,
+  personaNames = EMPTY_NAMES,
+  mentions = EMPTY_MENTIONS,
+  onOpenThread,
+  onAnswerThread,
+  conversationMode = 'plan',
+  onGrantMode,
+  onDeclineMode,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -121,9 +148,13 @@ export function TaskStream({
     };
   };
 
+  // Runs and action cards of agents working inside a thread stay out of the main
+  // stream: the assistant owns them (relaunch, answers), the Threads panel shows them.
+  const hiddenMentionIds = useMemo(() => threadMentionIds(comments, mentions), [comments, mentions]);
+  const threadCommentIds = useMemo(() => new Set(comments.filter((c) => c.threadId).map((c) => c.id)), [comments]);
   const stream = useMemo(
-    () => buildStream(comments, events, executions, deliverables),
-    [comments, events, executions, deliverables],
+    () => buildStream(comments, events, executions, deliverables, threads, hiddenMentionIds),
+    [comments, events, executions, deliverables, threads, hiddenMentionIds],
   );
 
   useEffect(() => {
@@ -136,12 +167,30 @@ export function TaskStream({
     if (!showActionCards || activity !== 'waiting') return null;
     for (let i = comments.length - 1; i >= 0; i--) {
       const c = comments[i]!;
-      if (c.authorType === 'agent') {
+      // The assistant relays agent questions to the user with the same declared shape.
+      if (c.authorType === 'agent' || c.authorType === 'assistant') {
         return c.questions?.length ? c.id : null;
       }
     }
     return null;
   }, [comments, activity, showActionCards]);
+
+  // Only the most recent mode request is actionable; earlier ones are history.
+  const latestModeRequestId = useMemo(() => {
+    if (!showActionCards) return null;
+    for (let i = comments.length - 1; i >= 0; i--) {
+      const c = comments[i]!;
+      if (c.threadId || c.authorType !== 'assistant') continue;
+      if (parseModeRequest(c.body)) return c.id;
+    }
+    return null;
+  }, [comments, showActionCards]);
+
+  // An assistant turn in flight streams its answer live at the bottom of the stream.
+  const liveAssistant = useMemo(
+    () => executions.find((e) => e.status === 'running' && e.mentionId.startsWith('assistant:')) ?? null,
+    [executions],
+  );
 
   const hasContent = stream.length > 0 || (description && description.trim().length > 0);
 
@@ -164,7 +213,32 @@ export function TaskStream({
                   onDeleted={editable ? (id) => onDeliverableDeleted?.(id) : undefined}
                 />
               );
-            case 'comment':
+            case 'delegation':
+              return (
+                <DelegationCard
+                  key={`t-${entry.thread.id}`}
+                  thread={entry.thread}
+                  turns={threadTurns(comments, entry.thread.id)}
+                  personaDisplayName={threadTargetLabel(entry.thread, personaNames[entry.thread.personaId])}
+                  onOpen={(id) => onOpenThread?.(id)}
+                  onAnswer={(id, text) => onAnswerThread?.(id, text)}
+                />
+              );
+            case 'comment': {
+              const modeRequest = entry.comment.authorType === 'assistant' ? parseModeRequest(entry.comment.body) : null;
+              if (modeRequest) {
+                return (
+                  <ModeRequestCard
+                    key={entry.comment.id}
+                    comment={entry.comment}
+                    request={modeRequest}
+                    currentMode={conversationMode}
+                    actionable={entry.comment.id === latestModeRequestId}
+                    onGrant={(r) => onGrantMode?.(r)}
+                    onDecline={(r) => onDeclineMode?.(r)}
+                  />
+                );
+              }
               return entry.comment.id === questionCommentId ? (
                 <InlineQuestion
                   key={entry.comment.id}
@@ -177,8 +251,13 @@ export function TaskStream({
               ) : (
                 <StreamItem key={entry.comment.id} comment={entry.comment} onDelete={askDelete(entry.comment.id)} pin={pinOf(entry.comment)} />
               );
+            }
           }
         })}
+
+        {liveAssistant && (
+          <AssistantLiveReply execution={liveAssistant} name={personaNames[liveAssistant.personaId] ?? 'Assistant'} />
+        )}
 
         {/* Actionable HITL / workflow cards (Human Gate approve-reject, waiting
             for input, ambiguous route, failed-step retry, crashed relaunch,
@@ -191,6 +270,7 @@ export function TaskStream({
             // The stream already renders a RunCard per running execution, so the
             // "…is working" banner would double-report it.
             showRunningBanner={false}
+            hideCommentIds={threadCommentIds}
           />
         )}
 

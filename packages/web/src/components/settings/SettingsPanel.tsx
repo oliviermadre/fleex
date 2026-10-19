@@ -8,6 +8,8 @@ import { DeliverableTypesTab } from './DeliverableTypesTab';
 import { MemoryTab } from './MemoryTab';
 import { ConnectorsTab } from './ConnectorsTab';
 import { ActionsTab } from './actions/ActionsTab';
+import { cn } from '../../lib/cn';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import type { AgentToken } from '@fleex/shared';
 import {
   DEFAULT_AGENT_MAX_TURNS,
@@ -38,6 +40,7 @@ export function SettingsPanel() {
   const [basePath, setBasePath] = useState('');
   const [humanDisplayName, setHumanDisplayName] = useState('');
   const [humanMentionName, setHumanMentionName] = useState('');
+  const [defaultAssistantPersonaId, setDefaultAssistantPersonaId] = useState('');
   const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
   const [agentMaxTurns, setAgentMaxTurns] = useState(DEFAULT_AGENT_MAX_TURNS);
   const [agentTimeoutMinutes, setAgentTimeoutMinutes] = useState(DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES);
@@ -46,6 +49,7 @@ export function SettingsPanel() {
     setBasePath(settings.basePath);
     setHumanDisplayName((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string ?? '');
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
+    setDefaultAssistantPersonaId(settings.defaultAssistantPersonaId ?? '');
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setAgentMaxTurns(settings.agentMaxTurns ?? DEFAULT_AGENT_MAX_TURNS);
     setAgentTimeoutMinutes(
@@ -63,6 +67,7 @@ export function SettingsPanel() {
       agentMaxConcurrency,
       agentMaxTurns,
       agentExecutionTimeout: agentTimeoutMinutes * MS_IN_MINUTE,
+      defaultAssistantPersonaId: defaultAssistantPersonaId || undefined,
     } as Partial<AppSettings> & Record<string, unknown>);
   };
 
@@ -92,6 +97,8 @@ export function SettingsPanel() {
               setAgentMaxTurns={setAgentMaxTurns}
               agentTimeoutMinutes={agentTimeoutMinutes}
               setAgentTimeoutMinutes={setAgentTimeoutMinutes}
+              defaultAssistantPersonaId={defaultAssistantPersonaId}
+              setDefaultAssistantPersonaId={setDefaultAssistantPersonaId}
             />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
@@ -128,6 +135,8 @@ function GeneralTab({
   setAgentMaxTurns,
   agentTimeoutMinutes,
   setAgentTimeoutMinutes,
+  defaultAssistantPersonaId,
+  setDefaultAssistantPersonaId,
 }: {
   basePath: string;
   setBasePath: (v: string) => void;
@@ -141,7 +150,10 @@ function GeneralTab({
   setAgentMaxTurns: (v: number) => void;
   agentTimeoutMinutes: number;
   setAgentTimeoutMinutes: (v: number) => void;
+  defaultAssistantPersonaId: string;
+  setDefaultAssistantPersonaId: (v: string) => void;
 }) {
+  const personas = useAgentPersonaStore((s) => s.personas);
   return (
     <div className="flex flex-col gap-5">
       <Input
@@ -192,6 +204,28 @@ function GeneralTab({
           Per-agent overrides can be set in agent configuration.
         </p>
         </div>
+      </div>
+
+      <AssistantSwitch />
+
+      <div>
+        <label htmlFor="defaultAssistantPersonaId" className="mb-1 block text-sm font-medium text-[var(--theme-text-secondary)]">
+          Default assistant
+        </label>
+        <select
+          id="defaultAssistantPersonaId"
+          value={defaultAssistantPersonaId}
+          onChange={(e) => setDefaultAssistantPersonaId(e.target.value)}
+          className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
+        >
+          <option value="">None (Work composer posts plain comments)</option>
+          {personas.map((p) => (
+            <option key={p.id} value={p.id}>{p.displayName}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+          The persona that answers in the Work view and delegates to other agents in threads. A ticket can override it from its composer.
+        </p>
       </div>
 
       <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
@@ -391,3 +425,47 @@ function AgentTokensTab() {
   );
 }
 
+/**
+ * Kill switch for the assistant and its threads, saved on click like the Memory
+ * tab toggles: when it misbehaves it must be one click away. Off, the server
+ * starts no assistant turn and the Work composer posts plain comments.
+ */
+function AssistantSwitch() {
+  const settings = useSettingsStore((s) => s.settings);
+  const saveSettings = useSettingsStore((s) => s.saveSettings);
+  const [saving, setSaving] = useState(false);
+  const enabled = settings.workThreadsEnabled === true;
+  const toggle = async (next: boolean) => {
+    setSaving(true);
+    try {
+      await saveSettings({ workThreadsEnabled: next });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <label
+      className={cn(
+        'flex items-start gap-2.5 rounded border border-[var(--theme-border)] px-3 py-2',
+        saving ? 'opacity-50' : 'cursor-pointer hover:bg-[var(--theme-bg-hover)]',
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={enabled}
+        disabled={saving}
+        onChange={(e) => void toggle(e.target.checked)}
+        className="mt-0.5 flex-shrink-0 accent-[var(--theme-accent)]"
+        aria-label="Assistant & threads"
+      />
+      <span className="min-w-0">
+        <span className="text-sm font-medium text-[var(--theme-text-primary)]">Assistant & threads</span>
+        <span className="mt-0.5 block text-xs text-[var(--theme-text-muted)]">
+          {enabled
+            ? 'On: the Work composer talks to the assistant, which delegates in threads. Saved immediately.'
+            : 'Off: the Work composer posts plain comments and @agent: / @skill: / @workflow: mentions run directly. No assistant turn starts. Saved immediately.'}
+        </span>
+      </span>
+    </label>
+  );
+}

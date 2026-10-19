@@ -48,6 +48,13 @@ export interface AppSettings {
   agentMaxTurns: number;
   /** Wall-clock cap (ms) on a single agent/skill execution. Unset → server default. */
   agentExecutionTimeout?: number;
+  /**
+   * Feature flag for the Work view's assistant threads (Phase 3). Opt-in: only
+   * `true` enables it (the composer talks to the assistant, the Threads tool shows).
+   */
+  workThreadsEnabled?: boolean;
+  /** Persona that plays the assistant unless a ticket overrides it (server config). */
+  defaultAssistantPersonaId?: string;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**

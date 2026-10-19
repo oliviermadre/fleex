@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentQuestion, CommentVisibility, MentionExecutionMode } from '@fleex/shared';
+import type { AgentQuestion, CommentVisibility, MentionExecutionMode, CommentAuthorType } from '@fleex/shared';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
@@ -18,12 +18,24 @@ export class PostCommentUseCase {
 
   async execute(params: {
     ticketId: string;
-    authorType: 'user' | 'agent';
+    authorType: CommentAuthorType;
     authorName: string;
     body: string;
     visibility?: CommentVisibility;
     privateRecipients?: string[];
     parentId?: string | null;
+    /**
+     * Thread this comment is a turn of. `undefined` = inherit the parent's
+     * threadId when `parentId` is given (this is how an agent's reply lands in
+     * the thread that mentioned it); `null` = force a main-stream comment.
+     */
+    threadId?: string | null;
+    /**
+     * Join the thread of this comment without replying to it (`threadId`
+     * undefined, no `parentId`): a skill or panel run announces itself in the
+     * thread that mentioned it, and its result comments follow as replies.
+     */
+    threadOf?: string;
     humanMentionNames?: string[];
     executionMode?: MentionExecutionMode;
     /**
@@ -35,7 +47,20 @@ export class PostCommentUseCase {
     suppressMentionForAgents?: string[];
     /** Closed questions declared by the agent (already sanitized by questionsToKeep). */
     questions?: AgentQuestion[] | null;
+    /**
+     * Skip @agent:/@panel:/@skill:/@workflow: mentions entirely. The Work
+     * composer sets it: the assistant reads those mentions as delegation
+     * instructions instead, so nothing launches twice.
+     */
+    suppressAgentMentions?: boolean;
   }): Promise<{ comment: TicketCommentEntity; createdMentions: TicketMentionEntity[] }> {
+    let threadId: string | null = params.threadId ?? null;
+    const threadSource = params.parentId ?? params.threadOf;
+    if (params.threadId === undefined && threadSource) {
+      const source = await this.commentStore.getById(threadSource);
+      threadId = source?.threadId ?? null;
+    }
+
     const comment = TicketCommentEntity.create({
       id: randomUUID(),
       ticketId: params.ticketId,
@@ -46,6 +71,7 @@ export class PostCommentUseCase {
       privateRecipients: params.privateRecipients,
       parentId: params.parentId,
       questions: params.questions,
+      threadId,
     });
 
     await this.commentStore.save(comment);
@@ -53,6 +79,9 @@ export class PostCommentUseCase {
     // Create mentions for each @agent:xxx found in the body
     // Phase 1: agent-authored comments do NOT create actionable mentions (no chaining)
     const isAgentAuthored = params.authorType === 'agent';
+    // The assistant's own comments DO create mentions (that is how it launches an
+    // agent); a user message routed through the assistant creates none.
+    const skipAgentMentions = isAgentAuthored || params.suppressAgentMentions === true;
     // Agent/panel mentions no longer carry the composer's mode: the effective
     // mode is resolved from the ticket's conversation-scoped config when the
     // mention is acknowledged (see ExecuteAgentUseCase.resolveExecutionConfig).
@@ -62,7 +91,7 @@ export class PostCommentUseCase {
     const suppressedAgents = new Set(params.suppressMentionForAgents ?? []);
 
     const createdMentions: TicketMentionEntity[] = [];
-    if (!isAgentAuthored) {
+    if (!skipAgentMentions) {
       for (const targetAgent of comment.mentions) {
         if (targetAgent === params.authorName) continue; // don't self-mention
         if (suppressedAgents.has(targetAgent)) continue; // re-mention of a waiting agent: wake the existing one, don't duplicate
@@ -96,6 +125,9 @@ export class PostCommentUseCase {
         createdMentions.push(mention);
       }
 
+    }
+
+    if (!isAgentAuthored && params.suppressAgentMentions !== true) {
       // Create mentions for @skill:xxx found in the body
       const skillMentions = TicketCommentEntity.extractSkillMentions(params.body);
       for (const commandName of skillMentions) {
@@ -155,9 +187,10 @@ export class PostCommentUseCase {
       id: randomUUID(),
       ticketId: params.ticketId,
       action: 'commented',
-      actorType: params.authorType,
+      // Activity rows only know user/agent actors; the assistant is an agent there.
+      actorType: params.authorType === 'user' ? 'user' : 'agent',
       actorName: params.authorName,
-      source: params.authorType === 'agent' ? 'api' : 'web',
+      source: params.authorType === 'user' ? 'web' : 'api',
     }));
 
     this.logger.info('Comment posted', {

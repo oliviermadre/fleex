@@ -73,6 +73,8 @@ export interface WorkDraft {
   boardId: string | null;
   type: DraftType;
   priority: TicketPriority;
+  /** Hand the new ticket to the assistant right after creation (Phase 3). */
+  startWithAssistant: boolean;
 }
 
 export interface WorkState {
@@ -161,6 +163,7 @@ export interface WorkState {
   setActiveScratchTab: (ticketId: string, tabKey: string) => void;
   setSelectedThread: (id: string | null) => void;
   setThreadTab: (tab: ThreadTab) => void;
+  setSelectedThreadId: (threadId: string | null) => void;
   setShellOpen: (open: boolean) => void;
   setShellMode: (mode: boolean) => void;
   setCodeMode: (mode: boolean) => void;
@@ -500,6 +503,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
     setTimelineZoom: (zoom) => commit({ timelineZoom: clampTimelineZoom(zoom) }),
     toggleTimelineFilter: (key) =>
       commit({ timelineFilters: { ...get().timelineFilters, [key]: !get().timelineFilters[key] } }),
+    setSelectedThreadId: (selectedThreadId) => commit({ selectedThreadId }),
     // Shell mode and Code mode both take over the center — entering one exits the other.
     setShellMode: (shellMode) => commitMode({ shellMode, ...(shellMode ? { codeMode: false, workflowMode: false } : {}) }),
     setCodeMode: (codeMode) => commitMode({ codeMode, ...(codeMode ? { shellMode: false, workflowMode: false } : {}) }),
