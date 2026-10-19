@@ -10,3 +10,4 @@ coverage/
 *.tsbuildinfo
 .claude/settings.local.json
 .fleex/
+demo/.shots/

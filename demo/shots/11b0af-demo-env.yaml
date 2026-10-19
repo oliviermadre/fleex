@@ -1,0 +1,14 @@
+# Release fragment releases/unreleased/11b0af-demo-env.md (this very feature).
+feature: 11b0af-demo-env
+viewport: { width: 1440, height: 900, scale: 2 }
+themes: [dark, light]
+shots:
+  - id: board
+    goto: /tickets/board/{{board:nova}}
+    waitFor: '[data-testid="ticket-card"]'
+  - id: ticket
+    goto: /tickets/board/all/ticket/{{ticket:nova-12}}
+    waitFor: '[data-testid="ticket-detail"]'
+    actions:
+      - click: 'text=Comments (3)'
+      - wait: 300
