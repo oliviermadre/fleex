@@ -239,6 +239,15 @@ export class SqliteMemoryStoreAdapter implements MemoryStorePort {
     });
   }
 
+  async countSearchable(filters: MemorySearchFilters): Promise<number> {
+    // The very clause `search` scans, so the count cannot disagree with it.
+    const { sql, params } = this.buildFilterClause(filters, 'embedding IS NOT NULL');
+    const row = this.conn.db
+      .prepare(`SELECT COUNT(*) AS n FROM memory_chunks ${sql}`)
+      .get(...params) as { n: number };
+    return row.n;
+  }
+
   async searchKeyword(term: string, filters: MemorySearchFilters, limit: number): Promise<MemoryChunkEntity[]> {
     const trimmed = term.trim();
     if (!trimmed) return [];
