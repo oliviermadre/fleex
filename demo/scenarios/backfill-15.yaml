@@ -1,0 +1,32 @@
+# Release #15 backfill: a finished ticket whose Timeline shows phase durations,
+# the hatched period after Done, and annotations spread out enough to render as cards.
+tickets:
+  - key: nova-41
+    board: nova
+    repos: [atelier-nova/web]
+    title: "Bons cadeaux imprimables"
+    status: done
+    priority: high
+    tags: [cadeaux]
+    epic: growth
+    persona: builder
+    createdAt: -9d
+    statusAt: -1d
+    description: |
+      Un bon cadeau en PDF, prêt à imprimer, avec le nom de l'atelier et un code unique.
+    comments:
+      - { persona: catalyst, at: -8d, body: "PRD prêt : PDF A5, code à 8 caractères, validité 12 mois." }
+      - { author: Nas, at: -7d, body: "OK, on ajoute un message personnalisé." }
+      - { persona: guardian, at: -2d, body: "Review OK. Un seul point : échapper le message dans le PDF." }
+    annotations:
+      - { at: -8d, title: "Validité 12 mois", tone: info, body: "Aligné avec les CGV." }
+      - { at: -5d, title: "Code unique : 8 caractères", tone: highlight }
+      - { at: -2d, title: "Échapper le message", tone: warning, body: "Retour du Guardian." }
+    workflowRun:
+      name: "Spec Dev PR"
+      status: completed
+      steps:
+        - { name: Spec, persona: catalyst, at: -8d }
+        - { name: Check Spec, gate: true, at: -7d }
+        - { name: Build, persona: builder, at: -4d }
+        - { name: Review, persona: guardian, at: -2d }

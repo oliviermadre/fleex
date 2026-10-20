@@ -1,0 +1,10 @@
+# Backfill of release #15, §7 « Mobile repensé ».
+feature: backfill-15-mobile
+scenario: backfill-15
+out: releases/15/assets
+viewport: { width: 390, height: 844, scale: 3 }
+themes: [dark, light]
+shots:
+  - id: mobile-focus
+    goto: /focus
+    waitFor: 'text=Focus'

@@ -1,0 +1,48 @@
+# Backfill of release #15 (published on Slack on 2026-10-16), shot on today's main.
+# Shots carry browser state (drafts, open drawers) to the next one: run them one by one with --only.
+# Reset first with a fake home, so the skill picker lists Atelier Nova's
+# fictional skills instead of the ones on this machine, then enable them:
+#   HOST_HOMEDIR=$PWD/demo/home bun packages/cli/index.ts demo reset --scenario backfill-15 --workspace demo
+#   curl -s localhost:<server>/api/claude-code-skills | jq -c '[.skills[].id]'  → POST /api/claude-code-skills/bulk {ids, enabled: true}
+feature: backfill-15
+scenario: backfill-15
+out: releases/15/assets
+viewport: { width: 1440, height: 900, scale: 2 }
+themes: [dark, light]
+shots:
+  # §1 Skills Claude Code natifs: the @ picker lists SKILL.md skills with their CC badge
+  - id: cc-skills
+    goto: /work/{{ticket:nova-12}}
+    waitFor: 'textarea'
+    actions:
+      - type: { selector: 'textarea', text: '@' }
+      - wait: 500
+    clip: 'div:has(> footer) > :first-child'
+    padding: 0
+  # §3 Timeline: durations, lifetime and pinned annotations
+  - id: timeline
+    goto: /work/{{ticket:nova-41}}
+    waitFor: 'button:has-text("Timeline")'
+    actions:
+      - click: 'button:has-text("Timeline")'
+      - wait: 600
+    clip: 'div:has(> footer) > :first-child'
+    padding: 0
+  # §8 Tasks gains the ticket actions: Docs panel with + Add deliverable
+  - id: tasks-docs
+    goto: /work/{{ticket:nova-12}}
+    waitFor: 'button:has-text("Docs") >> nth=1'
+    actions:
+      - click: 'button:has-text("Docs") >> nth=1'
+      - wait: 500
+    clip: 'div:has(> footer) > :first-child'
+    padding: 0
+  # §10 Models: Haiku 5.5 in the model picker
+  - id: models
+    goto: /work/{{ticket:nova-12}}
+    waitFor: 'text=Auto (persona)'
+    actions:
+      - click: 'text=Auto (persona)'
+      - wait: 400
+    clip: 'div:has(> footer) > :first-child'
+    padding: 0
