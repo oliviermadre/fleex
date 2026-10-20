@@ -71,6 +71,17 @@ export function SplitIcon({ className }: IconProps) {
   );
 }
 
+// Sub-workflow — stacked layers (a whole workflow folded into one step).
+export function LayersIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
+    </svg>
+  );
+}
+
 // ── Palette data ──────────────────────────────────────────────────────────────
 
 type IconComponent = React.ComponentType<IconProps>;
@@ -133,6 +144,14 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     Icon: SplitIcon,
     hue: 'orange',
     colorClass: `${tintClasses('orange').text} ${tintClasses('orange').borderColor}`,
+  },
+  {
+    type: 'workflow',
+    label: 'Workflow',
+    description: 'Another workflow, run in place — always its latest version',
+    Icon: LayersIcon,
+    hue: 'pink',
+    colorClass: `${tintClasses('pink').text} ${tintClasses('pink').borderColor}`,
   },
 ];
 

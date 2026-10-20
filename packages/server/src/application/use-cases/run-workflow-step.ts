@@ -3,6 +3,7 @@ import { StepRunEntity } from '../../domain/entities/step-run.entity.js';
 import { EdgeEvaluator } from '../services/edge-evaluator.js';
 import { pauseForRouting } from '../services/ambiguous-routing.js';
 import { buildRunHistory } from '../utils/run-history.js';
+import { postWorkflowComment } from '../services/workflow-comment.js';
 import { WorkflowRunNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
@@ -15,6 +16,10 @@ import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { WorkflowExecutorType, StepOutput, WorkflowStep } from '@fleex/shared';
+import { MAX_STEP_VISITS_PER_RUN } from '@fleex/shared';
+
+/** Marks the parked step_run the loop guard leaves behind (see `parkForLoop`). */
+export const LOOP_GUARD_FIELD = 'loopGuard';
 
 export interface RunWorkflowStepDeps {
   runStore: WorkflowRunStorePort;
@@ -175,6 +180,10 @@ export class RunWorkflowStepUseCase {
 
       // 7. Advance or complete
       if (nextEdge) {
+        if (await this.visitLimitReached(run.id, nextEdge.target)) {
+          await this.parkForLoop(run, nextEdge.target);
+          return;
+        }
         run.advanceTo(nextEdge.target);
         await this.deps.runStore.save(run);
         this.deps.orchestrator.runStep(run.id, nextEdge.target);
@@ -235,6 +244,66 @@ export class RunWorkflowStepUseCase {
         error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
       });
     }
+  }
+
+  /**
+   * G6 — the runtime loop guard. An edge back to an earlier step (`QA ko →
+   * Build`) is a legitimate loop, but one that never converges burns tokens
+   * forever, and sub-workflows make each lap more expensive.
+   *
+   * A visit is a *completed* attempt: a step that asked a question and was
+   * retried three times before finishing was entered once. Counting restarts
+   * after the latest park *anywhere in the run*: every step of the loop has
+   * been visited as often as the one that tripped the guard, so a per-step
+   * reset would park again one hop later. A human who chose to let it continue
+   * gets a fresh allowance for the whole loop. Only edge traversals go through
+   * here — a human retry, gate or route decision is never refused.
+   */
+  private async visitLimitReached(workflowRunId: string, stepId: string): Promise<boolean> {
+    const runs = await this.deps.stepRunStore.getByWorkflowRun(workflowRunId);
+    const lastPark = Math.max(0, ...runs
+      .filter((sr) => sr.output?.schemaFields?.[LOOP_GUARD_FIELD] === true)
+      .map((sr) => sr.createdAt.getTime()));
+    const visits = runs.filter((sr) => sr.stepId === stepId && sr.status === 'completed'
+      && sr.createdAt.getTime() >= lastPark).length;
+    return visits >= MAX_STEP_VISITS_PER_RUN;
+  }
+
+  /**
+   * Parks the run on `stepId` instead of entering it again: a `needs_review`
+   * step_run that never executed (no agent, no tokens) carries the explanation,
+   * and the existing Restart action on it is how a human lets the run go on.
+   */
+  private async parkForLoop(run: WorkflowRunEntity, stepId: string): Promise<void> {
+    const step = run.findStep(stepId);
+    const name = step?.name ?? stepId;
+    const message = `⛔ Loop detected: step **${name}** was reached ${MAX_STEP_VISITS_PER_RUN} times in this run. `
+      + 'Restart it to allow another round.';
+    const latest = await this.deps.stepRunStore.getLatestForStep(run.id, stepId);
+    const parked = StepRunEntity.create({
+      id: randomUUID(), workflowRunId: run.id, stepId, attempt: (latest?.attempt ?? 0) + 1,
+    });
+    const output: StepOutput = { comment: message, schemaFields: { [LOOP_GUARD_FIELD]: true }, result: 'needs_review' };
+    parked.markNeedsReview({ output });
+    await this.deps.stepRunStore.save(parked);
+    run.advanceTo(stepId);
+    run.block();
+    await this.deps.runStore.save(run);
+    try {
+      await postWorkflowComment(this.deps.postComment, this.deps.eventBus, {
+        ticketId: run.ticketId,
+        authorName: `workflow:${run.templateSnapshot.name}`,
+        body: message,
+      });
+    } catch (err) {
+      this.deps.logger?.warn('Loop guard comment failed', {
+        workflowRunId: run.id, error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    this.deps.eventBus.emit({
+      type: 'workflow.needs_review', workflowRunId: run.id, stepRunId: parked.id, stepId,
+      ticketId: run.ticketId, routineId: run.routineId, occurredAt: new Date(),
+    });
   }
 
   /**

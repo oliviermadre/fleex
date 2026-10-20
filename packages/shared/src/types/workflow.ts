@@ -1,7 +1,11 @@
 import type { DeliverableType, DeliverableStatus, AgentQuestion } from './ticket.js';
 import type { RunSubject } from './routine.js';
 
-export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route';
+/**
+ * `workflow` = a sub-workflow: `executorRef` is the slug of another template,
+ * expanded into this one when a run starts (see `workflow/subworkflows.ts`).
+ */
+export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native' | 'route' | 'workflow';
 
 export type EdgeOperator =
   | 'eq' | 'neq'
@@ -67,6 +71,11 @@ export interface WorkflowStep {
    */
   forEach?: string;
   position: { x: number; y: number };
+  /**
+   * Set only in a run snapshot, on a step copied in from a sub-workflow: the id
+   * of the (innermost) `workflow` step it was expanded from. Never authored.
+   */
+  origin?: { subworkflowStepId: string };
 }
 
 export interface WorkflowEdgeCondition {
@@ -134,12 +143,25 @@ export type WorkflowRunStatus =
   | 'running' | 'blocked' | 'needs_review'
   | 'completed' | 'failed' | 'cancelled';
 
+/** One sub-workflow expanded into a run snapshot — what the run view groups by. */
+export interface SubworkflowInfo {
+  /** The `workflow` step, kept in the snapshot as the sub-workflow's exit. */
+  stepId: string;
+  /** The enclosing sub-workflow's `stepId`, when nested. */
+  parentStepId?: string;
+  templateSlug: string;
+  name: string;
+  emoji: string;
+}
+
 export interface WorkflowTemplateSnapshot {
   name: string;
   emoji: string;
   steps: WorkflowStep[];
   edges: WorkflowEdge[];
   entryStepId: string;
+  /** Present iff the template included sub-workflows (expanded at launch). */
+  subworkflows?: SubworkflowInfo[];
 }
 
 export interface WorkflowRun {

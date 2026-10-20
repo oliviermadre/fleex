@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { includedWorkflowSlugs } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
@@ -80,6 +81,13 @@ export function AgentListPanel() {
     setCollapsed((c) => ({ ...c, [kind]: !c[kind] }));
   // Delete is irreversible, so it is always funnelled through a confirm dialog.
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; kind: PrimitiveKind; name: string } | null>(null);
+  const deleteConsumers = useMemo(() => {
+    if (deleteTarget?.kind !== 'workflow') return [];
+    const slug = templates.find((t) => t.id === deleteTarget.id)?.slug;
+    return slug
+      ? templates.filter((t) => t.enabled && t.id !== deleteTarget.id && includedWorkflowSlugs(t.steps).includes(slug))
+      : [];
+  }, [deleteTarget, templates]);
 
   const {
     open: menuOpen,
@@ -230,7 +238,9 @@ export function AgentListPanel() {
     if (kind === 'persona') deletePersona(id);
     else if (kind === 'skill') deleteSkill(id);
     else if (kind === 'panel') deletePanelAction(id);
-    else removeWorkflow(id);
+    // The dialog listed the workflows including this one: confirming is the
+    // informed override the server asks for.
+    else removeWorkflow(id, { force: true });
     setDeleteTarget(null);
   };
 
@@ -555,6 +565,12 @@ export function AgentListPanel() {
               <span className="font-medium text-[var(--theme-text-primary)]">{deleteTarget.name}</span>? This
               action is irreversible.
             </p>
+            {deleteConsumers.length > 0 && (
+              <p className="mt-2 text-xs text-[var(--theme-danger)]">
+                Included as a sub-workflow by {deleteConsumers.map((t) => t.name).join(', ')}.
+                {' '}{deleteConsumers.length > 1 ? 'They' : 'It'} will no longer start.
+              </p>
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 className="rounded-md px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"

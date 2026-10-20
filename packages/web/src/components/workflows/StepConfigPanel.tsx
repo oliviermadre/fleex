@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { WorkflowStep, WorkflowEdge, JsonSchema } from '@fleex/shared';
+import type { WorkflowStep, WorkflowEdge, JsonSchema, WorkflowTemplate } from '@fleex/shared';
+import { includedWorkflowSlugs } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { TagInput } from '../ui/TagInput';
 import { NativeActionsEditor } from './NativeActionsEditor';
 
@@ -15,9 +17,32 @@ interface Props {
   steps: WorkflowStep[];
   edges: WorkflowEdge[];
   entryStepId: string;
+  /** Slug of the workflow being edited — what a sub-workflow must not lead back to. */
+  workflowSlug: string;
 }
 
-export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, edges, entryStepId }: Props) {
+/**
+ * Why `candidate` can't be included in `currentSlug`, or null. Mirrors the
+ * server's save-time check (G1/G2) so the choice is greyed out before a save
+ * gets refused.
+ */
+function inclusionBlocker(candidate: string, currentSlug: string, templates: WorkflowTemplate[]): string | null {
+  if (candidate === currentSlug) return 'this workflow itself';
+  const bySlug = new Map(templates.map((t) => [t.slug, t]));
+  const seen = new Set<string>();
+  const stack = [candidate];
+  while (stack.length > 0) {
+    const slug = stack.pop()!;
+    if (slug === currentSlug) return 'would create a cycle';
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    stack.push(...includedWorkflowSlugs(bySlug.get(slug)?.steps ?? []));
+  }
+  return null;
+}
+
+export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, edges, entryStepId, workflowSlug }: Props) {
+  const templates = useWorkflowTemplateStore((s) => s.templates);
   const personas = useAgentPersonaStore((s) => s.personas);
   const skills = useSkillStore((s) => s.skills);
   const panels = usePanelStore((s) => s.panels);
@@ -40,6 +65,9 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
   // A router produces nothing, so an output schema would be a lie. Its whole
   // configuration is its name — the routing lives on its outgoing edges.
   const isRouter = step.executorType === 'route';
+  // A sub-workflow relays its child's output: no persona, no mode, no schema.
+  const isSubworkflow = step.executorType === 'workflow';
+  const child = isSubworkflow ? templates.find((t) => t.slug === step.executorRef) : undefined;
 
   const refOptions = (() => {
     switch (step.executorType) {
@@ -49,6 +77,12 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
         return skills.map((s) => ({ value: s.commandName, label: s.displayName || s.commandName }));
       case 'panel':
         return panels.map((p) => ({ value: p.name, label: p.displayName || p.name }));
+      case 'workflow':
+        return templates.map((t) => {
+          const blocker = inclusionBlocker(t.slug, workflowSlug, templates);
+          const suffix = blocker ? ` — ${blocker}` : t.enabled ? '' : ' (disabled)';
+          return { value: t.slug, label: `${t.emoji ? `${t.emoji} ` : ''}${t.name}${suffix}`, disabled: blocker !== null };
+        });
       case 'human_gate':
       case 'native':
       case 'route':
@@ -102,7 +136,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
       {/* Executor ref (select) */}
       {hasExecutorRef && (
         <label className="block text-xs space-y-1">
-          <span style={{ color: 'var(--theme-text-muted)' }}>Executor ref</span>
+          <span style={{ color: 'var(--theme-text-muted)' }}>{isSubworkflow ? 'Workflow to include' : 'Executor ref'}</span>
           <select
             value={step.executorRef}
             onChange={(e) => onChange({ ...step, executorRef: e.target.value })}
@@ -110,8 +144,8 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
             style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
           >
             <option value="">Select…</option>
-            {refOptions.map((o) => (
-              <option key={o.value} value={o.value}>
+            {refOptions.map((o: { value: string; label: string; disabled?: boolean }) => (
+              <option key={o.value} value={o.value} disabled={o.disabled}>
                 {o.label}
               </option>
             ))}
@@ -119,8 +153,33 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
         </label>
       )}
 
+      {isSubworkflow && step.executorRef && (
+        <div className="text-xs space-y-1">
+          {!child && <div className="text-[var(--theme-danger)]">Workflow "{step.executorRef}" not found.</div>}
+          {child && !child.enabled && (
+            <div className="text-[var(--theme-danger)]">This workflow is disabled: runs including it will be refused.</div>
+          )}
+          {child && (
+            <>
+              <span style={{ color: 'var(--theme-text-muted)' }}>Steps run in place ({child.steps.length})</span>
+              <ol className="list-decimal pl-4 space-y-0.5" style={{ color: 'var(--theme-text-primary)' }}>
+                {child.steps.map((c) => (
+                  <li key={c.id}>
+                    {c.name} <span style={{ color: 'var(--theme-text-muted)' }}>· {c.executorType}{c.executorType === 'workflow' ? ` ${c.executorRef}` : ''}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+          <p className="text-[10px] leading-tight" style={{ color: 'var(--theme-text-muted)' }}>
+            Each run takes the workflow's latest version. Outgoing edges read the
+            output of its last completed step.
+          </p>
+        </div>
+      )}
+
       {/* Mode override */}
-      {hasExecutorRef && (
+      {hasExecutorRef && !isSubworkflow && (
         <label className="block text-xs space-y-1">
           <span style={{ color: 'var(--theme-text-muted)' }}>Mode override (optional)</span>
           <select
@@ -194,7 +253,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry, steps, ed
       )}
 
       {/* Output schema textarea */}
-      {!isRouter && (
+      {!isRouter && !isSubworkflow && (
       <label className="block text-xs space-y-1">
         <span style={{ color: 'var(--theme-text-muted)' }}>Output schema (JSON Schema)</span>
         <textarea

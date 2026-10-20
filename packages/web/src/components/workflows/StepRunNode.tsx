@@ -3,7 +3,7 @@ import type { WorkflowStep, StepRunStatus, WorkflowExecutorType } from '@fleex/s
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
-import { ListChecksIcon, SplitIcon } from './executor-palette';
+import { ListChecksIcon, SplitIcon, LayersIcon } from './executor-palette';
 import { nativeStepSummary } from './nativeStepSummary';
 
 export interface StepRunNodeData {
@@ -127,7 +127,7 @@ function SkipForwardIcon({ className }: IconProps) {
 // Executor types map onto the canonical primitive glyphs (lib/primitives.tsx),
 // so a step node on the canvas shows the SAME icon as the sidebar and the
 // palette. `human_gate` is not a primitive, so it keeps its dedicated glyph.
-const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native' | 'route'>, PrimitiveKind> = {
+const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native' | 'route' | 'workflow'>, PrimitiveKind> = {
   agent: 'persona',
   panel: 'panel',
   skill: 'skill',
@@ -137,6 +137,7 @@ function StepIcon({ type, className }: { type: WorkflowExecutorType; className?:
   if (type === 'human_gate') return <UserCheckIcon className={className} />;
   if (type === 'native') return <ListChecksIcon className={className} />;
   if (type === 'route') return <SplitIcon className={className} />;
+  if (type === 'workflow') return <LayersIcon className={className} />;
   // tinted={false}: the icon inherits the node's executor-type colour (border +
   // icon share one hue) instead of re-applying the tint, keeping each node
   // chromatically coherent.
@@ -150,6 +151,8 @@ const executorColor = {
   human_gate: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor} border-dashed`,
   native: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
   route: `${tintClasses('orange').text} ${tintClasses('orange').borderColor} border-dashed`,
+  // The exit of an expanded sub-workflow: it only relays the child's result.
+  workflow: `${tintClasses('pink').text} ${tintClasses('pink').borderColor} border-dashed`,
 };
 
 function StatusIcon({ status }: { status: StepRunStatus | 'pending' }) {

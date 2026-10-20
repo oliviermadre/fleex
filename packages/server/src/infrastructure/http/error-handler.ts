@@ -40,6 +40,7 @@ const CODE_TO_STATUS: Record<string, number> = {
   IMPORT_NOT_FOUND: 422,
   IMPORT_EMPTY: 422,
   IMPORT_UPSTREAM_FAILED: 502,
+  SUBWORKFLOW_EXPANSION_FAILED: 422,
 };
 
 export function registerErrorHandler(app: FastifyInstance): void {

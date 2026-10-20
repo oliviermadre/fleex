@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import {
   WorkflowRunAlreadyActiveError, WorkflowTemplateNotFoundError, RoutineRunAlreadyActiveError,
-  WorkflowRunDepthExceededError,
+  WorkflowRunDepthExceededError, SubworkflowExpansionFailedError,
 } from '../../domain/errors.js';
-import type { RunSubject, WorkflowTemplateSnapshot } from '@fleex/shared';
+import type { RunSubject, WorkflowTemplateSnapshot, SubworkflowSource } from '@fleex/shared';
+import { expandSubworkflows, hasSubworkflows, SubworkflowExpansionError } from '@fleex/shared';
 import type { WorkflowTemplateStorePort } from '../ports/workflow-template-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
@@ -75,9 +76,11 @@ export class CreateWorkflowRunUseCase {
     }
 
     let snapshot: WorkflowTemplateSnapshot;
+    let rootSlug: string | null = null;
     if (params.templateId !== null) {
       const template = await this.templateStore.getById(params.templateId);
       if (!template) throw new WorkflowTemplateNotFoundError(params.templateId);
+      rootSlug = template.slug;
       snapshot = {
         name: template.name,
         emoji: template.emoji,
@@ -87,6 +90,15 @@ export class CreateWorkflowRunUseCase {
       };
     } else {
       snapshot = params.templateSnapshot!;
+    }
+
+    // Sub-workflows are expanded now, from the included templates' *current*
+    // version: improving a child improves every parent's next run, and a run
+    // already going keeps the snapshot it started with. The included templates
+    // may have changed since the parent was saved, so the inclusion guards run
+    // again here (G5) — refusing before the run exists costs nothing.
+    if (hasSubworkflows(snapshot.steps)) {
+      snapshot = await this.expand(snapshot, rootSlug, params.ticketId ?? null);
     }
 
     const run = WorkflowRunEntity.create({
@@ -123,6 +135,29 @@ export class CreateWorkflowRunUseCase {
 
     this.orchestrator.runStep(run.id, run.currentStepId!);
     return run;
+  }
+
+  private async expand(
+    snapshot: WorkflowTemplateSnapshot,
+    rootSlug: string | null,
+    ticketId: string | null,
+  ): Promise<WorkflowTemplateSnapshot> {
+    const bySlug = new Map<string, SubworkflowSource>(
+      (await this.templateStore.getAll()).map((t) => [t.slug, t]),
+    );
+    try {
+      return expandSubworkflows(snapshot, rootSlug, (slug) => bySlug.get(slug), { requireEnabled: true });
+    } catch (err) {
+      if (!(err instanceof SubworkflowExpansionError)) throw err;
+      // Every trigger (mention, API, routine, workflow.trigger) ends here, and a
+      // mention has no caller to read an HTTP error: say it on the ticket.
+      await postWorkflowComment(this.postComment, this.eventBus, {
+        ticketId,
+        authorName: `workflow:${snapshot.name}`,
+        body: `❌ Cannot start ${snapshot.emoji ? `${snapshot.emoji} ` : ''}**${snapshot.name}**: ${err.message}.`,
+      });
+      throw new SubworkflowExpansionFailedError(snapshot.name, err.message);
+    }
   }
 
   /**
