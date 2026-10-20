@@ -72,6 +72,25 @@ describe('expandSubworkflows — rewriting', () => {
     expect(targets(out, 'q::review')).toEqual(['q::verdict']); // already had a default: untouched
   });
 
+  it('E5: a gate rejoins the exit on its first outcome only — a refusal must not hand over to the parent', () => {
+    const gate = (extra: Partial<WorkflowStep> = {}) => step('check', { executorType: 'human_gate', executorRef: '', humanGateOutcomes: ['approve', 'reject'], ...extra });
+    const spec = tpl('spec', [step('write'), gate()], [edge('write', 'check')]);
+    const out = run(snap([wf('s', 'spec'), step('build')], [edge('s', 'build')]), spec);
+    const exits = out.edges.filter((e) => e.source === 's::check');
+    expect(exits).toHaveLength(1);
+    expect(exits[0]).toMatchObject({ target: 's', isDefault: false });
+    expect(exits[0]!.conditionGroup?.clauses).toEqual([{ field: 'outcome', operator: 'eq', value: 'approve' }]);
+  });
+
+  it('E5: a gate that already routes its first outcome gets no exit edge (no ambiguity, other outcomes still end the run)', () => {
+    const onOutcome = (v: string) => ({ isDefault: false, conditionGroup: { match: 'all' as const, clauses: [{ field: 'outcome', operator: 'eq' as const, value: v }] } });
+    const spec = tpl('spec', [
+      step('write'), step('check', { executorType: 'human_gate', executorRef: '', humanGateOutcomes: ['approve', 'reject'] }), step('publish'),
+    ], [edge('write', 'check'), edge('check', 'publish', onOutcome('approve'))]);
+    const out = run(snap([wf('s', 'spec')], []), spec);
+    expect(targets(out, 's::check')).toEqual(['s::publish']);
+  });
+
   it('E2: rewrites clause stepIds and {{ steps.* }} references to the child steps only', () => {
     const child = tpl('child', [
       step('compute'),

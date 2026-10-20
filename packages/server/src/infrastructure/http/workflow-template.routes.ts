@@ -81,6 +81,20 @@ async function subworkflowErrors(
   return validateSubworkflows(candidate, (slug) => bySlug.get(slug));
 }
 
+/**
+ * 409 body when disabling `t` would leave enabled workflows unable to start,
+ * null otherwise. Shared by DELETE and by a PUT that sets `enabled: false`.
+ */
+async function inUseError(store: WorkflowTemplateStorePort, t: WorkflowTemplateEntity) {
+  const consumers = consumersOf(await store.getAll(), t.slug).filter((c) => c.enabled);
+  if (consumers.length === 0) return null;
+  return {
+    error: 'TEMPLATE_IN_USE',
+    message: `"${t.slug}" is included by ${consumers.map((c) => `"${c.slug}"`).join(', ')}, which could no longer start. Pass ?force=true to disable it anyway.`,
+    consumers: consumers.map((c) => ({ id: c.id, slug: c.slug, name: c.name })),
+  };
+}
+
 /** `workflow` steps pointing at `from` now point at `to`. */
 function retarget(steps: WorkflowStep[], from: string, to: string): WorkflowStep[] {
   return steps.map((st) => (st.executorType === 'workflow' && st.executorRef === from ? { ...st, executorRef: to } : st));
@@ -156,7 +170,7 @@ export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateSt
     });
 
     // PUT /api/workflows/templates/:id — update
-    app.put<{ Params: { id: string } }>('/api/workflows/templates/:id', async (request, reply) => {
+    app.put<{ Params: { id: string }; Querystring: { force?: string } }>('/api/workflows/templates/:id', async (request, reply) => {
       const t = await deps.templateStore.getById(request.params.id);
       if (!t) return reply.code(404).send({ error: 'WORKFLOW_TEMPLATE_NOT_FOUND' });
 
@@ -174,19 +188,24 @@ export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateSt
         return reply.code(400).send({ error: 'INVALID_TEMPLATE', message: subErrors.join('\n') });
       }
 
+      // Same guard as DELETE: disabling through PUT must not bypass it.
+      if (t.enabled && !parsed.data.enabled && request.query.force !== 'true') {
+        const inUse = await inUseError(deps.templateStore, t);
+        if (inUse) return reply.code(409).send(inUse);
+      }
+
       const previousSlug = t.slug;
       try {
         t.update(parsed.data);
-        await deps.templateStore.save(t);
         // A renamed template keeps every workflow including it launchable: their
         // sub-workflow steps follow the new slug (references are by slug, as
-        // for `workflow.trigger` and the export).
-        if (previousSlug !== t.slug) {
-          for (const consumer of consumersOf(await deps.templateStore.getAll(), previousSlug)) {
-            consumer.update({ steps: retarget(consumer.steps, previousSlug, t.slug) });
-            await deps.templateStore.save(consumer);
-          }
-        }
+        // for `workflow.trigger` and the export). Every entity is updated — and
+        // so validated — before anything is saved: a failure leaves the store
+        // untouched instead of half-renamed.
+        const consumers = previousSlug !== t.slug ? consumersOf(await deps.templateStore.getAll(), previousSlug) : [];
+        for (const consumer of consumers) consumer.update({ steps: retarget(consumer.steps, previousSlug, t.slug) });
+        await deps.templateStore.save(t);
+        for (const consumer of consumers) await deps.templateStore.save(consumer);
         return t.toDTO();
       } catch (err) {
         return reply.code(400).send({
@@ -203,14 +222,8 @@ export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateSt
       const t = await deps.templateStore.getById(request.params.id);
       if (!t) return reply.code(404).send({ error: 'WORKFLOW_TEMPLATE_NOT_FOUND' });
       if (request.query.force !== 'true') {
-        const consumers = consumersOf(await deps.templateStore.getAll(), t.slug).filter((c) => c.enabled);
-        if (consumers.length > 0) {
-          return reply.code(409).send({
-            error: 'TEMPLATE_IN_USE',
-            message: `"${t.slug}" is included by ${consumers.map((c) => `"${c.slug}"`).join(', ')}, which could no longer start. Pass ?force=true to disable it anyway.`,
-            consumers: consumers.map((c) => ({ id: c.id, slug: c.slug, name: c.name })),
-          });
-        }
+        const inUse = await inUseError(deps.templateStore, t);
+        if (inUse) return reply.code(409).send(inUse);
       }
       t.update({ enabled: false });
       await deps.templateStore.save(t);

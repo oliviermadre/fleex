@@ -4,6 +4,8 @@ import { MAX_STEP_VISITS_PER_RUN } from '@fleex/shared';
 import { CreateWorkflowRunUseCase } from '../../src/application/use-cases/create-workflow-run.js';
 import { RunWorkflowStepUseCase, LOOP_GUARD_FIELD } from '../../src/application/use-cases/run-workflow-step.js';
 import { WorkflowStepExecutor } from '../../src/application/services/step-executors/workflow-step-executor.js';
+import { HumanGateStepExecutor } from '../../src/application/services/step-executors/human-gate-step-executor.js';
+import { ResolveHumanGateUseCase } from '../../src/application/use-cases/resolve-human-gate.js';
 import { RouteStepExecutor } from '../../src/application/services/step-executors/route-step-executor.js';
 import { WorkflowTemplateEntity } from '../../src/domain/entities/workflow-template.entity.js';
 import type { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
@@ -86,7 +88,8 @@ function harness(templates: WorkflowTemplateEntity[], verdicts: string[]) {
     runStore: runStore as never, stepRunStore: stepRunStore as never, orchestrator: orchestrator as never,
     eventBus: eventBus as never,
     executors: {
-      agent: agent as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never,
+      agent: agent as never, skill: {} as never, panel: {} as never, native: {} as never,
+      human_gate: new HumanGateStepExecutor(postComment as never, eventBus as never),
       route: new RouteStepExecutor(), workflow: new WorkflowStepExecutor(stepRunStore as never),
     },
     submitDeliverable: { execute: vi.fn() } as never,
@@ -104,8 +107,20 @@ function harness(templates: WorkflowTemplateEntity[], verdicts: string[]) {
     { cancelExecution: vi.fn() } as never,
   );
 
+  const gates = new ResolveHumanGateUseCase(
+    runStore as never, stepRunStore as never, orchestrator as never, eventBus as never, postComment as never,
+    { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as never,
+  );
+  const stepRunGetById = async (id: string) => stepRuns.find((s) => s.id === id) ?? null;
+  (stepRunStore as Record<string, unknown>)['getById'] = vi.fn(stepRunGetById);
+
   return {
     create, stepRuns, executed, comments, runStore,
+    /** A human picks an outcome on the gate the run is waiting on. */
+    resolveGate: async (outcome: string) => {
+      const gate = stepRuns.at(-1)!;
+      await gates.execute({ workflowRunId: run!.id, stepRunId: gate.id, outcome });
+    },
     /** The Restart button on the parked step: re-enters it directly, not via an edge. */
     restartParkedStep: () => retry.execute({ workflowRunId: run!.id, stepRunId: stepRuns.at(-1)!.id }),
     get run() { return run!; },
@@ -140,6 +155,36 @@ describe('a composed workflow at launch', () => {
       .rejects.toBeInstanceOf(SubworkflowExpansionFailedError);
     expect(h.runStore.save).not.toHaveBeenCalled();
     expect(h.comments).toEqual([expect.stringMatching(/^❌ Cannot start .*FULL.*sub-workflow "qa" is disabled/)]);
+  });
+});
+
+describe('a human gate inside a sub-workflow', () => {
+  // Spec ends on a gate with no edge out, as in "Spec Dev PR": approving hands
+  // over to Build, refusing must stop the whole run — not start Build.
+  const spec = tpl('t-spec', 'spec', [
+    step('write'),
+    step('check', { executorType: 'human_gate', executorRef: '', humanGateOutcomes: ['approve', 'reject'] }),
+  ], [edge('w', 'write', 'check')]);
+  const delivery = tpl('t-delivery', 'delivery', [
+    step('s', { executorType: 'workflow', executorRef: 'spec' }),
+    step('b', { executorType: 'workflow', executorRef: 'build' }),
+  ], [edge('s-b', 's', 'b')]);
+
+  it.each([
+    ['reject', ['s::write'], 0],
+    ['approve', ['s::write', 'b::implement', 'b::tests'], 1],
+  ])('%s → executed %j', async (outcome, expected, buildExits) => {
+    const h = harness([spec, build, delivery], ['ok']);
+    await h.create.execute({ ticketId: 't-1', templateId: 't-delivery', triggeredBy: 'nas', triggeredFrom: 'api' });
+    await h.drain();
+    expect(h.stepRuns.at(-1)!.stepId).toBe('s::check');
+
+    await h.resolveGate(outcome);
+    await h.drain();
+
+    expect(h.executed).toEqual(expected);
+    expect(h.run.status).toBe('completed');
+    expect(h.stepRuns.filter((sr) => sr.stepId === 'b')).toHaveLength(buildExits);
   });
 });
 

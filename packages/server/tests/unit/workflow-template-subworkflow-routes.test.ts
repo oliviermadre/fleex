@@ -75,6 +75,29 @@ describe('sub-workflows on the template routes', () => {
     expect(templates.get('b')!.enabled).toBe(false);
   });
 
+  it('applies the same 409 to a PUT that disables an included template — no back door around the guard', async () => {
+    const { app, add, templates } = await setup();
+    add('b', 'build', [step('impl')]);
+    add('f', 'full', [includes('build')]);
+    const disable = { ...body('build', [step('impl')]), enabled: false };
+
+    const refused = await app.inject({ method: 'PUT', url: '/api/workflows/templates/b', payload: disable });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toMatchObject({ error: 'TEMPLATE_IN_USE', consumers: [{ slug: 'full' }] });
+    expect(templates.get('b')!.enabled).toBe(true);
+
+    const forced = await app.inject({ method: 'PUT', url: '/api/workflows/templates/b?force=true', payload: disable });
+    expect(forced.statusCode).toBe(200);
+    expect(templates.get('b')!.enabled).toBe(false);
+  });
+
+  it('refuses a step id containing "::", which would pass for a step expanded from a sub-workflow', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'POST', url: '/api/workflows/templates', payload: body('x', [step('b::impl')]) });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toMatch(/must not contain "::"/);
+  });
+
   it('renaming an included template rewrites the references of the workflows including it', async () => {
     const { app, add, templates } = await setup();
     add('b', 'build', [step('impl')]);

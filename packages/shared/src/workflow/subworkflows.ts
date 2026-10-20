@@ -256,10 +256,8 @@ function expandGraph(
     // E5: inside the child, "no edge matched" ended the run. Expanded, it means
     // "the sub-workflow is over": rejoin the exit step.
     for (const c of inner.steps) {
-      const hasDefault = inner.edges.some((e) => e.source === c.id && e.isDefault);
-      if (!hasDefault) {
-        edges.push({ id: `${prefix}${c.id}${SUBWORKFLOW_ID_SEPARATOR}exit`, source: prefix + c.id, target: step.id, isDefault: true });
-      }
+      const exit = exitEdge(c, inner.edges, prefix, step.id);
+      if (exit) edges.push(exit);
     }
 
     // E3: whatever entered the workflow step now enters the child's entry. The
@@ -283,6 +281,41 @@ function expandGraph(
   }
 
   return { steps, edges, entryStepId, subworkflows };
+}
+
+/**
+ * E5 edge for one child step, or null when it needs none.
+ *
+ * A human gate is the exception: its outcomes are a human's decision, and a
+ * "reject" that ended the run in the child alone must not hand over to the
+ * parent's next step (that would spend tokens on what a human just refused).
+ * Only the gate's *first* outcome — `approve` in the editor's default order —
+ * rejoins the exit, and only if no edge of the gate already takes it. Every
+ * other unhandled outcome still ends the run.
+ */
+function exitEdge(c: WorkflowStep, childEdges: WorkflowEdge[], prefix: string, exitId: string): WorkflowEdge | null {
+  const outgoing = childEdges.filter((e) => e.source === c.id);
+  if (outgoing.some((e) => e.isDefault)) return null;
+  const id = `${prefix}${c.id}${SUBWORKFLOW_ID_SEPARATOR}exit`;
+  if (c.executorType !== 'human_gate') {
+    return { id, source: prefix + c.id, target: exitId, isDefault: true };
+  }
+  const proceed = c.humanGateOutcomes?.[0];
+  if (!proceed || outgoing.some((e) => takesOutcome(e, c.id, proceed))) return null;
+  return {
+    id, source: prefix + c.id, target: exitId, isDefault: false,
+    conditionGroup: { match: 'all', clauses: [{ field: 'outcome', operator: 'eq', value: proceed }] },
+  };
+}
+
+/** Whether an edge already routes `outcome == value` (simple, explicit clauses only). */
+function takesOutcome(e: WorkflowEdge, sourceId: string, value: string): boolean {
+  const clauses = e.conditionGroup?.clauses ?? (e.condition ? [e.condition] : []);
+  return clauses.some((cl) => (
+    cl.field === 'outcome'
+    && (!('stepId' in cl) || !cl.stepId || cl.stepId === sourceId)
+    && ((cl.operator === 'eq' && cl.value === value) || (cl.operator === 'in' && Array.isArray(cl.value) && cl.value.includes(value)))
+  ));
 }
 
 function rewriteAction(action: NativeAction, ids: Set<string>, prefix: string): NativeAction {
