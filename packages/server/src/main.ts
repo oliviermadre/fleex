@@ -14,6 +14,7 @@ import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
 import { worktreeDiffRoutes } from './infrastructure/http/worktree-diff.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { versionRoutes } from './infrastructure/http/version.routes.js';
+import { releasesRoutes } from './infrastructure/http/releases.routes.js';
 import { memoryRoutes } from './infrastructure/http/memory.routes.js';
 import { configRoutes } from './infrastructure/http/config.routes.js';
 import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
@@ -125,6 +126,7 @@ async function main() {
   await app.register(worktreeDiffRoutes(container));
   await app.register(healthRoutes(container));
   await app.register(versionRoutes());
+  await app.register(releasesRoutes({ logger: container.logger }));
   await app.register(memoryRoutes(container));
   await app.register(configRoutes(container));
   await app.register(deliverableTypesRoutes(container));

@@ -22,7 +22,7 @@ import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
-type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus';
+type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'work' | 'focus' | 'releases';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -195,6 +195,11 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // before the list has loaded.
   if (pathname === '/routines') {
     return { ...base, panel: 'routines' };
+  }
+
+  // Nouveautés — illustrated release notes (docs/releases.md)
+  if (pathname === '/releases') {
+    return { ...base, panel: 'releases' };
   }
 
   // Claude Config
@@ -422,6 +427,8 @@ export function storeToUrl({
       return { pathname: '/execution-log', search: '' };
     case 'routines':
       return { pathname: '/routines', search: '' };
+    case 'releases':
+      return { pathname: '/releases', search: '' };
     case 'cluster':
       return { pathname: '/cluster', search: '' };
     case 'scratchpads': {

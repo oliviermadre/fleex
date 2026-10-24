@@ -751,3 +751,20 @@ export { diffTemplates, isEmptyDiff } from './workflow/apply/diff.js';
 export type { DiffEntry, TemplateDiff, DiffableTemplate } from './workflow/apply/diff.js';
 export { buildApplyDocumentation, renderApplyDocumentationMarkdown } from './workflow/apply/documentation.js';
 export type { ApplyDocumentation, DocumentationInput } from './workflow/apply/documentation.js';
+
+export {
+  RELEASE_CATEGORIES,
+  RELEASE_TITLE_MAX,
+  splitFrontMatter,
+  parseReleaseEntry,
+  parseReleaseHeader,
+  sortReleaseEntries,
+} from './releases.js';
+export type {
+  ReleaseCategory,
+  ReleaseImage,
+  ReleaseEntry,
+  ReleaseHeader,
+  Release,
+  ParseResult,
+} from './releases.js';
