@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { releasesRoutes } from '../../src/infrastructure/http/releases.routes.js';
+import { releasesRoutes, skillScanHomedir } from '../../src/infrastructure/http/releases.routes.js';
 
 function write(root: string, rel: string, content: string | Buffer) {
   const file = path.join(root, rel);
@@ -145,5 +145,19 @@ describe('releases routes', () => {
       expect(res.statusCode, url).toBe(404);
       expect(res.body, url).not.toContain('TOP-SECRET-CONTENT');
     }
+  });
+});
+
+describe('skillScanHomedir', () => {
+  // Demo screenshots are published: the skill picker must list the fictional
+  // skills of demo/home, never the ones in the real ~/.claude of this machine.
+  it('reads the versioned demo/home in demo mode', () => {
+    expect(skillScanHomedir('/Users/someone', { FLEEX_DEMO_MODE: '1', FLEEX_REPO_DIR: '/repo' }))
+      .toBe(path.join('/repo', 'demo', 'home'));
+  });
+
+  it('reads the real home otherwise', () => {
+    expect(skillScanHomedir('/Users/someone', { FLEEX_REPO_DIR: '/repo' })).toBe('/Users/someone');
+    expect(skillScanHomedir('/Users/someone', { FLEEX_DEMO_MODE: '0', FLEEX_REPO_DIR: '/repo' })).toBe('/Users/someone');
   });
 });

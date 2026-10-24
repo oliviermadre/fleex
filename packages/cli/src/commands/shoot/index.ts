@@ -167,26 +167,31 @@ ${chalk.bold.yellow('Notes:')}
       const chromium = await loadChromium();
       browser = await chromium.launch({ headless: true });
       for (const theme of list.themes) {
-        const context = await browser.newContext({
-          viewport: { width: list.viewport.width, height: list.viewport.height },
-          deviceScaleFactor: list.viewport.scale,
-          colorScheme: theme === 'light' ? 'light' : 'dark',
-          reducedMotion: 'reduce',
-          locale: 'fr-FR',
-        });
-        const page = await context.newPage();
-        // Frozen clock: relative dates ("il y a 2 h") and the timeline are identical run after run.
-        await page.clock.setFixedTime(clock);
         for (const shot of shots) {
-          const url = buildShotUrl(webBase, resolvePlaceholders(shot.goto, state), theme);
-          info(`${shot.id} · ${theme} · ${url}`);
-          const img = await runShot(page, list, shot, url);
-          const out = outputFile(list, shot.id, theme);
-          fs.mkdirSync(path.dirname(out), { recursive: true });
-          fs.writeFileSync(out, img);
-          results.push({ shot: shot.id, theme, file: path.relative(ctx.repoDir, out), bytes: img.length });
+          // A fresh context per shot: the web app keeps drafts, open drawers and panels in
+          // localStorage, so a shared context would leak one shot's UI state into the next.
+          const context = await browser.newContext({
+            viewport: { width: list.viewport.width, height: list.viewport.height },
+            deviceScaleFactor: list.viewport.scale,
+            colorScheme: theme === 'light' ? 'light' : 'dark',
+            reducedMotion: 'reduce',
+            locale: 'fr-FR',
+          });
+          try {
+            const page = await context.newPage();
+            // Frozen clock: relative dates ("il y a 2 h") and the timeline are identical run after run.
+            await page.clock.setFixedTime(clock);
+            const url = buildShotUrl(webBase, resolvePlaceholders(shot.goto, state), theme);
+            info(`${shot.id} · ${theme} · ${url}`);
+            const img = await runShot(page, list, shot, url);
+            const out = outputFile(list, shot.id, theme);
+            fs.mkdirSync(path.dirname(out), { recursive: true });
+            fs.writeFileSync(out, img);
+            results.push({ shot: shot.id, theme, file: path.relative(ctx.repoDir, out), bytes: img.length });
+          } finally {
+            await context.close();
+          }
         }
-        await context.close();
       }
     } catch (e) {
       const msg = (e as Error).message;

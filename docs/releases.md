@@ -93,6 +93,8 @@ tickets:
         - { name: Build, persona: builder, at: -2h }
 ```
 
+In demo mode the Claude Code skill scanner reads `demo/home/.claude` instead of the real `~/.claude`, so the skill picker shows Atelier Nova's fictional skills; `fleex demo reset` enables them. The Tasks status bar hides the workspace path under `?demo=1`.
+
 Statuses moved to `done` / `cancelled` more than 7 days ago are hidden by the board's default filter. Keep their `statusAt` within the week. `fleex demo reset` writes the key → id mapping to `~/.fleex/.run/<instance>/demo-seed.json`, and the shot lists use it.
 
 `deliverables[].file` is relative to `demo/` (or use `content: |` inline). Personas are referenced by name. When a persona is missing from the demo DB, the `personas:` list creates a minimal one (name, display name, emoji). The seed is checked as a whole before anything is written: every error comes out at once, with the ticket key.
@@ -124,7 +126,7 @@ shots:
 
 Placeholders in `goto`: `{{ticket:<key>}}` (UUID), `{{ticketNumber:<key>}}` (#), `{{board:<key>}}`. Useful URLs: `/tickets/board/{{board:nova}}` (Kanban), `/tickets/board/all/ticket/{{ticket:nova-12}}` (ticket), `/work/{{ticket:nova-12}}` (Work view), `/releases`. Stable selectors: `kanban-board`, `kanban-column`, `ticket-card`, `ticket-detail`, `ticket-timeline`, `releases-page`, `release-entry` (all `data-testid`).
 
-`--only hero,detail` retakes only some shots. Output: `<out>/<id>-<theme>.webp`. A WebP above 300 KB is re-encoded at lower quality. If a selector does not match, the command exits with a non-zero code and names the shot, the selector and the URL. It never writes an empty image.
+Every shot runs in a fresh browser context: drafts, open drawers and panels never leak from one shot to the next. `--only hero,detail` retakes only some shots. Output: `<out>/<id>-<theme>.webp`. A WebP above 300 KB is re-encoded at lower quality. If a selector does not match, the command exits with a non-zero code and names the shot, the selector and the URL. It never writes an empty image.
 
 Each page loads with `?demo=1&theme=<theme>`. In this mode, the version banner and every toast are hidden, animations are turned off, and the theme is forced for that page load only (nothing is saved). The clock is frozen at `clock`, or at the moment `shoot` starts, so two runs give the same images.
 
@@ -141,6 +143,8 @@ prs: [325]                 # optional
 audience: [dev, pm]        # optional
 order: 1                   # optional, lower first
 lang: fr                   # default fr
+source: pr                 # optional: pr (default) | slack (backfilled from a published Slack note)
+captured_at: 2026-10-20    # optional: when the screenshots were taken, if not at release time
 images:                    # optional, paths relative to this file
   - src: assets/697-qa-workspace/hero-dark.webp
     light: assets/697-qa-workspace/hero-light.webp
@@ -150,6 +154,8 @@ images:                    # optional, paths relative to this file
 Vous pouvez maintenant laisser un agent lancer une instance isolée, vérifier son travail
 de bout en bout puis tout nettoyer, sans toucher à vos données.
 ```
+
+Unknown keys are rejected (a typo such as `catpion:` would otherwise vanish silently), in the front-matter, in `images[]` and in `release.md`.
 
 The body is required. Write it for the user ("vous pouvez maintenant…") and leave out how the feature was built.
 

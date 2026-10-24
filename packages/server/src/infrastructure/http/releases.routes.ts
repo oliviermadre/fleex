@@ -22,8 +22,22 @@ import {
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_DIR = path.resolve(MODULE_DIR, '../../../../..');
 
+/** Root of this server's own checkout (`FLEEX_REPO_DIR` wins). */
+export function fleexRepoDir(): string {
+  return process.env['FLEEX_REPO_DIR'] ?? DEFAULT_REPO_DIR;
+}
+
 export function defaultReleasesDir(): string {
-  return path.join(process.env['FLEEX_REPO_DIR'] ?? DEFAULT_REPO_DIR, 'releases');
+  return path.join(fleexRepoDir(), 'releases');
+}
+
+/**
+ * Home whose `~/.claude` the Claude Code skill scanner reads. In demo mode
+ * (`FLEEX_DEMO_MODE=1`) it is the versioned `demo/home` of the checkout, so
+ * screenshots show Atelier Nova's fictional skills, never this machine's.
+ */
+export function skillScanHomedir(hostHomedir: string, env: NodeJS.ProcessEnv = process.env): string {
+  return env['FLEEX_DEMO_MODE'] === '1' ? path.join(env['FLEEX_REPO_DIR'] ?? DEFAULT_REPO_DIR, 'demo', 'home') : hostHomedir;
 }
 
 const IMAGE_MIME: Record<string, string> = {

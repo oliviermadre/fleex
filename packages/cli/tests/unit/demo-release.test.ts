@@ -126,6 +126,30 @@ describe('validateReleases', () => {
     ]));
   });
 
+  it('rejects unknown keys, so a typo does not silently drop a caption or a field', () => {
+    fs.writeFileSync(path.join(root, 'unreleased/assets/x/a.webp'), 'img');
+    fs.writeFileSync(path.join(root, 'unreleased/x.md'), fragment('categroy: fix\nimages:\n  - { src: assets/x/a.webp, alt: "A", catpion: "oops" }\n'));
+    fs.mkdirSync(path.join(root, '3'));
+    fs.writeFileSync(path.join(root, '3/release.md'), '---\nnumber: 3\ndate: 2026-10-24\ntitle: T\nsubtitle: S\n---\n');
+    const msgs = validateReleases(root).problems.map((p) => `${p.file}: ${p.message}`);
+    expect(msgs).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^unreleased\/x\.md: unknown key "categroy"/),
+      expect.stringMatching(/^unreleased\/x\.md: unknown key "catpion" in images\[0\]/),
+      expect.stringMatching(/^3\/release\.md: unknown key "subtitle"/),
+    ]));
+  });
+
+  it('accepts the backfill keys (source: slack, captured_at) and checks their values', () => {
+    fs.writeFileSync(path.join(root, 'unreleased/x.md'), fragment('source: slack\ncaptured_at: 2026-10-20\n'));
+    expect(validateReleases(root).problems).toEqual([]);
+    fs.writeFileSync(path.join(root, 'unreleased/x.md'), fragment('source: notion\ncaptured_at: hier\n'));
+    const msgs = validateReleases(root).problems.map((p) => p.message);
+    expect(msgs).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^"source" must be one of pr, slack/),
+      '"captured_at" must be YYYY-MM-DD',
+    ]));
+  });
+
   it('warns (does not fail) above 300 KB', () => {
     fs.writeFileSync(path.join(root, 'unreleased/assets/x/big.webp'), Buffer.alloc(301 * 1024));
     fs.writeFileSync(path.join(root, 'unreleased/x.md'), fragment('images:\n  - { src: assets/x/big.webp, alt: "A" }\n'));

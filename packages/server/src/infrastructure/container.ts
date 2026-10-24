@@ -11,6 +11,7 @@ import { resolveSchedulerRole } from '../domain/services/scheduler-role.js';
 import { RepositoryResolver } from '../domain/services/repository-resolver.js';
 import { GithubDiscovery } from '../domain/services/github-discovery.js';
 import { RepoPathResolver } from '../domain/services/repo-path-resolver.js';
+import { skillScanHomedir } from './http/releases.routes.js';
 import { BareCloneManager } from '../application/services/bare-clone-manager.js';
 import { SdkConcurrencyLimiter, DEFAULT_AGENT_MAX_CONCURRENCY } from '../application/services/sdk-concurrency-limiter.js';
 import { OverlayManager } from '../application/services/overlay-manager.js';
@@ -467,7 +468,7 @@ export async function createContainer() {
   const claudeCodeHostId = process.env['FLEEX_INSTANCE_ID'] ?? hostname();
   const listRepositories = new ListRepositoriesUseCase(git, config, logger, hostFs, resolver);
   const claudeCodeSkillScanner = new ClaudeCodeSkillScanner(
-    hostFs, execFn, hostHomedir, () => listRepositories.execute(), logger,
+    hostFs, execFn, skillScanHomedir(hostHomedir), () => listRepositories.execute(), logger,
   );
   const claudeCodeSkills = new ClaudeCodeSkillsUseCase(
     claudeCodeSkillStore, claudeCodeSkillScanner, skillStore, personaStore_, ticketStore_, claudeCodeHostId, logger,

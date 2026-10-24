@@ -43,6 +43,29 @@ export interface ReleaseEntry {
   order?: number;
   lang: string;
   images: ReleaseImage[];
+  /** Where the text comes from: a PR fragment (default) or a release note already published on Slack (backfill). */
+  source?: ReleaseSource;
+  /** YYYY-MM-DD — when the screenshots were taken, if not at release time (backfill). */
+  capturedAt?: string;
+}
+
+export const RELEASE_SOURCES = ['pr', 'slack'] as const;
+export type ReleaseSource = (typeof RELEASE_SOURCES)[number];
+
+const ENTRY_KEYS = ['title', 'category', 'ticket', 'prs', 'audience', 'order', 'lang', 'images', 'source', 'captured_at'];
+const IMAGE_KEYS = ['src', 'light', 'alt', 'caption'];
+const HEADER_KEYS = ['number', 'date', 'title', 'tagline', 'themes'];
+
+/** A typo (`catpion:`) must fail validation, not silently vanish from the page. */
+function checkKeys(d: Record<string, unknown>, known: string[], where: string, errors: string[]): void {
+  for (const k of Object.keys(d)) {
+    if (!known.includes(k)) errors.push(`unknown key "${k}"${where} (known: ${known.join(', ')})`);
+  }
+}
+
+/** YAML turns an unquoted 2026-10-24 into a Date: accept both. */
+function isoDate(v: unknown): string {
+  return v instanceof Date ? v.toISOString().slice(0, 10) : typeof v === 'string' ? v : '';
 }
 
 export interface ReleaseHeader {
@@ -100,6 +123,7 @@ export function parseReleaseEntry(slug: string, text: string): ParseResult<Relea
   if (!split || !isObject(split.data)) return { ok: false, errors: ['missing YAML front-matter (---)'] };
   const d = split.data;
   const errors: string[] = [];
+  checkKeys(d, ENTRY_KEYS, '', errors);
 
   const title = typeof d.title === 'string' ? d.title.trim() : '';
   if (!title) errors.push('"title" is required');
@@ -140,6 +164,7 @@ export function parseReleaseEntry(slug: string, text: string): ParseResult<Relea
           errors.push(`images[${i}] must be an object`);
           return;
         }
+        checkKeys(img, IMAGE_KEYS, ` in images[${i}]`, errors);
         const src = typeof img.src === 'string' ? img.src : '';
         const alt = typeof img.alt === 'string' ? img.alt.trim() : '';
         const light = typeof img.light === 'string' ? img.light : undefined;
@@ -161,6 +186,17 @@ export function parseReleaseEntry(slug: string, text: string): ParseResult<Relea
   const audience = stringList(d.audience, 'audience', errors);
   const lang = typeof d.lang === 'string' && d.lang ? d.lang : 'fr';
 
+  let source: ReleaseSource | undefined;
+  if (d.source !== undefined) {
+    if ((RELEASE_SOURCES as readonly unknown[]).includes(d.source)) source = d.source as ReleaseSource;
+    else errors.push(`"source" must be one of ${RELEASE_SOURCES.join(', ')}`);
+  }
+  let capturedAt: string | undefined;
+  if (d.captured_at !== undefined) {
+    capturedAt = isoDate(d.captured_at);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(capturedAt)) errors.push('"captured_at" must be YYYY-MM-DD');
+  }
+
   if (errors.length) return { ok: false, errors };
   return {
     ok: true,
@@ -175,6 +211,8 @@ export function parseReleaseEntry(slug: string, text: string): ParseResult<Relea
       ...(order !== undefined ? { order } : {}),
       lang,
       images,
+      ...(source ? { source } : {}),
+      ...(capturedAt ? { capturedAt } : {}),
     },
   };
 }
@@ -189,10 +227,10 @@ export function parseReleaseHeader(text: string): ParseResult<ReleaseHeader> {
   if (!split || !isObject(split.data)) return { ok: false, errors: ['missing YAML front-matter (---)'] };
   const d = split.data;
   const errors: string[] = [];
+  checkKeys(d, HEADER_KEYS, '', errors);
 
   if (!Number.isInteger(d.number) || (d.number as number) <= 0) errors.push('"number" must be a positive integer');
-  // YAML turns an unquoted 2026-10-24 into a Date: accept both.
-  const date = d.date instanceof Date ? d.date.toISOString().slice(0, 10) : typeof d.date === 'string' ? d.date : '';
+  const date = isoDate(d.date);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.push('"date" must be YYYY-MM-DD');
   const title = typeof d.title === 'string' ? d.title.trim() : '';
   if (!title) errors.push('"title" is required');

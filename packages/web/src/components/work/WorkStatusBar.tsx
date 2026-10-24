@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
+import { DEMO_MODE } from '../../lib/demoMode';
 import type { WorkTask } from './types';
 
 interface Props {
@@ -33,7 +34,8 @@ export function WorkStatusBar({ task }: Props) {
               <span className="font-mono text-[var(--theme-text-faint)]">#{task.number}</span>{' '}
               <span className="truncate text-[var(--theme-text-secondary)]">{task.title}</span>
             </Segment>
-            {workspacePath && (
+            {/* Demo screenshots (?demo=1) must not show the machine's absolute path (/Users/<name>/…). */}
+            {workspacePath && !DEMO_MODE && (
               <>
                 <Chevron />
                 <Segment>

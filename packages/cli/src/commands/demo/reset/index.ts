@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { CommandDef } from '../../../core/types.ts';
-import { die, info, ok, present } from '../../../core/colors.ts';
+import { die, info, ok, present, warn } from '../../../core/colors.ts';
 import { resolveInstance } from '../../../core/instance.ts';
 import { SERVICES, loadPorts } from '../../../core/ports.ts';
 import { isRunning } from '../../../core/process.ts';
@@ -62,6 +62,17 @@ const def: CommandDef = {
         return die('The server has no /api/demo routes: FLEEX_DEMO_MODE=1 did not reach it. Check the demo workspace env in ~/.fleex/workspaces.json.');
       }
       return die(`Seed failed: ${msg}`);
+    }
+
+    // The fictional Claude Code skills of demo/home (read instead of ~/.claude in demo mode)
+    // are disabled when discovered: enable them so the skill picker has something to show.
+    try {
+      const base = `http://localhost:${ports.server}/api/claude-code-skills`;
+      await apiCall('POST', `${base}/scan`, {}, 30_000);
+      const { skills } = await apiCall<{ skills: Array<{ id: string }> }>('GET', base, undefined, 30_000);
+      if (skills.length) await apiCall('POST', `${base}/bulk`, { ids: skills.map((s) => s.id), enabled: true }, 30_000);
+    } catch (e) {
+      warn(`Demo Claude Code skills not enabled: ${(e as Error).message}`);
     }
 
     const state: SeedState = {

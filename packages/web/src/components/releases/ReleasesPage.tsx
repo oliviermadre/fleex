@@ -252,7 +252,7 @@ function Screenshot({ image }: { image: ReleaseImage }) {
         className="overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] cursor-zoom-in"
         aria-label={`Agrandir : ${image.alt}`}
       >
-        <img src={src} alt={image.alt} loading="lazy" className="block h-auto w-full" />
+        <img src={src} alt={image.alt} loading="lazy" className="mx-auto block h-auto max-h-[640px] w-auto max-w-full" />
       </button>
       <div className="flex items-start justify-between gap-3">
         {image.caption ? (
