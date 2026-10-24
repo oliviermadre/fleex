@@ -8,11 +8,13 @@ const DIM = chalk.dim;
 const def: CommandDef = {
   name: 'workflow',
   aliases: ['wf'],
-  description: 'Manage workflow templates & runs (list, show, run, gate, route, step)',
+  description: 'Manage workflow templates & runs (list, show, apply, run, gate, route, step)',
   isParent: true,
   extraHelp: `\n${SECTION('Examples:')}
   ${DIM('$')} fleex workflow list                ${DIM('# all workflow templates + @workflow: handle')}
   ${DIM('$')} fleex workflow show spec-dev-pr    ${DIM('# detail + steps of one workflow')}
+  ${DIM('$')} fleex workflow apply --documentation   ${DIM('# contract for creating/replacing a workflow')}
+  ${DIM('$')} fleex workflow apply --file wf.json    ${DIM('# create or replace a whole template')}
   ${DIM('$')} fleex trigger 42 --workflow spec-dev-pr
   ${DIM('$')} fleex workflow run list 42         ${DIM('# runs for ticket #42')}
   ${DIM('$')} fleex workflow run cancel <runId> -f

@@ -90,6 +90,7 @@ const COMMON_TASKS: Array<{ goal: string; command: string }> = [
   { goal: 'Déplacer un ticket vers un statut', command: 'fleex ticket move <ticket-id> <status>' },
   { goal: 'Trouver un ticket', command: 'fleex memory search "…"' },
   { goal: 'Lister les tickets actifs d\'un board', command: 'fleex ticket list --board <b> --status doing --limit 20 --json' },
+  { goal: 'Créer ou remplacer un workflow (document JSON entier) — lire le contrat d\'abord', command: 'fleex workflow apply --documentation' },
 ];
 
 /**

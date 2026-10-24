@@ -1,9 +1,7 @@
 import type {
   WorkflowTemplate, WorkflowStep, WorkflowEdge,
 } from '@fleex/shared';
-import { validateNativeSteps, validateEdgeConditions } from '@fleex/shared';
-
-const SLUG_PATTERN = /^[a-z0-9_-]+$/;
+import { validateWorkflow } from '@fleex/shared';
 
 export class WorkflowTemplateEntity {
   constructor(
@@ -31,9 +29,7 @@ export class WorkflowTemplateEntity {
     entryStepId: string;
     enabled?: boolean;
   }): WorkflowTemplateEntity {
-    WorkflowTemplateEntity.validate({
-      slug: params.slug, steps: params.steps, edges: params.edges, entryStepId: params.entryStepId,
-    });
+    WorkflowTemplateEntity.validate(params);
     const now = new Date();
     return new WorkflowTemplateEntity(
       params.id,
@@ -50,47 +46,30 @@ export class WorkflowTemplateEntity {
     );
   }
 
+  /**
+   * Save-time validation, delegated to the shared invariant registry
+   * (`validateWorkflow`, profile `save` — what the web editor has always been
+   * allowed to save). Every error is thrown at once, one per line, instead of
+   * the first one only.
+   */
   static validate(input: {
-    slug: string; steps: WorkflowStep[]; edges: WorkflowEdge[]; entryStepId: string;
+    slug: string; name: string; emoji?: string; description?: string;
+    steps: WorkflowStep[]; edges: WorkflowEdge[]; entryStepId: string;
   }): void {
-    if (!SLUG_PATTERN.test(input.slug)) {
-      throw new Error(`Invalid slug: must match ${SLUG_PATTERN}`);
-    }
-    if (input.steps.length === 0) {
-      throw new Error('Workflow must have at least one step');
-    }
-    const stepIds = new Set(input.steps.map((s) => s.id));
-    if (!stepIds.has(input.entryStepId)) {
-      throw new Error(`entryStepId "${input.entryStepId}" not found in steps[]`);
-    }
-    for (const edge of input.edges) {
-      if (!stepIds.has(edge.source)) {
-        throw new Error(`edge ${edge.id} source "${edge.source}" not found in steps[]`);
-      }
-      if (!stepIds.has(edge.target)) {
-        throw new Error(`edge ${edge.id} target "${edge.target}" not found in steps[]`);
-      }
-    }
-    for (const step of input.steps) {
-      if (step.executorType === 'human_gate') {
-        if (!step.humanGateOutcomes || step.humanGateOutcomes.length < 2) {
-          throw new Error(`step ${step.id}: human_gate must have at least two outcomes`);
-        }
-      }
-    }
-
-    // Native steps: actions, parameters and `{{ … }}` references are checked at
-    // save time so a misconfigured workflow can never reach a run. Warnings
-    // (e.g. a reference to a step on a branch that may not run) are surfaced by
-    // the editor only — they don't block saving.
-    const { errors } = validateNativeSteps(input.steps, input.edges, input.entryStepId);
-    if (errors.length > 0) throw new Error(errors.join('\n'));
-
-    // Edge conditions get the same treatment: a clause pointing at a step that
-    // never runs before the edge would silently route every run to the default
-    // branch, which is exactly the kind of failure that is invisible at runtime.
-    const edgeIssues = validateEdgeConditions(input.steps, input.edges, input.entryStepId);
-    if (edgeIssues.errors.length > 0) throw new Error(edgeIssues.errors.join('\n'));
+    const { errors } = validateWorkflow(
+      {
+        slug: input.slug,
+        name: input.name,
+        emoji: input.emoji ?? '',
+        description: input.description ?? '',
+        entryStepId: input.entryStepId,
+        steps: input.steps,
+        edges: input.edges,
+      },
+      { caps: null },
+      'save',
+    );
+    if (errors.length > 0) throw new Error(errors.map((e) => e.message).join('\n'));
   }
 
   update(changes: {
@@ -105,6 +84,9 @@ export class WorkflowTemplateEntity {
   }): void {
     const next = {
       slug: changes.slug ?? this.slug,
+      name: changes.name ?? this.name,
+      emoji: changes.emoji ?? this.emoji,
+      description: changes.description ?? this.description,
       steps: changes.steps ?? this.steps,
       edges: changes.edges ?? this.edges,
       entryStepId: changes.entryStepId ?? this.entryStepId,
