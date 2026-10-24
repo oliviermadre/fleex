@@ -215,6 +215,17 @@ export class WorkflowRunDepthExceededError extends DomainError {
   }
 }
 
+/**
+ * A run could not be created because its sub-workflows don't expand: an
+ * included template is missing or disabled, or the inclusions now form a cycle
+ * or exceed a limit. Raised before the run exists, so nothing was spent.
+ */
+export class SubworkflowExpansionFailedError extends DomainError {
+  constructor(templateName: string, public readonly reason: string) {
+    super(`Cannot start workflow "${templateName}": ${reason}`, 'SUBWORKFLOW_EXPANSION_FAILED');
+  }
+}
+
 export class WorkflowTemplateNotFoundError extends DomainError {
   constructor(slugOrId: string) {
     super(`Workflow template not found: ${slugOrId}`, 'WORKFLOW_TEMPLATE_NOT_FOUND');

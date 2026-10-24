@@ -37,6 +37,7 @@ import {
   toMarketplaceSkill,
   toMarketplacePanel,
   toMarketplaceWorkflow,
+  orderByInclusion,
 } from '../../core/marketplace.ts';
 import { contentEquals, renderDiff } from '../../core/marketplace-diff.ts';
 import { personaBody, skillBody, panelBody, workflowBody } from '../../core/marketplace-install.ts';
@@ -320,7 +321,9 @@ ${SECTION('Examples:')}
       let installed = 0;
       let failed = 0;
       for (const kind of ORDER) {
-        for (const a of actions.filter((x) => x.kind === kind)) {
+        const ofKind = actions.filter((x) => x.kind === kind);
+        const ordered = kind === 'workflow' ? orderByInclusion(ofKind, (a) => a.content as MarketplaceWorkflow) : ofKind;
+        for (const a of ordered) {
           try {
             if (kind === 'persona') {
               const body = personaBody(a.content as MarketplacePersona);

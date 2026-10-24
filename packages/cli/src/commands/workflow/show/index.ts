@@ -38,9 +38,11 @@ const def: CommandDef = {
       process.stdout.write(`\n  ${c.bold('Steps')}\n`);
       for (const s of w.steps) {
         const entry = s.id === w.entryStepId ? c.dim(' (entry)') : '';
-        const executor = s.executorType
-          ? c.dim(` [${s.executorType}${s.executorRef ? `:${s.executorRef}` : ''}]`)
-          : '';
+        const executor = s.executorType === 'workflow'
+          ? c.dim(` ↳ workflow: ${s.executorRef || '(none)'}`)
+          : s.executorType
+            ? c.dim(` [${s.executorType}${s.executorRef ? `:${s.executorRef}` : ''}]`)
+            : '';
         process.stdout.write(`  - ${s.name ?? s.id}${executor}${entry}\n`);
       }
     }

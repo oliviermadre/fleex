@@ -1251,8 +1251,14 @@ export async function updateWorkflowTemplate(
   });
 }
 
-export async function deleteWorkflowTemplate(id: string): Promise<void> {
-  return request<void>(`/workflows/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+/**
+ * `force` disables a template other workflows include as a sub-workflow (the
+ * server answers 409 TEMPLATE_IN_USE otherwise). Only pass it once the user has
+ * seen which workflows will stop launching.
+ */
+export async function deleteWorkflowTemplate(id: string, opts: { force?: boolean } = {}): Promise<void> {
+  const query = opts.force ? '?force=true' : '';
+  return request<void>(`/workflows/templates/${encodeURIComponent(id)}${query}`, { method: 'DELETE' });
 }
 
 // ── Workflow Runs ──

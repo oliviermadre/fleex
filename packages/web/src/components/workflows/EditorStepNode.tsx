@@ -4,7 +4,7 @@ import type { WorkflowStep, WorkflowExecutorType } from '@fleex/shared';
 import { COLOR_ERROR_RED } from '../../lib/constants';
 import { tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
-import { ListChecksIcon, SplitIcon } from './executor-palette';
+import { ListChecksIcon, SplitIcon, LayersIcon } from './executor-palette';
 import { nativeStepSummary } from './nativeStepSummary';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
@@ -35,7 +35,7 @@ function XIcon({ className }: IconProps) {
 // so a step node on the canvas shows the SAME icon as the sidebar and the
 // palette. `human_gate` and `native` are not primitives (nothing in the sidebar
 // corresponds to them), so they keep their dedicated glyphs.
-const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native' | 'route'>, PrimitiveKind> = {
+const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate' | 'native' | 'route' | 'workflow'>, PrimitiveKind> = {
   agent: 'persona',
   panel: 'panel',
   skill: 'skill',
@@ -45,6 +45,7 @@ function StepIcon({ type, className }: { type: WorkflowExecutorType; className?:
   if (type === 'human_gate') return <UserCheckIcon className={className} />;
   if (type === 'native') return <ListChecksIcon className={className} />;
   if (type === 'route') return <SplitIcon className={className} />;
+  if (type === 'workflow') return <LayersIcon className={className} />;
   // tinted={false}: the icon inherits the node's executor-type colour (border +
   // icon share one hue) instead of re-applying the tint, keeping each node
   // chromatically coherent.
@@ -58,6 +59,7 @@ const executorColor = {
   human_gate: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor} border-dashed`,
   native: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
   route: `${tintClasses('orange').text} ${tintClasses('orange').borderColor} border-dashed`,
+  workflow: `${tintClasses('pink').text} ${tintClasses('pink').borderColor}`,
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -79,6 +81,7 @@ const BORDER_HEX = {
   human_gate: '#f59e0b',  // amber-500
   native: '#14b8a6',      // teal-500
   route: '#f97316',       // orange-500
+  workflow: '#ec4899',    // pink-500
 } as const;
 
 export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
@@ -183,7 +186,9 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
             ? <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Unconfigured</span>
             : step.executorType === 'route'
               ? 'routing only'
-              : (nativeSummary ?? step.executorRef ?? '—') || '—'}
+              : step.executorType === 'workflow'
+                ? `↳ workflow: ${step.executorRef}`
+                : (nativeSummary ?? step.executorRef ?? '—') || '—'}
         </div>
       </div>
 

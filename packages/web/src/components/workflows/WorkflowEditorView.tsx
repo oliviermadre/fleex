@@ -14,7 +14,7 @@ import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
 import type { WorkflowExecutorType, WorkflowStep, WorkflowEdge as WfEdge, WorkflowTemplate } from '@fleex/shared';
-import { NATIVE_STEP_KIND_TICKET_ACTIONS, formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
+import { NATIVE_STEP_KIND_TICKET_ACTIONS, formatEdgeCondition, normalizeEdgeCondition, includedWorkflowSlugs } from '@fleex/shared';
 
 const nodeTypes = { editorStep: EditorStepNode };
 const edgeTypes = { workflow: WorkflowDagEdge };
@@ -23,6 +23,7 @@ const DEFAULT_STEP_NAME: Partial<Record<WorkflowExecutorType, string>> = {
   human_gate: 'Human Gate',
   native: 'Ticket Actions',
   route: 'Router',
+  workflow: 'Workflow',
 };
 
 interface Props {
@@ -40,6 +41,12 @@ export function WorkflowEditorView(props: Props) {
 
 function EditorInner({ template, onBack }: Props) {
   const update = useWorkflowTemplateStore((s) => s.update);
+  const templates = useWorkflowTemplateStore((s) => s.templates);
+  // Saving this workflow changes the next run of every workflow including it.
+  const usedBy = useMemo(
+    () => templates.filter((t) => t.id !== template.id && includedWorkflowSlugs(t.steps).includes(template.slug)),
+    [templates, template.id, template.slug],
+  );
   const reactFlow = useReactFlow();
   const colorMode = useColorMode();
   const themeColors = useActiveTheme().colors;
@@ -196,6 +203,11 @@ function EditorInner({ template, onBack }: Props) {
             style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }} />
         </div>
         <div className="flex items-center gap-2">
+          {usedBy.length > 0 && (
+            <span className="text-xs" style={{ color: 'var(--theme-text-muted)' }} title={usedBy.map((t) => t.name).join(', ')}>
+              Used by {usedBy.length} workflow{usedBy.length > 1 ? 's' : ''} ·
+            </span>
+          )}
           <span className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>{steps.length} steps · {edges.length} edges</span>
           <button
             onClick={() => reactFlow.fitView({ padding: 0.3, minZoom: 0.3, maxZoom: 1.2, duration: 300 })}
@@ -256,6 +268,7 @@ function EditorInner({ template, onBack }: Props) {
               steps={steps}
               edges={edges}
               entryStepId={entryStepId}
+              workflowSlug={slug}
             />
           ) : selectedEdge ? (
             <EdgeConfigPanel

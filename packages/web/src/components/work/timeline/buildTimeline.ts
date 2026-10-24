@@ -276,7 +276,7 @@ const RANK: Record<TimelineEventKind, number> = {
 const PRIORITY_FR: Record<string, string> = { none: 'aucune', low: 'basse', medium: 'moyenne', high: 'haute' };
 
 const EXECUTOR_LABEL: Record<WorkflowExecutorType, string> = {
-  agent: 'Agent', skill: 'Skill', panel: 'Panel', human_gate: 'Human gate', native: 'Native', route: 'Route',
+  agent: 'Agent', skill: 'Skill', panel: 'Panel', human_gate: 'Human gate', native: 'Native', route: 'Route', workflow: 'Workflow',
 };
 
 const STEP_RUN_STATUS_FR: Record<string, string> = {

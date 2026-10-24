@@ -12,7 +12,7 @@ interface WorkflowTemplateState {
   refresh(): Promise<void>;
   create(input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate>;
   update(id: string, input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate>;
-  remove(id: string): Promise<void>;
+  remove(id: string, opts?: { force?: boolean }): Promise<void>;
   getBySlug(slug: string): WorkflowTemplate | undefined;
 }
 
@@ -49,8 +49,8 @@ export const useWorkflowTemplateStore = create<WorkflowTemplateState>((set, get)
     return updated;
   },
 
-  remove: async (id) => {
-    await api.deleteWorkflowTemplate(id);
+  remove: async (id, opts) => {
+    await api.deleteWorkflowTemplate(id, opts);
     set((state) => ({
       templates: state.templates.filter((t) => t.id !== id),
       selectedWorkflowId: state.selectedWorkflowId === id ? null : state.selectedWorkflowId,

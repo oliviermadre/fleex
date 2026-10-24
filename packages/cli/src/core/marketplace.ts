@@ -35,6 +35,8 @@ export function executorKind(type: WorkflowExecutorType): PrimitiveKind | null {
       return 'skill';
     case 'panel':
       return 'panel';
+    case 'workflow':
+      return 'workflow'; // a sub-workflow: executorRef is the included template's slug
     default:
       return null; // human_gate references nothing
   }
@@ -129,6 +131,30 @@ export function deriveWorkflowDeps(w: MarketplaceWorkflow): PrimitiveRef[] {
     refs.set(`${kind}:${step.executorRef}`, { kind, slug: step.executorRef });
   }
   return [...refs.values()];
+}
+
+/**
+ * Workflows sorted so that every sub-workflow comes before the workflows that
+ * include it: the server refuses to save a template whose sub-workflow doesn't
+ * exist yet. Inclusions are acyclic (the server refuses cycles), but a corrupt
+ * manifest must not hang the install — a workflow already on the path is
+ * simply not revisited.
+ */
+export function orderByInclusion<T>(items: T[], content: (item: T) => MarketplaceWorkflow): T[] {
+  const bySlug = new Map(items.map((i) => [content(i).slug, i]));
+  const done = new Set<string>();
+  const out: T[] = [];
+  const visit = (slug: string) => {
+    const item = bySlug.get(slug);
+    if (!item || done.has(slug)) return;
+    done.add(slug);
+    for (const dep of deriveWorkflowDeps(content(item))) {
+      if (dep.kind === 'workflow') visit(dep.slug);
+    }
+    out.push(item);
+  };
+  for (const item of items) visit(content(item).slug);
+  return out;
 }
 
 // ── removal closure (reverse-dependency walk) ──

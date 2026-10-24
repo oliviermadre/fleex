@@ -4,6 +4,10 @@ import { collectNativeIssues, type NativeIssue, type NativeIssueCode } from '../
 import { NATIVE_STEP_KIND_TICKET_ACTIONS } from '../../native-operations/descriptors.js';
 import { isListOperator, normalizeEdgeCondition } from '../edge-conditions.js';
 import { checkDocumentShape, type ShapeIssue } from './schema.js';
+import {
+  MAX_EXPANDED_STEPS, MAX_SUBWORKFLOW_DEPTH, SUBWORKFLOW_ID_SEPARATOR, SubworkflowExpansionError, expandSubworkflows, includedWorkflowSlugs, subworkflowOutputSchema,
+  type SubworkflowResolver, type SubworkflowSource,
+} from '../subworkflows.js';
 import { EXAMPLE_REFS, richExample } from './examples.js';
 import type {
   InvariantSeverity,
@@ -87,8 +91,36 @@ export class CheckContext {
     return (this.shape ??= checkDocumentShape(this.raw));
   }
 
+  /**
+   * The workspace's templates with this document overlaid on its own slug — the
+   * store as it will be once the document is applied, so a cycle closing
+   * through it is seen. Null when the caller gave no templates.
+   */
+  get resolve(): SubworkflowResolver | null {
+    const base = this.env.resolveWorkflow;
+    if (!base) return null;
+    const doc = this.doc;
+    const self: SubworkflowSource = {
+      slug: doc.slug, name: doc.name, emoji: doc.emoji ?? '', enabled: doc.enabled ?? true,
+      steps: this.steps, edges: doc.edges, entryStepId: doc.entryStepId,
+    };
+    return (slug) => (slug === doc.slug ? self : base(slug));
+  }
+
   edgeIssues(): EdgeIssue[] {
-    return (this.edges ??= collectEdgeIssues(this.steps, this.doc.edges, this.doc.entryStepId));
+    // A `workflow` step relays the output of its sub-workflow's last completed
+    // step: its outgoing edges may read any field the sub-workflow's steps
+    // declare, so they are checked against that union.
+    if (this.edges) return this.edges;
+    const resolve = this.resolve;
+    const steps = resolve
+      ? this.steps.map((st) => {
+        if (st.executorType !== 'workflow' || st.outputSchema) return st;
+        const outputSchema = subworkflowOutputSchema(st.executorRef, resolve);
+        return outputSchema ? { ...st, outputSchema } : st;
+      })
+      : this.steps;
+    return (this.edges = collectEdgeIssues(steps, this.doc.edges, this.doc.entryStepId));
   }
 
   nativeIssues(): NativeIssue[] {
@@ -193,6 +225,18 @@ function outcomeValues(edge: WorkflowEdge): { clauseIndex: number; values: strin
   return out;
 }
 
+
+/** Slugs of the example workspace's workflows (see `EXAMPLE_CAPABILITIES`). */
+export const EXAMPLE_WORKFLOW_SLUGS = { qa: 'qa', disabled: 'legacy-qa', consumer: 'release' } as const;
+
+/** The rich example with a `ship` workflow step between "set-done" and "stop". */
+function withWorkflowStep(d: WorkflowDocument, slug: string): WorkflowDocument {
+  d.steps.push({ id: 'ship', name: 'Ship', executorType: 'workflow', executorRef: slug });
+  edgeOf(d, 'done-stop').target = 'ship';
+  d.edges.push({ id: 'ship-stop', source: 'ship', target: 'stop', isDefault: true });
+  return d;
+}
+
 const EXPECTED_REF: Record<string, string> = {
   agent: 'an agent name (see Capabilities › agents)',
   skill: 'a skill command name (see Capabilities › skills)',
@@ -200,6 +244,7 @@ const EXPECTED_REF: Record<string, string> = {
   human_gate: '""',
   route: '""',
   native: `"${NATIVE_STEP_KIND_TICKET_ACTIONS}"`,
+  workflow: 'the slug of another workflow template, included as a sub-workflow (see Capabilities › workflows)',
 };
 
 /** For each executor type, what `executorRef` must hold — published in Capabilities. */
@@ -209,6 +254,7 @@ function capsFor(caps: WorkflowCapabilities, type: string): string[] | null {
   if (type === 'agent') return caps.agents.map((a) => a.name);
   if (type === 'skill') return caps.skills.map((s) => s.name);
   if (type === 'panel') return caps.panels.map((p) => p.name);
+  if (type === 'workflow') return caps.workflows ? caps.workflows.map((w) => w.name) : null;
   return null;
 }
 
@@ -359,6 +405,28 @@ export const INVARIANTS: readonly WorkflowInvariant[] = [
     },
   },
   {
+    id: 'step.id_no_separator',
+    scope: 'step',
+    severity: ERROR_BOTH,
+    stage: 'graph',
+    rule: `A step id does not contain "${SUBWORKFLOW_ID_SEPARATOR}": it is reserved for the steps a sub-workflow is expanded into when a run starts ("build${SUBWORKFLOW_ID_SEPARATOR}implement").`,
+    check: (doc: WorkflowDocument) => doc.steps.flatMap((step, i) => (step.id.includes(SUBWORKFLOW_ID_SEPARATOR) ? [{
+      path: `$.steps[${i}].id`,
+      stepId: step.id,
+      message: `step id "${step.id}" contains "${SUBWORKFLOW_ID_SEPARATOR}" (expected: an id without it, e.g. "${step.id.split(SUBWORKFLOW_ID_SEPARATOR).join('-')}" — update the edges and conditions that use it)`,
+    }] : [])),
+    example: {
+      describe: 'a step id written like an expanded sub-workflow step',
+      build: (d) => {
+        const id = `end${SUBWORKFLOW_ID_SEPARATOR}stop`;
+        stepOf(d, 'stop').id = id;
+        for (const e of d.edges) if (e.target === 'stop') e.target = id;
+        return d;
+      },
+      excerpt: (d) => ({ id: d.steps[d.steps.length - 1].id }),
+    },
+  },
+  {
     id: 'step.position_present',
     scope: 'step',
     severity: { save: 'error', apply: 'off' },
@@ -411,14 +479,17 @@ export const INVARIANTS: readonly WorkflowInvariant[] = [
     scope: 'step',
     severity: APPLY_ONLY,
     stage: 'graph',
-    rule: 'executorRef matches executorType: agent/skill/panel → a non-empty name, native → "ticket.actions", human_gate and route → "". nativeActions and forEach only on native steps, humanGateOutcomes only on human_gate steps.',
+    rule: 'executorRef matches executorType: agent/skill/panel → a non-empty name, workflow → a non-empty workflow slug, native → "ticket.actions", human_gate and route → "". nativeActions and forEach only on native steps, humanGateOutcomes only on human_gate steps, no outputSchema on a workflow step (it relays its sub-workflow\'s output).',
     check: (doc: WorkflowDocument) => doc.steps.flatMap((step, i): Finding[] => {
       const out: Finding[] = [];
       const at = (field: string, message: string) =>
         out.push({ path: `$.steps[${i}].${field}`, stepId: step.id, message });
       const type = step.executorType;
-      if ((type === 'agent' || type === 'skill' || type === 'panel') && step.executorRef.trim() === '') {
+      if ((type === 'agent' || type === 'skill' || type === 'panel' || type === 'workflow') && step.executorRef.trim() === '') {
         at('executorRef', `${type} step "${step.id}" has an empty executorRef (expected: ${EXPECTED_REF[type]})`);
+      }
+      if (type === 'workflow' && step.outputSchema !== undefined) {
+        at('outputSchema', `workflow step "${step.id}" has an outputSchema (expected: none — the step relays the output of the last completed step of sub-workflow "${step.executorRef}", and its outgoing edges may read any field that sub-workflow's steps declare; declare fields there)`);
       }
       if ((type === 'human_gate' || type === 'route') && step.executorRef !== '') {
         at('executorRef', `${type} step "${step.id}" has executorRef "${step.executorRef}" (expected: "")`);
@@ -449,12 +520,15 @@ export const INVARIANTS: readonly WorkflowInvariant[] = [
     scope: 'step',
     severity: APPLY_ONLY,
     stage: 'graph',
-    rule: 'An agent step names an installed agent, a skill step an installed skill, a panel step an existing panel (see Capabilities).',
+    rule: 'An agent step names an installed agent, a skill step an installed skill, a panel step an existing panel, a workflow step an existing workflow template slug (see Capabilities).',
     check: (doc: WorkflowDocument, ctx) => {
       const caps = ctx.env.caps;
       if (!caps) return [];
       return doc.steps.flatMap((step, i) => {
-        const names = capsFor(caps, step.executorType);
+        const listed = capsFor(caps, step.executorType);
+        // The document's own slug exists once applied: including it is a cycle,
+        // which subworkflow.inclusion reports — not a missing workflow.
+        const names = listed && step.executorType === 'workflow' && !listed.includes(doc.slug) ? [...listed, doc.slug] : listed;
         if (!names || step.executorRef.trim() === '' || names.includes(step.executorRef)) return [];
         const near = closest(step.executorRef, names);
         const kind = step.executorType;
@@ -471,6 +545,131 @@ export const INVARIANTS: readonly WorkflowInvariant[] = [
       describe: 'a misspelled agent name',
       build: (d) => { stepOf(d, 'spec').executorRef = 'catalist'; return d; },
       excerpt: (d) => ({ id: 'spec', executorType: 'agent', executorRef: stepOf(d, 'spec').executorRef }),
+    },
+  },
+
+  // ── Sub-workflows ────────────────────────────────────────────────────────
+  {
+    id: 'subworkflow.inclusion',
+    scope: 'step',
+    severity: ERROR_BOTH,
+    stage: 'graph',
+    rule: `Sub-workflow inclusions expand into a finite run: a workflow never includes itself, directly or through other workflows (no inclusion cycle), nests at most ${MAX_SUBWORKFLOW_DEPTH} levels deep, reaches at most ${MAX_EXPANDED_STEPS} steps once every sub-workflow is expanded, and every workflow it includes (at any depth) exists. Checked against the templates as they are now, with this document in place.`,
+    check: (doc: WorkflowDocument, ctx) => {
+      const resolve = ctx.resolve;
+      if (!resolve || !includedWorkflowSlugs(ctx.steps).length) return [];
+      try {
+        expandSubworkflows(
+          { name: doc.name, emoji: doc.emoji ?? '', steps: ctx.steps, edges: doc.edges, entryStepId: doc.entryStepId },
+          doc.slug, resolve, { requireEnabled: false },
+        );
+        return [];
+      } catch (err) {
+        if (!(err instanceof SubworkflowExpansionError)) throw err;
+        // A missing direct child is executor.ref_exists' business.
+        if (err.code === 'not_found' && err.chain.length === 2) return [];
+        const top = doc.steps.findIndex((st) => st.executorType === 'workflow' && st.executorRef === err.chain[1]);
+        if (top < 0) return [{ path: '$.steps', message: `${err.message} (expected: fewer steps or fewer sub-workflows)` }];
+        // Said from the document's own step: the author fixes THAT step.
+        const step = doc.steps[top]!;
+        const via = err.chain.slice(1).map((c) => `"${c}"`).join(' → ');
+        const message = err.code === 'cycle'
+          ? (err.chain.length === 2
+            ? `step "${step.id}": a workflow cannot include itself ("${doc.slug}") (expected: another workflow's slug — to repeat work, use an edge back to an earlier step)`
+            : `step "${step.id}" includes ${err.chain.slice(1, -1).map((c) => `"${c}"`).join(" → ")}, which leads back to "${doc.slug}": inclusion cycle ${err.chain.join(' → ')} (expected: remove or change this step — to repeat work, use an edge back to an earlier step)`)
+          : err.code === 'depth'
+            ? `step "${step.id}": sub-workflows nested more than ${MAX_SUBWORKFLOW_DEPTH} levels deep (${err.chain.join(' → ')}) (expected: flatten one level — include the deepest workflow's steps directly, or include it higher up)`
+            : err.code === 'not_found'
+              ? `step "${step.id}": ${via} — "${err.chain[err.chain.length - 1]}" does not exist (expected: fix or apply that workflow first)`
+              : `${err.message} (expected: fewer steps or fewer sub-workflows)`;
+        return [{ path: `$.steps[${top}].executorRef`, stepId: step.id, message }];
+      }
+    },
+    example: {
+      describe: '"spec-review" includes "release", which already includes "spec-review"',
+      build: (d) => withWorkflowStep(d, EXAMPLE_WORKFLOW_SLUGS.consumer),
+      excerpt: (d) => stepOf(d, 'ship'),
+    },
+  },
+  {
+    id: 'subworkflow.enabled',
+    scope: 'step',
+    severity: WARN_BOTH,
+    stage: 'graph',
+    rule: 'A workflow step names an enabled workflow: while the included workflow is disabled, every run of this one is refused at launch (warning).',
+    check: (doc: WorkflowDocument, ctx) => {
+      const resolve = ctx.resolve;
+      if (!resolve) return [];
+      return doc.steps.flatMap((step, i) => {
+        if (step.executorType !== 'workflow' || step.executorRef === doc.slug) return [];
+        const child = resolve(step.executorRef);
+        return child && !child.enabled ? [{
+          path: `$.steps[${i}].executorRef`,
+          stepId: step.id,
+          message: `step "${step.id}": workflow "${step.executorRef}" is disabled — runs of "${doc.slug}" will be refused until it is enabled again`,
+        }] : [];
+      });
+    },
+    example: {
+      describe: 'including a disabled workflow',
+      build: (d) => withWorkflowStep(d, EXAMPLE_WORKFLOW_SLUGS.disabled),
+      excerpt: (d) => stepOf(d, 'ship'),
+    },
+  },
+  {
+    id: 'subworkflow.disable_in_use',
+    scope: 'document',
+    severity: { save: 'off', apply: 'warning' },
+    stage: 'graph',
+    rule: 'Setting "enabled": false on a workflow other enabled workflows include as a sub-workflow stops them from starting (warning).',
+    check: (doc: WorkflowDocument, ctx) => {
+      const resolve = ctx.resolve;
+      const all = ctx.env.caps?.workflows;
+      if (doc.enabled !== false || !resolve || !all) return [];
+      const consumers = all
+        .filter((w) => w.name !== doc.slug && w.enabled)
+        .filter((w) => includedWorkflowSlugs(resolve(w.name)?.steps ?? []).includes(doc.slug))
+        .map((w) => w.name);
+      return consumers.length > 0 ? [{
+        path: '$.enabled',
+        message: `"${doc.slug}" is included by ${consumers.map((c) => `"${c}"`).join(', ')}, which will no longer start while it is disabled`,
+      }] : [];
+    },
+    example: {
+      describe: 'disabling a workflow that "release" includes',
+      build: (d) => ({ ...d, enabled: false }),
+      excerpt: (d) => ({ slug: d.slug, enabled: d.enabled }),
+    },
+  },
+
+  {
+    id: 'subworkflow.exit_fields',
+    scope: 'edge',
+    severity: STRICT_ON_APPLY,
+    stage: 'graph',
+    rule: 'An edge leaving a workflow step only reads what the sub-workflow hands over — the fields its steps declare, result and outcome. deliverable.*, comment and mentionStatus are not relayed (the included step already posted them), so a clause on them would never match.',
+    check: (doc: WorkflowDocument) => doc.edges.flatMap((edge, i) => {
+      const source = doc.steps.find((st) => st.id === edge.source);
+      if (source?.executorType !== 'workflow') return [];
+      return (normalizeEdgeCondition(edge)?.clauses ?? []).flatMap((clause, c) => {
+        if (clause.stepId && clause.stepId !== edge.source) return [];
+        const f = clause.field;
+        if (!(f === 'comment' || f === 'mentionStatus' || f === 'deliverable' || f.startsWith('deliverable.'))) return [];
+        return [{
+          path: edge.conditionGroup ? `$.edges[${i}].conditionGroup.clauses[${c}].field` : `$.edges[${i}].condition.field`,
+          edgeId: edge.id,
+          message: `${edgeName(edge)}: "${f}" is not relayed by workflow step "${source.id}" (expected: result, outcome, or a field declared by a step of "${source.executorRef}" — to branch on a deliverable, route inside "${source.executorRef}" instead)`,
+        }];
+      });
+    }),
+    example: {
+      describe: 'branching on deliverable.status after a sub-workflow',
+      build: (d) => {
+        withWorkflowStep(d, EXAMPLE_WORKFLOW_SLUGS.qa);
+        d.edges.push({ id: 'ship-again', source: 'ship', target: 'spec', isDefault: false, conditionGroup: { match: 'all', clauses: [{ field: 'deliverable.status', operator: 'eq', value: 'draft' }] } });
+        return d;
+      },
+      excerpt: (d) => edgeOf(d, 'ship-again'),
     },
   },
 
@@ -876,12 +1075,41 @@ export const EXAMPLE_CAPABILITIES: WorkflowCapabilities = {
   agents: [{ name: EXAMPLE_REFS.agent }],
   skills: [{ name: EXAMPLE_REFS.skill }],
   panels: [],
+  workflows: [
+    { name: EXAMPLE_WORKFLOW_SLUGS.qa, description: 'QA', enabled: true },
+    { name: EXAMPLE_WORKFLOW_SLUGS.disabled, description: 'Legacy QA', enabled: false },
+    { name: EXAMPLE_WORKFLOW_SLUGS.consumer, description: 'Release', enabled: true },
+  ],
 };
+
+/**
+ * The example workspace's templates: "qa" (a review declaring `verdict`), a
+ * disabled copy of it, and "release", which includes the rich example's slug.
+ */
+const EXAMPLE_TEMPLATES: Record<string, SubworkflowSource> = (() => {
+  const review = (slug: string, name: string, enabled: boolean): SubworkflowSource => ({
+    slug, name, emoji: '🧪', enabled, entryStepId: 'check', edges: [],
+    steps: [{
+      id: 'check', name: 'Check', executorType: 'agent', executorRef: EXAMPLE_REFS.agent, position: { x: 0, y: 0 },
+      outputSchema: { type: 'object', properties: { verdict: { type: 'string', enum: ['ok', 'ko'] } } },
+    }],
+  });
+  return {
+    [EXAMPLE_WORKFLOW_SLUGS.qa]: review(EXAMPLE_WORKFLOW_SLUGS.qa, 'QA', true),
+    [EXAMPLE_WORKFLOW_SLUGS.disabled]: review(EXAMPLE_WORKFLOW_SLUGS.disabled, 'Legacy QA', false),
+    [EXAMPLE_WORKFLOW_SLUGS.consumer]: {
+      slug: EXAMPLE_WORKFLOW_SLUGS.consumer, name: 'Release', emoji: '🚆', enabled: true, entryStepId: 'run', edges: [],
+      steps: [{ id: 'run', name: 'Run', executorType: 'workflow', executorRef: 'spec-review', position: { x: 0, y: 0 } }],
+    },
+  };
+})();
+
+export const resolveExampleWorkflow: SubworkflowResolver = (slug) => EXAMPLE_TEMPLATES[slug];
 
 /** Build an invariant's violating example and the violations it produces. */
 export function runInvariantExample(inv: WorkflowInvariant, profile: ValidationProfile = 'apply') {
   const violating = inv.example.build(clone(richExample(EXAMPLE_REFS))) as WorkflowDocument;
-  const env: ValidationEnv = { caps: EXAMPLE_CAPABILITIES, ...inv.example.env };
+  const env: ValidationEnv = { caps: EXAMPLE_CAPABILITIES, resolveWorkflow: resolveExampleWorkflow, ...inv.example.env };
   const result = validateWorkflow(violating, env, profile);
   return { violating, excerpt: inv.example.excerpt(violating), result };
 }

@@ -4,6 +4,8 @@ import '@xyflow/react/dist/style.css';
 import { formatEdgeCondition, normalizeEdgeCondition } from '@fleex/shared';
 import type { WorkflowRun, StepRun, WorkflowStep, TicketDeliverable } from '@fleex/shared';
 import { StepRunNode, type StepRunNodeData } from './StepRunNode';
+import { SubworkflowGroupNode } from './SubworkflowGroupNode';
+import { layoutRun, subworkflowGroups } from './subworkflowLayout';
 import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
 import { AmbiguousRouteResolvePanel } from './AmbiguousRouteResolvePanel';
@@ -23,7 +25,7 @@ import { countCompletedSteps } from './workflowProgress';
 import { postTicketComment } from '../../services/api';
 import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
 
-const nodeTypes = { stepRun: StepRunNode };
+const nodeTypes = { stepRun: StepRunNode, subworkflowGroup: SubworkflowGroupNode };
 const edgeTypes = { workflow: WorkflowDagEdge };
 
 interface Props {
@@ -136,7 +138,26 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
     return m;
   }, [run.templateSnapshot.steps, stepRuns, deliverables]);
 
-  const nodes = useMemo(
+  const positions = useMemo(() => layoutRun(run.templateSnapshot), [run.templateSnapshot]);
+
+  // Frames come first in the array so React Flow paints them under the steps.
+  const groupNodes = useMemo(
+    () =>
+      subworkflowGroups(run.templateSnapshot, positions, (id) => latestPerStep.get(id)?.status ?? 'pending').map((g) => ({
+        id: g.id,
+        type: 'subworkflowGroup',
+        position: { x: g.x, y: g.y },
+        width: g.width,
+        height: g.height,
+        zIndex: -1 - g.depth,
+        selectable: false,
+        draggable: false,
+        data: g as unknown as Record<string, unknown>,
+      })),
+    [run.templateSnapshot, positions, latestPerStep],
+  );
+
+  const stepNodes = useMemo(
     () =>
       run.templateSnapshot.steps.map((step) => {
         const sr = latestPerStep.get(step.id);
@@ -167,7 +188,7 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
         return {
           id: step.id,
           type: 'stepRun',
-          position: step.position,
+          position: positions.get(step.id) ?? step.position,
           width: 180,
           height: 80,
           handles: [
@@ -177,8 +198,9 @@ export function WorkflowRunView({ run, stepRuns, deliverables = [] }: Props) {
           data: data as unknown as Record<string, unknown>,
         };
       }),
-    [run.templateSnapshot.steps, latestPerStep, run.currentStepId, deliverablesByStepId],
+    [run.templateSnapshot.steps, latestPerStep, run.currentStepId, deliverablesByStepId, positions],
   );
+  const nodes = useMemo(() => [...groupNodes, ...stepNodes], [groupNodes, stepNodes]);
 
   const edges: Edge[] = useMemo(
     () =>

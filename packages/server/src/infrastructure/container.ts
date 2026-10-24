@@ -82,6 +82,7 @@ import { PanelStepExecutor } from '../application/services/step-executors/panel-
 import { HumanGateStepExecutor } from '../application/services/step-executors/human-gate-step-executor.js';
 import { NativeStepExecutor } from '../application/services/step-executors/native-step-executor.js';
 import { RouteStepExecutor } from '../application/services/step-executors/route-step-executor.js';
+import { WorkflowStepExecutor } from '../application/services/step-executors/workflow-step-executor.js';
 import { NativeOperationRegistry } from '../application/services/native-operations/registry.js';
 import { ApplyNativeActionsUseCase } from '../application/use-cases/apply-native-actions.js';
 import type { TriggerWorkflowRunPort } from '../application/services/native-operations/types.js';
@@ -705,6 +706,7 @@ export async function createContainer() {
         human_gate: humanGateStepExecutor,
         native: nativeStepExecutor,
         route: new RouteStepExecutor(),
+        workflow: new WorkflowStepExecutor(stepRunStore),
       },
       submitDeliverable,
       postComment,
