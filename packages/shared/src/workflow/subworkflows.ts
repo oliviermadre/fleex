@@ -1,5 +1,5 @@
 import type {
-  WorkflowStep, WorkflowEdge, WorkflowTemplateSnapshot, SubworkflowInfo, NativeAction,
+  WorkflowStep, WorkflowEdge, WorkflowTemplateSnapshot, SubworkflowInfo, NativeAction, JsonSchema, JsonSchemaProperty,
 } from '../types/workflow.js';
 import { REFERENCE_PATTERN } from '../native-operations/references.js';
 
@@ -53,8 +53,16 @@ export interface SubworkflowSource {
 
 export type SubworkflowResolver = (slug: string) => SubworkflowSource | undefined;
 
+/** Why an expansion failed — lets `workflow apply` file it under the right invariant. */
+export type SubworkflowExpansionCode = 'not_found' | 'disabled' | 'cycle' | 'depth' | 'size';
+
 export class SubworkflowExpansionError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code: SubworkflowExpansionCode,
+    /** Slugs from the root to the failing inclusion (`[root, child, …]`); empty for `size`. */
+    readonly chain: string[] = [],
+  ) {
     super(message);
     this.name = 'SubworkflowExpansionError';
   }
@@ -108,6 +116,7 @@ export function expandSubworkflows(
   if (expanded.steps.length > MAX_EXPANDED_STEPS) {
     throw new SubworkflowExpansionError(
       `${expanded.steps.length} steps once sub-workflows are expanded (max ${MAX_EXPANDED_STEPS})`,
+      'size',
     );
   }
   return {
@@ -162,6 +171,34 @@ export function isInsideSubworkflow(stepId: string, exitStepId: string): boolean
   return stepId.startsWith(`${exitStepId}${SUBWORKFLOW_ID_SEPARATOR}`);
 }
 
+/**
+ * The output fields an edge leaving a `workflow` step can read: at run time the
+ * exit relays the `schemaFields` of the sub-workflow's last completed step, so
+ * any field declared by one of its steps (nested sub-workflows included) may
+ * show up. Same-named fields are merged; their enums too, unless one side
+ * declares none (then any value is possible). Unknown children contribute
+ * nothing — `executor.ref_exists` reports them.
+ */
+export function subworkflowOutputSchema(slug: string, resolve: SubworkflowResolver): JsonSchema | undefined {
+  const properties: Record<string, JsonSchemaProperty> = {};
+  const seen = new Set<string>();
+  const visit = (s: string) => {
+    if (seen.has(s)) return;
+    seen.add(s);
+    for (const step of resolve(s)?.steps ?? []) {
+      if (step.executorType === 'workflow') { visit(step.executorRef); continue; }
+      for (const [field, prop] of Object.entries(step.outputSchema?.properties ?? {})) {
+        const prev = properties[field];
+        if (!prev) { properties[field] = { ...prop }; continue; }
+        if (prev.enum && prop.enum) prev.enum = [...new Set([...prev.enum, ...prop.enum])];
+        else delete prev.enum;
+      }
+    }
+  };
+  visit(slug);
+  return Object.keys(properties).length > 0 ? { type: 'object', properties } : undefined;
+}
+
 // ── Internals ──────────────────────────────────────────────────────────────
 
 interface Graph {
@@ -198,17 +235,21 @@ function expandGraph(
         path.length === 2
           ? `${where}: workflow "${slug}" cannot include itself`
           : `${where}: inclusion cycle ${path.join(' → ')}`,
+        'cycle',
+        [...stack, slug],
       );
     }
     if (depth + 1 > MAX_SUBWORKFLOW_DEPTH) {
       throw new SubworkflowExpansionError(
         `${where}: sub-workflows nested more than ${MAX_SUBWORKFLOW_DEPTH} levels deep (${[...stack, slug].join(' → ')})`,
+        'depth',
+        [...stack, slug],
       );
     }
     const child = resolve(slug);
-    if (!child) throw new SubworkflowExpansionError(`${where}: sub-workflow "${slug}" not found`);
+    if (!child) throw new SubworkflowExpansionError(`${where}: sub-workflow "${slug}" not found`, 'not_found', [...stack, slug]);
     if (options.requireEnabled && !child.enabled) {
-      throw new SubworkflowExpansionError(`${where}: sub-workflow "${slug}" is disabled`);
+      throw new SubworkflowExpansionError(`${where}: sub-workflow "${slug}" is disabled`, 'disabled', [...stack, slug]);
     }
 
     const inner = expandGraph(
@@ -230,7 +271,7 @@ function expandGraph(
         ...c,
         id: prefix + c.id,
         name: `${child.name}${SUBWORKFLOW_NAME_SEPARATOR}${c.name}`,
-        position: { x: step.position.x + c.position.x, y: step.position.y + c.position.y },
+        position: { x: (step.position?.x ?? 0) + (c.position?.x ?? 0), y: (step.position?.y ?? 0) + (c.position?.y ?? 0) },
         ...(c.nativeActions ? { nativeActions: c.nativeActions.map((a) => rewriteAction(a, innerIds, prefix)) } : {}),
         ...(c.forEach !== undefined ? { forEach: rewriteReferences(c.forEach, innerIds, prefix) } : {}),
         origin: { subworkflowStepId: c.origin ? p(c.origin.subworkflowStepId) : step.id },

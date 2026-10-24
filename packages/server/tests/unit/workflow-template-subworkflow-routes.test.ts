@@ -95,7 +95,7 @@ describe('sub-workflows on the template routes', () => {
     const { app } = await setup();
     const res = await app.inject({ method: 'POST', url: '/api/workflows/templates', payload: body('x', [step('b::impl')]) });
     expect(res.statusCode).toBe(400);
-    expect(res.json().message).toMatch(/must not contain "::"/);
+    expect(res.json().message).toMatch(/contains "::"/);
   });
 
   it('renaming an included template rewrites the references of the workflows including it', async () => {

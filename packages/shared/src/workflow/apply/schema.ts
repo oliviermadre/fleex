@@ -17,9 +17,12 @@ import type { WorkflowExecutorType } from '../../types/workflow.js';
  * walks the schema and fails on any other keyword.
  */
 
-export const EXECUTOR_TYPES: readonly WorkflowExecutorType[] = [
-  'agent', 'skill', 'panel', 'human_gate', 'native', 'route',
-];
+// A record, not a list: adding a member to `WorkflowExecutorType` without
+// listing it here is a type error, so the contract cannot silently refuse it.
+const EXECUTOR_TYPE_SET: Record<WorkflowExecutorType, true> = {
+  agent: true, skill: true, panel: true, human_gate: true, native: true, route: true, workflow: true,
+};
+export const EXECUTOR_TYPES = Object.keys(EXECUTOR_TYPE_SET) as readonly WorkflowExecutorType[];
 export const STEP_MODES = ['talk', 'plan', 'edit'] as const;
 export const CONDITION_MATCH_MODES = ['all', 'any'] as const;
 export const OUTPUT_PROPERTY_TYPES = ['string', 'number', 'boolean', 'array', 'object'] as const;
@@ -98,7 +101,7 @@ export const WORKFLOW_DOCUMENT_SCHEMA: SchemaNode = {
         executorType: { type: 'string', enum: EXECUTOR_TYPES, description: 'Who runs the step. See Capabilities.' },
         executorRef: {
           type: 'string',
-          description: 'What runs it: an agent name, a skill command name, a panel name, "ticket.actions" for native, "" for human_gate and route.',
+          description: 'What runs it: an agent name, a skill command name, a panel name, a workflow slug for workflow (a sub-workflow), "ticket.actions" for native, "" for human_gate and route.',
         },
         position: {
           $ref: '#/$defs/position',

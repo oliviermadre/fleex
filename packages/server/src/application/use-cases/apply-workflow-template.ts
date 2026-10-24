@@ -9,6 +9,8 @@ import {
   type WorkflowCapabilities,
   type WorkflowDocument,
   type WorkflowRunStatus,
+  type SubworkflowResolver,
+  type SubworkflowSource,
 } from '@fleex/shared';
 import { WorkflowTemplateEntity } from '../../domain/entities/workflow-template.entity.js';
 import type { WorkflowTemplateStorePort } from '../ports/workflow-template-store.port.js';
@@ -54,14 +56,19 @@ export type ApplyResponse =
 /** Statuses of a run that has not finished — it still reads its templateSnapshot. */
 const ACTIVE_RUN_STATUSES: WorkflowRunStatus[] = ['running', 'blocked', 'needs_review'];
 
-/** Introspected on every call: agents, skills and panels differ per workspace. */
+/**
+ * Introspected on every call: agents, skills, panels and workflow templates
+ * differ per workspace.
+ */
 export async function loadWorkflowCapabilities(deps: Partial<ApplyDeps>): Promise<WorkflowCapabilities> {
-  const [personas, skills, panels] = await Promise.all([
+  const [personas, skills, panels, templates] = await Promise.all([
     deps.personaStore?.getAll() ?? [],
     deps.skillStore?.getAll() ?? [],
     deps.panelStore?.getAll() ?? [],
+    deps.templateStore?.getAll() ?? [],
   ]);
   return {
+    workflows: templates.map((t) => ({ name: t.slug, description: t.name, enabled: t.enabled })),
     agents: personas.map((p) => ({ name: p.name, description: p.displayName !== p.name ? p.displayName : undefined })),
     skills: skills.map((s) => ({ name: s.commandName, description: s.displayName || undefined })),
     panels: panels.map((p) => ({ name: p.name, description: p.description || p.displayName || undefined })),
@@ -84,10 +91,14 @@ export async function applyWorkflowDocument(
     : undefined;
   const existing = slug ? await deps.templateStore.getBySlug(slug) : null;
   const caps = await loadWorkflowCapabilities(deps);
+  // Sub-workflow rules (inclusion cycles, depth, size, disabled children, the
+  // fields an edge may read after a workflow step) need the templates' content.
+  const bySlug = new Map<string, SubworkflowSource>((await deps.templateStore.getAll()).map((t) => [t.slug, t]));
+  const resolveWorkflow: SubworkflowResolver = (s) => bySlug.get(s);
 
   const { errors, warnings, skipped } = validateWorkflow(
     body,
-    { caps, existingTemplateId: existing?.id ?? null },
+    { caps, existingTemplateId: existing?.id ?? null, resolveWorkflow },
     'apply',
   );
   if (errors.length > 0) {

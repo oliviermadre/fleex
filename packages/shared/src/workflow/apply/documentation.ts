@@ -7,6 +7,9 @@ import { EXECUTOR_TYPES, WORKFLOW_DOCUMENT_SCHEMA, type SchemaNode } from './sch
 import { EXECUTOR_REF_EXPECTATIONS, INVARIANTS, runInvariantExample, validateWorkflow, type WorkflowInvariant } from './invariants.js';
 import { minimalExample, richExample } from './examples.js';
 import type { Violation, WorkflowCapabilities, WorkflowDocument } from './types.js';
+import {
+  MAX_EXPANDED_STEPS, MAX_STEP_VISITS_PER_RUN, MAX_SUBWORKFLOW_DEPTH, SUBWORKFLOW_ID_SEPARATOR, SUBWORKFLOW_NAME_SEPARATOR,
+} from '../subworkflows.js';
 
 /**
  * `fleex workflow apply --documentation` — generated, never written by hand.
@@ -120,6 +123,16 @@ function buildCapabilities(caps: WorkflowCapabilities) {
     agents: caps.agents,
     skills: caps.skills,
     panels: caps.panels,
+    workflows: caps.workflows ?? [],
+    subworkflows: [
+      'A step with "executorType": "workflow" and "executorRef": "<slug>" includes that whole workflow at this point of the graph. Leave prompt, mode, outputSchema, nativeActions and humanGateOutcomes out.',
+      `When a run starts, the step is replaced by a copy of the included workflow's CURRENT version: its steps get ids "<stepId>${SUBWORKFLOW_ID_SEPARATOR}<childStepId>" and names "<child name>${SUBWORKFLOW_NAME_SEPARATOR}<step name>". One run, one ticket: the included steps see the run history of the steps before them. Do not write "${SUBWORKFLOW_ID_SEPARATOR}" in your own step ids.`,
+      'Edges that enter the workflow step enter the included workflow\'s entry step. When the included workflow is over, the run continues on the workflow step\'s own outgoing edges.',
+      'Those outgoing edges read the output of the included workflow\'s LAST COMPLETED step: any field declared in the outputSchema of one of its steps (e.g. {"field":"verdict","operator":"eq","value":"ko"} back to an earlier step), plus result and outcome.',
+      'Inside the included workflow, a step whose edges all fail to match ends the included workflow and continues in the parent — except a human_gate: only its FIRST humanGateOutcome continues, any other unrouted outcome ends the whole run (a refusal stops everything). Put the outcome that means "go on" first.',
+      `Limits: no inclusion cycle (a workflow never includes itself, even through others), at most ${MAX_SUBWORKFLOW_DEPTH} levels of nesting, at most ${MAX_EXPANDED_STEPS} steps once everything is expanded. A disabled included workflow makes every launch of this one fail.`,
+      `Loop guard (every workflow, not only composed ones): a run entering the same step a ${MAX_STEP_VISITS_PER_RUN + 1}th time through an edge pauses for a human instead. Repeat work with an edge back to an earlier step, never by including a workflow in itself.`,
+    ],
     nativeStepKind: NATIVE_STEP_KIND_TICKET_ACTIONS,
     nativeOperations: NATIVE_OPERATIONS.map((op) => ({
       operationId: op.id,
@@ -203,7 +216,7 @@ export function buildApplyDocumentation(
       `Workspace: ${input.workspace ?? 'current'} · generated ${input.generatedAt ?? new Date().toISOString()}`,
     ],
     workflow: [
-      'Read Capabilities: use only the agents, skills, panels and native operations listed there.',
+      'Read Capabilities: use only the agents, skills, panels, workflows and native operations listed there.',
       'Start from Examples › rich and adapt it. Ids are free-form strings you choose (e.g. "spec", "review-ok"); keep them unique.',
       'Every edge is either `"isDefault": true` (at most one per source step) or carries a conditionGroup.',
       'Run `fleex workflow apply --file wf.json --dry-run`, fix EVERY listed error, run it again, then apply without --dry-run.',
@@ -261,6 +274,14 @@ export function renderApplyDocumentationMarkdown(doc: ApplyDocumentation): strin
   refs('agents (executorRef of an agent step)', caps.agents, '_none installed in this workspace_');
   refs('skills (executorRef of a skill step)', caps.skills, '_none installed in this workspace_');
   refs('panels (executorRef of a panel step)', caps.panels, '_none in this workspace_');
+  refs(
+    'workflows (executorRef of a workflow step — a sub-workflow)',
+    caps.workflows.map((w) => ({ name: w.name, description: `${w.description ?? ''}${w.enabled ? '' : ' (disabled: cannot be included in a workflow that must run)'}`.trim() || undefined })),
+    '_no workflow template in this workspace_',
+  );
+  out.push('### sub-workflows (workflow steps)', '');
+  for (const note of caps.subworkflows) out.push(`- ${note}`);
+  out.push('');
 
   out.push(`### native operations (nativeActions[].operationId, in a step with executorRef "${caps.nativeStepKind}")`, '');
   for (const op of caps.nativeOperations) {

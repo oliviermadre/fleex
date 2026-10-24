@@ -459,11 +459,11 @@ export {
 export { computeAncestors, computeDominators } from './workflow/graph.js';
 export type { EdgeValidationResult, EdgeFieldSuggestion } from './workflow/edge-validation.js';
 export { validateEdgeConditions, edgeConditionSuggestions } from './workflow/edge-validation.js';
-export type { SubworkflowSource, SubworkflowResolver, ExpandOptions } from './workflow/subworkflows.js';
+export type { SubworkflowSource, SubworkflowResolver, ExpandOptions, SubworkflowExpansionCode } from './workflow/subworkflows.js';
 export {
   SUBWORKFLOW_ID_SEPARATOR, SUBWORKFLOW_NAME_SEPARATOR,
   MAX_SUBWORKFLOW_DEPTH, MAX_EXPANDED_STEPS, MAX_STEP_VISITS_PER_RUN,
-  SubworkflowExpansionError, expandSubworkflows, validateSubworkflows,
+  SubworkflowExpansionError, expandSubworkflows, validateSubworkflows, subworkflowOutputSchema,
   includedWorkflowSlugs, hasSubworkflows, isInsideSubworkflow,
 } from './workflow/subworkflows.js';
 
@@ -737,6 +737,8 @@ export type { SchemaNode, ShapeIssue } from './workflow/apply/schema.js';
 export {
   INVARIANTS,
   EXAMPLE_CAPABILITIES,
+  EXAMPLE_WORKFLOW_SLUGS,
+  resolveExampleWorkflow,
   EXECUTOR_REF_EXPECTATIONS,
   validateWorkflow,
   runInvariantExample,

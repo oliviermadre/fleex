@@ -1,4 +1,5 @@
 import type { WorkflowEdge, WorkflowStep } from '../../types/workflow.js';
+import type { SubworkflowResolver } from '../subworkflows.js';
 
 /** A step as written in a document: `position` may be left out (auto-layout). */
 export type DocumentStep = Omit<WorkflowStep, 'position'> & { position?: { x: number; y: number } };
@@ -38,6 +39,11 @@ export interface WorkflowCapabilities {
   skills: CapabilityRef[];
   /** `executorRef` of a `panel` step = a panel name. */
   panels: CapabilityRef[];
+  /**
+   * `executorRef` of a `workflow` step = a workflow template slug (`name` holds
+   * the slug, `description` its display name). Absent = refs are not checked.
+   */
+  workflows?: (CapabilityRef & { enabled: boolean })[];
 }
 
 export interface ValidationEnv {
@@ -45,6 +51,13 @@ export interface ValidationEnv {
   caps: WorkflowCapabilities | null;
   /** Id of the template currently holding the document's slug, if any. */
   existingTemplateId?: string | null;
+  /**
+   * The workspace's templates by slug, as they are now. Enables the
+   * sub-workflow rules (inclusion cycles, depth, size, disabled children, the
+   * fields readable after a `workflow` step). The document itself is overlaid
+   * on its own slug by the validator. Absent = those rules are skipped.
+   */
+  resolveWorkflow?: SubworkflowResolver;
 }
 
 export interface Violation {
