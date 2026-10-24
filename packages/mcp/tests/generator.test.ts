@@ -85,6 +85,12 @@ describe('generateTools', () => {
     expect(byName(tools, 'fleex_ticket_list').mutating).toBe(false);
   });
 
+  it('marks `workflow apply` as mutating: it creates or replaces a whole template', () => {
+    const root = new Command('fleex');
+    root.command('workflow').command('apply').description('Create or replace a workflow').option('--file <path|->', 'Document');
+    expect(byName(generateTools(root), 'fleex_workflow_apply').mutating).toBe(true);
+  });
+
   it('builds an input schema with required fields and hides --workspace', () => {
     const create = byName(tools, 'fleex_ticket_create');
     expect(create.inputSchema.required).toContain('title');

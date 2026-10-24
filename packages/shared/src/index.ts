@@ -706,3 +706,38 @@ export {
   parseCleanupOlderThan,
   parseCleanupStatuses,
 } from './types/worktree-cleanup.js';
+
+// ── Workflow document: invariant registry, shape, layout, diff, documentation ──
+export type {
+  DocumentStep,
+  WorkflowDocument,
+  ValidationProfile,
+  InvariantSeverity,
+  CapabilityRef,
+  WorkflowCapabilities,
+  ValidationEnv,
+  Violation,
+  WorkflowValidationResult,
+} from './workflow/apply/types.js';
+export {
+  WORKFLOW_DOCUMENT_SCHEMA,
+  EXECUTOR_TYPES,
+  STEP_MODES,
+  checkDocumentShape,
+} from './workflow/apply/schema.js';
+export type { SchemaNode, ShapeIssue } from './workflow/apply/schema.js';
+export {
+  INVARIANTS,
+  EXAMPLE_CAPABILITIES,
+  EXECUTOR_REF_EXPECTATIONS,
+  validateWorkflow,
+  runInvariantExample,
+} from './workflow/apply/invariants.js';
+export type { WorkflowInvariant, InvariantExample } from './workflow/apply/invariants.js';
+export { EXAMPLE_REFS, minimalExample, richExample } from './workflow/apply/examples.js';
+export type { ExampleRefs } from './workflow/apply/examples.js';
+export { layoutSteps } from './workflow/apply/layout.js';
+export { diffTemplates, isEmptyDiff } from './workflow/apply/diff.js';
+export type { DiffEntry, TemplateDiff, DiffableTemplate } from './workflow/apply/diff.js';
+export { buildApplyDocumentation, renderApplyDocumentationMarkdown } from './workflow/apply/documentation.js';
+export type { ApplyDocumentation, DocumentationInput } from './workflow/apply/documentation.js';

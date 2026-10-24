@@ -160,7 +160,13 @@ async function main() {
 
   // Workflow template routes (requires workflowTemplateStore — available on sqlite/supabase)
   if (container.workflowTemplateStore) {
-    await app.register(workflowTemplateRoutes({ templateStore: container.workflowTemplateStore }));
+    await app.register(workflowTemplateRoutes({
+      templateStore: container.workflowTemplateStore,
+      runStore: container.workflowRunStore ?? undefined,
+      personaStore: container.personaStore,
+      skillStore: container.skillStore,
+      panelStore: container.panelStore,
+    }));
   } else {
     container.logger.warn('workflowTemplateStore not available — /api/workflows/templates routes skipped');
   }

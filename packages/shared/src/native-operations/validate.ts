@@ -35,16 +35,60 @@ export interface NativeValidationResult {
   byStep: Record<string, { errors: string[]; warnings: string[] }>;
 }
 
+export type NativeIssueCode =
+  | 'native.kind'
+  | 'native.has_actions'
+  | 'native.create_placement'
+  | 'native.for_each'
+  | 'native.operation_known'
+  | 'native.conflicts'
+  | 'native.params'
+  | 'native.reference_unverified';
+
+export interface NativeIssue {
+  code: NativeIssueCode;
+  severity: 'error' | 'warning';
+  stepId: string;
+  /** Set when the message is about one action of the step. */
+  actionId?: string;
+  message: string;
+}
+
 export function validateNativeSteps(
   steps: WorkflowStep[],
   edges: WorkflowEdge[],
   entryStepId?: string,
 ): NativeValidationResult {
+  return runNativeValidation(steps, edges, entryStepId).result;
+}
+
+/**
+ * The same messages as `validateNativeSteps`, each tagged with the invariant id
+ * it belongs to — read by the workflow invariant registry
+ * (`workflow/apply/invariants.ts`), which decides per profile what blocks.
+ */
+export function collectNativeIssues(
+  steps: WorkflowStep[],
+  edges: WorkflowEdge[],
+  entryStepId?: string,
+): NativeIssue[] {
+  return runNativeValidation(steps, edges, entryStepId).issues;
+}
+
+function runNativeValidation(
+  steps: WorkflowStep[],
+  edges: WorkflowEdge[],
+  entryStepId?: string,
+): { result: NativeValidationResult; issues: NativeIssue[] } {
   const byStep: Record<string, { errors: string[]; warnings: string[] }> = {};
-  const flatten = (): NativeValidationResult => ({
-    errors: Object.values(byStep).flatMap((i) => i.errors),
-    warnings: Object.values(byStep).flatMap((i) => i.warnings),
-    byStep,
+  const issues: NativeIssue[] = [];
+  const flatten = () => ({
+    result: {
+      errors: Object.values(byStep).flatMap((i) => i.errors),
+      warnings: Object.values(byStep).flatMap((i) => i.warnings),
+      byStep,
+    },
+    issues,
   });
 
   const nativeSteps = steps.filter((s) => s.executorType === 'native');
@@ -59,30 +103,47 @@ export function validateNativeSteps(
     // Every helper below pushes into these two arrays; the flat lists are
     // derived from `byStep` at the end, so the helpers stay unaware of grouping.
     const { errors, warnings } = (byStep[step.id] = { errors: [], warnings: [] } as { errors: string[]; warnings: string[] });
+    // Helpers push plain strings; `tag` labels everything pushed since its
+    // previous call with the invariant id of the check that just ran.
+    let seenErrors = 0;
+    let seenWarnings = 0;
+    const tag = (code: NativeIssueCode, actionId?: string, warningCode: NativeIssueCode = code) => {
+      for (; seenErrors < errors.length; seenErrors++) {
+        issues.push({ code, severity: 'error', stepId: step.id, actionId, message: errors[seenErrors]! });
+      }
+      for (; seenWarnings < warnings.length; seenWarnings++) {
+        issues.push({ code: warningCode, severity: 'warning', stepId: step.id, actionId, message: warnings[seenWarnings]! });
+      }
+    };
 
     if (step.executorRef && step.executorRef !== NATIVE_STEP_KIND_TICKET_ACTIONS) {
       errors.push(`${where}: unknown native step kind "${step.executorRef}"`);
     }
+    tag('native.kind');
 
     const actions = step.nativeActions ?? [];
     if (actions.length === 0) {
       errors.push(`${where}: a native step must have at least one action`);
+      tag('native.has_actions');
       continue;
     }
 
     validateCreatePlacement(actions, where, errors);
+    tag('native.create_placement');
 
     const inboundCount = edges.filter((e) => e.target === step.id).length;
     const claimedFields = new Map<string, string>();
     const forEachItems = step.forEach
       ? validateForEach(step, byId, ancestors, where, errors)
       : null;
+    tag('native.for_each');
     const hasCreate = actions.some((a) => a.operationId === NATIVE_OP_CREATE_TICKET);
 
     for (const action of actions) {
       const op = getNativeOperation(action.operationId);
       if (!op) {
         errors.push(`${where}: unknown operation "${action.operationId}"`);
+        tag('native.operation_known', action.id);
         continue;
       }
       const label = `${where}, action "${op.label}"`;
@@ -98,6 +159,7 @@ export function validateNativeSteps(
           claimedFields.set(field, op.label);
         }
       }
+      tag('native.conflicts', action.id);
 
       for (const param of op.params) {
         validateParam({
@@ -117,6 +179,7 @@ export function validateNativeSteps(
           isCreateAction: action.operationId === NATIVE_OP_CREATE_TICKET,
         });
       }
+      tag('native.params', action.id, 'native.reference_unverified');
     }
   }
 

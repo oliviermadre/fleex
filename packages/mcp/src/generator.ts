@@ -48,6 +48,9 @@ const MUTATING_LEAVES = new Set([
   'consolidate',
   // changes which engine feeds every future prompt, and which features are on
   'engine',
+  // `workflow apply` creates or replaces a whole template (its --documentation
+  // mode is read-only, but the leaf is classed by its writing mode)
+  'apply',
 ]);
 
 /** Options we never expose as tool params (handled specially or noise). */

@@ -28,6 +28,25 @@ export interface EdgeValidationResult {
   byEdge: Record<string, { errors: string[]; warnings: string[] }>;
 }
 
+export type EdgeIssueCode =
+  | 'edge.single_default'
+  | 'edge.overlapping_conditions'
+  | 'edge.needs_condition'
+  | 'edge.clause_operand'
+  | 'edge.clause_step_ancestor'
+  | 'edge.clause_step_may_be_skipped'
+  | 'edge.clause_field_declared'
+  | 'edge.clause_value_in_enum';
+
+export interface EdgeIssue {
+  code: EdgeIssueCode;
+  severity: 'error' | 'warning';
+  edgeId: string;
+  /** Index of the offending clause inside `conditionGroup.clauses`, when there is one. */
+  clauseIndex?: number;
+  message: string;
+}
+
 /**
  * Fields every step publishes regardless of its output schema.
  *
@@ -43,6 +62,12 @@ const STANDARD_FIELDS: { field: string; type: JsonSchemaProperty['type']; enum?:
   { field: 'mentionStatus', type: 'string', enum: ['resolved', 'waiting_for_info'] },
 ];
 
+/** Exported read-only so `--documentation` lists exactly what the validator accepts. */
+export const EDGE_STANDARD_FIELDS: readonly { field: string; type: JsonSchemaProperty['type']; enum?: string[] }[] = [
+  ...STANDARD_FIELDS,
+  { field: 'comment', type: 'string' },
+];
+
 function isStandardField(field: string): boolean {
   return STANDARD_FIELDS.some((f) => f.field === field)
     || field === 'comment'
@@ -54,13 +79,51 @@ export function validateEdgeConditions(
   edges: WorkflowEdge[],
   entryStepId?: string,
 ): EdgeValidationResult {
+  return runEdgeValidation(steps, edges, entryStepId).result;
+}
+
+/**
+ * The same messages as `validateEdgeConditions`, each tagged with the invariant
+ * id it belongs to — read by the workflow invariant registry
+ * (`workflow/apply/invariants.ts`), which decides per profile what blocks.
+ */
+export function collectEdgeIssues(
+  steps: WorkflowStep[],
+  edges: WorkflowEdge[],
+  entryStepId?: string,
+): EdgeIssue[] {
+  return runEdgeValidation(steps, edges, entryStepId).issues;
+}
+
+function runEdgeValidation(
+  steps: WorkflowStep[],
+  edges: WorkflowEdge[],
+  entryStepId?: string,
+): { result: EdgeValidationResult; issues: EdgeIssue[] } {
   const byEdge: Record<string, { errors: string[]; warnings: string[] }> = {};
   const byId = new Map(steps.map((s) => [s.id, s]));
   const ancestors = computeAncestors(steps, edges);
   const dominators = entryStepId ? computeDominators(steps, edges, entryStepId) : null;
 
+  const issues: EdgeIssue[] = [];
+  // Messages are pushed into `byEdge` by helpers that know nothing about
+  // invariant ids; `tag` labels every message pushed since the previous call.
+  const tagged = new Map<string, { errors: number; warnings: number }>();
+  const tag = (edgeId: string, code: EdgeIssueCode, clauseIndex?: number) => {
+    const bucket = byEdge[edgeId];
+    const seen = tagged.get(edgeId);
+    if (!bucket || !seen) return;
+    for (; seen.errors < bucket.errors.length; seen.errors++) {
+      issues.push({ code, severity: 'error', edgeId, clauseIndex, message: bucket.errors[seen.errors]! });
+    }
+    for (; seen.warnings < bucket.warnings.length; seen.warnings++) {
+      issues.push({ code, severity: 'warning', edgeId, clauseIndex, message: bucket.warnings[seen.warnings]! });
+    }
+  };
+
   for (const edge of edges) {
     byEdge[edge.id] = { errors: [], warnings: [] };
+    tagged.set(edge.id, { errors: 0, warnings: 0 });
   }
 
   // Two defaults leaving the same step is unarbitrable by construction: nothing
@@ -68,9 +131,11 @@ export function validateEdgeConditions(
   // where the author can still fix it cheaply — at runtime it would mean parking
   // every single run on a routing question with no right answer.
   detectDuplicateDefaults(byId, edges, byEdge);
+  for (const edge of edges) tag(edge.id, 'edge.single_default');
   // Overlapping conditions are only *likely* to be ambiguous, so they warn: the
   // engine now pauses and asks rather than guessing, which is a fine outcome.
   detectOverlappingConditions(byId, edges, byEdge);
+  for (const edge of edges) tag(edge.id, 'edge.overlapping_conditions');
 
   for (const edge of edges) {
     const bucket = byEdge[edge.id]!;
@@ -84,20 +149,28 @@ export function validateEdgeConditions(
     if (edge.isDefault) continue;
     if (!group) {
       errors.push(`${where}: a non-default edge needs at least one condition`);
+      tag(edge.id, 'edge.needs_condition');
       continue;
     }
 
     group.clauses.forEach((clause, index) => {
       validateClause({
-        clause, index, where, edge, byId, ancestors, dominators, errors, warnings,
+        clause, index, where, edge, byId, ancestors, dominators,
+        report: (severity, code, message) => {
+          (severity === 'error' ? errors : warnings).push(message);
+          tag(edge.id, code, index);
+        },
       });
     });
   }
 
   return {
-    errors: Object.values(byEdge).flatMap((i) => i.errors),
-    warnings: Object.values(byEdge).flatMap((i) => i.warnings),
-    byEdge,
+    result: {
+      errors: Object.values(byEdge).flatMap((i) => i.errors),
+      warnings: Object.values(byEdge).flatMap((i) => i.warnings),
+      byEdge,
+    },
+    issues,
   };
 }
 
@@ -199,16 +272,17 @@ interface ClauseValidationCtx {
   byId: Map<string, WorkflowStep>;
   ancestors: Map<string, Set<string>>;
   dominators: Map<string, Set<string>> | null;
-  errors: string[];
-  warnings: string[];
+  report: (severity: 'error' | 'warning', code: EdgeIssueCode, message: string) => void;
 }
 
 function validateClause(ctx: ClauseValidationCtx): void {
-  const { clause, index, where, edge, byId, ancestors, dominators, errors, warnings } = ctx;
+  const { clause, index, where, edge, byId, ancestors, dominators, report } = ctx;
   const label = `${where}, condition ${index + 1}`;
+  const error = (code: EdgeIssueCode, message: string) => report('error', code, message);
+  const warn = (code: EdgeIssueCode, message: string) => report('warning', code, message);
 
   if (!clause.field || !clause.field.trim()) {
-    errors.push(`${label}: a field is required`);
+    error('edge.clause_operand', `${label}: a field is required`);
     return;
   }
 
@@ -217,21 +291,21 @@ function validateClause(ctx: ClauseValidationCtx): void {
     // Nothing to check — a value is simply ignored.
   } else if (isListOperator(clause.operator)) {
     if (!Array.isArray(clause.value) || clause.value.length === 0) {
-      errors.push(`${label}: "${clause.operator}" needs a non-empty list of values`);
+      error('edge.clause_operand', `${label}: "${clause.operator}" needs a non-empty list of values`);
       return;
     }
   } else if (typeof clause.value !== 'string' || clause.value === '') {
-    errors.push(`${label}: "${clause.operator}" needs a value`);
+    error('edge.clause_operand', `${label}: "${clause.operator}" needs a value`);
     return;
   }
 
   if (clause.operator === 'matches' && typeof clause.value === 'string') {
     if (clause.value.length > MAX_REGEX_LENGTH) {
-      errors.push(`${label}: the pattern must be at most ${MAX_REGEX_LENGTH} characters`);
+      error('edge.clause_operand', `${label}: the pattern must be at most ${MAX_REGEX_LENGTH} characters`);
       return;
     }
     if (!compileRegex(clause.value, clause.caseInsensitive)) {
-      errors.push(`${label}: "${clause.value}" is not a valid regular expression`);
+      error('edge.clause_operand', `${label}: "${clause.value}" is not a valid regular expression`);
       return;
     }
   }
@@ -240,20 +314,22 @@ function validateClause(ctx: ClauseValidationCtx): void {
   const sourceStepId = clause.stepId ?? edge.source;
   const step = byId.get(sourceStepId);
   if (!step) {
-    errors.push(`${label}: unknown step "${sourceStepId}"`);
+    error('edge.clause_step_ancestor', `${label}: unknown step "${sourceStepId}"`);
     return;
   }
 
   if (clause.stepId && clause.stepId !== edge.source) {
     if (!(ancestors.get(edge.source)?.has(clause.stepId) ?? false)) {
-      errors.push(
+      error(
+        'edge.clause_step_ancestor',
         `${label}: "${step.name || sourceStepId}" does not run before this edge, ` +
           `so its output is never available here`,
       );
       return;
     }
     if (dominators && !dominators.get(edge.source)?.has(clause.stepId)) {
-      warnings.push(
+      warn(
+        'edge.clause_step_may_be_skipped',
         `${label}: "${step.name || sourceStepId}" is on a branch that may not run — ` +
           `this condition is false whenever it was skipped`,
       );
@@ -266,9 +342,14 @@ function validateClause(ctx: ClauseValidationCtx): void {
   if (readsSourceStep && isStandardField(clause.field)) return;
 
   const property = step.outputSchema?.properties?.[clause.field];
+  // `report.score` reads inside a declared `object` field: the schema says the
+  // object exists, its inner shape is the agent's business.
+  const head = clause.field.split('.')[0] ?? '';
+  if (!property && clause.field.includes('.') && step.outputSchema?.properties?.[head]?.type === 'object') return;
   if (!property) {
     const available = Object.keys(step.outputSchema?.properties ?? {});
-    warnings.push(
+    warn(
+      'edge.clause_field_declared',
       `${label}: "${step.name || sourceStepId}" declares no output field "${clause.field}"` +
         (available.length > 0 ? ` (declared: ${available.join(', ')})` : ''),
     );
@@ -281,7 +362,8 @@ function validateClause(ctx: ClauseValidationCtx): void {
       : typeof clause.value === 'string' ? [clause.value] : [];
     const outside = values.filter((v) => !property.enum?.includes(v));
     if (outside.length > 0 && (clause.operator === 'eq' || clause.operator === 'neq' || isListOperator(clause.operator))) {
-      warnings.push(
+      warn(
+        'edge.clause_value_in_enum',
         `${label}: "${step.name || sourceStepId}" never produces ${outside.join(', ')} ` +
           `(allowed: ${property.enum.join(', ')})`,
       );

@@ -2,189 +2,15 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { WorkflowTemplateEntity } from '../../domain/entities/workflow-template.entity.js';
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
-import type {
-  WorkflowStep, WorkflowEdge, JsonSchemaProperty,
-} from '@fleex/shared';
-import { EDGE_OPERATORS } from '@fleex/shared';
+import type { WorkflowStep, WorkflowEdge } from '@fleex/shared';
+import { checkDocumentShape } from '@fleex/shared';
+import { applyWorkflowDocument, loadWorkflowCapabilities, type ApplyDeps } from '../../application/use-cases/apply-workflow-template.js';
+import { buildApplyDocumentation, renderApplyDocumentationMarkdown } from '@fleex/shared';
 
-// ── Manual validation helpers ──────────────────────────────────────────────
-
-type ValidationResult = { ok: true } | { ok: false; error: string };
-
-function isString(v: unknown): v is string {
-  return typeof v === 'string';
-}
-
-function isNumber(v: unknown): v is number {
-  return typeof v === 'number';
-}
-
-function isBoolean(v: unknown): v is boolean {
-  return typeof v === 'boolean';
-}
-
-function isArray(v: unknown): v is unknown[] {
-  return Array.isArray(v);
-}
+// ── Body guard ──────────────────────────────────────────────────────────────
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-const SLUG_PATTERN = /^[a-z0-9_-]+$/;
-const EXECUTOR_TYPES = ['agent', 'skill', 'panel', 'human_gate', 'native', 'route'] as const;
-const STEP_MODES = ['talk', 'plan', 'edit'] as const;
-const MATCH_MODES = ['all', 'any'] as const;
-const JSON_SCHEMA_PROP_TYPES = ['string', 'number', 'boolean', 'array', 'object'] as const;
-
-function validateJsonSchemaProperty(prop: unknown, path: string): ValidationResult {
-  if (!isObject(prop)) return { ok: false, error: `${path} must be an object` };
-  if (!isString(prop['type']) || !JSON_SCHEMA_PROP_TYPES.includes(prop['type'] as never)) {
-    return { ok: false, error: `${path}.type must be one of ${JSON_SCHEMA_PROP_TYPES.join(', ')}` };
-  }
-  if (prop['enum'] !== undefined) {
-    if (!isArray(prop['enum']) || !prop['enum'].every(isString)) {
-      return { ok: false, error: `${path}.enum must be an array of strings` };
-    }
-  }
-  if (prop['description'] !== undefined && !isString(prop['description'])) {
-    return { ok: false, error: `${path}.description must be a string` };
-  }
-  return { ok: true };
-}
-
-function validateOutputSchema(schema: unknown, path: string): ValidationResult {
-  if (!isObject(schema)) return { ok: false, error: `${path} must be an object` };
-  if (schema['type'] !== 'object') return { ok: false, error: `${path}.type must be "object"` };
-  if (!isObject(schema['properties'])) return { ok: false, error: `${path}.properties must be an object` };
-  for (const [key, prop] of Object.entries(schema['properties'])) {
-    const r = validateJsonSchemaProperty(prop, `${path}.properties.${key}`);
-    if (!r.ok) return r;
-  }
-  if (schema['required'] !== undefined) {
-    if (!isArray(schema['required']) || !schema['required'].every(isString)) {
-      return { ok: false, error: `${path}.required must be an array of strings` };
-    }
-  }
-  return { ok: true };
-}
-
-/**
- * Shape-only check. Whether the operation exists, whether its params satisfy the
- * descriptor, and whether references point at real ancestors is decided by
- * `WorkflowTemplateEntity.validate` — this guard only keeps malformed JSON from
- * reaching it.
- */
-function validateNativeActions(actions: unknown, path: string): ValidationResult {
-  if (!isArray(actions)) return { ok: false, error: `${path} must be an array` };
-  for (let i = 0; i < actions.length; i++) {
-    const a = actions[i];
-    const ap = `${path}[${i}]`;
-    if (!isObject(a)) return { ok: false, error: `${ap} must be an object` };
-    if (!isString(a['id']) || a['id'].length === 0) {
-      return { ok: false, error: `${ap}.id must be a non-empty string` };
-    }
-    if (!isString(a['operationId']) || a['operationId'].length === 0) {
-      return { ok: false, error: `${ap}.operationId must be a non-empty string` };
-    }
-    if (!isObject(a['params'])) return { ok: false, error: `${ap}.params must be an object` };
-  }
-  return { ok: true };
-}
-
-function validateStep(step: unknown, idx: number): ValidationResult {
-  const p = `steps[${idx}]`;
-  if (!isObject(step)) return { ok: false, error: `${p} must be an object` };
-  if (!isString(step['id']) || step['id'].length === 0) return { ok: false, error: `${p}.id must be a non-empty string` };
-  if (!isString(step['name']) || step['name'].length === 0) return { ok: false, error: `${p}.name must be a non-empty string` };
-  if (!isString(step['executorType']) || !EXECUTOR_TYPES.includes(step['executorType'] as never)) {
-    return { ok: false, error: `${p}.executorType must be one of ${EXECUTOR_TYPES.join(', ')}` };
-  }
-  if (!isString(step['executorRef'])) return { ok: false, error: `${p}.executorRef must be a string` };
-  if (step['mode'] !== undefined && (!isString(step['mode']) || !STEP_MODES.includes(step['mode'] as never))) {
-    return { ok: false, error: `${p}.mode must be one of ${STEP_MODES.join(', ')}` };
-  }
-  if (step['outputSchema'] !== undefined) {
-    const r = validateOutputSchema(step['outputSchema'], `${p}.outputSchema`);
-    if (!r.ok) return r;
-  }
-  if (step['humanGateOutcomes'] !== undefined) {
-    if (!isArray(step['humanGateOutcomes']) || !step['humanGateOutcomes'].every(isString)) {
-      return { ok: false, error: `${p}.humanGateOutcomes must be an array of strings` };
-    }
-  }
-  if (step['nativeActions'] !== undefined) {
-    const r = validateNativeActions(step['nativeActions'], `${p}.nativeActions`);
-    if (!r.ok) return r;
-  }
-  if (!isObject(step['position'])) return { ok: false, error: `${p}.position must be an object` };
-  if (!isNumber((step['position'] as Record<string, unknown>)['x'])) return { ok: false, error: `${p}.position.x must be a number` };
-  if (!isNumber((step['position'] as Record<string, unknown>)['y'])) return { ok: false, error: `${p}.position.y must be a number` };
-  return { ok: true };
-}
-
-function validateOperator(op: unknown, p: string): ValidationResult {
-  if (!isString(op) || !EDGE_OPERATORS.includes(op as never)) {
-    return { ok: false, error: `${p}.operator must be one of ${EDGE_OPERATORS.join(', ')}` };
-  }
-  return { ok: true };
-}
-
-function validateConditionGroup(group: unknown, p: string): ValidationResult {
-  if (!isObject(group)) return { ok: false, error: `${p} must be an object` };
-  if (!isString(group['match']) || !MATCH_MODES.includes(group['match'] as never)) {
-    return { ok: false, error: `${p}.match must be one of ${MATCH_MODES.join(', ')}` };
-  }
-  if (!isArray(group['clauses']) || group['clauses'].length === 0) {
-    return { ok: false, error: `${p}.clauses must be a non-empty array` };
-  }
-  for (let i = 0; i < group['clauses'].length; i++) {
-    const cp = `${p}.clauses[${i}]`;
-    const clause = group['clauses'][i];
-    if (!isObject(clause)) return { ok: false, error: `${cp} must be an object` };
-    if (clause['stepId'] !== undefined && !isString(clause['stepId'])) {
-      return { ok: false, error: `${cp}.stepId must be a string` };
-    }
-    if (!isString(clause['field'])) return { ok: false, error: `${cp}.field must be a string` };
-    const r = validateOperator(clause['operator'], cp);
-    if (!r.ok) return r;
-    if (clause['value'] !== undefined
-      && !isString(clause['value'])
-      && !(isArray(clause['value']) && (clause['value'] as unknown[]).every(isString))) {
-      return { ok: false, error: `${cp}.value must be a string or array of strings` };
-    }
-    if (clause['caseInsensitive'] !== undefined && !isBoolean(clause['caseInsensitive'])) {
-      return { ok: false, error: `${cp}.caseInsensitive must be a boolean` };
-    }
-  }
-  return { ok: true };
-}
-
-function validateEdge(edge: unknown, idx: number): ValidationResult {
-  const p = `edges[${idx}]`;
-  if (!isObject(edge)) return { ok: false, error: `${p} must be an object` };
-  if (!isString(edge['id']) || edge['id'].length === 0) return { ok: false, error: `${p}.id must be a non-empty string` };
-  if (!isString(edge['source']) || edge['source'].length === 0) return { ok: false, error: `${p}.source must be a non-empty string` };
-  if (!isString(edge['target']) || edge['target'].length === 0) return { ok: false, error: `${p}.target must be a non-empty string` };
-  if (!isBoolean(edge['isDefault'])) return { ok: false, error: `${p}.isDefault must be a boolean` };
-  if (edge['condition'] !== undefined) {
-    const c = edge['condition'];
-    if (!isObject(c)) return { ok: false, error: `${p}.condition must be an object` };
-    if (!isString(c['field'])) return { ok: false, error: `${p}.condition.field must be a string` };
-    const r = validateOperator(c['operator'], `${p}.condition`);
-    if (!r.ok) return r;
-    if (!isString(c['value']) && !(isArray(c['value']) && (c['value'] as unknown[]).every(isString))) {
-      return { ok: false, error: `${p}.condition.value must be a string or array of strings` };
-    }
-  }
-  if (edge['conditionGroup'] !== undefined) {
-    const r = validateConditionGroup(edge['conditionGroup'], `${p}.conditionGroup`);
-    if (!r.ok) return r;
-  }
-  if (edge['label'] !== undefined && !isString(edge['label'])) {
-    return { ok: false, error: `${p}.label must be a string` };
-  }
-  return { ok: true };
 }
 
 interface TemplateBody {
@@ -198,51 +24,56 @@ interface TemplateBody {
   enabled: boolean;
 }
 
+/**
+ * Shape guard for the editor's PUT / POST, on top of the shared document
+ * schema (`WORKFLOW_DOCUMENT_SCHEMA`) — the same one `workflow apply` and its
+ * documentation use. Returns every shape error at once. Unknown fields are
+ * tolerated here (the `save` profile only warns about them); semantic rules are
+ * the entity's job.
+ */
 export function parseTemplateBody(body: unknown): { ok: true; data: TemplateBody } | { ok: false; error: string } {
-  if (!isObject(body)) return { ok: false, error: 'body must be an object' };
-
-  if (!isString(body['name']) || body['name'].length === 0) {
-    return { ok: false, error: 'name must be a non-empty string' };
-  }
-  if (!isString(body['slug'])) return { ok: false, error: 'slug must be a string' };
-  if (!SLUG_PATTERN.test(body['slug'])) {
-    return { ok: false, error: 'slug must match /^[a-z0-9_-]+$/' };
-  }
-  if (!isArray(body['steps']) || body['steps'].length === 0) {
-    return { ok: false, error: 'steps must be a non-empty array' };
-  }
-  for (let i = 0; i < body['steps'].length; i++) {
-    const r = validateStep(body['steps'][i], i);
-    if (!r.ok) return r;
-  }
-  if (!isArray(body['edges'])) return { ok: false, error: 'edges must be an array' };
-  for (let i = 0; i < body['edges'].length; i++) {
-    const r = validateEdge(body['edges'][i], i);
-    if (!r.ok) return r;
-  }
-  if (!isString(body['entryStepId']) || body['entryStepId'].length === 0) {
-    return { ok: false, error: 'entryStepId must be a non-empty string' };
-  }
-
+  const shapeErrors = checkDocumentShape(body).filter((i) => i.kind === 'shape');
+  if (shapeErrors.length > 0) return { ok: false, error: shapeErrors.map((i) => i.message).join('\n') };
+  const b = body as Record<string, unknown>;
   return {
     ok: true,
     data: {
-      name: body['name'],
-      slug: body['slug'],
-      emoji: isString(body['emoji']) ? body['emoji'] : '',
-      description: isString(body['description']) ? body['description'] : '',
-      steps: body['steps'] as WorkflowStep[],
-      edges: body['edges'] as WorkflowEdge[],
-      entryStepId: body['entryStepId'],
-      enabled: isBoolean(body['enabled']) ? body['enabled'] : true,
+      name: b['name'] as string,
+      slug: b['slug'] as string,
+      emoji: (b['emoji'] as string | undefined) ?? '',
+      description: (b['description'] as string | undefined) ?? '',
+      steps: b['steps'] as WorkflowStep[],
+      edges: b['edges'] as WorkflowEdge[],
+      entryStepId: b['entryStepId'] as string,
+      enabled: (b['enabled'] as boolean | undefined) ?? true,
     },
   };
 }
 
 // ── Route registration ─────────────────────────────────────────────────────
 
-export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateStorePort }) {
+export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateStorePort } & Partial<ApplyDeps>) {
   return async function (app: FastifyInstance) {
+    // POST /api/workflows/templates/apply?dryRun=1 — create or replace a whole
+    // template from one document (`fleex workflow apply`). Never a partial edit.
+    app.post<{ Querystring: { dryRun?: string } }>('/api/workflows/templates/apply', async (request, reply) => {
+      const dryRun = request.query.dryRun === '1' || request.query.dryRun === 'true';
+      const result = await applyWorkflowDocument(request.body, { ...deps }, { dryRun });
+      return reply.code(result.status).send(result.body);
+    });
+
+    // GET /api/workflows/templates/apply/documentation?format=markdown|json
+    app.get<{ Querystring: { format?: string } }>('/api/workflows/templates/apply/documentation', async (request, reply) => {
+      const format = request.query.format ?? 'markdown';
+      if (format !== 'markdown' && format !== 'json') {
+        return reply.code(400).send({ error: 'INVALID_FORMAT', message: `format must be markdown or json (got "${format}")` });
+      }
+      const caps = await loadWorkflowCapabilities(deps);
+      const doc = buildApplyDocumentation({ caps, workspace: process.env.FLEEX_WORKSPACE });
+      if (format === 'json') return doc;
+      return reply.type('text/markdown; charset=utf-8').send(renderApplyDocumentationMarkdown(doc));
+    });
+
     // GET /api/workflows/templates — list all
     app.get('/api/workflows/templates', async () => {
       const templates = await deps.templateStore.getAll();
