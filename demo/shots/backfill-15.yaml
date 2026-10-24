@@ -1,9 +1,6 @@
 # Backfill of release #15 (published on Slack on 2026-10-16), shot on today's main.
-# Shots carry browser state (drafts, open drawers) to the next one: run them one by one with --only.
-# Reset first with a fake home, so the skill picker lists Atelier Nova's
-# fictional skills instead of the ones on this machine, then enable them:
-#   HOST_HOMEDIR=$PWD/demo/home bun packages/cli/index.ts demo reset --scenario backfill-15 --workspace demo
-#   curl -s localhost:<server>/api/claude-code-skills | jq -c '[.skills[].id]'  → POST /api/claude-code-skills/bulk {ids, enabled: true}
+# bun packages/cli/index.ts demo reset --scenario backfill-15 --workspace demo
+# The skill picker shows demo/home's fictional skills (demo mode), never this machine's.
 feature: backfill-15
 scenario: backfill-15
 out: releases/15/assets
