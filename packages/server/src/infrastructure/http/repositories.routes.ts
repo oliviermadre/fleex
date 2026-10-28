@@ -157,7 +157,10 @@ export function repositoryRoutes(container: Container) {
           const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
           const mergedDateStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-          const [openResult, mergedResult, closedResult] = await Promise.all([
+          // allSettled: the merged/closed lists use `gh pr list --search`, which a torn
+          // `~/.cache/gh` entry (gh < 2.101 writes it non-atomically) breaks for every
+          // repo at once. Their failure must not take the open list down with them.
+          const [openSettled, mergedSettled, closedSettled] = await Promise.allSettled([
             container.execFn('gh', [
               'pr', 'list',
               '--repo', `${org}/${name}`,
@@ -182,18 +185,28 @@ export function repositoryRoutes(container: Container) {
               '--search', `-is:merged closed:>${mergedDateStr}`,
             ], { timeout: 15_000 }),
           ]);
+          if (openSettled.status === 'rejected') throw openSettled.reason;
+          const failedSearches = [mergedSettled, closedSettled]
+            .filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+          for (const failed of failedSearches) {
+            container.logger.warn('Failed to list merged/closed PRs via gh CLI, returning open PRs only', {
+              org, name, error: String(failed.reason),
+            });
+          }
+          const searchStdout = (r: PromiseSettledResult<{ stdout: string }>) =>
+            (r.status === 'fulfilled' ? r.value.stdout : '[]');
 
-          const rawOpen = JSON.parse(openResult.stdout) as {
+          const rawOpen = JSON.parse(openSettled.value.stdout) as {
             number: number; title: string; headRefName: string; isDraft: boolean;
             author: { login: string }; assignees: { login: string }[];
             createdAt: string; updatedAt: string;
           }[];
-          const rawMerged = JSON.parse(mergedResult.stdout) as {
+          const rawMerged = JSON.parse(searchStdout(mergedSettled)) as {
             number: number; title: string; headRefName: string; isDraft: boolean;
             author: { login: string }; assignees: { login: string }[];
             createdAt: string; updatedAt: string; mergedAt: string;
           }[];
-          const rawClosed = JSON.parse(closedResult.stdout) as {
+          const rawClosed = JSON.parse(searchStdout(closedSettled)) as {
             number: number; title: string; headRefName: string; isDraft: boolean;
             author: { login: string }; assignees: { login: string }[];
             createdAt: string; updatedAt: string;
@@ -235,7 +248,10 @@ export function repositoryRoutes(container: Container) {
           }));
 
           const result = [...openPRs, ...mergedPRs, ...closedPRs];
-          container.repositoryCache.set(cacheKey, result, RepositoryCache.TTL_PULLS);
+          // A partial list is not cached: the next poll retries the failed lists.
+          if (failedSearches.length === 0) {
+            container.repositoryCache.set(cacheKey, result, RepositoryCache.TTL_PULLS);
+          }
           return result;
         } catch (err) {
           container.logger.warn('Failed to list PRs via gh CLI', { org, name, error: String(err) });

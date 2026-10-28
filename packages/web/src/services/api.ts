@@ -212,9 +212,14 @@ export async function fetchWorktrees(org: string, name: string): Promise<Worktre
   return request<Worktree[]>(`/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`);
 }
 
+/**
+ * No toast: only background callers use this (the 2-min poll of every repo, the
+ * timeline prefetch), and they keep the last known PRs on failure. A toast here
+ * repeats at every tick for as long as GitHub / `gh` is broken.
+ */
 export async function fetchPullRequests(org: string, name: string, force = false): Promise<PullRequest[]> {
   const qs = force ? '?force=true' : '';
-  return request<PullRequest[]>(
+  return browseRequest<PullRequest[]>(
     `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/pulls${qs}`
   );
 }
