@@ -14,6 +14,7 @@ import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { STATUS_COLORS } from '../../lib/statusColors';
+import { openTicketInWork } from '../work/openInWork';
 
 export function EpicDetailView() {
   const epicId = useTicketGroupStore((s) => s.selectedEpicDetailId);
@@ -443,10 +444,7 @@ function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardId
   const [showPicker, setShowPicker] = useState(false);
   const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
   const setSelectedEpicDetail = useTicketGroupStore((s) => s.setSelectedEpicDetail);
-  const setActiveView = useTicketGroupStore((s) => s.setActiveView);
   const boards = useTicketStore((s) => s.boards);
-  const selectBoard = useTicketStore((s) => s.selectBoard);
-  const selectTicket = useTicketStore((s) => s.selectTicket);
 
   const boardMap = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
 
@@ -477,18 +475,9 @@ function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardId
     return groups;
   }, [epicTickets, boardMap]);
 
-  // Navigate store-driven (like KanbanCard / RoadmapView) so RouterSync computes a
-  // single coherent ticket URL. An epic is only opened from the roadmap, so the
-  // store still holds activeView='roadmap'; without resetting it to 'board' the
-  // roadmap branch of storeToUrl wins and bounces us back to the roadmap.
-  // Order matters: selectBoard() resets selectedTicketId, so selectTicket() must
-  // run after it (an epic can span several boards, hence selectBoard first).
-  const handleClickTicket = (ticket: Ticket) => {
-    setSelectedEpicDetail(null);
-    setActiveView('board');
-    selectBoard(ticket.boardId);
-    selectTicket(ticket.id);
-  };
+  // A ticket opens in the Work view (like a Kanban card); the epic stays the
+  // Kanban's current screen, so Back returns to it.
+  const handleClickTicket = (ticket: Ticket) => openTicketInWork(ticket.id);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

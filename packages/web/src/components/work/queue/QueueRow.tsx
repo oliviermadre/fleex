@@ -27,9 +27,14 @@ interface Props {
   onSelect: () => void;
   /** Open the execution log for this task's running SDK run (from the activity badge). */
   onOpenExecution: (executionId: string, title: string) => void;
+  /**
+   * Set for the pinned row the filters exclude: adds a line naming the excluding
+   * filters.
+   */
+  hiddenBy?: readonly string[];
 }
 
-export function QueueRow({ task, selected, onSelect, onOpenExecution }: Props) {
+export function QueueRow({ task, selected, onSelect, onOpenExecution, hiddenBy }: Props) {
   const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === task.id) ?? null);
   const updateTicket = useTicketStore((s) => s.updateTicket);
 
@@ -136,6 +141,12 @@ export function QueueRow({ task, selected, onSelect, onOpenExecution }: Props) {
           )}
         >
           {task.activityDetail || task.boardName}
+        </div>
+      )}
+
+      {hiddenBy && hiddenBy.length > 0 && (
+        <div className={cn('mt-1 truncate text-[11px]', tintClasses('purple').text)}>
+          Hidden by filters: {hiddenBy.join(', ')}
         </div>
       )}
 

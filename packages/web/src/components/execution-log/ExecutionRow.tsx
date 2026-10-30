@@ -12,6 +12,7 @@ import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
 import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, RoutineIcon, type PrimitiveKind } from '../../lib/primitives';
 import { CommentIcon, DeliverableIcon } from '../ui/icons/ActivityIcons';
+import { openTicketInWork } from '../work/openInWork';
 
 // ── Type badge ──
 
@@ -444,9 +445,6 @@ export const ExecutionRow = memo(function ExecutionRow({
   }, [entry, keepState, keptNoteId]);
   const [cancelState, setCancelState] = useState<'idle' | 'confirming' | 'cancelling'>('idle');
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectTicket = useTicketStore((s) => s.selectTicket);
-  const setTicketTab = useTicketStore((s) => s.setTicketTab);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const selectRoutine = useRoutineStore((s) => s.select);
   const navigate = useNavigate();
 
@@ -468,10 +466,12 @@ export const ExecutionRow = memo(function ExecutionRow({
 
   const navigateToTicket = useCallback((e: React.MouseEvent, tab?: 'comments' | 'deliverables' | 'workflow') => {
     e.stopPropagation();
-    selectTicket(entry.ticketId);
-    if (tab) setTicketTab(tab);
-    setActivePanel('tickets');
-  }, [entry.ticketId, selectTicket, setTicketTab, setActivePanel]);
+    if (!entry.ticketId) return;
+    openTicketInWork(
+      entry.ticketId,
+      tab === 'deliverables' ? { rightPanel: 'deliv' } : tab === 'workflow' ? { mode: 'workflow' } : tab === 'comments' ? { mode: 'chat' } : {},
+    );
+  }, [entry.ticketId]);
 
   const navigateToRoutine = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

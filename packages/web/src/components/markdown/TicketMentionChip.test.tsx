@@ -3,6 +3,7 @@ import { render, cleanup, fireEvent, act } from '@testing-library/react';
 import type { Ticket } from '@fleex/shared';
 import { TicketMentionChip } from './TicketMentionChip';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useWorkStore } from '../../stores/workStore';
 import { useUIStore } from '../../stores/uiStore';
 
 const UUID = '05d50f27-b12e-4338-8c36-e840fd288222';
@@ -42,8 +43,10 @@ describe('TicketMentionChip', () => {
     useTicketStore.setState({ tickets: [ticket('t1', 378, 'Go here')] });
     const { getByRole } = render(<TicketMentionChip idRef="378" />);
     fireEvent.click(getByRole('button'));
-    expect(useTicketStore.getState().selectedTicketId).toBe('t1');
-    expect(useUIStore.getState().activePanel).toBe('tickets');
+    // The ticket opens in the Work view, pinned whatever the queue filters.
+    expect(useWorkStore.getState().selectedTicketId).toBe('t1');
+    expect(useWorkStore.getState().pinnedTicketId).toBe('t1');
+    expect(useUIStore.getState().activePanel).toBe('work');
   });
 
   it('fills in reactively once the ticket list loads', () => {

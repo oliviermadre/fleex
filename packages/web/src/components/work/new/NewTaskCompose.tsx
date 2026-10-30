@@ -44,6 +44,7 @@ export function NewTaskCompose({
   const resetDraft = useWorkStore((s) => s.resetDraft);
   const setView = useWorkStore((s) => s.setView);
   const selectTicket = useWorkStore((s) => s.selectTicket);
+  const pinTicket = useWorkStore((s) => s.pinTicket);
   const [creating, setCreating] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
 
@@ -136,6 +137,9 @@ export function NewTaskCompose({
         }
       }
       resetDraft(effectiveBoardId);
+      // Pinned, so it stays on screen even when the queue filters exclude it
+      // (e.g. created on a board the queue doesn't show).
+      pinTicket(ticket.id);
       selectTicket(ticket.id);
       setView('task');
     } catch (e) {

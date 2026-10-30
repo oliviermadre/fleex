@@ -211,10 +211,10 @@ describe('FocusView', () => {
     expect(within(dialog).getByText('→ Build')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: /Ouvrir dans Tasks/ }));
     expect(useWorkStore.getState().selectedTicketId).toBe('t1');
-    // The Tasks view (RouterSync turns this into /work/t1), and t1 is revealed in
+    // The Tasks view (RouterSync turns this into /work/t1), and t1 is pinned in
     // its queue even when the queue filters would hide it.
     expect(useUIStore.getState().activePanel).toBe('work');
-    expect(useWorkStore.getState().revealTicketId).toBe('t1');
+    expect(useWorkStore.getState().pinnedTicketId).toBe('t1');
   });
 
   it('unstacks to the next item: the one left stays on screen, frozen, while the pile rises', async () => {

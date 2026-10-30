@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TicketActivity, TicketComment, TicketWsMessage } from '@fleex/shared';
 import * as api from '../../../services/api';
 import { appWs } from '../../../services/websocket';
+import { useUnreadStore } from '../../../stores/unreadStore';
 
 export interface TaskConversation {
   comments: TicketComment[];
@@ -66,6 +67,14 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
     }
     void load(ticketId);
   }, [ticketId, load]);
+
+  // Showing the conversation = caught up: clears the Kanban card's unread
+  // comment counter (the retired ticket detail did this; mobile does the same).
+  const markCommentsRead = useUnreadStore((s) => s.markCommentsRead);
+  useEffect(() => {
+    const last = comments[comments.length - 1];
+    if (ticketId && last && last.ticketId === ticketId) markCommentsRead(ticketId, last.createdAt).catch(() => {});
+  }, [ticketId, comments, markCommentsRead]);
 
   // Live updates: apply comment mutations for the current ticket in place, so
   // an agent's reply (or an edit/delete from elsewhere) shows without a refetch.

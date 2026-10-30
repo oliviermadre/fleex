@@ -18,17 +18,11 @@ registerDefaultRenderers(notificationRegistry);
  *  prefix just ensures enough Pulse-relevant subtypes survive the noise. */
 const AUDIT_FETCH_LIMIT = 100;
 
-/** Shared renderer context — resolves ticket deep links from the live store.
+/** Shared renderer context — builds ticket deep links (the Work view).
  *  (The ticket's human reference is resolved later, at render time, in the
  *  notification card — see NotificationCard.) */
 function buildRendererContext(): RendererContext {
-  return {
-    ticketLink: (id, tab) => {
-      const board =
-        useTicketStore.getState().tickets.find((t) => t.id === id)?.boardId ?? null;
-      return ticketLink(id, tab, board);
-    },
-  };
+  return { ticketLink };
 }
 
 /**

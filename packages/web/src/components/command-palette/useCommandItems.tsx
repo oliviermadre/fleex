@@ -9,7 +9,7 @@ import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
 import { STATUS_LABEL } from '../actions/actionStatus';
 import { ClaudeIcon, TerminalIcon, PlusIcon } from '../sidebar/icons';
 import { useWorkStore } from '../../stores/workStore';
-import { openSessionInWork, ticketIdForSession } from '../work/openInWork';
+import { openSessionInWork, openTicketInWork, ticketIdForSession } from '../work/openInWork';
 import { openSystemShell } from '../../lib/systemShell';
 import type { CommandItem } from './commandPaletteTypes';
 
@@ -36,7 +36,6 @@ export function useCommandItems(query: string): CommandItem[] {
   const sessionDisplayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
 
   const ticketItems = useTicketStore((s) => s.tickets);
-  const selectTicket = useTicketStore((s) => s.selectTicket);
 
   const allItems = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = [];
@@ -166,7 +165,7 @@ export function useCommandItems(query: string): CommandItem[] {
       categoryLabel: 'Tickets',
       icon: getTicketIcon(),
       keywords: 'kanban board tickets',
-      onExecute: () => { setActivePanel('tickets'); selectTicket(null); closeCommandPalette(); },
+      onExecute: () => { setActivePanel('tickets'); closeCommandPalette(); },
     });
 
     for (const ticket of ticketItems) {
@@ -178,7 +177,7 @@ export function useCommandItems(query: string): CommandItem[] {
         categoryLabel: 'Tickets',
         icon: getTicketIcon(),
         keywords: `ticket ${ticket.title} ${ticket.tags.join(' ')} ${ticket.status}`,
-        onExecute: () => { setActivePanel('tickets'); selectTicket(ticket.id); closeCommandPalette(); },
+        onExecute: () => { openTicketInWork(ticket.id); closeCommandPalette(); },
       });
     }
 
@@ -200,7 +199,7 @@ export function useCommandItems(query: string): CommandItem[] {
     activePanel, focusedFloatingPanelId, workTicketId,
     toggleScratchpad, pinnedIcons, pinnedStatuses, workspaceActions, basePath,
     executePinnedAction, executeWorkspaceAction,
-    ticketItems, selectTicket,
+    ticketItems,
   ]);
 
   // Filter by query

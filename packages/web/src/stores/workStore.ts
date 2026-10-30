@@ -134,11 +134,13 @@ export interface WorkState {
   queueCollapsed: boolean;
   draft: WorkDraft;
   /**
-   * A ticket we navigated to on purpose (deep link, "open this session") that
-   * must stay the one shown even if the queue filters hide it. useWorkQueue
-   * relaxes the filters once the ticket is loaded, then clears this. Not persisted.
+   * The ticket opened from outside the queue (Kanban card, deep link, palette,
+   * notification, a task just created…). The queue shows it whatever its filters
+   * — in its own « Opened outside filters » section when they exclude it — and
+   * never changes the filters to do so. One slot: the next outside open replaces
+   * it; picking another queue row keeps it. Persisted, so it survives a reload.
    */
-  revealTicketId: string | null;
+  pinnedTicketId: string | null;
   /** A session whose shell pane should take the keyboard when it mounts. Not persisted. */
   shellFocusRequest: string | null;
 
@@ -173,19 +175,22 @@ export interface WorkState {
   /** Pin a session to one of the ticket's pane slots (removing it from its other slots); null clears. */
   bindShellPane: (ticketId: string, index: number, id: string | null) => void;
   /**
-   * Select a ticket AND set its center mode in one commit (URL → store). Going
+   * Select a ticket AND set its center mode in one commit (URL → store), pinning
+   * it unless `opts.pin` is false (see pinnedTicketId). Going
    * through selectTicket + setMode would write the mode onto the previous ticket
    * (commitMode targets modeTicketId), then restoreTicketMode would overwrite it.
    */
-  openTicket: (ticketId: string, mode: WorkMode) => void;
+  openTicket: (ticketId: string, mode: WorkMode, opts?: { pin?: boolean }) => void;
   /**
    * Open a ticket in shell mode with `sessionId` bound to a pane (the one already
    * showing it, else the first empty one, else the first) and ask that pane to
    * take the keyboard. The landing spot of every "open this session" action.
    */
   openShellForTicket: (ticketId: string, sessionId: string) => void;
-  /** Apply the filter patch that reveals the pending ticket, and clear the request. */
-  settleReveal: (patch: Partial<Pick<WorkState, QueueFilterKey>> | null) => void;
+  /** Pin a ticket in the queue (replaces the current pin). */
+  pinTicket: (ticketId: string) => void;
+  /** Drop the pin. */
+  unpinTicket: () => void;
   clearShellFocusRequest: () => void;
   /** Drop everything remembered for a ticket (after it's deleted). */
   forgetTicket: (ticketId: string) => void;
@@ -206,7 +211,7 @@ const STORAGE_KEY = 'fleex_work';
 export type QueueFilterKey = 'boardFilters' | 'statusFilters' | 'priorityFilters' | 'favoriteOnly' | 'search';
 
 /** The fields of a ticket the queue filters look at. */
-export interface RevealableTicket {
+export interface FilterableTicket {
   readonly boardId: string;
   readonly status: string;
   readonly priority: string;
@@ -215,25 +220,22 @@ export interface RevealableTicket {
 }
 
 /**
- * The smallest filter change that lets `ticket` into the queue, or null when it
- * already passes (mirrors useWorkQueue's filtering). Each filter that excludes it
- * is widened just enough — the ticket's status is added to the status filter
- * rather than wiping it — so the user's other choices survive.
+ * The queue filters that exclude `ticket`, in display order — empty when it
+ * passes them all. Mirrors useWorkQueue's filtering; never suggests changing
+ * the filters (the queue pins the ticket instead).
  */
-export function filtersRevealing(
+export function excludedBy(
   s: Pick<WorkState, QueueFilterKey>,
-  ticket: RevealableTicket,
-): Partial<Pick<WorkState, QueueFilterKey>> | null {
-  const patch: Partial<Pick<WorkState, QueueFilterKey>> = {};
-  if (s.statusFilters.length > 0 && !s.statusFilters.includes(ticket.status)) {
-    patch.statusFilters = [...s.statusFilters, ticket.status];
-  }
-  if (s.boardFilters.length > 0 && !s.boardFilters.includes(ticket.boardId)) patch.boardFilters = [];
-  if (s.priorityFilters.length > 0 && !s.priorityFilters.includes(ticket.priority)) patch.priorityFilters = [];
-  if (s.favoriteOnly && !ticket.favorite) patch.favoriteOnly = false;
+  ticket: FilterableTicket,
+): QueueFilterKey[] {
+  const out: QueueFilterKey[] = [];
+  if (s.boardFilters.length > 0 && !s.boardFilters.includes(ticket.boardId)) out.push('boardFilters');
+  if (s.statusFilters.length > 0 && !s.statusFilters.includes(ticket.status)) out.push('statusFilters');
+  if (s.priorityFilters.length > 0 && !s.priorityFilters.includes(ticket.priority)) out.push('priorityFilters');
+  if (s.favoriteOnly && !ticket.favorite) out.push('favoriteOnly');
   const q = s.search.trim().toLowerCase();
-  if (q && !ticket.title.toLowerCase().includes(q)) patch.search = '';
-  return Object.keys(patch).length > 0 ? patch : null;
+  if (q && !ticket.title.toLowerCase().includes(q)) out.push('search');
+  return out;
 }
 
 /** The subset of state we persist — everything except the action functions. */
@@ -268,6 +270,7 @@ type PersistedWork = Pick<
   | 'queueWidth'
   | 'queueCollapsed'
   | 'draft'
+  | 'pinnedTicketId'
 >;
 
 /**
@@ -368,6 +371,7 @@ const DEFAULTS: PersistedWork = {
   queueWidth: 300,
   queueCollapsed: false,
   draft: EMPTY_DRAFT,
+  pinnedTicketId: null,
 };
 
 function load(): PersistedWork {
@@ -426,6 +430,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
       queueWidth: s.queueWidth,
       queueCollapsed: s.queueCollapsed,
       draft: s.draft,
+      pinnedTicketId: s.pinnedTicketId,
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -471,11 +476,10 @@ export const useWorkStore = create<WorkState>((set, get) => {
 
   return {
     ...load(),
-    revealTicketId: null,
     shellFocusRequest: null,
 
-    // A hand-picked selection supersedes any pending reveal.
-    selectTicket: (id) => commit({ selectedTicketId: id, view: 'task', revealTicketId: null }),
+    // Picking a row inside the queue never touches the pin.
+    selectTicket: (id) => commit({ selectedTicketId: id, view: 'task' }),
     setView: (view) => commit({ view }),
     setBoardFilters: (boardFilters) => commit({ boardFilters }),
     setPriorityFilters: (priorityFilters) => commit({ priorityFilters }),
@@ -518,7 +522,8 @@ export const useWorkStore = create<WorkState>((set, get) => {
       ids[index] = id;
       commit({ shellPaneIdsByTicket: { ...get().shellPaneIdsByTicket, [ticketId]: ids } });
     },
-    openTicket: (ticketId, mode) => commit({ ...ticketModePatch(ticketId, mode), revealTicketId: ticketId }),
+    openTicket: (ticketId, mode, opts) =>
+      commit({ ...ticketModePatch(ticketId, mode), ...(opts?.pin === false ? {} : { pinnedTicketId: ticketId }) }),
     openShellForTicket: (ticketId, sessionId) => {
       const s = get();
       const ids = [...(s.shellPaneIdsByTicket[ticketId] ?? [])];
@@ -533,11 +538,12 @@ export const useWorkStore = create<WorkState>((set, get) => {
       commit({
         ...ticketModePatch(ticketId, 'shell'),
         shellPaneIdsByTicket: { ...s.shellPaneIdsByTicket, [ticketId]: ids },
-        revealTicketId: ticketId,
+        pinnedTicketId: ticketId,
         shellFocusRequest: sessionId,
       });
     },
-    settleReveal: (patch) => commit({ ...(patch ?? {}), revealTicketId: null }),
+    pinTicket: (pinnedTicketId) => commit({ pinnedTicketId }),
+    unpinTicket: () => commit({ pinnedTicketId: null }),
     clearShellFocusRequest: () => set({ shellFocusRequest: null }),
     forgetTicket: (ticketId) => {
       const s = get();
@@ -547,6 +553,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
         shellPaneIdsByTicket: withoutTicket(s.shellPaneIdsByTicket, ticketId),
         activeScratchTabByTicket: withoutTicket(s.activeScratchTabByTicket, ticketId),
         ...(s.modeTicketId === ticketId ? { modeTicketId: null } : {}),
+        ...(s.pinnedTicketId === ticketId ? { pinnedTicketId: null } : {}),
       });
     },
     updateDraft: (patch) => commit({ draft: { ...get().draft, ...patch } }),

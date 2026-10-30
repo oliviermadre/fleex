@@ -133,10 +133,6 @@ interface UIState {
   contentPanelCollapsed: boolean;
   toggleContentPanel: () => void;
 
-  // Ticket meta sidebar collapse
-  ticketMetaSidebarCollapsed: boolean;
-  toggleTicketMetaSidebar: () => void;
-
   // Unified floating panel z-order (sessions + deliverables share one stack)
   floatingPanelOrder: string[];  // ordered IDs — last = top z-index
   focusedFloatingPanelId: string | null;
@@ -184,7 +180,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   scratchpadOpen: false,
   scratchpadRepoKey: null,
   contentPanelCollapsed: false,
-  ticketMetaSidebarCollapsed: false,
   floatingPanelOrder: [],
   focusedFloatingPanelId: null,
   floatingSessionIds: [],
@@ -265,8 +260,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   toggleContentPanel: () =>
     set((state) => ({ contentPanelCollapsed: !state.contentPanelCollapsed })),
 
-  toggleTicketMetaSidebar: () =>
-    set((state) => ({ ticketMetaSidebarCollapsed: !state.ticketMetaSidebarCollapsed })),
 
   // Unified z-order actions
   bringFloatingPanelToFront: (id) =>

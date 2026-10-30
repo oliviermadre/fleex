@@ -1,23 +1,28 @@
-import type { TicketTab } from '../stores/ticketStore';
+/** One-shot panels a Work URL can open next to the task (`?panel=`, see RouterSync). */
+export type WorkUrlPanel = 'deliv' | 'mentions' | 'timeline';
 
 /**
- * Build an in-app deep link to a ticket detail view.
- *
- * The board slug `all` always resolves (it maps to "all boards", board = null
- * in `parseUrl`) and still opens the ticket, so it is a safe fallback whenever
- * the ticket's board is unknown client-side. When the board IS known we use it
- * so the back navigation lands on the right board.
- *
- * Mirrors the format produced by `storeToUrl` in router/RouterSync.tsx:
- *   /tickets/board/{boardSlug}/ticket/{ticketId}[/{tab}]
- * (the `description` tab is the default and is omitted, matching storeToUrl).
+ * Where each tab of the retired ticket-detail screen lives in the Work view.
+ * Callers still name a tab (a deliverable notification → `deliverables`); old
+ * /tickets/board/:b/ticket/:id[/:tab] links redirect through the same table.
  */
-export function ticketLink(
-  ticketId: string,
-  tab?: TicketTab,
-  boardId?: string | null,
-): string {
-  const boardSlug = boardId ?? 'all';
-  const base = `/tickets/board/${boardSlug}/ticket/${ticketId}`;
-  return tab && tab !== 'description' ? `${base}/${tab}` : base;
+const TAB_TARGET: Record<string, { suffix?: string; panel?: WorkUrlPanel }> = {
+  description: {},
+  comments: {},
+  deliverables: { panel: 'deliv' },
+  mentions: { panel: 'mentions' },
+  workflow: { suffix: '/workflow' },
+  activity: { panel: 'timeline' },
+};
+
+export type TicketLinkTab = 'description' | 'comments' | 'deliverables' | 'mentions' | 'workflow' | 'activity';
+
+/**
+ * Build an in-app deep link to a ticket: the Work view, on the center mode or
+ * panel matching `tab` — `/work/{ticketId}[/workflow][?panel=…]`. The ticket is
+ * shown (pinned) whatever the Work queue filters.
+ */
+export function ticketLink(ticketId: string, tab?: TicketLinkTab | string | null): string {
+  const target = (tab && TAB_TARGET[tab]) || {};
+  return `/work/${ticketId}${target.suffix ?? ''}${target.panel ? `?panel=${target.panel}` : ''}`;
 }

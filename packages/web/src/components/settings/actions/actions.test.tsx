@@ -282,8 +282,8 @@ describe('ActionDetail Try', () => {
 
   beforeEach(() => {
     useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, basePath: '/base', workspaceActions: [{ id: 'w', icon: '', iconType: 'svg', label: 'Open', actionType: 'shell', actionValue: 'ls {{workspace_path}}' }] } });
-    useTicketStore.setState({ tickets: [ticket], selectedTicketId: 'abc123' });
-    useWorkStore.setState({ selectedTicketId: null });
+    useTicketStore.setState({ tickets: [ticket] });
+    useWorkStore.setState({ selectedTicketId: 'abc123' });
   });
   afterEach(() => useTicketStore.setState({ tickets: [], selectedTicketId: null }));
 

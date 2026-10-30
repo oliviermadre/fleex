@@ -25,6 +25,7 @@ export function NewTask({ enterStarts = true }: { enterStarts?: boolean } = {}) 
   const updateDraft = useWorkStore((s) => s.updateDraft);
   const resetDraft = useWorkStore((s) => s.resetDraft);
   const selectTicket = useWorkStore((s) => s.selectTicket);
+  const pinTicket = useWorkStore((s) => s.pinTicket);
   const setView = useWorkStore((s) => s.setView);
   const repositories = useRepositoryStore((s) => s.repositories);
 
@@ -35,10 +36,12 @@ export function NewTask({ enterStarts = true }: { enterStarts?: boolean } = {}) 
   const openTicket = useCallback(
     (ticketId: string) => {
       setResolving(null);
+      // Opened from outside the queue: pinned, whatever the queue filters.
+      pinTicket(ticketId);
       selectTicket(ticketId);
       setView('task');
     },
-    [selectTicket, setView],
+    [pinTicket, selectTicket, setView],
   );
 
   const applyPreview = useCallback(

@@ -13,8 +13,9 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { isLeaveGuarded, pauseLeaveGuard, requestLeave, useUIStore, type SettingsTab, type AnalyticsTab, type ActionsRoute, type ActionsScope } from '../stores/uiStore';
-import { useWorkStore, type WorkMode } from '../stores/workStore';
-import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/ticketStore';
+import { useWorkStore, excludedBy, type WorkMode } from '../stores/workStore';
+import { useTicketStore } from '../stores/ticketStore';
+import { ticketLink, type WorkUrlPanel } from '../notifications/links';
 import { useTicketGroupStore, VALID_EPIC_DETAIL_TABS, type EpicDetailTab } from '../stores/ticketGroupStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
@@ -59,6 +60,13 @@ const VALID_PERSONA_TABS: PersonaTab[] = ['config', 'soul', 'identity', 'memory'
 const WORK_URL_MODES = ['code', 'shell', 'workflow'] as const satisfies readonly WorkMode[];
 
 /**
+ * One-shot `?panel=` on /work/:ticketId — what to open next to the task (a
+ * notification's deliverables, the old ticket-detail tabs). Applied once, then
+ * dropped from the URL: panels are layout, kept in workStore.
+ */
+const WORK_URL_PANELS = ['deliv', 'mentions', 'timeline'] as const satisfies readonly WorkUrlPanel[];
+
+/**
  * The Work view's URL state. `ticketId` undefined = bare /work (no preference:
  * the store keeps its remembered selection); `view: 'new'` = /work/new.
  */
@@ -66,6 +74,8 @@ interface WorkUrl {
   view: 'task' | 'new';
   ticketId?: string;
   mode: WorkMode;
+  /** One-shot panel to open (see WORK_URL_PANELS). */
+  panel?: WorkUrlPanel;
 }
 
 interface ParsedUrl {
@@ -75,8 +85,6 @@ interface ParsedUrl {
   repoKey: string | null;
   /** undefined = "no board preference in URL", null = "all boards", string = specific board */
   boardId: string | null | undefined;
-  ticketId: string | null;
-  ticketTab: TicketTab | null;
   /** 'board' | 'roadmap' — which sub-view of the tickets panel */
   ticketsView: 'board' | 'roadmap' | null;
   epicId: string | null;
@@ -97,7 +105,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { work: null as WorkUrl | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, ticketsView: null as 'board' | 'roadmap' | null, epicId: null as string | null, epicDetailTab: null as EpicDetailTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, workflowId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null };
+  const base = { work: null as WorkUrl | null, repoKey: null, boardId: undefined as string | null | undefined, ticketsView: null as 'board' | 'roadmap' | null, epicId: null as string | null, epicDetailTab: null as EpicDetailTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, workflowId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null };
 
   // Root: redirect to /tickets (Kanban is the default view)
   if (pathname === '/') {
@@ -130,11 +138,13 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   if (workMatch) {
     const ticketId = workMatch[1]!;
     const rawMode = workMatch[2];
+    const panel = WORK_URL_PANELS.find((p) => p === params.get('panel'));
+    const withPanel = panel ? { panel } : {};
     if (rawMode === undefined) {
-      return { ...base, panel: 'work', work: { view: 'task', ticketId, mode: 'chat' } };
+      return { ...base, panel: 'work', work: { view: 'task', ticketId, mode: 'chat', ...withPanel } };
     }
     const mode = WORK_URL_MODES.find((m) => m === rawMode);
-    if (mode) return { ...base, panel: 'work', work: { view: 'task', ticketId, mode } };
+    if (mode) return { ...base, panel: 'work', work: { view: 'task', ticketId, mode, ...withPanel } };
     // Unknown mode segment → the task itself.
     return { ...base, panel: 'work', work: { view: 'task', ticketId, mode: 'chat' }, redirect: `/work/${ticketId}` };
   }
@@ -164,12 +174,15 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
     return { ...base, panel: 'tickets', boardId: rawBoard === 'all' ? null : rawBoard, ticketsView: 'roadmap' };
   }
 
+  // Retired ticket-detail screen: its links open the ticket in the Work view,
+  // on the mode / panel its tab now lives in (see ticketLink). Parsed straight
+  // into the Work route rather than redirected — on a cold load a redirect
+  // returns before the store syncs, and the store's panel would win. The URL→
+  // store sync then rewrites the address to the canonical /work/:ticketId.
   const ticketBoardTicketMatch = pathname.match(/^\/tickets\/board\/([^/]+)\/ticket\/([^/]+)(?:\/([^/]+))?$/);
   if (ticketBoardTicketMatch) {
-    const rawBoard = ticketBoardTicketMatch[1]!;
-    const rawTab = ticketBoardTicketMatch[3] as TicketTab | undefined;
-    const ticketTab = rawTab && VALID_TICKET_TABS.includes(rawTab) ? rawTab : null;
-    return { ...base, panel: 'tickets', boardId: rawBoard === 'all' ? null : rawBoard, ticketId: ticketBoardTicketMatch[2]!, ticketTab };
+    const target = new URL(ticketLink(ticketBoardTicketMatch[2]!, ticketBoardTicketMatch[3]), 'http://x');
+    return parseUrl(target.pathname, target.search);
   }
   const ticketBoardMatch = pathname.match(/^\/tickets\/board\/([^/]+)$/);
   if (ticketBoardMatch) {
@@ -313,7 +326,6 @@ export interface UrlState {
   activePanel: ActivePanel;
   selectedRepoKey?: string | null;
   selectedBoardId?: string | null;
-  selectedTicketId?: string | null;
   selectedScratchpadKey?: string | null;
   selectedPersonaId?: string | null;
   selectedSkillId?: string | null;
@@ -321,7 +333,6 @@ export interface UrlState {
   settingsTab?: SettingsTab;
   actionsRoute?: ActionsRoute;
   analyticsTab?: AnalyticsTab;
-  ticketTab?: TicketTab;
   selectedPanelId?: string | null;
   activeView?: 'board' | 'roadmap';
   epicDetailId?: string | null;
@@ -337,7 +348,6 @@ export function storeToUrl({
   activePanel,
   selectedRepoKey = null,
   selectedBoardId = null,
-  selectedTicketId = null,
   selectedScratchpadKey = null,
   selectedPersonaId = null,
   selectedSkillId = null,
@@ -345,7 +355,6 @@ export function storeToUrl({
   settingsTab = 'general',
   actionsRoute,
   analyticsTab,
-  ticketTab,
   selectedPanelId,
   activeView,
   epicDetailId,
@@ -364,7 +373,6 @@ export function storeToUrl({
     }
     case 'tickets': {
       const boardSlug = selectedBoardId === null ? 'all' : selectedBoardId;
-      const tabSuffix = selectedTicketId && ticketTab && ticketTab !== 'description' ? `/${ticketTab}` : '';
 
       // Epic detail takes priority
       if (epicDetailId && boardSlug) {
@@ -377,11 +385,8 @@ export function storeToUrl({
         return { pathname: `/tickets/board/${boardSlug}/roadmap`, search: '' };
       }
 
-      // Board view with ticket detail
+      // Board view (a ticket opens in the Work view, never here)
       if (boardSlug) {
-        if (selectedTicketId) {
-          return { pathname: `/tickets/board/${boardSlug}/ticket/${selectedTicketId}${tabSuffix}`, search: '' };
-        }
         return { pathname: `/tickets/board/${boardSlug}`, search: '' };
       }
       return { pathname: '/tickets', search: '' };
@@ -462,7 +467,7 @@ export function storeToUrl({
  * each other and don't create a spurious extra entry when the store rewrites
  * the URL:
  *   - board id: undefined ⇒ null (`/tickets` == `/tickets/board/all`)
- *   - ticket / epic detail tab: null ⇒ 'description' (the default tab, which
+ *   - epic detail tab: null ⇒ 'description' (the default tab, which
  *     storeToUrl omits from the path)
  *   - settings section: null ⇒ 'general' (bare `/settings` == `/settings/general`)
  */
@@ -475,8 +480,6 @@ export function navIdentity(parsed: ParsedUrl): string {
     parsed.work?.mode ?? '',
     parsed.repoKey ?? '',
     boardId ?? '',
-    parsed.ticketId ?? '',
-    parsed.ticketTab ?? 'description',
     parsed.ticketsView ?? '',
     parsed.epicId ?? '',
     parsed.epicDetailTab ?? 'description',
@@ -544,13 +547,11 @@ export function RouterSync() {
   // which briefly still belong to the previous task while the view switches.
   const workMode = useWorkStore((s) => (s.selectedTicketId ? s.modeByTicket[s.selectedTicketId] ?? 'chat' : 'chat'));
   const openWorkTicket = useWorkStore((s) => s.openTicket);
+  const setWorkRightPanel = useWorkStore((s) => s.setRightPanel);
+  const setWorkTimelineOpen = useWorkStore((s) => s.setTimelineOpen);
 
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const selectBoard = useTicketStore((s) => s.selectBoard);
-  const selectedTicketId = useTicketStore((s) => s.selectedTicketId);
-  const selectTicket = useTicketStore((s) => s.selectTicket);
-  const ticketTab = useTicketStore((s) => s.ticketTab);
-  const setTicketTab = useTicketStore((s) => s.setTicketTab);
 
   const activeView = useTicketGroupStore((s) => s.activeView);
   const setActiveView = useTicketGroupStore((s) => s.setActiveView);
@@ -585,7 +586,6 @@ export function RouterSync() {
       activePanel,
       selectedRepoKey,
       selectedBoardId,
-      selectedTicketId,
       selectedScratchpadKey,
       selectedPersonaId,
       selectedSkillId,
@@ -593,7 +593,6 @@ export function RouterSync() {
       settingsTab,
       actionsRoute,
       analyticsTab,
-      ticketTab,
       selectedPanelId,
       activeView,
       epicDetailId,
@@ -648,7 +647,19 @@ export function RouterSync() {
         if (workView !== 'new') setWorkView('new');
       } else if (w.ticketId !== undefined) {
         if (w.ticketId !== workTicketId || w.mode !== workMode || workView !== 'task') {
-          openWorkTicket(w.ticketId, w.mode);
+          // A /work/:ticketId URL always shows its ticket: pinned unless it is
+          // already in the queue — then Back / Forward through queue picks
+          // leave the pin alone. Unknown yet (cold load) → pinned.
+          const ticket = useTicketStore.getState().tickets.find((t) => t.id === w.ticketId);
+          const inQueue = !!ticket && excludedBy(useWorkStore.getState(), ticket).length === 0;
+          openWorkTicket(w.ticketId, w.mode, { pin: !inQueue });
+        }
+        if (w.panel === 'timeline') setWorkTimelineOpen(true);
+        else if (w.panel) setWorkRightPanel(w.panel);
+        // A legacy ticket-detail link or a one-shot ?panel=: name the task plainly.
+        const canonical = storeToUrl({ activePanel: 'work', workTicketId: w.ticketId, workMode: w.mode });
+        if (canonical.pathname !== location.pathname || location.search) {
+          navigate(canonical, { replace: true });
         }
       } else {
         if (workView !== 'task') setWorkView('task');
@@ -672,19 +683,6 @@ export function RouterSync() {
       if (parsed.boardId !== undefined && parsed.boardId !== selectedBoardId) {
         selectBoard(parsed.boardId);
       }
-      if (parsed.ticketId !== selectedTicketId) {
-        selectTicket(parsed.ticketId);
-      }
-      // The default tab ('description') is omitted from the URL, so sync it back
-      // explicitly when a ticket is selected. Otherwise navigating Back onto the
-      // tab-less ticket URL would leave the previous tab (e.g. 'comments')
-      // selected and the "description" history entry would be silently skipped.
-      if (parsed.ticketId) {
-        const nextTicketTab = parsed.ticketTab ?? 'description';
-        if (nextTicketTab !== ticketTab) {
-          setTicketTab(nextTicketTab);
-        }
-      }
       // Roadmap / board view
       const newView = parsed.ticketsView ?? (parsed.epicId ? activeView : 'board');
       if (newView !== activeView) {
@@ -695,7 +693,7 @@ export function RouterSync() {
       if (newEpicId !== epicDetailId) {
         setSelectedEpicDetail(newEpicId);
       }
-      // Same as ticketTab: default epic detail tab is omitted from the URL, so
+      // The default epic detail tab is omitted from the URL, so
       // reset it to 'description' when Back lands on the tab-less epic URL.
       if (parsed.epicId) {
         const nextEpicTab = parsed.epicDetailTab ?? 'description';
@@ -808,7 +806,6 @@ export function RouterSync() {
     activePanel,
     selectedRepoKey,
     selectedBoardId,
-    selectedTicketId,
     selectedScratchpadKey,
     selectedPersonaId,
     selectedSkillId,
@@ -816,7 +813,6 @@ export function RouterSync() {
     settingsTab,
     actionsRoute,
     analyticsTab,
-    ticketTab,
     selectedPanelId,
     selectedWorkflowId,
     activeView,

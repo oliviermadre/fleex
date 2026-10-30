@@ -1,4 +1,4 @@
-import type { TicketTab } from '../stores/ticketStore';
+import type { TicketLinkTab } from './links';
 
 /**
  * Fleex Pulse — notification primitives.
@@ -72,7 +72,7 @@ export interface NotificationDraft {
  */
 export interface RendererContext {
   /** Build a deep link to a ticket (optionally a specific tab). */
-  readonly ticketLink: (ticketId: string, tab?: TicketTab) => string;
+  readonly ticketLink: (ticketId: string, tab?: TicketLinkTab) => string;
 }
 
 /**

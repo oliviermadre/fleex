@@ -81,14 +81,33 @@ describe('parseUrl', () => {
     const result = parseUrl('/tickets/board/board-123', '');
     expect(result.panel).toBe('tickets');
     expect(result.boardId).toBe('board-123');
-    expect(result.ticketId).toBeNull();
   });
 
-  it('parses /tickets/board/:boardId/ticket/:ticketId', () => {
-    const result = parseUrl('/tickets/board/board-123/ticket/ticket-456', '');
-    expect(result.panel).toBe('tickets');
-    expect(result.boardId).toBe('board-123');
-    expect(result.ticketId).toBe('ticket-456');
+  // The ticket-detail screen is retired: every old link opens the Work view,
+  // on the panel / mode its tab now lives in.
+  it('redirects every legacy /tickets/board/:b/ticket/:id[/:tab] to the Work view', () => {
+    const cases: [string, string][] = [
+      ['', '/work/t1'],
+      ['/description', '/work/t1'],
+      ['/comments', '/work/t1'],
+      ['/deliverables', '/work/t1?panel=deliv'],
+      ['/mentions', '/work/t1?panel=mentions'],
+      ['/workflow', '/work/t1/workflow'],
+      ['/activity', '/work/t1?panel=timeline'],
+      ['/bogus', '/work/t1'],
+    ];
+    for (const [tab, target] of cases) {
+      const [path, search = ''] = target.split('?');
+      const result = parseUrl(`/tickets/board/board-123/ticket/t1${tab}`, '');
+      expect(result.panel, tab).toBe('work');
+      expect(result, tab).toEqual(parseUrl(path!, search ? `?${search}` : ''));
+    }
+  });
+
+  it('parses the one-shot ?panel= of a Work task URL, ignoring unknown panels', () => {
+    expect(parseUrl('/work/t1', '?panel=deliv').work).toEqual({ view: 'task', ticketId: 't1', mode: 'chat', panel: 'deliv' });
+    expect(parseUrl('/work/t1/workflow', '?panel=timeline').work?.panel).toBe('timeline');
+    expect(parseUrl('/work/t1', '?panel=nope').work).toEqual({ view: 'task', ticketId: 't1', mode: 'chat' });
   });
 
   it('parses /claude-config', () => {
@@ -287,10 +306,6 @@ describe('storeToUrl', () => {
     expect(url.pathname).toBe('/tickets/board/board-123');
   });
 
-  it('generates /tickets/board/:boardId/ticket/:ticketId when ticket selected', () => {
-    const url = storeToUrl({ activePanel: 'tickets', selectedBoardId: 'board-123', selectedTicketId: 'ticket-456' });
-    expect(url.pathname).toBe('/tickets/board/board-123/ticket/ticket-456');
-  });
 
   it('generates /agents when no persona selected', () => {
     const url = storeToUrl({ activePanel: 'agents' });
@@ -343,26 +358,14 @@ describe('storeToUrl', () => {
 describe('historyActionForNav', () => {
   const action = (from: string, to: string) => historyActionForNav(from, '', to, '');
 
-  it('pushes when selecting a ticket from the board (the reported bug)', () => {
-    // Kanban → ticket detail must leave the kanban entry reachable via Back.
-    expect(action('/tickets/board/all', '/tickets/board/all/ticket/t1')).toBe('push');
+  it('pushes when a Kanban card opens its ticket in the Work view', () => {
+    // Kanban → ticket must leave the kanban entry reachable via Back.
+    expect(action('/tickets/board/b1', '/work/t1')).toBe('push');
   });
 
   it('replaces when the store normalises /tickets to /tickets/board/all', () => {
     // Same view (board, nothing selected) — must not create a spurious entry.
     expect(action('/tickets', '/tickets/board/all')).toBe('replace');
-  });
-
-  it('pushes when switching tabs within the same ticket detail', () => {
-    // Switching a detail tab is a real navigation: Back must return to the
-    // previous tab, not skip past the whole ticket to the board.
-    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('push');
-  });
-
-  it('replaces when the store normalises the default (description) ticket tab', () => {
-    // storeToUrl omits the default tab, so the shorthand and the explicit
-    // /description form are the same view — no spurious entry.
-    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/description')).toBe('replace');
   });
 
   it('pushes when switching tabs within the same epic detail', () => {
@@ -376,13 +379,6 @@ describe('historyActionForNav', () => {
   it('replaces when the store normalises the default (config) persona tab', () => {
     // Bare /agents/p1 parses as the config tab, same as the explicit form.
     expect(action('/agents/p1', '/agents/p1/config')).toBe('replace');
-  });
-
-  it('replays the reported tab scenario: comments → deliverables keeps comments', () => {
-    // NaS: on a ticket detail, going comments → deliverables then Back must
-    // land on comments, not jump straight to the board.
-    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('push');
-    expect(action('/tickets/board/all/ticket/t1/comments', '/tickets/board/all/ticket/t1/deliverables')).toBe('push');
   });
 
   it('replaces when the store normalises bare /settings to /settings/general', () => {
@@ -400,7 +396,6 @@ describe('historyActionForNav', () => {
 
   it('pushes when switching top-level panels', () => {
     expect(action('/work/t1', '/tickets/board/all')).toBe('push');
-    expect(action('/tickets/board/all/ticket/t1', '/repositories')).toBe('push');
   });
 
   it('pushes when selecting a repository', () => {
@@ -437,9 +432,9 @@ describe('historyActionForNav', () => {
 
   it('replays the reported scenario: tasks → kanban → ticket → repos keeps every step', () => {
     // Each hop is the URL the store lands on; assert the history action so that
-    // Back walks repos → ticket → kanban → tasks (ticket detail retained).
+    // Back walks repos → ticket → kanban → tasks (the ticket now opens in Work).
     expect(action('/work/t1', '/tickets/board/all')).toBe('push'); // tasks → kanban
-    expect(action('/tickets/board/all', '/tickets/board/all/ticket/t1')).toBe('push'); // kanban → ticket
-    expect(action('/tickets/board/all/ticket/t1', '/repositories')).toBe('push'); // ticket → repos
+    expect(action('/tickets/board/all', '/work/t2')).toBe('push'); // kanban → ticket
+    expect(action('/work/t2', '/repositories')).toBe('push'); // ticket → repos
   });
 });

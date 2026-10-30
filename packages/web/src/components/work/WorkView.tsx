@@ -64,14 +64,16 @@ export function WorkView() {
 
   // When the remembered task falls out of the queue (filtered out, deleted), the
   // view shows the first row instead: adopt it as the selection so the store —
-  // and the /work/:ticketId URL built from it — names what is on screen. Not
-  // while a reveal is pending: that task is about to be let back in.
+  // and the /work/:ticketId URL built from it — names what is on screen. Never
+  // the pinned task: it is shown whatever the filters (useWorkQueue keeps it
+  // selected, and shows nothing rather than a fallback while it loads).
   const selectedTicketId = useWorkStore((s) => s.selectedTicketId);
-  const revealTicketId = useWorkStore((s) => s.revealTicketId);
+  const pinnedTicketId = useWorkStore((s) => s.pinnedTicketId);
   useEffect(() => {
-    if (view !== 'task' || revealTicketId || !selectedTaskId || selectedTaskId === selectedTicketId) return;
+    if (view !== 'task' || !selectedTaskId || selectedTaskId === selectedTicketId) return;
+    if (selectedTicketId && selectedTicketId === pinnedTicketId) return;
     useWorkStore.getState().selectTicket(selectedTaskId);
-  }, [view, revealTicketId, selectedTaskId, selectedTicketId]);
+  }, [view, pinnedTicketId, selectedTaskId, selectedTicketId]);
 
   // Each ticket keeps its own center mode (chat / code / shell / workflow): apply
   // the selected one's before paint, so switching never flashes the previous mode.
@@ -116,7 +118,7 @@ export function WorkView() {
         {/* The queue runs down to the bottom drawer, so the top bar starts to its right. */}
         <div className="col-start-1 row-span-2 row-start-1 flex min-h-0">
           {queueCollapsed ? (
-            <CollapsedQueueRail counts={queue.counts} />
+            <CollapsedQueueRail counts={queue.counts} pinned={queue.pinned?.task ?? null} selectedId={view === 'task' ? selectedTaskId : null} />
           ) : (
             <WorkQueue queue={queue} onOpenExecution={openExecution} />
           )}
