@@ -55,6 +55,8 @@ export interface TimelineAnnotationsProps {
   onCreateAt: (at: number, anchor: AnchorRect) => void;
   /** A card (or a stack) was clicked. */
   onOpenCard: (card: PlacedCard<UiAnnotation>, anchor: AnchorRect) => void;
+  /** Mini band: the cursor entered a pill (`anchor`) or left it (`null`). */
+  onHoverCard?: (card: PlacedCard<UiAnnotation>, anchor: AnchorRect | null) => void;
 }
 
 export interface TicketTimelineProps {
@@ -361,6 +363,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
               ghost={ghost}
               highlight={annotations.highlight}
               onOpenCard={(card, el) => annotations.onOpenCard(card, rectOf(el))}
+              onHoverCard={annotations.onHoverCard && ((card, el) => annotations.onHoverCard!(card, el ? rectOf(el) : null))}
               onCreate={(at, el) => annotations.onCreateAt(at, rectOf(el))}
             />
           )}

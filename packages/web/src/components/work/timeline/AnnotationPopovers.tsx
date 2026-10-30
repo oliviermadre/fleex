@@ -1,8 +1,9 @@
 /**
  * The Timeline annotation popovers (SPEC annotations §5.2–5.3): the composer
  * (create / pin a comment / edit / retry), the reader of a card, and the list
- * of a stacked group. Click-opened, never hover: Échap or a click outside
- * closes them. Rendered in a portal at fixed coordinates next to their anchor,
+ * of a stacked group. Click-opened; in the mini band a pill's reader / list
+ * also opens on hover (the click then pins it). Échap or a click outside
+ * closes them — a click on their own anchor is left to the anchor (toggle). Rendered in a portal at fixed coordinates next to their anchor,
  * so the drawer's overflow never clips them.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -39,18 +40,28 @@ function toLocalInput(iso: string): string {
 
 // ── Shell ─────────────────────────────────────────────────────────────────────
 
+/** What a reader / list needs to be hover-opened and to toggle on its anchor. */
+export interface PopoverHover {
+  /** `data-timeline-node` of the anchor: a click on it is not a click outside. */
+  anchorNode?: string;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}
+
 function Popover({
   anchor,
   width,
   onClose,
   label,
   children,
+  hover,
 }: {
   anchor: AnchorRect;
   width: number;
   onClose: () => void;
   label: string;
   children: ReactNode;
+  hover?: PopoverHover;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -68,9 +79,14 @@ function Popover({
     setPos({ left, top: Math.max(8, top) });
   }, [anchor, width, children]);
 
+  const anchorNode = hover?.anchorNode;
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      const target = e.target as Element;
+      if (!ref.current || ref.current.contains(target)) return;
+      // The anchor's own click decides (pin / unpin): closing here would let it reopen us.
+      if (anchorNode && target.closest?.('[data-timeline-node]')?.getAttribute('data-timeline-node') === anchorNode) return;
+      onClose();
     };
     // Next tick: the click that opened us must not close us.
     const id = setTimeout(() => document.addEventListener('mousedown', onDown), 0);
@@ -78,13 +94,15 @@ function Popover({
       clearTimeout(id);
       document.removeEventListener('mousedown', onDown);
     };
-  }, [onClose]);
+  }, [onClose, anchorNode]);
 
   return createPortal(
     <div
       ref={ref}
       role="dialog"
       aria-label={label}
+      onMouseEnter={hover?.onMouseEnter}
+      onMouseLeave={hover?.onMouseLeave}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation();
@@ -313,6 +331,7 @@ export function AnnotationViewer({
   onDelete,
   onTone,
   onSeeComment,
+  hover,
 }: {
   annotation: UiAnnotation;
   anchor: AnchorRect;
@@ -321,11 +340,12 @@ export function AnnotationViewer({
   onDelete: () => void;
   onTone: (tone: AnnotationTone) => void;
   onSeeComment: (commentId: string) => void;
+  hover?: PopoverHover;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const a = annotation;
   return (
-    <Popover anchor={anchor} width={520} onClose={onClose} label={`Annotation : ${a.title}`}>
+    <Popover anchor={anchor} width={520} onClose={onClose} label={`Annotation : ${a.title}`} hover={hover}>
       <div data-testid="annotation-viewer">
         <div className="flex items-center gap-2">
           <AnnotationToneIcon tone={a.tone} size={14} />
@@ -398,14 +418,16 @@ export function AnnotationStackList({
   anchor,
   onClose,
   onOpen,
+  hover,
 }: {
   annotations: UiAnnotation[];
   anchor: AnchorRect;
   onClose: () => void;
   onOpen: (id: string) => void;
+  hover?: PopoverHover;
 }) {
   return (
-    <Popover anchor={anchor} width={300} onClose={onClose} label={`${annotations.length} annotations`}>
+    <Popover anchor={anchor} width={300} onClose={onClose} label={`${annotations.length} annotations`} hover={hover}>
       <div className="mb-1 text-[12px] text-[var(--theme-text-secondary)]">{annotations.length} annotations</div>
       <div className="flex flex-col">
         {annotations.map((a) => {

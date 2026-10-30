@@ -1,12 +1,13 @@
 /**
  * The annotation band above the frieze (SPEC annotations §5.1): always-visible
- * cards (title, time, author, thumbnail) — nothing to hover — each hung from a
+ * cards (title, time, author, thumbnail) — nothing to hover — or, when the
+ * drawer is too short, icon-only pills whose hover shows the reader; each hung from a
  * dotted line in its tone that stops on the lifeline at its exact instant; plus
  * the ghost "+" that follows the cursor. Only that "+" bubble is clickable
  * (it lights up on hover): a click elsewhere in the band never creates.
  * Pure rendering: placement comes from layoutAnnotations, clicks go up.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { cn } from '../../../lib/cn';
 import type { UiAnnotation } from '../../../stores/annotationStore';
 import { GEOMETRY } from './layoutTimeline';
@@ -53,6 +54,8 @@ interface Props {
   ghost: CursorInstant | null;
   highlight: { id: string; nonce: number } | null;
   onOpenCard: (card: PlacedCard<UiAnnotation>, el: HTMLElement) => void;
+  /** Mini band only: the cursor entered a pill (`el`) or left it (`null`). */
+  onHoverCard?: (card: PlacedCard<UiAnnotation>, el: HTMLElement | null) => void;
   /** The ghost "+" bubble was clicked: annotate this instant. */
   onCreate: (at: number, el: HTMLElement) => void;
 }
@@ -92,7 +95,7 @@ export function AnnotationAnchors({ band, width }: { band: AnnotationBand<UiAnno
   );
 }
 
-export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCard, onCreate }: Props) {
+export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCard, onHoverCard, onCreate }: Props) {
   const h = band.height;
   const [pulsing, setPulsing] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -139,7 +142,7 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
         const id = cardNodeId(card);
         const top = cardTop(card.row, h);
         const pulse = pulsing === id;
-        if (band.mode === 'mini') return <AnnotationPill key={id} id={id} card={card} pulse={pulse} onOpen={onOpenCard} />;
+        if (band.mode === 'mini') return <AnnotationPill key={id} id={id} card={card} pulse={pulse} onOpen={onOpenCard} onHover={onHoverCard} />;
         if (card.kind === 'stack') {
           const first = card.items[0]!.annotation;
           const last = card.items[card.items.length - 1]!.annotation;
@@ -265,19 +268,30 @@ export function TimelineAnnotationBand({ band, width, ghost, highlight, onOpenCa
  * Mini band (drawer too short for cards): one pill per annotation — its tone
  * icon in its tone colour — or a counted pill when several would touch. Same
  * click targets as the cards: a pill opens the reader, a counted pill the list.
+ * An icon tells nothing, so hovering a pill also shows it (the click pins it) —
+ * except a failed / saving annotation, whose click is an action, not a read.
  */
 function AnnotationPill({
   id,
   card,
   pulse,
   onOpen,
+  onHover,
 }: {
   id: string;
   card: PlacedCard<UiAnnotation>;
   pulse: boolean;
   onOpen: (card: PlacedCard<UiAnnotation>, el: HTMLElement) => void;
+  onHover?: (card: PlacedCard<UiAnnotation>, el: HTMLElement | null) => void;
 }) {
   const ring = pulse && 'ring-2 ring-[var(--theme-accent)]';
+  const hoverable = !!onHover && (card.kind === 'stack' || !card.item.annotation.uiState);
+  const hover = hoverable
+    ? {
+        onMouseEnter: (e: MouseEvent<HTMLElement>) => onHover!(card, e.currentTarget),
+        onMouseLeave: () => onHover!(card, null),
+      }
+    : {};
   if (card.kind === 'stack') {
     return (
       <button
@@ -285,8 +299,9 @@ function AnnotationPill({
         data-timeline-node={id}
         data-testid="annotation-pill"
         aria-label={`${card.items.length} annotations`}
-        title={`${card.items.length} annotations`}
+        title={hoverable ? undefined : `${card.items.length} annotations`}
         onClick={(e) => onOpen(card, e.currentTarget)}
+        {...hover}
         className={cn(
           'absolute z-[4] flex items-center justify-center rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-overlay)] font-mono text-[10px] font-semibold text-[var(--theme-text-primary)] transition-transform hover:scale-110',
           ring,
@@ -305,8 +320,9 @@ function AnnotationPill({
       data-timeline-node={id}
       data-testid="annotation-pill"
       aria-label={`Annotation : ${a.title}, ${longWhen(a.at)}`}
-      title={a.title}
+      title={hoverable ? undefined : a.title}
       onClick={(e) => onOpen(card, e.currentTarget)}
+      {...hover}
       className={cn('absolute z-[4] flex items-center justify-center rounded-full border transition-transform hover:scale-110', a.uiState === 'saving' && 'opacity-60', ring)}
       style={{
         left: card.left,

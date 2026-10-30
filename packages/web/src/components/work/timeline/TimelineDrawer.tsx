@@ -7,6 +7,8 @@
  *
  * It also owns the annotation popovers (composer, reader, stack list): the
  * frieze reports clicks with a screen rect, the drawer opens the popover there.
+ * A click pins the reader / list, a second click on the same card unpins and
+ * closes it; in the mini band, hovering a pill shows it unpinned (gone on leave).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
@@ -22,6 +24,7 @@ import type { TimelineAction } from './buildTimeline';
 import { TicketTimeline, type TimelineAnnotationsProps } from './TicketTimeline';
 import { AnnotationComposer, AnnotationStackList, AnnotationViewer, type AnchorRect } from './AnnotationPopovers';
 import type { PlacedCard } from './layoutAnnotations';
+import { cardNodeId } from './TimelineAnnotationBand';
 import { useTicketTimeline } from './useTicketTimeline';
 import { GEOMETRY } from './layoutTimeline';
 
@@ -35,6 +38,17 @@ interface Props {
 }
 
 const EMPTY: UiAnnotation[] = [];
+
+/** Hover on a mini pill: open after this rest, close this long after leaving (time to reach the popover). */
+const HOVER_OPEN_MS = 150;
+const HOVER_CLOSE_MS = 200;
+
+/** An open reader / list: its anchor's node id (toggle on re-click) and whether a click pinned it. */
+interface OpenAt {
+  anchor: AnchorRect;
+  node?: string;
+  pinned: boolean;
+}
 
 const rectOf = (el: Element): AnchorRect => {
   const r = el.getBoundingClientRect();
@@ -68,13 +82,29 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
   const highlight = useAnnotationStore((s) => s.highlight);
   const composer = useAnnotationStore((s) => (s.composer?.ticketId === task.id ? s.composer : null));
   const [composerAnchor, setComposerAnchor] = useState<AnchorRect | null>(null);
-  const [viewer, setViewer] = useState<{ id: string; anchor: AnchorRect } | null>(null);
-  const [stack, setStack] = useState<{ ids: string[]; anchor: AnchorRect } | null>(null);
+  const [viewer, setViewer] = useState<({ id: string } & OpenAt) | null>(null);
+  const [stack, setStack] = useState<({ ids: string[] } & OpenAt) | null>(null);
   const [contentH, setContentH] = useState(0);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     void useAnnotationStore.getState().load(task.id);
   }, [task.id]);
+
+  // Hover never replaces a pinned popover nor competes with the composer.
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hoverBlocked = useRef(false);
+  useEffect(() => {
+    hoverBlocked.current = !!(viewer?.pinned || stack?.pinned || composer);
+  });
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+  const hoverKeep = useCallback(() => clearTimeout(hoverTimer.current), []);
+  const hoverClose = useCallback(() => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => {
+      setViewer((v) => (v?.pinned ? v : null));
+      setStack((s) => (s?.pinned ? s : null));
+    }, HOVER_CLOSE_MS);
+  }, []);
 
   // A composer opened from elsewhere (pin a comment) comes without a rect:
   // anchor it on the comment's picto, else on the drawer itself.
@@ -102,12 +132,14 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
       });
     },
     onOpenCard: (card: PlacedCard<UiAnnotation>, anchor: AnchorRect) => {
-      setStack(null);
+      clearTimeout(hoverTimer.current);
+      const node = cardNodeId(card);
       if (card.kind === 'stack') {
         setViewer(null);
-        setStack({ ids: card.items.map((i) => i.annotation.id), anchor });
+        setStack((s) => (s?.node === node && s.pinned ? null : { ids: card.items.map((i) => i.annotation.id), anchor, node, pinned: true }));
         return;
       }
+      setStack(null);
       const a = card.item.annotation;
       if (a.uiState === 'error') {
         setComposerAnchor(anchor);
@@ -117,9 +149,25 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
         });
         return;
       }
-      if (!a.uiState) setViewer({ id: a.id, anchor });
+      if (!a.uiState) setViewer((v) => (v?.node === node && v.pinned ? null : { id: a.id, anchor, node, pinned: true }));
     },
-  }), [list, highlight, task.id]);
+    onHoverCard: (card: PlacedCard<UiAnnotation>, anchor: AnchorRect | null) => {
+      if (!anchor) return hoverClose();
+      if (hoverBlocked.current) return;
+      clearTimeout(hoverTimer.current);
+      const node = cardNodeId(card);
+      hoverTimer.current = setTimeout(() => {
+        if (hoverBlocked.current) return;
+        if (card.kind === 'stack') {
+          setViewer(null);
+          setStack({ ids: card.items.map((i) => i.annotation.id), anchor, node, pinned: false });
+        } else {
+          setStack(null);
+          setViewer({ id: card.item.annotation.id, anchor, node, pinned: false });
+        }
+      }, HOVER_OPEN_MS);
+    },
+  }), [list, highlight, task.id, hoverClose]);
 
   const closeComposer = useCallback(() => {
     // Closing a failed draft's retry keeps the red card: "Réessayer / Abandonner" stays on it.
@@ -207,6 +255,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
         <AnnotationViewer
           annotation={viewed}
           anchor={viewer.anchor}
+          hover={{ anchorNode: viewer.node, onMouseEnter: hoverKeep, onMouseLeave: hoverClose }}
           onClose={() => setViewer(null)}
           onTone={(tone) => void useAnnotationStore.getState().update(task.id, viewed.id, { tone })}
           onSeeComment={(commentId) => {
@@ -232,9 +281,10 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
         <AnnotationStackList
           annotations={stack.ids.map((id) => list.find((a) => a.id === id)).filter((a): a is UiAnnotation => !!a)}
           anchor={stack.anchor}
+          hover={{ anchorNode: stack.node, onMouseEnter: hoverKeep, onMouseLeave: hoverClose }}
           onClose={() => setStack(null)}
           onOpen={(id) => {
-            setViewer({ id, anchor: stack.anchor });
+            setViewer({ id, anchor: stack.anchor, node: stack.node, pinned: true });
             setStack(null);
           }}
         />
