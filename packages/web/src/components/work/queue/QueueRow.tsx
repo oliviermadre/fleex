@@ -7,6 +7,7 @@
  * the row body selects the task.
  */
 import type { KeyboardEvent } from 'react';
+import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { tintClasses } from '../../../lib/tints';
 import { useTicketStore } from '../../../stores/ticketStore';
@@ -27,9 +28,14 @@ interface Props {
   onSelect: () => void;
   /** Open the execution log for this task's running SDK run (from the activity badge). */
   onOpenExecution: (executionId: string, title: string) => void;
+  /**
+   * Set for the pinned row the filters exclude: its status is always shown (it's
+   * usually why the row is filtered out) with a line naming the excluding filters.
+   */
+  hiddenBy?: readonly string[];
 }
 
-export function QueueRow({ task, selected, onSelect, onOpenExecution }: Props) {
+export function QueueRow({ task, selected, onSelect, onOpenExecution, hiddenBy }: Props) {
   const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === task.id) ?? null);
   const updateTicket = useTicketStore((s) => s.updateTicket);
 
@@ -64,6 +70,18 @@ export function QueueRow({ task, selected, onSelect, onOpenExecution }: Props) {
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--theme-text-primary)]">
           {task.title}
         </span>
+
+        {hiddenBy && (
+          <span
+            className={cn(
+              'shrink-0 rounded border px-1.5 text-[10.5px] leading-[17px]',
+              tintClasses('gray').text,
+              tintClasses('gray').borderColor,
+            )}
+          >
+            {TICKET_STATUS_LABELS[task.status as keyof typeof TICKET_STATUS_LABELS] ?? task.status}
+          </span>
+        )}
 
         {ticket && (
           <button
@@ -136,6 +154,12 @@ export function QueueRow({ task, selected, onSelect, onOpenExecution }: Props) {
           )}
         >
           {task.activityDetail || task.boardName}
+        </div>
+      )}
+
+      {hiddenBy && hiddenBy.length > 0 && (
+        <div className={cn('mt-1 truncate text-[11px]', tintClasses('purple').text)}>
+          Hidden by filters: {hiddenBy.join(', ')}
         </div>
       )}
 

@@ -7,8 +7,6 @@ import { ScratchpadMainView } from '../scratchpad/ScratchpadMainView';
 import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { KanbanBoard } from '../tickets/KanbanBoard';
-import { TicketDetail } from '../tickets/TicketDetail';
-import { useTicketStore } from '../../stores/ticketStore';
 import { AgentPersonaView } from '../agents/AgentPersonaView';
 import { SkillEditor } from '../agents/SkillEditor';
 import { PanelDetailView } from '../agents/PanelDetailView';
@@ -29,7 +27,6 @@ export function MainPanel() {
   const activePanel = useUIStore((s) => s.activePanel);
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
-  const selectedTicketId = useTicketStore((s) => s.selectedTicketId);
   const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
   const selectedPanelId = usePanelStore((s) => s.selectedPanelId);
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
@@ -102,10 +99,8 @@ export function MainPanel() {
     return <AgentPersonaView />;
   }
 
+  // A ticket never opens here: it opens in the Work view (openTicketInWork).
   if (activePanel === 'tickets') {
-    if (selectedTicketId) {
-      return <TicketDetail ticketId={selectedTicketId} />;
-    }
     return <KanbanBoard />;
   }
 

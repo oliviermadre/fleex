@@ -9,6 +9,7 @@ import { FloatingExecutionPanel } from './ExecutionModal';
 import { CostBadge } from './CostBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
+import { openTicketInWork } from '../work/openInWork';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUnreadStore } from '../../stores/unreadStore';
@@ -66,8 +67,6 @@ export function KanbanCard({
   ticket: Ticket;
   board?: BoardWithCounts | null;
 }) {
-  const selectTicket = useTicketStore((s) => s.selectTicket);
-  const setTicketTab = useTicketStore((s) => s.setTicketTab);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const archiveTicket = useTicketStore((s) => s.archiveTicket);
   const retrySlackImport = useTicketStore((s) => s.retrySlackImport);
@@ -148,7 +147,7 @@ export function KanbanCard({
       onDragEnd={(e) => {
         (e.currentTarget as HTMLElement).style.opacity = '';
       }}
-      onClick={() => selectTicket(ticket.id)}
+      onClick={() => openTicketInWork(ticket.id)}
       className={`group relative cursor-pointer rounded-lg border transition-colors ${PRIORITY_BORDER[ticket.priority]} ${PRIORITY_LEFT[ticket.priority]} ${PRIORITY_BG[ticket.priority]}`}
     >
       {/* ── HEADER BAR ── priority dot + type emoji (left) | cost badge (centre) | github/blocked/fav (right)
@@ -365,7 +364,7 @@ export function KanbanCard({
           <button
             className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadComments > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}
             title={unread.unreadComments > 0 ? `${unread.unreadComments} unread / ${unread.totalComments} comments` : `${unread.totalComments} comments`}
-            onClick={(e) => { e.stopPropagation(); selectTicket(ticket.id); setTicketTab('comments'); }}
+            onClick={(e) => { e.stopPropagation(); openTicketInWork(ticket.id, { mode: 'chat' }); }}
           >
             <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" /></svg>
             {unread.totalComments}
@@ -373,7 +372,7 @@ export function KanbanCard({
           <button
             className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadDeliverables > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}
             title={unread.unreadDeliverables > 0 ? `${unread.unreadDeliverables} unseen / ${unread.totalDeliverables} deliverables` : `${unread.totalDeliverables} deliverables`}
-            onClick={(e) => { e.stopPropagation(); selectTicket(ticket.id); setTicketTab('deliverables'); }}
+            onClick={(e) => { e.stopPropagation(); openTicketInWork(ticket.id, { rightPanel: 'deliv' }); }}
           >
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="1.5" width="10" height="13" rx="1.5" /><path d="M5.5 5h5M5.5 8h5M5.5 11h3" /></svg>
             {unread.totalDeliverables}

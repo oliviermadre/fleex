@@ -3,6 +3,7 @@ import { render, cleanup, fireEvent } from '@testing-library/react';
 import type { Ticket } from '@fleex/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useWorkStore } from '../../stores/workStore';
 import { useUIStore } from '../../stores/uiStore';
 
 function ticket(id: string, displayId: number, title: string): Ticket {
@@ -28,8 +29,10 @@ describe('MarkdownRenderer — @ticket mentions', () => {
     expect(container.textContent).toContain('Mentionner des tickets');
 
     fireEvent.click(getByRole('button'));
-    expect(useTicketStore.getState().selectedTicketId).toBe('t1');
-    expect(useUIStore.getState().activePanel).toBe('tickets');
+    // The ticket opens in the Work view, pinned whatever the queue filters.
+    expect(useWorkStore.getState().selectedTicketId).toBe('t1');
+    expect(useWorkStore.getState().pinnedTicketId).toBe('t1');
+    expect(useUIStore.getState().activePanel).toBe('work');
   });
 
   it('leaves a ticket mention inside a code span untouched', () => {

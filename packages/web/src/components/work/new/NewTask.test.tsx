@@ -119,6 +119,25 @@ describe('NewTask — board, epics, repos', () => {
   });
 });
 
+// The reported bug: queue filtered on board Alpha, task created on Beta → the
+// view jumped to the queue's first row and the new task was nowhere to be seen.
+describe('NewTask — a task created outside the queue filters', () => {
+  it('stays selected and pinned, and the queue filters are left alone', async () => {
+    useWorkStore.setState({ boardFilters: ['b1'], statusFilters: ['doing', 'reviewing'], pinnedTicketId: null, selectedTicketId: null });
+    useWorkStore.getState().updateDraft({ title: 'On another board', boardId: 'b2' });
+    render(<NewTask />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+    await waitFor(() => expect(useWorkStore.getState().view).toBe('task'));
+    const work = useWorkStore.getState();
+    expect(work.selectedTicketId).toBe('t-new');
+    expect(work.pinnedTicketId).toBe('t-new');
+    expect(work.boardFilters).toEqual(['b1']);
+    expect(work.statusFilters).toEqual(['doing', 'reviewing']);
+  });
+});
+
 describe('NewTask — description height', () => {
   const DESC_PLACEHOLDER = 'Describe the task. Code or not, framed or not.';
 

@@ -5,8 +5,6 @@ import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
 import { isMissingRepo } from '../lib/repoStatus';
 
-export type TicketTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity' | 'workflow';
-export const VALID_TICKET_TABS: TicketTab[] = ['description', 'comments', 'mentions', 'deliverables', 'activity', 'workflow'];
 
 interface TicketFilters {
   repo: string | null;        // "org/name" or null for all
@@ -24,7 +22,6 @@ interface TicketState {
   tickets: Ticket[];
   selectedBoardId: string | null;
   selectedTicketId: string | null;
-  ticketTab: TicketTab;
   statusFilter: TicketStatus | 'all';
   searchQuery: string;
   filters: TicketFilters;
@@ -51,7 +48,6 @@ interface TicketState {
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
   selectBoard: (id: string | null) => void;
   selectTicket: (id: string | null) => void;
-  setTicketTab: (tab: TicketTab) => void;
   setStatusFilter: (filter: TicketStatus | 'all') => void;
   setSearchQuery: (query: string) => void;
   setFilters: (filters: Partial<TicketFilters>) => void;
@@ -95,7 +91,6 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   tickets: [],
   selectedBoardId: loadPersistedBoardId() ?? null,
   selectedTicketId: null,
-  ticketTab: 'description',
   statusFilter: 'all',
   searchQuery: '',
   filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, noRepo: false, hideOldDoneCancelled: true },
@@ -286,11 +281,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     set({ selectedBoardId: id, selectedTicketId: null });
     localStorage.setItem(BOARD_STORAGE_KEY, id ?? ALL_BOARDS_SENTINEL);
   },
-  selectTicket: (id) => set((s) => ({
-    selectedTicketId: id,
-    ticketTab: id !== s.selectedTicketId ? 'description' : s.ticketTab,
-  })),
-  setTicketTab: (tab) => set({ ticketTab: tab }),
+  selectTicket: (id) => set({ selectedTicketId: id }),
   setStatusFilter: (filter) => set({ statusFilter: filter }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setFilters: (partial) => set((s) => ({ filters: { ...s.filters, ...partial } })),

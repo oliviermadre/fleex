@@ -2,18 +2,19 @@
  * useWorkQueue — the single place that joins the real stores into the Work
  * view's model. It loads tickets/boards/activity, builds a WorkTask per ticket
  * in scope (status doing/reviewing across all boards), partitions them into the
- * three queue sections, and resolves the selected task. Every Work component
+ * three queue sections, adds the pinned ticket when the filters exclude it, and
+ * resolves the selected task. Every Work component
  * consumes this; none reaches into a store for queue data itself.
  */
-import { useEffect, useMemo, useState } from 'react';
-import type { AgentActivityState, BoardWithCounts, TicketLink } from '@fleex/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { AgentActivityState, BoardWithCounts, Ticket, TicketLink } from '@fleex/shared';
 import * as api from '../../services/api';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
-import { useWorkStore, filtersRevealing, type QueueGroupBy } from '../../stores/workStore';
+import { useWorkStore, excludedBy, type QueueFilterKey, type QueueGroupBy } from '../../stores/workStore';
 import { partitionQueue, idleActivitySource, type QueueItem } from './selectors';
 import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
@@ -75,8 +76,14 @@ export interface WorkQueueModel {
   tasks: WorkTask[];
   /** Ordered, grouped rows for the current groupBy. */
   groups: QueueGroup[];
-  /** Flattened display order of ids (drives ⌘⇧↑/↓). */
+  /** Flattened display order of ids (drives ⌘⇧↑/↓) — the out-of-filters pin first. */
   orderedIds: string[];
+  /**
+   * The pinned ticket when the filters exclude it (shown in its own section on
+   * top of the queue, not counted), with the filters that exclude it. Null when
+   * there is no pin or it passes the filters (then it's an ordinary row).
+   */
+  pinned: { task: WorkTask; excludedBy: QueueFilterKey[] } | null;
   /** WorkTask lookup by id. */
   byId: Map<string, WorkTask>;
   boards: BoardWithCounts[];
@@ -109,26 +116,27 @@ export function useWorkQueue(): WorkQueueModel {
   const favoriteOnly = useWorkStore((s) => s.favoriteOnly);
   const search = useWorkStore((s) => s.search);
   const selectedTicketId = useWorkStore((s) => s.selectedTicketId);
-  const revealTicketId = useWorkStore((s) => s.revealTicketId);
+  const pinnedTicketId = useWorkStore((s) => s.pinnedTicketId);
 
   // Prime tickets/boards once. useTickets() may already be mounted higher up;
   // fetching again is cheap and keeps the view self-sufficient when it isn't.
+  // `ticketsLoaded` tells "not loaded yet" from "doesn't exist" for the pin.
+  const [ticketsLoaded, setTicketsLoaded] = useState(false);
   useEffect(() => {
     void fetchBoards();
-    void fetchTickets();
+    void fetchTickets().then(() => setTicketsLoaded(true), () => setTicketsLoaded(true));
     void fetchRepositories();
   }, [fetchBoards, fetchTickets, fetchRepositories]);
 
-  // A ticket we were sent to (deep link, "open this session") is shown even when
-  // the filters hide it: widen them just enough, once the ticket is loaded — the
-  // fallback below would otherwise silently show the queue's first row instead.
+  const pinnedTicket = useMemo<Ticket | null>(
+    () => (pinnedTicketId ? tickets.find((t) => t.id === pinnedTicketId) ?? null : null),
+    [tickets, pinnedTicketId],
+  );
+
+  // A pin whose ticket is gone (deleted elsewhere) is dropped, once we know.
   useEffect(() => {
-    if (!revealTicketId) return;
-    const ticket = tickets.find((t) => t.id === revealTicketId);
-    if (!ticket) return;
-    const store = useWorkStore.getState();
-    store.settleReveal(filtersRevealing(store, ticket));
-  }, [revealTicketId, tickets]);
+    if (ticketsLoaded && pinnedTicketId && !pinnedTicket) useWorkStore.getState().unpinTicket();
+  }, [ticketsLoaded, pinnedTicketId, pinnedTicket]);
 
   // The tickets in queue scope = those whose status is in the status filter
   // (defaults to doing + reviewing). An empty filter shows every status.
@@ -138,7 +146,12 @@ export function useWorkQueue(): WorkQueueModel {
     return set.size === 0 ? tickets : tickets.filter((t) => set.has(t.status));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tickets, statusFilterKey]);
-  const scopedIds = useMemo(() => scopedTickets.map((t) => t.id), [scopedTickets]);
+  // The pin's activity is loaded too: it may sit outside the status scope.
+  const scopedIds = useMemo(() => {
+    const ids = scopedTickets.map((t) => t.id);
+    if (pinnedTicket && !ids.includes(pinnedTicket.id)) ids.push(pinnedTicket.id);
+    return ids;
+  }, [scopedTickets, pinnedTicket]);
   const scopedIdsKey = scopedIds.join(',');
 
   useEffect(() => {
@@ -151,9 +164,10 @@ export function useWorkQueue(): WorkQueueModel {
   // glyph and refreshed periodically.
   const prRefsKey = useMemo(() => {
     const refs = new Set<string>();
-    for (const t of scopedTickets) for (const l of t.links) if (l.type === 'github_pr') refs.add(l.ref);
+    const all = pinnedTicket ? [...scopedTickets, pinnedTicket] : scopedTickets;
+    for (const t of all) for (const l of t.links) if (l.type === 'github_pr') refs.add(l.ref);
     return [...refs].sort().join('\n');
-  }, [scopedTickets]);
+  }, [scopedTickets, pinnedTicket]);
   const [prDetails, setPrDetails] = useState<Record<string, api.PullRequestDetails>>({});
   useEffect(() => {
     if (!prRefsKey) return;
@@ -200,80 +214,62 @@ export function useWorkQueue(): WorkQueueModel {
     return m;
   }, [boards]);
 
-  const tasks = useMemo<WorkTask[]>(() => {
-    const boardSet = new Set(boardFilters);
-    const prioritySet = new Set(priorityFilters);
-    const q = search.trim().toLowerCase();
-    const filtered = scopedTickets.filter((t) => {
-      if (boardSet.size > 0 && !boardSet.has(t.boardId)) return false;
-      if (prioritySet.size > 0 && !prioritySet.has(t.priority)) return false;
-      if (favoriteOnly && !t.favorite) return false;
-      if (q && !t.title.toLowerCase().includes(q)) return false;
-      return true;
-    });
+  const toTask = useCallback((t: Ticket): WorkTask => {
+    const activity: AgentActivityState = activityByTicket[t.id] ?? 'idle';
+    const worktrees = reposFromLinks(t.links);
+    const activeRun = runsByTicket[t.id]?.find((r) =>
+      ['running', 'blocked', 'needs_review'].includes(r.status),
+    );
+    let progress: number | null = null;
+    if (activeRun) {
+      const steps = activeRun.templateSnapshot.steps;
+      const idx = steps.findIndex((s) => s.id === activeRun.currentStepId);
+      if (idx >= 0 && steps.length > 0) progress = (idx + 1) / steps.length;
+    }
 
-    return filtered.map((t) => {
-      const activity: AgentActivityState = activityByTicket[t.id] ?? 'idle';
-      const worktrees = reposFromLinks(t.links);
-      const activeRun = runsByTicket[t.id]?.find((r) =>
-        ['running', 'blocked', 'needs_review'].includes(r.status),
-      );
-      let progress: number | null = null;
-      if (activeRun) {
-        const steps = activeRun.templateSnapshot.steps;
-        const idx = steps.findIndex((s) => s.id === activeRun.currentStepId);
-        if (idx >= 0 && steps.length > 0) progress = (idx + 1) / steps.length;
-      }
+    // PR from the ticket's github_pr link; diff stats from the PR polling
+    // store, matched on the PR's worktree repo + branch when we have one.
+    const prBase = prFromLinks(t.links);
+    const wtStats = diffStatsByTicket.get(t.id);
+    let pr: WorkTask['pr'] = null;
+    if (prBase) {
+      pr = {
+        ref: prBase.ref,
+        checksLabel: null,
+        additions: wtStats?.additions ?? null,
+        deletions: wtStats?.deletions ?? null,
+        url: prBase.url ?? undefined,
+      };
+    }
 
-      // PR from the ticket's github_pr link; diff stats from the PR polling
-      // store, matched on the PR's worktree repo + branch when we have one.
-      const prBase = prFromLinks(t.links);
-      const wtStats = diffStatsByTicket.get(t.id);
-      let pr: WorkTask['pr'] = null;
-      if (prBase) {
-        pr = {
-          ref: prBase.ref,
-          checksLabel: null,
-          additions: wtStats?.additions ?? null,
-          deletions: wtStats?.deletions ?? null,
-          url: prBase.url ?? undefined,
-        };
-      }
-
-      return {
-        id: t.id,
-        number: t.displayId,
-        title: t.title,
-        boardId: t.boardId,
-        boardName: boardById.get(t.boardId)?.name ?? null,
-        status: t.status,
-        type: t.type,
-        size: null,
-        priority: t.priority,
-        favorite: t.favorite,
-        blocked: t.blocked,
-        activity,
-        activityDetail: detailByTicket[t.id] ?? null,
-        since: toMs(sinceByTicket[t.id]),
-        lastActivityAt: toMs(idleActivitySource(t, lastActivityAtByTicket[t.id])),
-        cost: costByTicket[t.id] ?? null,
-        runningExecutionId: runningExecutionIdByTicket[t.id] ?? null,
-        progress,
-        worktrees,
-        suggestedRepos: [],
-        changedLines: wtStats ? wtStats.additions + wtStats.deletions : 0,
-        pr,
-        prs: prLinksFor(t.links, prDetails),
-        deliverableCount: 0,
-        sessionCount: sessionCountByTicket.get(t.id) ?? 0,
-      } satisfies WorkTask;
-    });
+    return {
+      id: t.id,
+      number: t.displayId,
+      title: t.title,
+      boardId: t.boardId,
+      boardName: boardById.get(t.boardId)?.name ?? null,
+      status: t.status,
+      type: t.type,
+      size: null,
+      priority: t.priority,
+      favorite: t.favorite,
+      blocked: t.blocked,
+      activity,
+      activityDetail: detailByTicket[t.id] ?? null,
+      since: toMs(sinceByTicket[t.id]),
+      lastActivityAt: toMs(idleActivitySource(t, lastActivityAtByTicket[t.id])),
+      cost: costByTicket[t.id] ?? null,
+      runningExecutionId: runningExecutionIdByTicket[t.id] ?? null,
+      progress,
+      worktrees,
+      suggestedRepos: [],
+      changedLines: wtStats ? wtStats.additions + wtStats.deletions : 0,
+      pr,
+      prs: prLinksFor(t.links, prDetails),
+      deliverableCount: 0,
+      sessionCount: sessionCountByTicket.get(t.id) ?? 0,
+    } satisfies WorkTask;
   }, [
-    scopedTickets,
-    boardFilters,
-    priorityFilters,
-    favoriteOnly,
-    search,
     activityByTicket,
     detailByTicket,
     sinceByTicket,
@@ -287,23 +283,46 @@ export function useWorkQueue(): WorkQueueModel {
     prDetails,
   ]);
 
+  const filters = useMemo(
+    () => ({ boardFilters, statusFilters, priorityFilters, favoriteOnly, search }),
+    [boardFilters, statusFilters, priorityFilters, favoriteOnly, search],
+  );
+
+  const tasks = useMemo<WorkTask[]>(
+    () => scopedTickets.filter((t) => excludedBy(filters, t).length === 0).map(toTask),
+    [scopedTickets, filters, toTask],
+  );
+
+  const pinned = useMemo<WorkQueueModel['pinned']>(() => {
+    if (!pinnedTicket) return null;
+    const reasons = excludedBy(filters, pinnedTicket);
+    return reasons.length > 0 ? { task: toTask(pinnedTicket), excludedBy: reasons } : null;
+  }, [pinnedTicket, filters, toTask]);
+
   const byId = useMemo(() => {
     const m = new Map<string, WorkTask>();
     for (const t of tasks) m.set(t.id, t);
+    if (pinned) m.set(pinned.task.id, pinned.task);
     return m;
-  }, [tasks]);
+  }, [tasks, pinned]);
 
   const groups = useMemo<QueueGroup[]>(() => groupTasks(tasks, groupBy), [tasks, groupBy]);
 
-  const orderedIds = useMemo(() => groups.flatMap((g) => g.items.map((t) => t.id)), [groups]);
+  const orderedIds = useMemo(
+    () => [...(pinned ? [pinned.task.id] : []), ...groups.flatMap((g) => g.items.map((t) => t.id))],
+    [groups, pinned],
+  );
 
-  // Selected task: the persisted selection when still in scope, else the first
-  // row in display order.
+  // Selected task: the persisted selection when it's in the queue or pinned,
+  // else the first row in display order. Never a fallback while the pinned
+  // selection is still loading — a deep link would be replaced on first paint.
+  const pinLoading = !ticketsLoaded && !!selectedTicketId && selectedTicketId === pinnedTicketId && !pinnedTicket;
   const selectedTask = useMemo<WorkTask | null>(() => {
     if (selectedTicketId && byId.has(selectedTicketId)) return byId.get(selectedTicketId)!;
+    if (pinLoading) return null;
     const fallback = orderedIds[0] ?? null;
     return fallback ? byId.get(fallback) ?? null : null;
-  }, [selectedTicketId, byId, orderedIds]);
+  }, [selectedTicketId, pinLoading, byId, orderedIds]);
 
   const counts = useMemo(
     () => ({
@@ -314,7 +333,7 @@ export function useWorkQueue(): WorkQueueModel {
     [tasks],
   );
 
-  return { tasks, groups, orderedIds, byId, boards, selectedTask, counts };
+  return { tasks, groups, orderedIds, pinned, byId, boards, selectedTask, counts };
 }
 
 /** Recency-descending sort (for non-activity groupings). */

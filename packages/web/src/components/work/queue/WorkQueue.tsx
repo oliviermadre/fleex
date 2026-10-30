@@ -7,7 +7,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { cn } from '../../../lib/cn';
 import { TICKET_PRIORITIES, TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
-import { useWorkStore, QUEUE_MIN, QUEUE_MAX, type QueueGroupBy } from '../../../stores/workStore';
+import { useWorkStore, QUEUE_MIN, QUEUE_MAX, type QueueFilterKey, type QueueGroupBy } from '../../../stores/workStore';
+import { tintClasses } from '../../../lib/tints';
+import { Tooltip } from '../../ui/Tooltip';
 import { MultiSelect } from '../../ui/MultiSelect';
 import { GroupBySelect } from './GroupBySelect';
 import { PriorityIndicator, PRIORITY_LABELS } from '../../tickets/PriorityIndicator';
@@ -23,6 +25,16 @@ interface Props {
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** How the pinned row names the filters that exclude it. */
+const FILTER_LABELS: Record<QueueFilterKey, string> = {
+  boardFilters: 'board',
+  statusFilters: 'status',
+  priorityFilters: 'priority',
+  favoriteOnly: 'favorites',
+  search: 'search',
+};
+const PIN = tintClasses('purple');
 const GROUP_BY_OPTIONS: { value: QueueGroupBy; label: string }[] = [
   { value: 'activity', label: 'Activity' },
   { value: 'status', label: 'Status' },
@@ -50,6 +62,7 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
   const width = useWorkStore((s) => s.queueWidth);
   const setQueueWidth = useWorkStore((s) => s.setQueueWidth);
   const toggleQueueCollapsed = useWorkStore((s) => s.toggleQueueCollapsed);
+  const unpinTicket = useWorkStore((s) => s.unpinTicket);
   const view = useWorkStore((s) => s.view);
   // No queue row is "active" while composing a new task.
   const selectedId = view === 'task' ? (queue.selectedTask?.id ?? null) : null;
@@ -194,6 +207,39 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
             New task · draft · not yet a ticket
           </div>
         )}
+        {/* The ticket opened from outside the queue, kept on top while the filters
+            exclude it — without ever touching the filters. Not counted. */}
+        {queue.pinned && (
+          <div
+            data-testid="queue-pinned"
+            className={cn('mx-2 mb-1 mt-2 overflow-hidden rounded-md border border-dashed', PIN.borderColor, PIN.bg)}
+          >
+            <div className="flex items-center gap-1.5 pl-2.5 pr-1 pt-1">
+              <span className={cn('text-[10.5px] font-semibold tracking-[0.06em]', PIN.text)}>📌 OPENED OUTSIDE FILTERS</span>
+              <Tooltip label="Remove from the queue">
+                <button
+                  type="button"
+                  onClick={unpinTicket}
+                  aria-label="Remove from the queue"
+                  className={cn(
+                    'ml-auto flex h-5 w-5 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-primary)]',
+                    PIN.hoverBg,
+                  )}
+                >
+                  ✕
+                </button>
+              </Tooltip>
+            </div>
+            <QueueRow
+              task={queue.pinned.task}
+              selected={queue.pinned.task.id === selectedId}
+              onSelect={() => selectTicket(queue.pinned!.task.id)}
+              onOpenExecution={onOpenExecution}
+              hiddenBy={queue.pinned.excludedBy.map((k) => FILTER_LABELS[k])}
+            />
+          </div>
+        )}
+
         {queue.groups.map((g) => (
           <div key={g.key} className="pb-1">
             <div className="flex items-center gap-1.5 px-3 pb-1 pt-2">
@@ -232,7 +278,7 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
           <HotkeyBadge hotkey="⌥N" position="inline" />
         </button>
 
-        {queue.counts.total === 0 && (
+        {queue.counts.total === 0 && !queue.pinned && (
           <div className="px-3 pb-8 pt-2 text-center text-[12px] text-[var(--theme-text-faint)]">
             No tasks match. Adjust the filters above.
           </div>

@@ -10,6 +10,7 @@ import { askMemoryStream, fetchDeliverable, type MemoryAnswer, type MemorySnippe
 import type { MemoryAskStage, Ticket } from '@fleex/shared';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
+import { openTicketInWork } from '../work/openInWork';
 
 const REASONS: Record<string, string> = {
   no_results: 'Nothing indexed relates to this question.',
@@ -257,7 +258,6 @@ export function AskMemoryModal() {
   const question = useUIStore((s) => s.askMemoryQuestion);
   const close = useUIStore((s) => s.closeAskMemory);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
-  const selectTicket = useTicketStore((s) => s.selectTicket);
   const recordExchange = useAssistantStore((s) => s.recordExchange);
   const openSession = useAssistantStore((s) => s.openSession);
 
@@ -412,9 +412,8 @@ export function AskMemoryModal() {
 
   const openSource = useCallback((ticketId: string) => {
     close();
-    setActivePanel('tickets');
-    selectTicket(ticketId);
-  }, [close, setActivePanel, selectTicket]);
+    openTicketInWork(ticketId);
+  }, [close]);
 
   /**
    * Open a document that belongs to no ticket, in the reading overlay.

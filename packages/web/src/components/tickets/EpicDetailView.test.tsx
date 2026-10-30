@@ -7,18 +7,13 @@ import { RouterSync } from '../../router/RouterSync';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useWorkStore } from '../../stores/workStore';
 
 /**
  * Regression guard for the reported bug: clicking a ticket inside an epic must
- * open THAT ticket's page, not redirect to the roadmap.
- *
- * An epic is only ever opened from the roadmap, so while its detail is shown the
- * store holds `activeView === 'roadmap'`. The click handler must reset the view
- * to 'board' and select the ticket's board + the ticket, otherwise RouterSync's
- * Store→URL sync recomputes the roadmap URL (the roadmap branch of `storeToUrl`
- * wins over the ticket branch while `activeView === 'roadmap'`) and the user is
- * bounced back to the roadmap. These tests would still fail if the handler
- * reverted to a raw `navigate()` that races that sync.
+ * open THAT ticket, not redirect to the roadmap. A ticket now opens in the Work
+ * view (the ticket-detail screen is retired), pinned so the Work queue filters
+ * can't hide it; the epic stays the Kanban's screen, for Back.
  */
 
 function makeBoard(id: string, name: string): BoardWithCounts {
@@ -114,7 +109,6 @@ describe('EpicDetailView — clicking a ticket opens the ticket page', () => {
       tickets: [],
       selectedBoardId: null,
       selectedTicketId: null,
-      ticketTab: 'description',
     });
     useTicketGroupStore.setState({
       groups: [],
@@ -126,41 +120,7 @@ describe('EpicDetailView — clicking a ticket opens the ticket page', () => {
   });
   afterEach(() => cleanup());
 
-  it('navigates to the ticket URL (not the roadmap) and leaves a coherent store state', async () => {
-    useTicketStore.setState({
-      boards: [makeBoard('b1', 'Board One')],
-      tickets: [makeTicket('t1', 'b1', 'Ticket Alpha')],
-      selectedBoardId: 'b1',
-      selectedTicketId: null,
-    });
-    useTicketGroupStore.setState({
-      groups: [makeGroup('e1', ['b1'])],
-      groupTicketIds: { e1: ['t1'] },
-      activeView: 'roadmap',
-      selectedEpicDetailId: 'e1',
-      epicDetailTab: 'tickets',
-    });
-
-    renderEpicOpenedFromRoadmap('/tickets/board/b1/epic/e1/tickets');
-    await flushRouterSync();
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('Ticket Alpha'));
-    });
-    await flushRouterSync();
-
-    // AC1 — the ticket page opens, NOT the roadmap.
-    expect(currentLocation).toBe('/tickets/board/b1/ticket/t1');
-    expect(currentLocation).not.toBe('/tickets/board/b1/roadmap');
-
-    // AC3 — the store state is coherent with a ticket opened on its board.
-    expect(useTicketGroupStore.getState().selectedEpicDetailId).toBeNull();
-    expect(useTicketGroupStore.getState().activeView).toBe('board');
-    expect(useTicketStore.getState().selectedBoardId).toBe('b1');
-    expect(useTicketStore.getState().selectedTicketId).toBe('t1');
-  });
-
-  it('selects the ticket board (AC2) when the epic spans multiple boards', async () => {
+  it('opens the ticket in the Work view (not the roadmap), pinned, whatever its board', async () => {
     useTicketStore.setState({
       boards: [makeBoard('b1', 'Board One'), makeBoard('b2', 'Board Two')],
       tickets: [makeTicket('t1', 'b1', 'Ticket Alpha'), makeTicket('t2', 'b2', 'Ticket Beta')],
@@ -174,6 +134,7 @@ describe('EpicDetailView — clicking a ticket opens the ticket page', () => {
       selectedEpicDetailId: 'e1',
       epicDetailTab: 'tickets',
     });
+    useWorkStore.setState({ boardFilters: ['b1'], pinnedTicketId: null, selectedTicketId: null });
 
     renderEpicOpenedFromRoadmap('/tickets/board/b1/epic/e1/tickets');
     await flushRouterSync();
@@ -183,8 +144,11 @@ describe('EpicDetailView — clicking a ticket opens the ticket page', () => {
     });
     await flushRouterSync();
 
-    expect(currentLocation).toBe('/tickets/board/b2/ticket/t2');
-    expect(useTicketStore.getState().selectedBoardId).toBe('b2');
-    expect(useTicketStore.getState().selectedTicketId).toBe('t2');
+    expect(currentLocation).toBe('/work/t2');
+    expect(useUIStore.getState().activePanel).toBe('work');
+    expect(useWorkStore.getState().selectedTicketId).toBe('t2');
+    expect(useWorkStore.getState().pinnedTicketId).toBe('t2');
+    // The Work filters are the user's: never widened to show the ticket.
+    expect(useWorkStore.getState().boardFilters).toEqual(['b1']);
   });
 });

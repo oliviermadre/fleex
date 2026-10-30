@@ -1,12 +1,11 @@
 import type { DeliverableListItem } from '@fleex/shared';
-import { useNavigate } from 'react-router-dom';
-import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
 import { PrimitiveIcon, RoutineIcon, TicketIcon } from '../../lib/primitives';
 import { parseEmitter } from '../../lib/emitter';
+import { openTicketInWork } from '../work/openInWork';
 
 // Theme-accent fallback used when a type has no configured colour.
 const ACCENT_BADGE = 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]';
@@ -26,9 +25,6 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 export function DocumentRow({ deliverable }: { deliverable: DeliverableListItem }) {
-  const navigate = useNavigate();
-  const selectBoard = useTicketStore((s) => s.selectBoard);
-  const selectTicket = useTicketStore((s) => s.selectTicket);
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
   const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
   const typeColorCfg = useDeliverableTypesStore((s) => s.colorFor)(deliverable.type);
@@ -46,11 +42,7 @@ export function DocumentRow({ deliverable }: { deliverable: DeliverableListItem 
 
   const handleOpenTicket = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (origin?.kind === 'ticket') {
-      selectBoard(null);
-      selectTicket(origin.id);
-      navigate(`/tickets/board/all/ticket/${origin.id}`);
-    }
+    if (origin?.kind === 'ticket') openTicketInWork(origin.id);
   };
 
   const handleOpenDocument = (e: React.MouseEvent) => {

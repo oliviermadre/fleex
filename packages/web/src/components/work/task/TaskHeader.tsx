@@ -9,13 +9,12 @@ import type { WorkTask } from '../types';
 
 export function TaskHeader({ task }: { task: WorkTask }) {
   const navigate = useNavigate();
-  const selectTicket = useTicketStore((s) => s.selectTicket);
   const selectBoard = useTicketStore((s) => s.selectBoard);
 
+  // The ticket's board — the ticket itself only opens in the Work view.
   function openInKanban() {
     selectBoard(task.boardId);
-    selectTicket(task.id);
-    navigate(`/tickets/board/${task.boardId ?? 'all'}/ticket/${task.id}`);
+    navigate(`/tickets/board/${task.boardId ?? 'all'}`);
   }
 
   return (

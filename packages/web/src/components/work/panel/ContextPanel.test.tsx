@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { Ticket, TicketLink } from '@fleex/shared';
+import { SLACK_IMPORT_PENDING_TAG } from '@fleex/shared';
 import { ContextPanel } from './ContextPanel';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
+import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
 import type { WorkPrLink, WorkTask } from '../types';
 
 vi.mock('../../../services/api', async (importOriginal) => ({
@@ -31,6 +33,10 @@ function pr(ref: string, additions: number, deletions: number): WorkPrLink {
   };
 }
 
+
+// The Assignee picker lists personas: nothing to fetch here.
+useAgentPersonaStore.setState({ loaded: true });
+
 const LINKS = [prLink('odys-travel/agentic-dmc-2#11', 'l1'), prLink('odys-travel/odys-front#2933', 'l2')];
 
 const TICKET = {
@@ -44,6 +50,8 @@ const TICKET = {
   favorite: false,
   blocked: false,
   links: LINKS,
+  tags: [],
+  assignee: null,
   updatedAt: '2026-01-01T00:00:00Z',
 } as unknown as Ticket;
 
@@ -183,5 +191,54 @@ describe('ContextPanel — attaching repos', () => {
       'odys-travel/odys-front',
       'odys-travel/agentic-dmc',
     ]);
+  });
+});
+
+// Retiring the ticket-detail screen must not leave tags and the other links
+// (GitHub issue, Slack message…) uneditable on desktop: they live here now.
+describe('ContextPanel — tags and links', () => {
+  const issue = { id: 'l9', type: 'github_issue', ref: 'acme/web#4', label: '#4', url: 'https://github.com/acme/web/issues/4', createdAt: '2026-01-01T00:00:00Z' } as TicketLink;
+  const updateTicket = vi.fn(async () => {});
+  const addLink = vi.fn(async () => {});
+  const removeLink = vi.fn(async () => {});
+
+  function renderWith(over: Partial<Ticket>) {
+    useTicketStore.setState({ tickets: [{ ...TICKET, ...over } as Ticket], updateTicket, addLink, removeLink } as never);
+    return render(
+      <MemoryRouter>
+        <ContextPanel task={TASK} onDelete={() => {}} />
+      </MemoryRouter>,
+    );
+  }
+
+  it('adds a tag, keeping the hidden Slack-import tags', () => {
+    renderWith({ tags: ['ux', SLACK_IMPORT_PENDING_TAG] } as Partial<Ticket>);
+    expect(screen.getByText('ux')).toBeTruthy();
+    expect(screen.queryByText(SLACK_IMPORT_PENDING_TAG)).toBeNull();
+    // The tag box shows its placeholder only when empty: reach its input via a chip.
+    const input = screen.getByText('ux').closest('div')!.querySelector('input')!;
+    fireEvent.change(input, { target: { value: 'auth' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(updateTicket).toHaveBeenCalledWith('t1', { tags: [SLACK_IMPORT_PENDING_TAG, 'ux', 'auth'] });
+  });
+
+  it('lists the other links, removes one, and adds a GitHub issue by URL', async () => {
+    renderWith({ links: [...LINKS, issue] } as Partial<Ticket>);
+    expect(screen.getByText('github issue')).toBeTruthy();
+    fireEvent.click(screen.getByTitle('Remove link'));
+    expect(removeLink).toHaveBeenCalledWith('t1', 'l9');
+
+    fireEvent.change(screen.getByPlaceholderText('Paste a GitHub issue URL…'), {
+      target: { value: 'https://github.com/acme/api/issues/12' },
+    });
+    fireEvent.submit(screen.getByPlaceholderText('Paste a GitHub issue URL…').closest('form')!);
+    await waitFor(() =>
+      expect(addLink).toHaveBeenCalledWith('t1', {
+        type: 'github_issue',
+        ref: 'acme/api#12',
+        label: '#12',
+        url: 'https://github.com/acme/api/issues/12',
+      }),
+    );
   });
 });

@@ -1,6 +1,6 @@
 import type { Ticket } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useUIStore } from '../../stores/uiStore';
+import { openTicketInWork } from '../work/openInWork';
 
 /**
  * Resolve a ticket reference the same way the backend does: a purely numeric ref
@@ -33,10 +33,7 @@ export function TicketMentionChip({ idRef }: { idRef: string }) {
     return <span>@ticket:{idRef}</span>;
   }
 
-  const openTicket = () => {
-    useUIStore.getState().setActivePanel('tickets');
-    useTicketStore.getState().selectTicket(ticket.id);
-  };
+  const openTicket = () => openTicketInWork(ticket.id);
 
   return (
     <button

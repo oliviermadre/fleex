@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { TicketType } from '@fleex/shared';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { ConfirmModal } from '../ui/ConfirmModal';
@@ -12,6 +11,7 @@ import { tint, tintText, tintClasses, type TintHue } from '../../lib/tints';
 import { getStatusBadgeClass } from '../../lib/statusColors';
 import * as api from '../../services/api';
 import type { WorktreeRow } from './overview-helpers';
+import { openTicketInWork } from '../work/openInWork';
 
 interface Props {
   org: string;
@@ -36,7 +36,6 @@ const TYPE_HUE: Record<TicketType, TintHue> = {
 };
 
 export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSeeAll }: Props) {
-  const navigate = useNavigate();
   const costByTicket = useTicketActivityStore((s) => s.costByTicket);
   const [pendingDelete, setPendingDelete] = useState<WorktreeRow | null>(null);
   const [busy, setBusy] = useState(false);
@@ -130,7 +129,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
                     )}
                     <span
                       className="min-w-0 flex-1 cursor-pointer truncate text-[13.5px] font-semibold text-[var(--theme-text-primary)] hover:underline"
-                      onClick={() => navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)}
+                      onClick={() => openTicketInWork(ticket.id)}
                     >
                       {ticket.title}
                     </span>
@@ -185,7 +184,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
                           )}
                           <span
                             className="min-w-0 flex-1 cursor-pointer truncate text-[13.5px] font-semibold text-[var(--theme-text-secondary)] hover:underline"
-                            onClick={() => navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)}
+                            onClick={() => openTicketInWork(ticket.id)}
                           >
                             {ticket.title}
                           </span>

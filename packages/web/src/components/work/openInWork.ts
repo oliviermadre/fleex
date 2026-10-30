@@ -7,7 +7,7 @@
 import type { SessionGroup } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useWorkStore } from '../../stores/workStore';
+import { useWorkStore, type RightPanel, type WorkMode } from '../../stores/workStore';
 
 /** The ticket a session belongs to, via its worktree (Session carries no ticketId). */
 export function ticketIdForSession(groups: readonly SessionGroup[], sessionId: string): string | null {
@@ -46,12 +46,24 @@ export function openTicketSessionInWork(ticketId: string, sessionId: string): vo
   ui.setActivePanel('work');
 }
 
+/** What to open alongside the ticket: a center mode, a right panel, the Timeline drawer. */
+export interface OpenInWorkOptions {
+  /** Center mode; default = the one the ticket was last left in (chat when none). */
+  mode?: WorkMode;
+  rightPanel?: Exclude<RightPanel, null>;
+  /** Open the bottom Timeline drawer (the former ticket-detail Activity tab). */
+  timeline?: boolean;
+}
+
 /**
- * Open a ticket in the Work view on the center mode it was last left in, and
- * make sure the queue shows it even if its filters would hide it.
+ * Open a ticket in the Work view — the landing spot of every "open this ticket"
+ * action (Kanban card, palette, notification, mention…). The ticket is pinned,
+ * so the queue shows it whatever its filters, which are never changed.
  */
-export function openTicketInWork(ticketId: string): void {
+export function openTicketInWork(ticketId: string, opts: OpenInWorkOptions = {}): void {
   const work = useWorkStore.getState();
-  work.openTicket(ticketId, work.modeByTicket[ticketId] ?? 'chat');
+  work.openTicket(ticketId, opts.mode ?? work.modeByTicket[ticketId] ?? 'chat');
+  if (opts.rightPanel) work.setRightPanel(opts.rightPanel);
+  if (opts.timeline) work.setTimelineOpen(true);
   useUIStore.getState().setActivePanel('work');
 }

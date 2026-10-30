@@ -10,8 +10,8 @@ import { useWorkStore } from '../stores/workStore';
 /**
  * These tests pin the *intent* of the history fix: the default detail tab
  * ('description') is omitted from the URL, so navigating Back onto the tab-less
- * ticket/epic URL must return the store to the description tab. A test that
- * could still pass while the store kept the previous tab (comments/deliverables)
+ * epic URL must return the store to the description tab. A test that could
+ * still pass while the store kept the previous tab (comments/deliverables)
  * would defeat the purpose — the "description" history entry would look like
  * "rien ne se passe" and get visually skipped, which is exactly the reported bug.
  */
@@ -34,21 +34,11 @@ function renderAt(initialPath: string) {
 
 describe('RouterSync URL→Store detail-tab sync', () => {
   beforeEach(() => {
-    useTicketStore.setState({ selectedBoardId: null, selectedTicketId: null, ticketTab: 'description' });
+    useTicketStore.setState({ selectedBoardId: null, selectedTicketId: null });
     useTicketGroupStore.setState({ selectedEpicDetailId: null, epicDetailTab: 'description' });
     useUIStore.setState({ activePanel: 'focus' });
   });
   afterEach(() => cleanup());
-
-  it('restores the description tab when navigating back to the tab-less ticket URL', () => {
-    renderAt('/tickets/board/all/ticket/t1/comments');
-    expect(useTicketStore.getState().ticketTab).toBe('comments');
-
-    // Back onto the tab-less URL (the "description" entry) must return to
-    // 'description', not silently keep 'comments'.
-    act(() => navigate('/tickets/board/all/ticket/t1'));
-    expect(useTicketStore.getState().ticketTab).toBe('description');
-  });
 
   it('restores the description tab when navigating back to the tab-less epic URL', () => {
     renderAt('/tickets/board/all/epic/e1/deliverables');
@@ -80,18 +70,18 @@ describe('RouterSync — Work view URLs', () => {
   beforeEach(() => {
     localStorage.clear();
     useUIStore.setState({ activePanel: 'focus' });
-    useWorkStore.setState({ selectedTicketId: null, view: 'task', modeByTicket: {}, modeTicketId: null, revealTicketId: null });
+    useWorkStore.setState({ selectedTicketId: null, view: 'task', modeByTicket: {}, modeTicketId: null, pinnedTicketId: null, rightPanel: 'context', timelineOpen: false });
   });
   afterEach(() => cleanup());
 
-  it('opens the linked task in the linked mode, revealed in the queue', () => {
+  it('opens the linked task in the linked mode, pinned in the queue', () => {
     renderWorkAt('/work/t1/shell');
     const work = useWorkStore.getState();
     expect(useUIStore.getState().activePanel).toBe('work');
     expect(work.selectedTicketId).toBe('t1');
     expect(work.shellMode).toBe(true);
     expect(work.modeByTicket.t1).toBe('shell');
-    expect(work.revealTicketId).toBe('t1');
+    expect(work.pinnedTicketId).toBe('t1');
   });
 
   it('opens the new-task composer from /work/new', () => {
@@ -118,6 +108,42 @@ describe('RouterSync — Work view URLs', () => {
       useWorkStore.getState().setMode('shell');
     });
     expect(pathname).toBe('/work/t2/shell');
+  });
+
+  // The ticket-detail screen is gone: its old links (bookmarks, notifications
+  // already stored) must still land on the ticket, on the matching panel.
+  it('redirects a legacy ticket-detail URL to the Work view, deliverables panel open', () => {
+    renderWorkAt('/tickets/board/b1/ticket/t1/deliverables');
+    const work = useWorkStore.getState();
+    expect(pathname).toBe('/work/t1');
+    expect(useUIStore.getState().activePanel).toBe('work');
+    expect(work.selectedTicketId).toBe('t1');
+    expect(work.pinnedTicketId).toBe('t1');
+    expect(work.rightPanel).toBe('deliv');
+  });
+
+  it('redirects the legacy workflow tab to the workflow mode, activity to the Timeline', () => {
+    renderWorkAt('/tickets/board/all/ticket/t1/workflow');
+    expect(pathname).toBe('/work/t1/workflow');
+    expect(useWorkStore.getState().workflowMode).toBe(true);
+    cleanup();
+    renderWorkAt('/tickets/board/all/ticket/t2/activity');
+    expect(pathname).toBe('/work/t2');
+    expect(useWorkStore.getState().timelineOpen).toBe(true);
+  });
+
+  // Back/Forward through rows picked in the queue must not steal the pin from
+  // the ticket that brought the user here.
+  it('a URL naming a ticket already in the queue selects it without re-pinning', () => {
+    useTicketStore.setState({
+      tickets: [{ id: 't2', boardId: 'b1', status: 'doing', priority: 'medium', favorite: false, title: 'In queue' }] as never,
+    });
+    useWorkStore.setState({ boardFilters: [], statusFilters: ['doing'], priorityFilters: [], favoriteOnly: false, search: '' });
+    renderWorkAt('/work/t1');
+    expect(useWorkStore.getState().pinnedTicketId).toBe('t1');
+    act(() => navigate('/work/t2'));
+    expect(useWorkStore.getState().selectedTicketId).toBe('t2');
+    expect(useWorkStore.getState().pinnedTicketId).toBe('t1');
   });
 
   it('returns to chat when Back lands on the mode-less task URL', () => {

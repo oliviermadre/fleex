@@ -168,18 +168,16 @@ export function MenuButton({ children, onClick, danger, hint }: { children: Reac
 
 /**
  * The ticket a ticket action would run against from Settings: the task open in
- * Work, else the selected ticket. Null when neither exists — "Try" is then disabled.
+ * Work. Null when there is none — "Try" is then disabled.
  */
 export function useContextTicket(): WorkspaceContext | null {
   const workTicketId = useWorkStore((s) => s.selectedTicketId);
-  const boardTicketId = useTicketStore((s) => s.selectedTicketId);
   const tickets = useTicketStore((s) => s.tickets);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   return useMemo(() => {
-    const id = workTicketId ?? boardTicketId;
-    const ticket = id ? tickets.find((t) => t.id === id) : undefined;
+    const ticket = workTicketId ? tickets.find((t) => t.id === workTicketId) : undefined;
     return ticket ? buildWorkspaceContext(ticket, basePath) : null;
-  }, [workTicketId, boardTicketId, tickets, basePath]);
+  }, [workTicketId, tickets, basePath]);
 }
 
 /** Run a saved action from Settings (list row ▶, preview bar). Ticket actions need a context ticket. */

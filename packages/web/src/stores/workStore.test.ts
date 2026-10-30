@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useWorkStore, filtersRevealing, TIMELINE_MAX_HEIGHT } from './workStore';
+import { useWorkStore, excludedBy, TIMELINE_MAX_HEIGHT } from './workStore';
 
 // Each ticket keeps its own center mode, shell split and pane bindings — switching
 // tickets must never apply one ticket's shells or layout to another.
@@ -161,8 +161,10 @@ describe('workStore — openShellForTicket / openTicket', () => {
       workflowMode: false,
       shellLayoutByTicket: {},
       shellPaneIdsByTicket: {},
-      revealTicketId: null,
+      pinnedTicketId: null,
       shellFocusRequest: null,
+      boardFilters: ['ODYS'],
+      statusFilters: ['doing', 'reviewing'],
     });
   });
 
@@ -204,10 +206,10 @@ describe('workStore — openShellForTicket / openTicket', () => {
     expect(s().shellPaneIdsByTicket.A).toEqual(['x', 's1']);
   });
 
-  it('asks the pane to take the keyboard, and the queue to reveal the ticket', () => {
+  it('asks the pane to take the keyboard, and pins the ticket in the queue', () => {
     s().openShellForTicket('A', 's1');
     expect(s().shellFocusRequest).toBe('s1');
-    expect(s().revealTicketId).toBe('A');
+    expect(s().pinnedTicketId).toBe('A');
   });
 
   it('openTicket applies the given mode to that ticket only, chat forgetting it', () => {
@@ -219,35 +221,69 @@ describe('workStore — openShellForTicket / openTicket', () => {
     expect([s().shellMode, s().codeMode, s().workflowMode]).toEqual([false, false, false]);
   });
 
-  it('a hand-picked selection cancels a pending reveal', () => {
+  // The user refused "mirroring": opening a ticket from outside must never
+  // rewrite the queue filters they chose — the pin shows it instead.
+  it('openTicket pins the ticket and leaves the filters (memory and storage) untouched', () => {
+    s().setStatusFilters(['doing', 'reviewing']);
+    const stored = JSON.parse(localStorage.getItem('fleex_work')!);
+    s().openTicket('A', 'chat');
+    expect(s().pinnedTicketId).toBe('A');
+    expect(s().boardFilters).toEqual(['ODYS']);
+    expect(s().statusFilters).toEqual(['doing', 'reviewing']);
+    const after = JSON.parse(localStorage.getItem('fleex_work')!);
+    expect([after.boardFilters, after.statusFilters]).toEqual([stored.boardFilters, stored.statusFilters]);
+    expect(after.pinnedTicketId).toBe('A');
+  });
+
+  it('openTicket with pin: false selects without touching the pin', () => {
+    s().pinTicket('P');
+    s().openTicket('A', 'chat', { pin: false });
+    expect(s().selectedTicketId).toBe('A');
+    expect(s().pinnedTicketId).toBe('P');
+  });
+
+  it('picking another queue row keeps the pin (the ticket that brought you here stays)', () => {
     s().openTicket('A', 'chat');
     s().selectTicket('B');
-    expect(s().revealTicketId).toBeNull();
+    expect(s().selectedTicketId).toBe('B');
+    expect(s().pinnedTicketId).toBe('A');
+  });
+
+  it('a second outside open replaces the pin — one slot', () => {
+    s().openTicket('A', 'chat');
+    s().openTicket('B', 'chat');
+    expect(s().pinnedTicketId).toBe('B');
+  });
+
+  it('unpinTicket drops the pin; forgetting the pinned ticket drops it too', () => {
+    s().pinTicket('A');
+    s().unpinTicket();
+    expect(s().pinnedTicketId).toBeNull();
+    s().pinTicket('A');
+    s().forgetTicket('B');
+    expect(s().pinnedTicketId).toBe('A');
+    s().forgetTicket('A');
+    expect(s().pinnedTicketId).toBeNull();
   });
 });
 
-describe('filtersRevealing', () => {
+describe('excludedBy', () => {
   const none = { boardFilters: [], statusFilters: [], priorityFilters: [], favoriteOnly: false, search: '' };
   const ticket = { boardId: 'b1', status: 'todo', priority: 'low', favorite: false, title: 'Fix login' };
 
-  it('is null when the ticket already passes the filters', () => {
-    expect(filtersRevealing(none, ticket)).toBeNull();
-    expect(filtersRevealing({ ...none, statusFilters: ['todo'], boardFilters: ['b1'], search: 'login' }, ticket)).toBeNull();
+  it('is empty when the ticket passes the filters', () => {
+    expect(excludedBy(none, ticket)).toEqual([]);
+    expect(excludedBy({ ...none, statusFilters: ['todo'], boardFilters: ['b1'], search: 'login' }, ticket)).toEqual([]);
   });
 
-  it("adds the ticket's status to the status filter instead of wiping it", () => {
-    expect(filtersRevealing({ ...none, statusFilters: ['doing', 'reviewing'] }, ticket)).toEqual({
-      statusFilters: ['doing', 'reviewing', 'todo'],
-    });
-  });
-
-  it('clears only the filters that exclude the ticket', () => {
+  it('names every filter that excludes the ticket, board and status first', () => {
+    expect(excludedBy({ ...none, boardFilters: ['b2'], statusFilters: ['doing', 'reviewing'] }, ticket)).toEqual([
+      'boardFilters',
+      'statusFilters',
+    ]);
     expect(
-      filtersRevealing(
-        { boardFilters: ['b2'], statusFilters: ['todo'], priorityFilters: ['high'], favoriteOnly: true, search: 'zzz' },
-        ticket,
-      ),
-    ).toEqual({ boardFilters: [], priorityFilters: [], favoriteOnly: false, search: '' });
+      excludedBy({ boardFilters: ['b2'], statusFilters: ['doing'], priorityFilters: ['high'], favoriteOnly: true, search: 'zzz' }, ticket),
+    ).toEqual(['boardFilters', 'statusFilters', 'priorityFilters', 'favoriteOnly', 'search']);
   });
 });
 

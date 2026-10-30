@@ -3,11 +3,12 @@
  * mutation + link APIs. Board / Status / Type / Priority are four dropdowns;
  * favorite, blocked and due date are togglable; repos (repository links, each
  * with an editable base branch) and PRs (github_pr links) can be attached and
- * detached; deliverables open the existing
- * overlay. Reads the live Ticket from ticketStore so every edit round-trips.
+ * detached; assignee, tags and the other links (GitHub issue, Slack message…)
+ * are edited here too; deliverables open the existing overlay. Reads the live Ticket from ticketStore so every edit round-trips.
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { TicketLink } from '@fleex/shared';
+import { isSlackImportTag } from '@fleex/shared';
 import * as api from '../../../services/api';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
@@ -24,6 +25,8 @@ import { MultiSelect } from '../../ui/MultiSelect';
 import { repoOptions } from '../new/draftOptions';
 import { topReposForBoard } from '../../../lib/repoStatus';
 import { sortPrLinks } from '../../../lib/prRef';
+import { TagInput } from '../../ui/TagInput';
+import { AssigneeField } from '../../tickets/AssigneeField';
 import { WorkBoardPicker } from './WorkBoardPicker';
 import { WorkStatusPicker } from './WorkStatusPicker';
 import type { WorkTask } from '../types';
@@ -38,6 +41,17 @@ function parsePrLink(link: TicketLink): { org: string; name: string; number: num
   if (slash < 0 || Number.isNaN(num)) return null;
   return { org: repo.slice(0, slash), name: repo.slice(slash + 1), number: num };
 }
+
+/** Parse a pasted GitHub issue URL into an addLink payload. */
+export function issueUrlToLink(url: string): { type: string; ref: string; label: string; url: string } | null {
+  const m = url.trim().match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\/?$/i);
+  if (!m) return null;
+  const [, org, name, num] = m;
+  return { type: 'github_issue', ref: `${org}/${name}#${Number(num)}`, label: `#${Number(num)}`, url: url.trim() };
+}
+
+/** Links shown in LINKS: everything the REPOS / PULL REQUESTS sections don't own. */
+const isOtherLink = (l: TicketLink) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr';
 
 /** Parse a pasted GitHub PR URL into an addLink payload. */
 function prUrlToLink(url: string): { type: string; ref: string; label: string; url: string } | null {
@@ -183,6 +197,10 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
   const tickets = useTicketStore((s) => s.tickets);
   const [prUrl, setPrUrl] = useState('');
   const [addingPr, setAddingPr] = useState(false);
+  const [issueUrl, setIssueUrl] = useState('');
+  const [addingIssue, setAddingIssue] = useState(false);
+  const [syncingIssue, setSyncingIssue] = useState(false);
+  const syncGithubIssue = useTicketStore((s) => s.syncGithubIssue);
   // Staged repo for "+ attach repo…": chosen but not linked yet, so a base
   // branch can be picked first.
   const [pendingRepos, setPendingRepos] = useState<string[]>([]);
@@ -199,6 +217,7 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
 
   const repoLinks = useMemo(() => (ticket?.links ?? []).filter((l) => l.type === 'repository'), [ticket]);
   const prLinks = useMemo(() => sortPrLinks((ticket?.links ?? []).filter((l) => l.type === 'github_pr')), [ticket]);
+  const otherLinks = useMemo(() => (ticket?.links ?? []).filter(isOtherLink), [ticket]);
 
   // Each PR's own size, from GitHub. Never `task.pr`: that one carries the
   // worktree diff summed over every repo of the workspace, so showing it on a
@@ -304,6 +323,22 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
       <div className="border-b border-[var(--theme-border-subtle)] px-3 py-2.5">
         <EpicPicker ticketId={ticket.id} boardId={ticket.boardId} />
       </div>
+
+      {/* Assignee */}
+      <div className="border-b border-[var(--theme-border-subtle)] px-3 py-2.5">
+        <AssigneeField assignee={ticket.assignee} onChange={(assignee) => void updateTicket(ticket.id, { assignee })} />
+      </div>
+
+      {/* Tags — the reserved Slack-import lifecycle tags stay hidden and are kept on edit */}
+      <Section label="TAGS">
+        <TagInput
+          tags={ticket.tags.filter((t) => !isSlackImportTag(t))}
+          onChange={(visible) =>
+            void updateTicket(ticket.id, { tags: [...ticket.tags.filter(isSlackImportTag), ...visible] })
+          }
+          placeholder="Add a tag…"
+        />
+      </Section>
 
       {/* Repos (repository links) */}
       <Section label="REPOS">
@@ -465,7 +500,82 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
         </form>
       </Section>
 
-      {/* Actions — pinned to the bottom, like the ticket detail sidebar */}
+      {/* Other links (GitHub issue, Slack message…) — added by pasting a GitHub issue URL */}
+      <Section label="LINKS">
+        <div className="flex flex-col gap-1">
+          {otherLinks.map((l) => (
+            <div key={l.id} className="group flex items-center gap-2 text-[11px]">
+              <span className="shrink-0 rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9.5px] font-medium text-[var(--theme-text-muted)]">
+                {l.type.replace('_', ' ')}
+              </span>
+              {l.url ? (
+                <a
+                  href={l.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 flex-1 truncate text-[var(--theme-accent)] hover:underline"
+                  title={l.url}
+                >
+                  {l.label}
+                </a>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-[var(--theme-text-secondary)]">{l.label}</span>
+              )}
+              {l.type === 'github_issue' && (
+                <button
+                  type="button"
+                  disabled={syncingIssue}
+                  onClick={() => {
+                    setSyncingIssue(true);
+                    void syncGithubIssue(ticket.id).catch(() => {}).finally(() => setSyncingIssue(false));
+                  }}
+                  className="shrink-0 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)] disabled:opacity-40"
+                  title="Sync from GitHub"
+                >
+                  {syncingIssue ? <Spinner size={11} /> : '↻'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void removeLink(ticket.id, l.id)}
+                className="shrink-0 text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-100 hover:text-[var(--theme-danger)]"
+                title="Remove link"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <form
+          className="mt-1.5 flex gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const payload = issueUrlToLink(issueUrl);
+            if (!payload) return;
+            setAddingIssue(true);
+            void addLink(ticket.id, payload).finally(() => {
+              setAddingIssue(false);
+              setIssueUrl('');
+            });
+          }}
+        >
+          <input
+            value={issueUrl}
+            onChange={(e) => setIssueUrl(e.target.value)}
+            placeholder="Paste a GitHub issue URL…"
+            className="min-w-0 flex-1 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[11px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={addingIssue || !issueUrlToLink(issueUrl)}
+            className="rounded-md bg-[var(--theme-accent)] px-2 py-1 text-[11px] font-medium text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)] disabled:opacity-40"
+          >
+            Add
+          </button>
+        </form>
+      </Section>
+
+      {/* Actions — pinned to the bottom */}
       <div className="mt-auto border-t border-[var(--theme-border)] px-3 py-3">
         <button
           type="button"
