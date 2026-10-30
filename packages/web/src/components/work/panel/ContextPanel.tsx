@@ -329,17 +329,6 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
         <AssigneeField assignee={ticket.assignee} onChange={(assignee) => void updateTicket(ticket.id, { assignee })} />
       </div>
 
-      {/* Tags — the reserved Slack-import lifecycle tags stay hidden and are kept on edit */}
-      <Section label="TAGS">
-        <TagInput
-          tags={ticket.tags.filter((t) => !isSlackImportTag(t))}
-          onChange={(visible) =>
-            void updateTicket(ticket.id, { tags: [...ticket.tags.filter(isSlackImportTag), ...visible] })
-          }
-          placeholder="Add a tag…"
-        />
-      </Section>
-
       {/* Repos (repository links) */}
       <Section label="REPOS">
         {repoLinks.length === 0 && (
@@ -573,6 +562,18 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
             Add
           </button>
         </form>
+      </Section>
+
+      {/* Tags — the reserved Slack-import lifecycle tags stay hidden and are kept on edit */}
+      <Section label="TAGS">
+        <TagInput
+          tags={ticket.tags.filter((t) => !isSlackImportTag(t))}
+          onChange={(visible) =>
+            void updateTicket(ticket.id, { tags: [...ticket.tags.filter(isSlackImportTag), ...visible] })
+          }
+          placeholder="Add a tag…"
+          size="compact"
+        />
       </Section>
 
       {/* Actions — pinned to the bottom */}

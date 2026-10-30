@@ -33,6 +33,8 @@ describe('WorkQueue — pinned ticket section', () => {
     const section = screen.getByTestId('queue-pinned');
     expect(within(section).getByText('Opened from the Kanban')).toBeTruthy();
     expect(within(section).getByText('Hidden by filters: board, status')).toBeTruthy();
+    // No status badge: the pinned row looks like any other row, only the section marks it.
+    expect(within(section).queryByText('Doing')).toBeNull();
 
     fireEvent.click(within(section).getByRole('button', { name: 'Remove from the queue' }));
     expect(useWorkStore.getState().pinnedTicketId).toBeNull();
