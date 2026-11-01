@@ -14,6 +14,7 @@ describe('PR CI routes', () => {
   let mergeCalls: unknown[];
   let mergeError: Error | null;
   let events: PrMergedEvent[];
+  let invalidatedPulls: string[];
 
   beforeEach(async () => {
     clock = 1_000_000;
@@ -21,6 +22,7 @@ describe('PR CI routes', () => {
     mergeCalls = [];
     mergeError = null;
     events = [];
+    invalidatedPulls = [];
     const github: PrCiGithub = {
       fetchPRCiSummaries: async (prs) => {
         summaryCalls.push(prs.map((p) => `${p.org}/${p.name}#${p.number}`));
@@ -36,7 +38,12 @@ describe('PR CI routes', () => {
       },
     };
     app = Fastify();
-    await app.register(prCiRoutes({ github, emit: (e) => events.push(e), now: () => clock }));
+    await app.register(prCiRoutes({
+      github,
+      emit: (e) => events.push(e),
+      invalidatePulls: (org, name) => invalidatedPulls.push(`${org}/${name}`),
+      now: () => clock,
+    }));
     await app.ready();
   });
 
@@ -73,6 +80,11 @@ describe('PR CI routes', () => {
 
     await summaries(['o/n#1']);
     expect(summaryCalls).toHaveLength(2);
+  });
+
+  it('drops the repo PR list cache on merge, so a reload right after shows the PR merged in the timeline', async () => {
+    await merge({ ref: 'o/n#1', method: 'merge', headSha: SHA });
+    expect(invalidatedPulls).toEqual(['o/n']);
   });
 
   it('returns gh\'s refusal as a 422 the confirm dialog can show, and emits nothing', async () => {

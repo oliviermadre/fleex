@@ -137,7 +137,11 @@ async function main() {
   await app.register(claudeUsageRoutes(container));
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
-  await app.register(prCiRoutes({ github: container.githubGraphql, emit: (e) => container.eventBus.emit(e) }));
+  await app.register(prCiRoutes({
+    github: container.githubGraphql,
+    emit: (e) => container.eventBus.emit(e),
+    invalidatePulls: (org, name) => container.repositoryCache.invalidate(`pulls-all:${org}/${name}`),
+  }));
   await app.register(personaRoutes(container));
   await app.register(skillRoutes(container));
   await app.register(claudeCodeSkillRoutes(container));

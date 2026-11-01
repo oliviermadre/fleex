@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { PrCiDetail, PrCiSummary, PrMergeMethod } from '@fleex/shared';
 import { fetchPRCiDetail, fetchPRCiSummaries, mergePR } from '../services/api';
+import { parseGithubPrRef } from '../lib/prRef';
+import { usePullRequestStore } from './pullRequestStore';
 
 /** Poll cadence while at least one watched open PR has CI running. */
 export const POLL_RUNNING_MS = 60_000;
@@ -185,9 +187,29 @@ export const usePrCiStore = create<PrCiState>((set, get) => {
         return { details, summaries: { ...s.summaries, [ref]: { ...current, state: 'MERGED' as const } } };
       });
       void get().refresh([ref]);
+      refreshRepoPulls(ref);
     },
   };
 });
+
+/**
+ * The timeline's "PR merged" node reads `mergedAt` from the repo PR list, not
+ * from this store. Mark the PR merged there right away (GitHub's merged list
+ * lags the merge), then refetch past the server cache. That list is keyed by
+ * the repo's own casing while `ref` is lowercased: refresh every matching key.
+ */
+function refreshRepoPulls(ref: string) {
+  const pr = parseGithubPrRef(ref);
+  if (!pr?.org) return;
+  const pulls = usePullRequestStore.getState();
+  const repo = `${pr.org}/${pr.name}`;
+  pulls.markMerged(repo, pr.number);
+  const keys = Object.keys(pulls.pullsByRepo).filter((k) => k.toLowerCase() === repo.toLowerCase());
+  for (const key of keys.length ? keys : [repo]) {
+    const [org, name] = key.split('/');
+    void pulls.fetchPullsForRepo(org!, name!, true);
+  }
+}
 
 /** Test-only: forget every subscription, timer and cached value. */
 export function resetPrCiStore() {
