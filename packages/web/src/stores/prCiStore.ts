@@ -194,17 +194,21 @@ export const usePrCiStore = create<PrCiState>((set, get) => {
 
 /**
  * The timeline's "PR merged" node reads `mergedAt` from the repo PR list, not
- * from this store: refetch it past the server cache. That list is keyed by the
- * repo's own casing while `ref` is lowercased, so reuse the known key.
+ * from this store. Mark the PR merged there right away (GitHub's merged list
+ * lags the merge), then refetch past the server cache. That list is keyed by
+ * the repo's own casing while `ref` is lowercased: refresh every matching key.
  */
 function refreshRepoPulls(ref: string) {
   const pr = parseGithubPrRef(ref);
   if (!pr?.org) return;
   const pulls = usePullRequestStore.getState();
   const repo = `${pr.org}/${pr.name}`;
-  const key = Object.keys(pulls.pullsByRepo).find((k) => k.toLowerCase() === repo) ?? repo;
-  const [org, name] = key.split('/');
-  void pulls.fetchPullsForRepo(org!, name!, true);
+  pulls.markMerged(repo, pr.number);
+  const keys = Object.keys(pulls.pullsByRepo).filter((k) => k.toLowerCase() === repo.toLowerCase());
+  for (const key of keys.length ? keys : [repo]) {
+    const [org, name] = key.split('/');
+    void pulls.fetchPullsForRepo(org!, name!, true);
+  }
 }
 
 /** Test-only: forget every subscription, timer and cached value. */
