@@ -5,10 +5,12 @@ const api = vi.hoisted(() => ({
   fetchPRCiSummaries: vi.fn(),
   fetchPRCiDetail: vi.fn(),
   mergePR: vi.fn(),
+  fetchPullRequests: vi.fn(),
 }));
 vi.mock('../services/api', () => api);
 
 import { usePrCiStore, resetPrCiStore, POLL_IDLE_MS, POLL_RUNNING_MS } from './prCiStore';
+import { usePullRequestStore } from './pullRequestStore';
 
 function summary(ref: string, patch: Partial<PrCiSummary> = {}): PrCiSummary {
   return { ref, state: 'OPEN', isDraft: false, ciStatus: 'passed', counts: { pass: 1 }, ...patch };
@@ -136,6 +138,23 @@ describe('prCiStore merge', () => {
     expect(api.mergePR).toHaveBeenCalledWith({ ref: 'a/b#1', method: 'squash', headSha: 'a'.repeat(40) });
     expect(usePrCiStore.getState().summaries['a/b#1']!.state).toBe('MERGED');
     expect(api.fetchPRCiSummaries).toHaveBeenLastCalledWith(['a/b#1']);
+  });
+
+  it('refreshes the repo PR list (bypassing the server cache) so the timeline shows the merge without a reload', async () => {
+    // The timeline's "PR merged" node reads `mergedAt` from the repo PR list, not from the CI chips.
+    // The list is keyed by the repo's own casing; CI refs are lowercased.
+    usePullRequestStore.setState({ pullsByRepo: { 'Acme/Api': {} } });
+    api.mergePR.mockResolvedValue({ ok: true });
+    api.fetchPRCiSummaries.mockImplementation(() => new Promise(() => {}));
+    api.fetchPullRequests.mockResolvedValue([
+      { number: 7, headRefName: 'feat/x', state: 'merged', mergedAt: '2026-11-01T10:00:00Z' },
+    ]);
+
+    await usePrCiStore.getState().merge('acme/api#7', 'merge', 'a'.repeat(40));
+    await flush();
+
+    expect(api.fetchPullRequests).toHaveBeenCalledWith('Acme', 'Api', true);
+    expect(usePullRequestStore.getState().pullsByRepo['Acme/Api']!['feat/x']!.mergedAt).toBe('2026-11-01T10:00:00Z');
   });
 
   it('leaves the PR open and rethrows gh refusal for the dialog to show', async () => {

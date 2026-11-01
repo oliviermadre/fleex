@@ -13,6 +13,8 @@ export interface PrCiGithub {
 export interface PrCiRouteDeps {
   github: PrCiGithub;
   emit: (event: PrMergedEvent) => void;
+  /** Drop the repo's cached PR list: the timeline reads `mergedAt` from it. */
+  invalidatePulls: (org: string, name: string) => void;
   /** Injectable clock, for the cache TTL in tests. */
   now?: () => number;
 }
@@ -96,6 +98,7 @@ export function prCiRoutes(deps: PrCiRouteDeps) {
       }
 
       cache.delete(key);
+      deps.invalidatePulls(pr.org, pr.name);
       deps.emit({ type: 'pr.merged', ref: key, method: method as PrMergeMethod, occurredAt: new Date() });
       return { ok: true };
     });
