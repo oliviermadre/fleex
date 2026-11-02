@@ -366,15 +366,8 @@ export function AnnotationViewer({
           )}
         </div>
         {a.body.trim() && (
-          <div className="mt-2 max-h-[340px] overflow-auto border-t border-[var(--theme-border)] pt-2 text-[12px] [&_img]:max-w-[480px] [&_img]:cursor-zoom-in">
-            <div
-              onClick={(e) => {
-                const img = (e.target as HTMLElement).closest('img');
-                if (img) window.open(img.src, '_blank', 'noopener');
-              }}
-            >
-              <MessageMarkdown body={a.body} />
-            </div>
+          <div className="mt-2 max-h-[340px] overflow-auto border-t border-[var(--theme-border)] pt-2 text-[12px]">
+            <MessageMarkdown body={a.body} />
           </div>
         )}
         <div className="mt-2 flex items-center gap-1.5 border-t border-[var(--theme-border)] pt-2">
