@@ -144,6 +144,7 @@ export class ActionRunService {
     if (runningRunId) return { ok: false, runningRunId };
 
     const terminal = request.mode === 'terminal' && !!this.deps.terminal;
+    const cwd = request.cwd || this.deps.defaultCwd;
     const run: ActionRun = {
       runId: randomUUID(),
       sourceId: request.sourceId,
@@ -151,6 +152,7 @@ export class ActionRunService {
       sourceKind: request.sourceKind,
       label: request.label,
       command: request.command,
+      cwd,
       startedAt: this.now().toISOString(),
       stdout: '',
       stderr: '',
@@ -163,7 +165,6 @@ export class ActionRunService {
     this.live.set(run.runId, live);
     this.deps.broadcast('action-run:started', { ...run });
 
-    const cwd = request.cwd || this.deps.defaultCwd;
     if (terminal) {
       let markReady: () => void = () => {};
       live.terminalReady = new Promise<void>((resolve) => { markReady = resolve; });

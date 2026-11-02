@@ -10,7 +10,8 @@ import { Tooltip } from '../ui/Tooltip';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { STATUS_LABEL, compactBadge, formatAgo, runDuration, statusDotClass, statusTextClass, truncate } from './actionStatus';
 
-const ICON_BTN =
+/** The square of every top-bar action button (the Terminals button shares it). */
+export const ICON_BTN =
   'relative flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]';
 
 export type ActionButtonKind = 'pinned' | 'workspace';

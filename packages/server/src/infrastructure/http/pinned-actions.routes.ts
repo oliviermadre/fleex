@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { ActionRunCapabilities, ActionRunRequest, ActionSourceKind } from '@fleex/shared';
 import type { ActionRunService } from '../../domain/services/action-run.service.js';
@@ -13,7 +14,11 @@ export interface PinnedActionsRouteDeps {
   logger: { info: (msg: string, meta?: Record<string, unknown>) => void };
 }
 
+// No `scratch`: a free shell is only ever started by POST /api/terminals/shell.
 const SOURCE_KINDS = new Set<ActionSourceKind>(['pinned', 'workspace', 'worktree']);
+
+/** What a free shell runs (the terminal runner wraps it in `zsh -l -i -c`): an interactive login zsh. */
+export const SCRATCH_SHELL_COMMAND = 'exec /bin/zsh -l -i';
 
 /**
  * Status probes and asynchronous action runs for the pinned / workspace action
@@ -65,6 +70,27 @@ export function pinnedActionsRoutes(deps: PinnedActionsRouteDeps) {
         ...(body.mode === 'terminal' ? { mode: 'terminal' as const } : {}),
         ...(typeof body.slot === 'string' && body.slot ? { slot: body.slot.slice(0, 128) } : {}),
       });
+      if (!result.ok) return reply.code(409).send({ runId: result.runningRunId });
+      return reply.code(202).send({ runId: result.run.runId, run: result.run });
+    });
+
+    // A free shell for the Terminals panel: the server composes the command, the client only picks a cwd.
+    app.post<{ Body: { cwd?: unknown } }>('/api/terminals/shell', async (request, reply) => {
+      const capabilities = deps.actionRunCapabilities ? await deps.actionRunCapabilities() : null;
+      if (!capabilities?.terminal) return reply.code(501).send({ error: 'Terminal unavailable — restart the gateway' });
+      const cwd = request.body?.cwd;
+      const result = deps.actionRuns.start(
+        {
+          sourceId: `scratch:${randomUUID()}`,
+          sourceKind: 'scratch',
+          label: 'Shell',
+          command: SCRATCH_SHELL_COMMAND,
+          mode: 'terminal',
+          ...(typeof cwd === 'string' && cwd ? { cwd } : {}),
+        },
+        // A shell the user opened lives until they close it: no 4 h safety net.
+        { persistent: true },
+      );
       if (!result.ok) return reply.code(409).send({ runId: result.runningRunId });
       return reply.code(202).send({ runId: result.run.runId, run: result.run });
     });

@@ -10,6 +10,7 @@ import { useWorkStore } from '../../stores/workStore';
 import type { WorkQueueModel } from './useWorkQueue';
 import { WorkTopBarActions } from './WorkTopBarActions';
 import { ModeSwitcher } from './ModeSwitcher';
+import { TerminalsButton } from '../actions/TerminalsButton';
 
 interface Props {
   queue: WorkQueueModel;
@@ -27,6 +28,9 @@ export function WorkTopBar({ queue }: Props) {
       {view === 'task' && selectedTaskId && <ModeSwitcher ticketId={selectedTaskId} />}
 
       <div className="ml-auto" />
+
+      {/* Every terminal (actions and free shells) — with or without a selected ticket. */}
+      <TerminalsButton />
 
       <WorkTopBarActions ticketId={selectedTaskId} />
     </header>

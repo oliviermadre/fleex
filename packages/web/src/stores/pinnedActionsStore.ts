@@ -47,6 +47,19 @@ export interface TerminalGeometry {
   height: number;
 }
 
+/** "Shell N": the lowest N ≥ 1 no open free shell uses. */
+export function nextShellLabel(terminals: readonly TerminalTab[]): string {
+  const used = new Set(terminals.filter((t) => t.sourceKind === 'scratch').map((t) => t.label));
+  let n = 1;
+  while (used.has(`Shell ${n}`)) n += 1;
+  return `Shell ${n}`;
+}
+
+/** A terminal still alive: its run has not finished (unknown yet = just started). */
+export function isTerminalAlive(tab: TerminalTab, runs: Record<string, ActionRun[]>): boolean {
+  return !runs[tab.sourceId]?.find((r) => r.runId === tab.runId)?.finishedAt;
+}
+
 /** One tab of the floating "Action terminal" panel — one per action command. */
 export interface TerminalTab {
   /** `runSlotKey(sourceId, slot)`: one tab per action command, so two rules of one action get two terminals. */
@@ -170,8 +183,8 @@ interface PinnedActionsState {
   /** Bumped each time a tab must grab the keyboard (opened, brought to front). */
   terminalFocusNonce: number;
   /**
-   * The panel is hidden but its tabs (and their tmux sessions) live on: clicking
-   * the action again brings it back where it was. Closing a tab is what ends a session.
+   * The panel is hidden but its tabs (and their tmux sessions) live on: the
+   * Terminals button (⌃`) or the action brings it back where it was. Closing a tab is what ends a session.
    */
   terminalMinimized: boolean;
   /** The panel's last place and size (saved in this browser); null until it has been opened once. */
@@ -188,11 +201,21 @@ interface PinnedActionsState {
   /** A tab key, or an action id (its most recent terminal). */
   focusTerminal: (keyOrSource: string) => void;
   minimizeTerminal: () => void;
+  /** Show the hidden panel as it was (same active tab) — never re-runs anything. No-op without a tab. */
+  showTerminal: () => void;
+  /** The Terminals button / ⌃`: no terminal → a new free shell; hidden → show; visible → hide. */
+  toggleTerminals: () => Promise<void>;
+  /** A free interactive zsh (no action, no ticket) in a new "Shell N" tab. */
+  openScratchShell: () => Promise<void>;
   setTerminalGeometry: (geometry: TerminalGeometry) => void;
   /** Remove a tab and end its tmux session (a running command is stopped). */
   closeTerminal: (key: string) => void;
   loadRuns: (sourceId: string) => Promise<void>;
-  /** After a WS (re)connect: a missed `action-run:finished` must not leave a button spinning. */
+  /**
+   * After a WS (re)connect: a missed `action-run:finished` must not leave a button
+   * spinning, and the terminals still running server-side get their tab back
+   * (after a reload) — without ever showing the panel.
+   */
   reconcileRuns: () => Promise<void>;
   refresh: (iconId?: string) => Promise<void>;
   openLogs: (target: LogsTarget) => void;
@@ -406,7 +429,31 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
       }
       const runs = { ...s.runs };
       for (const r of [...serverRuns].reverse()) runs[r.sourceId] = upsertRun(runs[r.sourceId], r);
-      return { running, runs };
+      const terminals = [...s.terminals];
+      // Oldest first, so the rebuilt tabs keep the order they were opened in.
+      for (const r of [...serverRuns].reverse()) {
+        if (r.mode !== 'terminal' || r.finishedAt || r.sourceId.startsWith(DRAFT_SOURCE_PREFIX)) continue;
+        const key = runSlotKey(r.sourceId, r.slot);
+        if (terminals.some((t) => t.key === key)) continue;
+        terminals.push({
+          key,
+          sourceId: r.sourceId,
+          sourceKind: r.sourceKind,
+          runId: r.runId,
+          label: r.sourceKind === 'scratch' ? nextShellLabel(terminals) : r.label,
+          command: r.command,
+          ...(r.cwd ? { cwd: r.cwd } : {}),
+        });
+      }
+      if (terminals.length === s.terminals.length) return { running, runs };
+      return {
+        running,
+        runs,
+        terminals,
+        activeTerminal: s.activeTerminal ?? terminals.at(-1)!.key,
+        // Rebuilt tabs never pop the panel up: it stays as it was, hidden when it had nothing to show.
+        ...(s.terminals.length === 0 ? { terminalMinimized: true } : {}),
+      };
     });
   },
 
@@ -448,6 +495,35 @@ export const usePinnedActionsStore = create<PinnedActionsState>((set, get) => ({
   },
 
   minimizeTerminal: () => set({ terminalMinimized: true }),
+
+  showTerminal: () => {
+    set((s) => (s.terminals.length === 0 ? s : { terminalMinimized: false, terminalFocusNonce: s.terminalFocusNonce + 1 }));
+  },
+
+  toggleTerminals: async () => {
+    const { terminals, terminalMinimized } = get();
+    if (terminals.length === 0) await get().openScratchShell();
+    else if (terminalMinimized) get().showTerminal();
+    else get().minimizeTerminal();
+  },
+
+  openScratchShell: async () => {
+    let started: { runId: string; run: ActionRun };
+    try {
+      started = await api.startScratchShell();
+    } catch { return; /* toasted with the server's message */ }
+    const { runId, run } = started;
+    set((s) => ({ runs: { ...s.runs, [run.sourceId]: upsertRun(s.runs[run.sourceId], run) } }));
+    get().openTerminal({
+      key: runSlotKey(run.sourceId, run.slot),
+      sourceId: run.sourceId,
+      sourceKind: 'scratch',
+      runId,
+      label: nextShellLabel(get().terminals),
+      command: run.command,
+      ...(run.cwd ? { cwd: run.cwd } : {}),
+    });
+  },
 
   setTerminalGeometry: (terminalGeometry) => {
     writeTerminalGeometry(terminalGeometry);
