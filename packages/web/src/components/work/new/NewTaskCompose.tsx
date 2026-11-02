@@ -5,6 +5,7 @@ import { useWorkStore } from '../../../stores/workStore';
 import { toast } from '../../../lib/toast';
 import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
 import { useBoardEpics } from '../../../hooks/useBoardEpics';
+import { useFileUpload } from '../../../hooks/useFileUpload';
 import { topReposForBoard } from '../../../lib/repoStatus';
 import { syncGithubIssue } from '../../../services/api';
 import { MultiSelect } from '../../ui/MultiSelect';
@@ -51,6 +52,13 @@ export function NewTaskCompose({
   const titleRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
 
+  // Paste / drop a file into the description, like every other markdown field.
+  const fileUpload = useFileUpload({
+    textareaRef: descRef,
+    value: draft.text,
+    onChange: (text) => updateDraft({ text }),
+  });
+
   // Focus the description when the title is already filled (the common case after
   // an import or after naming the task on the entry screen), otherwise the title.
   useEffect(() => {
@@ -73,7 +81,8 @@ export function NewTaskCompose({
   }, [draft.text]);
 
   const effectiveBoardId = boards.some((b) => b.id === draft.boardId) ? draft.boardId : (boards[0]?.id ?? null);
-  const canStart = draft.title.trim().length > 0 && !!effectiveBoardId && !creating;
+  // Not mid-upload: the description would still hold the `Uploading…` placeholder.
+  const canStart = draft.title.trim().length > 0 && !!effectiveBoardId && !creating && !fileUpload.isUploading;
 
   const boardEpics = useBoardEpics(effectiveBoardId);
   const epicChoices = useMemo(() => epicOptions(boardEpics), [boardEpics]);
@@ -239,8 +248,10 @@ export function NewTaskCompose({
           value={draft.text}
           onChange={(e) => updateDraft({ text: e.target.value })}
           onKeyDown={onDescKeyDown}
+          onPaste={fileUpload.pasteHandler}
+          {...fileUpload.dragProps}
           placeholder="Describe the task. Code or not, framed or not."
-          className="min-h-[5.5rem] max-h-[50vh] w-full resize-none overflow-y-auto bg-transparent text-[14px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:outline-none"
+          className={`min-h-[5.5rem] max-h-[50vh] w-full resize-none overflow-y-auto rounded-md bg-transparent text-[14px] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:outline-none ${fileUpload.isDragOver ? 'ring-2 ring-[var(--theme-accent)]/30' : ''}`}
         />
 
         <div className="mt-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-t border-[var(--theme-border-subtle)] pt-3">
