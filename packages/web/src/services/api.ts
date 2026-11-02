@@ -1768,6 +1768,25 @@ export async function startActionRun(
 }
 
 /**
+ * A free interactive zsh for the Terminals panel (no action, no ticket). The
+ * server composes the command; 501 when its terminal runner is unavailable.
+ * Errors are toasted with the server's message.
+ */
+export async function startScratchShell(cwd?: string): Promise<{ runId: string; run: import('@fleex/shared').ActionRun }> {
+  const res = await fetch(`${API_URL}/terminals/shell`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cwd ? { cwd } : {}),
+  });
+  if (!res.ok) {
+    const message = extractErrorMessage(await res.text().catch(() => ''), res.statusText);
+    toast.error(message);
+    throw new Error(message);
+  }
+  return (await res.json()) as { runId: string; run: import('@fleex/shared').ActionRun };
+}
+
+/**
  * Stop a run in flight. False when the server no longer knows it (404: already
  * finished) — not worth a toast, the `finished` message is on its way.
  */

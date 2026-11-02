@@ -141,7 +141,8 @@ export interface ProbeTestResult {
 }
 
 /** `worktree`: a worktree button's command (see worktree-actions.ts). */
-export type ActionSourceKind = 'pinned' | 'workspace' | 'worktree';
+/** `scratch`: a free shell opened from the Terminals panel, tied to no action nor ticket. */
+export type ActionSourceKind = 'pinned' | 'workspace' | 'worktree' | 'scratch';
 
 export interface ActionRunRequest {
   /** Pinned icon / workspace action id. `draft:<id>` for Settings "Try" runs. */
@@ -180,6 +181,8 @@ export interface ActionRun {
   sourceKind: ActionSourceKind;
   label: string;
   command: string;
+  /** Where it runs (the request's cwd, else the gateway user's home). */
+  cwd?: string;
   startedAt: string;
   finishedAt?: string;
   exitCode?: number;

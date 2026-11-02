@@ -23,6 +23,28 @@ export function actionTerminalSessionId(runId: string): string {
   return `action:${runId}`;
 }
 
+/** ⌃` (VS Code's terminal toggle): the physical key, or the character. */
+export function isTerminalsShortcut(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey' | 'key' | 'code'>): boolean {
+  return e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '`' || e.code === 'Backquote');
+}
+
+/**
+ * ⌃` toggles the panel from anywhere, the xterm included: a capture listener on
+ * the window runs before the terminal's own keyboard handler.
+ */
+function useTerminalsShortcut(): void {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isTerminalsShortcut(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void usePinnedActionsStore.getState().toggleTerminals();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+}
+
 /** "0:14", "12:03" — the panel's running clock. */
 function clock(startedAt: string, now: number): string {
   const sec = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
@@ -69,6 +91,7 @@ export function ActionTerminalPanel() {
   const focusNonce = usePinnedActionsStore((s) => s.terminalFocusNonce);
   const minimized = usePinnedActionsStore((s) => s.terminalMinimized);
   const [maximized, setMaximized] = useState(false);
+  useTerminalsShortcut();
 
   if (terminals.length === 0) return null;
   const tab = terminals.find((t) => t.key === active) ?? terminals[terminals.length - 1]!;
@@ -171,7 +194,7 @@ function ActiveTab({
   const run = useTabRun(tab);
   const action = useSourceAction(tab.sourceId);
   const running = !run?.finishedAt;
-  const { focusTerminal, openLogs, minimizeTerminal: hide, setTerminalGeometry } = usePinnedActionsStore.getState();
+  const { focusTerminal, openLogs, minimizeTerminal: hide, setTerminalGeometry, openScratchShell } = usePinnedActionsStore.getState();
 
   // Opens where the user last left it (moved or resized, even in an earlier session), else in the middle.
   const [start] = useState(() => initialGeometry(usePinnedActionsStore.getState().terminalGeometry));
@@ -257,18 +280,31 @@ function ActiveTab({
           {running && run && <RunningBadge startedAt={run.startedAt} format={clock} />}
           <div className="flex shrink-0 items-center gap-1">
             <WindowButton kind={maximized ? 'restore' : 'maximize'} label={maximized ? 'Restore size (double-click the bar)' : 'Maximize (double-click the bar)'} onClick={onToggleMaximized} />
-            <WindowButton kind="hide" label="Hide (⌘W) — the terminals keep running; click an action to bring it back" onClick={hide} />
+            <WindowButton kind="hide" label="Hide (⌘W) — the terminals keep running; reopen them from the Terminals button (⌃`)" onClick={hide} />
           </div>
         </div>
         <div role="tablist" aria-label="Action terminals" className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-[var(--theme-border-subtle)] px-2 pt-1.5">
           {tabs.map((t) => (
             <TabButton key={t.key} tab={t} active={t.key === tab.key} onSelect={() => focusTerminal(t.key)} />
           ))}
+          <Tooltip label="New shell (hors action)">
+            <button
+              type="button"
+              aria-label="New shell"
+              data-new-shell
+              onClick={() => void openScratchShell()}
+              className="mb-1 ml-1 flex h-5 w-5 shrink-0 items-center justify-center self-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                <path d="M12 5v14" /><path d="M5 12h14" />
+              </svg>
+            </button>
+          </Tooltip>
         </div>
         <TerminalView key={tab.runId} sessionId={actionTerminalSessionId(tab.runId)} focusNonce={focusNonce} />
         {running ? (
           <div className="shrink-0 border-t border-[var(--theme-border-subtle)] px-3 py-1.5 font-mono text-[10.5px] text-[var(--theme-text-muted)]">
-            zsh -l -i · cwd {tab.cwd ? homeRelative(tab.cwd) : '~'} · stdout+stderr mixed
+            zsh -l -i · cwd {tab.cwd ? homeRelative(tab.cwd) : '~'} · {tab.sourceKind === 'scratch' ? 'interactive shell' : 'stdout+stderr mixed'}
           </div>
         ) : (
           <FinishedFooter tab={tab} run={run!} onViewLogs={() => openLogs({ sourceId: tab.sourceId, label: tab.label, runId: tab.runId })} />

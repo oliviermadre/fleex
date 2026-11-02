@@ -18,6 +18,7 @@ vi.mock('../../services/api', async (importOriginal) => ({
   cancelActionRun: vi.fn(async () => true),
   closeActionTerminal: vi.fn(async () => true),
   diagnoseBinary: vi.fn(async () => null),
+  startScratchShell: vi.fn(),
 }));
 
 const run = (extra: Partial<ActionRun> = {}): ActionRun => ({
@@ -352,5 +353,59 @@ describe('ActionTerminalPanel · resize', () => {
     render(<ActionTerminalPanel />);
     fireEvent.click(screen.getByRole('button', { name: /^Maximize/ }));
     expect(document.querySelectorAll('[data-resize]')).toHaveLength(0);
+  });
+});
+
+describe('ActionTerminalPanel · Terminals (⌃`, + New shell)', () => {
+  const shell = (extra: Partial<TerminalTab> = {}) => tab({ key: 'scratch:1', sourceId: 'scratch:1', sourceKind: 'scratch', runId: 's1', label: 'Shell 1', command: 'exec /bin/zsh -l -i', cwd: '/Users/me', ...extra });
+
+  it('⌃` hides the panel even with the keyboard in the terminal, and shows it back without a run', () => {
+    usePinnedActionsStore.setState({ terminals: [tab()], runs: { kp: [run()] }, activeTerminal: 'kp' });
+    render(<ActionTerminalPanel />);
+    const xterm = screen.getByTestId('action-terminal');
+    const reachedTerminal = vi.fn();
+    xterm.addEventListener('keydown', reachedTerminal);
+    fireEvent.keyDown(xterm, { key: '`', code: 'Backquote', ctrlKey: true });
+    expect(usePinnedActionsStore.getState().terminalMinimized).toBe(true);
+    // Swallowed before the terminal: a ⌃` never reaches the shell.
+    expect(reachedTerminal).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.body, { key: '`', code: 'Backquote', ctrlKey: true });
+    expect(usePinnedActionsStore.getState().terminalMinimized).toBe(false);
+    expect(api.startActionRun).not.toHaveBeenCalled();
+  });
+
+  it('⌃` with no terminal at all opens a free shell', async () => {
+    vi.mocked(api.startScratchShell).mockResolvedValueOnce({ runId: 's1', run: run({ runId: 's1', sourceId: 'scratch:1', sourceKind: 'scratch', label: 'Shell', command: 'exec /bin/zsh -l -i' }) });
+    render(<ActionTerminalPanel />);
+    await act(async () => { fireEvent.keyDown(document.body, { key: '`', code: 'Backquote', ctrlKey: true }); });
+    expect(api.startScratchShell).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('tab', { name: /Shell 1/ })).toBeTruthy();
+  });
+
+  it('the + of the tab bar opens one more shell, in front', async () => {
+    usePinnedActionsStore.setState({ terminals: [shell()], runs: { 'scratch:1': [run({ runId: 's1', sourceId: 'scratch:1', sourceKind: 'scratch' })] }, activeTerminal: 'scratch:1' });
+    vi.mocked(api.startScratchShell).mockResolvedValueOnce({ runId: 's2', run: run({ runId: 's2', sourceId: 'scratch:2', sourceKind: 'scratch', label: 'Shell', command: 'exec /bin/zsh -l -i' }) });
+    render(<ActionTerminalPanel />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'New shell' })); });
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Shell 1', 'Shell 2']);
+    expect(usePinnedActionsStore.getState().activeTerminal).toBe('scratch:2');
+  });
+
+  it('a running free shell says so in its footer; after exit it stays open with its exit code', () => {
+    vi.useFakeTimers();
+    usePinnedActionsStore.setState({ terminals: [shell()], runs: { 'scratch:1': [run({ runId: 's1', sourceId: 'scratch:1', sourceKind: 'scratch' })] }, activeTerminal: 'scratch:1' });
+    render(<ActionTerminalPanel />);
+    expect(screen.getByText(/zsh -l -i · cwd ~ · interactive shell/)).toBeTruthy();
+    act(() => usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: run({ runId: 's1', sourceId: 'scratch:1', sourceKind: 'scratch', finishedAt: new Date().toISOString(), exitCode: 0 }) }));
+    act(() => { vi.advanceTimersByTime(TERMINAL_AUTO_CLOSE_MS + 100); });
+    expect(screen.getByRole('status').textContent).toMatch(/✓ exit 0/);
+    expect(usePinnedActionsStore.getState().terminals).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('the window × tells where to reopen the terminals from', () => {
+    usePinnedActionsStore.setState({ terminals: [tab()], runs: { kp: [run()] }, activeTerminal: 'kp' });
+    render(<ActionTerminalPanel />);
+    expect(screen.getByRole('button', { name: /Hide \(⌘W\) — the terminals keep running; reopen them from the Terminals button \(⌃`\)/ })).toBeTruthy();
   });
 });

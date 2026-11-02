@@ -13,6 +13,7 @@ vi.mock('../services/api', async (importOriginal) => ({
   closeActionTerminal: vi.fn(async () => true),
   fetchActionRunCapabilities: vi.fn(async () => ({ liveOutput: true, terminal: true })),
   updateConfig: vi.fn(async () => ({})),
+  startScratchShell: vi.fn(),
 }));
 
 const run = (extra: Partial<ActionRun>): ActionRun => ({
@@ -413,5 +414,106 @@ describe('one action, several terminal commands (rules)', () => {
     usePinnedActionsStore.setState({ running: { 'k9::a': 'ra', 'k9::b': 'rb' }, runs: {} });
     usePinnedActionsStore.getState().handleWsMessage({ type: 'action-run:finished', data: { runId: 'ra', sourceId: 'k9', slot: 'a', sourceKind: 'pinned', label: 'k9s A', command: 'k9s', startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), exitCode: 0, stdout: '', stderr: '', mode: 'terminal' } } as never);
     expect(usePinnedActionsStore.getState().running).toEqual({ 'k9::b': 'rb' });
+  });
+});
+
+describe('Terminals panel: reopen without re-running, free shells, rebuilt after a reload', () => {
+  const tab = (key: string, runId: string, extra: Record<string, unknown> = {}) => ({ key, sourceId: key, sourceKind: 'pinned' as const, runId, label: key, command: 'cmd', ...extra });
+  const shellRun = (runId: string, sourceId: string): ActionRun =>
+    run({ runId, sourceId, sourceKind: 'scratch', label: 'Shell', command: 'exec /bin/zsh -l -i', mode: 'terminal', finishedAt: undefined, cwd: '/Users/me' });
+
+  beforeEach(() => usePinnedActionsStore.setState({ terminalMinimized: false }));
+
+  it('showTerminal brings the hidden panel back on the same tab and starts nothing', () => {
+    usePinnedActionsStore.setState({ terminals: [tab('a', 'ra'), tab('b', 'rb')], activeTerminal: 'a', terminalMinimized: true, terminalFocusNonce: 3 });
+    usePinnedActionsStore.getState().showTerminal();
+    const s = usePinnedActionsStore.getState();
+    expect(s).toMatchObject({ terminalMinimized: false, activeTerminal: 'a', terminalFocusNonce: 4 });
+    expect(api.startActionRun).not.toHaveBeenCalled();
+  });
+
+  it('showTerminal does nothing when there is no tab to show', () => {
+    usePinnedActionsStore.setState({ terminalMinimized: true });
+    usePinnedActionsStore.getState().showTerminal();
+    expect(usePinnedActionsStore.getState().terminalMinimized).toBe(true);
+  });
+
+  it('toggleTerminals: hides a visible panel, shows a hidden one, opens a shell when there is none', async () => {
+    const store = usePinnedActionsStore.getState();
+    usePinnedActionsStore.setState({ terminals: [tab('a', 'ra')], activeTerminal: 'a', terminalMinimized: false });
+    await store.toggleTerminals();
+    expect(usePinnedActionsStore.getState().terminalMinimized).toBe(true);
+    await store.toggleTerminals();
+    expect(usePinnedActionsStore.getState().terminalMinimized).toBe(false);
+    expect(api.startScratchShell).not.toHaveBeenCalled();
+
+    usePinnedActionsStore.setState({ terminals: [], activeTerminal: null, terminalMinimized: false });
+    vi.mocked(api.startScratchShell).mockResolvedValueOnce({ runId: 's1', run: shellRun('s1', 'scratch:1') });
+    await store.toggleTerminals();
+    expect(api.startScratchShell).toHaveBeenCalledTimes(1);
+    expect(usePinnedActionsStore.getState().terminals.map((t) => t.label)).toEqual(['Shell 1']);
+  });
+
+  it('openScratchShell opens "Shell N" tabs — the lowest free number — in front, never auto-closing', async () => {
+    vi.mocked(api.startScratchShell)
+      .mockResolvedValueOnce({ runId: 's1', run: shellRun('s1', 'scratch:1') })
+      .mockResolvedValueOnce({ runId: 's2', run: shellRun('s2', 'scratch:2') })
+      .mockResolvedValueOnce({ runId: 's3', run: shellRun('s3', 'scratch:3') });
+    const { openScratchShell, closeTerminal } = usePinnedActionsStore.getState();
+    await openScratchShell();
+    await openScratchShell();
+    closeTerminal('scratch:1');
+    await openScratchShell();
+    const s = usePinnedActionsStore.getState();
+    expect(s.terminals.map((t) => [t.key, t.label])).toEqual([['scratch:2', 'Shell 2'], ['scratch:3', 'Shell 1']]);
+    expect(s.terminals[1]).toMatchObject({ sourceKind: 'scratch', runId: 's3', cwd: '/Users/me' });
+    expect(s.terminals.some((t) => t.closeOnSuccess)).toBe(false);
+    expect(s.activeTerminal).toBe('scratch:3');
+    expect(s.terminalMinimized).toBe(false);
+    // Its run is known at once: the Terminals badge counts it as running.
+    expect(s.runs['scratch:3']?.[0]?.runId).toBe('s3');
+  });
+
+  it('openScratchShell leaves everything as it was when the server refuses (the api toasts the reason)', async () => {
+    vi.mocked(api.startScratchShell).mockRejectedValueOnce(new Error('Terminal unavailable — restart the gateway'));
+    await usePinnedActionsStore.getState().openScratchShell();
+    expect(usePinnedActionsStore.getState().terminals).toEqual([]);
+  });
+
+  it('reconcileRuns rebuilds the tabs of the terminals still running after a reload, keeping the panel hidden', async () => {
+    vi.mocked(api.fetchActionRuns).mockResolvedValueOnce([
+      // Newest first, like the server.
+      shellRun('s1', 'scratch:x'),
+      run({ runId: 'w1', sourceId: 'wt:abc', slot: 'start', sourceKind: 'worktree', label: 'dev server', mode: 'terminal', finishedAt: undefined, cwd: '/w' }),
+      run({ runId: 'k1', sourceId: 'k9s', label: 'k9s', mode: 'terminal', finishedAt: undefined }),
+      run({ runId: 'done', sourceId: 'gone', mode: 'terminal' }),
+      run({ runId: 'bg', sourceId: 'bg', mode: 'background', finishedAt: undefined }),
+      run({ runId: 'try', sourceId: 'draft:k9s', mode: 'terminal', finishedAt: undefined }),
+    ]);
+    await usePinnedActionsStore.getState().reconcileRuns();
+    const s = usePinnedActionsStore.getState();
+    expect(s.terminals.map((t) => [t.key, t.label, t.runId])).toEqual([
+      ['k9s', 'k9s', 'k1'],
+      ['wt:abc::start', 'dev server', 'w1'],
+      ['scratch:x', 'Shell 1', 's1'],
+    ]);
+    expect(s.terminals[1]!.cwd).toBe('/w');
+    expect(s.terminalMinimized).toBe(true);
+    expect(s.activeTerminal).toBe('scratch:x');
+  });
+
+  it('reconcileRuns leaves open tabs untouched and never shows a hidden or visible panel differently', async () => {
+    const open = tab('k9s', 'k1', { label: 'k9s (mine)', closeOnSuccess: true });
+    usePinnedActionsStore.setState({ terminals: [open], activeTerminal: 'k9s', terminalMinimized: false });
+    vi.mocked(api.fetchActionRuns).mockResolvedValueOnce([
+      run({ runId: 'k1', sourceId: 'k9s', label: 'k9s', mode: 'terminal', finishedAt: undefined }),
+      run({ runId: 'b1', sourceId: 'build', label: 'build', mode: 'terminal', finishedAt: undefined }),
+    ]);
+    await usePinnedActionsStore.getState().reconcileRuns();
+    const s = usePinnedActionsStore.getState();
+    expect(s.terminals[0]).toEqual(open);
+    expect(s.terminals.map((t) => t.key)).toEqual(['k9s', 'build']);
+    expect(s.activeTerminal).toBe('k9s');
+    expect(s.terminalMinimized).toBe(false);
   });
 });
