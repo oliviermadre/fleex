@@ -20,6 +20,15 @@ export function worktreeLabels(views: WorktreeActionsView[]): string[] {
   return views.map((v, i) => (names.filter((n) => n === names[i]).length > 1 ? `${names[i]}·${shortBranch(v.branch)}` : names[i]!));
 }
 
+/** Signature of the ticket links that decide which worktrees its workspace holds. */
+function worktreeLinksKey(ticket: Ticket): string {
+  return ticket.links
+    .filter((l) => l.type === 'repository' || l.type === 'worktree')
+    .map((l) => `${l.type}:${l.ref}:${l.baseBranch ?? ''}:${l.checkoutRef ?? ''}`)
+    .sort()
+    .join('|');
+}
+
 /**
  * WORKTREES group (PRD §8.1): one button per worktree found in the ticket's
  * workspace, sorted by repo then branch. Renders nothing until the ticket has
@@ -32,9 +41,13 @@ export function WorktreeActionsGroup({ ticket, separator = false }: { ticket: Ti
   const views = useWorktreeActionsStore((s) => (root ? s.byRoot[root] : undefined)) ?? EMPTY;
   const load = useWorktreeActionsStore((s) => s.load);
 
+  // The workspace path doesn't move when repos are attached/detached, but the
+  // worktrees in it do: reload on any change to the links that shape them.
+  const linksKey = useMemo(() => worktreeLinksKey(ticket), [ticket]);
+
   useEffect(() => {
     if (root) void load(root);
-  }, [root, load]);
+  }, [root, linksKey, load]);
 
   const labels = useMemo(() => worktreeLabels(views), [views]);
   // A worktree picked from the overflow list joins the bar (and opens its menu).
