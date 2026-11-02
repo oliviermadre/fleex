@@ -6,12 +6,14 @@ import { useTicketStore } from '../../../stores/ticketStore';
 import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { useWorkStore } from '../../../stores/workStore';
+import { uploadFile } from '../../../services/api';
 
 const epicsByBoard: Record<string, TicketGroup[]> = {};
 
 vi.mock('../../../services/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../services/api')>()),
   fetchTicketGroups: vi.fn(async (boardId?: string) => epicsByBoard[boardId ?? ''] ?? []),
+  uploadFile: vi.fn(),
 }));
 
 const createTicket = vi.fn(async () => ({ id: 't-new' }) as Ticket);
@@ -135,6 +137,66 @@ describe('NewTask — a task created outside the queue filters', () => {
     expect(work.pinnedTicketId).toBe('t-new');
     expect(work.boardFilters).toEqual(['b1']);
     expect(work.statusFilters).toEqual(['doing', 'reviewing']);
+  });
+});
+
+// The reported bug: a screenshot pasted into the description did nothing, while
+// every other markdown field in Fleex uploads it. The description is where people
+// most want a screenshot, and it must land in the created ticket as markdown.
+describe('NewTask — files in the description', () => {
+  const DESC_PLACEHOLDER = 'Describe the task. Code or not, framed or not.';
+  const png = () => new File(['png-bytes'], 'shot.png', { type: 'image/png' });
+
+  function deferredUpload() {
+    let resolve!: (v: Awaited<ReturnType<typeof uploadFile>>) => void;
+    vi.mocked(uploadFile).mockImplementation(() => new Promise((r) => { resolve = r; }));
+    return (url: string) => resolve({ url, originalName: 'shot.png' } as Awaited<ReturnType<typeof uploadFile>>);
+  }
+
+  it('uploads a pasted image and creates the ticket with it in the description', async () => {
+    vi.mocked(uploadFile).mockResolvedValue({ url: '/api/files/abc.png', originalName: 'shot.png' } as Awaited<ReturnType<typeof uploadFile>>);
+    render(<NewTask />);
+    const desc = screen.getByPlaceholderText(DESC_PLACEHOLDER);
+
+    fireEvent.paste(desc, { clipboardData: { files: [png()] } });
+
+    await waitFor(() => expect(useWorkStore.getState().draft.text).toBe('![shot.png](/api/files/abc.png)'));
+    expect(uploadFile).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() =>
+      expect(createTicket).toHaveBeenCalledWith(expect.objectContaining({ description: '![shot.png](/api/files/abc.png)' })),
+    );
+  });
+
+  it('uploads a file dropped on the description', async () => {
+    vi.mocked(uploadFile).mockResolvedValue({ url: '/api/files/abc.png', originalName: 'shot.png' } as Awaited<ReturnType<typeof uploadFile>>);
+    render(<NewTask />);
+    const desc = screen.getByPlaceholderText(DESC_PLACEHOLDER);
+
+    fireEvent.drop(desc, { dataTransfer: { files: [png()] } });
+
+    await waitFor(() => expect(useWorkStore.getState().draft.text).toBe('![shot.png](/api/files/abc.png)'));
+  });
+
+  // Starting mid-upload would create the ticket with the `![Uploading…](fleex-upload-…)`
+  // placeholder instead of the image, then reset the draft under the finishing upload.
+  it('cannot start while an upload is in flight, by button or by ⏎', async () => {
+    const finish = deferredUpload();
+    render(<NewTask />);
+    const desc = screen.getByPlaceholderText(DESC_PLACEHOLDER);
+
+    fireEvent.paste(desc, { clipboardData: { files: [png()] } });
+    await waitFor(() => expect(useWorkStore.getState().draft.text).toContain('Uploading shot.png'));
+
+    const startBtn = screen.getByRole('button', { name: 'Start' }) as HTMLButtonElement;
+    expect(startBtn.disabled).toBe(true);
+    fireEvent.keyDown(desc, { key: 'Enter' });
+    expect(createTicket).not.toHaveBeenCalled();
+
+    finish('/api/files/abc.png');
+    await waitFor(() => expect(startBtn.disabled).toBe(false));
+    expect(useWorkStore.getState().draft.text).toBe('![shot.png](/api/files/abc.png)');
   });
 });
 
