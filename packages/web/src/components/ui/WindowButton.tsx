@@ -14,6 +14,7 @@ export const WINDOW_ICONS = {
   maximize: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   restore: <path d="M5 12h14" />,
   hide: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+  close: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
 } as const;
 
 /** The Maximize / Restore tooltip, the same on every window. */

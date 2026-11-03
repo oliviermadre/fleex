@@ -165,14 +165,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
 
           <WindowButton kind={maximized ? 'restore' : 'maximize'} label={maximizeLabel(maximized)} onClick={toggleMaximized} />
 
-          {/* Close button */}
-          <button
-            onClick={close}
-            className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-danger)]/15 hover:text-[var(--theme-danger)]"
-            style={{ fontSize: 16, lineHeight: 1 }}
-          >
-            &times;
-          </button>
+          <WindowButton kind="close" label="Close (Esc)" onClick={close} />
         </div>
 
         {/* Content */}

@@ -72,7 +72,7 @@ describe('FloatingDeliverablePanel · maximize', () => {
     expect(bar().style.cursor).toBe('grab');
   });
 
-  it.each([/^Maximize/, '×'])('a press on a bar button (%s) does not start a drag', (name) => {
+  it.each([/^Maximize/, /^Close/])('a press on a bar button (%s) does not start a drag', (name) => {
     render(<FloatingDeliverablePanel deliverable={deliverable()} onClose={() => {}} />);
     const before = box();
     drag(screen.getByRole('button', { name }), -100, -60);

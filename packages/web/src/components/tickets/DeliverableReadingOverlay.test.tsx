@@ -82,7 +82,7 @@ describe('DeliverableReadingOverlay · maximize', () => {
       screen.getByRole('button', { name: /Copy to…/ }),
       screen.getByRole('button', { name: /Detach/ }),
       screen.getByRole('button', { name: /^Maximize/ }),
-      screen.getByRole('button', { name: '×' }),
+      screen.getByRole('button', { name: /^Close/ }),
       // The type badge is a picker button too.
       bar().querySelector('button')!,
     ];
@@ -94,7 +94,7 @@ describe('DeliverableReadingOverlay · maximize', () => {
 
   it.each([
     ['Escape', () => fireEvent.keyDown(window, { key: 'Escape' })],
-    ['×', () => fireEvent.click(screen.getByRole('button', { name: '×' }))],
+    ['Close', () => fireEvent.click(screen.getByRole('button', { name: /^Close/ }))],
     ['a click on the backdrop', () => fireEvent.mouseDown(document.querySelector('.deliverable-overlay-backdrop')!)],
   ])('closed while maximized (%s), the next deliverable opens centred', (_, closeIt) => {
     render(<DeliverableReadingOverlay />);

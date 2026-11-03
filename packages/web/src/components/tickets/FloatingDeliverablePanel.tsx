@@ -180,35 +180,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
 
           <WindowButton kind={maximized ? 'restore' : 'maximize'} label={maximizeLabel(maximized)} onClick={toggleMaximized} />
 
-          <button
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
-            style={{
-              width: 20,
-              height: 20,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 4,
-              border: 'none',
-              background: 'transparent',
-              color: 'var(--theme-text-muted)',
-              cursor: 'pointer',
-              flexShrink: 0,
-              fontSize: 14,
-              lineHeight: 1,
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = 'var(--theme-danger)';
-              (e.currentTarget as HTMLElement).style.background = 'var(--theme-danger)/15';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
-              (e.currentTarget as HTMLElement).style.background = 'transparent';
-            }}
-            title="Close floating deliverable"
-          >
-            &times;
-          </button>
+          <WindowButton kind="close" label="Close" onClick={onClose} />
         </div>
 
         {/* Content */}
