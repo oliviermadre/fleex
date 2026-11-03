@@ -12,6 +12,7 @@ import { tintClasses } from '../../../lib/tints';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { TypePickerPopover } from '../../tickets/TypePickerPopover';
 import { PriorityPickerPopover } from '../../tickets/PriorityPickerPopover';
+import { ComplexityPickerPopover } from '../../tickets/ComplexityPickerPopover';
 import { QueueActivityTimer } from './QueueActivityTimer';
 import { QueuePrGlyph } from './QueuePrGlyph';
 import type { WorkTask } from '../types';
@@ -63,6 +64,7 @@ export function QueueRow({ task, selected, onSelect, onOpenExecution, hiddenBy }
           <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
             <PriorityPickerPopover ticket={ticket} />
             <TypePickerPopover ticket={ticket} display="icon" />
+            <ComplexityPickerPopover ticket={ticket} />
           </div>
         )}
 

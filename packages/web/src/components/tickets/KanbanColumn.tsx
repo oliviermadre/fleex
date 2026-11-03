@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import type { Ticket, TicketStatus, BoardWithCounts } from '@fleex/shared';
-import { TICKET_STATUS_LABELS } from '@fleex/shared';
+import { TICKET_STATUS_LABELS, formatComplexitySum, sumComplexity } from '@fleex/shared';
 import { KanbanCard } from './KanbanCard';
 import { InlineCardCreator } from './InlineCardCreator';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -38,6 +38,8 @@ export function KanbanColumn({
   // Index where the drop indicator should appear (-1 = none, 0..tickets.length)
   const [dropIndex, setDropIndex] = useState(-1);
   const listRef = useRef<HTMLDivElement>(null);
+  // Points of the visible (already filtered) tickets. Hidden when none is estimated.
+  const points = useMemo(() => sumComplexity(tickets), [tickets]);
 
   const handleDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('application/x-ticket-id')) return;
@@ -175,6 +177,15 @@ export function KanbanColumn({
         <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', getStatusBadgeClass(status))}>
           {tickets.length}
         </span>
+        {points.estimated > 0 && (
+          <span
+            data-testid="column-complexity-sum"
+            className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--theme-text-primary)]"
+            title={`${points.estimated} estimated · ${points.unestimated} not estimated${points.infinite > 0 ? ` · ${points.infinite} to split (∞)` : ''}`}
+          >
+            {formatComplexitySum(points)}
+          </span>
+        )}
         {onToggleCollapse && (
           <button
             className="ml-auto flex items-center justify-center text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"

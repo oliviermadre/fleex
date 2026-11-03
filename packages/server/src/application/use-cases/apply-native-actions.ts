@@ -367,6 +367,7 @@ function ticketReferenceFields(ticket: TicketEntity): Record<string, unknown> {
     description: ticket.description,
     status: ticket.status,
     priority: ticket.priority,
+    complexity: ticket.complexity,
     type: ticket.type,
     assignee: ticket.assignee,
     tags: ticket.tags,

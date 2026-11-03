@@ -1,4 +1,5 @@
 import { TICKET_STATUSES, TICKET_PRIORITIES, TICKET_TYPES } from '../constants.js';
+import { TICKET_COMPLEXITIES } from '../ticket-complexity.js';
 
 /**
  * Native operations — the open/closed catalogue of deterministic ticket
@@ -90,6 +91,7 @@ export const NATIVE_OPERATIONS: readonly NativeOperationDescriptor[] = [
       { name: 'description', label: 'Description', type: 'text', required: false },
       { name: 'status', label: 'Status', type: 'enum', enum: TICKET_STATUSES, required: false },
       { name: 'priority', label: 'Priority', type: 'enum', enum: TICKET_PRIORITIES, required: false },
+      { name: 'complexity', label: 'Complexity', type: 'enum', enum: TICKET_COMPLEXITIES, required: false, nullable: true },
       { name: 'type', label: 'Type', type: 'enum', enum: TICKET_TYPES, required: false, nullable: true },
       { name: 'tags', label: 'Tags', type: 'string[]', required: false },
       { name: 'dueDate', label: 'Due date', type: 'date', required: false, nullable: true },
@@ -114,6 +116,16 @@ export const NATIVE_OPERATIONS: readonly NativeOperationDescriptor[] = [
       { name: 'priority', label: 'Priority', type: 'enum', enum: TICKET_PRIORITIES, required: true },
     ],
     conflictsOn: ['priority'],
+  },
+  {
+    id: 'ticket.set_complexity',
+    label: 'Set complexity',
+    category: 'ticket',
+    description: 'Set the ticket complexity (Fibonacci points; inf = too big, must be split).',
+    params: [
+      { name: 'complexity', label: 'Complexity', type: 'enum', enum: TICKET_COMPLEXITIES, required: true, nullable: true },
+    ],
+    conflictsOn: ['complexity'],
   },
   {
     id: 'ticket.set_type',

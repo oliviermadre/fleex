@@ -1,5 +1,5 @@
 import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
-import { isEffortLevel, TICKET_PRIORITY_RANK } from '@fleex/shared';
+import { isEffortLevel, normalizeTicketComplexity, TICKET_PRIORITY_RANK } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -43,6 +43,7 @@ interface TicketRow {
   model_override: string | null;
   effort_override: string | null;
   fast_mode: boolean | null;
+  complexity: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +99,7 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     r.model_override ?? null,
     isEffortLevel(r.effort_override) ? r.effort_override : null,
     r.fast_mode === true,
+    normalizeTicketComplexity(r.complexity),
   );
 }
 
@@ -240,6 +242,7 @@ export class SupabaseTicketStore implements TicketStorePort {
         description: ticket.description,
         status: ticket.status,
         priority: ticket.priority,
+        complexity: ticket.complexity,
         type: ticket.type,
         position: ticket.position,
         tags: ticket.tags,
@@ -272,6 +275,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       description: ticket.description,
       status: ticket.status,
       priority: ticket.priority,
+      complexity: ticket.complexity,
       type: ticket.type,
       position: ticket.position,
       tags: ticket.tags,

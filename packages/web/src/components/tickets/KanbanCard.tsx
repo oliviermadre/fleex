@@ -3,6 +3,7 @@ import type { Ticket, TicketLink, TicketPriority, BoardWithCounts } from '@fleex
 import { TICKET_STATUS, SLACK_IMPORT_PENDING_TAG, SLACK_IMPORT_FAILED_TAG, isSlackImportTag } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
+import { ComplexityPickerPopover } from './ComplexityPickerPopover';
 import { DueDateBadge } from './DueDateBadge';
 import { ActivityPill } from './ActivityPill';
 import { FloatingExecutionPanel } from './ExecutionModal';
@@ -168,6 +169,11 @@ export function KanbanCard({
           {/* Type picker */}
           <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
             <TypePickerPopover ticket={ticket} />
+          </div>
+
+          {/* Complexity — unestimated tickets only reveal the trigger on card hover */}
+          <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <ComplexityPickerPopover ticket={ticket} hideWhenUnset />
           </div>
 
           {/* Board badge (shown in "All boards" view) */}

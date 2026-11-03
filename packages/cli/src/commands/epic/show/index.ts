@@ -2,6 +2,8 @@ import type { CommandDef } from '../../../core/types.ts';
 import { c, statusColor } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
 import { resolveEpicId } from '../_shared.ts';
+import { complexityCell } from '../../ticket/_shared.ts';
+import { complexityProgress, formatComplexitySum, normalizeTicketComplexity } from '@fleex/shared';
 
 interface Epic {
   id: string;
@@ -25,6 +27,7 @@ interface Ticket {
   title: string;
   status: string;
   priority: string;
+  complexity?: string | null;
   type?: string | null;
 }
 
@@ -76,6 +79,13 @@ const def: CommandDef = {
     const tickets = await apiGet<Ticket[]>(`${base}/api/epics/${resolvedId}/tickets`);
     process.stdout.write('\n');
     process.stdout.write(`  ${c.bold(`Tickets (${tickets.length}):`)}\n`);
+    // Points: cancelled tickets don't count; ∞ and unestimated ones are reported apart.
+    const { done, total } = complexityProgress(
+      tickets.map((t) => ({ status: t.status, complexity: normalizeTicketComplexity(t.complexity) })),
+    );
+    if (total.estimated > 0 || total.unestimated > 0) {
+      process.stdout.write(`  ${c.bold('Points:')}       ${done.points} / ${formatComplexitySum(total)} done · ${total.unestimated} unestimated\n`);
+    }
     if (tickets.length === 0) {
       process.stdout.write(`    ${c.dim('No tickets')}\n`);
     } else {
@@ -83,8 +93,9 @@ const def: CommandDef = {
       for (const t of tickets) {
         const colored = statusColor(t.status)(t.status.padEnd(11));
         const prio = (t.priority ?? '-').padEnd(8);
+        const pts = complexityCell(t.complexity).padEnd(4);
         const type = (t.type ?? '-').padEnd(8);
-        process.stdout.write(`    #${String(t.displayId).padEnd(5)} ${colored} ${prio} ${type} ${t.title}\n`);
+        process.stdout.write(`    #${String(t.displayId).padEnd(5)} ${colored} ${prio} ${pts} ${type} ${t.title}\n`);
       }
     }
     process.stdout.write('\n');

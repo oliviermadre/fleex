@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { TicketStatus, TicketPriority, TicketType, TicketLink } from '@fleex/shared';
+import type { TicketStatus, TicketPriority, TicketComplexity, TicketType, TicketLink } from '@fleex/shared';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { BoardNotFoundError } from '../../domain/errors.js';
@@ -13,6 +13,7 @@ export interface CreateTicketInput {
   description?: string;
   status?: TicketStatus;
   priority?: TicketPriority;
+  complexity?: TicketComplexity | null;
   type?: TicketType | null;
   tags?: string[];
   links?: Omit<TicketLink, 'id' | 'createdAt'>[];
@@ -54,6 +55,7 @@ export class CreateTicketUseCase {
       description: input.description,
       status: targetStatus,
       priority: input.priority,
+      complexity: input.complexity,
       type: input.type,
       position: minPos - 1,
       tags: input.tags,

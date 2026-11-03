@@ -50,4 +50,10 @@ describe('migrateDraft', () => {
     expect(migrated.repoCheckoutRefs).toEqual({});
     expect(migrated.source).toBeNull();
   });
+
+  it('defaults the complexity to "not estimated" for blobs persisted before it existed, and drops off-scale values', () => {
+    expect(migrateDraft({ title: 'T', text: '', stage: 'compose' }).complexity).toBeNull();
+    expect(migrateDraft({ title: 'T', text: '', stage: 'compose', complexity: '4' }).complexity).toBeNull();
+    expect(migrateDraft({ title: 'T', text: '', stage: 'compose', complexity: 'inf' }).complexity).toBe('inf');
+  });
 });

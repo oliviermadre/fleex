@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { TicketType, TicketPriority, TicketLink, ImportSourceId } from '@fleex/shared';
+import type { TicketType, TicketPriority, TicketComplexity, TicketLink, ImportSourceId } from '@fleex/shared';
 import { EMPTY_DRAFT, migrateDraft } from '../components/work/new/draftMigration';
 import { paneCount } from '../components/work/shell/shellLayout';
 import { useBrowserStore } from './browserStore';
@@ -95,6 +95,8 @@ export interface WorkDraft {
   boardId: string | null;
   type: DraftType;
   priority: TicketPriority;
+  /** Estimate chosen before creation; `null` = not estimated. */
+  complexity: TicketComplexity | null;
 }
 
 export interface WorkState {

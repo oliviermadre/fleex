@@ -30,6 +30,7 @@ ${SECTION('Examples:')}
   ${DIM('$')} fleex ticket show 42 --full                ${DIM('# include comments + deliverables')}
   ${DIM('$')} fleex ticket create --title "Fix bug"      ${DIM('# create a new ticket')}
   ${DIM('$')} fleex ticket update 42 --priority high     ${DIM('# set priority')}
+  ${DIM('$')} fleex ticket update 42 --complexity 5     ${DIM('# estimate (0 .5 1 2 3 5 8 13 21 34 55 inf, none)')}
   ${DIM('$')} fleex ticket update 42 --type fix --due 2026-07-01
   ${DIM('$')} fleex ticket update 42 --favorite --blocked ${DIM('# toggle flags (use --no-* to clear)')}
   ${DIM('$')} fleex ticket update 42 --add-tag urgent --rm-tag wip

@@ -133,6 +133,20 @@ describe('ApplyNativeActionsUseCase', () => {
     expect(events('ticket.moved')).toHaveLength(1);
   });
 
+  it('sets and clears the complexity through ticket.set_complexity, tracing it in the activity', async () => {
+    const { run, ticketStore } = harness();
+
+    const result = await run([action('ticket.set_complexity', { complexity: '8' })]);
+    expect(result.changed).toEqual(['complexity']);
+    const saved = ticketStore.saveTicket.mock.calls[0]?.[0] as TicketEntity;
+    expect(saved.complexity).toBe('8');
+    const activity = ticketStore.saveActivity.mock.calls[0]?.[0] as { changes: Record<string, unknown> };
+    expect(activity.changes).toEqual({ complexity: { from: null, to: '8' } });
+
+    await run([action('ticket.set_complexity', { complexity: null })]);
+    expect((ticketStore.saveTicket.mock.calls[1]?.[0] as TicketEntity).complexity).toBeNull();
+  });
+
   it('attributes the change to the workflow, not to a user', async () => {
     // Otherwise the ticket history reads as if a human did it, and there is no
     // way to tell an automated triage from a manual one.

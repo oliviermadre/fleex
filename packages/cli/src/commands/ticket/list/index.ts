@@ -5,6 +5,7 @@ import { c, info, die, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
 import { resolveEpicId } from '../../epic/_shared.ts';
 import { resolveBoardId } from '../../board/_shared.ts';
+import { complexityCell } from '../_shared.ts';
 
 interface ListOptions {
   board?: string;
@@ -22,6 +23,7 @@ export interface Ticket {
   title: string;
   status: string;
   priority?: string | null;
+  complexity?: string | null;
   type?: string | null;
   tags?: string[];
   assignee?: string | null;
@@ -132,6 +134,7 @@ export interface SlimTicket {
   board: string;
   status: string;
   priority: string | null;
+  complexity: string | null;
   type: string | null;
   assignee: string | null;
   epic: string | null;
@@ -148,6 +151,7 @@ export function toSlim(t: Ticket, ctx: { boardName: (id: string) => string; epic
     board: ctx.boardName(t.boardId),
     status: t.status,
     priority: t.priority ?? null,
+    complexity: t.complexity ?? null,
     type: t.type ?? null,
     assignee: t.assignee ?? null,
     epic: ctx.epicLabel(t.id),
@@ -278,11 +282,11 @@ ${chalk.bold.yellow('Token budget:')}
 
     process.stdout.write('\n');
     if (showBoard) {
-      process.stdout.write(`  ${c.bold('#     '.padEnd(7) + 'Board                  ' + 'Status      ' + 'Prio     ' + 'Assignee     ' + 'Epic               ' + 'Title')}\n`);
-      process.stdout.write(`  ${'──────'.padEnd(7)}${'──────────────────────'.padEnd(23)}${'───────────'.padEnd(12)}${'────────'.padEnd(9)}${'────────────'.padEnd(13)}${'──────────────────'.padEnd(19)}──────────────────────────────\n`);
+      process.stdout.write(`  ${c.bold('#     '.padEnd(7) + 'Board                  ' + 'Status      ' + 'Prio     ' + 'Pts  ' + 'Assignee     ' + 'Epic               ' + 'Title')}\n`);
+      process.stdout.write(`  ${'──────'.padEnd(7)}${'──────────────────────'.padEnd(23)}${'───────────'.padEnd(12)}${'────────'.padEnd(9)}${'────'.padEnd(5)}${'────────────'.padEnd(13)}${'──────────────────'.padEnd(19)}──────────────────────────────\n`);
     } else {
-      process.stdout.write(`  ${c.bold('#     '.padEnd(7) + 'Status      ' + 'Prio     ' + 'Assignee     ' + 'Epic               ' + 'Title')}\n`);
-      process.stdout.write(`  ${'──────'.padEnd(7)}${'───────────'.padEnd(12)}${'────────'.padEnd(9)}${'────────────'.padEnd(13)}${'──────────────────'.padEnd(19)}──────────────────────────────\n`);
+      process.stdout.write(`  ${c.bold('#     '.padEnd(7) + 'Status      ' + 'Prio     ' + 'Pts  ' + 'Assignee     ' + 'Epic               ' + 'Title')}\n`);
+      process.stdout.write(`  ${'──────'.padEnd(7)}${'───────────'.padEnd(12)}${'────────'.padEnd(9)}${'────'.padEnd(5)}${'────────────'.padEnd(13)}${'──────────────────'.padEnd(19)}──────────────────────────────\n`);
     }
 
     for (const t of tickets) {
@@ -290,13 +294,14 @@ ${chalk.bold.yellow('Token budget:')}
       const status = t.status.padEnd(11);
       const colored = statusColor(t.status)(status);
       const prio = (t.priority ?? '-').padEnd(8);
+      const pts = complexityCell(t.complexity).padEnd(4);
       const assignee = (t.assignee ?? '-').padEnd(12);
       const ep = (epicLabel(t.id) ?? '-').slice(0, 18).padEnd(18);
       if (showBoard) {
         const board = boardName(t.boardId).slice(0, 22).padEnd(22);
-        process.stdout.write(`  ${did.padEnd(6)} ${board} ${colored} ${prio} ${assignee} ${ep} ${t.title}\n`);
+        process.stdout.write(`  ${did.padEnd(6)} ${board} ${colored} ${prio} ${pts} ${assignee} ${ep} ${t.title}\n`);
       } else {
-        process.stdout.write(`  ${did.padEnd(6)} ${colored} ${prio} ${assignee} ${ep} ${t.title}\n`);
+        process.stdout.write(`  ${did.padEnd(6)} ${colored} ${prio} ${pts} ${assignee} ${ep} ${t.title}\n`);
       }
     }
     process.stdout.write('\n');

@@ -2,7 +2,7 @@ import type { TicketTodoItem, TimelineAnnotation } from '@fleex/shared';
 import type { CommandDef } from '../../../core/types.ts';
 import { c, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiCall } from '../../../core/api.ts';
-import { resolveTicketId, colorizeCost } from '../_shared.ts';
+import { resolveTicketId, colorizeCost, formatComplexity } from '../_shared.ts';
 import { countsLine, itemLine } from '../todo/_shared.ts';
 
 interface ShowOptions {
@@ -19,6 +19,7 @@ interface Ticket {
   title: string;
   status: string;
   priority: string;
+  complexity?: string | null;
   type?: string | null;
   assignee?: string | null;
   tags?: string[];
@@ -96,7 +97,8 @@ const def: CommandDef = {
 
     const colored = statusColor(ticket.status)(ticket.status);
     process.stdout.write('\n');
-    process.stdout.write(`  ${c.bold(`Ticket #${ticket.displayId}`)}  ${colored} | ${ticket.priority}\n`);
+    const points = formatComplexity(ticket.complexity);
+    process.stdout.write(`  ${c.bold(`Ticket #${ticket.displayId}`)}  ${colored} | ${ticket.priority}${points ? ` | ${points}` : ''}\n`);
     process.stdout.write(`  ─────────────────────────────────────────────────────────\n`);
     process.stdout.write(`  ${c.bold('Title:')}       ${ticket.title}\n`);
     process.stdout.write(`  ${c.bold('Type:')}        ${ticket.type ?? '-'}\n`);

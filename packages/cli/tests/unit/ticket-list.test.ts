@@ -146,14 +146,14 @@ describe('ticket list --json (slim)', () => {
   beforeEach(() => { setJsonMode(true); vi.clearAllMocks(); mockApi(); });
   afterEach(() => { setJsonMode(false); });
 
-  it('emits one JSON envelope whose tickets carry exactly the 11 grid fields', async () => {
+  it('emits one JSON envelope whose tickets carry exactly the 12 grid fields', async () => {
     const { out, code } = await run({});
     expect(code).toBeNull();
     const parsed = JSON.parse(out);
     expect(Object.keys(parsed).sort()).toEqual(['hidden', 'notice', 'returned', 'tickets', 'total', 'truncated']);
     for (const t of parsed.tickets) {
       expect(Object.keys(t).sort()).toEqual(
-        ['assignee', 'board', 'displayId', 'epic', 'id', 'priority', 'status', 'tags', 'title', 'type', 'updatedAt'],
+        ['assignee', 'board', 'complexity', 'displayId', 'epic', 'id', 'priority', 'status', 'tags', 'title', 'type', 'updatedAt'],
       );
     }
     expect(out).not.toContain('description');

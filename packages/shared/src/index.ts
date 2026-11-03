@@ -14,6 +14,20 @@ export type {
 
 export { slugify } from './slugify.js';
 
+export {
+  TICKET_COMPLEXITIES,
+  TICKET_COMPLEXITY_INPUT_HINT,
+  isTicketComplexity,
+  normalizeTicketComplexity,
+  complexityLabel,
+  complexityValue,
+  parseTicketComplexityInput,
+  sumComplexity,
+  formatComplexitySum,
+  complexityProgress,
+} from './ticket-complexity.js';
+export type { ComplexitySum } from './ticket-complexity.js';
+
 export { buildTicketWorkspaceId } from './utils/workspace.js';
 
 export {
@@ -181,6 +195,7 @@ export type {
 export type {
   TicketStatus,
   TicketPriority,
+  TicketComplexity,
   TicketType,
   ConversationMode,
   EffortLevel,

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { TICKET_TYPES } from '@fleex/shared';
+import { TICKET_COMPLEXITIES, TICKET_TYPES, complexityLabel, normalizeTicketComplexity } from '@fleex/shared';
 import type { Ticket, TicketPriority, TicketType } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { tint, tintText } from '../lib/tints';
@@ -7,7 +7,7 @@ import { PRIORITY_LABELS, PRIORITY_ORDER_DESC } from '../components/tickets/Prio
 
 /**
  * Bottom sheet for every ticket-level write the desktop meta sidebar offers:
- * priority, type, tags, due date, favorite, blocked, board move, archive and
+ * priority, complexity, type, tags, due date, favorite, blocked, board move, archive and
  * delete. Field edits go through the standard updateTicket PATCH.
  */
 export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
@@ -78,6 +78,22 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
               <option value="">—</option>
               {(TICKET_TYPES as readonly TicketType[]).map((t) => (
                 <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div>
+            <label className={label}>Complexité</label>
+            <select
+              value={ticket.complexity ?? ''}
+              onChange={(e) => patch({ complexity: normalizeTicketComplexity(e.target.value) })}
+              className={select}
+            >
+              <option value="">Non estimé</option>
+              {TICKET_COMPLEXITIES.map((c) => (
+                <option key={c} value={c}>{c === 'inf' ? '∞ (à découper)' : complexityLabel(c)}</option>
               ))}
             </select>
           </div>

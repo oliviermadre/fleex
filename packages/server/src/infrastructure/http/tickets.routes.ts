@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus, TicketType, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
-import { TICKET_STATUSES, githubIssueSource } from '@fleex/shared';
+import { TICKET_STATUSES, TICKET_COMPLEXITIES, githubIssueSource, isTicketComplexity } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
@@ -18,6 +18,8 @@ import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoun
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
 import type { DeliverableQueryFilters } from '../../application/ports/deliverable-store.port.js';
+
+const INVALID_COMPLEXITY_MESSAGE = `complexity must be one of ${TICKET_COMPLEXITIES.join(', ')} (or null to clear)`;
 
 /** Default and maximum page size for the global deliverables list. */
 const DELIVERABLES_PAGE_SIZE = 100;
@@ -323,7 +325,10 @@ export function ticketRoutes(container: Container) {
     });
 
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
-      const { boardId, title, description, status, priority, type, tags, links, dueDate } = request.body;
+      const { boardId, title, description, status, priority, complexity, type, tags, links, dueDate } = request.body;
+      if (complexity !== undefined && complexity !== null && !isTicketComplexity(complexity)) {
+        return reply.code(400).send({ error: INVALID_COMPLEXITY_MESSAGE });
+      }
 
       // Validate/normalise any per-repo base branch / checkout ref before creating.
       let normalizedLinks = links;
@@ -368,13 +373,16 @@ export function ticketRoutes(container: Container) {
       }
 
       const ticket = await container.createTicket.execute({
-        boardId, title, description, status, priority, type, tags, links: normalizedLinks, dueDate,
+        boardId, title, description, status, priority, complexity, type, tags, links: normalizedLinks, dueDate,
       });
       return reply.code(201).send(ticket.toDTO());
     });
 
-    app.patch<{ Params: { id: string }; Querystring: { silent?: string }; Body: UpdateTicketRequest }>('/api/tickets/:id', async (request) => {
+    app.patch<{ Params: { id: string }; Querystring: { silent?: string }; Body: UpdateTicketRequest }>('/api/tickets/:id', async (request, reply) => {
       const { dueDate, ...rest } = request.body;
+      if (rest.complexity !== undefined && rest.complexity !== null && !isTicketComplexity(rest.complexity)) {
+        return reply.code(400).send({ error: INVALID_COMPLEXITY_MESSAGE });
+      }
       const changes: Parameters<TicketEntity['update']>[0] = { ...rest };
       if (dueDate !== undefined) {
         changes.dueDate = dueDate ? new Date(dueDate) : null;
