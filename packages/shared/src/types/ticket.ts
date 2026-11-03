@@ -281,6 +281,95 @@ export interface TimelineAnnotation {
   readonly updatedAt: string;
 }
 
+// ── Ticket todo list ──
+
+/**
+ * State of one item of a ticket's todo list. Not `todo`: that word is already
+ * a ticket status. The UI says « À faire / Fait / Annulé »; the CLI accepts
+ * `todo` as an alias of `open`.
+ */
+export type TodoItemState = 'open' | 'done' | 'cancelled';
+export type TodoActorType = 'user' | 'agent';
+/** Where a todo change came from. */
+export type TodoSource = 'web' | 'cli' | 'mcp' | 'agent-api';
+export type TodoEventAction = 'created' | 'edited' | 'state_changed' | 'moved' | 'deleted';
+
+export const TODO_ITEM_STATES: readonly TodoItemState[] = ['open', 'done', 'cancelled'];
+export const TODO_SOURCES: readonly TodoSource[] = ['web', 'cli', 'mcp', 'agent-api'];
+export const TODO_TEXT_MAX = 500;
+export const TODO_NOTE_MAX = 4000;
+export const TODO_REASON_MAX = 500;
+
+export function isTodoItemState(v: unknown): v is TodoItemState {
+  return typeof v === 'string' && (TODO_ITEM_STATES as readonly string[]).includes(v);
+}
+
+export function isTodoSource(v: unknown): v is TodoSource {
+  return typeof v === 'string' && (TODO_SOURCES as readonly string[]).includes(v);
+}
+
+/**
+ * An item's text: one line, trimmed, 1..TODO_TEXT_MAX chars. Returns the
+ * cleaned text, or an error message the caller turns into its own error type.
+ */
+export function validateTodoText(raw: unknown): { ok: true; text: string } | { ok: false; error: string } {
+  const text = String(raw ?? '').replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  if (text.length === 0) return { ok: false, error: 'Todo text is required' };
+  if (text.length > TODO_TEXT_MAX) return { ok: false, error: `Todo text must be at most ${TODO_TEXT_MAX} characters` };
+  return { ok: true, text };
+}
+
+/**
+ * One item of a ticket's shared todo list. `ref` is a per-ticket number
+ * (#1, #2…) that is never reused, even after a delete.
+ */
+export interface TicketTodoItem {
+  readonly id: string;
+  readonly ticketId: string;
+  readonly ref: number;
+  readonly text: string;
+  readonly note: string | null;
+  readonly state: TodoItemState;
+  /** Manual order; lower first. */
+  readonly position: number;
+  readonly createdByType: TodoActorType;
+  readonly createdByName: string;
+  /** Last done / cancelled / reopen transition — with state 'done', the "done at". */
+  readonly stateChangedAt: string | null;
+  readonly stateChangedByType: TodoActorType | null;
+  readonly stateChangedByName: string | null;
+  /** Reason given on the last cancel, null otherwise. */
+  readonly cancelReason: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** One change of one todo item — the audit trail. */
+export interface TicketTodoEvent {
+  readonly id: string;
+  readonly itemId: string;
+  readonly ticketId: string;
+  readonly itemRef: number;
+  /** The item's text when the event happened. */
+  readonly itemText: string;
+  readonly action: TodoEventAction;
+  /** `{ field: { from, to } }`; a cancel also carries `reason: { from: null, to }`. */
+  readonly changes: Record<string, { from: unknown; to: unknown }>;
+  readonly actorType: TodoActorType;
+  readonly actorName: string;
+  readonly source: TodoSource;
+  readonly createdAt: string;
+}
+
+/**
+ * What a todo write returns: the item, and the history rows it wrote. Empty
+ * `history` means nothing changed (e.g. `done` on an item already done).
+ */
+export interface TodoWriteResult {
+  readonly item: TicketTodoItem;
+  readonly history: readonly TicketTodoEvent[];
+}
+
 // ── Mentions ──
 
 export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info' | 'failed';
@@ -690,6 +779,8 @@ export interface TicketContext {
   readonly deliverables: TicketDeliverable[];
   /** Timeline annotations: what humans/agents flagged as worth remembering, and when. */
   readonly annotations?: TimelineAnnotation[];
+  /** The ticket's shared todo list (not deleted), in display order. */
+  readonly todos?: TicketTodoItem[];
   readonly activity: TicketActivity[];
   readonly relevantSummaries: TicketSummaryRef[];
   readonly epics: TicketContextEpic[];
@@ -734,7 +825,10 @@ export type TicketWsMessageType =
   | 'deliverable:deleted'
   | 'annotation:created'
   | 'annotation:updated'
-  | 'annotation:deleted';
+  | 'annotation:deleted'
+  | 'todo:created'
+  | 'todo:updated'
+  | 'todo:deleted';
 
 export interface TicketWsMessage {
   readonly type: TicketWsMessageType;

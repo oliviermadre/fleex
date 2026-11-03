@@ -6,6 +6,7 @@ import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
 import type { AnnotationStorePort } from '../ports/annotation-store.port.js';
+import type { TodoStorePort } from '../ports/todo-store.port.js';
 import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
 import type { MemorySnippet, RetrieveContextUseCase } from './retrieve-context.js';
 
@@ -28,6 +29,8 @@ export class GetTicketContextUseCase {
     private readonly retrieveContext?: RetrieveContextUseCase,
     /** Timeline annotations — what was flagged as worth remembering, and when. */
     private readonly annotationStore?: AnnotationStorePort,
+    /** The ticket's shared todo list. */
+    private readonly todoStore?: TodoStorePort,
   ) {}
 
   async execute(params: {
@@ -65,6 +68,11 @@ export class GetTicketContextUseCase {
             ? { ...dto, body: `${dto.body.slice(0, ANNOTATION_CONTEXT_BODY_MAX)}…` }
             : dto;
         })
+      : [];
+
+    // Shared todo list (live items, display order). A failure must not sink the run.
+    const todos = this.todoStore
+      ? (await this.todoStore.listItems(params.ticketId).catch(() => [])).map((i) => i.toDTO())
       : [];
 
     // Get activity
@@ -125,6 +133,7 @@ export class GetTicketContextUseCase {
       },
       deliverables: deliverables.map((d) => d.toDTO()),
       annotations,
+      todos,
       activity: activity.map((a) => a.toDTO()),
       relevantSummaries,
       epics,

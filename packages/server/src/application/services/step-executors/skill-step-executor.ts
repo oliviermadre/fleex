@@ -58,6 +58,7 @@ export class SkillStepExecutor implements StepExecutor {
         workflowContextPrompt: `${skillPreamble}\n\n---\n\n${workflowContextPrompt}`,
         mode: 'edit',
         onExecutionStarted: input.onExecutionStarted,
+        actorName: `workflow:${input.workflowContext.workflowName} → ${input.workflowContext.stepName}`,
       });
       return { output: this.toStepOutput(structuredOutput), executionId };
     }

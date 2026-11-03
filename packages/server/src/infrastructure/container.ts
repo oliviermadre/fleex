@@ -55,6 +55,7 @@ import { GitHubPrImportAdapter } from '../application/services/import-sources/gi
 import { SlackMessageImportAdapter } from '../application/services/import-sources/slack-message.adapter.js';
 import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import { TimelineAnnotationsUseCase } from '../application/use-cases/timeline-annotations.js';
+import { TicketTodosUseCase } from '../application/use-cases/ticket-todos.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
 import { SubmitDeliverableUseCase } from '../application/use-cases/submit-deliverable.js';
 import { ManageDeliverableTypesUseCase } from '../application/use-cases/manage-deliverable-types.js';
@@ -177,6 +178,7 @@ export async function createContainer() {
     agentTokenStore,
     commentStore,
     annotationStore,
+    todoStore,
     mentionStore,
     deliverableStore,
     personaStore,
@@ -303,7 +305,7 @@ export async function createContainer() {
     config, getRelevantSummaries, ticketStore_, logger, memoryStore ?? undefined, embeddingProvider,
   );
   const getTicketContext = new GetTicketContextUseCase(
-    ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore, retrieveContext, annotationStore,
+    ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore, retrieveContext, annotationStore, todoStore,
   );
   // Let a width-declaring store (Supabase's `vector(N)` column, its index and its
   // search function) match the configured encoder. Idempotent, and the only thing
@@ -421,6 +423,7 @@ export async function createContainer() {
   //     broadcasts only — never side-effects, never re-audited, never re-published.
   const eventBus = new EventBus();
   const timelineAnnotations = new TimelineAnnotationsUseCase(annotationStore, ticketStore_, commentStore, (e) => eventBus.emit(e));
+  const ticketTodos = new TicketTodosUseCase(todoStore, ticketStore_, (e) => eventBus.emit(e));
   const remoteEventBus = new EventBus();
 
   // Human-readable identity of this process, shared by the audit trail and the
@@ -946,6 +949,8 @@ export async function createContainer() {
     commentStore,
     annotationStore,
     timelineAnnotations,
+    todoStore,
+    ticketTodos,
     mentionStore,
     deliverableStore,
     postComment,

@@ -204,6 +204,13 @@ export type {
   AgentQuestion,
   AnnotationTone,
   TimelineAnnotation,
+  TodoItemState,
+  TodoActorType,
+  TodoSource,
+  TodoEventAction,
+  TicketTodoItem,
+  TicketTodoEvent,
+  TodoWriteResult,
   MentionStatus,
   MentionTargetType,
   MentionExecutionMode,
@@ -258,6 +265,14 @@ export {
   ANNOTATION_BODY_MAX,
   isAnnotationTone,
   annotationTitleFromComment,
+  TODO_ITEM_STATES,
+  TODO_SOURCES,
+  TODO_TEXT_MAX,
+  TODO_NOTE_MAX,
+  TODO_REASON_MAX,
+  isTodoItemState,
+  isTodoSource,
+  validateTodoText,
 } from './types/ticket.js';
 
 export type {

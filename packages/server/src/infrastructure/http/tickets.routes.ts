@@ -12,6 +12,8 @@ import { buildTicketBranchName, buildTicketWorkspaceId, normalizeBaseBranchInput
 import { parsePRRefs } from '../../domain/services/pr-ref.js';
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { registerFocusRoutes } from './focus.routes.js';
+import { registerTodoRoutes } from './todos.routes.js';
+import { resolveTodoActor } from './todo-actor.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
@@ -1726,6 +1728,10 @@ export function ticketRoutes(container: Container) {
         return reply.code(204).send();
       },
     );
+
+    // ── Ticket todo list (web + CLI/MCP; the actor comes from x-fleex-actor-* headers) ──
+
+    registerTodoRoutes(app, container, (request) => resolveTodoActor(request.headers, webActor().name), '/api');
 
     // ── Read Cursors (unread tracking via KvStore) ──
 

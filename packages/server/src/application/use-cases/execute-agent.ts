@@ -24,6 +24,7 @@ import { meterSdkRun, type CostBasis, type SdkSessionBaseline, type SdkUsageTota
 /** Usage bookkeeping persisted with a completed SDK run (raw totals, CLI version, cost basis). */
 interface SdkMeterPersist { sdkTotals: SdkUsageTotals; cliVersion?: string; costBasis: CostBasis }
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
+import { formatTodoContext, TODO_CONTEXT_HINT } from '../utils/format-todo-context.js';
 import { PromptComposer, buildExecutionContextData, promptTextLength } from '../utils/prompt-composer.js';
 import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
 import type { PostCommentUseCase } from './post-comment.js';
@@ -1047,6 +1048,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           fast: resolved.fast,
           maxTurns: this.config.get().agentMaxTurns,
           talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
+          actorName: persona.displayName || persona.name,
         });
 
         // Build the prompt: use content blocks if there are images, plain string otherwise
@@ -1872,6 +1874,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputFormat: opts?.outputFormatOverride ?? this.outputFormatSchema(),
         resume: previousSessionId ?? undefined,
         maxTurns: this.config.get().agentMaxTurns,
+        actorName: announceAuthor,
       });
 
       // Build prompt: content blocks if images, string otherwise
@@ -2223,6 +2226,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
      * `step_run.executionId` live and make the in-flight step cancellable.
      */
     onExecutionStarted?: (executionId: string) => void | Promise<void>;
+    /** Who the run acts as for the CLI/MCP (FLEEX_ACTOR_NAME): `workflow:<template> → <step>`. */
+    actorName?: string;
   }): Promise<{
     structuredOutput: Record<string, unknown> | null;
     rawText: string;
@@ -2355,6 +2360,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputFormat: params.outputFormat,
         maxTurns: this.config.get().agentMaxTurns,
         talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
+        actorName: params.actorName ?? (persona.displayName || persona.name),
       });
 
       const hasImages = userPromptBlocks.some((b) => b.type === 'image');
@@ -2499,6 +2505,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
     }
     this.composeAnnotations(composer, context);
+    this.composeTodos(composer, context);
 
     if (context.deliverables.length > 0) {
       composer.scaffold('\n## Deliverables\n');
@@ -2590,6 +2597,24 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   }
 
   /**
+   * The ticket's shared todo list (when not empty), and — always — the one-line
+   * hint that tells the agent the list exists and how to use it.
+   */
+  private composeTodos(
+    composer: PromptComposer,
+    context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
+  ): void {
+    const section = formatTodoContext(context.ticket.displayId, context.todos ?? []);
+    if (section) {
+      composer.track(
+        { kind: 'todo', section: 'Todo list', label: `${(context.todos ?? []).length} items`, ticketId: context.ticket.id },
+        section,
+      );
+    }
+    composer.scaffold(`${section ? '' : '\n'}${TODO_CONTEXT_HINT}`);
+  }
+
+  /**
    * The ticket background every non-mention run shares: header, description,
    * comments, deliverables. Factored out so skill and workflow-step prompts
    * cannot drift apart from each other in either the text they send or the
@@ -2624,6 +2649,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     }
 
     this.composeAnnotations(composer, context);
+    this.composeTodos(composer, context);
 
     if (context.deliverables.length > 0) {
       composer.scaffold('\n## Deliverables\n');

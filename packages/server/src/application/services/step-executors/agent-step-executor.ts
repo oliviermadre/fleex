@@ -43,6 +43,7 @@ export class AgentStepExecutor implements StepExecutor {
       workflowContextPrompt,
       mode,
       onExecutionStarted: input.onExecutionStarted,
+      actorName: `workflow:${input.workflowContext.workflowName} → ${input.workflowContext.stepName}`,
     });
 
     return { output: this.toStepOutput(structuredOutput, rawText), executionId };

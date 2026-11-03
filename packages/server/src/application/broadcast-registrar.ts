@@ -114,6 +114,17 @@ export class BroadcastRegistrar {
       }
     });
 
+    // ── Ticket todo broadcasts (the event carries the DTO) ──
+    bus.on('todo.created', (e) => {
+      if (e.type === 'todo.created') this.ticketBroadcast('todo:created', e.item);
+    });
+    bus.on('todo.updated', (e) => {
+      if (e.type === 'todo.updated') this.ticketBroadcast('todo:updated', e.item);
+    });
+    bus.on('todo.deleted', (e) => {
+      if (e.type === 'todo.deleted') this.ticketBroadcast('todo:deleted', { id: e.itemId, ticketId: e.ticketId });
+    });
+
     // ── Mention broadcasts ──
     bus.on('mention.created', (e) => this.broadcastMentionEntity(e, 'mention:created'));
     bus.on('mention.acknowledged', (e) => this.broadcastMentionEntity(e, 'mention:acknowledged'));

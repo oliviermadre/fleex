@@ -524,6 +524,8 @@ export class RunPanelUseCase {
       emitEvent?: (eventType: AgentEventType, data: unknown) => Promise<void> | void;
       /** Stops the SDK loop as soon as it aborts (Terminate from the UI). */
       abortSignal?: AbortSignal;
+      /** Who the run acts as for the CLI/MCP (FLEEX_ACTOR_NAME). */
+      actorName?: string;
     },
   ): Promise<{ text: string; structuredOutput: Record<string, unknown> | null; metrics: SdkMetrics }> {
     const mode = options.effectiveMode ?? 'edit';
@@ -535,6 +537,7 @@ export class RunPanelUseCase {
       outputFormat: options.outputFormat,
       maxTurns: this.config.get().agentMaxTurns,
       talkCanReadImages: mode === 'talk' && Array.isArray(prompt) && promptHasImageAttachment(prompt),
+      actorName: options.actorName,
     });
 
     // For non-talk modes, override maxTurns if explicitly provided
@@ -669,6 +672,7 @@ export class RunPanelUseCase {
         effectiveMode,
         emitEvent,
         abortSignal: abortController.signal,
+        actorName: persona.displayName || persona.name,
       });
 
       // Terminated mid-run: cancelExecution already emitted the interrupted
@@ -860,6 +864,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
         outputFormat: outputFormatOverride,
         emitEvent,
         abortSignal: abortController.signal,
+        actorName: panel.displayName,
       });
 
       // Terminated mid-run: cancelExecution already emitted the interrupted

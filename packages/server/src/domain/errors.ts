@@ -390,6 +390,18 @@ export class InvalidAnnotationError extends DomainError {
   }
 }
 
+export class TodoItemNotFoundError extends DomainError {
+  constructor(itemKey: string, ticketLabel: string) {
+    super(`todo ${/^\d+$/.test(itemKey) ? `#${itemKey}` : itemKey} not found on ticket ${ticketLabel}`, 'TODO_NOT_FOUND');
+  }
+}
+
+export class InvalidTodoError extends DomainError {
+  constructor(message: string) {
+    super(message, 'INVALID_TODO');
+  }
+}
+
 /** A comment can be promoted to the Timeline only once. */
 export class CommentAlreadyAnnotatedError extends DomainError {
   constructor(commentId: string, public readonly annotationId: string) {
