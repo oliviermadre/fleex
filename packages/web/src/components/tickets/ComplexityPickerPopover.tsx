@@ -37,7 +37,7 @@ export function ComplexityPickerPopover({
         ref={refs.setReference}
         type="button"
         className={cn(
-          'cursor-pointer rounded p-px transition-opacity hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]',
+          'inline-flex cursor-pointer items-center rounded p-px transition-opacity hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]',
           hideWhenUnset && value === null && !open && 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
         )}
         {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
