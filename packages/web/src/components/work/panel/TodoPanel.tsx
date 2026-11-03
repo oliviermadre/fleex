@@ -38,7 +38,9 @@ import {
 import { CommentActionsMenu, type CommentAction } from '../task/CommentActionsMenu';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import { AgentTag } from '../timeline/AnnotationPopovers';
-import { assigneeLabel, TodoAssigneeAvatar } from './TodoAssigneeAvatar';
+import { AGENTS_OFF_HINT, assigneeLabel, TodoAssigneeAvatar } from './TodoAssigneeAvatar';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useUIStore } from '../../../stores/uiStore';
 
 const STATE_LABEL: Record<TicketTodoItem['state'], string> = { open: 'À faire', done: 'Fait', cancelled: 'Annulé' };
 const EMPTY: TicketTodoItem[] = [];
@@ -86,6 +88,8 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
   const flashing = useTodoStore((s) => s.flashing);
   const { load, add, update, remove, undelete } = useTodoStore.getState();
   const personas = useAgentPersonaStore((s) => s.personas);
+  // Off unless turned on in Settings: agent runs neither see nor touch this list.
+  const agentsOff = useSettingsStore((s) => s.settings.todoAgentAccess !== true);
 
   const [draft, setDraft] = useState('');
   const [bulk, setBulk] = useState<string[] | null>(null);
@@ -235,6 +239,7 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
       onDrop={() => onDrop(item.id)}
       personas={personas}
       seen={seen}
+      agentsOff={agentsOff}
       onAssign={(next, label) => void reassign(item, next, label)}
       onToggle={() => void setState(item, item.state === 'open' ? 'done' : 'open')}
       onToggleDone={() => void setState(item, 'done')}
@@ -279,12 +284,31 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
           </div>
         )}
 
+        {agentsOff && (
+          <p data-testid="todo-agents-off" className="mx-1 mb-2 text-[11px] italic text-[var(--theme-text-faint)]">
+            Les agents ne voient pas cette todo ·{' '}
+            <button
+              type="button"
+              title={AGENTS_OFF_HINT}
+              onClick={() => {
+                const ui = useUIStore.getState();
+                ui.setActivePanel('settings');
+                ui.setSettingsTab('general');
+              }}
+              className="not-italic underline decoration-dotted underline-offset-2 hover:text-[var(--theme-text-secondary)]"
+            >
+              Réglages
+            </button>
+          </p>
+        )}
+
         <div className="mx-1 mb-2">
           <div className="flex items-center gap-1.5">
           <TodoAssigneeAvatar
             value={addAssignee}
             personas={personas}
             seen={seen}
+            agentsOff={agentsOff}
             subject="Nouveaux items"
             onChange={(next) => {
               setAddAssignee(next);
@@ -450,6 +474,7 @@ interface RowProps {
   item: TicketTodoItem;
   personas: ReturnType<typeof useAgentPersonaStore.getState>['personas'];
   seen: readonly string[];
+  agentsOff: boolean;
   onAssign: (next: TodoAssignee | null, label: string) => void;
   flashing: boolean;
   draggable: boolean;
@@ -628,6 +653,7 @@ function TodoRow(p: RowProps) {
           personas={p.personas}
           seen={p.seen}
           subject={`#${item.ref}`}
+          agentsOff={p.agentsOff}
           onChange={item.state === 'open' ? p.onAssign : undefined}
         />
         <CommentActionsMenu actions={actions} label={`Actions de #${item.ref}`} className="group-hover/todo:opacity-100" />

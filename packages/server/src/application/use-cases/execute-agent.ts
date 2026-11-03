@@ -32,7 +32,7 @@ import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
 import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
-import type { ConfigPort } from '../ports/config.port.js';
+import { isTodoAgentAccessEnabled, type ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
@@ -2603,13 +2603,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
   /**
    * The ticket's shared todo list (when not empty), and — always — the one-line
-   * hint that tells the agent the list exists and how to use it.
+   * hint that tells the agent the list exists and how to use it. Nothing at all
+   * while todo access is off for agents (Settings): the run never hears of it.
    */
   private composeTodos(
     composer: PromptComposer,
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     personaSlug?: string,
   ): void {
+    if (!isTodoAgentAccessEnabled(this.config.get())) return;
     const section = formatTodoContext(context.ticket.displayId, context.todos ?? [], { persona: personaSlug });
     if (section) {
       composer.track(

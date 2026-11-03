@@ -92,9 +92,14 @@ interface Props {
   onChange?: (next: TodoAssignee | null, label: string) => void;
   /** Accessible name prefix, e.g. "#3". */
   subject?: string;
+  /** Todo access is off for agents (Settings): agent choices are greyed, nobody would read them. */
+  agentsOff?: boolean;
 }
 
-export function TodoAssigneeAvatar({ value, personas, seen = [], onChange, subject }: Props) {
+/** Why the agent choices are greyed. */
+export const AGENTS_OFF_HINT = 'Les agents ne voient pas la todo (Réglages › General)';
+
+export function TodoAssigneeAvatar({ value, personas, seen = [], onChange, subject, agentsOff = false }: Props) {
   const label = assigneeLabel(value, personas);
   const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ placement: 'bottom-end', maxHeight: 320 });
   const [query, setQuery] = useState('');
@@ -126,23 +131,31 @@ export function TodoAssigneeAvatar({ value, personas, seen = [], onChange, subje
     setQuery('');
     onChange(next, assigneeLabel(next, personas));
   };
-  const option = (key: string, text: string, preview: TodoAssignee | null) => (
+  const option = (key: string, text: string, preview: TodoAssignee | null) => {
+    const off = agentsOff && preview?.type === 'agent';
+    return (
     <button
       key={key}
       type="button"
       role="menuitem"
+      disabled={off}
+      title={off ? AGENTS_OFF_HINT : undefined}
       onClick={(e) => {
         e.stopPropagation();
         pick(preview);
       }}
-      className="flex w-full items-center gap-2 px-2.5 py-1 text-left text-[12px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+      className={cn(
+        'flex w-full items-center gap-2 px-2.5 py-1 text-left text-[12px] text-[var(--theme-text-secondary)]',
+        off ? 'cursor-not-allowed opacity-40' : 'hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]',
+      )}
     >
       <span aria-hidden className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded-full', faceClasses(preview))}>
         <Face value={preview} personas={personas} />
       </span>
       <span className="truncate">{text}</span>
     </button>
-  );
+    );
+  };
 
   return (
     <>

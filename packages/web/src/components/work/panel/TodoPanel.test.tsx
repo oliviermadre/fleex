@@ -28,6 +28,11 @@ vi.mock('../../../lib/toast', () => ({ toast: { info: toastInfo, error: vi.fn(),
 import { TodoPanel, pastedItems } from './TodoPanel';
 import { delegatedToHumanCount, openTodoCount, useTodoStore } from '../../../stores/todoStore';
 import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
+
+/** Agents see the todo (Settings): the collaborative behaviour most tests below exercise. */
+const setAgentAccess = (on: boolean) =>
+  useSettingsStore.setState((s) => ({ settings: { ...s.settings, todoAgentAccess: on } }));
 
 const item = (ref: number, over: Partial<TicketTodoItem> = {}): TicketTodoItem => ({
   id: `i${ref}`, ticketId: 't1', ref, text: `Item ${ref}`, note: null, state: 'open', position: ref,
@@ -44,6 +49,7 @@ beforeEach(() => {
     { id: 'p2', name: 'catalyst', displayName: 'Catalyst' },
   ]);
   useAgentPersonaStore.setState({ personas: [], loaded: false });
+  setAgentAccess(true);
 });
 afterEach(cleanup);
 
@@ -348,5 +354,37 @@ describe('TodoPanel — opened from the Timeline (a mark of the todo strip)', ()
     await screen.findByText('Item 1');
     act(() => useWorkStore.getState().focusTodo({ itemId: null, view: 'history' }));
     await waitFor(() => expect(api.fetchTicketTodoEvents).toHaveBeenCalledWith('t1', undefined));
+  });
+});
+
+describe('TodoPanel — todo access off for agents (Settings, the default)', () => {
+  beforeEach(() => setAgentAccess(false));
+
+  it('says agents do not see this list, with a way to the setting', async () => {
+    api.fetchTicketTodos.mockResolvedValue([item(1)]);
+    render(<TodoPanel ticketId="t1" />);
+    const notice = await screen.findByTestId('todo-agents-off');
+    expect(notice.textContent).toContain('Les agents ne voient pas cette todo');
+    expect(screen.getByRole('button', { name: 'Réglages' })).toBeTruthy();
+  });
+
+  it('greys the agent choices of the picker: nobody would read an item given to an agent', async () => {
+    api.fetchTicketTodos.mockResolvedValue([item(1)]);
+    render(<TodoPanel ticketId="t1" />);
+    fireEvent.click(await screen.findByRole('button', { name: "#1 — Pour n'importe qui (changer)" }));
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Builder' })).toBeTruthy());
+    expect((screen.getByRole('menuitem', { name: 'Builder' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('menuitem', { name: "N'importe quel agent" }) as HTMLButtonElement).disabled).toBe(true);
+    // Still yours to assign to yourself or to nobody.
+    expect((screen.getByRole('menuitem', { name: 'Moi' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('menuitem', { name: "N'importe qui" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('shows no notice once agents see the todo', async () => {
+    setAgentAccess(true);
+    api.fetchTicketTodos.mockResolvedValue([item(1)]);
+    render(<TodoPanel ticketId="t1" />);
+    await screen.findByText('Item 1');
+    expect(screen.queryByTestId('todo-agents-off')).toBeNull();
   });
 });

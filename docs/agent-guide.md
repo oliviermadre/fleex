@@ -303,6 +303,14 @@ agents together. It is optional: most tickets never use one. On a multi-step
 ticket it is where everyone sees what is left — the Catalyst lays out the plan,
 the Builder checks items as it goes, the human adds what QA finds.
 
+**Off for agents unless the human turns it on** (Settings › General › *Agents
+see the ticket todo list*, `todoAgentAccess` in the config). While it is off,
+agent runs get no `## Todo list` section nor hint in their prompt, and every
+`/todos*` call they make — read or write, CLI, MCP or agent API — answers
+**403** `the ticket todo list is turned off for agents in this workspace`. If
+you get that, leave the todo alone and carry on without it. The human, their own
+CLI and the assistant (no `FLEEX_ACTOR_TYPE=agent`) are never affected.
+
 **Model.** Each item has a per-ticket `ref` (`#1`, `#2`…), never reused, a
 one-line `text` (≤ 500 chars), an optional markdown `note`, and a state:
 `open` (alias `todo`), `done`, `cancelled`. Every change — create, edit, state

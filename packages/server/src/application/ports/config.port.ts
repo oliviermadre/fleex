@@ -85,6 +85,13 @@ export interface AppConfig {
    */
   memoryFeatures?: MemoryFeatureFlags;
   /**
+   * Whether the agent runs Fleex launches (mentions, workflow steps, skills,
+   * panels) see and use the ticket todo list. Unset → off: the todo stays the
+   * human's (UI, their own CLI, the assistant) and agent runs are never told
+   * about it — see `isTodoAgentAccessEnabled`.
+   */
+  todoAgentAccess?: boolean;
+  /**
    * Local hour (0-23) after which the nightly memory consolidation becomes due.
    * Unset → 3. The pass runs on the first tick past this hour, so a laptop that
    * was closed at that time catches up when it wakes.
@@ -193,4 +200,13 @@ export interface ConfigPort {
   get(): AppConfig;
   update(partial: Partial<AppConfig>): void | Promise<void>;
   getClaudeCommand(): string;
+}
+
+/**
+ * Whether agent runs may see and use the ticket todo list. Off unless turned on:
+ * the todo must not leak into a workflow the human has not opted in. Gates the
+ * prompt section and hint, and every `/todos*` route an agent calls (403).
+ */
+export function isTodoAgentAccessEnabled(config: Pick<AppConfig, 'todoAgentAccess'>): boolean {
+  return config.todoAgentAccess === true;
 }

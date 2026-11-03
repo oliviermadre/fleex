@@ -41,6 +41,7 @@ export function SettingsPanel() {
   const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
   const [agentMaxTurns, setAgentMaxTurns] = useState(DEFAULT_AGENT_MAX_TURNS);
   const [agentTimeoutMinutes, setAgentTimeoutMinutes] = useState(DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES);
+  const [todoAgentAccess, setTodoAgentAccess] = useState(false);
 
   useEffect(() => {
     setBasePath(settings.basePath);
@@ -48,6 +49,7 @@ export function SettingsPanel() {
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setAgentMaxTurns(settings.agentMaxTurns ?? DEFAULT_AGENT_MAX_TURNS);
+    setTodoAgentAccess(settings.todoAgentAccess === true);
     setAgentTimeoutMinutes(
       settings.agentExecutionTimeout
         ? Math.round(settings.agentExecutionTimeout / MS_IN_MINUTE)
@@ -63,6 +65,7 @@ export function SettingsPanel() {
       agentMaxConcurrency,
       agentMaxTurns,
       agentExecutionTimeout: agentTimeoutMinutes * MS_IN_MINUTE,
+      todoAgentAccess,
     } as Partial<AppSettings> & Record<string, unknown>);
   };
 
@@ -92,6 +95,8 @@ export function SettingsPanel() {
               setAgentMaxTurns={setAgentMaxTurns}
               agentTimeoutMinutes={agentTimeoutMinutes}
               setAgentTimeoutMinutes={setAgentTimeoutMinutes}
+              todoAgentAccess={todoAgentAccess}
+              setTodoAgentAccess={setTodoAgentAccess}
             />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
@@ -128,6 +133,8 @@ function GeneralTab({
   setAgentMaxTurns,
   agentTimeoutMinutes,
   setAgentTimeoutMinutes,
+  todoAgentAccess,
+  setTodoAgentAccess,
 }: {
   basePath: string;
   setBasePath: (v: string) => void;
@@ -141,6 +148,8 @@ function GeneralTab({
   setAgentMaxTurns: (v: number) => void;
   agentTimeoutMinutes: number;
   setAgentTimeoutMinutes: (v: number) => void;
+  todoAgentAccess: boolean;
+  setTodoAgentAccess: (v: boolean) => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -270,6 +279,26 @@ function GeneralTab({
           </code>{' '}
           minutes.
         </p>
+      </div>
+
+      <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            id="todoAgentAccess"
+            type="checkbox"
+            checked={todoAgentAccess}
+            onChange={(e) => setTodoAgentAccess(e.target.checked)}
+            className="mt-0.5 flex-shrink-0 accent-[var(--theme-accent)]"
+          />
+          <span className="min-w-0">
+            <span className="text-sm font-medium text-[var(--theme-text-primary)]">Agents see the ticket todo list</span>
+            <span className="mt-1 block text-xs text-[var(--theme-text-muted)]">
+              When off, the agent runs Fleex launches (mentions, workflow steps, skills, panels) are not told
+              the todo exists, and any todo call they still make is refused. You keep the todo: panel, your own
+              CLI, timeline, and the assistant when you ask it. Off by default.
+            </span>
+          </span>
+        </label>
       </div>
     </div>
   );
