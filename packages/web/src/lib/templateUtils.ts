@@ -1,4 +1,3 @@
-import { buildTicketWorkspaceId } from '@fleex/shared';
 import type { Ticket } from '@fleex/shared';
 import { getPipe } from './pipes';
 
@@ -17,8 +16,12 @@ export interface WorkspaceContext {
   ticket_display_id: string;
 }
 
-export function buildWorkspaceContext(ticket: Ticket, basePath: string): WorkspaceContext {
-  const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+/**
+ * `workspaceId` is the folder name resolved by the server (see
+ * `useTicketWorkspaceId`), never derived from the title here: the folder keeps
+ * the name it got at creation, so a renamed ticket would point elsewhere.
+ */
+export function buildWorkspaceContext(ticket: Ticket, basePath: string, workspaceId: string): WorkspaceContext {
   return {
     workspace_path: `${basePath}/workspaces/${workspaceId}`,
     workspace_name: workspaceId,

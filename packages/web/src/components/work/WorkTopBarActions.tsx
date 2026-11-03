@@ -10,6 +10,7 @@ import { useMemo } from 'react';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
+import { useTicketWorkspaceId } from '../../stores/ticketWorkspaceStore';
 import { WorktreeActionsGroup } from '../worktree-actions/WorktreeActionsGroup';
 import { PinnedActionButton } from '../actions/PinnedActionButton';
 import { GROUP_LABEL } from './topBarStyles';
@@ -27,9 +28,10 @@ export function WorkTopBarActions({ ticketId }: { ticketId: string | null }) {
 
   // Workspace actions are bound to the ticket's workspace; without a ticket
   // there is no workspace, so only the global pinned actions show.
+  const workspaceId = useTicketWorkspaceId(ticket);
   const workspaceContext = useMemo(
-    () => (ticket ? buildWorkspaceContext(ticket, basePath) : null),
-    [ticket, basePath],
+    () => (ticket && workspaceId ? buildWorkspaceContext(ticket, basePath, workspaceId) : null),
+    [ticket, basePath, workspaceId],
   );
 
   const hasPinned = pinnedIcons.length > 0;

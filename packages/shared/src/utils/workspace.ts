@@ -1,10 +1,10 @@
 /**
- * Build the workspace directory name for a ticket: `<short-id>-<title-slug>`.
+ * The name a ticket's workspace directory gets when it is *created*:
+ * `<short-id>-<title-slug>`.
  *
- * This is the single source of truth for the deterministic workspace id, shared
- * between the server (which creates the folder) and the web client (which builds
- * template contexts for workspace actions). Keep the algorithm byte-for-byte in
- * sync with how the workspace folder is actually created on disk.
+ * Not where an existing workspace is: the folder keeps this name after a rename,
+ * so it must be found by ticket id — server-side `resolveTicketWorkspaceId`, and
+ * `GET /api/tickets/:id/workspace` for the web client.
  */
 export function buildTicketWorkspaceId(title: string, ticketId: string): string {
   const slug = title

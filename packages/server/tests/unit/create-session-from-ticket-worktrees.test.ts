@@ -80,6 +80,7 @@ function harness(repos: string[], withWorktree: string[]) {
     execute: async () => ({ id: 'sess-1', tmuxName: 'fleex_shell_test' }),
   };
   const resolver = {
+    workspacesRoot: () => join(root, 'workspaces'),
     workspacePath: (id: string) => join(root, 'workspaces', id),
     workspaceRepoPath: (id: string, name: string) => join(root, 'workspaces', id, name),
     barePath: (org: string, name: string) => join(root, '.bare', org, `${name}.git`),
@@ -205,6 +206,7 @@ describe('CreateSessionFromTicketUseCase — imported PR branches on top', () =>
     const ticketStore = { getTicketById: async () => ticket, saveTicket: async () => {}, saveActivity: async () => {} };
     const createSession = { execute: async () => ({ id: 'sess-1', tmuxName: 'fleex_shell_test' }) };
     const resolver = {
+      workspacesRoot: () => join(root, 'workspaces'),
       workspacePath: (id: string) => join(root, 'workspaces', id),
       workspaceRepoPath: (id: string, name: string) => join(root, 'workspaces', id, name),
       barePath: (org: string, name: string) => join(root, '.bare', org, `${name}.git`),

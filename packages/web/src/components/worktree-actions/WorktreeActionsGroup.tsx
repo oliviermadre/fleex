@@ -5,6 +5,7 @@ import type { Ticket, WorktreeActionsView } from '@fleex/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useWorktreeActionsStore, worktreeName } from '../../stores/worktreeActionsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
+import { useTicketWorkspaceId } from '../../stores/ticketWorkspaceStore';
 import { GROUP_LABEL } from '../work/topBarStyles';
 import { WorktreeActionButton } from './WorktreeActionButton';
 import { STATE_LABEL, shortBranch, stateDotClass } from './worktreeUi';
@@ -37,7 +38,11 @@ function worktreeLinksKey(ticket: Ticket): string {
 export function WorktreeActionsGroup({ ticket, separator = false }: { ticket: Ticket; separator?: boolean }) {
   const basePath = useSettingsStore((s) => s.settings.basePath);
   // Without the base path (settings not loaded yet) the workspace path is meaningless.
-  const root = useMemo(() => (basePath ? buildWorkspaceContext(ticket, basePath).workspace_path : ''), [ticket, basePath]);
+  const workspaceId = useTicketWorkspaceId(ticket);
+  const root = useMemo(
+    () => (basePath && workspaceId ? buildWorkspaceContext(ticket, basePath, workspaceId).workspace_path : ''),
+    [ticket, basePath, workspaceId],
+  );
   const views = useWorktreeActionsStore((s) => (root ? s.byRoot[root] : undefined)) ?? EMPTY;
   const load = useWorktreeActionsStore((s) => s.load);
 

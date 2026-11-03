@@ -1,5 +1,6 @@
 import type { Ticket, TicketStatus, TicketPriority, TicketComplexity, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
-import { DEFAULT_CONVERSATION_MODE, isEffortLevel, normalizeTicketComplexity, sanitizeForStorage } from '@fleex/shared';
+import { DEFAULT_CONVERSATION_MODE, isEffortLevel, normalizeTicketComplexity, sanitizeForStorage, TICKET_TITLE_MAX_LENGTH } from '@fleex/shared';
+import { InvalidTicketTitleError } from '../errors.js';
 
 export class TicketEntity {
   constructor(
@@ -35,6 +36,27 @@ export class TicketEntity {
     public complexity: TicketComplexity | null = null,
   ) {}
 
+  /**
+   * A title as stored: sanitized, trimmed, 1..TICKET_TITLE_MAX_LENGTH characters.
+   * Throws (→ 400) otherwise — for every writer: API, CLI, MCP, workflows.
+   */
+  static validTitle(raw: string): string {
+    const title = typeof raw === 'string' ? sanitizeForStorage(raw).trim() : '';
+    if (title.length === 0 || title.length > TICKET_TITLE_MAX_LENGTH) {
+      throw new InvalidTicketTitleError(TICKET_TITLE_MAX_LENGTH);
+    }
+    return title;
+  }
+
+  /**
+   * A machine-produced title (PR title, AI synthesis, imported issue) made to fit
+   * the limit instead of failing the import: trimmed, cut with an ellipsis.
+   */
+  static fitTitle(raw: string, fallback = 'Untitled'): string {
+    const title = sanitizeForStorage(raw).trim() || fallback;
+    return title.length <= TICKET_TITLE_MAX_LENGTH ? title : `${title.slice(0, TICKET_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
+  }
+
   static create(params: {
     id: string;
     boardId: string;
@@ -55,7 +77,7 @@ export class TicketEntity {
       params.id,
       params.boardId,
       params.displayId,
-      sanitizeForStorage(params.title),
+      TicketEntity.validTitle(params.title),
       sanitizeForStorage(params.description ?? ''),
       params.status ?? 'backlog',
       params.priority ?? 'none',
@@ -103,8 +125,10 @@ export class TicketEntity {
     // Sanitized before comparison, so an unchanged resubmission produces no
     // diff — and so the diff itself (which feeds `ticket_activities.changes`,
     // another jsonb column) can never carry an unstorable character.
+    // Only a write of `title` is validated: a legacy title over the limit must
+    // never make an unrelated update (status, tags…) fail.
     const nextTitle =
-      changes.title === undefined ? undefined : sanitizeForStorage(changes.title);
+      changes.title === undefined ? undefined : TicketEntity.validTitle(changes.title);
     const nextDescription =
       changes.description === undefined ? undefined : sanitizeForStorage(changes.description);
 

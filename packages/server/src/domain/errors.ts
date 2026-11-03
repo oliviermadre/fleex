@@ -55,6 +55,12 @@ export class BoardNotFoundError extends DomainError {
   }
 }
 
+export class InvalidTicketTitleError extends DomainError {
+  constructor(max: number) {
+    super(`Title must be 1–${max} characters`, 'INVALID_TICKET_TITLE');
+  }
+}
+
 export class TicketNotFoundError extends DomainError {
   constructor(id: string) {
     super(`Ticket not found: ${id}`, 'TICKET_NOT_FOUND');

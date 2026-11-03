@@ -6,7 +6,8 @@ import { inferModelCapabilities, resolveEffortLevel, parseRepoRef, DEFAULT_AGENT
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { resolveTicketWorkspaceId } from '../../domain/services/ticket-workspace-locator.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
@@ -2689,8 +2690,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     // Create workspace + manifest first — independent of repos.
     let workspaceRoot: string;
+    let workspaceId: string;
     try {
-      const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+      workspaceId = resolveTicketWorkspaceId(this.resolver!, ticket, this.logger);
       workspaceRoot = this.resolver!.workspacePath(workspaceId);
       mkdirSync(workspaceRoot, { recursive: true });
       const manifestPath = join(workspaceRoot, '.fleex.json');
@@ -2721,7 +2723,6 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     // Determine branch: use existing worktree link's branch, or generate a new one
     const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
-    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
     let branchName: string;
     let createNewBranch: boolean;
     if (existingWorktreeLink) {
