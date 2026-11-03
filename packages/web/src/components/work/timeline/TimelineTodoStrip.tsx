@@ -1,9 +1,17 @@
 /**
  * The "Todo" strip under the frieze (SPEC todo-timeline §3.1–3.2): a dashed
  * baseline, a dot per event at its exact instant, and the chips — a round pill
- * for a lone event, a counted chip (one segment per kind) for a burst. Hovering
- * a chip draws dotted lines from its marks up to the lifeline; at rest there
- * are none, they would cross the bottom lane's pictos.
+ * for a lone event, a counted chip (one segment per kind) for a burst.
+ *
+ * Like every other picto of the timeline, each chip hangs from the lifeline:
+ * - a lone event: one dotted line up to the spine, a dot at its exact instant
+ *   (an annotation's anchor);
+ * - a burst: ONE dotted line, from the chip to the middle of its time span, and
+ *   on the spine a short bar covering that span (first → last event). The span
+ *   lives on the spine because that is where time is read; the chip stays a
+ *   single readable label. A chip pushed sideways keeps its anchor with a short
+ *   elbow, as annotation cards do.
+ * Hovering a chip still draws the strong version (a line at each end).
  * Pure rendering: placement comes from layoutTodoStrip, clicks / hovers go up.
  */
 import type { ComponentType, MouseEvent } from 'react';
@@ -99,6 +107,78 @@ export function TimelineTodoStrip({ strip, top, spineY, x0, x1, width, activeKey
       ))}
     </div>
   );
+}
+
+/** Below this span (px) a burst is anchored at one point, not a bar. */
+const SPAN_MIN = 4;
+/** Thicker than the 4px spine, so the mark shows around it from underneath. */
+const MARK_H = 8;
+
+/**
+ * The quiet dotted lines of every chip, drawn UNDER the frieze (rendered before
+ * it, like AnnotationAnchors) so they never cross a picto or its label. The
+ * open chip has its strong hover lines instead.
+ */
+export function TodoAnchors({ strip, top, lifelineY, width, activeKey }: {
+  strip: TodoStrip;
+  /** Content y of the strip's top. */
+  top: number;
+  lifelineY: number;
+  width: number;
+  activeKey: string | null;
+}) {
+  if (strip.height === 0) return null;
+  const chipTop = top + CHIP_TOP;
+  return (
+    <svg className="pointer-events-none absolute left-0 top-0" width={width} height={top + TODO_STRIP} aria-hidden>
+      {strip.chips.map((chip) => {
+        if (chip.key === activeKey) return null;
+        const x = (chip.minX + chip.maxX) / 2;
+        // Leave from the chip's centre, kept inside the chip, then elbow to the anchor.
+        const inset = Math.min(8, chip.width / 2);
+        const cx = Math.min(Math.max(x, chip.left + inset), chip.left + chip.width - inset);
+        return (
+          <g key={chip.key}>
+            <path
+              data-testid="todo-anchor"
+              d={`M${cx} ${chipTop} L${cx} ${chipTop - 3} L${x} ${chipTop - 7} L${x} ${lifelineY}`}
+              fill="none"
+              stroke={`var(--tint-${TODO_MARK_HUE[chip.dominant]}-solid)`}
+              strokeWidth={1}
+              strokeDasharray="2 3"
+              strokeOpacity={0.6}
+            />
+            <SpineMark chip={chip} lifelineY={lifelineY} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/**
+ * Where a chip lands on the lifeline, under it: a burst gets a capsule around
+ * the spine over its time span (first event to last); a lone event, a dot at
+ * its instant. A frieze picto standing there covers it, as it should.
+ */
+function SpineMark({ chip, lifelineY }: { chip: TodoChip; lifelineY: number }) {
+  const fill = `var(--tint-${TODO_MARK_HUE[chip.dominant]}-solid)`;
+  const span = chip.maxX - chip.minX;
+  if (span >= SPAN_MIN) {
+    return (
+      <rect
+        data-testid="todo-anchor-span"
+        x={chip.minX}
+        y={lifelineY - MARK_H / 2}
+        width={span}
+        height={MARK_H}
+        rx={MARK_H / 2}
+        fill={fill}
+        opacity={0.75}
+      />
+    );
+  }
+  return <circle data-testid="todo-anchor-dot" cx={(chip.minX + chip.maxX) / 2} cy={lifelineY} r={3.5} fill={fill} />;
 }
 
 function HoverLines({ chip, baseY, spineY }: { chip: TodoChip; baseY: number; spineY: number }) {

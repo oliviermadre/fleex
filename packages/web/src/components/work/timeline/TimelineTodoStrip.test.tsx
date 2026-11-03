@@ -112,6 +112,38 @@ describe('TicketTimeline — todo strip', () => {
     expect(screen.getByTestId('todo-hover-lines')).toBeTruthy();
   });
 
+  // nas: every item of the timeline hangs from it by a dotted line; the todo chips must too.
+  it('hangs every chip from the lifeline at rest, like every other picto', () => {
+    setup(MARKS);
+    const chips = screen.getAllByTestId('todo-chip');
+    expect(screen.getAllByTestId('todo-anchor')).toHaveLength(chips.length);
+  });
+
+  it("marks a burst's time span on the spine, and a lone event's exact instant", () => {
+    // 8 creations spread over 7 minutes (one chip), then one isolated done much later.
+    const spread = Array.from({ length: 8 }, (_, i) => mark(i + 1, at(9, 5 + i)));
+    setup([...spread, mark(30, at(11, 30), 'done', { actorName: 'Builder' })]);
+    // Every burst spanning time gets a bar as wide as its span (the layout may split 7 minutes in two).
+    const spans = screen.getAllByTestId('todo-anchor-span');
+    expect(spans.length).toBeGreaterThan(0);
+    for (const span of spans) expect(Number(span.getAttribute('width'))).toBeGreaterThan(4);
+    expect(screen.getAllByTestId('todo-anchor-dot')).toHaveLength(1);
+  });
+
+  it('draws the quiet anchors under the frieze, so they never cover a picto or its label', () => {
+    setup(MARKS);
+    const anchor = screen.getAllByTestId('todo-anchor')[0]!;
+    const picto = document.querySelector('[data-timeline-node]:not([data-timeline-node^="todo:"])')!;
+    // Earlier in the DOM = painted first = underneath.
+    expect(anchor.compareDocumentPosition(picto) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('swaps the quiet anchor for the strong hover lines on the open chip', () => {
+    setup(MARKS, ALL, { activeKey: 'm21' });
+    expect(screen.getAllByTestId('todo-anchor')).toHaveLength(screen.getAllByTestId('todo-chip').length - 1);
+    expect(screen.getByTestId('todo-hover-lines')).toBeTruthy();
+  });
+
   it('lets the arrow keys walk from the frieze pictos onto the chips', () => {
     setup(MARKS);
     const chips = screen.getAllByTestId('todo-chip');

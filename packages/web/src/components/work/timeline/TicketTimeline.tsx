@@ -41,7 +41,7 @@ import { ghostTop, inCreateStrip, instantAtCursor, layoutAnnotationBand, rowsFor
 import { AnnotationAnchors, TimelineAnnotationBand, cardNodeId } from './TimelineAnnotationBand';
 import type { AnchorRect } from './AnnotationPopovers';
 import { layoutTodoStrip, type TodoChip, type TodoStrip } from './layoutTodoStrip';
-import { TimelineTodoStrip, todoChipNodeId } from './TimelineTodoStrip';
+import { TimelineTodoStrip, TodoAnchors, todoChipNodeId } from './TimelineTodoStrip';
 import type { TodoMark } from './todoMarks';
 
 const COLUMN_W = 232;
@@ -306,6 +306,15 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
             onClick={onContentClick}
           >
           {bandH > 0 && <AnnotationAnchors band={band} width={layout.width} />}
+          {todos && (
+            <TodoAnchors
+              strip={strip}
+              top={bandH + GEOMETRY.height}
+              lifelineY={bandH + GEOMETRY.spineY}
+              width={layout.width}
+              activeKey={todos.activeKey}
+            />
+          )}
           <div className="absolute left-0" style={{ top: bandH, width: layout.width, height: GEOMETRY.height }}>
             <TimelineZoneBands zones={layout.zones} fadeFrom={layout.nowX} />
             <TimelineOutOfLifeBand zones={layout.zones} closedAt={model.summary.closedAt} />
