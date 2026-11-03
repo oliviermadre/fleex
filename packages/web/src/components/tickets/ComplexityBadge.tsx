@@ -1,5 +1,5 @@
 import type { TicketComplexity } from '@fleex/shared';
-import { complexityLabel } from '@fleex/shared';
+import { TICKET_COMPLEXITIES, complexityLabel } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { tintText } from '../../lib/tints';
 
@@ -10,10 +10,17 @@ export function complexityDescription(c: TicketComplexity | null): string {
   return `${c} pts`;
 }
 
+/** How far round the dial a value sits: 0 → empty, 55 → nearly full, ∞ → full. */
+function dialFill(c: TicketComplexity): number {
+  return TICKET_COMPLEXITIES.indexOf(c) / (TICKET_COMPLEXITIES.length - 1);
+}
+
 /**
- * A small clock dial showing a ticket's complexity points: a ring with ticks at
- * 12 / 3 / 6 / 9 and the value in the centre. `null` (not estimated) is a
- * dashed ring with `–`, distinct from `0`; `∞` (must be split) is tinted.
+ * A small stopwatch showing a ticket's complexity points: a crown on top,
+ * short inner ticks at 3 / 6 / 9, an arc that fills with the value's place on
+ * the scale, and the value in the centre. `null` (not estimated) is a dashed,
+ * empty dial with `–`, distinct from `0`; `∞` (must be split) is a full,
+ * orange dial.
  */
 export function ComplexityBadge({
   complexity,
@@ -29,10 +36,13 @@ export function ComplexityBadge({
   // Three characters (0.5) need a smaller font to stay inside the ticks.
   const font =
     complexity === 'inf'
-      ? (size === 'md' ? 'text-[13px]' : 'text-[12px]')
+      ? (size === 'md' ? 'text-[12px]' : 'text-[11px]')
       : label.length >= 3
-        ? (size === 'md' ? 'text-[8.5px]' : 'text-[7.5px]')
-        : (size === 'md' ? 'text-[11px]' : 'text-[9.5px]');
+        ? (size === 'md' ? 'text-[8px]' : 'text-[7px]')
+        : label.length === 2
+          ? (size === 'md' ? 'text-[9.5px]' : 'text-[8px]')
+          : (size === 'md' ? 'text-[10.5px]' : 'text-[9px]');
+  const fill = complexity === null ? 0 : dialFill(complexity);
   return (
     <span
       data-testid="complexity-badge"
@@ -48,22 +58,27 @@ export function ComplexityBadge({
       )}
       style={{ width: px, height: px }}
     >
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        width={px}
-        height={px}
-        className={cn('absolute inset-0', complexity === 'inf' ? undefined : 'text-[var(--theme-text-muted)]')}
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-      >
-        <circle cx="12" cy="12" r="10.5" strokeWidth="1.25" strokeDasharray={complexity === null ? '2.2 2' : undefined} />
+      <svg aria-hidden="true" viewBox="0 0 24 24" width={px} height={px} className="absolute inset-0" fill="none" stroke="currentColor" strokeLinecap="round">
+        {/* Crown: what makes it read as a stopwatch rather than a target. */}
+        <path d="M12 2.6v1.6M10.4 1.6h3.2" strokeWidth="1.5" opacity={complexity === null ? 0.6 : 0.75} />
+        {/* Dial ring: faint track, then the filled arc from 12 o'clock. */}
+        <circle cx="12" cy="13.5" r="9" strokeWidth="1.4" opacity={complexity === null ? 0.9 : 0.3} strokeDasharray={complexity === null ? '2.2 2' : undefined} />
+        {fill > 0 && (
+          <circle
+            cx="12"
+            cy="13.5"
+            r="9"
+            strokeWidth="1.6"
+            pathLength={100}
+            strokeDasharray={`${fill * 100} 100`}
+            transform="rotate(-90 12 13.5)"
+          />
+        )}
         {complexity !== null && (
-          <path d="M12 1.5v2.2M22.5 12h-1.6M12 22.5v-2.2M1.5 12h1.6" strokeWidth="1.5" />
+          <path d="M20.3 13.5h-0.9M12 21.8v-1.3M3.7 13.5h0.9" strokeWidth="1.2" opacity="0.55" />
         )}
       </svg>
-      <span className="relative">{label}</span>
+      <span className="relative" style={{ marginTop: px * 0.1 }}>{label}</span>
     </span>
   );
 }
