@@ -34,6 +34,8 @@ interface ExecutionRow {
   source: string | null;
   comment_id: string | null;
   deliverable_id: string | null;
+  auto_terminated_at_conclusion?: number | null;
+  manually_terminated_by_user?: number | null;
 }
 
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
@@ -268,6 +270,45 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     }
     return result;
   }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+    const placeholders = executionIds.map(() => '?').join(',');
+
+    // Build the UPDATE statement dynamically based on which flags are set
+    let updateParts = ['status = ?', 'completed_at = ?'];
+    const updateValues: Array<string | number> = [status, now];
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateParts.push('auto_terminated_at_conclusion = ?');
+      updateValues.push(flags.autoTerminatedAtConclusion ? 1 : 0);
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateParts.push('manually_terminated_by_user = ?');
+      updateValues.push(flags.manuallyTerminatedByUser ? 1 : 0);
+    }
+
+    updateValues.push(...executionIds);
+
+    this.conn.db.prepare(`
+      UPDATE agent_event_executions
+      SET ${updateParts.join(', ')}
+      WHERE execution_id IN (${placeholders})
+    `).run(...updateValues);
+  }
+
+  async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
+    const row = this.conn.db
+      .prepare('SELECT * FROM agent_event_executions WHERE mention_id = ? ORDER BY started_at DESC LIMIT 1')
+      .get(mentionId) as ExecutionRow | undefined;
+    return row ? rowToExecution(row) : null;
+  }
 }
 
 function rowToExecution(row: ExecutionRow): AgentExecution {
@@ -295,5 +336,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: row.comment_id ?? null,
     deliverableId: row.deliverable_id ?? null,
+    autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    manuallyTerminatedByUser: !!row.manually_terminated_by_user,
   };
 }

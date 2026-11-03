@@ -26,6 +26,16 @@ export interface AppConfig {
    * Talk mode is unaffected (it has no agentic loop).
    */
   agentMaxTurns?: number;
+  /** Persona id that plays the assistant in the Work view unless a ticket overrides it. */
+  defaultAssistantPersonaId?: string;
+  /**
+   * Opt-in switch for the assistant and its threads (Work view Phase 3). Only
+   * `true` turns it on: absent means off, so shipping it changes nothing until
+   * it is switched on. Off: no assistant turn ever starts (message, new ticket, thread
+   * wake-up), the assistant routes answer `assistant: null` so the composer
+   * posts plain comments, and mentions go straight to their targets again.
+   */
+  workThreadsEnabled?: boolean;
   repositories?: string[];
   resolvedRepositories?: string[];
   resolvedAt?: string;

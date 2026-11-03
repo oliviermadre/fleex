@@ -16,6 +16,7 @@ import { TodoPanel } from './TodoPanel';
 import { ScratchpadTabsPanel } from './ScratchpadTabsPanel';
 import { BrowserPanel } from './browser/BrowserPanel';
 import { TicketMentions } from '../../tickets/TicketMentions';
+import { ThreadsPanel } from './ThreadsPanel';
 
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
@@ -39,11 +40,13 @@ export function RightPanel({
   deliverables,
   onDeliverableDeleted,
   onDeleteTask,
+  onOpenExecution,
 }: {
   task: WorkTask;
   deliverables: TicketDeliverable[];
   onDeliverableDeleted?: (id: string) => void;
   onDeleteTask: (id: string) => void;
+  onOpenExecution: (executionId: string, title: string) => void;
 }) {
   const rightPanel = useEffectiveRightPanel();
   // Expanded browser: WorkView drops the center and the panel fills the row.
@@ -120,6 +123,7 @@ export function RightPanel({
       )}
       {rightPanel === 'scratch' && <ScratchpadTabsPanel task={task} />}
       {rightPanel === 'browser' && <BrowserPanel key={task.id} ticketId={task.id} />}
+      {rightPanel === 'thread' && <ThreadsPanel task={task} deliverables={deliverables} onOpenExecution={onOpenExecution} />}
     </section>
   );
 }

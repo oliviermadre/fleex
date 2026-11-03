@@ -30,7 +30,7 @@ const BODY_604 = "**Le front (lot 5) n'est pas fait** : `odys-front` n'est pas d
 function agentComment(over: Partial<TicketComment> = {}): TicketComment {
   return {
     id: 'c1', ticketId: 't1', authorType: 'agent', authorName: 'The Builder', body: BODY_604,
-    visibility: 'public', privateRecipients: [], mentions: [], parentId: null,
+    visibility: 'public', privateRecipients: [], mentions: [], parentId: null, threadId: null,
     createdAt: '2026-10-02T16:49:58.478Z', updatedAt: '2026-10-02T16:49:58.478Z', ...over,
   };
 }

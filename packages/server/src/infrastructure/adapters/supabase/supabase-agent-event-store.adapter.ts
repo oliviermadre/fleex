@@ -37,6 +37,8 @@ interface ExecutionRow {
   source: string | null;
   comment_id: string | null;
   deliverable_id: string | null;
+  auto_terminated_at_conclusion?: boolean | null;
+  manually_terminated_by_user?: boolean | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -287,6 +289,81 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     }
     return result;
   }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+    const updateData: any = {
+      status,
+      completed_at: now,
+    };
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateData.auto_terminated_at_conclusion = flags.autoTerminatedAtConclusion;
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateData.manually_terminated_by_user = flags.manuallyTerminatedByUser;
+    }
+
+    const { error } = await this.conn.client
+      .from('agent_event_executions')
+      .update(updateData)
+      .in('execution_id', executionIds);
+    if (error) throw new Error(`SupabaseAgentEventStore.updateExecutionsByIds failed: ${error.message}`);
+  }
+
+  async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
+    const { data, error } = await this.conn.client
+      .from('agent_event_executions')
+      .select(`
+        execution_id, persona_id, ticket_id, mention_id, event_count, status,
+        started_at, completed_at, last_event_at, sdk_session_id, model,
+        effective_mode, effort, fast_mode, duration_ms, cost_usd,
+        input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+        source, comment_id, deliverable_id,
+        auto_terminated_at_conclusion, manually_terminated_by_user
+      `)
+      .eq('mention_id', mentionId)
+      .order('started_at', { ascending: false })
+      .limit(1);
+
+    if (error) throw new Error(`SupabaseAgentEventStore.getExecutionByMentionId failed: ${error.message}`);
+    if (!data || data.length === 0) return null;
+
+    const row = data[0] as any;
+    return {
+      id: row.execution_id,
+      personaId: row.persona_id,
+      ticketId: row.ticket_id,
+      mentionId: row.mention_id,
+      eventCount: row.event_count,
+      status: row.status,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      lastEventAt: row.last_event_at ?? null,
+      sdkSessionId: row.sdk_session_id,
+      model: row.model ?? null,
+      effectiveMode: row.effective_mode ?? null,
+      effort: row.effort ?? null,
+      fast: row.fast_mode ?? null,
+      durationMs: row.duration_ms ?? null,
+      costUsd: row.cost_usd ?? null,
+      inputTokens: row.input_tokens ?? null,
+      outputTokens: row.output_tokens ?? null,
+      cacheReadTokens: row.cache_read_tokens ?? null,
+      cacheCreationTokens: row.cache_creation_tokens ?? null,
+      source: row.source,
+      commentId: row.comment_id ?? null,
+      deliverableId: row.deliverable_id ?? null,
+      autoTerminatedAtConclusion: row.auto_terminated_at_conclusion ? Boolean(row.auto_terminated_at_conclusion) : null,
+      manuallyTerminatedByUser: row.manually_terminated_by_user ? Boolean(row.manually_terminated_by_user) : null,
+    };
+  }
 }
 
 function rowToExecution(row: ExecutionRow): AgentExecution {
@@ -314,5 +391,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: row.comment_id ?? null,
     deliverableId: row.deliverable_id ?? null,
+    autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    manuallyTerminatedByUser: !!row.manually_terminated_by_user,
   };
 }

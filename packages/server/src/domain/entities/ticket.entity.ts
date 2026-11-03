@@ -31,6 +31,7 @@ export class TicketEntity {
     public modelOverride: string | null = null,
     public effortOverride: EffortLevel | null = null,
     public fastMode: boolean = false,
+    public assistantPersonaId: string | null = null,
   ) {}
 
   static create(params: {
@@ -193,6 +194,7 @@ export class TicketEntity {
     modelOverride?: string | null;
     effortOverride?: EffortLevel | null;
     fastMode?: boolean;
+    assistantPersonaId?: string | null;
   }): Record<string, { from: unknown; to: unknown }> {
     const diff: Record<string, { from: unknown; to: unknown }> = {};
 
@@ -219,6 +221,10 @@ export class TicketEntity {
     if (changes.fastMode !== undefined && changes.fastMode !== this.fastMode) {
       diff['fastMode'] = { from: this.fastMode, to: changes.fastMode };
       this.fastMode = changes.fastMode;
+    }
+    if (changes.assistantPersonaId !== undefined && changes.assistantPersonaId !== this.assistantPersonaId) {
+      diff['assistantPersonaId'] = { from: this.assistantPersonaId, to: changes.assistantPersonaId };
+      this.assistantPersonaId = changes.assistantPersonaId;
     }
 
     if (Object.keys(diff).length > 0) {
@@ -398,6 +404,7 @@ export class TicketEntity {
       modelOverride: this.modelOverride,
       effortOverride: this.effortOverride,
       fastMode: this.fastMode,
+      assistantPersonaId: this.assistantPersonaId,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };
