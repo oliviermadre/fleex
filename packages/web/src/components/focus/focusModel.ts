@@ -1,5 +1,5 @@
-import type { FocusItem, FocusItemKind, Ticket, TicketPriority, TicketStatus } from '@fleex/shared';
-import { FOCUS_KIND_ORDER } from '@fleex/shared';
+import type { FocusItem, FocusItemKind, Ticket, TicketStatus } from '@fleex/shared';
+import { FOCUS_KIND_ORDER, TICKET_PRIORITY_RANK } from '@fleex/shared';
 import type { TintHue } from '../../lib/tints';
 import * as api from '../../services/api';
 
@@ -38,8 +38,6 @@ export function formatWait(ms: number | null): string {
 
 export type FocusSort = 'age' | 'priority' | 'kind';
 
-const PRIORITY_RANK: Record<TicketPriority, number> = { high: 0, medium: 1, low: 2, none: 3 };
-
 /** Oldest first by default — the longest wait is the most expensive one. */
 export function sortFocusItems(
   items: readonly FocusItem[],
@@ -48,7 +46,7 @@ export function sortFocusItems(
 ): FocusItem[] {
   const since = (i: FocusItem) => (i.since ? Date.parse(i.since) : Number.POSITIVE_INFINITY);
   const byAge = (a: FocusItem, b: FocusItem) => since(a) - since(b);
-  const prio = (i: FocusItem) => PRIORITY_RANK[ticketById.get(i.ticketId)?.priority ?? 'none'];
+  const prio = (i: FocusItem) => TICKET_PRIORITY_RANK[ticketById.get(i.ticketId)?.priority ?? 'none'] ?? TICKET_PRIORITY_RANK.none;
   return [...items].sort((a, b) => {
     if (sort === 'priority') return prio(a) - prio(b) || byAge(a, b);
     if (sort === 'kind') return FOCUS_KIND_ORDER[a.kind] - FOCUS_KIND_ORDER[b.kind] || byAge(a, b);

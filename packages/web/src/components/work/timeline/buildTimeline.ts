@@ -273,7 +273,7 @@ const RANK: Record<TimelineEventKind, number> = {
   created: 0, status: 1, priority: 2, workflowStart: 3, cli: 4, step: 5, run: 5, deliverable: 6, pr: 7, comment: 8,
 };
 
-const PRIORITY_FR: Record<string, string> = { none: 'aucune', low: 'basse', medium: 'moyenne', high: 'haute' };
+const PRIORITY_FR: Record<string, string> = { none: 'aucune', low: 'basse', medium: 'moyenne', high: 'haute', urgent: 'urgente' };
 
 const EXECUTOR_LABEL: Record<WorkflowExecutorType, string> = {
   agent: 'Agent', skill: 'Skill', panel: 'Panel', human_gate: 'Human gate', native: 'Native', route: 'Route', workflow: 'Workflow',

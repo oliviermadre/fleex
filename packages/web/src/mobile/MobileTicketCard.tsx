@@ -1,15 +1,9 @@
 import { memo } from 'react';
-import type { Ticket, TicketPriority } from '@fleex/shared';
+import type { Ticket } from '@fleex/shared';
 import { linkedPrs } from '../lib/prRef';
-import { tintSolid, tintText } from '../lib/tints';
+import { tintText } from '../lib/tints';
 import { PrBadgeGroup } from '../components/ui/PrBadgeGroup';
-
-export const PRIORITY_COLOR: Record<TicketPriority, string> = {
-  none: 'bg-transparent',
-  low: tintSolid('blue'),
-  medium: tintSolid('yellow'),
-  high: tintSolid('red'),
-};
+import { PriorityIndicator } from '../components/tickets/PriorityIndicator';
 
 export const MobileTicketCard = memo(function MobileTicketCard({
   ticket,
@@ -42,7 +36,9 @@ export const MobileTicketCard = memo(function MobileTicketCard({
     >
       <div className="flex items-start gap-2">
         {ticket.priority !== 'none' && (
-          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${PRIORITY_COLOR[ticket.priority]}`} />
+          <span className="mt-[3px] shrink-0">
+            <PriorityIndicator priority={ticket.priority} />
+          </span>
         )}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium leading-snug text-[var(--theme-text-primary)]">

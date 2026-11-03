@@ -5,6 +5,7 @@ import { fetchArchivedTickets } from '../../services/api';
 import { useTicketStore } from '../../stores/ticketStore';
 import { PAGE_SIZE_ARCHIVED_TICKETS } from '../../lib/constants';
 import { tint } from '../../lib/tints';
+import { PriorityIndicator, PRIORITY_LABELS } from './PriorityIndicator';
 
 export function ArchivedTicketsModal({
   boardId,
@@ -104,14 +105,9 @@ export function ArchivedTicketsModal({
                 >
                   {/* Priority indicator */}
                   {ticket.priority !== 'none' && (
-                    <span className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                      ticket.priority === 'high'
-                        ? tint('red')
-                        : ticket.priority === 'medium'
-                          ? tint('yellow')
-                          : tint('blue')
-                    }`}>
-                      {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
+                    <span className="flex flex-shrink-0 items-center gap-1 text-[10px] font-medium text-[var(--theme-text-secondary)]">
+                      <PriorityIndicator priority={ticket.priority} />
+                      {PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
                     </span>
                   )}
 

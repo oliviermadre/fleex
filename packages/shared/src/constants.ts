@@ -1,3 +1,5 @@
+import type { TicketPriority } from './types/ticket.js';
+
 export const FLEEX_PREFIX = 'fleex_';
 export const FLEEX_SHELL_PREFIX = 'fleex_shell_';
 export const FLEEX_CLAUDE_PREFIX = 'fleex_claude_';
@@ -72,7 +74,15 @@ export const TICKET_STATUS_LABELS: Record<string, string> = {
   done: 'Done',
   cancelled: 'Cancelled',
 };
-export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
+export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const;
+/** Sort rank, most urgent first (urgent=0 … none=4). Used everywhere tickets are ordered by priority. */
+export const TICKET_PRIORITY_RANK: Record<TicketPriority, number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  none: 4,
+};
 
 export const TICKET_TYPES = [
   'build', 'fix', 'review', 'ops', 'lead', 'think',

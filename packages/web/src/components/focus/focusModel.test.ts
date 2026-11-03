@@ -122,4 +122,8 @@ describe('sortFocusItems', () => {
   it('by kind', () => {
     expect(sortFocusItems([a, c, b], 'kind', prio).map((i) => i.key)).toEqual(['b', 'c', 'a']);
   });
+  it('by priority: urgent comes before high, whatever the age', () => {
+    const withUrgent = new Map([...prio, ['A', { priority: 'urgent' as const }]]);
+    expect(sortFocusItems([b, c, a], 'priority', withUrgent).map((i) => i.key)).toEqual(['a', 'b', 'c']);
+  });
 });

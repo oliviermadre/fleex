@@ -1,9 +1,10 @@
 import { die, err, c } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
 import { fetchBoards, resolveBoardId } from '../board/_shared.ts';
+import { TICKET_PRIORITIES } from '@fleex/shared';
 
 export const VALID_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled'] as const;
-export const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
+export const VALID_PRIORITIES = TICKET_PRIORITIES;
 export const VALID_TYPES = ['build', 'fix', 'review', 'ops', 'lead', 'think'] as const;
 
 export function assertValidStatus(s: string): void {

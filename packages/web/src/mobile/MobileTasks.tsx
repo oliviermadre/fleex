@@ -8,16 +8,14 @@ import { QuickAddFab } from './MobileQuickAdd';
 import { MobilePageHeader } from './MobilePageHeader';
 import { MobileNewTask } from './MobileNewTask';
 import { TasksIcon } from '../components/sidebar/icons';
-import { PRIORITY_LABELS } from '../components/tickets/PriorityIndicator';
+import { PriorityIndicator, PRIORITY_LABELS, PRIORITY_ORDER_DESC } from '../components/tickets/PriorityIndicator';
 import { formatAge } from '../lib/formatAge';
 import { useClock } from './useClock';
 import { cn } from '../lib/cn';
 import { tintClasses } from '../lib/tints';
-import { PRIORITY_COLOR } from './MobileTicketCard';
 import { MobileSheet, SheetOption } from './MobileSheet';
 import { useMobileNavStore } from './mobileNavStore';
 
-const PRIORITIES = ['high', 'medium', 'low', 'none'] as const;
 const GROUP_LABELS: Record<QueueGroupBy, string> = {
   activity: 'Activity',
   repo: 'Repo',
@@ -144,7 +142,7 @@ export function MobileTasks() {
       )}
       {sheet === 'priority' && (
         <MobileSheet title="Priority" onClose={() => setSheet(null)}>
-          {PRIORITIES.map((p) => (
+          {PRIORITY_ORDER_DESC.map((p) => (
             <SheetOption
               key={p}
               label={PRIORITY_LABELS[p]}
@@ -224,7 +222,12 @@ function TaskRow({ task, now, onOpen }: { task: WorkTask; now: number; onOpen: (
       className="flex min-h-14 w-full flex-col gap-0.5 border-b border-l-2 border-b-[var(--theme-border-subtle)] border-l-transparent px-4 py-2.5 text-left active:bg-[var(--theme-bg-hover)]"
     >
       <span className="flex items-center gap-2">
-        <span className={cn('h-2 w-2 shrink-0 rounded-full', PRIORITY_COLOR[task.priority as TicketPriority])} />
+        {task.priority === 'none' ? (
+          // Keeps titles aligned with rows that do show a priority icon.
+          <span className="w-3 shrink-0" />
+        ) : (
+          <PriorityIndicator priority={task.priority as TicketPriority} />
+        )}
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--theme-text-primary)]">{task.title}</span>
         {task.blocked && <span className={cn('shrink-0 text-xs', tintClasses('red').text)}>🔒</span>}
         {task.favorite && <span className={cn('shrink-0 text-xs', tintClasses('yellow').text)}>★</span>}

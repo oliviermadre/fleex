@@ -56,6 +56,14 @@ describe('buildTimeline — status zones', () => {
     expect(m.zones[1]!.from).toBe(new Date(at(9, 10)).getTime());
   });
 
+  it('labels a raise to urgent in French', () => {
+    const src = emptySources();
+    src.activities = [
+      activity({ id: 'p1', action: 'updated', createdAt: at(9, 20), changes: { priority: { from: 'high', to: 'urgent' } } }),
+    ];
+    expect(byId(buildTimeline(src, NOW).events, 'prio:p1').label).toBe('priorité : haute → urgente');
+  });
+
   it('chains PATCH status edits and /move moves in time order', () => {
     const src = emptySources();
     src.ticket = { ...src.ticket, status: 'done' };

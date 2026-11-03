@@ -17,7 +17,7 @@ import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useWorkStore, excludedBy, type QueueFilterKey, type QueueGroupBy } from '../../stores/workStore';
 import { partitionQueue, idleActivitySource, type QueueItem } from './selectors';
 import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
-import { TICKET_TYPE_LABELS } from '@fleex/shared';
+import { TICKET_PRIORITY_RANK, TICKET_TYPE_LABELS } from '@fleex/shared';
 import type { WorkTask, WorkWorktree, QueueGroup } from './types';
 import { prLinksFor } from './queue/prLinks';
 
@@ -342,7 +342,6 @@ function byRecent(a: WorkTask, b: WorkTask): number {
 }
 
 const STATUS_ORDER = ['doing', 'reviewing', 'todo', 'backlog', 'done', 'cancelled'];
-const PRIORITY_ORDER = ['high', 'medium', 'low', 'none'];
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
@@ -404,7 +403,7 @@ function groupTasks(tasks: WorkTask[], groupBy: QueueGroupBy): QueueGroup[] {
 
   const orderIndex = (key: string): number => {
     if (groupBy === 'status') return STATUS_ORDER.indexOf(key) === -1 ? 99 : STATUS_ORDER.indexOf(key);
-    if (groupBy === 'priority') return PRIORITY_ORDER.indexOf(key) === -1 ? 99 : PRIORITY_ORDER.indexOf(key);
+    if (groupBy === 'priority') return TICKET_PRIORITY_RANK[key as keyof typeof TICKET_PRIORITY_RANK] ?? 99;
     return 0;
   };
 

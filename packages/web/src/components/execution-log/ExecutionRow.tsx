@@ -59,6 +59,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: tintText('blue'),
   medium: tintText('yellow'),
   high: tintText('red'),
+  urgent: tintText('red'),
 };
 
 function TicketIcon({ priority }: { priority: string | null }) {

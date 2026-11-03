@@ -214,10 +214,11 @@ export class PgTicketStore implements TicketStorePort {
 
     sql += ` ORDER BY
       CASE priority
-        WHEN 'high' THEN 0
-        WHEN 'medium' THEN 1
-        WHEN 'low' THEN 2
-        ELSE 3
+        WHEN 'urgent' THEN 0
+        WHEN 'high' THEN 1
+        WHEN 'medium' THEN 2
+        WHEN 'low' THEN 3
+        ELSE 4
       END,
       position ASC
       LIMIT 1`;

@@ -6,13 +6,13 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { cn } from '../../../lib/cn';
-import { TICKET_PRIORITIES, TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
+import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import { useWorkStore, QUEUE_MIN, QUEUE_MAX, type QueueFilterKey, type QueueGroupBy } from '../../../stores/workStore';
 import { tintClasses } from '../../../lib/tints';
 import { Tooltip } from '../../ui/Tooltip';
 import { MultiSelect } from '../../ui/MultiSelect';
 import { GroupBySelect } from './GroupBySelect';
-import { PriorityIndicator, PRIORITY_LABELS } from '../../tickets/PriorityIndicator';
+import { PriorityIndicator, PRIORITY_LABELS, PRIORITY_ORDER_DESC } from '../../tickets/PriorityIndicator';
 import type { WorkQueueModel } from '../useWorkQueue';
 import { QueueRow } from './QueueRow';
 import { PlusIcon, SidePanelIcon } from '../../sidebar/icons';
@@ -145,7 +145,7 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
             values={priorityFilters}
             onChange={setPriorityFilters}
             searchable={false}
-            options={[...TICKET_PRIORITIES].map((p) => ({
+            options={PRIORITY_ORDER_DESC.map((p) => ({
               value: p,
               label: PRIORITY_LABELS[p],
               icon: <PriorityIndicator priority={p} />,
