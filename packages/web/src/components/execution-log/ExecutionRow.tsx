@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ExecutionLogEntry, TicketType, PanelMemberSummary, WorkflowStepSummary } from '@fleex/shared';
+import type { ExecutionLogEntry, TicketPriority, TicketType, PanelMemberSummary, WorkflowStepSummary } from '@fleex/shared';
 import { cancelExecution, curateMemory, forgetCuratedMemory } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -54,7 +54,7 @@ function TypeBadge({ type, isRoutine }: { type: ExecutionLogEntry['type']; isRou
 
 // ── Priority-colored ticket icon (same as session view) ──
 
-const PRIORITY_COLORS: Record<string, string> = {
+const PRIORITY_COLORS: Record<TicketPriority, string> = {
   none: 'text-[var(--theme-text-muted)]',
   low: tintText('blue'),
   medium: tintText('yellow'),
@@ -63,7 +63,8 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 function TicketIcon({ priority }: { priority: string | null }) {
-  const color = PRIORITY_COLORS[priority ?? 'none'] ?? PRIORITY_COLORS['none'];
+  // Unknown values fall back to the 'none' colour.
+  const color = PRIORITY_COLORS[(priority ?? 'none') as TicketPriority] ?? PRIORITY_COLORS.none;
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn('flex-shrink-0', color)}>
       <rect x="2" y="2" width="12" height="12" rx="2" />

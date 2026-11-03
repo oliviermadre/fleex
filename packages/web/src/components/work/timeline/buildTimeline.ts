@@ -27,6 +27,7 @@ import type {
   TicketDeliverable,
   TicketLink,
   TicketMention,
+  TicketPriority,
   TicketStatus,
   WorkflowExecutorType,
   WorkflowRun,
@@ -273,7 +274,7 @@ const RANK: Record<TimelineEventKind, number> = {
   created: 0, status: 1, priority: 2, workflowStart: 3, cli: 4, step: 5, run: 5, deliverable: 6, pr: 7, comment: 8,
 };
 
-const PRIORITY_FR: Record<string, string> = { none: 'aucune', low: 'basse', medium: 'moyenne', high: 'haute', urgent: 'urgente' };
+const PRIORITY_FR: Record<TicketPriority, string> = { none: 'aucune', low: 'basse', medium: 'moyenne', high: 'haute', urgent: 'urgente' };
 
 const EXECUTOR_LABEL: Record<WorkflowExecutorType, string> = {
   agent: 'Agent', skill: 'Skill', panel: 'Panel', human_gate: 'Human gate', native: 'Native', route: 'Route', workflow: 'Workflow',
@@ -675,8 +676,8 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
   // ── Priority ──
   for (const a of activities) {
     if (a.action !== 'updated' || !a.changes?.priority) continue;
-    const from = PRIORITY_FR[String(a.changes.priority.from)] ?? String(a.changes.priority.from);
-    const to = PRIORITY_FR[String(a.changes.priority.to)] ?? String(a.changes.priority.to);
+    const from = PRIORITY_FR[String(a.changes.priority.from) as TicketPriority] ?? String(a.changes.priority.from);
+    const to = PRIORITY_FR[String(a.changes.priority.to) as TicketPriority] ?? String(a.changes.priority.to);
     const at = clamp(ms(a.createdAt) ?? createdAt);
     const by = a.actorName ?? (a.actorType === 'user' ? 'Toi' : 'Agent');
     drafts.push({
