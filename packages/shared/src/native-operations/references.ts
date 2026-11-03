@@ -40,6 +40,7 @@ export const TICKET_REFERENCE_FIELDS = [
   'description',
   'status',
   'priority',
+  'complexity',
   'type',
   'assignee',
   'tags',

@@ -28,6 +28,7 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     description: '',
     status: 'doing',
     priority: 'none',
+    complexity: null,
     type: null,
     position: 0,
     tags: [],

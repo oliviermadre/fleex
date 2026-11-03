@@ -1,7 +1,8 @@
 import { die, err, c } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
 import { fetchBoards, resolveBoardId } from '../board/_shared.ts';
-import { TICKET_PRIORITIES } from '@fleex/shared';
+import { TICKET_PRIORITIES, TICKET_COMPLEXITY_INPUT_HINT, parseTicketComplexityInput, complexityLabel, isTicketComplexity } from '@fleex/shared';
+import type { TicketComplexity } from '@fleex/shared';
 
 export const VALID_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled'] as const;
 export const VALID_PRIORITIES = TICKET_PRIORITIES;
@@ -23,6 +24,30 @@ export function assertValidType(t: string): void {
   if (!VALID_TYPES.includes(t as typeof VALID_TYPES[number])) {
     die(`Invalid type: ${t} (valid: ${VALID_TYPES.join(', ')})`);
   }
+}
+
+/** `--complexity` help text, shared by create and update. */
+export const COMPLEXITY_OPTION_HELP = `Complexity points: ${TICKET_COMPLEXITY_INPUT_HINT} (aliases: ∞, infinity, .5, 0,5; none clears it)`;
+
+/**
+ * Parse a `--complexity` value (scale value or alias) into what the API takes:
+ * a scale value, or `null` for `none`. Dies on anything else.
+ */
+export function parseComplexityOption(raw: string): TicketComplexity | null {
+  const parsed = parseTicketComplexityInput(raw);
+  if (parsed === undefined) die(`Invalid complexity: ${raw} (valid: ${TICKET_COMPLEXITY_INPUT_HINT})`);
+  return parsed as TicketComplexity | null;
+}
+
+/** `5 pts`, `∞`, or `null` when not estimated — for one-line ticket summaries. */
+export function formatComplexity(c: unknown): string | null {
+  if (!isTicketComplexity(c)) return null;
+  return c === 'inf' ? '∞' : `${c} pts`;
+}
+
+/** Fixed-width `PTS` table cell: `5`, `0.5`, `∞`, or `-`. */
+export function complexityCell(c: unknown): string {
+  return isTicketComplexity(c) ? complexityLabel(c) : '-';
 }
 
 /** Repeatable-option accumulator for Commander (e.g. --add-tag a --add-tag b). */

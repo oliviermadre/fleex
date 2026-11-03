@@ -1,5 +1,5 @@
 import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
-import { isEffortLevel, TICKET_PRIORITY_RANK } from '@fleex/shared';
+import { isEffortLevel, normalizeTicketComplexity, TICKET_PRIORITY_RANK } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -41,6 +41,7 @@ interface TicketRow {
   model_override: string | null;
   effort_override: string | null;
   fast_mode: number | null;
+  complexity: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -107,13 +108,13 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     // would surface any race as an error rather than producing a duplicate.
     const stmt = this.conn.db.prepare(`
       INSERT INTO tickets
-        (id, board_id, display_id, title, description, status, priority, type, position,
+        (id, board_id, display_id, title, description, status, priority, complexity, type, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
          github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at)
       VALUES
         (@id, @board_id,
          (SELECT COALESCE(MAX(display_id), 0) + 1 FROM tickets),
-         @title, @description, @status, @priority, @type, @position,
+         @title, @description, @status, @priority, @complexity, @type, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
          @github_metadata, @archived_at, @first_doing_at, @status_changed_at, @created_at, @updated_at)
       RETURNING display_id
@@ -126,6 +127,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       description: ticket.description,
       status: ticket.status,
       priority: ticket.priority,
+      complexity: ticket.complexity,
       type: ticket.type,
       position: ticket.position,
       tags: JSON.stringify(ticket.tags),
@@ -193,12 +195,12 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     // ON CONFLICT DO UPDATE performs an in-place UPDATE: no row is deleted, no cascade fires.
     const stmt = this.conn.db.prepare(`
       INSERT INTO tickets
-        (id, board_id, display_id, title, description, status, priority, type, position,
+        (id, board_id, display_id, title, description, status, priority, complexity, type, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
          github_metadata, archived_at, first_doing_at, status_changed_at,
          conversation_mode, model_override, effort_override, fast_mode, created_at, updated_at)
       VALUES
-        (@id, @board_id, @display_id, @title, @description, @status, @priority, @type, @position,
+        (@id, @board_id, @display_id, @title, @description, @status, @priority, @complexity, @type, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
          @github_metadata, @archived_at, @first_doing_at, @status_changed_at,
          @conversation_mode, @model_override, @effort_override, @fast_mode, @created_at, @updated_at)
@@ -209,6 +211,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
         description = excluded.description,
         status = excluded.status,
         priority = excluded.priority,
+        complexity = excluded.complexity,
         type = excluded.type,
         position = excluded.position,
         tags = excluded.tags,
@@ -238,6 +241,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       description: ticket.description,
       status: ticket.status,
       priority: ticket.priority,
+      complexity: ticket.complexity,
       type: ticket.type,
       position: ticket.position,
       tags: JSON.stringify(ticket.tags),
@@ -448,6 +452,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       row.model_override ?? null,
       isEffortLevel(row.effort_override) ? row.effort_override : null,
       row.fast_mode === 1,
+      normalizeTicketComplexity(row.complexity),
     );
   }
 

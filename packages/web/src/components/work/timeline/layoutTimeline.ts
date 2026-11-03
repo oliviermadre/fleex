@@ -95,7 +95,8 @@ export type TimelineFilters = Record<TimelineFilterKey, boolean>;
 export function isVisible(e: TimelineEvent, f: TimelineFilters): boolean {
   switch (e.kind) {
     case 'status':
-    case 'priority': return f.status;
+    case 'priority':
+    case 'complexity': return f.status;
     case 'cli': return f.cli;
     case 'pr': return f.pr;
     case 'deliverable': return f.deliverables;
@@ -118,8 +119,13 @@ export function noteOffset(e: TimelineEvent): number {
  * carries its text ("priorité : moyenne → haute") so it reserves that room in
  * the top lane — other top pictos move aside rather than hide the text.
  */
+/** Top-lane pictos that carry their text inline (priority, complexity). */
+export function carriesText(e: TimelineEvent): boolean {
+  return e.kind === 'priority' || e.kind === 'complexity';
+}
+
 function rightExtent(e: TimelineEvent, w: number): number {
-  if (e.kind !== 'priority') return w / 2;
+  if (!carriesText(e)) return w / 2;
   return 14 + 4 + Math.min(PRIORITY_TEXT_MAX, Math.ceil(e.label.length * 6.2)) + 8;
 }
 
@@ -210,7 +216,7 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, m
       const next = nextInLane(idx, 'spine') ?? nowX;
       const room = Math.min(NOTE_MAX, next - it.x - noteOffset(it.event) - 14);
       it.textWidth = room >= MIN_TEXT ? room : null;
-    } else if (it.event.kind === 'priority') {
+    } else if (carriesText(it.event)) {
       const next = nextInLane(idx, 'top') ?? nowX;
       const room = Math.min(PRIORITY_TEXT_MAX, next - it.x - 24);
       it.textWidth = room >= MIN_TEXT ? room : null;

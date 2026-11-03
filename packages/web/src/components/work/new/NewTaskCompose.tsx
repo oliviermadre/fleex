@@ -12,6 +12,7 @@ import { MultiSelect } from '../../ui/MultiSelect';
 import { WorkBoardPicker } from '../panel/WorkBoardPicker';
 import { DraftTypePicker } from './DraftTypePicker';
 import { DraftPriorityPicker } from './DraftPriorityPicker';
+import { DraftComplexityPicker } from './DraftComplexityPicker';
 import { RepoBaseBranchSelect, REPO_BUSY_LABEL, extractLinkError } from '../../tickets/RepoBaseBranchSelect';
 import { BusyLine } from '../../ui/Spinner';
 import { epicOptions, repoOptions } from './draftOptions';
@@ -106,6 +107,7 @@ export function NewTaskCompose({
         description: draft.text.trim(),
         type: draft.type,
         priority: draft.priority,
+        complexity: draft.complexity,
         status: 'doing',
         ...(draft.source?.tags?.length ? { tags: draft.source.tags } : {}),
         ...(draft.source?.links?.length ? { links: draft.source.links } : {}),
@@ -288,6 +290,9 @@ export function NewTaskCompose({
             </Cell>
             <Cell label="PRIORITY">
               <DraftPriorityPicker value={draft.priority} onChange={(priority) => updateDraft({ priority })} />
+            </Cell>
+            <Cell label="COMPLEXITY">
+              <DraftComplexityPicker value={draft.complexity} onChange={(complexity) => updateDraft({ complexity })} />
             </Cell>
           </div>
         </div>

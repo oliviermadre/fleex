@@ -1,6 +1,8 @@
 export type TicketStatus = 'backlog' | 'todo' | 'doing' | 'reviewing' | 'done' | 'cancelled';
 export type TicketPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
 export type TicketType = 'build' | 'fix' | 'review' | 'ops' | 'lead' | 'think';
+import type { TicketComplexity } from '../ticket-complexity.js';
+export type { TicketComplexity } from '../ticket-complexity.js';
 
 /**
  * Conversation-scoped execution mode. Persisted on the ticket and resolved at
@@ -90,6 +92,8 @@ export interface Ticket {
   readonly description: string;
   readonly status: TicketStatus;
   readonly priority: TicketPriority;
+  /** Effort estimate on the closed Fibonacci scale. `null` = not estimated (≠ `'0'`). */
+  readonly complexity: TicketComplexity | null;
   readonly type: TicketType | null;
   readonly position: number;
   readonly tags: string[];
@@ -154,6 +158,7 @@ export interface CreateTicketRequest {
   readonly description?: string;
   readonly status?: TicketStatus;
   readonly priority?: TicketPriority;
+  readonly complexity?: TicketComplexity | null;
   readonly type?: TicketType | null;
   readonly tags?: string[];
   readonly links?: Omit<TicketLink, 'id' | 'createdAt'>[];
@@ -166,6 +171,8 @@ export interface UpdateTicketRequest {
   readonly description?: string;
   readonly status?: TicketStatus;
   readonly priority?: TicketPriority;
+  /** `null` clears the estimate. */
+  readonly complexity?: TicketComplexity | null;
   readonly type?: TicketType | null;
   readonly position?: number;
   readonly tags?: string[];

@@ -6,6 +6,7 @@ import { getStatusBadgeClass } from '../../lib/statusColors';
 import { useTicketStore } from '../../stores/ticketStore';
 import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
 import { TypePickerPopover } from '../tickets/TypePickerPopover';
+import { ComplexityPickerPopover } from '../tickets/ComplexityPickerPopover';
 
 /** The ticket's status — its own column in Focus rows, so every row lines up. */
 export function FocusStatusBadge({ ticket, className }: { ticket: Pick<Ticket, 'status'>; className?: string }) {
@@ -17,7 +18,7 @@ export function FocusStatusBadge({ ticket, className }: { ticket: Pick<Ticket, '
 }
 
 /**
- * Priority then type, before the ticket number — the same pickers as the Tasks
+ * Priority, type, then complexity, before the ticket number — the same pickers as the Tasks
  * queue (SVG glyphs, editable in place). Clicks stay here, they don't open the row.
  */
 export function FocusTicketLead({ ticket }: { ticket: Ticket }) {
@@ -25,6 +26,7 @@ export function FocusTicketLead({ ticket }: { ticket: Ticket }) {
     <span className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
       <PriorityPickerPopover ticket={ticket} />
       <TypePickerPopover ticket={ticket} display="icon" />
+      <ComplexityPickerPopover ticket={ticket} />
     </span>
   );
 }

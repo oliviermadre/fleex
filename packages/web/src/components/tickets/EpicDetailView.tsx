@@ -11,6 +11,8 @@ import { MarkdownEditor } from '../markdown/MarkdownEditor';
 import { EpicProgressBar } from './EpicProgressBar';
 import { NanoRoadmap } from './NanoRoadmap';
 import { PriorityIndicator } from './PriorityIndicator';
+import { ComplexityBadge } from './ComplexityBadge';
+import { EpicComplexitySummary } from './EpicComplexitySummary';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { STATUS_COLORS } from '../../lib/statusColors';
@@ -159,6 +161,7 @@ export function EpicDetailView() {
               <div>
                 <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Progress</label>
                 <EpicProgressBar tickets={epicTickets} />
+                <EpicComplexitySummary tickets={epicTickets} />
               </div>
 
               {/* Boards */}
@@ -506,6 +509,7 @@ function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardId
                 className="group flex items-center border-b border-[var(--theme-border)] px-4 py-2 transition-colors hover:bg-[var(--theme-bg-hover)]"
               >
                 <PriorityIndicator priority={ticket.priority} />
+                <ComplexityBadge complexity={ticket.complexity ?? null} className="ml-1.5" />
                 <button
                   className="ml-2 min-w-0 flex-1 truncate text-left text-sm text-[var(--theme-text-primary)] transition-colors hover:text-[var(--theme-accent)]"
                   onClick={() => handleClickTicket(ticket)}

@@ -1,7 +1,7 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
-import { accumulate, assertValidStatus, assertValidPriority, assertValidType, normalizeDueDate, parseRepoRef } from '../_shared.ts';
+import { accumulate, assertValidStatus, assertValidPriority, assertValidType, normalizeDueDate, parseRepoRef, parseComplexityOption, COMPLEXITY_OPTION_HELP } from '../_shared.ts';
 import { resolveBoardIdOrDefault } from '../../board/_shared.ts';
 
 interface CreateOptions {
@@ -9,6 +9,7 @@ interface CreateOptions {
   title?: string;
   description?: string;
   priority?: string;
+  complexity?: string;
   status?: string;
   type?: string;
   due?: string;
@@ -26,6 +27,7 @@ const def: CommandDef = {
     cmd.option('--board <board>', 'Board (name, UUID, or 8-char id prefix; auto-detected if only one board)');
     cmd.option('--description <description>', 'Ticket description');
     cmd.option('--priority <priority>', 'Priority: none | low | medium | high | urgent');
+    cmd.option('--complexity <points>', COMPLEXITY_OPTION_HELP);
     cmd.option('--status <status>', 'Initial status (default: backlog)');
     cmd.option('--type <type>', 'Type: build | fix | review | ops | lead | think');
     cmd.option('--due <date>', 'Due date (YYYY-MM-DD or ISO 8601)');
@@ -37,11 +39,13 @@ const def: CommandDef = {
     if (opts.status) assertValidStatus(opts.status);
     if (opts.priority) assertValidPriority(opts.priority);
     if (opts.type) assertValidType(opts.type);
+    const complexity = opts.complexity !== undefined ? parseComplexityOption(opts.complexity) : undefined;
 
     const boardId = await resolveBoardIdOrDefault(opts.board);
     const body: Record<string, unknown> = { boardId, title: opts.title };
     if (opts.description) body.description = opts.description;
     if (opts.priority) body.priority = opts.priority;
+    if (complexity !== undefined) body.complexity = complexity;
     if (opts.status) body.status = opts.status;
     if (opts.type) body.type = opts.type;
     if (opts.due) body.dueDate = normalizeDueDate(opts.due);

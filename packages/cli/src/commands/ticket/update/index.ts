@@ -5,6 +5,8 @@ import {
   assertValidStatus,
   assertValidPriority,
   assertValidType,
+  parseComplexityOption,
+  COMPLEXITY_OPTION_HELP,
   normalizeDueDate,
   accumulate,
   resolveTicketId,
@@ -18,6 +20,7 @@ interface UpdateOptions {
   description?: string;
   status?: string;
   priority?: string;
+  complexity?: string;
   type?: string;
   assignee?: string;
   favorite?: boolean;
@@ -43,6 +46,7 @@ const def: CommandDef = {
     cmd.option('--description <description>', 'New description');
     cmd.option('--status <status>', 'New status');
     cmd.option('--priority <priority>', 'New priority');
+    cmd.option('--complexity <points>', COMPLEXITY_OPTION_HELP);
     cmd.option('--type <type>', 'Type: build | fix | review | ops | lead | think');
     cmd.option('--assignee <name>', 'Assignee');
     cmd.option('--favorite', 'Mark as favorite');
@@ -68,6 +72,7 @@ const def: CommandDef = {
     if (opts.status !== undefined) assertValidStatus(opts.status);
     if (opts.priority !== undefined) assertValidPriority(opts.priority);
     if (opts.type !== undefined) assertValidType(opts.type);
+    const complexity = opts.complexity !== undefined ? parseComplexityOption(opts.complexity) : undefined;
     if (opts.due !== undefined && opts.clearDue) die('Use either --due or --clear-due, not both.');
 
     const body: Record<string, unknown> = {};
@@ -75,6 +80,7 @@ const def: CommandDef = {
     if (opts.description !== undefined) body.description = opts.description;
     if (opts.status !== undefined) body.status = opts.status;
     if (opts.priority !== undefined) body.priority = opts.priority;
+    if (complexity !== undefined) body.complexity = complexity;
     if (opts.type !== undefined) body.type = opts.type;
     if (opts.assignee !== undefined) body.assignee = opts.assignee;
     if (opts.favorite !== undefined) body.favorite = opts.favorite;
@@ -84,7 +90,7 @@ const def: CommandDef = {
     if (opts.toBoard !== undefined) body.boardId = await resolveBoardId(opts.toBoard);
 
     if (Object.keys(body).length === 0 && !hasTagOps && !hasEpicOps) {
-      die('No updates specified. Use --title, --description, --status, --priority, --type, --assignee, --favorite/--no-favorite, --blocked/--no-blocked, --due/--clear-due, --to-board, --add-tag/--rm-tag, or --add-epic/--remove-epic.');
+      die('No updates specified. Use --title, --description, --status, --priority, --complexity, --type, --assignee, --favorite/--no-favorite, --blocked/--no-blocked, --due/--clear-due, --to-board, --add-tag/--rm-tag, or --add-epic/--remove-epic.');
     }
 
     const uuid = await resolveTicketId(idArg, opts.board);

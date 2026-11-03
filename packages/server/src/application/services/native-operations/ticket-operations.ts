@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketPriority, TicketType } from '@fleex/shared';
+import type { TicketStatus, TicketPriority, TicketComplexity, TicketType } from '@fleex/shared';
 import type { NativeOperationImpl } from './types.js';
 import { postWorkflowComment } from '../workflow-comment.js';
 
@@ -28,6 +28,7 @@ export const TICKET_OPERATIONS: readonly NativeOperationImpl[] = [
         description: params['description'] === undefined ? undefined : str(params['description']),
         status: params['status'] === undefined ? undefined : (params['status'] as TicketStatus),
         priority: params['priority'] === undefined ? undefined : (params['priority'] as TicketPriority),
+        complexity: params['complexity'] === undefined ? undefined : ((params['complexity'] ?? null) as TicketComplexity | null),
         type: params['type'] === undefined ? undefined : (params['type'] as TicketType | null),
         tags: params['tags'] === undefined ? undefined : strList(params['tags']),
         dueDate: params['dueDate'] === undefined ? undefined : strOrNull(params['dueDate']),
@@ -43,6 +44,13 @@ export const TICKET_OPERATIONS: readonly NativeOperationImpl[] = [
   {
     id: 'ticket.set_priority',
     plan: ({ params }) => ({ kind: 'field', patch: { priority: params['priority'] as TicketPriority } }),
+  },
+  {
+    id: 'ticket.set_complexity',
+    plan: ({ params }) => ({
+      kind: 'field',
+      patch: { complexity: (params['complexity'] ?? null) as TicketComplexity | null },
+    }),
   },
   {
     id: 'ticket.set_type',

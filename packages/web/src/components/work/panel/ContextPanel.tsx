@@ -20,6 +20,8 @@ import { Spinner, BusyLine } from '../../ui/Spinner';
 import { DueDatePickerPopover } from '../../tickets/DueDatePickerPopover';
 import { TypePickerPopover } from '../../tickets/TypePickerPopover';
 import { PriorityPickerPopover } from '../../tickets/PriorityPickerPopover';
+import { ComplexityPickerPopover } from '../../tickets/ComplexityPickerPopover';
+import { complexityDescription } from '../../tickets/ComplexityBadge';
 import { EpicPicker } from '../../tickets/EpicPicker';
 import { MultiSelect } from '../../ui/MultiSelect';
 import { repoOptions } from '../new/draftOptions';
@@ -270,7 +272,7 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {/* Board / Status / Type / Priority — four Kanban-style pickers, 2×2 */}
+      {/* Board / Status / Type / Priority / Complexity — Kanban-style pickers, 2 per row */}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-b border-[var(--theme-border-subtle)] px-3 py-3">
         <Field label="Board">
           <WorkBoardPicker value={ticket.boardId} onChange={(boardId) => void updateTicket(ticket.id, { boardId })} />
@@ -286,6 +288,12 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
         <Field label="Priority">
           <div className="flex min-h-[28px] items-center gap-1.5 px-1 py-1">
             <PriorityPickerPopover ticket={ticket} />
+          </div>
+        </Field>
+        <Field label="Complexity">
+          <div className="flex min-h-[28px] items-center gap-1.5 px-1 py-1">
+            <ComplexityPickerPopover ticket={ticket} size="md" />
+            <span className="text-xs text-[var(--theme-text-secondary)]">{complexityDescription(ticket.complexity ?? null)}</span>
           </div>
         </Field>
       </div>

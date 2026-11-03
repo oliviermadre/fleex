@@ -1,5 +1,5 @@
-import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
-import { DEFAULT_CONVERSATION_MODE, isEffortLevel, sanitizeForStorage } from '@fleex/shared';
+import type { Ticket, TicketStatus, TicketPriority, TicketComplexity, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
+import { DEFAULT_CONVERSATION_MODE, isEffortLevel, normalizeTicketComplexity, sanitizeForStorage } from '@fleex/shared';
 
 export class TicketEntity {
   constructor(
@@ -31,6 +31,8 @@ export class TicketEntity {
     public modelOverride: string | null = null,
     public effortOverride: EffortLevel | null = null,
     public fastMode: boolean = false,
+    /** Fibonacci estimate; `null` = not estimated. Appended for the same reason as above. */
+    public complexity: TicketComplexity | null = null,
   ) {}
 
   static create(params: {
@@ -41,6 +43,7 @@ export class TicketEntity {
     description?: string;
     status?: TicketStatus;
     priority?: TicketPriority;
+    complexity?: TicketComplexity | null;
     type?: TicketType | null;
     position?: number;
     tags?: string[];
@@ -48,7 +51,7 @@ export class TicketEntity {
     dueDate?: Date | null;
   }): TicketEntity {
     const now = new Date();
-    return new TicketEntity(
+    const ticket = new TicketEntity(
       params.id,
       params.boardId,
       params.displayId,
@@ -72,6 +75,8 @@ export class TicketEntity {
       now,
       now,
     );
+    ticket.complexity = normalizeTicketComplexity(params.complexity);
+    return ticket;
   }
 
   update(changes: {
@@ -80,6 +85,7 @@ export class TicketEntity {
     description?: string;
     status?: TicketStatus;
     priority?: TicketPriority;
+    complexity?: TicketComplexity | null;
     type?: TicketType | null;
     position?: number;
     tags?: string[];
@@ -122,6 +128,15 @@ export class TicketEntity {
     if (changes.priority !== undefined && changes.priority !== this.priority) {
       diff['priority'] = { from: this.priority, to: changes.priority };
       this.priority = changes.priority;
+    }
+    if (changes.complexity !== undefined) {
+      // Off-scale input clears nothing and changes nothing: callers validate
+      // first (400 / CLI die), this only guards against persisting garbage.
+      const next = changes.complexity === null ? null : normalizeTicketComplexity(changes.complexity);
+      if ((changes.complexity === null || next !== null) && next !== this.complexity) {
+        diff['complexity'] = { from: this.complexity, to: next };
+        this.complexity = next;
+      }
     }
     if (changes.type !== undefined && changes.type !== this.type) {
       diff['type'] = { from: this.type, to: changes.type };
@@ -381,6 +396,7 @@ export class TicketEntity {
       description: this.description,
       status: this.status,
       priority: this.priority,
+      complexity: this.complexity,
       type: this.type,
       position: this.position,
       tags: this.tags,

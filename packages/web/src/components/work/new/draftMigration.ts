@@ -1,3 +1,4 @@
+import { normalizeTicketComplexity } from '@fleex/shared';
 import type { WorkDraft, DraftSource } from '../../../stores/workStore';
 
 /** The empty draft — the starting point for a brand-new task (ENTRY screen). */
@@ -13,6 +14,7 @@ export const EMPTY_DRAFT: WorkDraft = {
   boardId: null,
   type: 'build',
   priority: 'none',
+  complexity: null,
 };
 
 /**
@@ -53,6 +55,8 @@ export function migrateDraft(raw: unknown): WorkDraft {
     repoCheckoutRefs: isRecord(d['repoCheckoutRefs']) ? (d['repoCheckoutRefs'] as Record<string, string>) : {},
     epicIds: Array.isArray(d['epicIds']) ? (d['epicIds'] as string[]) : [],
     source: isRecord(d['source']) ? (d['source'] as unknown as DraftSource) : null,
+    // Blobs persisted before complexity existed (or carrying an off-scale value) → not estimated.
+    complexity: normalizeTicketComplexity(d['complexity']),
   };
 
   if (typeof d['title'] !== 'string') {

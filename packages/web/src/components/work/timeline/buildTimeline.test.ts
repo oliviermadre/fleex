@@ -64,6 +64,31 @@ describe('buildTimeline — status zones', () => {
     expect(byId(buildTimeline(src, NOW).events, 'prio:p1').label).toBe('priorité : haute → urgente');
   });
 
+  // A complexity edit is a field edit like priority: it must show on the ticket's timeline.
+  it('shows a complexity change, ∞ and "not estimated" included', () => {
+    const src = emptySources();
+    src.activities = [
+      activity({ id: 'c1', action: 'updated', createdAt: at(9, 20), changes: { complexity: { from: null, to: '5' } } }),
+      activity({ id: 'c2', action: 'updated', createdAt: at(9, 40), changes: { complexity: { from: '5', to: 'inf' } } }),
+      activity({ id: 'c3', action: 'updated', createdAt: at(9, 50), changes: { complexity: { from: '0', to: null } } }),
+    ];
+    const events = buildTimeline(src, NOW).events;
+    expect(byId(events, 'cx:c1')).toMatchObject({ kind: 'complexity', lane: 'top', label: 'complexité : – → 5' });
+    expect(byId(events, 'cx:c2').label).toBe('complexité : 5 → ∞');
+    // 0 (trivial) and not estimated read differently.
+    expect(byId(events, 'cx:c3').label).toBe('complexité : 0 → –');
+  });
+
+  it('a single update changing priority and complexity gives one event for each', () => {
+    const src = emptySources();
+    src.activities = [
+      activity({ id: 'u', action: 'updated', createdAt: at(9, 20), changes: { priority: { from: 'low', to: 'high' }, complexity: { from: '2', to: '3' } } }),
+    ];
+    const kinds = buildTimeline(src, NOW).events.map((e) => e.kind);
+    expect(kinds).toContain('priority');
+    expect(kinds).toContain('complexity');
+  });
+
   it('chains PATCH status edits and /move moves in time order', () => {
     const src = emptySources();
     src.ticket = { ...src.ticket, status: 'done' };

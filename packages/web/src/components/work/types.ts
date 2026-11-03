@@ -5,6 +5,7 @@
  * these shapes, never on a store directly, so they stay testable and the data
  * wiring lives in one place.
  */
+import type { TicketComplexity } from '@fleex/shared';
 import type { QueueActivity } from './selectors';
 
 export interface WorkWorktree {
@@ -61,6 +62,8 @@ export interface WorkTask {
   type: string | null;
   size: string | null;
   priority: string;
+  /** null = not estimated. */
+  complexity: TicketComplexity | null;
   favorite: boolean;
   blocked: boolean;
   /** The epics the task belongs to (empty when none). */

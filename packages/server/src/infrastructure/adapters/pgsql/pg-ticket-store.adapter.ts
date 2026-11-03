@@ -1,5 +1,5 @@
 import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
-import { isEffortLevel } from '@fleex/shared';
+import { isEffortLevel, normalizeTicketComplexity } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -55,8 +55,9 @@ export class PgTicketStore implements TicketStorePort {
       `INSERT INTO tickets (
         id, board_id, title, description, status, priority, type, position,
         tags, links, blocked, favorite, due_date, assignee,
-        agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+        agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at,
+        complexity
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
       RETURNING display_id`,
       [
         ticket.id,
@@ -80,6 +81,7 @@ export class PgTicketStore implements TicketStorePort {
         ticket.statusChangedAt.toISOString(),
         ticket.createdAt.toISOString(),
         ticket.updatedAt.toISOString(),
+        ticket.complexity,
       ],
     );
     if (rows.length === 0) throw new Error('createTicket failed to return display_id');
@@ -134,8 +136,9 @@ export class PgTicketStore implements TicketStorePort {
         id, board_id, display_id, title, description, status, priority, type, position,
         tags, links, blocked, favorite, due_date, assignee,
         agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at,
-        conversation_mode, model_override, effort_override, fast_mode, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+        conversation_mode, model_override, effort_override, fast_mode, created_at, updated_at,
+        complexity
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
       ON CONFLICT (id) DO UPDATE SET
         board_id = $2,
         display_id = $3,
@@ -161,7 +164,8 @@ export class PgTicketStore implements TicketStorePort {
         effort_override = $23,
         fast_mode = $24,
         created_at = $25,
-        updated_at = $26`,
+        updated_at = $26,
+        complexity = $27`,
       [
         ticket.id,
         ticket.boardId,
@@ -189,6 +193,7 @@ export class PgTicketStore implements TicketStorePort {
         ticket.fastMode,
         ticket.createdAt.toISOString(),
         ticket.updatedAt.toISOString(),
+        ticket.complexity,
       ],
     );
   }
@@ -373,6 +378,7 @@ function rowToTicket(row: Record<string, unknown>): TicketEntity {
     (row.model_override as string | null) ?? null,
     isEffortLevel(row.effort_override) ? row.effort_override : null,
     row.fast_mode === true,
+    normalizeTicketComplexity(row.complexity),
   );
 }
 

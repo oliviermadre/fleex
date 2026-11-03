@@ -10,7 +10,7 @@
  * epic, no repo, no PR): a task without a value passes a non-empty filter only
  * when that filter holds `'none'`.
  */
-import { TICKET_PRIORITY_RANK } from '@fleex/shared';
+import { TICKET_PRIORITY_RANK, complexityValue, isTicketComplexity, type TicketComplexity } from '@fleex/shared';
 import type { WorkPrState } from './types';
 
 export const NONE = 'none';
@@ -19,6 +19,19 @@ export type None = typeof NONE;
 export type BlockedFilter = 'any' | 'blocked' | 'not_blocked';
 export type PrFilterValue = None | WorkPrState;
 export type InactiveFor = '1d' | '3d' | '7d' | '14d' | '30d';
+
+/**
+ * Complexity filter: an inclusive range of the scale (a single value = min ===
+ * max; a null bound is open, so `min: '8', max: null` is "8 and up", ∞ included),
+ * plus `none` to also keep the not-estimated tickets. With no bound and
+ * `none`, only not-estimated tickets pass. With a bound, not-estimated tickets
+ * are out unless `none` — "unknown" never counts as "small".
+ */
+export interface ComplexityFilter {
+  min: TicketComplexity | null;
+  max: TicketComplexity | null;
+  none: boolean;
+}
 
 export const INACTIVE_FOR_OPTIONS: readonly InactiveFor[] = ['1d', '3d', '7d', '14d', '30d'];
 const INACTIVE_DAYS: Record<InactiveFor, number> = { '1d': 1, '3d': 3, '7d': 7, '14d': 14, '30d': 30 };
@@ -29,6 +42,8 @@ export interface QueueFilters {
   boards: string[];
   statuses: string[];
   priorities: string[];
+  /** null = no filter. */
+  complexity: ComplexityFilter | null;
   /** Ticket types, or 'none' (no type). */
   types: string[];
   /** Epic (ticket_group) ids, or 'none' (in no epic). */
@@ -70,6 +85,7 @@ export const DEFAULT_QUEUE_FILTERS: QueueFilters = {
   // The handoff default: the queue shows what is in flight.
   statuses: ['doing', 'reviewing'],
   priorities: [],
+  complexity: null,
   types: [],
   epics: [],
   repos: [],
@@ -88,13 +104,14 @@ export const DEFAULT_QUEUE_DISPLAY: QueueDisplay = {
 export const DEFAULT_QUEUE_CONFIG: QueueConfig = { filters: DEFAULT_QUEUE_FILTERS, display: DEFAULT_QUEUE_DISPLAY };
 
 /** The filters of the "Filters" popover (Boards and Status stay inline). */
-export const POPOVER_FILTER_KEYS = ['priorities', 'types', 'epics', 'repos', 'prs', 'blocked', 'inactiveFor'] as const;
+export const POPOVER_FILTER_KEYS = ['priorities', 'complexity', 'types', 'epics', 'repos', 'prs', 'blocked', 'inactiveFor'] as const;
 
 /** The filters a hidden task can be excluded by, in display order. */
 export type QueueFilterKey =
   | 'boards'
   | 'statuses'
   | 'priorities'
+  | 'complexity'
   | 'types'
   | 'epics'
   | 'repos'
@@ -109,6 +126,8 @@ export interface FilterableTask {
   readonly boardId: string | null;
   readonly status: string;
   readonly priority: string;
+  /** null = not estimated. */
+  readonly complexity: TicketComplexity | null;
   readonly type: string | null;
   readonly favorite: boolean;
   readonly blocked: boolean;
@@ -136,6 +155,21 @@ function prValues(task: FilterableTask): string[] {
   return task.prs.map((p) => p.state).filter((s): s is WorkPrState => s !== null);
 }
 
+/** Whether a complexity filter filters anything (no bound and no `none` = off). */
+export function complexityFilterActive(f: ComplexityFilter | null): f is ComplexityFilter {
+  return f !== null && (f.min !== null || f.max !== null || f.none);
+}
+
+/** Whether `c` passes an active complexity filter. Bounds given in reverse are swapped. */
+export function matchesComplexity(f: ComplexityFilter, c: TicketComplexity | null): boolean {
+  if (c === null) return f.none;
+  if (f.min === null && f.max === null) return false; // only "Not estimated" is selected
+  const v = complexityValue(c);
+  const a = f.min === null ? -Infinity : complexityValue(f.min);
+  const b = f.max === null ? Infinity : complexityValue(f.max);
+  return v >= Math.min(a, b) && v <= Math.max(a, b);
+}
+
 /** A repo's filter key: "org/name", lower-cased (links and repo settings differ in case). */
 export const repoKey = (repo: string): string => repo.toLowerCase();
 
@@ -160,6 +194,7 @@ export function matchQueueFilters(
   if (f.boards.length > 0 && !(task.boardId && f.boards.includes(task.boardId))) out.push('boards');
   if (f.statuses.length > 0 && !f.statuses.includes(task.status)) out.push('statuses');
   if (f.priorities.length > 0 && !f.priorities.includes(task.priority)) out.push('priorities');
+  if (complexityFilterActive(f.complexity) && !matchesComplexity(f.complexity, task.complexity)) out.push('complexity');
   if (f.types.length > 0 && !f.types.includes(task.type ?? NONE)) out.push('types');
   if (f.epics.length > 0 && !anyIn(orNone(task.epics.map((e) => e.id)), f.epics)) out.push('epics');
   if (f.repos.length > 0 && !anyIn(orNone(repoKeysOf(task)), f.repos)) out.push('repos');
@@ -183,13 +218,14 @@ export function popoverFilterCount(f: QueueFilters): number {
     const v = f[k];
     if (Array.isArray(v)) return v.length > 0;
     if (k === 'blocked') return v !== 'any';
+    if (k === 'complexity') return complexityFilterActive(f.complexity);
     return v !== null;
   }).length;
 }
 
 /** The popover's filters cleared — Boards, Status and favorites untouched. */
 export function clearPopoverFilters(f: QueueFilters): QueueFilters {
-  return { ...f, priorities: [], types: [], epics: [], repos: [], prs: [], blocked: 'any', inactiveFor: null };
+  return { ...f, priorities: [], complexity: null, types: [], epics: [], repos: [], prs: [], blocked: 'any', inactiveFor: null };
 }
 
 /** Ids that still exist; null = not loaded yet (nothing is pruned). */
@@ -223,10 +259,24 @@ export function pruneUnknown(config: QueueConfig, known: KnownIds): QueueConfig 
 export function completeConfig(raw: unknown): QueueConfig {
   const r = (raw ?? {}) as { filters?: Partial<QueueFilters>; display?: Partial<QueueDisplay> };
   const filters = { ...DEFAULT_QUEUE_FILTERS, ...(r.filters ?? {}) };
+  filters.complexity = completeComplexity(filters.complexity);
   const display = { ...DEFAULT_QUEUE_DISPLAY, ...(r.display ?? {}) };
   display.sort = { ...DEFAULT_QUEUE_DISPLAY.sort, ...(r.display?.sort ?? {}) };
   if (display.subGroupBy === display.groupBy) display.subGroupBy = null;
   return { filters, display };
+}
+
+/** A stored complexity filter, sanitised: off-scale bounds dropped, an empty filter → null. */
+function completeComplexity(raw: unknown): ComplexityFilter | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const r = raw as Partial<Record<keyof ComplexityFilter, unknown>>;
+  const f: ComplexityFilter = {
+    min: isTicketComplexity(r.min) ? r.min : null,
+    max: isTicketComplexity(r.max) ? r.max : null,
+    none: r.none === true,
+  };
+  if (f.min !== null && f.max !== null && complexityValue(f.min) > complexityValue(f.max)) [f.min, f.max] = [f.max, f.min];
+  return complexityFilterActive(f) ? f : null;
 }
 
 const sorted = <T extends string>(a: readonly T[]): T[] => [...a].sort();

@@ -3,6 +3,7 @@ import { CREATED_REFERENCE_FIELDS, TICKET_REFERENCE_FIELDS } from '../../native-
 import { EDGE_OPERATORS, LIST_OPERATORS, MAX_REGEX_LENGTH, UNARY_OPERATORS } from '../edge-conditions.js';
 import { EDGE_STANDARD_FIELDS } from '../edge-validation.js';
 import { TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from '../../constants.js';
+import { TICKET_COMPLEXITIES } from '../../ticket-complexity.js';
 import { EXECUTOR_TYPES, WORKFLOW_DOCUMENT_SCHEMA, type SchemaNode } from './schema.js';
 import { EXECUTOR_REF_EXPECTATIONS, INVARIANTS, runInvariantExample, validateWorkflow, type WorkflowInvariant } from './invariants.js';
 import { minimalExample, richExample } from './examples.js';
@@ -156,7 +157,7 @@ function buildCapabilities(caps: WorkflowCapabilities) {
       maxRegexLength: MAX_REGEX_LENGTH,
     },
     standardFields: EDGE_STANDARD_FIELDS.map((f) => ({ field: f.field, type: f.type, ...(f.enum ? { enum: f.enum } : {}) })),
-    ticket: { statuses: [...TICKET_STATUSES], priorities: [...TICKET_PRIORITIES], types: [...TICKET_TYPES] },
+    ticket: { statuses: [...TICKET_STATUSES], priorities: [...TICKET_PRIORITIES], complexities: [...TICKET_COMPLEXITIES], types: [...TICKET_TYPES] },
     references: {
       forms: [
         '{{ steps.<stepId>.<field> }} — a field of an upstream step\'s outputSchema',
@@ -307,6 +308,7 @@ export function renderApplyDocumentationMarkdown(doc: ApplyDocumentation): strin
   out.push('### ticket values', '');
   out.push(`- statuses: ${caps.ticket.statuses.join(', ')}`);
   out.push(`- priorities: ${caps.ticket.priorities.join(', ')}`);
+  out.push(`- complexities: ${caps.ticket.complexities.join(', ')} (Fibonacci points; inf = must be split; null = not estimated)`);
   out.push(`- types: ${caps.ticket.types.join(', ')}`, '');
   out.push('### {{ … }} references (native action params)', '');
   for (const f of caps.references.forms) out.push(`- ${f}`);
