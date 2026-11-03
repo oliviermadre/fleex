@@ -50,6 +50,7 @@ export const FILTER_LABELS: Record<QueueFilterKey, string> = {
   boards: 'board',
   statuses: 'status',
   priorities: 'priority',
+  complexity: 'complexity',
   types: 'type',
   epics: 'epic',
   repos: 'repo',

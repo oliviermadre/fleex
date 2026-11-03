@@ -23,6 +23,7 @@ const task = (over: Partial<FilterableTask> = {}): FilterableTask => ({
   boardId: 'b1',
   status: 'doing',
   priority: 'medium',
+  complexity: null,
   type: 'build',
   favorite: false,
   blocked: false,
@@ -104,6 +105,7 @@ describe('matchQueueFilters — the new filters (AC1)', () => {
       boards: ['b2'],
       statuses: ['todo'],
       priorities: ['high'],
+      complexity: { min: '8', max: null, none: false },
       types: ['fix'],
       epics: ['A'],
       repos: ['x/y'],
@@ -113,8 +115,56 @@ describe('matchQueueFilters — the new filters (AC1)', () => {
       favoriteOnly: true,
     };
     expect(matchQueueFilters(f, 'zzz', task(), NOW)).toEqual([
-      'boards', 'statuses', 'priorities', 'types', 'epics', 'repos', 'prs', 'blocked', 'inactiveFor', 'favoriteOnly', 'search',
+      'boards', 'statuses', 'priorities', 'complexity', 'types', 'epics', 'repos', 'prs', 'blocked', 'inactiveFor', 'favoriteOnly', 'search',
     ]);
+  });
+});
+
+describe('matchQueueFilters — complexity (one value or a range)', () => {
+  const cx = (complexity: FilterableTask['complexity']) => task({ complexity });
+
+  it('a single value is a range with min === max', () => {
+    const f = { complexity: { min: '5', max: '5', none: false } as const };
+    expect(passes(f, cx('5'))).toBe(true);
+    expect(passes(f, cx('3'))).toBe(false);
+    expect(passes(f, cx('8'))).toBe(false);
+  });
+
+  it('a range keeps both bounds, compares numerically (0.5 < 2 < 13), and ∞ is the top of the scale', () => {
+    const f = { complexity: { min: '0.5', max: '13', none: false } as const };
+    expect(['0.5', '2', '13'].every((c) => passes(f, cx(c as FilterableTask['complexity'])))).toBe(true);
+    // String order would put "13" before "2": the filter must not.
+    expect(passes(f, cx('0'))).toBe(false);
+    expect(passes(f, cx('21'))).toBe(false);
+    expect(passes(f, cx('inf'))).toBe(false);
+  });
+
+  it('an open upper bound means "and up", ∞ included — the tickets to split show up in "8+"', () => {
+    const f = { complexity: { min: '8', max: null, none: false } as const };
+    expect(passes(f, cx('55'))).toBe(true);
+    expect(passes(f, cx('inf'))).toBe(true);
+    expect(passes(f, cx('5'))).toBe(false);
+  });
+
+  it('a not-estimated ticket never counts as small: excluded by a range unless "Not estimated" is on', () => {
+    expect(passes({ complexity: { min: null, max: '3', none: false } }, cx(null))).toBe(false);
+    expect(passes({ complexity: { min: null, max: '3', none: true } }, cx(null))).toBe(true);
+    expect(passes({ complexity: { min: null, max: '3', none: true } }, cx('2'))).toBe(true);
+    // "0" is trivial, not "unknown": it is in "up to 3".
+    expect(passes({ complexity: { min: null, max: '3', none: false } }, cx('0'))).toBe(true);
+  });
+
+  it('"Not estimated" alone lists the tickets left to estimate', () => {
+    const f = { complexity: { min: null, max: null, none: true } };
+    expect(passes(f, cx(null))).toBe(true);
+    expect(passes(f, cx('0'))).toBe(false);
+  });
+
+  it('a stored range given backwards is swapped, and an empty or off-scale one is dropped', () => {
+    expect(completeConfig({ filters: { complexity: { min: '13', max: '2', none: false } } }).filters.complexity).toEqual({ min: '2', max: '13', none: false });
+    expect(completeConfig({ filters: { complexity: { min: '4', max: null, none: false } } }).filters.complexity).toBeNull();
+    // A view saved before this filter existed has no complexity filter.
+    expect(completeConfig({ filters: { priorities: ['high'] } }).filters.complexity).toBeNull();
   });
 });
 
@@ -122,10 +172,11 @@ describe('Filters popover badge and Clear (AC6)', () => {
   it('counts the active popover filters only — not boards, status or favorites', () => {
     expect(popoverFilterCount({ ...DEFAULT_QUEUE_FILTERS, boards: ['b1'], favoriteOnly: true })).toBe(0);
     expect(popoverFilterCount({ ...DEFAULT_QUEUE_FILTERS, types: ['fix'], blocked: 'blocked', inactiveFor: '7d' })).toBe(3);
+    expect(popoverFilterCount({ ...DEFAULT_QUEUE_FILTERS, complexity: { min: '1', max: '3', none: false } })).toBe(1);
   });
 
   it('Clear empties the popover filters and leaves boards and status alone', () => {
-    const f: QueueFilters = { ...DEFAULT_QUEUE_FILTERS, boards: ['b1'], statuses: ['doing'], epics: ['A'], prs: ['none'], blocked: 'blocked' };
+    const f: QueueFilters = { ...DEFAULT_QUEUE_FILTERS, boards: ['b1'], statuses: ['doing'], epics: ['A'], prs: ['none'], blocked: 'blocked', complexity: { min: '5', max: null, none: true } };
     const cleared = clearPopoverFilters(f);
     expect(popoverFilterCount(cleared)).toBe(0);
     expect(cleared.boards).toEqual(['b1']);

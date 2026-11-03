@@ -1,9 +1,17 @@
 /**
  * "Filters · n": the queue filters beyond the inline Boards / Status — priority,
- * type, epic, repo, PR, blocked, inactivity. Values are toggle pills inside one
+ * complexity, type, epic, repo, PR, blocked, inactivity. Values are toggle pills inside one
  * popover (no nested menus); "Clear" empties these only.
  */
-import { TICKET_TYPES, TICKET_TYPE_EMOJIS, TICKET_TYPE_LABELS, type TicketGroup } from '@fleex/shared';
+import {
+  TICKET_COMPLEXITIES,
+  TICKET_TYPES,
+  TICKET_TYPE_EMOJIS,
+  TICKET_TYPE_LABELS,
+  complexityLabel,
+  isTicketComplexity,
+  type TicketGroup,
+} from '@fleex/shared';
 import { usePopover, FloatingPortal } from '../../../hooks/usePopover';
 import { cn } from '../../../lib/cn';
 import { PriorityIndicator, PRIORITY_LABELS, PRIORITY_ORDER_DESC } from '../../tickets/PriorityIndicator';
@@ -11,8 +19,10 @@ import {
   INACTIVE_FOR_OPTIONS,
   NONE,
   clearPopoverFilters,
+  complexityFilterActive,
   popoverFilterCount,
   type BlockedFilter,
+  type ComplexityFilter,
   type InactiveFor,
   type PrFilterValue,
   type QueueFilters,
@@ -112,6 +122,56 @@ function Segmented<V extends string>({ value, options, onChange }: { value: V; o
   );
 }
 
+const OPEN_BOUND = '';
+const BOUND_SELECT =
+  'flex-1 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-1.5 py-0.5 text-[11px] text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none';
+
+/** One bound of the complexity range: "—" (open) or a scale value. */
+function BoundSelect({ label, value, onChange }: { label: string; value: ComplexityFilter['min']; onChange: (v: ComplexityFilter['min']) => void }) {
+  return (
+    <select
+      aria-label={label}
+      value={value ?? OPEN_BOUND}
+      onChange={(e) => onChange(isTicketComplexity(e.target.value) ? e.target.value : null)}
+      className={BOUND_SELECT}
+    >
+      <option value={OPEN_BOUND}>—</option>
+      {TICKET_COMPLEXITIES.map((c) => (
+        <option key={c} value={c}>
+          {complexityLabel(c)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * Complexity: an inclusive From–To range on the scale (same value twice = one
+ * value, an open bound = "and up" / "and below") plus "Not estimated".
+ */
+function ComplexityRange({ value, onChange }: { value: ComplexityFilter | null; onChange: (v: ComplexityFilter | null) => void }) {
+  const f: ComplexityFilter = value ?? { min: null, max: null, none: false };
+  const set = (patch: Partial<ComplexityFilter>) => {
+    const next = { ...f, ...patch };
+    onChange(complexityFilterActive(next) ? next : null);
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 text-[11px] text-[var(--theme-text-muted)]">
+        <span>From</span>
+        <BoundSelect label="Complexity from" value={f.min} onChange={(min) => set({ min })} />
+        <span>to</span>
+        <BoundSelect label="Complexity to" value={f.max} onChange={(max) => set({ max })} />
+      </div>
+      <div className="flex flex-wrap gap-1">
+        <Pill on={f.none} onClick={() => set({ none: !f.none })}>
+          Not estimated
+        </Pill>
+      </div>
+    </div>
+  );
+}
+
 export function QueueFiltersPopover({ filters, onChange, epics, repos }: Props) {
   const { open, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ role: 'dialog', maxHeight: 560 });
   const count = popoverFilterCount(filters);
@@ -176,6 +236,9 @@ export function QueueFiltersPopover({ filters, onChange, epics, repos }: Props) 
                 onChange={(priorities) => onChange({ priorities })}
                 options={PRIORITY_ORDER_DESC.map((p) => ({ value: p, label: PRIORITY_LABELS[p], icon: <PriorityIndicator priority={p} /> }))}
               />
+            </Section>
+            <Section title="Complexity">
+              <ComplexityRange value={filters.complexity} onChange={(complexity) => onChange({ complexity })} />
             </Section>
             <Section title="Type">
               <PillSet
