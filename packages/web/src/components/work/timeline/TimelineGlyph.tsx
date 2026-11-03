@@ -2,7 +2,8 @@
  * Maps a timeline glyph to the EXISTING iconography and hues: primitive icons
  * (lib/primitives), workflow executor icons (EXECUTOR_PALETTE), Claude / terminal
  * icons (sidebar), deliverable / comment glyphs, the PR octicon. No new icon is
- * drawn here except the priority flag, which has no existing counterpart.
+ * drawn here except the priority flag and the complexity glyph, which have no
+ * existing counterpart.
  */
 import { colorForType } from '@fleex/shared';
 import { PRIMITIVE_META, PrimitiveIcon } from '../../../lib/primitives';
@@ -31,6 +32,7 @@ export function glyphHue(g: Glyph): TintHue {
     case 'comment': return g.human ? 'yellow' : 'purple';
     case 'pr': return PR_HUE[g.state ?? 'open'];
     case 'priority': return 'orange';
+    case 'complexity': return 'blue';
     case 'status': return STATUS_HUES[g.status] ?? 'gray';
   }
 }
@@ -46,6 +48,18 @@ function FlagIcon({ size }: { size: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M5 21V4" />
       <path d="M5 4h11l-2 4 2 4H5" />
+    </svg>
+  );
+}
+
+/** Complexity: three rising steps (points pile up), read as "effort". */
+function ComplexityIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 20h16" />
+      <path d="M6 20v-4h4v4" />
+      <path d="M10 20v-8h4v8" />
+      <path d="M14 20V6h4v14" />
     </svg>
   );
 }
@@ -71,6 +85,8 @@ export function GlyphIcon({ glyph, size = 16 }: { glyph: Glyph; size?: number })
       return <CommentIcon size={size - 2} />;
     case 'priority':
       return <FlagIcon size={size - 2} />;
+    case 'complexity':
+      return <ComplexityIcon size={size - 2} />;
     default:
       return null;
   }

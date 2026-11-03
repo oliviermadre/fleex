@@ -16,6 +16,8 @@ import {
   evaluateConditionGroup,
   getByPath,
   normalizeEdgeCondition,
+  complexityLabel,
+  normalizeTicketComplexity,
   TICKET_STATUS_LABELS,
   TICKET_STATUSES,
 } from '@fleex/shared';
@@ -46,6 +48,7 @@ export type TimelineEventKind =
   | 'created'
   | 'status'
   | 'priority'
+  | 'complexity'
   | 'workflowStart'
   | 'cli'
   | 'step'
@@ -64,6 +67,7 @@ export type TimelineGlyph =
   | { type: 'comment'; human: boolean }
   | { type: 'pr'; state: WorkPrState | null; label: string }
   | { type: 'priority' }
+  | { type: 'complexity' }
   | { type: 'status'; status: TicketStatus };
 
 export type NoteTone = 'ok' | 'ko' | 'warn';
@@ -271,7 +275,7 @@ export interface TimelineSources {
 
 /** Tie-break at equal timestamps (SPEC §5.1). */
 const RANK: Record<TimelineEventKind, number> = {
-  created: 0, status: 1, priority: 2, workflowStart: 3, cli: 4, step: 5, run: 5, deliverable: 6, pr: 7, comment: 8,
+  created: 0, status: 1, priority: 2, complexity: 2, workflowStart: 3, cli: 4, step: 5, run: 5, deliverable: 6, pr: 7, comment: 8,
 };
 
 const PRIORITY_FR: Record<TicketPriority, string> = { none: 'aucune', low: 'basse', medium: 'moyenne', high: 'haute', urgent: 'urgente' };
@@ -687,6 +691,23 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
       tooltip: { ...blankTooltip(`${from} → ${to}`, 'Priorité'), rows: [['Par', by], ['Quand', whenLabel(at, now)]] },
       action: null,
       ariaLabel: `Priorité ${from} vers ${to}, ${hhmm(at)}`,
+    });
+  }
+
+  // ── Complexity ── (same lane and look as priority: a field edit with its text)
+  for (const a of activities) {
+    if (a.action !== 'updated' || !a.changes?.complexity) continue;
+    const from = complexityLabel(normalizeTicketComplexity(a.changes.complexity.from));
+    const to = complexityLabel(normalizeTicketComplexity(a.changes.complexity.to));
+    const at = clamp(ms(a.createdAt) ?? createdAt);
+    const by = a.actorName ?? (a.actorType === 'user' ? 'Toi' : 'Agent');
+    drafts.push({
+      id: `cx:${a.id}`, kind: 'complexity', at, lane: 'top', parentId: null,
+      glyph: { type: 'complexity' }, label: `complexité : ${from} → ${to}`, sub: null, state: 'ok', attempt: 1,
+      note: null, gate: false,
+      tooltip: { ...blankTooltip(`${from} → ${to}`, 'Complexité'), rows: [['Par', by], ['Quand', whenLabel(at, now)]] },
+      action: null,
+      ariaLabel: `Complexité ${from} vers ${to}, ${hhmm(at)}`,
     });
   }
 

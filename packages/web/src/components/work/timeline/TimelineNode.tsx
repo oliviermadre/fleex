@@ -12,7 +12,7 @@ import { getPrBadgeClasses } from '../../../lib/prBadgeStyle';
 import { Tooltip } from '../../ui/Tooltip';
 import { PrIcon } from '../queue/QueuePrGlyph';
 import type { TimelineAction, TimelineEvent } from './buildTimeline';
-import { GEOMETRY, noteOffset, type PlacedEvent } from './layoutTimeline';
+import { GEOMETRY, carriesText, noteOffset, type PlacedEvent } from './layoutTimeline';
 import { GlyphIcon, glyphHue, useDeliverableColor } from './TimelineGlyph';
 import { TimelineTooltip } from './TimelineTooltip';
 
@@ -170,9 +170,9 @@ export const LanePicto = memo(function LanePicto({ item, onAction }: NodeProps) 
           )}
         </button>
       </Tooltip>
-      {e.kind === 'priority' && item.textWidth != null && (
+      {carriesText(e) && item.textWidth != null && (
         <div
-          className={cn('pointer-events-none absolute truncate text-[11px] italic', tintText('orange'))}
+          className={cn('pointer-events-none absolute truncate text-[11px] italic', tintText(hue))}
           style={{ left: item.x + size / 2 + 4, top: y + 6, maxWidth: item.textWidth }}
         >
           {e.label}
