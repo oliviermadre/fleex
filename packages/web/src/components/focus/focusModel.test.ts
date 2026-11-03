@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { FocusItem } from '@fleex/shared';
+import type { FocusItem, TicketPriority } from '@fleex/shared';
 
 vi.mock('../../services/api', () => ({
   resolveWorkflowGate: vi.fn().mockResolvedValue(undefined),
@@ -111,7 +111,7 @@ describe('sortFocusItems', () => {
   const a = { ...base, key: 'a', kind: 'idle' as const, ticketId: 'A', since: '2026-09-28T08:00:00Z' };
   const b = { ...base, key: 'b', kind: 'gate' as const, ticketId: 'B', since: '2026-09-28T09:00:00Z' };
   const c = { ...base, key: 'c', kind: 'error' as const, ticketId: 'C', since: null };
-  const prio = new Map([['A', { priority: 'low' as const }], ['B', { priority: 'high' as const }], ['C', { priority: 'high' as const }]]);
+  const prio = new Map<string, { priority: TicketPriority }>([['A', { priority: 'low' as const }], ['B', { priority: 'high' as const }], ['C', { priority: 'high' as const }]]);
 
   it('oldest first, unknown ages last', () => {
     expect(sortFocusItems([c, b, a], 'age', prio).map((i) => i.key)).toEqual(['a', 'b', 'c']);
@@ -121,5 +121,9 @@ describe('sortFocusItems', () => {
   });
   it('by kind', () => {
     expect(sortFocusItems([a, c, b], 'kind', prio).map((i) => i.key)).toEqual(['b', 'c', 'a']);
+  });
+  it('by priority: urgent comes before high, whatever the age', () => {
+    const withUrgent = new Map<string, { priority: TicketPriority }>([...prio, ['A', { priority: 'urgent' }]]);
+    expect(sortFocusItems([b, c, a], 'priority', withUrgent).map((i) => i.key)).toEqual(['a', 'b', 'c']);
   });
 });

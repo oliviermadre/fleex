@@ -381,7 +381,7 @@ while open (or refresh on an `agent_event` Edit/Write tool_result).
 ## Key facts / gotchas (learned during impl)
 
 - `Ticket` has **no `size`** field; number is `displayId`; `type` nullable; boards ARE campaigns.
-- Status is lowercase: `backlog|todo|doing|reviewing|done|cancelled`. Priority `none|low|medium|high`.
+- Status is lowercase: `backlog|todo|doing|reviewing|done|cancelled`. Priority `none|low|medium|high|urgent`.
 - Worktrees/repos come from `ticket.links` type `repository` (`ref="org/name"`, multi-repo) — NOT the
   single `worktree` link, NOT sessionGroups. PR from `github_pr` link (`ref="org/name#num"`);
   diff stats (+add/−del) come from `WorktreeSessionGroup.diffStats`.

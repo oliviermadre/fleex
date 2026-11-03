@@ -28,7 +28,7 @@ import {
   waitedMs,
   type FocusAction,
 } from '../components/focus/focusModel';
-import { PRIORITY_COLOR } from './MobileTicketCard';
+import { PriorityIndicator } from '../components/tickets/PriorityIndicator';
 import { BellIcon } from './MobileMore';
 import { useMobileNavStore } from './mobileNavStore';
 import { useClock } from './useClock';
@@ -355,7 +355,9 @@ function FocusRow({
           </span>
           <span className="min-w-0 flex-1 text-sm font-semibold leading-[1.35] text-[var(--theme-text-primary)] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box] overflow-hidden">
             {ticket.priority !== 'none' && (
-              <span className={cn('mb-px mr-1.5 inline-block h-[7px] w-[7px] rounded-full', PRIORITY_COLOR[ticket.priority])} />
+              <span className="mb-px mr-1.5 inline-block align-middle">
+                <PriorityIndicator priority={ticket.priority} />
+              </span>
             )}
             <span className="mr-1.5 font-mono text-[11.5px] font-normal text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
             {ticket.title}

@@ -13,7 +13,7 @@ import { linkedPrs } from '../lib/prRef';
 import { PrBadgeGroup } from '../components/ui/PrBadgeGroup';
 import { MobileSheet, SheetOption } from './MobileSheet';
 import { useMobileNavStore, type MobileDetailTab } from './mobileNavStore';
-import { PRIORITY_COLOR } from './MobileTicketCard';
+import { PriorityIndicator, PRIORITY_LABELS } from '../components/tickets/PriorityIndicator';
 import { MobilePageHeader, HeaderIconButton } from './MobilePageHeader';
 import { AssistantIcon, StarIcon } from './MobileIcons';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
@@ -191,7 +191,9 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
             }}
           >
             {ticket.priority !== 'none' && (
-              <span className={cn('mr-2 inline-block h-2 w-2 rounded-full align-middle', PRIORITY_COLOR[ticket.priority])} />
+              <span className="mr-2 inline-block align-middle">
+                <PriorityIndicator priority={ticket.priority} />
+              </span>
             )}
             {ticket.title}
           </h1>
@@ -275,7 +277,7 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
                 onClick={() => setShowMeta(true)}
                 className="mb-4 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-left text-[14px]"
               >
-                <ContextRow label="Priorité" value={ticket.priority} />
+                <ContextRow label="Priorité" value={PRIORITY_LABELS[ticket.priority] ?? ticket.priority} />
                 <ContextRow label="Type" value={ticket.type ?? '—'} />
                 <ContextRow label="Tags" value={ticket.tags.join(', ') || '—'} />
                 <ContextRow label="Favori" value={ticket.favorite ? 'Oui' : 'Non'} />

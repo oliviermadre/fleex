@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
-import type { TicketPriority, TicketType } from '@fleex/shared';
-import { TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag } from '@fleex/shared';
+import type { TicketType } from '@fleex/shared';
+import { TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { PriorityIndicator } from './PriorityIndicator';
+import { PriorityIndicator, PRIORITY_LABELS, PRIORITY_ORDER_DESC } from './PriorityIndicator';
 import { TYPE_ICONS } from './TicketTypeBadge';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
@@ -127,7 +127,7 @@ export function FilterDropdown() {
                 >
                   All
                 </button>
-                {(TICKET_PRIORITIES as readonly TicketPriority[]).map((p) => (
+                {PRIORITY_ORDER_DESC.map((p) => (
                   <button
                     key={p}
                     className={cn(
@@ -139,7 +139,7 @@ export function FilterDropdown() {
                     onClick={() => setFilters({ priority: p })}
                   >
                     <PriorityIndicator priority={p} />
-                    {p === 'none' ? 'None' : p.charAt(0).toUpperCase() + p.slice(1)}
+                    {PRIORITY_LABELS[p]}
                   </button>
                 ))}
               </div>

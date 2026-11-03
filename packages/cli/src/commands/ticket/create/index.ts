@@ -25,7 +25,7 @@ const def: CommandDef = {
     cmd.requiredOption('--title <title>', 'Ticket title (required)');
     cmd.option('--board <board>', 'Board (name, UUID, or 8-char id prefix; auto-detected if only one board)');
     cmd.option('--description <description>', 'Ticket description');
-    cmd.option('--priority <priority>', 'Priority: none | low | medium | high');
+    cmd.option('--priority <priority>', 'Priority: none | low | medium | high | urgent');
     cmd.option('--status <status>', 'Initial status (default: backlog)');
     cmd.option('--type <type>', 'Type: build | fix | review | ops | lead | think');
     cmd.option('--due <date>', 'Due date (YYYY-MM-DD or ISO 8601)');

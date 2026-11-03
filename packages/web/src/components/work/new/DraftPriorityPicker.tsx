@@ -4,13 +4,9 @@
  * popover of priorities, bound to a draft value rather than a ticket.
  */
 import type { TicketPriority } from '@fleex/shared';
-import { TICKET_PRIORITIES } from '@fleex/shared';
 import { usePopover, FloatingPortal } from '../../../hooks/usePopover';
 import { cn } from '../../../lib/cn';
-import { PriorityIndicator, PRIORITY_LABELS } from '../../tickets/PriorityIndicator';
-
-// High → none reads most-important-first in the menu.
-const ORDER: TicketPriority[] = [...TICKET_PRIORITIES].reverse() as TicketPriority[];
+import { PriorityIndicator, PRIORITY_LABELS, PRIORITY_ORDER_DESC } from '../../tickets/PriorityIndicator';
 
 export function DraftPriorityPicker({
   value,
@@ -42,7 +38,7 @@ export function DraftPriorityPicker({
             {...getFloatingProps()}
             className="z-50 min-w-[160px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
           >
-            {ORDER.map((p) => (
+            {PRIORITY_ORDER_DESC.map((p) => (
               <button
                 key={p}
                 type="button"

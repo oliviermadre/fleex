@@ -1,12 +1,11 @@
 import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
-import { isEffortLevel } from '@fleex/shared';
+import { isEffortLevel, TICKET_PRIORITY_RANK } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
 import type { TicketStorePort } from '../../../application/ports/ticket-store.port.js';
 import type { SqliteConnection } from './connection.js';
 
-const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, none: 3 };
 const MAX_ACTIVITY_ENTRIES = 5000;
 
 interface BoardRow {
@@ -287,8 +286,8 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     const candidates = rows.map((r) => this.toTicketEntity(r));
 
     candidates.sort((a, b) => {
-      const pa = PRIORITY_ORDER[a.priority] ?? 3;
-      const pb = PRIORITY_ORDER[b.priority] ?? 3;
+      const pa = TICKET_PRIORITY_RANK[a.priority] ?? 4;
+      const pb = TICKET_PRIORITY_RANK[b.priority] ?? 4;
       if (pa !== pb) return pa - pb;
       return a.position - b.position;
     });

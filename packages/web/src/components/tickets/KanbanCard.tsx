@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Ticket, TicketLink, BoardWithCounts } from '@fleex/shared';
+import type { Ticket, TicketLink, TicketPriority, BoardWithCounts } from '@fleex/shared';
 import { TICKET_STATUS, SLACK_IMPORT_PENDING_TAG, SLACK_IMPORT_FAILED_TAG, isSlackImportTag } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
@@ -23,27 +23,30 @@ import { linkedPrs } from '../../lib/prRef';
 import { isMissingRepo, isRepoOptional } from '../../lib/repoStatus';
 import { MissingRepoIcon, RepositoriesIcon } from '../sidebar/icons';
 
-const PRIORITY_BORDER: Record<string, string> = {
+const PRIORITY_BORDER: Record<TicketPriority, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
   low: cn('border-[var(--theme-border)]', tintClasses('blue').hoverBorderColor),
   medium: cn('border-[var(--theme-border)]', tintClasses('yellow').hoverBorderColor),
   high: cn('border-[var(--theme-border)]', tintClasses('red').hoverBorderColor),
+  urgent: cn('border-[var(--theme-border)]', tintClasses('red').hoverBorderColor),
 };
 
 // Literal class strings: Tailwind's scanner cannot see runtime-built tokens,
 // and only the LEFT border must be overridden (not all sides).
-const PRIORITY_LEFT: Record<string, string> = {
+const PRIORITY_LEFT: Record<TicketPriority, string> = {
   none: '',
   low: 'border-l-2 !border-l-[var(--tint-blue-border)]',
   medium: 'border-l-2 !border-l-[var(--tint-yellow-border)]',
   high: 'border-l-2 !border-l-[var(--tint-red-border)]',
+  urgent: 'border-l-2 !border-l-[var(--tint-red-border)]',
 };
 
-const PRIORITY_BG: Record<string, string> = {
+const PRIORITY_BG: Record<TicketPriority, string> = {
   none: 'bg-[var(--theme-bg-surface)] hover:bg-[var(--theme-bg-hover)]',
   low: cn(tintClasses('blue').bg, tintClasses('blue').hoverBg),
   medium: cn(tintClasses('yellow').bg, tintClasses('yellow').hoverBg),
   high: cn(tintClasses('red').bg, tintClasses('red').hoverBg),
+  urgent: cn(tintClasses('red').bg, tintClasses('red').hoverBg),
 };
 
 function formatTimeAgo(dateStr: string, fromMs?: number): string {

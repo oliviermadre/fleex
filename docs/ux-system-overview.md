@@ -333,7 +333,7 @@ A work item on a board. The core unit of work assignment between humans and agen
 | Title            | Short description of the work                       |
 | Description      | Full details, acceptance criteria                   |
 | Status           | `backlog` → `todo` → `doing` → `reviewing` → `done`|
-| Priority         | `none`, `low`, `medium`, `high`                     |
+| Priority         | `none`, `low`, `medium`, `high`, `urgent`           |
 | Assignee         | Human name or agent name                            |
 | Tags             | Freeform labels                                     |
 | Blocked          | Boolean — is this ticket blocked?                   |

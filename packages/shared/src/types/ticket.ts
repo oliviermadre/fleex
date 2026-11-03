@@ -1,5 +1,5 @@
 export type TicketStatus = 'backlog' | 'todo' | 'doing' | 'reviewing' | 'done' | 'cancelled';
-export type TicketPriority = 'none' | 'low' | 'medium' | 'high';
+export type TicketPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
 export type TicketType = 'build' | 'fix' | 'review' | 'ops' | 'lead' | 'think';
 
 /**

@@ -2,12 +2,11 @@ import { useState, useRef, useMemo } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
 import { DEFAULT_BOARD_EMOJI, boardChanges } from '../../lib/boardEmoji';
 import { EmojiInput } from '../ui/EmojiInput';
-import type { TicketPriority } from '@fleex/shared';
-import { TICKET_PRIORITIES, isSlackMessageUrl, isSlackImportTag } from '@fleex/shared';
+import { isSlackMessageUrl, isSlackImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
-import { PriorityIndicator } from './PriorityIndicator';
+import { PriorityIndicator, PRIORITY_LABELS, PRIORITY_ORDER_DESC } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 
@@ -345,7 +344,7 @@ export function TicketsContentPanel() {
                 >
                   All
                 </button>
-                {(TICKET_PRIORITIES as readonly TicketPriority[]).map((p) => (
+                {PRIORITY_ORDER_DESC.map((p) => (
                   <button
                     key={p}
                     className={cn(
@@ -357,7 +356,7 @@ export function TicketsContentPanel() {
                     onClick={() => setFilters({ priority: p })}
                   >
                     <PriorityIndicator priority={p} />
-                    {p === 'none' ? 'None' : p.charAt(0).toUpperCase() + p.slice(1)}
+                    {PRIORITY_LABELS[p]}
                   </button>
                 ))}
               </div>

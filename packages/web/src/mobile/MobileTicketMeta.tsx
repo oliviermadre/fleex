@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { TICKET_PRIORITIES, TICKET_TYPES } from '@fleex/shared';
+import { TICKET_TYPES } from '@fleex/shared';
 import type { Ticket, TicketPriority, TicketType } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { tint, tintText } from '../lib/tints';
+import { PRIORITY_LABELS, PRIORITY_ORDER_DESC } from '../components/tickets/PriorityIndicator';
 
 /**
  * Bottom sheet for every ticket-level write the desktop meta sidebar offers:
@@ -62,8 +63,8 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
               onChange={(e) => patch({ priority: e.target.value as TicketPriority })}
               className={select}
             >
-              {(TICKET_PRIORITIES as readonly TicketPriority[]).map((p) => (
-                <option key={p} value={p}>{p}</option>
+              {PRIORITY_ORDER_DESC.map((p) => (
+                <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
               ))}
             </select>
           </div>

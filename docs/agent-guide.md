@@ -170,7 +170,7 @@ This links your response to the original request and marks the mention as `resol
   "title": "string",
   "description": "string",
   "status": "backlog | todo | doing | reviewing | done",
-  "priority": "none | low | medium | high",
+  "priority": "none | low | medium | high | urgent",
   "position": 0,
   "tags": ["string"],
   "links": [{ "id": "uuid", "type": "string", "ref": "string", "label": "string", "url": "string | null", "createdAt": "iso8601" }],

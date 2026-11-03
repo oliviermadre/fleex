@@ -17,7 +17,7 @@ const def: CommandDef = {
   — a board name, a full UUID, or the 8-char id prefix shown by ${chalk.cyan('fleex board list')}.
 
 ${SECTION('Statuses:')}  backlog, todo, doing, reviewing, done, cancelled
-${SECTION('Priorities:')} none, low, medium, high
+${SECTION('Priorities:')} none, low, medium, high, urgent
 
 ${SECTION('Examples:')}
   ${DIM('$')} fleex ticket list                          ${DIM('# active tickets (done/cancelled hidden, max 50)')}
