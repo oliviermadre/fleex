@@ -2,6 +2,8 @@ import type { Session, SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } f
 import type { SessionEntity } from '../../domain/entities.js';
 import { SessionGroupingService } from '../../domain/services/session-grouping.js';
 import { buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { resolveTicketWorkspaceId } from '../../domain/services/ticket-workspace-locator.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { SessionNamingService } from '../../domain/services/session-naming.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
@@ -33,6 +35,7 @@ export class GetSessionGroupsUseCase {
     private readonly hostFs?: HostFs,
     private readonly config?: ConfigPort,
     private readonly namingService?: SessionNamingService,
+    private readonly resolver?: RepoPathResolver,
   ) {
     this.listSessions = new ListSessionsUseCase(sessionStore, tmux, logger);
   }
@@ -457,7 +460,11 @@ export class GetSessionGroupsUseCase {
         // Path doesn't exist — reconcile into the ticket's workspace
         // (workspaces/{workspaceId}/{repo}), the single homogeneous convention.
         const agent = ref.wt.agentWorktree!;
-        const workspaceId = buildTicketWorkspaceId(agent.ticketTitle, agent.ticketId);
+        // By ticket id, not title: a renamed ticket keeps its original folder.
+        const ticket = { id: agent.ticketId, title: agent.ticketTitle };
+        const workspaceId = this.resolver
+          ? resolveTicketWorkspaceId(this.resolver, ticket, this.logger)
+          : buildTicketWorkspaceId(ticket.title, ticket.id);
         const result = await this.reconcileWorktree!.execute(
           ref.org,
           ref.name,

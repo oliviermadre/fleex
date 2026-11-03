@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
+import { useTicketWorkspaceId } from '../../stores/ticketWorkspaceStore';
 import type { WorkTask } from './types';
 
 interface Props {
@@ -17,9 +18,10 @@ interface Props {
 export function WorkStatusBar({ task }: Props) {
   const ticket = useTicketStore((s) => (task ? s.tickets.find((t) => t.id === task.id) ?? null : null));
   const basePath = useSettingsStore((s) => s.settings.basePath);
+  const workspaceId = useTicketWorkspaceId(ticket);
   const workspacePath = useMemo(
-    () => (ticket ? buildWorkspaceContext(ticket, basePath).workspace_path : null),
-    [ticket, basePath],
+    () => (ticket && workspaceId ? buildWorkspaceContext(ticket, basePath, workspaceId).workspace_path : null),
+    [ticket, basePath, workspaceId],
   );
 
   return (

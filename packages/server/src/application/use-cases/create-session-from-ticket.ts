@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { resolveTicketWorkspaceId } from '../../domain/services/ticket-workspace-locator.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -76,7 +77,7 @@ export class CreateSessionFromTicketUseCase {
     }
 
     // Create workspace and write manifest
-    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+    const workspaceId = resolveTicketWorkspaceId(this.resolver, ticket, this.logger);
     const workspacePath = this.resolver.workspacePath(workspaceId);
     mkdirSync(workspacePath, { recursive: true });
     const manifestPath = join(workspacePath, '.fleex.json');

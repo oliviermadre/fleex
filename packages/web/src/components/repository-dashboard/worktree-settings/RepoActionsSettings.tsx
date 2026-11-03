@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { listConfigKeys } from '@fleex/shared';
 import * as api from '../../../services/api';
 import { buildWorkspaceContext } from '../../../lib/templateUtils';
+import { useTicketWorkspaceId } from '../../../stores/ticketWorkspaceStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useWorkStore } from '../../../stores/workStore';
@@ -44,7 +45,11 @@ export function RepoActionsSettings({ org, name }: { org: string; name: string }
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const workTicketId = useWorkStore((s) => s.selectedTicketId);
   const ticket = useTicketStore((s) => (workTicketId ? s.tickets.find((t) => t.id === workTicketId) ?? null : null));
-  const ticketWorkspace = useMemo(() => (ticket && basePath ? buildWorkspaceContext(ticket, basePath).workspace_path : null), [ticket, basePath]);
+  const workspaceId = useTicketWorkspaceId(ticket);
+  const ticketWorkspace = useMemo(
+    () => (ticket && basePath && workspaceId ? buildWorkspaceContext(ticket, basePath, workspaceId).workspace_path : null),
+    [ticket, basePath, workspaceId],
+  );
 
   useEffect(() => {
     let cancelled = false;

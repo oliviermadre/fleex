@@ -8,7 +8,8 @@ import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, normalizeBaseBranchInput, resolveBaseRef, resolveWorktreeTarget } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, normalizeBaseBranchInput, resolveBaseRef, resolveWorktreeTarget } from '../../domain/services/branch-utils.js';
+import { resolveTicketWorkspaceId } from '../../domain/services/ticket-workspace-locator.js';
 import { parsePRRefs } from '../../domain/services/pr-ref.js';
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { registerFocusRoutes } from './focus.routes.js';
@@ -440,7 +441,7 @@ export function ticketRoutes(container: Container) {
 
       // Cleanup workspace: remove git worktrees, kill sessions, delete workspace folder
       if (ticket) {
-        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
         const workspaceBase = container.resolver.workspacePath(workspaceId);
 
         try {
@@ -604,7 +605,7 @@ export function ticketRoutes(container: Container) {
             const org = repoKey.substring(0, slashIdx);
             const name = repoKey.substring(slashIdx + 1);
             const barePath = container.resolver.barePath(org, name);
-            const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+            const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
             const targetPath = container.resolver.workspaceRepoPath(workspaceId, name);
 
             try {
@@ -651,7 +652,7 @@ export function ticketRoutes(container: Container) {
           const slashIdx = ref.indexOf('/');
           const org = ref.substring(0, slashIdx);
           const name = ref.substring(slashIdx + 1);
-          const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+          const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
           const workspaceRoot = container.resolver.workspacePath(workspaceId);
           const manifestPath = join(workspaceRoot, '.fleex.json');
 
@@ -776,7 +777,7 @@ export function ticketRoutes(container: Container) {
         if ('status' in resolved) return reply.code(resolved.status).send({ error: resolved.message });
         if (link.baseBranch === resolved.baseBranch) return ticket.toDTO(); // no-op (unchanged)
 
-        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
         const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
         const barePath = container.resolver.barePath(org, name);
         const ticketBranch = buildTicketBranchName(ticket.title, ticket.id);
@@ -839,7 +840,7 @@ export function ticketRoutes(container: Container) {
         // Before removing, check if it's a worktree link in a workspace — move it back
         const link = ticket.links.find((l) => l.id === request.params.linkId);
         if (link?.type === 'worktree') {
-          const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+          const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
           const workspaceBase = container.resolver.workspacePath(workspaceId);
 
           try {
@@ -929,7 +930,7 @@ export function ticketRoutes(container: Container) {
 
         // When removing a repository link, clean up the worktree from the workspace
         if (link?.type === 'repository') {
-          const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+          const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
           const workspaceBase = container.resolver.workspacePath(workspaceId);
           try {
             const slashIdx = link.ref.indexOf('/');
@@ -1029,14 +1030,26 @@ export function ticketRoutes(container: Container) {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-      const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+      const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
       const workspacePath = container.resolver.workspacePath(workspaceId);
       mkdirSync(workspacePath, { recursive: true });
       const manifestPath = join(workspacePath, '.fleex.json');
       if (!existsSync(manifestPath)) {
         writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
       }
-      return reply.send({ workspacePath });
+      return reply.send({ workspacePath, workspaceId });
+    });
+
+    // Where the ticket's workspace folder is (or would be created). Resolved by
+    // ticket id, not title: a renamed ticket keeps its original folder, which the
+    // web client cannot find by itself ({{workspace_path}} of workspace actions).
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/workspace', async (request, reply) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
+      const path = container.resolver.workspacePath(workspaceId);
+      return reply.send({ workspaceId, path, exists: existsSync(join(path, '.fleex.json')) });
     });
 
     // ── Unified import (source registry) ────────────────────────────────────

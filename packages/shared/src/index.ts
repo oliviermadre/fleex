@@ -610,6 +610,7 @@ export {
   MS_IN_MINUTE,
   MINUTES_IN_HOUR,
   HOURS_IN_DAY,
+  TICKET_TITLE_MAX_LENGTH,
 } from './constants.js';
 
 export type { EmbeddingModelSpec } from './types/embedding-model.js';

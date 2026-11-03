@@ -52,7 +52,7 @@ export class BackfillPRTicketUseCase {
       id: ticketId,
       boardId,
       displayId: 0, // assigned by createTicket() below
-      title: prTitle,
+      title: TicketEntity.fitTitle(prTitle),
       description,
       status,
     });
