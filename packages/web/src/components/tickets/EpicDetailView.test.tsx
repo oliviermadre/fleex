@@ -8,6 +8,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkStore } from '../../stores/workStore';
+import { DEFAULT_QUEUE_CONFIG, DEFAULT_QUEUE_FILTERS } from '../work/queueFilters';
 
 /**
  * Regression guard for the reported bug: clicking a ticket inside an epic must
@@ -134,7 +135,7 @@ describe('EpicDetailView — clicking a ticket opens the ticket page', () => {
       selectedEpicDetailId: 'e1',
       epicDetailTab: 'tickets',
     });
-    useWorkStore.setState({ boardFilters: ['b1'], pinnedTicketId: null, selectedTicketId: null });
+    useWorkStore.setState({ queueConfig: { ...DEFAULT_QUEUE_CONFIG, filters: { ...DEFAULT_QUEUE_FILTERS, boards: ['b1'] } }, pinnedTicketId: null, selectedTicketId: null });
 
     renderEpicOpenedFromRoadmap('/tickets/board/b1/epic/e1/tickets');
     await flushRouterSync();
@@ -149,6 +150,6 @@ describe('EpicDetailView — clicking a ticket opens the ticket page', () => {
     expect(useWorkStore.getState().selectedTicketId).toBe('t2');
     expect(useWorkStore.getState().pinnedTicketId).toBe('t2');
     // The Work filters are the user's: never widened to show the ticket.
-    expect(useWorkStore.getState().boardFilters).toEqual(['b1']);
+    expect(useWorkStore.getState().queueConfig.filters.boards).toEqual(['b1']);
   });
 });

@@ -4,16 +4,35 @@
  * Selection drives the center and right panel; it reads the joined model from
  * useWorkQueue and writes selection to workStore.
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../../lib/cn';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
-import { useWorkStore, QUEUE_MIN, QUEUE_MAX, type QueueFilterKey, type QueueGroupBy } from '../../../stores/workStore';
+import { useWorkStore, QUEUE_MIN, QUEUE_MAX } from '../../../stores/workStore';
+import { useSavedViewsStore, type SavedView } from '../../../stores/savedViewsStore';
+import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { tintClasses } from '../../../lib/tints';
 import { Tooltip } from '../../ui/Tooltip';
 import { MultiSelect } from '../../ui/MultiSelect';
-import { GroupBySelect } from './GroupBySelect';
-import { PriorityIndicator, PRIORITY_LABELS, PRIORITY_ORDER_DESC } from '../../tickets/PriorityIndicator';
+import { Button } from '../../ui/Button';
+import { ConfirmModal } from '../../ui/ConfirmModal';
+import { QueueFiltersPopover } from './QueueFiltersPopover';
+import { QueueDisplayPopover, GROUP_BY_OPTIONS } from './QueueDisplayPopover';
+import { ViewPicker } from './ViewPicker';
+import { ViewNameModal } from './ViewNameModal';
+import {
+  createView,
+  deleteView,
+  duplicateView,
+  isViewDirty,
+  reconcileActiveView,
+  renameView,
+  resetActiveView,
+  saveActiveView,
+  switchView,
+} from './savedViewActions';
+import { popoverFilterCount, repoKey, type QueueConfig, type QueueFilterKey } from '../queueFilters';
 import type { WorkQueueModel } from '../useWorkQueue';
+import type { QueueGroup } from '../types';
 import { QueueRow } from './QueueRow';
 import { PlusIcon, SidePanelIcon } from '../../sidebar/icons';
 import { HotkeyBadge } from '../../ui/HotkeyBadge';
@@ -27,36 +46,76 @@ interface Props {
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** How the pinned row names the filters that exclude it. */
-const FILTER_LABELS: Record<QueueFilterKey, string> = {
-  boardFilters: 'board',
-  statusFilters: 'status',
-  priorityFilters: 'priority',
+export const FILTER_LABELS: Record<QueueFilterKey, string> = {
+  boards: 'board',
+  statuses: 'status',
+  priorities: 'priority',
+  types: 'type',
+  epics: 'epic',
+  repos: 'repo',
+  prs: 'PR',
+  blocked: 'blocked',
+  inactiveFor: 'inactivity',
   favoriteOnly: 'favorites',
   search: 'search',
 };
 const PIN = tintClasses('purple');
-const GROUP_BY_OPTIONS: { value: QueueGroupBy; label: string }[] = [
-  { value: 'activity', label: 'Activity' },
-  { value: 'status', label: 'Status' },
-  { value: 'board', label: 'Board' },
-  { value: 'repo', label: 'Repo' },
-  { value: 'type', label: 'Type' },
-  { value: 'priority', label: 'Priority' },
-];
+
+/** One line describing a config, for the « New view » recap. */
+function describeConfig(config: QueueConfig, queue: WorkQueueModel): string {
+  const f = config.filters;
+  const parts: string[] = [];
+  if (f.boards.length > 0) {
+    parts.push(f.boards.map((id) => queue.boards.find((b) => b.id === id)?.name).filter(Boolean).join(' + '));
+  } else parts.push('All boards');
+  parts.push(f.statuses.length > 0 ? f.statuses.map((st) => TICKET_STATUS_LABELS[st] ?? cap(st)).join(', ') : 'any status');
+  const n = popoverFilterCount(f) + (f.favoriteOnly ? 1 : 0);
+  if (n > 0) parts.push(`${n} more filter${n > 1 ? 's' : ''}`);
+  const label = (g: string | null) => GROUP_BY_OPTIONS.find((o) => o.value === g)?.label.toLowerCase();
+  const d = config.display;
+  parts.push(`grouped by ${label(d.groupBy)}${d.subGroupBy ? ` › ${label(d.subGroupBy)}` : ''}`);
+  return parts.join(' · ');
+}
+
+type NameModal = { kind: 'create' } | { kind: 'rename'; view: SavedView } | null;
+
+/** A group header: caret, label, count — click to fold. */
+function GroupHeader({ group, nested, collapsed, onToggle }: { group: QueueGroup; nested?: boolean; collapsed: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      className={cn('flex w-full items-center gap-1.5 pb-1 pr-3 text-left', nested ? 'pl-6 pt-1.5' : 'pl-3 pt-2')}
+    >
+      <span className="w-2 text-[8px] text-[var(--theme-text-faint)]">{collapsed ? '▸' : '▾'}</span>
+      <span
+        className={cn(
+          'text-[10.5px] font-semibold',
+          nested ? 'tracking-[0.02em]' : 'tracking-[0.06em]',
+          group.tone ?? (nested ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]'),
+        )}
+      >
+        {group.label}
+      </span>
+      <span className="text-[10.5px] text-[var(--theme-text-faint)]">{group.items.length}</span>
+    </button>
+  );
+}
 
 export function WorkQueue({ queue, onOpenExecution }: Props) {
   const selectTicket = useWorkStore((s) => s.selectTicket);
   const setView = useWorkStore((s) => s.setView);
-  const boardFilters = useWorkStore((s) => s.boardFilters);
-  const setBoardFilters = useWorkStore((s) => s.setBoardFilters);
-  const priorityFilters = useWorkStore((s) => s.priorityFilters);
-  const setPriorityFilters = useWorkStore((s) => s.setPriorityFilters);
-  const statusFilters = useWorkStore((s) => s.statusFilters);
-  const setStatusFilters = useWorkStore((s) => s.setStatusFilters);
-  const groupBy = useWorkStore((s) => s.groupBy);
+  const queueConfig = useWorkStore((s) => s.queueConfig);
+  const { filters, display } = queueConfig;
+  const setQueueFilters = useWorkStore((s) => s.setQueueFilters);
+  const setQueueDisplay = useWorkStore((s) => s.setQueueDisplay);
   const setGroupBy = useWorkStore((s) => s.setGroupBy);
-  const favoriteOnly = useWorkStore((s) => s.favoriteOnly);
-  const setFavoriteOnly = useWorkStore((s) => s.setFavoriteOnly);
+  const activeViewId = useWorkStore((s) => s.activeViewId);
+  const views = useSavedViewsStore((s) => s.views);
+  const viewsStatus = useSavedViewsStore((s) => s.status);
+  const loadViews = useSavedViewsStore((s) => s.load);
+  const repositories = useRepositoryStore((s) => s.repositories);
   const search = useWorkStore((s) => s.search);
   const setSearch = useWorkStore((s) => s.setSearch);
   const width = useWorkStore((s) => s.queueWidth);
@@ -66,6 +125,37 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
   const view = useWorkStore((s) => s.view);
   // No queue row is "active" while composing a new task.
   const selectedId = view === 'task' ? (queue.selectedTask?.id ?? null) : null;
+
+  // Saved views: read on mount and when the window regains focus (another
+  // browser may have changed them); a vanished active view hands over to « All tasks ».
+  useEffect(() => {
+    const refresh = () => void loadViews().then(reconcileActiveView);
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [loadViews]);
+
+  const activeView = activeViewId ? views.find((v) => v.id === activeViewId) ?? null : null;
+  const dirty = isViewDirty(activeView, queueConfig, queue.known);
+  const [savingView, setSavingView] = useState(false);
+  const [nameModal, setNameModal] = useState<NameModal>(null);
+  const [deleting, setDeleting] = useState<SavedView | null>(null);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const repoOptions = useMemo(
+    () =>
+      [...repositories]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((r) => ({ value: repoKey(`${r.org}/${r.name}`), label: r.name })),
+    [repositories],
+  );
 
   const asideRef = useRef<HTMLElement>(null);
   const dragging = useRef(false);
@@ -128,53 +218,58 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
         </button>
       </div>
 
-      {/* Filters: board multi-select · priority multi-select · favorite toggle · search */}
-      <div className="flex flex-col gap-1.5 px-3 pb-2 pt-2">
+      {/* Saved view picker */}
+      <div className="flex items-center gap-1 px-2 pt-2">
+        <ViewPicker
+          views={views}
+          status={viewsStatus}
+          active={activeView}
+          dirty={dirty}
+          onSwitch={switchView}
+          onNew={() => setNameModal({ kind: 'create' })}
+          onRename={(view) => setNameModal({ kind: 'rename', view })}
+          onDuplicate={(view) => void duplicateView(view.id)}
+          onDelete={setDeleting}
+          onRetry={() => void loadViews()}
+        />
+      </div>
+
+      {/* Filters: boards · status · more filters · display · favorites · search */}
+      <div className="flex flex-col gap-1.5 px-3 pb-2 pt-1.5">
         <div className="flex flex-wrap items-center gap-1">
           <MultiSelect
             label="Boards"
             allLabel="All boards"
-            values={boardFilters}
-            onChange={setBoardFilters}
+            values={filters.boards}
+            onChange={(boards) => setQueueFilters({ boards })}
             options={queue.boards.map((b) => ({ value: b.id, label: b.name, icon: <span>{b.emoji}</span> }))}
             searchPlaceholder="Filter boards…"
           />
           <MultiSelect
-            label="Priority"
-            allLabel="Any priority"
-            values={priorityFilters}
-            onChange={setPriorityFilters}
-            searchable={false}
-            options={PRIORITY_ORDER_DESC.map((p) => ({
-              value: p,
-              label: PRIORITY_LABELS[p],
-              icon: <PriorityIndicator priority={p} />,
-            }))}
-          />
-          <MultiSelect
             label="Status"
             allLabel="Any status"
-            values={statusFilters}
-            onChange={setStatusFilters}
+            values={filters.statuses}
+            onChange={(statuses) => setQueueFilters({ statuses })}
             searchable={false}
-            options={[...TICKET_STATUSES].map((s) => ({ value: s, label: TICKET_STATUS_LABELS[s] ?? cap(s) }))}
+            options={[...TICKET_STATUSES].map((st) => ({ value: st, label: TICKET_STATUS_LABELS[st] ?? cap(st) }))}
           />
+          <QueueFiltersPopover filters={filters} onChange={setQueueFilters} epics={queue.epics} repos={repoOptions} />
+          <QueueDisplayPopover display={display} onChangeGroupBy={setGroupBy} onChange={setQueueDisplay} />
           <button
             type="button"
-            onClick={() => setFavoriteOnly(!favoriteOnly)}
+            onClick={() => setQueueFilters({ favoriteOnly: !filters.favoriteOnly })}
             title="Show favorites only"
             className={cn(
               'rounded-md p-1 transition-colors',
-              favoriteOnly
+              filters.favoriteOnly
                 ? 'bg-[var(--theme-accent-muted)] text-[var(--tint-yellow-text)]'
                 : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
             )}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill={favoriteOnly ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={filters.favoriteOnly ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
               <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
             </svg>
           </button>
-          <GroupBySelect value={groupBy} onChange={setGroupBy} options={GROUP_BY_OPTIONS} />
         </div>
         <div className="relative flex items-center">
           <svg className="absolute left-2 text-[var(--theme-text-faint)]" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -199,6 +294,36 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
           )}
         </div>
       </div>
+
+      {/* The active view's filters differ from what's saved: keep, fork or drop. */}
+      {dirty && activeView && (
+        <div
+          data-testid="view-dirty-bar"
+          className="mx-2 mb-2 flex flex-wrap items-center gap-1 rounded-md border border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] px-2 py-1"
+        >
+          <span className="mr-auto flex items-center gap-1.5 text-[11px] font-semibold text-[var(--theme-accent)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--theme-accent)]" />
+            Modified
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={savingView}
+            onClick={() => {
+              setSavingView(true);
+              void saveActiveView(queue.known).finally(() => setSavingView(false));
+            }}
+          >
+            Save
+          </Button>
+          <Button size="sm" onClick={() => setNameModal({ kind: 'create' })}>
+            New view…
+          </Button>
+          <Button variant="ghost" size="sm" onClick={resetActiveView}>
+            Reset
+          </Button>
+        </div>
+      )}
 
       {/* Sections */}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -242,21 +367,25 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
 
         {queue.groups.map((g) => (
           <div key={g.key} className="pb-1">
-            <div className="flex items-center gap-1.5 px-3 pb-1 pt-2">
-              <span className={cn('text-[10.5px] font-semibold tracking-[0.06em]', g.tone ?? 'text-[var(--theme-text-muted)]')}>
-                {g.label}
-              </span>
-              <span className="text-[10.5px] text-[var(--theme-text-faint)]">{g.items.length}</span>
-            </div>
-            {g.items.map((task) => (
-              <QueueRow
-                key={task.id}
-                task={task}
-                selected={task.id === selectedId}
-                onSelect={() => selectTicket(task.id)}
-                onOpenExecution={onOpenExecution}
-              />
-            ))}
+            <GroupHeader group={g} collapsed={collapsed.has(g.key)} onToggle={() => toggleCollapsed(g.key)} />
+            {!collapsed.has(g.key) &&
+              (g.subgroups ?? [{ ...g, key: '' }]).map((sub) => (
+                <div key={sub.key || g.key}>
+                  {sub.key && (
+                    <GroupHeader group={sub} nested collapsed={collapsed.has(sub.key)} onToggle={() => toggleCollapsed(sub.key)} />
+                  )}
+                  {!collapsed.has(sub.key) &&
+                    sub.items.map((task) => (
+                      <QueueRow
+                        key={task.id}
+                        task={task}
+                        selected={task.id === selectedId}
+                        onSelect={() => selectTicket(task.id)}
+                        onOpenExecution={onOpenExecution}
+                      />
+                    ))}
+                </div>
+              ))}
           </div>
         ))}
 
@@ -285,6 +414,31 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
         )}
       </div>
 
+      <ViewNameModal
+        open={nameModal !== null}
+        title={nameModal?.kind === 'rename' ? 'Rename view' : 'New view'}
+        confirmLabel={nameModal?.kind === 'rename' ? 'Rename' : 'Create view'}
+        initial={nameModal?.kind === 'rename' ? { name: nameModal.view.name, emoji: nameModal.view.emoji } : undefined}
+        exceptId={nameModal?.kind === 'rename' ? nameModal.view.id : undefined}
+        views={views}
+        summary={nameModal?.kind === 'create' ? describeConfig(queueConfig, queue) : undefined}
+        onConfirm={(name, emoji) =>
+          nameModal?.kind === 'rename' ? renameView(nameModal.view.id, name, emoji) : createView(name, emoji, queue.known)
+        }
+        onClose={() => setNameModal(null)}
+      />
+      <ConfirmModal
+        open={deleting !== null}
+        title={`Delete "${deleting?.name ?? ''}"?`}
+        message="Tickets are not touched. You can undo from the notification."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          const view = deleting;
+          setDeleting(null);
+          if (view) void deleteView(view.id);
+        }}
+        onCancel={() => setDeleting(null)}
+      />
     </aside>
   );
 }

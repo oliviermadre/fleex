@@ -6,6 +6,7 @@ import { useTicketStore } from '../stores/ticketStore';
 import { useTicketGroupStore } from '../stores/ticketGroupStore';
 import { useUIStore } from '../stores/uiStore';
 import { useWorkStore } from '../stores/workStore';
+import { DEFAULT_QUEUE_CONFIG, DEFAULT_QUEUE_FILTERS } from '../components/work/queueFilters';
 
 /**
  * These tests pin the *intent* of the history fix: the default detail tab
@@ -136,9 +137,9 @@ describe('RouterSync — Work view URLs', () => {
   // the ticket that brought the user here.
   it('a URL naming a ticket already in the queue selects it without re-pinning', () => {
     useTicketStore.setState({
-      tickets: [{ id: 't2', boardId: 'b1', status: 'doing', priority: 'medium', favorite: false, title: 'In queue' }] as never,
+      tickets: [{ id: 't2', boardId: 'b1', status: 'doing', priority: 'medium', favorite: false, title: 'In queue', links: [], updatedAt: '2026-01-01T00:00:00Z' }] as never,
     });
-    useWorkStore.setState({ boardFilters: [], statusFilters: ['doing'], priorityFilters: [], favoriteOnly: false, search: '' });
+    useWorkStore.setState({ queueConfig: { ...DEFAULT_QUEUE_CONFIG, filters: { ...DEFAULT_QUEUE_FILTERS, statuses: ['doing'] } }, search: '' });
     renderWorkAt('/work/t1');
     expect(useWorkStore.getState().pinnedTicketId).toBe('t1');
     act(() => navigate('/work/t2'));

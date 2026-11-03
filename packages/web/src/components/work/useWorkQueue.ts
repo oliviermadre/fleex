@@ -6,19 +6,19 @@
  * resolves the selected task. Every Work component
  * consumes this; none reaches into a store for queue data itself.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AgentActivityState, BoardWithCounts, Ticket, TicketLink } from '@fleex/shared';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { AgentActivityState, BoardWithCounts, Ticket, TicketGroup, TicketLink } from '@fleex/shared';
 import * as api from '../../services/api';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
-import { useWorkStore, excludedBy, type QueueFilterKey, type QueueGroupBy } from '../../stores/workStore';
-import { partitionQueue, idleActivitySource, type QueueItem } from './selectors';
-import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
-import { TICKET_PRIORITY_RANK, TICKET_TYPE_LABELS } from '@fleex/shared';
-import type { WorkTask, WorkWorktree, QueueGroup } from './types';
+import { useWorkStore } from '../../stores/workStore';
+import { idleActivitySource } from './selectors';
+import { matchQueueFilters, pruneUnknown, type KnownIds, type QueueConfig, type QueueFilterKey } from './queueFilters';
+import { groupTasks } from './queueGrouping';
+import type { WorkTask, WorkWorktree, WorkEpic, QueueGroup } from './types';
 import { prLinksFor } from './queue/prLinks';
 
 /** How often the queue re-reads its PRs' state from GitHub (it changes without a Fleex event). */
@@ -72,6 +72,34 @@ function prFromLinks(links: readonly TicketLink[]): { ref: string; url: string |
   return { ref, url: pr.url ?? null, linkId: pr.id };
 }
 
+/**
+ * The queue filters that hide `ticket`, judged from the ticket alone — for
+ * callers outside the queue (RouterSync deciding whether to pin a deep link).
+ * Without live data, PR states are unknown and activity falls back to the
+ * ticket's dates, so it errs towards "hidden": a needless pin is invisible (the
+ * queue only shows a pin its filters exclude), a missing one is not.
+ */
+export function ticketExcludedBy(
+  config: QueueConfig,
+  search: string,
+  ticket: Ticket,
+  now: number = Date.now(),
+): QueueFilterKey[] {
+  return matchQueueFilters(config.filters, search, {
+    boardId: ticket.boardId,
+    status: ticket.status,
+    priority: ticket.priority,
+    type: ticket.type,
+    favorite: ticket.favorite,
+    blocked: ticket.blocked,
+    title: ticket.title,
+    epics: ticket.epics ?? [],
+    worktrees: reposFromLinks(ticket.links),
+    prs: ticket.links.filter((l) => l.type === 'github_pr').map(() => ({ state: null })),
+    lastActivityAt: toMs(idleActivitySource(ticket, null)),
+  }, now);
+}
+
 export interface WorkQueueModel {
   tasks: WorkTask[];
   /** Ordered, grouped rows for the current groupBy. */
@@ -87,6 +115,10 @@ export interface WorkQueueModel {
   /** WorkTask lookup by id. */
   byId: Map<string, WorkTask>;
   boards: BoardWithCounts[];
+  /** Every epic (for the Epic filter); empty until loaded. */
+  epics: TicketGroup[];
+  /** The ids that still exist, to ignore a view's deleted boards / epics (null = not loaded). */
+  known: KnownIds;
   selectedTask: WorkTask | null;
   counts: { total: number; running: number; needs: number };
 }
@@ -109,11 +141,7 @@ export function useWorkQueue(): WorkQueueModel {
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const runsByTicket = useWorkflowRunStore((s) => s.runsByTicket);
 
-  const boardFilters = useWorkStore((s) => s.boardFilters);
-  const priorityFilters = useWorkStore((s) => s.priorityFilters);
-  const statusFilters = useWorkStore((s) => s.statusFilters);
-  const groupBy = useWorkStore((s) => s.groupBy);
-  const favoriteOnly = useWorkStore((s) => s.favoriteOnly);
+  const queueConfig = useWorkStore((s) => s.queueConfig);
   const search = useWorkStore((s) => s.search);
   const selectedTicketId = useWorkStore((s) => s.selectedTicketId);
   const pinnedTicketId = useWorkStore((s) => s.pinnedTicketId);
@@ -127,6 +155,30 @@ export function useWorkQueue(): WorkQueueModel {
     void fetchTickets().then(() => setTicketsLoaded(true), () => setTicketsLoaded(true));
     void fetchRepositories();
   }, [fetchBoards, fetchTickets, fetchRepositories]);
+
+  // Every epic, for the Epic filter and to tell a view's deleted epic apart. Kept
+  // local: ticketGroupStore.groups is the Kanban's board-scoped list.
+  const [epics, setEpics] = useState<TicketGroup[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.fetchTicketGroups().then(
+      (groups) => { if (!cancelled) setEpics(groups); },
+      () => {},
+    );
+    return () => { cancelled = true; };
+  }, []);
+
+  // Board / epic ids that no longer exist are ignored by the filters (a saved
+  // view may still reference them) — once the lists are loaded.
+  const known = useMemo<KnownIds>(
+    () => ({
+      boards: boards.length > 0 ? new Set(boards.map((b) => b.id)) : null,
+      epics: epics ? new Set(epics.map((e) => e.id)) : null,
+    }),
+    [boards, epics],
+  );
+  const filters = useMemo(() => pruneUnknown(queueConfig, known).filters, [queueConfig, known]);
+  const statusFilters = filters.statuses;
 
   const pinnedTicket = useMemo<Ticket | null>(
     () => (pinnedTicketId ? tickets.find((t) => t.id === pinnedTicketId) ?? null : null),
@@ -214,6 +266,18 @@ export function useWorkQueue(): WorkQueueModel {
     return m;
   }, [boards]);
 
+  // A ticket's epics come with the list endpoint only; a ticket replaced by an
+  // event or a mutation response has none, so the last known ones are kept.
+  const epicsCache = useRef(new Map<string, WorkEpic[]>());
+  const epicsOf = useCallback((t: Ticket): WorkEpic[] => {
+    if (t.epics) {
+      const list = t.epics.map((e) => ({ id: e.id, name: e.name, emoji: e.emoji }));
+      epicsCache.current.set(t.id, list);
+      return list;
+    }
+    return epicsCache.current.get(t.id) ?? [];
+  }, []);
+
   const toTask = useCallback((t: Ticket): WorkTask => {
     const activity: AgentActivityState = activityByTicket[t.id] ?? 'idle';
     const worktrees = reposFromLinks(t.links);
@@ -254,6 +318,8 @@ export function useWorkQueue(): WorkQueueModel {
       priority: t.priority,
       favorite: t.favorite,
       blocked: t.blocked,
+      epics: epicsOf(t),
+      createdAt: toMs(t.createdAt),
       activity,
       activityDetail: detailByTicket[t.id] ?? null,
       since: toMs(sinceByTicket[t.id]),
@@ -281,23 +347,29 @@ export function useWorkQueue(): WorkQueueModel {
     runsByTicket,
     boardById,
     prDetails,
+    epicsOf,
   ]);
 
-  const filters = useMemo(
-    () => ({ boardFilters, statusFilters, priorityFilters, favoriteOnly, search }),
-    [boardFilters, statusFilters, priorityFilters, favoriteOnly, search],
-  );
+  // "Inactive for" compares against now: re-evaluated with the data, and each minute.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!filters.inactiveFor) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [filters.inactiveFor]);
 
   const tasks = useMemo<WorkTask[]>(
-    () => scopedTickets.filter((t) => excludedBy(filters, t).length === 0).map(toTask),
-    [scopedTickets, filters, toTask],
+    () => scopedTickets.map(toTask).filter((t) => matchQueueFilters(filters, search, t, now).length === 0),
+    [scopedTickets, filters, search, toTask, now],
   );
 
   const pinned = useMemo<WorkQueueModel['pinned']>(() => {
     if (!pinnedTicket) return null;
-    const reasons = excludedBy(filters, pinnedTicket);
-    return reasons.length > 0 ? { task: toTask(pinnedTicket), excludedBy: reasons } : null;
-  }, [pinnedTicket, filters, toTask]);
+    const task = toTask(pinnedTicket);
+    const reasons = matchQueueFilters(filters, search, task, now);
+    return reasons.length > 0 ? { task, excludedBy: reasons } : null;
+  }, [pinnedTicket, filters, search, toTask, now]);
 
   const byId = useMemo(() => {
     const m = new Map<string, WorkTask>();
@@ -306,7 +378,8 @@ export function useWorkQueue(): WorkQueueModel {
     return m;
   }, [tasks, pinned]);
 
-  const groups = useMemo<QueueGroup[]>(() => groupTasks(tasks, groupBy), [tasks, groupBy]);
+  const display = queueConfig.display;
+  const groups = useMemo<QueueGroup[]>(() => groupTasks(tasks, display), [tasks, display]);
 
   const orderedIds = useMemo(
     () => [...(pinned ? [pinned.task.id] : []), ...groups.flatMap((g) => g.items.map((t) => t.id))],
@@ -333,88 +406,7 @@ export function useWorkQueue(): WorkQueueModel {
     [tasks],
   );
 
-  return { tasks, groups, orderedIds, pinned, byId, boards, selectedTask, counts };
+  return { tasks, groups, orderedIds, pinned, byId, boards, epics: epics ?? NO_EPICS, known, selectedTask, counts };
 }
 
-/** Recency-descending sort (for non-activity groupings). */
-function byRecent(a: WorkTask, b: WorkTask): number {
-  return (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0);
-}
-
-const STATUS_ORDER = ['doing', 'reviewing', 'todo', 'backlog', 'done', 'cancelled'];
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/**
- * Group tasks for the queue. 'activity' reuses the tested partition (NEEDS YOU /
- * RUNNING / IDLE with its tints); the others bucket by a single ticket field,
- * groups ordered sensibly and rows within a group by recency. A multi-repo task
- * lands in its first repo's group only, so display order has no duplicates.
- */
-function groupTasks(tasks: WorkTask[], groupBy: QueueGroupBy): QueueGroup[] {
-  if (groupBy === 'activity') {
-    const items: QueueItem[] = tasks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      boardId: t.boardId,
-      boardName: t.boardName,
-      activity: t.activity,
-      since: t.since,
-      lastActivityAt: t.lastActivityAt,
-    }));
-    const p = partitionQueue(items);
-    const byId = new Map(tasks.map((t) => [t.id, t]));
-    const pick = (arr: QueueItem[]) => arr.map((i) => byId.get(i.id)!).filter(Boolean);
-    return [
-      { key: 'needs', label: 'NEEDS YOU', tone: 'text-[var(--tint-yellow-text)]', items: pick(p.needs) },
-      { key: 'running', label: 'RUNNING', tone: 'text-[var(--theme-accent)]', items: pick(p.running) },
-      { key: 'idle', label: 'IDLE', tone: 'text-[var(--theme-text-muted)]', items: pick(p.idle) },
-    ].filter((g) => g.items.length > 0);
-  }
-
-  // Bucket by a single field.
-  const buckets = new Map<string, { label: string; items: WorkTask[] }>();
-  const keyOf = (t: WorkTask): { key: string; label: string } => {
-    switch (groupBy) {
-      case 'repo': {
-        const repo = t.worktrees[0]?.repo;
-        return repo ? { key: repo, label: repo } : { key: '~none', label: 'No repo' };
-      }
-      case 'type':
-        return t.type
-          ? { key: t.type, label: TICKET_TYPE_LABELS[t.type as keyof typeof TICKET_TYPE_LABELS] ?? cap(t.type) }
-          : { key: '~none', label: 'No type' };
-      case 'priority':
-        return { key: t.priority, label: PRIORITY_LABELS[t.priority as keyof typeof PRIORITY_LABELS] ?? cap(t.priority) };
-      case 'board':
-        return t.boardName ? { key: t.boardId ?? t.boardName, label: t.boardName } : { key: '~none', label: 'No board' };
-      case 'status':
-        return { key: t.status, label: cap(t.status) };
-      default:
-        return { key: '~none', label: '—' };
-    }
-  };
-
-  for (const t of tasks) {
-    const { key, label } = keyOf(t);
-    const bucket = buckets.get(key) ?? { label, items: [] };
-    bucket.items.push(t);
-    buckets.set(key, bucket);
-  }
-
-  const orderIndex = (key: string): number => {
-    if (groupBy === 'status') return STATUS_ORDER.indexOf(key) === -1 ? 99 : STATUS_ORDER.indexOf(key);
-    if (groupBy === 'priority') return TICKET_PRIORITY_RANK[key as keyof typeof TICKET_PRIORITY_RANK] ?? 99;
-    return 0;
-  };
-
-  return [...buckets.entries()]
-    .sort(([ka, va], [kb, vb]) => {
-      const oi = orderIndex(ka) - orderIndex(kb);
-      if (oi !== 0) return oi;
-      // "~none" last, then alphabetical by label.
-      if (ka === '~none') return 1;
-      if (kb === '~none') return -1;
-      return va.label.localeCompare(vb.label);
-    })
-    .map(([key, v]) => ({ key, label: v.label.toUpperCase(), items: [...v.items].sort(byRecent) }));
-}
+const NO_EPICS: TicketGroup[] = [];

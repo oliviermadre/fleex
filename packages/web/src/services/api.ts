@@ -456,6 +456,56 @@ export async function saveRepoScratchpad(org: string, name: string, content: str
   );
 }
 
+// ── Saved views ──
+
+/** A saved view as the server stores it (filters / display are the screen's own shape). */
+export interface SavedViewPayload<F = unknown, D = unknown> {
+  id: string;
+  name: string;
+  emoji: string | null;
+  filters: F;
+  display: D;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A saved-views call that failed; `status` 501 = views unavailable on this storage. */
+export class SavedViewsError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+/**
+ * Saved-views calls raise no toast of their own: a 501 is a normal state (the
+ * picker disables itself) and a failed save is reported by the caller, with
+ * what was kept.
+ */
+async function savedViewsRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: options?.body ? { 'Content-Type': 'application/json' } : undefined,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new SavedViewsError(extractErrorMessage(body, res.statusText), res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function fetchSavedViews(scope: string): Promise<SavedViewPayload[]> {
+  const { views } = await savedViewsRequest<{ views: SavedViewPayload[] }>(`/saved-views/${encodeURIComponent(scope)}`);
+  return views;
+}
+
+export async function saveSavedViews(scope: string, views: SavedViewPayload[]): Promise<SavedViewPayload[]> {
+  const res = await savedViewsRequest<{ views: SavedViewPayload[] }>(`/saved-views/${encodeURIComponent(scope)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ views }),
+  });
+  return res.views;
+}
+
 export async function fetchScratchpadList(
   repos?: string[],
 ): Promise<{ items: { key: string; label: string; lineCount: number }[] }> {
