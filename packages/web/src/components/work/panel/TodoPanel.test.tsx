@@ -208,6 +208,33 @@ describe('TodoPanel — row layout (nas: no hover icons pushing the text, no emo
   });
 });
 
+describe('TodoPanel — note from the "⋯" menu (nas: « Ajouter une note » did nothing)', () => {
+  it('opens the note editor and keeps it open once the menu has closed', async () => {
+    api.fetchTicketTodos.mockResolvedValue([item(1)]);
+    api.updateTicketTodo.mockResolvedValue({ item: item(1, { note: 'Chrome only' }), history: [{}] });
+    render(<TodoPanel ticketId="t1" />);
+    await screen.findByText('Item 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Actions de #1' }));
+    await act(async () => fireEvent.click(screen.getByRole('menuitem', { name: 'Ajouter une note' })));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    const editor = screen.getByRole('textbox', { name: 'Note de #1' });
+    expect(document.activeElement).toBe(editor);
+    fireEvent.change(editor, { target: { value: 'Chrome only' } });
+    fireEvent.keyDown(editor, { key: 'Enter', metaKey: true });
+    expect(api.updateTicketTodo).toHaveBeenCalledWith('t1', 'i1', { note: 'Chrome only' });
+  });
+
+  it('opens the text editor the same way', async () => {
+    api.fetchTicketTodos.mockResolvedValue([item(1)]);
+    render(<TodoPanel ticketId="t1" />);
+    await screen.findByText('Item 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Actions de #1' }));
+    await act(async () => fireEvent.click(screen.getByRole('menuitem', { name: 'Modifier le texte' })));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Texte de #1' }));
+  });
+});
+
 describe('TodoPanel — assignment', () => {
   it('shows who each item is for, and reassigns from the avatar', async () => {
     api.fetchTicketTodos.mockResolvedValue([item(1, { assignee: { type: 'user', name: 'nas' } }), item(2)]);

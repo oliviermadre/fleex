@@ -486,11 +486,15 @@ function TodoRow(p: RowProps) {
     </>
   );
 
+  // Open an editor only after the "⋯" menu has closed: closing it hands focus back
+  // to the menu button, which would blur a just-mounted editor and close it at once.
+  const editFromMenu = (field: 'text' | 'note') => () => setTimeout(() => startEdit(field), 0);
+
   const actions: CommentAction[] = [
     ...(item.state !== 'done' ? [{ key: 'done', label: 'Marquer fait', icon: <CheckIcon />, onSelect: p.onToggleDone }] : []),
     ...(item.state !== 'open' ? [{ key: 'reopen', label: 'Rouvrir', icon: <ReopenIcon />, onSelect: p.onReopen }] : []),
-    { key: 'text', label: 'Modifier le texte', icon: <PencilIcon />, onSelect: () => startEdit('text') },
-    { key: 'note', label: item.note ? 'Modifier la note' : 'Ajouter une note', icon: <NoteIcon />, onSelect: () => startEdit('note') },
+    { key: 'text', label: 'Modifier le texte', icon: <PencilIcon />, onSelect: editFromMenu('text') },
+    { key: 'note', label: item.note ? 'Modifier la note' : 'Ajouter une note', icon: <NoteIcon />, onSelect: editFromMenu('note') },
     ...(item.state !== 'cancelled' ? [{ key: 'cancel', label: "Annuler l'item…", icon: <CancelIcon />, onSelect: p.onCancel }] : []),
     { key: 'history', label: "Historique de l'item", icon: <HistoryIcon />, onSelect: p.onHistory },
     { key: 'delete', label: 'Supprimer', icon: <TrashIcon size={14} />, onSelect: p.onDelete, danger: true },
