@@ -12,16 +12,19 @@ const migration: Migration = {
   name: '043_ticket_complexity',
 
   async up(ctx) {
-    const stmt = ctx.dialect({
-      sqlite: `ALTER TABLE tickets ADD COLUMN complexity TEXT`,
-      pgsql: `ALTER TABLE tickets ADD COLUMN complexity TEXT`,
-      supabase: `ALTER TABLE tickets ADD COLUMN complexity TEXT`,
-    });
-    if (!stmt) return;
-    try {
-      await ctx.exec(stmt);
-    } catch {
-      // Column may already exist (idempotent re-run).
+    if (ctx.adapter === 'sqlite') {
+      // SQLite has no ADD COLUMN IF NOT EXISTS; a failure means it already exists.
+      try {
+        await ctx.exec(`ALTER TABLE tickets ADD COLUMN complexity TEXT`);
+      } catch { /* re-run after a partial apply */ }
+    } else {
+      // pg: a failed statement would abort the surrounding transaction — never fail.
+      await ctx.exec(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS complexity TEXT`);
+    }
+    // The Supabase adapter writes `complexity` on every ticket insert/upsert through
+    // PostgREST: a stale schema cache would fail them all (PGRST204).
+    if (ctx.adapter === 'supabase') {
+      await ctx.exec(`NOTIFY pgrst, 'reload schema'`);
     }
   },
 

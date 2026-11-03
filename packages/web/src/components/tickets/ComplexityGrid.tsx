@@ -59,7 +59,7 @@ export function ComplexityGrid({
   };
 
   return (
-    <div onKeyDown={onKeyDown} className="w-[184px] p-2">
+    <div role="menu" aria-label="Complexity" onKeyDown={onKeyDown} className="w-[184px] p-2">
       <div className="flex justify-between px-0.5 pb-1.5 text-[10.5px] uppercase tracking-wide text-[var(--theme-text-muted)]">
         <span>Complexity</span>
         <span className="normal-case">{value === null ? 'not estimated' : value === 'inf' ? '∞' : `${value} pts`}</span>

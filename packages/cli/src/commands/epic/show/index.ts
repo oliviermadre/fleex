@@ -83,8 +83,10 @@ const def: CommandDef = {
     const { done, total } = complexityProgress(
       tickets.map((t) => ({ status: t.status, complexity: normalizeTicketComplexity(t.complexity) })),
     );
-    if (total.estimated > 0 || total.unestimated > 0) {
+    if (total.estimated > 0) {
       process.stdout.write(`  ${c.bold('Points:')}       ${done.points} / ${formatComplexitySum(total)} done · ${total.unestimated} unestimated\n`);
+    } else if (total.unestimated > 0) {
+      process.stdout.write(`  ${c.bold('Points:')}       — · ${total.unestimated} unestimated\n`);
     }
     if (tickets.length === 0) {
       process.stdout.write(`    ${c.dim('No tickets')}\n`);
