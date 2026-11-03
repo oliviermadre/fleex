@@ -8,24 +8,33 @@
  *
  * Open items can be reordered by drag; Done is open by default, Cancelled
  * folded. Deleting an agent's item asks first (cancel keeps a visible trace);
- * deleting your own is undoable from the toast.
+ * any delete is undoable from the toast (the server restores the item).
+ *
+ * Each item has an assignee (round avatar at the end of the row): you, any
+ * agent, one persona, or anyone. What you add is yours by default — the
+ * avatar left of the input changes that for as long as the panel stays open,
+ * to queue several items for the Builder. Agents may not act on your items.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { TicketTodoEvent, TicketTodoItem } from '@fleex/shared';
+import type { TicketTodoEvent, TicketTodoItem, TodoAssignee } from '@fleex/shared';
 import { TODO_TEXT_MAX } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { toast } from '../../../lib/toast';
 import { tintSolid } from '../../../lib/tints';
 import * as api from '../../../services/api';
+import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
 import { useTodoStore } from '../../../stores/todoStore';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import { Input } from '../../ui/Input';
 import { Tooltip } from '../../ui/Tooltip';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import { AgentTag } from '../timeline/AnnotationPopovers';
+import { assigneeLabel, TodoAssigneeAvatar } from './TodoAssigneeAvatar';
 
 const STATE_LABEL: Record<TicketTodoItem['state'], string> = { open: 'À faire', done: 'Fait', cancelled: 'Annulé' };
 const EMPTY: TicketTodoItem[] = [];
+/** "Moi": the server fills in the human's name. */
+const ME: TodoAssignee = { type: 'user', name: null };
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -66,7 +75,8 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
   const loaded = useTodoStore((s) => ticketId in s.byTicket);
   const loadError = useTodoStore((s) => s.loadError[ticketId] ?? false);
   const flashing = useTodoStore((s) => s.flashing);
-  const { load, add, update, remove, hide, restore } = useTodoStore.getState();
+  const { load, add, update, remove, undelete } = useTodoStore.getState();
+  const personas = useAgentPersonaStore((s) => s.personas);
 
   const [draft, setDraft] = useState('');
   const [bulk, setBulk] = useState<string[] | null>(null);
@@ -75,24 +85,43 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
   const [history, setHistory] = useState<{ itemId: string | null } | null>(null);
   const [cancelling, setCancelling] = useState<TicketTodoItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<TicketTodoItem | null>(null);
+  // Who new items are for: you by default, kept while the panel stays open.
+  const [addAssignee, setAddAssignee] = useState<TodoAssignee | null>(ME);
+  const [mineOnly, setMineOnly] = useState(false);
   const addRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void load(ticketId);
+    setAddAssignee(ME);
   }, [ticketId, load]);
 
-  const open = useMemo(() => items.filter((i) => i.state === 'open'), [items]);
+  useEffect(() => {
+    const store = useAgentPersonaStore.getState();
+    if (!store.loaded) void store.loadPersonas();
+  }, []);
+
+  // Personas already seen on this ticket's list come first in the picker.
+  const seen = useMemo(() => {
+    const names = new Set<string>();
+    for (const i of items) {
+      for (const n of [i.createdByName, i.stateChangedByName, i.assignedByName, i.assignee?.name]) if (n) names.add(n.toLowerCase());
+    }
+    return personas.filter((p) => names.has(p.name.toLowerCase()) || names.has((p.displayName || '').toLowerCase())).map((p) => p.name);
+  }, [items, personas]);
+
+  const visible = useMemo(() => (mineOnly ? items.filter((i) => i.assignee?.type === 'user') : items), [items, mineOnly]);
+  const open = useMemo(() => visible.filter((i) => i.state === 'open'), [visible]);
   const done = useMemo(
-    () => items.filter((i) => i.state === 'done').sort((a, b) => (b.stateChangedAt ?? '').localeCompare(a.stateChangedAt ?? '')),
-    [items],
+    () => visible.filter((i) => i.state === 'done').sort((a, b) => (b.stateChangedAt ?? '').localeCompare(a.stateChangedAt ?? '')),
+    [visible],
   );
-  const cancelled = useMemo(() => items.filter((i) => i.state === 'cancelled'), [items]);
+  const cancelled = useMemo(() => visible.filter((i) => i.state === 'cancelled'), [visible]);
   const progress = open.length + done.length === 0 ? 0 : Math.round((done.length / (open.length + done.length)) * 100);
 
   const submit = async (texts: string[]) => {
     setDraft('');
     setBulk(null);
-    await add(ticketId, texts.map((t) => t.slice(0, TODO_TEXT_MAX)));
+    await add(ticketId, texts.map((t) => t.slice(0, TODO_TEXT_MAX)), addAssignee);
     addRef.current?.focus();
   };
 
@@ -100,23 +129,25 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
     const saved = await update(ticketId, item.id, { state, ...(reason ? { reason } : {}) });
     if (!saved) return;
     const verb = state === 'done' ? 'fait' : state === 'cancelled' ? 'annulé' : 'rouvert';
+    // Undo puts back the previous state — with its cancel reason, if it had one.
+    const undo = { state: item.state, ...(item.state === 'cancelled' && item.cancelReason ? { reason: item.cancelReason } : {}) };
     toast.info(`#${item.ref} ${verb}`, {
-      action: { label: 'Annuler', onClick: () => void update(ticketId, item.id, { state: item.state }) },
+      action: { label: 'Annuler', onClick: () => void update(ticketId, item.id, undo) },
     });
   };
 
-  // Deferred delete: hidden now, deleted when the toast goes — unless Undo.
+  const reassign = async (item: TicketTodoItem, next: TodoAssignee | null, label: string) => {
+    const saved = await update(ticketId, item.id, { assignee: next });
+    if (saved) toast.info(`#${item.ref} — ${label.charAt(0).toLowerCase()}${label.slice(1)}`);
+  };
+
+  // Deleted on the server at once (a reload cannot lose it); Undo restores it.
   const deleteNow = (item: TicketTodoItem) => {
-    const hidden = hide(ticketId, item.id);
-    if (!hidden) return;
-    toast.info(`#${item.ref} supprimé`, {
-      action: { label: 'Annuler', onClick: () => restore(ticketId, hidden) },
-      onDismiss: (reason) => {
-        if (reason === 'action') return;
-        void remove(ticketId, item.id).then((ok) => {
-          if (!ok) restore(ticketId, hidden);
-        });
-      },
+    void remove(ticketId, item.id).then((ok) => {
+      if (!ok) return;
+      toast.info(`#${item.ref} supprimé`, {
+        action: { label: 'Annuler', onClick: () => void undelete(ticketId, item.id) },
+      });
     });
   };
 
@@ -167,6 +198,9 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
         setDropBefore(null);
       }}
       onDrop={() => onDrop(item.id)}
+      personas={personas}
+      seen={seen}
+      onAssign={(next, label) => void reassign(item, next, label)}
       onToggle={() => void setState(item, item.state === 'open' ? 'done' : 'open')}
       onCancel={() => setCancelling(item)}
       onReopen={() => void setState(item, 'open')}
@@ -186,7 +220,22 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
                 {done.length} fait{done.length > 1 ? 's' : ''} · {open.length} à faire
                 {cancelled.length > 0 && ` · ${cancelled.length} annulé${cancelled.length > 1 ? 's' : ''}`}
               </span>
-              <span className="font-mono text-[var(--theme-text-secondary)]">{done.length}/{open.length + done.length}</span>
+              <span className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-pressed={mineOnly}
+                  onClick={() => setMineOnly(!mineOnly)}
+                  className={cn(
+                    'rounded px-1.5 py-px text-[10.5px] transition-colors',
+                    mineOnly
+                      ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                      : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
+                  )}
+                >
+                  Pour moi
+                </button>
+                <span className="font-mono text-[var(--theme-text-secondary)]">{done.length}/{open.length + done.length}</span>
+              </span>
             </div>
             <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--theme-bg-overlay)]">
               <div className={cn('h-full transition-[width] duration-300', tintSolid('green'))} style={{ width: `${progress}%` }} />
@@ -195,6 +244,17 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
         )}
 
         <div className="mx-1 mb-2">
+          <div className="flex items-center gap-1.5">
+          <TodoAssigneeAvatar
+            value={addAssignee}
+            personas={personas}
+            seen={seen}
+            subject="Nouveaux items"
+            onChange={(next) => {
+              setAddAssignee(next);
+              addRef.current?.focus();
+            }}
+          />
           <Input
             ref={addRef}
             value={draft}
@@ -217,6 +277,7 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
               }
             }}
           />
+          </div>
           {bulk && (
             <div className="mt-1.5 flex items-center gap-2 rounded-md bg-[var(--theme-accent-muted)] px-2 py-1.5 text-[12px] text-[var(--theme-text-primary)]">
               <span className="flex-1">Créer {bulk.length} items ?</span>
@@ -246,7 +307,10 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
         )}
 
         {open.map(row)}
-        {items.length > 0 && open.length === 0 && (
+        {mineOnly && visible.length === 0 && items.length > 0 && (
+          <div className="mx-2 my-3 text-center text-[12px] text-[var(--theme-text-muted)]">Rien ne vous est assigné.</div>
+        )}
+        {visible.length > 0 && open.length === 0 && (
           <div className="mx-2 my-3 text-center text-[12px] text-[var(--theme-text-muted)]">Tout est fait 🎉</div>
         )}
 
@@ -345,6 +409,9 @@ function CancelModal({ item, onCancel, onConfirm }: { item: TicketTodoItem | nul
 
 interface RowProps {
   item: TicketTodoItem;
+  personas: ReturnType<typeof useAgentPersonaStore.getState>['personas'];
+  seen: readonly string[];
+  onAssign: (next: TodoAssignee | null, label: string) => void;
   flashing: boolean;
   draggable: boolean;
   dragging: boolean;
@@ -387,6 +454,13 @@ function TodoRow(p: RowProps) {
       <span>· {ago(item.createdAt)}</span>
       {item.stateChangedByName && (
         <span className="inline-flex items-center gap-1">· rouvert par <Who type={item.stateChangedByType} name={item.stateChangedByName} /></span>
+      )}
+      {item.takeoverReason && (
+        // An agent took over the human's item: say who and why, plainly.
+        <span className="inline-flex flex-wrap items-center gap-1 text-[var(--tint-yellow-text)]">
+          · repris par <Who type={item.assignedByType} name={item.assignedByName} />
+          <span className="italic">« {item.takeoverReason} »</span>
+        </span>
       )}
     </>
   ) : (
@@ -498,6 +572,15 @@ function TodoRow(p: RowProps) {
           {action("Historique de l'item", '⟲', p.onHistory)}
           {action('Supprimer', '🗑', p.onDelete, true)}
         </div>
+        <span className="ml-0.5">
+          <TodoAssigneeAvatar
+            value={item.assignee}
+            personas={p.personas}
+            seen={p.seen}
+            subject={`#${item.ref}`}
+            onChange={item.state === 'open' ? p.onAssign : undefined}
+          />
+        </span>
       </div>
 
       <div className="col-start-3 col-end-5 flex flex-wrap items-center gap-1 text-[11px] text-[var(--theme-text-faint)]">{sub}</div>
@@ -538,6 +621,19 @@ function describe(e: TicketTodoEvent, withRef: boolean) {
       return { head: <>{ref}supprimé</>, detail: null };
     case 'moved':
       return { head: <>{ref}déplacé</>, detail: null };
+    case 'assigned': {
+      const to = (ch.assignee?.to ?? null) as TodoAssignee | null;
+      const takeover = (ch.assignee?.from as TodoAssignee | null)?.type === 'user' && e.actorType === 'agent';
+      return {
+        head: <>{ref}{takeover ? 'repris' : 'assigné'}</>,
+        detail: (
+          <>
+            {assigneeLabel(to, [])}
+            {ch.reason && <span className="ml-1 italic">« {String(ch.reason.to)} »</span>}
+          </>
+        ),
+      };
+    }
     case 'state_changed': {
       const from = ch.state?.from as TicketTodoItem['state'];
       const to = ch.state?.to as TicketTodoItem['state'];
@@ -552,6 +648,7 @@ function describe(e: TicketTodoEvent, withRef: boolean) {
       };
     }
     case 'edited':
+      if (ch.deleted) return { head: <>{ref}restauré</>, detail: null };
       return {
         head: <>{ref}édité</>,
         detail: (

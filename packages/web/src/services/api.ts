@@ -836,6 +836,10 @@ export type TodoPatch = {
   reason?: string | null;
   /** Move right after this item (ref or id); null = first. */
   after?: string | number | null;
+  /** `me` | `user` | `agent` | `none` | a persona slug, or the object form. */
+  assignee?: import('@fleex/shared').TodoAssigneeInput;
+  /** `false` restores a deleted item (Undo of a delete). */
+  deleted?: false;
 };
 
 const todosPath = (ticketId: string, itemId?: string) =>
@@ -847,7 +851,7 @@ export async function fetchTicketTodos(ticketId: string): Promise<import('@fleex
 
 export async function createTicketTodo(
   ticketId: string,
-  input: { text: string; note?: string | null; after?: string | number | null },
+  input: { text: string; note?: string | null; after?: string | number | null; assignee?: import('@fleex/shared').TodoAssigneeInput },
 ): Promise<import('@fleex/shared').TodoWriteResult> {
   return request<import('@fleex/shared').TodoWriteResult>(todosPath(ticketId), { method: 'POST', body: JSON.stringify(input) });
 }

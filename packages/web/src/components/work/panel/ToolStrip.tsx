@@ -125,11 +125,14 @@ export function ToolStrip({
   delivCount = 0,
   mentionCount = 0,
   todoCount = 0,
+  todoForYou = false,
 }: {
   task: WorkTask | null;
   delivCount?: number;
   /** Open items of the ticket's todo list. */
   todoCount?: number;
+  /** An agent handed you an open item (manual QA, a decision…): a dot on Todo. */
+  todoForYou?: boolean;
   /** Mentions on the ticket not yet resolved. */
   mentionCount?: number;
 }) {
@@ -184,6 +187,15 @@ export function ToolStrip({
             )}
             {dot && (
               <span className="absolute right-2 top-1 h-1.5 w-1.5 rounded-full bg-[var(--tint-yellow-solid)]" />
+            )}
+            {tool.key === 'todo' && todoForYou && (
+              // Left of the count badge: items an agent assigned to you.
+              <span
+                data-testid="todo-for-you-dot"
+                className="absolute left-2 top-1 h-1.5 w-1.5 rounded-full bg-[var(--tint-blue-solid)]"
+              >
+                <span className="sr-only">des items vous sont assignés</span>
+              </span>
             )}
             {tool.icon}
             {tool.label}

@@ -97,6 +97,13 @@ describe('ToolStrip — Todo', () => {
     expect(screen.getByRole('button', { name: /Todo/ }).textContent).toContain('3');
   });
 
+  it('dots Todo when an agent handed you an item', () => {
+    const { rerender } = render(<ToolStrip task={task} todoCount={2} />);
+    expect(screen.queryByTestId('todo-for-you-dot')).toBeNull();
+    rerender(<ToolStrip task={task} todoCount={2} todoForYou />);
+    expect(screen.getByTestId('todo-for-you-dot')).toBeTruthy();
+  });
+
   it('opens the Todo panel', () => {
     render(<ToolStrip task={task} />);
     fireEvent.click(screen.getByRole('button', { name: /Todo/ }));
