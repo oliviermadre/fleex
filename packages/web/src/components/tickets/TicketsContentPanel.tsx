@@ -1,5 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
+import { DEFAULT_BOARD_EMOJI, boardChanges } from '../../lib/boardEmoji';
+import { EmojiInput } from '../ui/EmojiInput';
 import type { TicketPriority } from '@fleex/shared';
 import { TICKET_PRIORITIES, isSlackMessageUrl, isSlackImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -31,8 +33,7 @@ export function TicketsContentPanel() {
   const [quickImporting, setQuickImporting] = useState(false);
   const [quickError, setQuickError] = useState<string | null>(null);
   const quickSubmittingRef = useRef(false);
-  const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
+  const [boardDraft, setBoardDraft] = useState<{ boardId: string; name: string; emoji: string } | null>(null);
   const [showCreateBoard, setShowCreateBoard] = useState(false);
 
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
@@ -110,21 +111,21 @@ export function TicketsContentPanel() {
 
   const handleCreateBoard = () => setShowCreateBoard(true);
 
-  const handleConfirmCreateBoard = async (name: string) => {
-    await createBoard({ name });
+  const handleConfirmCreateBoard = async (name: string, emoji?: string) => {
+    await createBoard({ name, ...(emoji ? { emoji } : {}) });
   };
 
-  const handleStartRename = (boardId: string, currentName: string) => {
-    setRenamingBoardId(boardId);
-    setRenameValue(currentName);
+  const handleStartEdit = (board: { id: string; name: string; emoji: string }) => {
+    setBoardDraft({ boardId: board.id, name: board.name, emoji: board.emoji });
   };
 
-  const handleFinishRename = async () => {
-    if (renamingBoardId && renameValue.trim()) {
-      await updateBoard(renamingBoardId, { name: renameValue.trim() });
-    }
-    setRenamingBoardId(null);
-    setRenameValue('');
+  /** Send only what changed (one PATCH at most), then leave edit mode. */
+  const handleFinishEdit = async () => {
+    if (!boardDraft) return;
+    setBoardDraft(null);
+    const board = boards.find((b) => b.id === boardDraft.boardId);
+    const changes = board ? boardChanges(board, boardDraft) : null;
+    if (changes) await updateBoard(boardDraft.boardId, changes);
   };
 
   const toggleContentPanel = useUIStore((s) => s.toggleContentPanel);
@@ -136,6 +137,7 @@ export function TicketsContentPanel() {
         open={showCreateBoard}
         title="Créer un board"
         placeholder="Nom du board"
+        emoji={{ defaultValue: DEFAULT_BOARD_EMOJI }}
         onConfirm={handleConfirmCreateBoard}
         onClose={() => setShowCreateBoard(false)}
       />
@@ -183,28 +185,41 @@ export function TicketsContentPanel() {
             ))}
           </select>
 
-          {/* Board actions: rename / delete */}
+          {/* Board actions: edit / delete */}
           {selectedBoard && (
             <div className="mt-1.5 flex items-center gap-1">
-              {renamingBoardId === selectedBoard.id ? (
-                <input
-                  autoFocus
-                  className="flex-1 rounded border border-[var(--theme-border-input)] bg-transparent px-1.5 py-0.5 text-[10px] text-[var(--theme-text-primary)] focus:outline-none"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
+              {boardDraft?.boardId === selectedBoard.id ? (
+                // Saves when focus leaves both fields, not when it moves between them.
+                <div
+                  className="flex flex-1 items-center gap-1"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleFinishRename();
-                    if (e.key === 'Escape') { setRenamingBoardId(null); setRenameValue(''); }
+                    if (e.key === 'Enter') handleFinishEdit();
+                    if (e.key === 'Escape') setBoardDraft(null);
                   }}
-                  onBlur={handleFinishRename}
-                />
+                  onBlur={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) handleFinishEdit();
+                  }}
+                >
+                  <EmojiInput
+                    className="h-6 w-8 rounded px-0 py-0 text-sm"
+                    value={boardDraft.emoji}
+                    onChange={(emoji) => setBoardDraft({ ...boardDraft, emoji })}
+                  />
+                  <input
+                    autoFocus
+                    aria-label="Board name"
+                    className="min-w-0 flex-1 rounded border border-[var(--theme-border-input)] bg-transparent px-1.5 py-0.5 text-[10px] text-[var(--theme-text-primary)] focus:outline-none"
+                    value={boardDraft.name}
+                    onChange={(e) => setBoardDraft({ ...boardDraft, name: e.target.value })}
+                  />
+                </div>
               ) : (
                 <>
                   <button
                     className="rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
-                    onClick={() => handleStartRename(selectedBoard.id, selectedBoard.name)}
+                    onClick={() => handleStartEdit(selectedBoard)}
                   >
-                    Rename
+                    Edit
                   </button>
                   {boards.length > 1 && (
                     <button

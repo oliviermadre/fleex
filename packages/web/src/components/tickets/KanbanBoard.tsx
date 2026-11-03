@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
+import { DEFAULT_BOARD_EMOJI } from '../../lib/boardEmoji';
 import { TICKET_STATUSES } from '@fleex/shared';
 import type { TicketStatus, Ticket, TicketWsMessage } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -103,8 +104,8 @@ export function KanbanBoard() {
 
   const handleCreateBoard = () => setShowCreateBoard(true);
 
-  const handleConfirmCreateBoard = async (name: string) => {
-    await createBoard({ name });
+  const handleConfirmCreateBoard = async (name: string, emoji?: string) => {
+    await createBoard({ name, ...(emoji ? { emoji } : {}) });
   };
 
   if (!board && !isAllBoards && boards.length === 0) {
@@ -114,6 +115,7 @@ export function KanbanBoard() {
           open={showCreateBoard}
           title="Créer un board"
           placeholder="Nom du board"
+          emoji={{ defaultValue: DEFAULT_BOARD_EMOJI }}
           onConfirm={handleConfirmCreateBoard}
           onClose={() => setShowCreateBoard(false)}
         />

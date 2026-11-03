@@ -4,36 +4,62 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
+import { boardChanges } from '../../lib/boardEmoji';
+import { EmojiInput } from '../ui/EmojiInput';
 
 export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
   const updateBoard = useTicketStore((s) => s.updateBoard);
   const deleteBoard = useTicketStore((s) => s.deleteBoard);
   const boards = useTicketStore((s) => s.boards);
 
-  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover();
-  const [renaming, setRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  // The edit in progress, or null when not editing. Mirrored in a ref because
+  // the popover can close from outside (click away, trigger) and that path
+  // must read the latest draft to save it.
+  const [draft, setDraft] = useState<{ name: string; emoji: string } | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
 
-  useEffect(() => {
-    if (renaming && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [renaming]);
-
-  const handleStartRename = () => {
-    setRenameValue(board.name);
-    setRenaming(true);
+  /** Save the draft (only what changed, one PATCH at most) and leave edit mode. */
+  const finishEdit = (save: boolean) => {
+    const current = draftRef.current;
+    draftRef.current = null;
+    setDraft(null);
+    if (!save || !current) return;
+    const changes = boardChanges(board, current);
+    if (changes) void updateBoard(board.id, changes);
   };
 
-  const handleFinishRename = async () => {
-    const trimmed = renameValue.trim();
-    if (trimmed && trimmed !== board.name) {
-      await updateBoard(board.id, { name: trimmed });
+  // Closing the popover while editing (outside click) saves, like the old
+  // rename-on-blur. Escape and Enter clear the draft first, so they don't.
+  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
+    onOpenChange: (next) => { if (!next) finishEdit(true); },
+  });
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const editing = draft !== null;
+  useEffect(() => {
+    if (editing && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
     }
-    setRenaming(false);
-    setOpen(false);
+  }, [editing]);
+
+  const handleStartEdit = () => {
+    setDraft({ name: board.name, emoji: board.emoji });
+  };
+
+  // Enter saves, Escape cancels. No blur handler: moving between the two
+  // fields must keep the popover open.
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finishEdit(true);
+      setOpen(false);
+    }
+    if (e.key === 'Escape') {
+      finishEdit(false);
+      setOpen(false);
+    }
   };
 
   const handleDelete = () => {
@@ -69,30 +95,33 @@ export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
             {...getFloatingProps()}
             className="z-50 min-w-[140px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
           >
-            {renaming ? (
-              <div className="px-2 py-1.5">
+            {draft ? (
+              <div className="flex items-center gap-1.5 px-2 py-1.5">
+                <EmojiInput
+                  className="h-7 w-9 rounded text-base"
+                  value={draft.emoji}
+                  onChange={(emoji) => setDraft({ ...draft, emoji })}
+                  onKeyDown={handleEditKeyDown}
+                />
                 <input
-                  ref={inputRef}
-                  className="w-full rounded border border-[var(--theme-border-input)] bg-transparent px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleFinishRename();
-                    if (e.key === 'Escape') { setRenaming(false); setOpen(false); }
-                  }}
-                  onBlur={handleFinishRename}
+                  ref={nameInputRef}
+                  aria-label="Board name"
+                  className="w-44 rounded border border-[var(--theme-border-input)] bg-transparent px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  onKeyDown={handleEditKeyDown}
                 />
               </div>
             ) : (
               <>
                 <button
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-                  onClick={handleStartRename}
+                  onClick={handleStartEdit}
                 >
                   <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" />
                   </svg>
-                  Rename
+                  Edit
                 </button>
                 {boards.length > 1 && (
                   <button

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
+import { DEFAULT_BOARD_EMOJI } from '../../lib/boardEmoji';
 import { useTicketStore } from '../../stores/ticketStore';
 import { BoardActionsDropdown } from './BoardActionsDropdown';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
@@ -28,8 +29,8 @@ export function BoardSelectorDropdown() {
     setShowCreateBoard(true);
   };
 
-  const handleConfirmCreateBoard = async (name: string) => {
-    await createBoard({ name });
+  const handleConfirmCreateBoard = async (name: string, emoji?: string) => {
+    await createBoard({ name, ...(emoji ? { emoji } : {}) });
   };
 
   const handleSelect = (id: string | null) => {
@@ -43,6 +44,7 @@ export function BoardSelectorDropdown() {
       open={showCreateBoard}
       title="Créer un board"
       placeholder="Nom du board"
+      emoji={{ defaultValue: DEFAULT_BOARD_EMOJI }}
       onConfirm={handleConfirmCreateBoard}
       onClose={() => setShowCreateBoard(false)}
     />

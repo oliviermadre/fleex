@@ -2,13 +2,18 @@ import { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { Input } from './Input';
 import { Button } from './Button';
+import { EmojiInput } from './EmojiInput';
+import { normalizeEmoji } from '../../lib/boardEmoji';
 
 interface NameInputModalProps {
   open: boolean;
   title: string;
   placeholder?: string;
   confirmLabel?: string;
-  onConfirm: (name: string) => void;
+  /** Show an emoji field left of the name, pre-filled with `defaultValue`. */
+  emoji?: { defaultValue: string };
+  /** `emoji` is the normalised emoji, or undefined when the field is absent or left blank. */
+  onConfirm: (name: string, emoji?: string) => void;
   onClose: () => void;
 }
 
@@ -17,22 +22,28 @@ export function NameInputModal({
   title,
   placeholder,
   confirmLabel = 'Créer',
+  emoji,
   onConfirm,
   onClose,
 }: NameInputModalProps) {
   const [value, setValue] = useState('');
+  const [emojiValue, setEmojiValue] = useState('');
+  const defaultEmoji = emoji?.defaultValue ?? '';
 
-  // Reset value when modal opens
+  // Reset values when modal opens
   useEffect(() => {
-    if (open) setValue('');
-  }, [open]);
+    if (open) {
+      setValue('');
+      setEmojiValue(defaultEmoji);
+    }
+  }, [open, defaultEmoji]);
 
   const trimmed = value.trim();
   const isValid = trimmed.length > 0;
 
   const handleConfirm = () => {
     if (!isValid) return;
-    onConfirm(trimmed);
+    onConfirm(trimmed, emoji ? normalizeEmoji(emojiValue) ?? undefined : undefined);
     onClose();
   };
 
@@ -49,13 +60,21 @@ export function NameInputModal({
         {title}
       </h2>
 
-      <Input
-        autoFocus
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-      />
+      <div className="flex items-center gap-2">
+        {emoji && (
+          <EmojiInput value={emojiValue} onChange={setEmojiValue} onKeyDown={handleKeyDown} />
+        )}
+        <div className="min-w-0 flex-1">
+          <Input
+            autoFocus
+            className="w-full"
+            placeholder={placeholder}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
+      </div>
 
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onClose}>
