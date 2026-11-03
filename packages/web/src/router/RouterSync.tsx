@@ -64,7 +64,7 @@ const WORK_URL_MODES = ['code', 'shell', 'workflow'] as const satisfies readonly
  * notification's deliverables, the old ticket-detail tabs). Applied once, then
  * dropped from the URL: panels are layout, kept in workStore.
  */
-const WORK_URL_PANELS = ['deliv', 'mentions', 'timeline'] as const satisfies readonly WorkUrlPanel[];
+const WORK_URL_PANELS = ['deliv', 'todo', 'mentions', 'timeline'] as const satisfies readonly WorkUrlPanel[];
 
 /**
  * The Work view's URL state. `ticketId` undefined = bare /work (no preference:

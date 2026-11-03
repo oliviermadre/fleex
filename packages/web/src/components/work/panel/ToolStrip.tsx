@@ -1,7 +1,7 @@
 /**
  * The right tool strip (60px): icon + label buttons that toggle the one-at-a-time
  * right tool window (JetBrains model — clicking the active tool closes it). Ships
- * Context, Diff, Code, Deliverables and Mentions; Threads (Phase 3) is still absent. Diff
+ * Context, Diff, Code, Deliverables, Todo and Mentions; Threads (Phase 3) is still absent. Diff
  * shows a dot when the branch has changes. The bottom Shell button toggles the
  * drawer rather than a right panel, so it lives outside the panel-toggling group,
  * with the Timeline button right above it: both toggle the one bottom slot
@@ -69,6 +69,20 @@ const TOOLS: Tool[] = [
     ),
   },
   {
+    key: 'todo',
+    label: 'Todo',
+    // Two checkboxes, the first ticked: the ticket's shared todo list.
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3.5" y="4.5" width="5" height="5" rx="1" />
+        <path d="m4.8 7 1 1 1.8-2" />
+        <line x1="11.5" y1="7" x2="20" y2="7" />
+        <rect x="3.5" y="14.5" width="5" height="5" rx="1" />
+        <line x1="11.5" y1="17" x2="20" y2="17" />
+      </svg>
+    ),
+  },
+  {
     key: 'mentions',
     label: 'Mentions',
     // An "@": the agents asked on this ticket.
@@ -110,9 +124,12 @@ export function ToolStrip({
   task,
   delivCount = 0,
   mentionCount = 0,
+  todoCount = 0,
 }: {
   task: WorkTask | null;
   delivCount?: number;
+  /** Open items of the ticket's todo list. */
+  todoCount?: number;
   /** Mentions on the ticket not yet resolved. */
   mentionCount?: number;
 }) {
@@ -139,7 +156,13 @@ export function ToolStrip({
         const isCode = tool.key === 'code';
         const active = isCode ? codeMode : rightPanel === tool.key;
         const badge =
-          tool.key === 'deliv' ? countBadge(delivCount) : tool.key === 'mentions' ? countBadge(mentionCount) : null;
+          tool.key === 'deliv'
+            ? countBadge(delivCount)
+            : tool.key === 'todo'
+            ? countBadge(todoCount)
+            : tool.key === 'mentions'
+            ? countBadge(mentionCount)
+            : null;
         const dot = tool.key === 'diff' && (task?.changedLines ?? 0) > 0;
         return (
           <button

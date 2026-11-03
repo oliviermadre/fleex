@@ -57,10 +57,10 @@ describe('ToolStrip — Mentions', () => {
     useWorkStore.setState({ rightPanel: null });
   });
 
-  it('sits right after Docs', () => {
+  it('sits right after Docs and Todo', () => {
     render(<ToolStrip task={task} />);
-    const docs = screen.getByRole('button', { name: /Docs/ });
-    expect(docs.nextElementSibling).toBe(screen.getByRole('button', { name: /Mentions/ }));
+    const todo = screen.getByRole('button', { name: /Todo/ });
+    expect(todo.nextElementSibling).toBe(screen.getByRole('button', { name: /Mentions/ }));
   });
 
   it('badges the open mentions, hidden at 0 and capped at 99+', () => {
@@ -83,5 +83,23 @@ describe('ToolStrip — Mentions', () => {
   it('is disabled without a task', () => {
     render(<ToolStrip task={null} />);
     expect(screen.getByRole('button', { name: /Mentions/ })).toHaveProperty('disabled', true);
+  });
+});
+
+describe('ToolStrip — Todo', () => {
+  it('sits right after Docs and counts open items (no badge at 0)', () => {
+    const { rerender } = render(<ToolStrip task={task} todoCount={0} />);
+    const docs = screen.getByRole('button', { name: /Docs/ });
+    const todo = screen.getByRole('button', { name: /Todo/ });
+    expect(docs.nextElementSibling).toBe(todo);
+    expect(todo.textContent).toBe('Todo');
+    rerender(<ToolStrip task={task} todoCount={3} />);
+    expect(screen.getByRole('button', { name: /Todo/ }).textContent).toContain('3');
+  });
+
+  it('opens the Todo panel', () => {
+    render(<ToolStrip task={task} />);
+    fireEvent.click(screen.getByRole('button', { name: /Todo/ }));
+    expect(useWorkStore.getState().rightPanel).toBe('todo');
   });
 });

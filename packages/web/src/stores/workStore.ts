@@ -14,7 +14,7 @@ import { ZOOM_LEVELS } from '../components/work/timeline/layoutTimeline';
  */
 
 export type WorkView = 'task' | 'new';
-export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'mentions' | 'scratch' | 'browser' | null;
+export type RightPanel = 'context' | 'thread' | 'diff' | 'code' | 'deliv' | 'todo' | 'mentions' | 'scratch' | 'browser' | null;
 /** A remembered `browser` panel means nothing outside the desktop shell. */
 export function effectiveRightPanel(panel: RightPanel, desktop: boolean): RightPanel {
   return panel === 'browser' && !desktop ? null : panel;

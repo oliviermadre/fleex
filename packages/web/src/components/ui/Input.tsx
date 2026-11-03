@@ -1,6 +1,7 @@
 import { cn } from '../../lib/cn';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+/** `ComponentProps` (not `InputHTMLAttributes`) so a `ref` reaches the <input> — React 19 passes it as a prop. */
+interface InputProps extends React.ComponentProps<'input'> {
   label?: string;
 }
 
