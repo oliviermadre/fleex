@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { stripHtmlCodeFence } from '@fleex/shared';
+import { cn } from '../../lib/cn';
 import { useUIStore } from '../../stores/uiStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
+import { maximizeLabel, maximizedStyle, onAButton, WindowButton } from '../ui/WindowButton';
 import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { TicketPickerModal } from './TicketPickerModal';
 
@@ -30,6 +32,8 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
   const isHtml = useDeliverableTypesStore((s) => s.rendererFor)(deliverable?.type ?? '') === 'html';
   const [showCopyPicker, setShowCopyPicker] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [maximized, setMaximized] = useState(false);
+  const toggleMaximized = () => setMaximized((m) => !m);
   const resolvedTicketId = ticketId ?? deliverable?.ticketId ?? '';
 
   const handleEsc = useCallback(
@@ -44,6 +48,12 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
     },
     [close],
   );
+
+  // Maximized lasts while one deliverable is open: closing it, or opening another, starts centred again.
+  const deliverableId = deliverable?.id;
+  useEffect(() => {
+    setMaximized(false);
+  }, [deliverableId]);
 
   useEffect(() => {
     if (!deliverable) return;
@@ -75,9 +85,21 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="deliverable-overlay-panel" style={isHtml ? { height: '85vh' } : undefined} onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className={cn('deliverable-overlay-panel', maximized && 'deliverable-overlay-panel--maximized')}
+        data-placement={maximized ? 'maximized' : 'centered'}
+        style={maximized ? maximizedStyle() : isHtml ? { height: '85vh' } : undefined}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {/* Title bar */}
-        <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
+        <div
+          data-deliverable-bar
+          className="flex select-none items-center gap-3 border-b border-white/[0.06] px-5 py-3"
+          style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}
+          onDoubleClick={(e) => {
+            if (!onAButton(e)) toggleMaximized();
+          }}
+        >
           <DeliverableTypePicker deliverable={deliverable} onChanged={(u) => useUIStore.getState().openDeliverableOverlay(u)}>
             <DeliverableTypeBadge type={deliverable.type} size="sm" />
           </DeliverableTypePicker>
@@ -140,6 +162,8 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
             </svg>
             Detach
           </button>
+
+          <WindowButton kind={maximized ? 'restore' : 'maximize'} label={maximizeLabel(maximized)} onClick={toggleMaximized} />
 
           {/* Close button */}
           <button

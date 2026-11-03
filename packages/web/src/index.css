@@ -495,6 +495,14 @@ html, body {
   pointer-events: none;
 }
 
+/* Maximized: pinned to the viewport by inline insets (below the desktop title bar), no size cap. */
+.deliverable-overlay-panel--maximized {
+  position: fixed;
+  width: auto;
+  max-width: none;
+  max-height: none;
+}
+
 @keyframes deliverable-overlay-scale-in {
   from {
     opacity: 0;

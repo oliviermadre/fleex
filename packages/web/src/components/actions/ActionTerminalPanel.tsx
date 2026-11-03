@@ -9,6 +9,7 @@ import { DRAFT_SOURCE_PREFIX, usePinnedActionsStore, type TerminalGeometry, type
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
+import { maximizeLabel, maximizedStyle, onAButton, WindowButton } from '../ui/WindowButton';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { RunningBadge } from './ActionLogsModal';
 import { RunHintCard } from './RunHintCard';
@@ -123,7 +124,6 @@ export const PANEL_MIN_WIDTH = 420;
 export const PANEL_MIN_HEIGHT = 220;
 /** Opened for the first time: centred, this share of the window. */
 export const DEFAULT_PANEL_RATIO = 0.66;
-const MAXIMIZED_MARGIN = 16;
 
 /** The area the panel may use: the viewport below the desktop title bar (drawn over the page, it swallows clicks). */
 function usableArea(): { top: number; width: number; height: number } {
@@ -142,40 +142,6 @@ export function initialGeometry(saved: TerminalGeometry | null): TerminalGeometr
   const width = Math.max(PANEL_MIN_WIDTH, Math.round(area.width * DEFAULT_PANEL_RATIO));
   const height = Math.max(PANEL_MIN_HEIGHT, Math.round(area.height * DEFAULT_PANEL_RATIO));
   return { ...clampPosition(Math.round((area.width - width) / 2), Math.round(area.top + (area.height - height) / 2), width, height, area.top), width, height };
-}
-
-function maximizedStyle(): CSSProperties {
-  return { top: titleBarBottom() + MAXIMIZED_MARGIN, left: MAXIMIZED_MARGIN, right: MAXIMIZED_MARGIN, bottom: MAXIMIZED_MARGIN };
-}
-
-const WINDOW_ICONS = {
-  maximize: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
-  restore: <path d="M5 12h14" />,
-  hide: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
-} as const;
-
-/** One of the panel's window controls: a small square button, its icon, a tooltip. */
-function WindowButton({ kind, label, onClick }: { kind: keyof typeof WINDOW_ICONS; label: string; onClick: () => void }) {
-  return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        aria-label={label}
-        data-window-button={kind}
-        onClick={onClick}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          {WINDOW_ICONS[kind]}
-        </svg>
-      </button>
-    </Tooltip>
-  );
-}
-
-/** A press on a button of the bar is a click, not the start of a drag or a double-click. */
-function onAButton(e: React.MouseEvent): boolean {
-  return !!(e.target as HTMLElement).closest('button');
 }
 
 function ActiveTab({
@@ -279,7 +245,7 @@ function ActiveTab({
           <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--theme-text-muted)]" title={tab.command}>{tab.command}</code>
           {running && run && <RunningBadge startedAt={run.startedAt} format={clock} />}
           <div className="flex shrink-0 items-center gap-1">
-            <WindowButton kind={maximized ? 'restore' : 'maximize'} label={maximized ? 'Restore size (double-click the bar)' : 'Maximize (double-click the bar)'} onClick={onToggleMaximized} />
+            <WindowButton kind={maximized ? 'restore' : 'maximize'} label={maximizeLabel(maximized)} onClick={onToggleMaximized} />
             <WindowButton kind="hide" label="Hide (⌘W) — the terminals keep running; reopen them from the Terminals button (⌃`)" onClick={hide} />
           </div>
         </div>

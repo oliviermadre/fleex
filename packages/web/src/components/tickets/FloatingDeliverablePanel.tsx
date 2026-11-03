@@ -1,9 +1,10 @@
-import { memo, useRef, useCallback } from 'react';
+import { memo, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { TicketDeliverable } from '@fleex/shared';
 import { stripHtmlCodeFence } from '@fleex/shared';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
+import { maximizeLabel, maximizedStyle, onAButton, WindowButton } from '../ui/WindowButton';
 import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { TITLE_BAR_HEIGHT, PILL_BORDER_RADIUS } from '../../lib/constants';
@@ -59,11 +60,15 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
     initialOffset,
   });
 
+  // Maximized only changes what is drawn: the free place and size stay in useFloatingResize, so Restore puts the panel back exactly.
+  const [maximized, setMaximized] = useState(false);
+  const toggleMaximized = () => setMaximized((m) => !m);
+
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
 
   // Drag handlers
   const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || maximized || onAButton(e)) return;
     e.preventDefault();
     dragRef.current = {
       dragging: true,
@@ -85,19 +90,17 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
     };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
-  }, [effectivePos, size, setPosition]);
+  }, [effectivePos, size, setPosition, maximized]);
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex, pointerEvents: 'none' }}>
       <div
         data-floating-panel
+        data-placement={maximized ? 'maximized' : 'floating'}
         onMouseDown={onFocus}
         style={{
           position: 'absolute',
-          left: effectivePos.x,
-          top: effectivePos.y,
-          width: size.width,
-          height: size.height,
+          ...(maximized ? maximizedStyle() : { left: effectivePos.x, top: effectivePos.y, width: size.width, height: size.height }),
           display: 'flex',
           flexDirection: 'column',
           borderRadius: 12,
@@ -123,13 +126,17 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
             alignItems: 'center',
             gap: 8,
             padding: '0 12px',
-            cursor: 'grab',
+            cursor: maximized ? 'default' : 'grab',
             borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
             background: 'var(--theme-bg-hover)',
             flexShrink: 0,
             userSelect: 'none',
           }}
+          data-deliverable-bar
           onMouseDown={handleTitleMouseDown}
+          onDoubleClick={(e) => {
+            if (!onAButton(e)) toggleMaximized();
+          }}
         >
           <DeliverableTypePicker deliverable={deliverable} onChanged={updateFloatingDeliverable}>
             <DeliverableTypeBadge type={deliverable.type} />
@@ -170,6 +177,8 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           )}
 
           <div style={{ flex: 1 }} />
+
+          <WindowButton kind={maximized ? 'restore' : 'maximize'} label={maximizeLabel(maximized)} onClick={toggleMaximized} />
 
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -247,40 +256,44 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
 
       </div>
 
-      {/* Edge resize handles */}
-      <div style={{ position: 'absolute', top: effectivePos.y - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 'n-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('n')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + size.height - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 's-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('s')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x - 3, width: 6, height: size.height - 16, cursor: 'w-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('w')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x + size.width - 3, width: 6, height: size.height - 16, cursor: 'e-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('e')} />
+      {!maximized && (
+        <>
+          {/* Edge resize handles */}
+          <div style={{ position: 'absolute', top: effectivePos.y - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 'n-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('n')} />
+          <div style={{ position: 'absolute', top: effectivePos.y + size.height - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 's-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('s')} />
+          <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x - 3, width: 6, height: size.height - 16, cursor: 'w-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('w')} />
+          <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x + size.width - 3, width: 6, height: size.height - 16, cursor: 'e-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('e')} />
 
-      {/* Corner resize handles */}
-      {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
-        <div
-          key={corner}
-          style={{
-            position: 'absolute',
-            top: corner.includes('n') ? effectivePos.y - 4 : effectivePos.y + size.height - 8,
-            left: corner.includes('w') ? effectivePos.x - 4 : effectivePos.x + size.width - 8,
-            width: 12,
-            height: 12,
-            cursor: `${corner}-resize`,
-            pointerEvents: 'auto',
-          }}
-          onMouseDown={handleResizeMouseDown(corner)}
-        >
-          {corner === 'se' && (
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              fill="none"
-              style={{ position: 'absolute', bottom: 1, right: 1 }}
+          {/* Corner resize handles */}
+          {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+            <div
+              key={corner}
+              style={{
+                position: 'absolute',
+                top: corner.includes('n') ? effectivePos.y - 4 : effectivePos.y + size.height - 8,
+                left: corner.includes('w') ? effectivePos.x - 4 : effectivePos.x + size.width - 8,
+                width: 12,
+                height: 12,
+                cursor: `${corner}-resize`,
+                pointerEvents: 'auto',
+              }}
+              onMouseDown={handleResizeMouseDown(corner)}
             >
-              <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="var(--theme-border)" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          )}
-        </div>
-      ))}
+              {corner === 'se' && (
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  style={{ position: 'absolute', bottom: 1, right: 1 }}
+                >
+                  <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="var(--theme-border)" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              )}
+            </div>
+          ))}
+        </>
+      )}
     </div>,
     document.body,
   );
