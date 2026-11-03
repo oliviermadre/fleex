@@ -34,6 +34,21 @@ interface SdkOptionsContext {
    * can exceed this value without indicating the cap was ignored.
    */
   maxTurns?: number;
+  /**
+   * Who the run is, for the `fleex` CLI/MCP it calls: exported to the agent's
+   * process as FLEEX_ACTOR_TYPE=agent / FLEEX_ACTOR_NAME, which the CLI sends
+   * as `x-fleex-actor-*` headers — so a todo item an agent writes is
+   * attributed to it, not to the human. The persona's display name, or
+   * `workflow:<template> → <step>` for a workflow step (same as its comments).
+   */
+  actorName?: string;
+  /**
+   * The persona's slug (`persona.name`), exported as FLEEX_ACTOR_PERSONA: a
+   * workflow step is named `workflow:<template> → <step>`, so the name alone
+   * cannot tell which todo items are assigned to this run. Absent for runs
+   * without a persona (a panel's orchestrator).
+   */
+  actorPersona?: string;
 }
 
 /** Clamp a configured turn budget, falling back to the default when unusable. */
@@ -57,6 +72,15 @@ export function effectiveMaxTurns(
   return resolveMaxTurns(configured);
 }
 
+/** The env a run exports so the `fleex` CLI it spawns acts in its name. */
+export function agentActorEnv(actorName: string, personaSlug?: string): Record<string, string> {
+  return {
+    FLEEX_ACTOR_TYPE: 'agent',
+    FLEEX_ACTOR_NAME: actorName,
+    ...(personaSlug ? { FLEEX_ACTOR_PERSONA: personaSlug } : {}),
+  };
+}
+
 export function buildSdkOptions(
   effectiveMode: MentionExecutionMode,
   ctx: SdkOptionsContext,
@@ -74,6 +98,8 @@ export function buildSdkOptions(
   if (ctx.fast) base.settings = { ...(base.settings as Record<string, unknown> | undefined), fastMode: true };
 
   if (ctx.outputFormat) base.outputFormat = ctx.outputFormat;
+  // `env` replaces the SDK's default (process.env): keep everything else.
+  if (ctx.actorName) base.env = { ...process.env, ...agentActorEnv(ctx.actorName, ctx.actorPersona) };
 
   switch (effectiveMode) {
     case 'talk':

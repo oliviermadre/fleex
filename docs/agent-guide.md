@@ -296,6 +296,99 @@ All paths are relative to `/api/agents/v1`.
 
 ---
 
+## Ticket todo list
+
+Every ticket can carry a **shared todo list**, built by the human and the
+agents together. It is optional: most tickets never use one. On a multi-step
+ticket it is where everyone sees what is left — the Catalyst lays out the plan,
+the Builder checks items as it goes, the human adds what QA finds.
+
+**Off for agents unless the human turns it on** (Settings › General › *Agents
+see the ticket todo list*, `todoAgentAccess` in the config). While it is off,
+agent runs get no `## Todo list` section nor hint in their prompt, and every
+`/todos*` call they make — read or write, CLI, MCP or agent API — answers
+**403** `the ticket todo list is turned off for agents in this workspace`. If
+you get that, leave the todo alone and carry on without it. The human, their own
+CLI and the assistant (no `FLEEX_ACTOR_TYPE=agent`) are never affected.
+
+**Model.** Each item has a per-ticket `ref` (`#1`, `#2`…), never reused, a
+one-line `text` (≤ 500 chars), an optional markdown `note`, and a state:
+`open` (alias `todo`), `done`, `cancelled`. Every change — create, edit, state
+change, move, delete — is recorded with who, when and from where
+(`web` / `cli` / `mcp` / `agent-api`). Delete is soft: the item leaves the list,
+its history stays.
+
+**Assignee.** Each item says who it is for: the human (`user`), any agent
+(`agent`), one persona (`builder`, `catalyst`…), or anyone (`none`). What the
+human adds is theirs by default; what an agent adds is for anyone. In your
+prompt the open items are grouped: *For you*, *For any agent / anyone*,
+*Assigned to another agent*, *Assigned to <human> — do NOT act on these*.
+
+**Etiquette.**
+
+- Add the steps you plan before you start (`add --file plan.txt` for several).
+- Mark them done as you complete them — not all at the end.
+- Add what you discover along the way.
+- Never delete an item you did not create: **cancel it with a reason**. An
+  agent deleting an item a human created gets a `403`.
+- Work on your items and unassigned ones (`list --mine`).
+- **Never act on an item assigned to the human.** `done`, `cancel`, `reopen`,
+  editing its text and `delete` are refused (`403`). Take it over
+  (`assign … me --reason "…"`) only when the human explicitly asked you to in
+  this request — never just to be able to complete it. Without `--reason` the
+  takeover is refused (`400`); with it, the reason is kept in the history and
+  the panel shows "repris par <you>".
+- Hand to the human (`--to user`) what only they can do: manual QA, decisions,
+  credentials. They find it in their todo instead of a comment.
+- On another agent's item you are allowed, but warned: coordinate (comment).
+- `done` on an item already done writes nothing and says so (exit 0).
+
+**From an agent run (CLI / MCP).** The run exports `FLEEX_ACTOR_TYPE=agent` and
+`FLEEX_ACTOR_NAME=<persona>` (`workflow:<template> → <step>` for a workflow
+step), plus `FLEEX_ACTOR_PERSONA=<persona slug>`; the CLI turns them into
+`x-fleex-actor-*` headers, so what you write is attributed to you and `me` /
+`--mine` know which persona you are. `--as <name>` forces an attribution by
+hand.
+
+```bash
+fleex ticket todo list 42                       # open, then done, then cancelled
+fleex ticket todo add 42 "Write migration 042" --note "follow 040"
+fleex ticket todo add 42 --file plan.txt        # one item per non-empty line
+fleex ticket todo add 42 "Test pg for real" --to user   # me | user | agent | none | <persona>
+fleex ticket todo list 42 --mine                # what you may pick up
+fleex ticket todo assign 42 4 5 builder         # several refs, then who
+fleex ticket todo assign 42 8 me --reason "nas asked me to finish the QA"
+fleex ticket todo done 42 1 2                   # several refs at once
+fleex ticket todo cancel 42 3 --reason "covered by #2"
+fleex ticket todo reopen 42 3
+fleex ticket todo move 42 5 --after 2           # or --first
+fleex ticket todo edit 42 4 --text "…" --note "…"
+fleex ticket todo delete 42 6                   # only items you (an agent) created
+fleex ticket todo history 42 [3]
+```
+
+The MCP exposes the same commands as `fleex_ticket_todo_*` tools. Your prompt
+already contains the list (section `## Todo list`, open items + the 20 most
+recently done) when it is not empty, and always a one-line reminder that it
+exists.
+
+**HTTP (token auth).** All paths relative to `/api/agents/v1`; `:item` is the
+ref (`3`) or the item UUID. The actor is your token's agent, source `agent-api`;
+its name, lower-cased, stands for the persona (`me`). `assignee` is
+`me | user | agent | none | <persona slug>` or `{ type, name }`.
+
+| Action | Method | Path | Body |
+|---|---|---|---|
+| List | `GET` | `/tickets/:id/todos` | — |
+| Add | `POST` | `/tickets/:id/todos` | `{ text, note?, after?, assignee? }` |
+| Edit / change state / move / assign | `PATCH` | `/tickets/:id/todos/:item` | `{ text?, note?, state?, reason?, after?, assignee?, deleted?: false }` (`after: null` = first; `deleted: false` restores) |
+| Delete | `DELETE` | `/tickets/:id/todos/:item` | — |
+| History | `GET` | `/tickets/:id/todos/events` | Query: `?itemId=<ref or id>` |
+
+Writes return `{ item, history }`; an empty `history` means nothing changed.
+
+---
+
 ## Worktree Management
 
 When you need a git worktree as your working directory for a ticket, use the worktree endpoints. The simplest path is a single idempotent POST — it creates a worktree if none exists, or returns the existing one.

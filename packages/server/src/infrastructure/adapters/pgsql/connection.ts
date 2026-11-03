@@ -24,6 +24,15 @@ export class PgConnection {
     return this.pool.query(text, params);
   }
 
+  /**
+   * A dedicated client for a transaction (BEGIN … COMMIT must run on one
+   * connection). Release it when done.
+   */
+  async connect(): Promise<{ query(text: string, params?: unknown[]): Promise<pg.QueryResult>; release(): void }> {
+    // The installed @types/pg does not surface Pool#connect to tsc here; it exists at runtime.
+    return (this.pool as unknown as { connect(): Promise<{ query(text: string, params?: unknown[]): Promise<pg.QueryResult>; release(): void }> }).connect();
+  }
+
   async close(): Promise<void> {
     if (this._pool) {
       await this._pool.end();

@@ -97,7 +97,10 @@ export function runFleexArgv(argv: string[], opts: ExecOptions = {}): Promise<Ex
     execFile(
       bin,
       fullArgs,
-      { cwd: opts.cwd, timeout: timeoutMs, maxBuffer, windowsHide: true },
+      // FLEEX_SOURCE=mcp: the CLI tags what it writes as coming from the MCP
+      // (todo history). The rest of the env — FLEEX_ACTOR_* of an agent run
+      // included — is inherited as before.
+      { cwd: opts.cwd, timeout: timeoutMs, maxBuffer, windowsHide: true, env: { ...process.env, FLEEX_SOURCE: 'mcp' } },
       (err, stdout, stderr) => {
         const classified = err ? classifyExecError(err as ExecFileError, { bin, timeoutMs, maxBuffer }) : null;
         const exitCode = classified ? classified.exitCode : 0;

@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind, PrMergeMethod, TimelineAnnotation } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult, RoutineTriggerKind, PrMergeMethod, TimelineAnnotation, TicketTodoItem, TicketTodoEvent } from '@fleex/shared';
 
 // ── Base ──
 
@@ -168,6 +168,30 @@ export interface AnnotationDeletedEvent extends DomainEvent {
   type: 'annotation.deleted';
   ticketId: string;
   annotationId: string;
+}
+
+// ── Ticket todo events ──
+// They carry the DTO and the history rows they wrote, like annotations.
+
+export interface TodoCreatedEvent extends DomainEvent {
+  type: 'todo.created';
+  ticketId: string;
+  item: TicketTodoItem;
+  history: TicketTodoEvent[];
+}
+
+export interface TodoUpdatedEvent extends DomainEvent {
+  type: 'todo.updated';
+  ticketId: string;
+  item: TicketTodoItem;
+  history: TicketTodoEvent[];
+}
+
+export interface TodoDeletedEvent extends DomainEvent {
+  type: 'todo.deleted';
+  ticketId: string;
+  itemId: string;
+  history: TicketTodoEvent[];
 }
 
 // ── Mention events ──
@@ -640,6 +664,9 @@ export type AnyDomainEvent =
   | AnnotationCreatedEvent
   | AnnotationUpdatedEvent
   | AnnotationDeletedEvent
+  | TodoCreatedEvent
+  | TodoUpdatedEvent
+  | TodoDeletedEvent
   | MentionCreatedEvent
   | MentionAcknowledgedEvent
   | MentionResolvedEvent

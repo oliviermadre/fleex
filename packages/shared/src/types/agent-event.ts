@@ -149,6 +149,7 @@ export type ContextInjectionKind =
   | 'comment'
   | 'deliverable'
   | 'annotation'
+  | 'todo'
   | 'epic'
   | 'ticket_summary'
   | 'memory_snippet'

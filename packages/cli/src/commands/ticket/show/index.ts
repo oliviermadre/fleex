@@ -1,8 +1,9 @@
-import type { TimelineAnnotation } from '@fleex/shared';
+import type { TicketTodoItem, TimelineAnnotation } from '@fleex/shared';
 import type { CommandDef } from '../../../core/types.ts';
 import { c, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiCall } from '../../../core/api.ts';
 import { resolveTicketId, colorizeCost } from '../_shared.ts';
+import { countsLine, itemLine } from '../todo/_shared.ts';
 
 interface ShowOptions {
   board?: string;
@@ -49,7 +50,7 @@ const def: CommandDef = {
   action: async (idArg: string, opts: ShowOptions) => {
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();
-    const [ticket, ticketEpics, activity, annotations] = await Promise.all([
+    const [ticket, ticketEpics, activity, annotations, todos] = await Promise.all([
       apiGet<Ticket>(`${base}/api/tickets/${uuid}`),
       apiGet<Epic[]>(`${base}/api/tickets/${uuid}/epics`),
       // Cumulative agentic cost (#404) rides on the same endpoint the Kanban
@@ -60,6 +61,8 @@ const def: CommandDef = {
       // Timeline annotations are what the team flagged as worth remembering —
       // always shown, but an older server without the route must not sink `show`.
       apiCall<TimelineAnnotation[]>('GET', `${base}/api/tickets/${uuid}/annotations`).catch(() => [] as TimelineAnnotation[]),
+      // The shared todo list: same rule, an older server must not sink `show`.
+      apiCall<TicketTodoItem[]>('GET', `${base}/api/tickets/${uuid}/todos`).catch(() => [] as TicketTodoItem[]),
     ]);
     const cumulativeCostUsd = activity?.[0]?.cumulativeCostUsd ?? null;
 
@@ -83,6 +86,7 @@ const def: CommandDef = {
         epics: ticketEpics,
         cumulativeCostUsd,
         annotations,
+        todos,
         ...(comments ? { comments } : {}),
         ...(deliverables ? { deliverables } : {}),
       };
@@ -138,6 +142,13 @@ const def: CommandDef = {
       for (const a of annotations) {
         process.stdout.write(`    ${c.dim(a.at.slice(0, 16).replace('T', ' '))}  ${c.bold(a.title)} ${c.dim(`[${a.tone}]`)} by ${c.cyan(a.authorName)}\n`);
       }
+    }
+
+    if (todos.length > 0) {
+      const open = todos.filter((i) => i.state === 'open');
+      process.stdout.write('\n');
+      process.stdout.write(`  ${c.bold('Todo:')}        ${c.dim(`${countsLine(todos)} — fleex ticket todo list ${ticket.displayId}`)}\n`);
+      for (const i of open) process.stdout.write(`  ${itemLine(i)}\n`);
     }
 
     const wantComments = opts.withComments || opts.full;

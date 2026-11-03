@@ -48,6 +48,8 @@ export interface AppSettings {
   agentMaxTurns: number;
   /** Wall-clock cap (ms) on a single agent/skill execution. Unset → server default. */
   agentExecutionTimeout?: number;
+  /** Agent runs see and use the ticket todo list. Unset → off (server default). */
+  todoAgentAccess?: boolean;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**

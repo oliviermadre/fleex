@@ -827,6 +827,49 @@ export async function deleteTicketAnnotation(ticketId: string, annotationId: str
   await request<void>(`/tickets/${encodeURIComponent(ticketId)}/annotations/${encodeURIComponent(annotationId)}`, { method: 'DELETE' });
 }
 
+// ── Ticket todo list API ──
+
+export type TodoPatch = {
+  text?: string;
+  note?: string | null;
+  state?: import('@fleex/shared').TodoItemState;
+  reason?: string | null;
+  /** Move right after this item (ref or id); null = first. */
+  after?: string | number | null;
+  /** `me` | `user` | `agent` | `none` | a persona slug, or the object form. */
+  assignee?: import('@fleex/shared').TodoAssigneeInput;
+  /** `false` restores a deleted item (Undo of a delete). */
+  deleted?: false;
+};
+
+const todosPath = (ticketId: string, itemId?: string) =>
+  `/tickets/${encodeURIComponent(ticketId)}/todos${itemId ? `/${encodeURIComponent(itemId)}` : ''}`;
+
+export async function fetchTicketTodos(ticketId: string): Promise<import('@fleex/shared').TicketTodoItem[]> {
+  return request<import('@fleex/shared').TicketTodoItem[]>(todosPath(ticketId));
+}
+
+export async function createTicketTodo(
+  ticketId: string,
+  input: { text: string; note?: string | null; after?: string | number | null; assignee?: import('@fleex/shared').TodoAssigneeInput },
+): Promise<import('@fleex/shared').TodoWriteResult> {
+  return request<import('@fleex/shared').TodoWriteResult>(todosPath(ticketId), { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function updateTicketTodo(ticketId: string, itemId: string, patch: TodoPatch): Promise<import('@fleex/shared').TodoWriteResult> {
+  return request<import('@fleex/shared').TodoWriteResult>(todosPath(ticketId, itemId), { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export async function deleteTicketTodo(ticketId: string, itemId: string): Promise<import('@fleex/shared').TodoWriteResult> {
+  return request<import('@fleex/shared').TodoWriteResult>(todosPath(ticketId, itemId), { method: 'DELETE' });
+}
+
+/** Newest first: the whole list, or one item (deleted ones included). */
+export async function fetchTicketTodoEvents(ticketId: string, itemId?: string): Promise<import('@fleex/shared').TicketTodoEvent[]> {
+  const q = itemId ? `?itemId=${encodeURIComponent(itemId)}` : '';
+  return request<import('@fleex/shared').TicketTodoEvent[]>(`${todosPath(ticketId)}/events${q}`);
+}
+
 // ── Read Cursors API ──
 
 export async function fetchReadCursors(ticketId: string): Promise<import('@fleex/shared').TicketReadCursors> {

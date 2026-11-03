@@ -1,5 +1,5 @@
 /** One-shot panels a Work URL can open next to the task (`?panel=`, see RouterSync). */
-export type WorkUrlPanel = 'deliv' | 'mentions' | 'timeline';
+export type WorkUrlPanel = 'deliv' | 'todo' | 'mentions' | 'timeline';
 
 /**
  * Where each tab of the retired ticket-detail screen lives in the Work view.

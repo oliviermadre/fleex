@@ -17,7 +17,7 @@ afterEach(cleanup);
  */
 const GLYPH = /[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
 
-const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true };
+const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true };
 const header = { number: 591, title: 'Importer une tâche depuis Slack', boardName: 'Fleex', status: 'doing', type: 'build' };
 
 function setup(filters = ALL) {

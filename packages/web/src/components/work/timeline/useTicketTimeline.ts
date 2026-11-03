@@ -5,6 +5,7 @@
  *  - comments: applied in place (comment:created/updated/deleted);
  *  - activity log: refetched on ticket:updated / ticket:moved (no activity event);
  *  - mentions: refetched (debounced) on mention:*;
+ *  - todo history: refetched (debounced) on todo:* — one refetch for a burst;
  *  - workflow runs: `applyEvent` on workflow:*, and every run's detail is loaded;
  *  - executions, deliverables, PRs, sessions: their stores are already live.
  * "now" ticks every 60 s so the now line advances.
@@ -15,6 +16,7 @@ import type {
   TicketComment,
   TicketDeliverable,
   TicketMention,
+  TicketTodoEvent,
   TicketWsMessage,
 } from '@fleex/shared';
 import * as api from '../../../services/api';
@@ -37,10 +39,13 @@ import {
   type TimelineModel,
   type TimelineNames,
 } from './buildTimeline';
+import { todoMarks, type TodoMark } from './todoMarks';
 
 /** Enough for any real ticket's history (the server clamps to 1000). */
 const ACTIVITY_LIMIT = 1000;
 const NOW_TICK_MS = 60_000;
+/** A burst of WS messages (`todo done 42 1 2 3 4`) → one refetch after it. */
+const REFETCH_DEBOUNCE_MS = 500;
 const EMPTY_EXECUTIONS: never[] = [];
 const EMPTY_RUNS: never[] = [];
 const EMPTY_SEEN: ReadonlySet<string> = new Set();
@@ -56,6 +61,8 @@ function useMinuteClock(): number {
 
 export interface TicketTimelineData {
   model: TimelineModel | null;
+  /** The todo history as frieze marks — kept out of `model`: they take no slot in the layout. */
+  todoMarks: TodoMark[];
   loading: boolean;
 }
 
@@ -68,6 +75,7 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
   const [activities, setActivities] = useState<TicketActivity[]>([]);
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
+  const [todoEvents, setTodoEvents] = useState<TicketTodoEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,11 +85,14 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
       api.fetchTicketActivity(ticketId, { limit: ACTIVITY_LIMIT }).catch(() => [] as TicketActivity[]),
       api.fetchTicketComments(ticketId).catch(() => [] as TicketComment[]),
       api.fetchTicketMentions(ticketId).catch(() => [] as TicketMention[]),
-    ]).then(([a, c, m]) => {
+      // A failing todo endpoint never breaks the timeline: no strip, that's all.
+      api.fetchTicketTodoEvents(ticketId).catch(() => [] as TicketTodoEvent[]),
+    ]).then(([a, c, m, t]) => {
       if (cancelled) return;
       setActivities(a);
       setComments(c);
       setMentions(m);
+      setTodoEvents(t);
       setLoading(false);
     });
     return () => {
@@ -90,6 +101,7 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
   }, [ticketId]);
 
   const mentionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const todoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const unsub = appWs.onChannel('tickets', (raw) => {
       const msg = raw as TicketWsMessage;
@@ -109,7 +121,13 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
         if (mentionTimer.current) clearTimeout(mentionTimer.current);
         mentionTimer.current = setTimeout(() => {
           api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
-        }, 500);
+        }, REFETCH_DEBOUNCE_MS);
+      } else if (msg.type.startsWith('todo:')) {
+        if (data?.ticketId !== ticketId) return;
+        if (todoTimer.current) clearTimeout(todoTimer.current);
+        todoTimer.current = setTimeout(() => {
+          api.fetchTicketTodoEvents(ticketId).then(setTodoEvents).catch(() => {});
+        }, REFETCH_DEBOUNCE_MS);
       } else if (msg.type.startsWith('workflow:')) {
         if (data?.ticketId !== ticketId) return;
         useWorkflowRunStore.getState().applyEvent({ type: msg.type, ticketId, payload: msg.data as Record<string, unknown> });
@@ -118,6 +136,7 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
     return () => {
       unsub();
       if (mentionTimer.current) clearTimeout(mentionTimer.current);
+      if (todoTimer.current) clearTimeout(todoTimer.current);
     };
   }, [ticketId]);
 
@@ -254,5 +273,7 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
     );
   }, [ticket, ticketId, activities, comments, deliverables, seen, executions, mentions, runsWithSteps, task.prs, prDates, sessions, names, now]);
 
-  return { model, loading };
+  const marks = useMemo(() => todoMarks(todoEvents), [todoEvents]);
+
+  return { model, todoMarks: marks, loading };
 }

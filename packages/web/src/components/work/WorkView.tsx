@@ -28,6 +28,7 @@ import { CollapsedQueueRail } from './queue/CollapsedQueueRail';
 import { TaskPane } from './task/TaskPane';
 import { NewTask } from './new/NewTask';
 import { ToolStrip } from './panel/ToolStrip';
+import { delegatedToHumanCount, openTodoCount, useTodoStore } from '../../stores/todoStore';
 import { RightPanel } from './panel/RightPanel';
 import { ShellSurface } from './shell/ShellSurface';
 import { ShellDrawer } from './shell/ShellDrawer';
@@ -103,6 +104,13 @@ export function WorkView() {
   const { deliverables, removeDeliverable } = useTicketDeliverables(selectedTask?.id ?? null);
   // Same for mentions: one subscription feeds the tool-strip badge.
   const { openCount: mentionCount } = useTicketMentions(selectedTask?.id ?? null);
+  // And the todo list: loaded with the ticket so the badge counts open items
+  // before the panel is ever opened; live via WS afterwards.
+  const todoCount = useTodoStore((s) => openTodoCount(selectedTask ? s.byTicket[selectedTask.id] : undefined));
+  const todoForYou = useTodoStore((s) => delegatedToHumanCount(selectedTask ? s.byTicket[selectedTask.id] : undefined) > 0);
+  useEffect(() => {
+    if (selectedTask?.id) void useTodoStore.getState().load(selectedTask.id);
+  }, [selectedTask?.id]);
 
   // A single execution-log panel for the whole view — opened from a queue row's
   // running badge or a timeline run card.
@@ -166,7 +174,7 @@ export function WorkView() {
             buttons stay next to the band they toggle. */}
         {view === 'task' && (
           <div className="col-start-3 row-span-2 row-start-2 flex min-h-0">
-            <ToolStrip task={selectedTask} delivCount={deliverables.length} mentionCount={mentionCount} />
+            <ToolStrip task={selectedTask} delivCount={deliverables.length} mentionCount={mentionCount} todoCount={todoCount} todoForYou={todoForYou} />
           </div>
         )}
 

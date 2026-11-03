@@ -12,6 +12,7 @@ import type { WorkTask } from '../types';
 import { ContextPanel } from './ContextPanel';
 import { DelivsPanel } from './DelivsPanel';
 import { DiffPanel } from './DiffPanel';
+import { TodoPanel } from './TodoPanel';
 import { ScratchpadTabsPanel } from './ScratchpadTabsPanel';
 import { BrowserPanel } from './browser/BrowserPanel';
 import { TicketMentions } from '../../tickets/TicketMentions';
@@ -19,6 +20,7 @@ import { TicketMentions } from '../../tickets/TicketMentions';
 const TITLES: Record<string, string> = {
   context: 'CONTEXT',
   deliv: 'DELIVERABLES',
+  todo: 'TODO',
   mentions: 'MENTIONS',
   thread: 'THREADS',
   diff: 'DIFF',
@@ -110,6 +112,7 @@ export function RightPanel({
       {rightPanel === 'deliv' && (
         <DelivsPanel ticketId={task.id} deliverables={deliverables} onDeleted={onDeliverableDeleted} />
       )}
+      {rightPanel === 'todo' && <TodoPanel key={task.id} ticketId={task.id} />}
       {rightPanel === 'mentions' && (
         <div className="flex min-h-0 flex-1 flex-col p-2">
           <TicketMentions key={task.id} ticketId={task.id} compact />

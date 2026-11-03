@@ -56,6 +56,12 @@ If the server does not return `changed` (older server than CLI), the CLI cannot
 prove a no-op and falls back to the previous optimistic message rather than
 wrongly claiming nothing happened.
 
+The ticket todo list follows the same rule: its writes return
+`{ item, history }`, and an empty `history` means nothing was written.
+`fleex ticket todo done 42 3` on an item already done prints
+`#3 already done — nothing written`, exit `0`; `todo assign` to the current
+assignee prints `already assigned to … — nothing written`.
+
 ## Non-guarantee — the perimeter is narrower on purpose
 
 `DEFAULT_INCLUDE = ['ticket', 'epic']`.

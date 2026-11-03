@@ -1,5 +1,6 @@
 import { die } from './colors.ts';
 import { requirePorts } from './ports.ts';
+import { actorHeaders } from './actor.ts';
 
 export function apiBase(): string {
   const ports = requirePorts();
@@ -42,9 +43,9 @@ async function request<T>(method: string, url: string, body?: unknown, timeoutMs
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const opts: RequestInit = { method, signal: ctrl.signal };
+    const opts: RequestInit = { method, signal: ctrl.signal, headers: actorHeaders() };
     if (body !== undefined) {
-      opts.headers = { 'Content-Type': 'application/json' };
+      opts.headers = { ...actorHeaders(), 'Content-Type': 'application/json' };
       opts.body = JSON.stringify(body);
     }
     res = await fetch(url, opts);
@@ -82,9 +83,9 @@ async function request<T>(method: string, url: string, body?: unknown, timeoutMs
  * Use when the caller wants to recover (e.g. continue a batch on failure).
  */
 export async function apiCall<T = any>(method: string, url: string, body?: unknown, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
-  const opts: RequestInit = { method };
+  const opts: RequestInit = { method, headers: actorHeaders() };
   if (body !== undefined) {
-    opts.headers = { 'Content-Type': 'application/json' };
+    opts.headers = { ...actorHeaders(), 'Content-Type': 'application/json' };
     opts.body = JSON.stringify(body);
   }
   const ctrl = new AbortController();
