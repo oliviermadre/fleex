@@ -255,6 +255,8 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
               addRef.current?.focus();
             }}
           />
+          {/* Input wraps itself in a div: this one lets it take the row's width. */}
+          <div className="min-w-0 flex-1">
           <Input
             ref={addRef}
             value={draft}
@@ -277,6 +279,7 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
               }
             }}
           />
+          </div>
           </div>
           {bulk && (
             <div className="mt-1.5 flex items-center gap-2 rounded-md bg-[var(--theme-accent-muted)] px-2 py-1.5 text-[12px] text-[var(--theme-text-primary)]">
