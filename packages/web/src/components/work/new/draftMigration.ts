@@ -13,6 +13,7 @@ export const EMPTY_DRAFT: WorkDraft = {
   boardId: null,
   type: 'build',
   priority: 'none',
+  startWithAssistant: true,
 };
 
 /**

@@ -12,6 +12,7 @@ import { PinnedBadge, type CommentPin } from './CommentPin';
 import { CommentActionsMenu, type CommentAction } from './CommentActionsMenu';
 import { TrashIcon } from './TrashIcon';
 import { PinIcon } from '../../ui/icons/AnnotationIcons';
+import { stripModeRequest } from '../selectors';
 
 /** The menu entries a comment offers, in order: pin (or go to its annotation), then delete. */
 export function commentActions({ onDelete, pin }: { onDelete?: () => void; pin?: CommentPin }): CommentAction[] {
@@ -30,6 +31,7 @@ export function commentActions({ onDelete, pin }: { onDelete?: () => void; pin?:
 export function StreamItem({ comment, onDelete, pin }: { comment: TicketComment; onDelete?: () => void; pin?: CommentPin }) {
   const isUser = comment.authorType === 'user';
   const actions = commentActions({ onDelete, pin });
+  const isAssistant = comment.authorType === 'assistant';
 
   if (isUser) {
     return (
@@ -46,19 +48,23 @@ export function StreamItem({ comment, onDelete, pin }: { comment: TicketComment;
   return (
     <div className="group/comment flex gap-2" data-comment-id={comment.id}>
       <div
-        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--tint-purple-bg)] text-[12px] text-[var(--tint-purple-text)]"
+        className={
+          isAssistant
+            ? 'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--theme-accent-muted)] text-[12px] text-[var(--theme-accent)]'
+            : 'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--tint-purple-bg)] text-[12px] text-[var(--tint-purple-text)]'
+        }
         aria-hidden
       >
-        ⌬
+        {isAssistant ? '◆' : '⌬'}
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-center text-[11px] font-medium text-[var(--theme-text-secondary)]">
-          {comment.authorName || 'Agent'}
+          {comment.authorName || (isAssistant ? 'Assistant' : 'Agent')}
           {pin?.pinned && <PinnedBadge onClick={pin.onShow} className="ml-2" />}
           <CommentActionsMenu actions={actions} className="-my-1 ml-auto" />
         </div>
         <div className="min-w-0 max-w-full overflow-hidden text-[13px] text-[var(--theme-text-primary)]">
-          <MessageMarkdown body={comment.body} />
+          <MessageMarkdown body={stripModeRequest(comment.body)} />
         </div>
       </div>
     </div>
