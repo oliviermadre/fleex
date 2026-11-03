@@ -6,6 +6,7 @@ import { useTicketStore } from '../../../stores/ticketStore';
 import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { useWorkStore } from '../../../stores/workStore';
+import { DEFAULT_QUEUE_CONFIG, DEFAULT_QUEUE_FILTERS } from '../queueFilters';
 import { uploadFile } from '../../../services/api';
 
 const epicsByBoard: Record<string, TicketGroup[]> = {};
@@ -125,7 +126,7 @@ describe('NewTask — board, epics, repos', () => {
 // view jumped to the queue's first row and the new task was nowhere to be seen.
 describe('NewTask — a task created outside the queue filters', () => {
   it('stays selected and pinned, and the queue filters are left alone', async () => {
-    useWorkStore.setState({ boardFilters: ['b1'], statusFilters: ['doing', 'reviewing'], pinnedTicketId: null, selectedTicketId: null });
+    useWorkStore.setState({ queueConfig: { ...DEFAULT_QUEUE_CONFIG, filters: { ...DEFAULT_QUEUE_FILTERS, boards: ['b1'], statuses: ['doing', 'reviewing'] } }, pinnedTicketId: null, selectedTicketId: null });
     useWorkStore.getState().updateDraft({ title: 'On another board', boardId: 'b2' });
     render(<NewTask />);
 
@@ -135,8 +136,8 @@ describe('NewTask — a task created outside the queue filters', () => {
     const work = useWorkStore.getState();
     expect(work.selectedTicketId).toBe('t-new');
     expect(work.pinnedTicketId).toBe('t-new');
-    expect(work.boardFilters).toEqual(['b1']);
-    expect(work.statusFilters).toEqual(['doing', 'reviewing']);
+    expect(work.queueConfig.filters.boards).toEqual(['b1']);
+    expect(work.queueConfig.filters.statuses).toEqual(['doing', 'reviewing']);
   });
 });
 

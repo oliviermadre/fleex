@@ -4,6 +4,17 @@ import { EMPTY_DRAFT, migrateDraft } from '../components/work/new/draftMigration
 import { paneCount } from '../components/work/shell/shellLayout';
 import { useBrowserStore } from './browserStore';
 import { ZOOM_LEVELS } from '../components/work/timeline/layoutTimeline';
+import {
+  DEFAULT_QUEUE_CONFIG,
+  completeConfig,
+  withGroupBy,
+  type QueueConfig,
+  type QueueDisplay,
+  type QueueFilters,
+  type QueueGroupBy,
+} from '../components/work/queueFilters';
+
+export type { QueueGroupBy, QueueFilterKey } from '../components/work/queueFilters';
 
 /**
  * Client-only UI state for the Work view. The ticket is the source of truth for
@@ -26,8 +37,8 @@ export type ShellLayout = '1' | 'cols' | 'rows' | 'three' | 'grid';
 export type WorkMode = 'chat' | 'code' | 'shell' | 'workflow';
 /** New tasks can be any ticket type (the picker mirrors Context's). */
 export type DraftType = TicketType;
-/** How the queue groups its rows. 'activity' is the handoff default. */
-export type QueueGroupBy = 'activity' | 'repo' | 'type' | 'priority' | 'board' | 'status';
+/** The `viewDrafts` key of « All tasks » (no saved view active). */
+export const ALL_TASKS_VIEW = '__all__';
 /** Event categories the Timeline can hide (the spine — runs, steps — never is). */
 export type TimelineFilterKey = 'status' | 'cli' | 'pr' | 'deliverables' | 'comments' | 'annotations' | 'todos';
 export type TimelineFilters = Record<TimelineFilterKey, boolean>;
@@ -89,17 +100,17 @@ export interface WorkDraft {
 export interface WorkState {
   selectedTicketId: string | null;
   view: WorkView;
-  /** Board ids to filter the queue by; empty = all boards. */
-  boardFilters: string[];
-  /** Priority values to filter by; empty = all priorities. */
-  priorityFilters: string[];
-  /** Ticket statuses shown in the queue; defaults to doing + reviewing. */
-  statusFilters: string[];
-  /** How the queue is grouped. */
-  groupBy: QueueGroupBy;
-  /** When true, only favorited tasks show. */
-  favoriteOnly: boolean;
-  /** Free-text search over task titles. */
+  /** The queue's applied filters + grouping/sort (see queueFilters.ts). */
+  queueConfig: QueueConfig;
+  /** The saved view the queue shows; null = « All tasks ». */
+  activeViewId: string | null;
+  /**
+   * The queue config last applied on each view (key: view id, or ALL_TASKS_VIEW),
+   * so a view's unsaved edits survive switching to another view and back, and a
+   * reload. The saved view itself lives on the server (savedViewsStore).
+   */
+  viewDrafts: Record<string, QueueConfig>;
+  /** Free-text search over task titles — never part of a view. */
   search: string;
   rightPanel: RightPanel;
   /** Last focus request for the Todo panel (not persisted). */
@@ -160,11 +171,25 @@ export interface WorkState {
   // ── actions ──
   selectTicket: (id: string | null) => void;
   setView: (view: WorkView) => void;
+  /** Change some queue filters (recorded as the active view's draft). */
+  setQueueFilters: (patch: Partial<QueueFilters>) => void;
+  /** Change the grouping / sort (recorded as the active view's draft). */
+  setQueueDisplay: (patch: Partial<QueueDisplay>) => void;
   setBoardFilters: (boards: string[]) => void;
   setPriorityFilters: (priorities: string[]) => void;
   setStatusFilters: (statuses: string[]) => void;
+  /** Change the first grouping level (a sub-grouping equal to it is dropped). */
   setGroupBy: (groupBy: QueueGroupBy) => void;
   setFavoriteOnly: (on: boolean) => void;
+  /**
+   * Show a view (null = « All tasks »): its draft when it has one, else `saved`
+   * (the server's config), else the defaults.
+   */
+  activateView: (viewId: string | null, saved: QueueConfig | null) => void;
+  /** Make `config` the view's applied config and drop its draft (after Save / Reset). */
+  settleView: (viewId: string, config: QueueConfig) => void;
+  /** Forget a deleted view's draft; when it was active, fall back to « All tasks ». */
+  forgetView: (viewId: string) => void;
   setSearch: (q: string) => void;
   setRightPanelWidth: (width: number) => void;
   setQueueWidth: (width: number) => void;
@@ -222,47 +247,14 @@ export interface WorkState {
 
 const STORAGE_KEY = 'fleex_work';
 
-/** The queue filters a hidden ticket can be excluded by. */
-export type QueueFilterKey = 'boardFilters' | 'statusFilters' | 'priorityFilters' | 'favoriteOnly' | 'search';
-
-/** The fields of a ticket the queue filters look at. */
-export interface FilterableTicket {
-  readonly boardId: string;
-  readonly status: string;
-  readonly priority: string;
-  readonly favorite: boolean;
-  readonly title: string;
-}
-
-/**
- * The queue filters that exclude `ticket`, in display order — empty when it
- * passes them all. Mirrors useWorkQueue's filtering; never suggests changing
- * the filters (the queue pins the ticket instead).
- */
-export function excludedBy(
-  s: Pick<WorkState, QueueFilterKey>,
-  ticket: FilterableTicket,
-): QueueFilterKey[] {
-  const out: QueueFilterKey[] = [];
-  if (s.boardFilters.length > 0 && !s.boardFilters.includes(ticket.boardId)) out.push('boardFilters');
-  if (s.statusFilters.length > 0 && !s.statusFilters.includes(ticket.status)) out.push('statusFilters');
-  if (s.priorityFilters.length > 0 && !s.priorityFilters.includes(ticket.priority)) out.push('priorityFilters');
-  if (s.favoriteOnly && !ticket.favorite) out.push('favoriteOnly');
-  const q = s.search.trim().toLowerCase();
-  if (q && !ticket.title.toLowerCase().includes(q)) out.push('search');
-  return out;
-}
-
 /** The subset of state we persist — everything except the action functions. */
 type PersistedWork = Pick<
   WorkState,
   | 'selectedTicketId'
   | 'view'
-  | 'boardFilters'
-  | 'priorityFilters'
-  | 'statusFilters'
-  | 'groupBy'
-  | 'favoriteOnly'
+  | 'queueConfig'
+  | 'activeViewId'
+  | 'viewDrafts'
   | 'search'
   | 'rightPanel'
   | 'activeScratchTabByTicket'
@@ -359,11 +351,9 @@ export const selectShellPaneIds =
 const DEFAULTS: PersistedWork = {
   selectedTicketId: null,
   view: 'task',
-  boardFilters: [],
-  priorityFilters: [],
-  statusFilters: ['doing', 'reviewing'],
-  groupBy: 'activity',
-  favoriteOnly: false,
+  queueConfig: DEFAULT_QUEUE_CONFIG,
+  activeViewId: null,
+  viewDrafts: {},
   search: '',
   rightPanel: 'context',
   activeScratchTabByTicket: {},
@@ -389,15 +379,55 @@ const DEFAULTS: PersistedWork = {
   pinnedTicketId: null,
 };
 
+/** The flat queue fields of blobs written before saved views existed. */
+interface LegacyQueueBlob {
+  boardFilters?: string[];
+  priorityFilters?: string[];
+  statusFilters?: string[];
+  groupBy?: QueueGroupBy;
+  favoriteOnly?: boolean;
+}
+
+/**
+ * The queue part of a stored blob. A pre-views blob (flat boardFilters, groupBy…)
+ * becomes « All tasks »' config, so an existing user sees the same queue.
+ */
+export function migrateQueue(
+  parsed: Partial<PersistedWork> & LegacyQueueBlob,
+): Pick<PersistedWork, 'queueConfig' | 'activeViewId' | 'viewDrafts'> {
+  if (parsed.queueConfig) {
+    const viewDrafts: Record<string, QueueConfig> = {};
+    for (const [k, v] of Object.entries(parsed.viewDrafts ?? {})) viewDrafts[k] = completeConfig(v);
+    return {
+      queueConfig: completeConfig(parsed.queueConfig),
+      activeViewId: typeof parsed.activeViewId === 'string' ? parsed.activeViewId : null,
+      viewDrafts,
+    };
+  }
+  const d = DEFAULT_QUEUE_CONFIG;
+  const queueConfig = completeConfig({
+    filters: {
+      ...d.filters,
+      boards: parsed.boardFilters ?? d.filters.boards,
+      priorities: parsed.priorityFilters ?? d.filters.priorities,
+      statuses: parsed.statusFilters ?? d.filters.statuses,
+      favoriteOnly: parsed.favoriteOnly ?? d.filters.favoriteOnly,
+    },
+    display: { ...d.display, groupBy: parsed.groupBy ?? d.display.groupBy },
+  });
+  return { queueConfig, activeViewId: null, viewDrafts: { [ALL_TASKS_VIEW]: queueConfig } };
+}
+
 function load(): PersistedWork {
   if (typeof localStorage === 'undefined') return DEFAULTS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
-    const parsed = JSON.parse(raw) as Partial<PersistedWork>;
+    const parsed = JSON.parse(raw) as Partial<PersistedWork> & LegacyQueueBlob;
     // Merge over defaults so a stored blob from an older shape stays valid, and
     // migrate the draft (old blobs had no explicit title/stage — see migrateDraft).
-    const merged = { ...DEFAULTS, ...parsed, draft: migrateDraft(parsed.draft) };
+    const { boardFilters: _b, priorityFilters: _p, statusFilters: _s, groupBy: _g, favoriteOnly: _f, ...rest } = parsed;
+    const merged = { ...DEFAULTS, ...rest, draft: migrateDraft(parsed.draft), ...migrateQueue(parsed) };
     return {
       ...merged,
       // One bottom panel at a time: a blob holding both open keeps the shell.
@@ -418,11 +448,9 @@ export const useWorkStore = create<WorkState>((set, get) => {
     const snapshot: PersistedWork = {
       selectedTicketId: s.selectedTicketId,
       view: s.view,
-      boardFilters: s.boardFilters,
-      priorityFilters: s.priorityFilters,
-      statusFilters: s.statusFilters,
-      groupBy: s.groupBy,
-      favoriteOnly: s.favoriteOnly,
+      queueConfig: s.queueConfig,
+      activeViewId: s.activeViewId,
+      viewDrafts: s.viewDrafts,
       search: s.search,
       rightPanel: s.rightPanel,
       activeScratchTabByTicket: s.activeScratchTabByTicket,
@@ -489,6 +517,17 @@ export const useWorkStore = create<WorkState>((set, get) => {
     };
   }
 
+  /** Apply a queue config and record it as the active view's draft. */
+  function commitQueue(queueConfig: QueueConfig): void {
+    const s = get();
+    const key = s.activeViewId ?? ALL_TASKS_VIEW;
+    commit({ queueConfig, viewDrafts: { ...s.viewDrafts, [key]: queueConfig } });
+  }
+  const patchFilters = (patch: Partial<QueueFilters>) =>
+    commitQueue({ ...get().queueConfig, filters: { ...get().queueConfig.filters, ...patch } });
+  const patchDisplay = (patch: Partial<QueueDisplay>) =>
+    commitQueue({ ...get().queueConfig, display: { ...get().queueConfig.display, ...patch } });
+
   return {
     ...load(),
     shellFocusRequest: null,
@@ -497,11 +536,37 @@ export const useWorkStore = create<WorkState>((set, get) => {
     // Picking a row inside the queue never touches the pin.
     selectTicket: (id) => commit({ selectedTicketId: id, view: 'task' }),
     setView: (view) => commit({ view }),
-    setBoardFilters: (boardFilters) => commit({ boardFilters }),
-    setPriorityFilters: (priorityFilters) => commit({ priorityFilters }),
-    setStatusFilters: (statusFilters) => commit({ statusFilters }),
-    setGroupBy: (groupBy) => commit({ groupBy }),
-    setFavoriteOnly: (favoriteOnly) => commit({ favoriteOnly }),
+    setQueueFilters: patchFilters,
+    setQueueDisplay: (patch) => {
+      const next = { ...get().queueConfig.display, ...patch };
+      // Never sub-group by the first level.
+      patchDisplay(next.subGroupBy === next.groupBy ? { ...patch, subGroupBy: null } : patch);
+    },
+    setBoardFilters: (boards) => patchFilters({ boards }),
+    setPriorityFilters: (priorities) => patchFilters({ priorities }),
+    setStatusFilters: (statuses) => patchFilters({ statuses }),
+    setGroupBy: (groupBy) => commitQueue({ ...get().queueConfig, display: withGroupBy(get().queueConfig.display, groupBy) }),
+    setFavoriteOnly: (favoriteOnly) => patchFilters({ favoriteOnly }),
+    activateView: (viewId, saved) => {
+      const draft = get().viewDrafts[viewId ?? ALL_TASKS_VIEW];
+      commit({ activeViewId: viewId, queueConfig: draft ?? saved ?? DEFAULT_QUEUE_CONFIG });
+    },
+    settleView: (viewId, config) => {
+      const s = get();
+      const viewDrafts = { ...s.viewDrafts };
+      delete viewDrafts[viewId];
+      commit({ viewDrafts, ...(s.activeViewId === viewId ? { queueConfig: config } : {}) });
+    },
+    forgetView: (viewId) => {
+      const s = get();
+      const viewDrafts = { ...s.viewDrafts };
+      delete viewDrafts[viewId];
+      if (s.activeViewId !== viewId) {
+        commit({ viewDrafts });
+        return;
+      }
+      commit({ viewDrafts, activeViewId: null, queueConfig: viewDrafts[ALL_TASKS_VIEW] ?? DEFAULT_QUEUE_CONFIG });
+    },
     setSearch: (search) => commit({ search }),
     setRightPanelWidth: (width) => commit({ rightPanelWidth: clampRightPanel(width) }),
     setQueueWidth: (width) => commit({ queueWidth: clampQueue(width) }),

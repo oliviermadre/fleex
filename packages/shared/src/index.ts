@@ -188,6 +188,7 @@ export type {
   TicketLink,
   GitHubIssueMetadata,
   Ticket,
+  TicketEpicRef,
   Board,
   BoardWithCounts,
   CreateTicketRequest,

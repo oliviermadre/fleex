@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { useWorkStore } from '../../../stores/workStore';
+import { useSavedViewsStore } from '../../../stores/savedViewsStore';
 import { WorkQueue } from './WorkQueue';
 import type { WorkQueueModel } from '../useWorkQueue';
 import type { WorkTask } from '../types';
@@ -19,17 +20,22 @@ function model(pinned: WorkQueueModel['pinned']): WorkQueueModel {
     pinned,
     byId: new Map([[QUEUED.id, QUEUED]]),
     boards: [],
+    epics: [],
+    known: { boards: null, epics: null },
     selectedTask: QUEUED,
     counts: { total: 1, running: 0, needs: 0 },
   };
 }
 
-beforeEach(() => useWorkStore.setState({ view: 'task', pinnedTicketId: PINNED.id, selectedTicketId: QUEUED.id }));
+beforeEach(() => {
+  useSavedViewsStore.setState({ views: [], status: 'ready', load: async () => {} });
+  useWorkStore.setState({ view: 'task', pinnedTicketId: PINNED.id, selectedTicketId: QUEUED.id });
+});
 afterEach(cleanup);
 
 describe('WorkQueue — pinned ticket section', () => {
   it('shows the pin on top with the filters that hide it, and × removes it', () => {
-    render(<WorkQueue queue={model({ task: PINNED, excludedBy: ['boardFilters', 'statusFilters'] })} onOpenExecution={() => {}} />);
+    render(<WorkQueue queue={model({ task: PINNED, excludedBy: ['boards', 'statuses'] })} onOpenExecution={() => {}} />);
     const section = screen.getByTestId('queue-pinned');
     expect(within(section).getByText('Opened from the Kanban')).toBeTruthy();
     expect(within(section).getByText('Hidden by filters: board, status')).toBeTruthy();
@@ -41,7 +47,7 @@ describe('WorkQueue — pinned ticket section', () => {
   });
 
   it('selecting the pinned row selects it, the pin stays', () => {
-    render(<WorkQueue queue={model({ task: PINNED, excludedBy: ['statusFilters'] })} onOpenExecution={() => {}} />);
+    render(<WorkQueue queue={model({ task: PINNED, excludedBy: ['statuses'] })} onOpenExecution={() => {}} />);
     fireEvent.click(within(screen.getByTestId('queue-pinned')).getByText('Opened from the Kanban'));
     expect(useWorkStore.getState().selectedTicketId).toBe(PINNED.id);
     expect(useWorkStore.getState().pinnedTicketId).toBe(PINNED.id);

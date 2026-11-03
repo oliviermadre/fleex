@@ -23,6 +23,13 @@ export interface WorkPullRequest {
   url?: string;
 }
 
+/** An epic (ticket group) the task belongs to. */
+export interface WorkEpic {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
 /** A linked PR's state as the queue glyph shows it (draft = an open PR not ready yet). */
 export type WorkPrState = 'open' | 'draft' | 'merged' | 'closed';
 
@@ -56,6 +63,10 @@ export interface WorkTask {
   priority: string;
   favorite: boolean;
   blocked: boolean;
+  /** The epics the task belongs to (empty when none). */
+  epics: WorkEpic[];
+  /** ms epoch the ticket was created. */
+  createdAt: number | null;
 
   activity: QueueActivity;
   /** Human label for the current activity, e.g. "builder · running tests". */
@@ -85,5 +96,8 @@ export interface QueueGroup {
   label: string;
   /** Optional Tailwind text-color class for the header (activity groups tint). */
   tone?: string;
+  /** Every row of the group in display order (its sub-groups' rows when it has some). */
   items: WorkTask[];
+  /** Second grouping level, when the queue is sub-grouped. */
+  subgroups?: QueueGroup[];
 }

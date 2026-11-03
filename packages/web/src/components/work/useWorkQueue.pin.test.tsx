@@ -5,6 +5,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { useWorkStore } from '../../stores/workStore';
+import { DEFAULT_QUEUE_CONFIG, DEFAULT_QUEUE_FILTERS } from './queueFilters';
 import { useWorkQueue } from './useWorkQueue';
 
 vi.mock('../../services/api', async (orig) => ({
@@ -35,12 +36,9 @@ beforeEach(() => {
   useRepositoryStore.setState({ fetchRepositories: async () => {} } as never);
   useTicketActivityStore.setState({ loadActivity: async () => {} } as never);
   useWorkStore.setState({
-    boardFilters: ['odys'],
-    statusFilters: ['doing', 'reviewing'],
-    priorityFilters: [],
-    favoriteOnly: false,
+    queueConfig: { ...DEFAULT_QUEUE_CONFIG, filters: { ...DEFAULT_QUEUE_FILTERS, boards: ['odys'] } },
+    activeViewId: null,
     search: '',
-    groupBy: 'activity',
     selectedTicketId: null,
     pinnedTicketId: null,
     view: 'task',
@@ -55,14 +53,14 @@ describe('useWorkQueue — the pinned ticket', () => {
     const { result } = renderHook(() => useWorkQueue());
 
     expect(result.current.pinned?.task.id).toBe(OUTSIDE.id);
-    expect(result.current.pinned?.excludedBy).toEqual(['boardFilters', 'statusFilters']);
+    expect(result.current.pinned?.excludedBy).toEqual(['boards', 'statuses']);
     expect(result.current.selectedTask?.id).toBe(OUTSIDE.id);
     // ⌘⇧↑/↓ walks through it first; the count is the filtered queue only.
     expect(result.current.orderedIds).toEqual([OUTSIDE.id, QUEUED.id]);
     expect(result.current.counts.total).toBe(1);
     // And the filters are never touched to make it appear.
-    expect(useWorkStore.getState().boardFilters).toEqual(['odys']);
-    expect(useWorkStore.getState().statusFilters).toEqual(['doing', 'reviewing']);
+    expect(useWorkStore.getState().queueConfig.filters.boards).toEqual(['odys']);
+    expect(useWorkStore.getState().queueConfig.filters.statuses).toEqual(['doing', 'reviewing']);
   });
 
   it('keeps the pin visible while another queue row is selected', () => {

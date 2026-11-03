@@ -13,7 +13,8 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { isLeaveGuarded, pauseLeaveGuard, requestLeave, useUIStore, type SettingsTab, type AnalyticsTab, type ActionsRoute, type ActionsScope } from '../stores/uiStore';
-import { useWorkStore, excludedBy, type WorkMode } from '../stores/workStore';
+import { useWorkStore, type WorkMode } from '../stores/workStore';
+import { ticketExcludedBy } from '../components/work/useWorkQueue';
 import { useTicketStore } from '../stores/ticketStore';
 import { ticketLink, type WorkUrlPanel } from '../notifications/links';
 import { useTicketGroupStore, VALID_EPIC_DETAIL_TABS, type EpicDetailTab } from '../stores/ticketGroupStore';
@@ -651,7 +652,8 @@ export function RouterSync() {
           // already in the queue — then Back / Forward through queue picks
           // leave the pin alone. Unknown yet (cold load) → pinned.
           const ticket = useTicketStore.getState().tickets.find((t) => t.id === w.ticketId);
-          const inQueue = !!ticket && excludedBy(useWorkStore.getState(), ticket).length === 0;
+          const { queueConfig, search } = useWorkStore.getState();
+          const inQueue = !!ticket && ticketExcludedBy(queueConfig, search, ticket).length === 0;
           openWorkTicket(w.ticketId, w.mode, { pin: !inQueue });
         }
         if (w.panel === 'timeline') setWorkTimelineOpen(true);

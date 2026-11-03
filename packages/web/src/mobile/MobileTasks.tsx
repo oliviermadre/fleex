@@ -23,6 +23,7 @@ const GROUP_LABELS: Record<QueueGroupBy, string> = {
   priority: 'Priority',
   board: 'Board',
   status: 'Status',
+  epic: 'Epic',
 };
 
 type SheetKind = 'boards' | 'priority' | 'status' | 'group' | 'new' | null;
@@ -33,11 +34,11 @@ export function MobileTasks() {
   const openTicket = useMobileNavStore((s) => s.openTicket);
   const now = useClock();
 
-  const boardFilters = useWorkStore((s) => s.boardFilters);
-  const priorityFilters = useWorkStore((s) => s.priorityFilters);
-  const statusFilters = useWorkStore((s) => s.statusFilters);
-  const groupBy = useWorkStore((s) => s.groupBy);
-  const favoriteOnly = useWorkStore((s) => s.favoriteOnly);
+  const boardFilters = useWorkStore((s) => s.queueConfig.filters.boards);
+  const priorityFilters = useWorkStore((s) => s.queueConfig.filters.priorities);
+  const statusFilters = useWorkStore((s) => s.queueConfig.filters.statuses);
+  const groupBy = useWorkStore((s) => s.queueConfig.display.groupBy);
+  const favoriteOnly = useWorkStore((s) => s.queueConfig.filters.favoriteOnly);
   const search = useWorkStore((s) => s.search);
   const { setBoardFilters, setPriorityFilters, setStatusFilters, setGroupBy, setFavoriteOnly, setSearch } =
     useWorkStore.getState();

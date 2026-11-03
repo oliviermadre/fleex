@@ -72,6 +72,16 @@ export interface GitHubIssueMetadata {
   readonly syncedAt: string;
 }
 
+/** An epic a ticket belongs to, as `GET /api/tickets` embeds it. */
+export interface TicketEpicRef {
+  readonly id: string;
+  readonly name: string;
+  readonly emoji: string;
+  readonly color: string;
+  readonly timeframe: string;
+  readonly groupStatus: string;
+}
+
 export interface Ticket {
   readonly id: string;
   readonly boardId: string;
@@ -105,6 +115,11 @@ export interface Ticket {
   readonly fastMode: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /**
+   * The ticket's epics — embedded by the ticket list / detail endpoints only
+   * (absent on a ticket pushed by an event or returned by a mutation).
+   */
+  readonly epics?: TicketEpicRef[];
 }
 
 /**

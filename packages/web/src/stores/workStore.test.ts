@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useWorkStore, excludedBy, TIMELINE_MAX_HEIGHT } from './workStore';
+import { useWorkStore, TIMELINE_MAX_HEIGHT, migrateQueue, ALL_TASKS_VIEW } from './workStore';
+import { DEFAULT_QUEUE_CONFIG, DEFAULT_QUEUE_FILTERS } from '../components/work/queueFilters';
 
 // Each ticket keeps its own center mode, shell split and pane bindings — switching
 // tickets must never apply one ticket's shells or layout to another.
@@ -163,8 +164,8 @@ describe('workStore — openShellForTicket / openTicket', () => {
       shellPaneIdsByTicket: {},
       pinnedTicketId: null,
       shellFocusRequest: null,
-      boardFilters: ['ODYS'],
-      statusFilters: ['doing', 'reviewing'],
+      queueConfig: { ...DEFAULT_QUEUE_CONFIG, filters: { ...DEFAULT_QUEUE_FILTERS, boards: ['ODYS'] } },
+      activeViewId: null,
     });
   });
 
@@ -228,10 +229,10 @@ describe('workStore — openShellForTicket / openTicket', () => {
     const stored = JSON.parse(localStorage.getItem('fleex_work')!);
     s().openTicket('A', 'chat');
     expect(s().pinnedTicketId).toBe('A');
-    expect(s().boardFilters).toEqual(['ODYS']);
-    expect(s().statusFilters).toEqual(['doing', 'reviewing']);
+    expect(s().queueConfig.filters.boards).toEqual(['ODYS']);
+    expect(s().queueConfig.filters.statuses).toEqual(['doing', 'reviewing']);
     const after = JSON.parse(localStorage.getItem('fleex_work')!);
-    expect([after.boardFilters, after.statusFilters]).toEqual([stored.boardFilters, stored.statusFilters]);
+    expect(after.queueConfig).toEqual(stored.queueConfig);
     expect(after.pinnedTicketId).toBe('A');
   });
 
@@ -264,26 +265,6 @@ describe('workStore — openShellForTicket / openTicket', () => {
     expect(s().pinnedTicketId).toBe('A');
     s().forgetTicket('A');
     expect(s().pinnedTicketId).toBeNull();
-  });
-});
-
-describe('excludedBy', () => {
-  const none = { boardFilters: [], statusFilters: [], priorityFilters: [], favoriteOnly: false, search: '' };
-  const ticket = { boardId: 'b1', status: 'todo', priority: 'low', favorite: false, title: 'Fix login' };
-
-  it('is empty when the ticket passes the filters', () => {
-    expect(excludedBy(none, ticket)).toEqual([]);
-    expect(excludedBy({ ...none, statusFilters: ['todo'], boardFilters: ['b1'], search: 'login' }, ticket)).toEqual([]);
-  });
-
-  it('names every filter that excludes the ticket, board and status first', () => {
-    expect(excludedBy({ ...none, boardFilters: ['b2'], statusFilters: ['doing', 'reviewing'] }, ticket)).toEqual([
-      'boardFilters',
-      'statusFilters',
-    ]);
-    expect(
-      excludedBy({ boardFilters: ['b2'], statusFilters: ['doing'], priorityFilters: ['high'], favoriteOnly: true, search: 'zzz' }, ticket),
-    ).toEqual(['boardFilters', 'statusFilters', 'priorityFilters', 'favoriteOnly', 'search']);
   });
 });
 
@@ -361,5 +342,102 @@ describe('workStore — one bottom panel at a time', () => {
     expect([st.shellOpen, st.timelineOpen]).toEqual([true, false]);
     expect(st.timelineHeight).toBe(160);
     expect(st.timelineFilters).toEqual({ status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true });
+  });
+});
+
+// Saved views: an existing user upgrading sees the same queue (AC16).
+describe('migrateQueue — pre-views fleex_work blobs', () => {
+  it('turns the flat filters and groupBy into « All tasks » config, new fields at their defaults', () => {
+    const migrated = migrateQueue({
+      boardFilters: ['b1'],
+      statusFilters: ['todo'],
+      priorityFilters: ['high'],
+      favoriteOnly: true,
+      groupBy: 'repo',
+    } as never);
+    expect(migrated.activeViewId).toBeNull();
+    expect(migrated.queueConfig.filters).toEqual({
+      ...DEFAULT_QUEUE_FILTERS,
+      boards: ['b1'],
+      statuses: ['todo'],
+      priorities: ['high'],
+      favoriteOnly: true,
+    });
+    expect(migrated.queueConfig.display).toEqual({ ...DEFAULT_QUEUE_CONFIG.display, groupBy: 'repo' });
+    expect(migrated.viewDrafts[ALL_TASKS_VIEW]).toEqual(migrated.queueConfig);
+  });
+
+  it('a blob with no queue fields at all gets the defaults (doing + reviewing, by activity)', () => {
+    expect(migrateQueue({}).queueConfig).toEqual(DEFAULT_QUEUE_CONFIG);
+  });
+
+  it('a current blob is kept, completed with any field added since', () => {
+    const migrated = migrateQueue({
+      queueConfig: { filters: { boards: ['b2'] }, display: { groupBy: 'epic' } },
+      activeViewId: 'v1',
+      viewDrafts: { v1: { filters: { types: ['fix'] } } },
+    } as never);
+    expect(migrated.activeViewId).toBe('v1');
+    expect(migrated.queueConfig.filters).toEqual({ ...DEFAULT_QUEUE_FILTERS, boards: ['b2'] });
+    expect(migrated.viewDrafts.v1!.filters.types).toEqual(['fix']);
+  });
+});
+
+// Every view, « All tasks » included, keeps its own unsaved edits in the browser.
+describe('per-view drafts', () => {
+  const s = () => useWorkStore.getState();
+  const saved = (boards: string[]) => ({ ...DEFAULT_QUEUE_CONFIG, filters: { ...DEFAULT_QUEUE_FILTERS, boards } });
+
+  beforeEach(() => {
+    localStorage.clear();
+    useWorkStore.setState({ queueConfig: DEFAULT_QUEUE_CONFIG, activeViewId: null, viewDrafts: {} });
+  });
+
+  it('an edit to a view survives switching to another view and back', () => {
+    s().activateView('v1', saved(['odys']));
+    s().setQueueFilters({ types: ['fix'] });
+    s().activateView('v2', saved(['fleex']));
+    expect(s().queueConfig.filters.boards).toEqual(['fleex']);
+    s().activateView('v1', saved(['odys']));
+    expect(s().queueConfig.filters).toMatchObject({ boards: ['odys'], types: ['fix'] });
+  });
+
+  it('« All tasks » gets its own config back, not the last view\'s', () => {
+    s().setQueueFilters({ boards: ['mine'] });
+    s().activateView('v1', saved(['odys']));
+    s().activateView(null, null);
+    expect(s().queueConfig.filters.boards).toEqual(['mine']);
+  });
+
+  it('drafts are persisted, so they survive a reload (AC13)', () => {
+    s().activateView('v1', saved(['odys']));
+    s().setQueueFilters({ prs: ['none'] });
+    const stored = JSON.parse(localStorage.getItem('fleex_work')!);
+    expect(stored.activeViewId).toBe('v1');
+    expect(stored.viewDrafts.v1.filters.prs).toEqual(['none']);
+  });
+
+  it('settleView (Save / Reset) applies the config and drops the draft', () => {
+    s().activateView('v1', saved(['odys']));
+    s().setQueueFilters({ types: ['fix'] });
+    s().settleView('v1', saved(['odys']));
+    expect(s().queueConfig.filters.types).toEqual([]);
+    expect(s().viewDrafts.v1).toBeUndefined();
+  });
+
+  it('forgetting the active view falls back to « All tasks » with its own config (AC15)', () => {
+    s().setQueueFilters({ boards: ['mine'] });
+    s().activateView('v1', saved(['odys']));
+    s().forgetView('v1');
+    expect(s().activeViewId).toBeNull();
+    expect(s().queueConfig.filters.boards).toEqual(['mine']);
+  });
+
+  it('setGroupBy on the sub-group value drops the sub-group (AC8)', () => {
+    s().setQueueDisplay({ groupBy: 'priority', subGroupBy: 'status' });
+    s().setGroupBy('status');
+    expect(s().queueConfig.display).toMatchObject({ groupBy: 'status', subGroupBy: null });
+    s().setQueueDisplay({ subGroupBy: 'status' });
+    expect(s().queueConfig.display.subGroupBy).toBeNull();
   });
 });

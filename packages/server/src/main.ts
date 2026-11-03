@@ -25,6 +25,7 @@ import { prCiRoutes } from './infrastructure/http/pr-ci.routes.js';
 import { actionsAiRoutes } from './infrastructure/http/actions-ai.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
+import { savedViewsRoutes } from './infrastructure/http/saved-views.routes.js';
 import { worktreeCleanupRoutes } from './infrastructure/http/worktree-cleanup.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
 import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
@@ -135,6 +136,7 @@ async function main() {
   await app.register(actionsAiRoutes({ suggestAction: container.suggestAction, iconSearch: container.iconSearch, isAvailable: container.isActionsAiAvailable, logger: container.logger }));
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));
+  await app.register(savedViewsRoutes({ kvStore: container.kvStore }));
   await app.register(claudeUsageRoutes(container));
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
