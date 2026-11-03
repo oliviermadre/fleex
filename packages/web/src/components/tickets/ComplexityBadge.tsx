@@ -1,5 +1,5 @@
 import type { TicketComplexity } from '@fleex/shared';
-import { TICKET_COMPLEXITIES, complexityLabel } from '@fleex/shared';
+import { complexityLabel } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { tintText } from '../../lib/tints';
 
@@ -10,10 +10,25 @@ export function complexityDescription(c: TicketComplexity | null): string {
   return `${c} pts`;
 }
 
-/** How far round the dial a value sits: 0 → empty, 55 → nearly full, ∞ → full. */
-function dialFill(c: TicketComplexity): number {
-  return TICKET_COMPLEXITIES.indexOf(c) / (TICKET_COMPLEXITIES.length - 1);
-}
+/**
+ * How far round the dial a value sits (0..1). A hand-tuned curve, not the
+ * scale index: small values stay small, 13 already reads as "big", 55 is
+ * nearly full and ∞ is full.
+ */
+export const DIAL_FILL: Record<TicketComplexity, number> = {
+  '0': 0,
+  '0.5': 0.02,
+  '1': 0.05,
+  '2': 0.1,
+  '3': 0.15,
+  '5': 0.25,
+  '8': 0.4,
+  '13': 0.65,
+  '21': 0.75,
+  '34': 0.85,
+  '55': 0.95,
+  inf: 1,
+};
 
 /**
  * A small stopwatch showing a ticket's complexity points: a crown on top,
@@ -42,7 +57,7 @@ export function ComplexityBadge({
         : label.length === 2
           ? (size === 'md' ? 'text-[9.5px]' : 'text-[8px]')
           : (size === 'md' ? 'text-[10.5px]' : 'text-[9px]');
-  const fill = complexity === null ? 0 : dialFill(complexity);
+  const fill = complexity === null ? 0 : DIAL_FILL[complexity];
   return (
     <span
       data-testid="complexity-badge"
