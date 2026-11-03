@@ -1,5 +1,5 @@
-import type { TicketTodoItem, TodoActorType, TodoItemState } from '@fleex/shared';
-import { TODO_NOTE_MAX, TODO_REASON_MAX, isTodoItemState, sanitizeForStorage, validateTodoText } from '@fleex/shared';
+import type { TicketTodoItem, TodoActorType, TodoAssignee, TodoItemState } from '@fleex/shared';
+import { TODO_NOTE_MAX, TODO_REASON_MAX, isTodoItemState, sameTodoAssignee, sanitizeForStorage, validateTodoText } from '@fleex/shared';
 import { InvalidTodoError } from '../errors.js';
 
 export interface TodoActorRef {
@@ -33,6 +33,10 @@ export class TicketTodoItemEntity {
     public stateChangedByType: TodoActorType | null,
     public stateChangedByName: string | null,
     public cancelReason: string | null,
+    public assignee: TodoAssignee | null,
+    public assignedByType: TodoActorType | null,
+    public assignedByName: string | null,
+    public takeoverReason: string | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
     public deletedAt: Date | null,
@@ -46,16 +50,51 @@ export class TicketTodoItemEntity {
     note?: string | null;
     position: number;
     actor: TodoActorRef;
+    /** Who the item is for (already resolved); null = anyone. */
+    assignee?: TodoAssignee | null;
     now?: Date;
   }): TicketTodoItemEntity {
     const now = params.now ?? new Date();
+    const assignee = params.assignee ?? null;
     return new TicketTodoItemEntity(
       params.id, params.ticketId, params.ref,
       validText(params.text), validNote(params.note ?? null), 'open', params.position,
       params.actor.type, params.actor.name,
       null, null, null, null,
+      assignee, assignee ? params.actor.type : null, assignee ? params.actor.name : null, null,
       now, now, null,
     );
+  }
+
+  /** The human is the assignee: agents must leave the item alone (see the use-case). */
+  get assignedToHuman(): boolean {
+    return this.assignee?.type === 'user';
+  }
+
+  /**
+   * Reassign. `takeoverReason` is set only when an agent takes over an item
+   * assigned to the human (the use-case decides); any other reassignment
+   * clears it. Returns the diff, or null when the assignee is unchanged.
+   */
+  assign(to: TodoAssignee | null, actor: TodoActorRef, reason: string | null, takeover: boolean, now = new Date()): TodoChanges | null {
+    if (sameTodoAssignee(this.assignee, to)) return null;
+    const cleanReason = validReason(reason, 'Reason');
+    const changes: TodoChanges = { assignee: { from: this.assignee, to } };
+    if (cleanReason) changes.reason = { from: null, to: cleanReason };
+    this.assignee = to;
+    this.assignedByType = to ? actor.type : null;
+    this.assignedByName = to ? actor.name : null;
+    this.takeoverReason = takeover ? cleanReason : null;
+    this.updatedAt = now;
+    return changes;
+  }
+
+  /** Undo a delete. Returns the diff, or null when the item is not deleted. */
+  restore(now = new Date()): TodoChanges | null {
+    if (!this.deletedAt) return null;
+    this.deletedAt = null;
+    this.updatedAt = now;
+    return { deleted: { from: true, to: false } };
   }
 
   /** Edit text and/or note. Returns the diff, or null when nothing changed. */
@@ -77,7 +116,7 @@ export class TicketTodoItemEntity {
   transition(to: string, actor: TodoActorRef, reason?: string | null, now = new Date()): TodoChanges | null {
     if (!isTodoItemState(to)) throw new InvalidTodoError(`Invalid todo state: ${to} (valid: open, done, cancelled)`);
     if (to === this.state) return null;
-    const cleanReason = to === 'cancelled' ? validReason(reason ?? null) : null;
+    const cleanReason = to === 'cancelled' ? validReason(reason ?? null, 'Cancel reason') : null;
     const changes: TodoChanges = { state: { from: this.state, to } };
     if (cleanReason) changes.reason = { from: null, to: cleanReason };
     this.state = to;
@@ -119,6 +158,10 @@ export class TicketTodoItemEntity {
       stateChangedByType: this.stateChangedByType,
       stateChangedByName: this.stateChangedByName,
       cancelReason: this.cancelReason,
+      assignee: this.assignee,
+      assignedByType: this.assignedByType,
+      assignedByName: this.assignedByName,
+      takeoverReason: this.takeoverReason,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };
@@ -139,10 +182,10 @@ function validNote(raw: string | null): string | null {
   return note;
 }
 
-function validReason(raw: string | null): string | null {
+function validReason(raw: string | null, label: string): string | null {
   if (raw === null) return null;
   const reason = sanitizeForStorage(String(raw)).trim();
   if (reason.length === 0) return null;
-  if (reason.length > TODO_REASON_MAX) throw new InvalidTodoError(`Cancel reason must be at most ${TODO_REASON_MAX} characters`);
+  if (reason.length > TODO_REASON_MAX) throw new InvalidTodoError(`${label} must be at most ${TODO_REASON_MAX} characters`);
   return reason;
 }

@@ -3,6 +3,7 @@ import { isTodoSource } from '@fleex/shared';
 import type { TodoActor } from '../../application/use-cases/ticket-todos.js';
 
 const NAME_MAX = 120;
+const PERSONA = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -26,7 +27,8 @@ function decode(v: string | undefined): string | undefined {
  * Who is acting on a web (`/api/tickets/...`) todo route.
  *
  * The CLI — and the MCP, which runs the CLI — declare themselves with
- * `x-fleex-actor-type` / `x-fleex-actor-name` / `x-fleex-source`, set from
+ * `x-fleex-actor-type` / `x-fleex-actor-name` / `x-fleex-actor-persona` /
+ * `x-fleex-source`, set from
  * the FLEEX_ACTOR_* env an agent run receives (or `--as`). Without headers the
  * caller is the browser: the configured human, source `web`.
  *
@@ -38,7 +40,11 @@ export function resolveTodoActor(headers: HeaderBag, human: string): TodoActor {
   const source: TodoSource = rawSource && isTodoSource(rawSource) && rawSource !== 'agent-api' ? rawSource : 'web';
   const rawType = header(headers, 'x-fleex-actor-type');
   const rawName = decode(header(headers, 'x-fleex-actor-name'))?.trim().slice(0, NAME_MAX);
-  if (rawType === 'agent' && rawName) return { type: 'agent', name: rawName, source };
+  if (rawType === 'agent' && rawName) {
+    // The persona slug (≤ 64, lower-case): which items are "for you", what `me` means.
+    const persona = header(headers, 'x-fleex-actor-persona')?.toLowerCase();
+    return { type: 'agent', name: rawName, source, ...(persona && PERSONA.test(persona) ? { persona } : {}) };
+  }
   const type: TodoActorType = 'user';
   return { type, name: rawType === 'user' && rawName ? rawName : human, source };
 }

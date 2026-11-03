@@ -208,6 +208,8 @@ export type {
   TodoActorType,
   TodoSource,
   TodoEventAction,
+  TodoAssignee,
+  TodoAssigneeInput,
   TicketTodoItem,
   TicketTodoEvent,
   TodoWriteResult,
@@ -273,6 +275,7 @@ export {
   isTodoItemState,
   isTodoSource,
   validateTodoText,
+  sameTodoAssignee,
 } from './types/ticket.js';
 
 export type {

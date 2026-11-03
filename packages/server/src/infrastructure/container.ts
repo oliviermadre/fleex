@@ -423,7 +423,16 @@ export async function createContainer() {
   //     broadcasts only — never side-effects, never re-audited, never re-published.
   const eventBus = new EventBus();
   const timelineAnnotations = new TimelineAnnotationsUseCase(annotationStore, ticketStore_, commentStore, (e) => eventBus.emit(e));
-  const ticketTodos = new TicketTodosUseCase(todoStore, ticketStore_, (e) => eventBus.emit(e));
+  const ticketTodos = new TicketTodosUseCase(
+    todoStore,
+    ticketStore_,
+    (e) => eventBus.emit(e),
+    () => {
+      const { humanDisplayName, humanMentionName } = config.get();
+      return humanDisplayName || humanMentionName || 'user';
+    },
+    async (slug) => (await personaStore_.getAll()).some((p) => p.name.toLowerCase() === slug),
+  );
   const remoteEventBus = new EventBus();
 
   // Human-readable identity of this process, shared by the audit trail and the

@@ -1,14 +1,45 @@
 import type { Command } from 'commander';
-import type { TicketTodoEvent, TicketTodoItem, TodoWriteResult } from '@fleex/shared';
-import { c, err, ok, info, present } from '../../../core/colors.ts';
+import type { TicketTodoEvent, TicketTodoItem, TodoAssignee, TodoWriteResult } from '@fleex/shared';
+import { c, err, ok, info, present, warn } from '../../../core/colors.ts';
 import { apiBase, apiCall } from '../../../core/api.ts';
-import { actAs } from '../../../core/actor.ts';
+import { actAs, currentActor, type CliActor } from '../../../core/actor.ts';
 
 export const BOARD_OPTION: [string, string] = ['--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)'];
 
 /** `--as <name>` on every write command. */
 export function addAsOption(cmd: Command): void {
   cmd.option('--as <name>', 'Attribute this change to agent <name> (default: FLEEX_ACTOR_NAME of an agent run, else you)');
+}
+
+/** `--to <who>` on `add`. */
+export const TO_HELP = 'Who the item is for: me (you — for an agent: your persona), user (the human), agent (any agent), '
+  + 'none (anyone) or a persona slug. Default: the human for an item the human adds, anyone for an agent\'s';
+
+/** `→ nas` / `→ builder` / `→ agent`; empty for anyone. */
+export function assigneeLabel(a: TodoAssignee | null): string {
+  if (!a) return '';
+  return `→ ${a.type === 'agent' ? (a.name ?? 'agent') : (a.name ?? 'user')}`;
+}
+
+/**
+ * `--mine`: for the human, what is assigned to them; for an agent, its own
+ * items plus the unassigned and "any agent" ones — what it may pick up.
+ */
+export function isMine(i: TicketTodoItem, actor: CliActor): boolean {
+  const a = i.assignee;
+  if (actor.type === 'user') return a?.type === 'user';
+  if (!a) return true;
+  return a.type === 'agent' && (!a.name || a.name.toLowerCase() === actor.persona);
+}
+
+/** `--assignee user|agent|none|<slug>` (exact assignment, not "may pick up"). */
+export function hasAssignee(i: TicketTodoItem, who: string): boolean {
+  const a = i.assignee;
+  const key = who.trim().toLowerCase();
+  if (key === 'none' || key === 'anyone') return a === null;
+  if (key === 'user' || key === 'human') return a?.type === 'user';
+  if (key === 'agent') return a?.type === 'agent' && a.name === null;
+  return a?.type === 'agent' && a.name?.toLowerCase() === key;
 }
 
 /** Apply `--as` before any request is sent. */
@@ -40,7 +71,9 @@ export function itemLine(i: TicketTodoItem, textWidth = 48): string {
   const label = `${`#${i.ref}`.padEnd(4)} ${i.text}`;
   const cut = label.length > textWidth ? `${label.slice(0, textWidth - 1)}…` : label.padEnd(textWidth);
   const body = i.state === 'open' ? cut : c.dim(cut);
-  return `  ${BOX[i.state]} ${body}  ${c.dim(meta)}${i.note ? c.dim(' 📝') : ''}`;
+  const to = assigneeLabel(i.assignee).padEnd(12);
+  const takeover = i.takeoverReason && i.state === 'open' ? c.dim(` · taken over by ${i.assignedByName}: “${i.takeoverReason}”`) : '';
+  return `  ${BOX[i.state]} ${body}  ${c.cyan(to)} ${c.dim(meta)}${takeover}${i.note ? c.dim(' 📝') : ''}`;
 }
 
 /** open first (list order), then done, then cancelled. */
@@ -75,13 +108,25 @@ function describeEvent(e: TicketTodoEvent): string {
     case 'created': return `created “${e.itemText}”`;
     case 'deleted': return 'deleted';
     case 'moved': return 'moved';
+    case 'assigned': {
+      const to = (ch.assignee?.to ?? null) as TodoAssignee | null;
+      return `assigned ${to ? assigneeLabel(to) : '→ anyone'}${ch.reason ? ` — “${String(ch.reason.to)}”` : ''}`;
+    }
     case 'state_changed':
       return `state ${String(ch.state?.from)} → ${String(ch.state?.to)}${ch.reason ? ` — “${String(ch.reason.to)}”` : ''}`;
     case 'edited':
+      if (ch.deleted) return 'restored';
       return Object.entries(ch)
         .map(([k, v]) => `${k} “${String(v.from ?? '∅')}” → “${String(v.to ?? '∅')}”`)
         .join(', ');
   }
+}
+
+/** The persona an item is assigned to, when it is another agent than the caller. */
+export function otherAgentOf(i: TicketTodoItem, actor: CliActor): string | null {
+  const a = i.assignee;
+  if (actor.type !== 'agent' || a?.type !== 'agent' || !a.name) return null;
+  return a.name.toLowerCase() === actor.persona ? null : a.name;
 }
 
 /** One item per non-empty line; list markers (`- `, `1. `, `[ ] `) are stripped. */
@@ -121,7 +166,11 @@ export async function changeState(
   const verb = state === 'open' ? 'reopened' : state;
   const noop = state === 'open' ? 'open' : state;
   present(results.length === 1 && failures.length === 0 ? results[0] : { results, failures }, () => {
-    for (const r of results) reportWrite(r, verb, noop);
+    for (const r of results) {
+      reportWrite(r, verb, noop);
+      const other = otherAgentOf(r.item, currentActor());
+      if (r.history.length > 0 && other) warn(`#${r.item.ref} is assigned to ${other} — tell them (comment on the ticket) so the work is not done twice`);
+    }
     for (const f of failures) err(f);
   });
   if (failures.length > 0) process.exit(1);

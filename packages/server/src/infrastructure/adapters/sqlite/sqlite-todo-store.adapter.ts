@@ -33,16 +33,23 @@ export class SqliteTodoStoreAdapter implements TodoStorePort {
     return Number(row.m);
   }
 
-  async insertItem(item: TicketTodoItemEntity): Promise<'ok' | 'ref_conflict'> {
+  async insertItem(item: TicketTodoItemEntity, events: readonly TicketTodoEvent[]): Promise<'ok' | 'ref_conflict'> {
     try {
-      this.conn.db.prepare(`
-        INSERT INTO ticket_todo_items
-          (id, ticket_id, ref, text, note, state, position, created_by_type, created_by_name,
-           state_changed_at, state_changed_by_type, state_changed_by_name, cancel_reason, created_at, updated_at, deleted_at)
-        VALUES
-          (@id, @ticket_id, @ref, @text, @note, @state, @position, @created_by_type, @created_by_name,
-           @state_changed_at, @state_changed_by_type, @state_changed_by_name, @cancel_reason, @created_at, @updated_at, @deleted_at)
-      `).run(todoItemToRow(item));
+      this.inTransaction(() => {
+        this.conn.db.prepare(`
+          INSERT INTO ticket_todo_items
+            (id, ticket_id, ref, text, note, state, position, created_by_type, created_by_name,
+             state_changed_at, state_changed_by_type, state_changed_by_name, cancel_reason,
+             assignee_type, assignee_name, assigned_by_type, assigned_by_name, takeover_reason,
+             created_at, updated_at, deleted_at)
+          VALUES
+            (@id, @ticket_id, @ref, @text, @note, @state, @position, @created_by_type, @created_by_name,
+             @state_changed_at, @state_changed_by_type, @state_changed_by_name, @cancel_reason,
+             @assignee_type, @assignee_name, @assigned_by_type, @assigned_by_name, @takeover_reason,
+             @created_at, @updated_at, @deleted_at)
+        `).run(todoItemToRow(item));
+        this.insertEvents(events);
+      });
       return 'ok';
     } catch (err) {
       if (isUniqueViolation(err)) return 'ref_conflict';
@@ -50,25 +57,46 @@ export class SqliteTodoStoreAdapter implements TodoStorePort {
     }
   }
 
-  async saveItem(item: TicketTodoItemEntity): Promise<void> {
-    this.conn.db.prepare(`
-      UPDATE ticket_todo_items SET
-        text = @text, note = @note, state = @state, position = @position,
-        state_changed_at = @state_changed_at, state_changed_by_type = @state_changed_by_type,
-        state_changed_by_name = @state_changed_by_name, cancel_reason = @cancel_reason,
-        updated_at = @updated_at, deleted_at = @deleted_at
-      WHERE id = @id
-    `).run(todoItemToRow(item));
+  async saveItem(item: TicketTodoItemEntity, events: readonly TicketTodoEvent[]): Promise<void> {
+    this.inTransaction(() => {
+      this.conn.db.prepare(`
+        UPDATE ticket_todo_items SET
+          text = @text, note = @note, state = @state, position = @position,
+          state_changed_at = @state_changed_at, state_changed_by_type = @state_changed_by_type,
+          state_changed_by_name = @state_changed_by_name, cancel_reason = @cancel_reason,
+          assignee_type = @assignee_type, assignee_name = @assignee_name,
+          assigned_by_type = @assigned_by_type, assigned_by_name = @assigned_by_name,
+          takeover_reason = @takeover_reason,
+          updated_at = @updated_at, deleted_at = @deleted_at
+        WHERE id = @id
+      `).run(todoItemToRow(item));
+      this.insertEvents(events);
+    });
   }
 
-  async addEvent(event: TicketTodoEvent): Promise<void> {
-    const row = todoEventToRow(event);
-    this.conn.db.prepare(`
+  private insertEvents(events: readonly TicketTodoEvent[]): void {
+    const stmt = this.conn.db.prepare(`
       INSERT INTO ticket_todo_events
         (id, item_id, ticket_id, item_ref, item_text, action, changes, actor_type, actor_name, source, created_at)
       VALUES
         (@id, @item_id, @ticket_id, @item_ref, @item_text, @action, @changes, @actor_type, @actor_name, @source, @created_at)
-    `).run({ ...row, changes: JSON.stringify(row.changes) });
+    `);
+    for (const event of events) {
+      const row = todoEventToRow(event);
+      stmt.run({ ...row, changes: JSON.stringify(row.changes) });
+    }
+  }
+
+  /** Item + history together: a failed history row must not leave an unrecorded change. */
+  private inTransaction(work: () => void): void {
+    this.conn.db.exec('BEGIN');
+    try {
+      work();
+      this.conn.db.exec('COMMIT');
+    } catch (error) {
+      this.conn.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   async listEvents(ticketId: string, itemId?: string): Promise<TicketTodoEvent[]> {

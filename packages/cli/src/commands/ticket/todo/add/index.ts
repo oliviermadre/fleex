@@ -4,21 +4,22 @@ import type { CommandDef } from '../../../../core/types.ts';
 import { die, ok, present } from '../../../../core/colors.ts';
 import { apiPost } from '../../../../core/api.ts';
 import { resolveTicketId } from '../../_shared.ts';
-import { addAsOption, applyAs, BOARD_OPTION, linesToItems, todosUrl } from '../_shared.ts';
+import { addAsOption, applyAs, assigneeLabel, BOARD_OPTION, linesToItems, TO_HELP, todosUrl } from '../_shared.ts';
 
-interface AddOptions { board?: string; note?: string; after?: string; file?: string; as?: string }
+interface AddOptions { board?: string; note?: string; after?: string; file?: string; as?: string; to?: string }
 
 const def: CommandDef = {
   workspaceAware: true,
   name: 'add',
   aliases: ['create', 'new'],
-  description: "Add one or more items to the ticket's shared todo list. Use it to lay out a multi-step plan the human and the next agents can follow.",
+  description: "Add one or more items to the ticket's shared todo list. Use it to lay out a multi-step plan the human and the next agents can follow. Assign to the human (--to user) what only they can do: manual QA, decisions, credentials.",
   setup(cmd) {
     cmd.argument('<ticket-id>', 'Ticket display ID or UUID');
     cmd.argument('[text]', 'The item, one line (≤ 500 chars). Omit it with --file');
     cmd.option('--note <markdown>', 'Optional detail shown under the item (≤ 4000 chars)');
     cmd.option('--after <ref>', 'Insert right after this item (default: end of the list)');
     cmd.option('--file <path>', 'Add one item per non-empty line of this file, in order');
+    cmd.option('--to <who>', TO_HELP);
     addAsOption(cmd);
     cmd.option(...BOARD_OPTION);
   },
@@ -47,6 +48,7 @@ const def: CommandDef = {
         text: t,
         ...(opts.note !== undefined ? { note: opts.note } : {}),
         ...(after !== undefined ? { after } : {}),
+        ...(opts.to !== undefined ? { assignee: opts.to } : {}),
       });
       created.push(result);
       // Keep a bulk insert in file order when it starts after an item.
@@ -54,7 +56,7 @@ const def: CommandDef = {
     }
     const items = created.map((r) => r.item);
     present(items.length === 1 ? items[0] : items, () => {
-      for (const i of items) ok(`#${i.ref} added — ${i.text}`);
+      for (const i of items) ok(`#${i.ref} added — ${i.text}${i.assignee ? ` ${assigneeLabel(i.assignee)}` : ''}`);
     });
   },
 };

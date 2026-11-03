@@ -10,11 +10,15 @@ export interface TodoStorePort {
   getItemByRef(ticketId: string, ref: number): Promise<TicketTodoItemEntity | null>;
   /** Highest ref ever given on this ticket, deleted items included; 0 when none. */
   maxRef(ticketId: string): Promise<number>;
-  /** Insert a new item. 'ref_conflict' when UNIQUE(ticket_id, ref) refused it (concurrent create). */
-  insertItem(item: TicketTodoItemEntity): Promise<'ok' | 'ref_conflict'>;
-  /** Update an existing item. */
-  saveItem(item: TicketTodoItemEntity): Promise<void>;
-  addEvent(event: TicketTodoEvent): Promise<void>;
+  /**
+   * Insert a new item and its history rows in one transaction (sqlite, pg;
+   * Supabase writes them in sequence — PostgREST has no multi-statement
+   * transaction). 'ref_conflict' when UNIQUE(ticket_id, ref) refused the item
+   * (concurrent create): nothing is written then.
+   */
+  insertItem(item: TicketTodoItemEntity, events: readonly TicketTodoEvent[]): Promise<'ok' | 'ref_conflict'>;
+  /** Update an existing item and append its history rows — same atomicity as insertItem. */
+  saveItem(item: TicketTodoItemEntity, events: readonly TicketTodoEvent[]): Promise<void>;
   /** History, newest first: the whole ticket, or one item. */
   listEvents(ticketId: string, itemId?: string): Promise<TicketTodoEvent[]>;
 }

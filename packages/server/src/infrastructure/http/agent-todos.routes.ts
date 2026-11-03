@@ -13,6 +13,8 @@ export function agentTodosRoutes(container: Container) {
       type: 'agent',
       name: request.agent?.name ?? 'unknown',
       source: 'agent-api',
+      // No persona header here: the token's agent name, lower-cased, stands for it.
+      ...(request.agent?.name ? { persona: request.agent.name.toLowerCase() } : {}),
     }));
   };
 }

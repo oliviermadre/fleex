@@ -292,7 +292,30 @@ export type TodoItemState = 'open' | 'done' | 'cancelled';
 export type TodoActorType = 'user' | 'agent';
 /** Where a todo change came from. */
 export type TodoSource = 'web' | 'cli' | 'mcp' | 'agent-api';
-export type TodoEventAction = 'created' | 'edited' | 'state_changed' | 'moved' | 'deleted';
+export type TodoEventAction = 'created' | 'edited' | 'state_changed' | 'moved' | 'deleted' | 'assigned';
+
+/**
+ * Who an item is for. `null` on the item = anyone. `{ type: 'user' }` = the
+ * human; `{ type: 'agent', name: null }` = any agent; `{ type: 'agent', name:
+ * 'builder' }` = that persona (its slug, lower-case).
+ */
+export interface TodoAssignee {
+  readonly type: TodoActorType;
+  readonly name: string | null;
+}
+
+/**
+ * How a client names an assignee on a write: a keyword resolved by the server
+ * against the acting caller — `me` (the caller itself), `user` (the human),
+ * `agent` (any agent), `none` (anyone) or a persona slug — or the object form.
+ */
+export type TodoAssigneeInput = string | TodoAssignee | null;
+
+/** Same assignee (null = anyone); persona slugs compare case-insensitively. */
+export function sameTodoAssignee(a: TodoAssignee | null, b: TodoAssignee | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.type === b.type && (a.name ?? '').toLowerCase() === (b.name ?? '').toLowerCase();
+}
 
 export const TODO_ITEM_STATES: readonly TodoItemState[] = ['open', 'done', 'cancelled'];
 export const TODO_SOURCES: readonly TodoSource[] = ['web', 'cli', 'mcp', 'agent-api'];
@@ -340,6 +363,16 @@ export interface TicketTodoItem {
   readonly stateChangedByName: string | null;
   /** Reason given on the last cancel, null otherwise. */
   readonly cancelReason: string | null;
+  /** Who the item is for; null = anyone. */
+  readonly assignee: TodoAssignee | null;
+  /** Who set the current assignee (the creator, for the default one). */
+  readonly assignedByType: TodoActorType | null;
+  readonly assignedByName: string | null;
+  /**
+   * Set when an agent took over an item assigned to the human: the reason it
+   * had to give. Cleared by any later reassignment.
+   */
+  readonly takeoverReason: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

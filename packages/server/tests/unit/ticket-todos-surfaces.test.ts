@@ -42,6 +42,19 @@ describe('resolveTodoActor — attribution of a web/CLI/MCP call', () => {
   });
 });
 
+describe('resolveTodoActor — the persona of an agent run', () => {
+  it('carries the persona slug the CLI sends, lower-cased: it decides which items are "for you"', () => {
+    expect(resolveTodoActor({ 'x-fleex-actor-type': 'agent', 'x-fleex-actor-name': 'w', 'x-fleex-actor-persona': 'Builder' }, 'nas'))
+      .toEqual({ type: 'agent', name: 'w', source: 'web', persona: 'builder' });
+  });
+
+  it('drops a malformed persona, and never gives one to the human', () => {
+    expect(resolveTodoActor({ 'x-fleex-actor-type': 'agent', 'x-fleex-actor-name': 'w', 'x-fleex-actor-persona': 'a b' }, 'nas').persona)
+      .toBeUndefined();
+    expect(resolveTodoActor({ 'x-fleex-actor-persona': 'builder' }, 'nas').persona).toBeUndefined();
+  });
+});
+
 describe('buildSdkOptions — the identity an agent run hands to the CLI it spawns', () => {
   it('exports FLEEX_ACTOR_* on top of the inherited env', () => {
     const opts = buildSdkOptions('edit', { model: 'm', systemPrompt: '', actorName: 'Builder' });
@@ -49,6 +62,13 @@ describe('buildSdkOptions — the identity an agent run hands to the CLI it spaw
     expect(env.FLEEX_ACTOR_TYPE).toBe('agent');
     expect(env.FLEEX_ACTOR_NAME).toBe('Builder');
     expect(env.PATH).toBe(process.env.PATH); // still able to find `fleex`, git, …
+  });
+
+  it('exports FLEEX_ACTOR_PERSONA only when the run has a persona (not a panel orchestrator)', () => {
+    const withPersona = buildSdkOptions('edit', { model: 'm', systemPrompt: '', actorName: 'w', actorPersona: 'builder' });
+    expect((withPersona.env as Record<string, string>).FLEEX_ACTOR_PERSONA).toBe('builder');
+    const orchestrator = buildSdkOptions('edit', { model: 'm', systemPrompt: '', actorName: 'Panel' });
+    expect((orchestrator.env as Record<string, string>).FLEEX_ACTOR_PERSONA).toBeUndefined();
   });
 
   it('leaves the SDK default env alone when no actor is given', () => {
@@ -61,7 +81,7 @@ const item = (ref: number, state: TicketTodoItem['state'], over: Partial<TicketT
   createdByType: 'agent', createdByName: 'Catalyst',
   stateChangedAt: state === 'open' ? null : `2026-11-03T10:${String(ref % 60).padStart(2, '0')}:00.000Z`,
   stateChangedByType: state === 'open' ? null : 'agent', stateChangedByName: state === 'open' ? null : 'Builder',
-  cancelReason: null, createdAt: '2026-11-03T09:00:00.000Z', updatedAt: '2026-11-03T09:00:00.000Z', ...over,
+  cancelReason: null, assignee: null, assignedByType: null, assignedByName: null, takeoverReason: null, createdAt: '2026-11-03T09:00:00.000Z', updatedAt: '2026-11-03T09:00:00.000Z', ...over,
 });
 
 describe('formatTodoContext — the `## Todo list` section of an agent prompt', () => {
@@ -77,11 +97,54 @@ describe('formatTodoContext — the `## Todo list` section of an agent prompt', 
       item(5, 'cancelled'),
     ])!;
     expect(out).toContain('2 open · 1 done · 1 cancelled');
-    expect(out).toContain('- [ ] #3 Item 3 — Catalyst (reopened by nas)');
-    expect(out).toContain('- [ ] #4 Item 4 — nas');
+    expect(out).toContain('- [ ] #3 Item 3 — by Catalyst (reopened by nas)');
+    expect(out).toContain('- [ ] #4 Item 4 — by nas');
     expect(out).toContain('- [x] #1 Item 1 — done by Builder · 2026-11-03 10:01 UTC');
     expect(out).not.toContain('Item 5');
     expect(out).toContain('(1 cancelled item hidden');
+  });
+
+  // The point of assignment: an agent reading the list must see at a glance
+  // what is its own, what is free, and what is the human's to do.
+  describe('grouped by who the items are for', () => {
+    const list = [
+      item(1, 'open', { assignee: { type: 'agent', name: 'builder' } }),
+      item(2, 'open'),
+      item(3, 'open', { assignee: { type: 'agent', name: null } }),
+      item(4, 'open', { assignee: { type: 'agent', name: 'catalyst' } }),
+      item(5, 'open', { assignee: { type: 'user', name: 'nas' }, createdByName: 'nas' }),
+    ];
+    const section = (out: string, heading: string) => out.split('### ').find((s) => s.startsWith(heading)) ?? '';
+
+    it('for an agent with a persona: its items, free ones, another agent\'s, the human\'s', () => {
+      const out = formatTodoContext(42, list, { persona: 'builder' })!;
+      expect(section(out, 'For you (builder)')).toContain('#1 Item 1');
+      expect(section(out, 'For any agent / anyone')).toMatch(/#2 Item 2[\s\S]*#3 Item 3/);
+      expect(section(out, 'Assigned to another agent')).toContain('#4 Item 4 — by Catalyst → catalyst');
+      expect(section(out, 'Assigned to nas — do NOT act on these')).toContain('#5 Item 5');
+      // Headings follow the order an agent should work in.
+      expect(out.indexOf('For you')).toBeLessThan(out.indexOf('For any agent'));
+      expect(out.indexOf('Assigned to another agent')).toBeLessThan(out.indexOf('Assigned to nas'));
+    });
+
+    it('for a run without persona (panel orchestrator): nothing is "for you"', () => {
+      const out = formatTodoContext(42, list)!;
+      expect(out).not.toContain('For you');
+      expect(section(out, 'Assigned to another agent')).toMatch(/#1 Item 1[\s\S]*#4 Item 4/);
+    });
+
+    it('omits empty groups', () => {
+      const out = formatTodoContext(42, [item(2, 'open')], { persona: 'builder' })!;
+      expect(out).toContain('### For any agent / anyone');
+      expect(out).not.toMatch(/For you|another agent|do NOT act/);
+    });
+
+    it('says when an agent took over the human\'s item, and why', () => {
+      const out = formatTodoContext(42, [item(6, 'open', {
+        assignee: { type: 'agent', name: 'builder' }, assignedByName: 'Builder', takeoverReason: 'nas asked me to finish QA',
+      })], { persona: 'builder' })!;
+      expect(out).toContain('(taken over by Builder: “nas asked me to finish QA”)');
+    });
   });
 
   it('caps open and done items so a long list cannot crowd the prompt', () => {
@@ -101,15 +164,50 @@ const entity = () => TicketTodoItemEntity.create({
   id: 'i1', ticketId: 't', ref: 1, text: 'A', position: 1, actor: { type: 'user', name: 'nas' },
 });
 
+/** A PgConnection whose transaction client fails on the statement matching `failOn`; records every statement. */
+function pgFake(failOn: RegExp | null, failure: Error) {
+  const sql: string[] = [];
+  let released = false;
+  const client = {
+    query: async (text: string) => {
+      sql.push(text.trim().split(/\s+/).slice(0, 3).join(' '));
+      if (failOn && failOn.test(text)) throw failure;
+      return { rows: [] };
+    },
+    release: () => { released = true; },
+  };
+  const db = { connect: async () => client, query: client.query };
+  return { db: db as unknown as PgConnection, sql, released: () => released };
+}
+
+const stateEvent = { id: 'e1', itemId: 'i1', ticketId: 't', itemRef: 1, itemText: 'A', action: 'state_changed' as const,
+  changes: { state: { from: 'open', to: 'done' } }, actorType: 'user' as const, actorName: 'nas', source: 'web' as const,
+  createdAt: '2026-11-03T10:00:00.000Z' };
+
 describe('PgTodoStore', () => {
   it('reports a ref collision as ref_conflict so the use-case retries', async () => {
-    const db = { query: async () => { throw Object.assign(new Error('duplicate key value'), { code: '23505' }); } };
-    expect(await new PgTodoStore(db as unknown as PgConnection).insertItem(entity())).toBe('ref_conflict');
+    const fake = pgFake(/INSERT INTO ticket_todo_items/, Object.assign(new Error('duplicate key value'), { code: '23505' }));
+    expect(await new PgTodoStore(fake.db).insertItem(entity(), [])).toBe('ref_conflict');
   });
 
   it('rethrows any other failure', async () => {
-    const db = { query: async () => { throw new Error('connection reset'); } };
-    await expect(new PgTodoStore(db as unknown as PgConnection).insertItem(entity())).rejects.toThrow('connection reset');
+    const fake = pgFake(/INSERT INTO ticket_todo_items/, new Error('connection reset'));
+    await expect(new PgTodoStore(fake.db).insertItem(entity(), [])).rejects.toThrow('connection reset');
+  });
+
+  // Review finding: item and history were two separate writes, so a failed
+  // history insert left a change nobody could trace (AC4: one event per change).
+  it('rolls the item change back when its history row fails, and releases the client', async () => {
+    const fake = pgFake(/INSERT INTO ticket_todo_events/, new Error('network down'));
+    await expect(new PgTodoStore(fake.db).saveItem(entity(), [stateEvent])).rejects.toThrow('network down');
+    expect(fake.sql).toEqual(['BEGIN', 'UPDATE ticket_todo_items SET', 'INSERT INTO ticket_todo_events', 'ROLLBACK']);
+    expect(fake.released()).toBe(true);
+  });
+
+  it('commits item and history together', async () => {
+    const fake = pgFake(null, new Error('unused'));
+    await new PgTodoStore(fake.db).saveItem(entity(), [stateEvent]);
+    expect(fake.sql).toEqual(['BEGIN', 'UPDATE ticket_todo_items SET', 'INSERT INTO ticket_todo_events', 'COMMIT']);
   });
 
   it('reads JSONB changes and Date columns back into the shared shape', async () => {
@@ -130,7 +228,7 @@ describe('PgTodoStore', () => {
 describe('SupabaseTodoStore', () => {
   it('reports a ref collision as ref_conflict', async () => {
     const client = { from: () => ({ insert: async () => ({ error: { code: '23505', message: 'duplicate key value' } }) }) };
-    expect(await new SupabaseTodoStore({ client } as unknown as SupabaseConnection).insertItem(entity())).toBe('ref_conflict');
+    expect(await new SupabaseTodoStore({ client } as unknown as SupabaseConnection).insertItem(entity(), [])).toBe('ref_conflict');
   });
 
   it('pages through the history instead of stopping at the 1000-row PostgREST cap', async () => {

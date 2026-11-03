@@ -6,6 +6,10 @@ import type { Migration } from '../types.js';
  * - `ticket_todo_items`: one row per item. `ref` is a per-ticket number that is
  *   never reused (UNIQUE(ticket_id, ref), computed over deleted rows too).
  *   Delete is soft (`deleted_at`) so the history stays readable.
+ * - `assignee_type` / `assignee_name`: who the item is for (both null = anyone;
+ *   `agent` + null name = any agent; `agent` + slug = that persona; `user` =
+ *   the human). `assigned_by_*` = who set it; `takeover_reason` = why an agent
+ *   took over an item assigned to the human.
  * - `ticket_todo_events`: the audit trail, one row per change of one item
  *   (who, when, from where, `{field: {from, to}}`).
  * Deleting a ticket deletes both (FK cascade).
@@ -31,12 +35,18 @@ const migration: Migration = {
       state_changed_by_type TEXT,
       state_changed_by_name TEXT,
       cancel_reason TEXT,
+      assignee_type TEXT CHECK (assignee_type IN ('user', 'agent')),
+      assignee_name TEXT,
+      assigned_by_type TEXT,
+      assigned_by_name TEXT,
+      takeover_reason TEXT,
       created_at ${ts} NOT NULL,
       updated_at ${ts} NOT NULL,
       deleted_at ${ts},
       UNIQUE (ticket_id, ref)
     )`);
     await ctx.exec('CREATE INDEX IF NOT EXISTS idx_ticket_todo_items_ticket ON ticket_todo_items(ticket_id, deleted_at, position)');
+    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_ticket_todo_items_assignee ON ticket_todo_items(ticket_id, assignee_type, assignee_name)');
 
     await ctx.exec(`CREATE TABLE IF NOT EXISTS ticket_todo_events (
       id TEXT PRIMARY KEY,
@@ -44,7 +54,7 @@ const migration: Migration = {
       ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
       item_ref INTEGER NOT NULL,
       item_text TEXT NOT NULL,
-      action TEXT NOT NULL CHECK (action IN ('created', 'edited', 'state_changed', 'moved', 'deleted')),
+      action TEXT NOT NULL CHECK (action IN ('created', 'edited', 'state_changed', 'moved', 'deleted', 'assigned')),
       changes ${json} NOT NULL,
       actor_type TEXT NOT NULL CHECK (actor_type IN ('user', 'agent')),
       actor_name TEXT NOT NULL,

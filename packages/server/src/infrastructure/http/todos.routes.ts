@@ -26,7 +26,7 @@ export function registerTodoRoutes(app: FastifyInstance, container: Container, a
     const body = request.body ?? {};
     const result = await container.ticketTodos.create(
       request.params.id,
-      { text: body.text ?? '', note: body.note, after: body.after },
+      { text: body.text ?? '', note: body.note, after: body.after, assignee: body.assignee },
       actorOf(request),
     );
     return reply.code(201).send(result);

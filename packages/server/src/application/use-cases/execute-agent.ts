@@ -939,7 +939,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // `isWakeUp` is decided up front from `wokenMentionIds` (a genuine resume
       // from waiting_for_info), NOT from "a session exists" — a fresh queued
       // mention reuses the session but is not a wake-up.
-      const { blocks: userPromptBlocks, manifest: userPromptManifest } = await this.composeUserPrompt(context, mention, isWakeUp);
+      const { blocks: userPromptBlocks, manifest: userPromptManifest } = await this.composeUserPrompt(context, mention, isWakeUp, persona.name);
       const userPromptTextLength = promptTextLength(userPromptBlocks);
 
       this.logger.info('Agent execution started', {
@@ -1049,6 +1049,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           maxTurns: this.config.get().agentMaxTurns,
           talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
           actorName: persona.displayName || persona.name,
+          actorPersona: persona.name,
         });
 
         // Build the prompt: use content blocks if there are images, plain string otherwise
@@ -1762,7 +1763,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount, repoBases);
 
     const { blocks: skillPromptBlocks, manifest: skillPromptManifest } =
-      await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody);
+      await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody, persona.name);
 
     if (opts?.workflowContextPrompt) {
       const workflowStepText = `\n---\n\n${opts.workflowContextPrompt}`;
@@ -1875,6 +1876,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         resume: previousSessionId ?? undefined,
         maxTurns: this.config.get().agentMaxTurns,
         actorName: announceAuthor,
+        actorPersona: persona.name,
       });
 
       // Build prompt: content blocks if images, string otherwise
@@ -2296,7 +2298,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const repoBases = context ? this.repoBasesFromLinks(context.ticket.links) : [];
       const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount, repoBases);
       const { blocks: userPromptBlocks, manifest: userPromptManifest } = context
-        ? await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt)
+        ? await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt, persona.name)
         : await this.composeRoutineUserPrompt(params.subject ?? null, params.workflowContextPrompt);
       const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
 
@@ -2361,6 +2363,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         maxTurns: this.config.get().agentMaxTurns,
         talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
         actorName: params.actorName ?? (persona.displayName || persona.name),
+        actorPersona: persona.name,
       });
 
       const hasImages = userPromptBlocks.some((b) => b.type === 'image');
@@ -2482,6 +2485,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   private async composeWorkflowUserPrompt(
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     workflowContextPrompt: string,
+    personaSlug?: string,
   ): Promise<ComposedPrompt> {
     const composer = new PromptComposer((text) => this.resolveText(text));
 
@@ -2505,7 +2509,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
     }
     this.composeAnnotations(composer, context);
-    this.composeTodos(composer, context);
+    this.composeTodos(composer, context, personaSlug);
 
     if (context.deliverables.length > 0) {
       composer.scaffold('\n## Deliverables\n');
@@ -2559,10 +2563,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     skillDisplayName: string,
     skillMarkdown: string,
     commentBody?: string,
+    personaSlug?: string,
   ): Promise<ComposedPrompt> {
     const composer = new PromptComposer((text) => this.resolveText(text));
 
-    await this.composeTicketBackground(composer, context);
+    await this.composeTicketBackground(composer, context, true, personaSlug);
 
     if (commentBody) {
       composer.track(
@@ -2603,8 +2608,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   private composeTodos(
     composer: PromptComposer,
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
+    personaSlug?: string,
   ): void {
-    const section = formatTodoContext(context.ticket.displayId, context.todos ?? []);
+    const section = formatTodoContext(context.ticket.displayId, context.todos ?? [], { persona: personaSlug });
     if (section) {
       composer.track(
         { kind: 'todo', section: 'Todo list', label: `${(context.todos ?? []).length} items`, ticketId: context.ticket.id },
@@ -2624,6 +2630,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     composer: PromptComposer,
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     includeTicketType = true,
+    /** The run's persona slug: which todo items are "for you". */
+    personaSlug?: string,
   ): Promise<void> {
     composer.track(
       { kind: 'ticket_header', section: 'Ticket', label: context.ticket.title, sourceKind: 'ticket', sourceId: context.ticket.id, ticketId: context.ticket.id },
@@ -2649,7 +2657,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     }
 
     this.composeAnnotations(composer, context);
-    this.composeTodos(composer, context);
+    this.composeTodos(composer, context, personaSlug);
 
     if (context.deliverables.length > 0) {
       composer.scaffold('\n## Deliverables\n');
@@ -2970,10 +2978,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     mention: TicketMentionEntity,
     isWakeUp = false,
+    personaSlug?: string,
   ): Promise<ComposedPrompt> {
     const composer = new PromptComposer((text) => this.resolveText(text));
 
-    await this.composeTicketBackground(composer, context);
+    await this.composeTicketBackground(composer, context, true, personaSlug);
 
     if (context.epics && context.epics.length > 0) {
       composer.scaffold('\n## Epics\n');

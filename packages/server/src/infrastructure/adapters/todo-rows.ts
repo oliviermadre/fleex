@@ -1,4 +1,4 @@
-import type { TicketTodoEvent, TodoActorType, TodoEventAction, TodoItemState, TodoSource } from '@fleex/shared';
+import type { TicketTodoEvent, TodoActorType, TodoAssignee, TodoEventAction, TodoItemState, TodoSource } from '@fleex/shared';
 import { TicketTodoItemEntity } from '../../domain/entities/ticket-todo-item.entity.js';
 
 /**
@@ -28,10 +28,19 @@ export function todoItemFromRow(r: TodoItemRow): TicketTodoItemEntity {
     (r.state_changed_by_type as TodoActorType | null) ?? null,
     (r.state_changed_by_name as string | null) ?? null,
     (r.cancel_reason as string | null) ?? null,
+    assigneeFromRow(r),
+    (r.assigned_by_type as TodoActorType | null) ?? null,
+    (r.assigned_by_name as string | null) ?? null,
+    (r.takeover_reason as string | null) ?? null,
     date(r.created_at),
     date(r.updated_at),
     dateOrNull(r.deleted_at),
   );
+}
+
+function assigneeFromRow(r: TodoItemRow): TodoAssignee | null {
+  const type = r.assignee_type as TodoActorType | null | undefined;
+  return type ? { type, name: (r.assignee_name as string | null) ?? null } : null;
 }
 
 export function todoItemToRow(i: TicketTodoItemEntity) {
@@ -49,6 +58,11 @@ export function todoItemToRow(i: TicketTodoItemEntity) {
     state_changed_by_type: i.stateChangedByType,
     state_changed_by_name: i.stateChangedByName,
     cancel_reason: i.cancelReason,
+    assignee_type: i.assignee?.type ?? null,
+    assignee_name: i.assignee?.name ?? null,
+    assigned_by_type: i.assignedByType,
+    assigned_by_name: i.assignedByName,
+    takeover_reason: i.takeoverReason,
     created_at: i.createdAt.toISOString(),
     updated_at: i.updatedAt.toISOString(),
     deleted_at: i.deletedAt?.toISOString() ?? null,

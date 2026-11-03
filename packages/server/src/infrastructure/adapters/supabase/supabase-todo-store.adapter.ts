@@ -48,21 +48,33 @@ export class SupabaseTodoStore implements TodoStorePort {
     return data ? Number((data as { ref: number }).ref) : 0;
   }
 
-  async insertItem(item: TicketTodoItemEntity): Promise<'ok' | 'ref_conflict'> {
+  /**
+   * Not transactional: PostgREST has no multi-statement transaction, so the
+   * history rows are written right after the item. A failure in between
+   * leaves a change without its history row (rare: same connection, same
+   * second). A Postgres RPC would close the gap if it ever matters.
+   */
+  async insertItem(item: TicketTodoItemEntity, events: readonly TicketTodoEvent[]): Promise<'ok' | 'ref_conflict'> {
     const { error } = await this.conn.client.from(ITEMS).insert(todoItemToRow(item));
-    if (!error) return 'ok';
-    if (isUniqueViolation(error)) return 'ref_conflict';
-    throw new Error(`SupabaseTodoStore.insertItem failed: ${error.message}`);
+    if (error) {
+      if (isUniqueViolation(error)) return 'ref_conflict';
+      throw new Error(`SupabaseTodoStore.insertItem failed: ${error.message}`);
+    }
+    await this.insertEvents(events);
+    return 'ok';
   }
 
-  async saveItem(item: TicketTodoItemEntity): Promise<void> {
+  /** Same caveat as insertItem: item first, then its history rows. */
+  async saveItem(item: TicketTodoItemEntity, events: readonly TicketTodoEvent[]): Promise<void> {
     const { id, ticket_id: _t, ref: _r, created_by_type: _ct, created_by_name: _cn, created_at: _ca, ...fields } = todoItemToRow(item);
     const { error } = await this.conn.client.from(ITEMS).update(fields).eq('id', id);
     if (error) throw new Error(`SupabaseTodoStore.saveItem failed: ${error.message}`);
+    await this.insertEvents(events);
   }
 
-  async addEvent(event: TicketTodoEvent): Promise<void> {
-    const { error } = await this.conn.client.from(EVENTS).insert(todoEventToRow(event));
+  private async insertEvents(events: readonly TicketTodoEvent[]): Promise<void> {
+    if (events.length === 0) return;
+    const { error } = await this.conn.client.from(EVENTS).insert(events.map(todoEventToRow));
     if (error) throw new Error(`SupabaseTodoStore.addEvent failed: ${error.message}`);
   }
 
