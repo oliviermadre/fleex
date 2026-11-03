@@ -10,9 +10,6 @@ interface ReviewWorkflowConfig {
   // Default human reviewer when no specific human mentioned
   defaultReviewer: string;
 
-  // Auto-block tickets when agents wait for info
-  autoBlockOnWaiting: boolean;
-
   // Enable/disable auto-review workflow
   enableAutoReview: boolean;
 }
@@ -31,7 +28,6 @@ export class AutoReviewWorkflowUseCase {
     const configData = this.config.get();
     return {
       defaultReviewer: configData.humanMentionName || configData.humanDisplayName || 'nas',
-      autoBlockOnWaiting: true,
       enableAutoReview: true,
     };
   }
@@ -84,6 +80,7 @@ export class AutoReviewWorkflowUseCase {
   /**
    * Handle agent work completion — log only, no status transition.
    * Status changes are manual only; agents never move tickets.
+   * The `blocked` flag is manual only; agents never set it.
    */
   async handleAgentWorkCompletion(params: {
     ticketId: string;
@@ -98,6 +95,7 @@ export class AutoReviewWorkflowUseCase {
   /**
    * Handle agent mention while in reviewing — log only, no status transition.
    * Status changes are manual only; agents never move tickets.
+   * The `blocked` flag is manual only; agents never set it.
    */
   async handleAgentMentionInReview(params: {
     ticketId: string;
@@ -112,6 +110,7 @@ export class AutoReviewWorkflowUseCase {
   /**
    * Handle deliverable creation — log only, no status transition.
    * Status changes are manual only; agents never move tickets.
+   * The `blocked` flag is manual only; agents never set it.
    */
   async handleDeliverableCreated(params: {
     ticketId: string;
@@ -123,41 +122,6 @@ export class AutoReviewWorkflowUseCase {
       agentName: params.agentName,
       status: params.status,
     });
-  }
-
-  /**
-   * Handle mention status change to waiting_for_info
-   */
-  async handleMentionWaitingForInfo(params: {
-    ticketId: string;
-    agentName: string;
-  }): Promise<void> {
-    const config = this.getWorkflowConfig();
-    if (!config.autoBlockOnWaiting) return;
-
-    const ticket = await this.ticketStore.getTicketById(params.ticketId);
-    if (!ticket) return;
-
-    if (!ticket.blocked) {
-      const diff = ticket.update({ blocked: true });
-      await this.ticketStore.saveTicket(ticket);
-      this.eventBus?.emit({ type: 'ticket.updated', ticketId: params.ticketId, changes: diff, occurredAt: new Date() });
-
-      await this.ticketStore.saveActivity(TicketActivityEntity.create({
-        id: randomUUID(),
-        ticketId: params.ticketId,
-        action: 'auto_blocked_waiting_for_info',
-        changes: diff,
-        actorType: 'agent',
-        actorName: params.agentName,
-        source: 'api',
-      }));
-
-      this.logger.info('Auto-blocked ticket due to agent waiting for info', {
-        ticketId: params.ticketId,
-        agentName: params.agentName,
-      });
-    }
   }
 
   /**

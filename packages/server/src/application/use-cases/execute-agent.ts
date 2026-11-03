@@ -1467,12 +1467,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         } else {
           mention.waitForInfo();
           await this.mentionStore.save(mention);
-          // Auto-block ticket when agent waits for info
-          if (ticket) {
-            ticket.update({ blocked: true });
-            await this.ticketStore.saveTicket(ticket);
-            this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
-          }
+          // The ticket's `blocked` flag is manual only: waiting for an answer is not "blocked".
           this.eventBus?.emit({
             type: 'mention.waiting_for_info',
             mentionId: mention.id,

@@ -21,7 +21,6 @@ import type {
   CommentUpdatedEvent,
   MentionCreatedEvent,
   MentionResolvedEvent,
-  MentionWaitingForInfoEvent,
   TicketMovedEvent,
   TicketUpdatedEvent,
   DeliverableCreatedEvent,
@@ -124,7 +123,6 @@ export class DomainEventListener {
     bus.on('comment.posted', (e) => this.handleCommentPostedWorkflow(e as CommentPostedEvent));
     bus.on('comment.updated', (e) => this.handleCommentUpdatedWorkflow(e as CommentUpdatedEvent));
     bus.on('mention.resolved', (e) => this.handleMentionResolvedWorkflow(e as MentionResolvedEvent));
-    bus.on('mention.waiting_for_info', (e) => this.handleMentionWaitingWorkflow(e as MentionWaitingForInfoEvent));
     bus.on('deliverable.created', (e) => this.handleDeliverableWorkflow(e as DeliverableCreatedEvent));
     bus.on('deliverable.updated', (e) => this.handleDeliverableUpdatedWorkflow(e as DeliverableUpdatedEvent));
 
@@ -339,15 +337,6 @@ export class DomainEventListener {
     await this.deps.autoReviewWorkflow.handleAgentWorkCompletion({
       ticketId: event.ticketId,
       completedAgentName: event.resolvedBy,
-    });
-  }
-
-  // ── Mention waiting for info → auto-block ──
-
-  private async handleMentionWaitingWorkflow(event: MentionWaitingForInfoEvent): Promise<void> {
-    await this.deps.autoReviewWorkflow.handleMentionWaitingForInfo({
-      ticketId: event.ticketId,
-      agentName: event.targetAgent,
     });
   }
 

@@ -171,5 +171,5 @@ export const AUTO_REVIEW_ACTIVITY_ACTIONS = [
   'moved_to_review_auto',
   'moved_from_review_to_doing',
   'moved_to_qa_review_auto',
-  'auto_blocked_waiting_for_info',
+  'auto_blocked_waiting_for_info', // legacy — no longer emitted (agents never set blocked)
 ] as const;
