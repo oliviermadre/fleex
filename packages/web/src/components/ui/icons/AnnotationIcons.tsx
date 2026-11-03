@@ -6,12 +6,13 @@
  */
 import type { ReactNode } from 'react';
 
-interface IconProps {
+export interface IconProps {
   size?: number;
   className?: string;
 }
 
-function Icon({ size = 14, className, children }: IconProps & { children: ReactNode }) {
+/** The 24×24 / 1.75 stroke frame every line icon here uses — reuse it for new ones. */
+export function Icon({ size = 14, className, children }: IconProps & { children: ReactNode }) {
   return (
     <svg
       width={size}

@@ -6,6 +6,8 @@
  * reopens during QA. Every change lands in the history view (who, when, from
  * where). Live over WS via todoStore — a row changed elsewhere flashes.
  *
+ * Each row ends with three fixed-width slots — note indicator, assignee
+ * avatar, "⋯" actions menu — so hovering never pushes the text around.
  * Open items can be reordered by drag; Done is open by default, Cancelled
  * folded. Deleting an agent's item asks first (cancel keeps a visible trace);
  * any delete is undoable from the toast (the server restores the item).
@@ -27,6 +29,12 @@ import { useTodoStore } from '../../../stores/todoStore';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import { Input } from '../../ui/Input';
 import { Tooltip } from '../../ui/Tooltip';
+import { TrashIcon } from '../../ui/TrashIcon';
+import { PencilIcon } from '../../ui/icons/AnnotationIcons';
+import {
+  CancelIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, GripIcon, HistoryIcon, MinusIcon, NoteIcon, ReopenIcon,
+} from '../../ui/icons/TodoIcons';
+import { CommentActionsMenu, type CommentAction } from '../task/CommentActionsMenu';
 import { MessageMarkdown } from '../task/MessageMarkdown';
 import { AgentTag } from '../timeline/AnnotationPopovers';
 import { assigneeLabel, TodoAssigneeAvatar } from './TodoAssigneeAvatar';
@@ -202,6 +210,7 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
       seen={seen}
       onAssign={(next, label) => void reassign(item, next, label)}
       onToggle={() => void setState(item, item.state === 'open' ? 'done' : 'open')}
+      onToggleDone={() => void setState(item, 'done')}
       onCancel={() => setCancelling(item)}
       onReopen={() => void setState(item, 'open')}
       onEdit={(patch) => void update(ticketId, item.id, patch)}
@@ -314,7 +323,7 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
           <div className="mx-2 my-3 text-center text-[12px] text-[var(--theme-text-muted)]">Rien ne vous est assigné.</div>
         )}
         {visible.length > 0 && open.length === 0 && (
-          <div className="mx-2 my-3 text-center text-[12px] text-[var(--theme-text-muted)]">Tout est fait 🎉</div>
+          <div className="mx-2 my-3 text-center text-[12px] text-[var(--theme-text-muted)]">Tout est fait.</div>
         )}
 
         {done.length > 0 && (
@@ -330,7 +339,7 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
 
       <div className="flex h-8 shrink-0 items-center justify-between border-t border-[var(--theme-border)] px-3 text-[11.5px]">
         <button type="button" className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]" onClick={() => setHistory({ itemId: null })}>
-          ⟲ Historique
+          <span className="inline-flex items-center gap-1"><HistoryIcon size={12} /> Historique</span>
         </button>
         <span className="font-mono text-[10.5px] text-[var(--theme-text-faint)]">fleex ticket todo --help</span>
       </div>
@@ -373,7 +382,7 @@ function Section({ label, open, onToggle }: { label: string; open: boolean; onTo
       onClick={onToggle}
       className="mx-1 mb-1 mt-3 flex w-[calc(100%-0.5rem)] items-center gap-1.5 text-[11px] text-[var(--theme-text-muted)] after:h-px after:flex-1 after:bg-[var(--theme-border)] hover:text-[var(--theme-text-secondary)]"
     >
-      <span className={cn('inline-block text-[9px] transition-transform', !open && '-rotate-90')}>▾</span>
+      <ChevronDownIcon size={11} className={cn('transition-transform', !open && '-rotate-90')} />
       {label}
     </button>
   );
@@ -424,6 +433,7 @@ interface RowProps {
   onDragEnd: () => void;
   onDrop: () => void;
   onToggle: () => void;
+  onToggleDone: () => void;
   onCancel: () => void;
   onReopen: () => void;
   onEdit: (patch: { text?: string; note?: string | null }) => void;
@@ -476,21 +486,15 @@ function TodoRow(p: RowProps) {
     </>
   );
 
-  const action = (label: string, glyph: string, onClick: () => void, danger = false) => (
-    <Tooltip label={label} placement="top">
-      <button
-        type="button"
-        aria-label={label}
-        onClick={onClick}
-        className={cn(
-          'flex h-5 w-5 items-center justify-center rounded text-[11px] hover:bg-[var(--theme-bg-overlay)]',
-          danger ? 'text-[var(--theme-text-muted)] hover:text-[var(--tint-red-text)]' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]',
-        )}
-      >
-        {glyph}
-      </button>
-    </Tooltip>
-  );
+  const actions: CommentAction[] = [
+    ...(item.state !== 'done' ? [{ key: 'done', label: 'Marquer fait', icon: <CheckIcon />, onSelect: p.onToggleDone }] : []),
+    ...(item.state !== 'open' ? [{ key: 'reopen', label: 'Rouvrir', icon: <ReopenIcon />, onSelect: p.onReopen }] : []),
+    { key: 'text', label: 'Modifier le texte', icon: <PencilIcon />, onSelect: () => startEdit('text') },
+    { key: 'note', label: item.note ? 'Modifier la note' : 'Ajouter une note', icon: <NoteIcon />, onSelect: () => startEdit('note') },
+    ...(item.state !== 'cancelled' ? [{ key: 'cancel', label: "Annuler l'item…", icon: <CancelIcon />, onSelect: p.onCancel }] : []),
+    { key: 'history', label: "Historique de l'item", icon: <HistoryIcon />, onSelect: p.onHistory },
+    { key: 'delete', label: 'Supprimer', icon: <TrashIcon size={14} />, onSelect: p.onDelete, danger: true },
+  ];
 
   return (
     <div
@@ -511,13 +515,15 @@ function TodoRow(p: RowProps) {
         p.onDrop();
       }}
       className={cn(
-        'group relative grid grid-cols-[12px_18px_1fr_auto] items-start gap-x-1.5 rounded-md px-1 py-1 transition-colors duration-700 hover:bg-[var(--theme-bg-hover)]',
+        'group/todo relative grid grid-cols-[12px_18px_1fr_auto] items-start gap-x-1.5 rounded-md px-1 py-1 transition-colors duration-700 hover:bg-[var(--theme-bg-hover)]',
         p.flashing && 'bg-[var(--theme-accent-muted)]',
         p.dragging && 'opacity-40',
         p.dropBefore && 'shadow-[inset_0_2px_0_var(--theme-accent)]',
       )}
     >
-      <span className={cn('cursor-grab select-none text-[11px] leading-[18px] text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-100', closed && 'invisible')}>⋮⋮</span>
+      <span className={cn('flex h-[18px] cursor-grab select-none items-center text-[var(--theme-text-faint)] opacity-0 group-hover/todo:opacity-100', closed && 'invisible')}>
+        <GripIcon size={12} />
+      </span>
       <button
         type="button"
         role="checkbox"
@@ -525,14 +531,14 @@ function TodoRow(p: RowProps) {
         aria-label={item.state === 'done' ? `Repasser #${item.ref} à faire` : item.state === 'cancelled' ? `Rouvrir #${item.ref}` : `Marquer #${item.ref} fait`}
         onClick={p.onToggle}
         className={cn(
-          'mt-px flex h-4 w-4 items-center justify-center rounded border-[1.5px] text-[10px] leading-none transition-colors',
+          'mt-px flex h-4 w-4 items-center justify-center rounded border-[1.5px] transition-colors',
           item.state === 'done'
             ? cn('border-transparent text-[var(--theme-bg-base)]', tintSolid('green'))
             : 'border-[var(--theme-border-input)] hover:border-[var(--theme-accent)]',
           item.state === 'cancelled' && 'border-dashed text-[var(--theme-text-faint)]',
         )}
       >
-        {item.state === 'done' ? '✓' : item.state === 'cancelled' ? '–' : ''}
+        {item.state === 'done' ? <CheckIcon size={11} /> : item.state === 'cancelled' ? <MinusIcon size={11} /> : null}
       </button>
 
       <div className="min-w-0 text-[12.5px] leading-[18px]">
@@ -566,24 +572,34 @@ function TodoRow(p: RowProps) {
         )}
       </div>
 
+      {/* Fixed-width slots: nothing appears or disappears in the flow on hover. */}
       <div className="flex items-center gap-0.5">
-        {item.note && !editing && action(noteOpen ? 'Masquer la note' : 'Voir la note', '📝', () => setNoteOpen(!noteOpen))}
-        <div className="hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
-          {action(item.note ? 'Éditer la note' : 'Ajouter une note', '✎', () => startEdit('note'))}
-          {item.state !== 'cancelled' && action("Annuler l'item…", '⊘', p.onCancel)}
-          {item.state !== 'open' && action('Rouvrir', '↺', p.onReopen)}
-          {action("Historique de l'item", '⟲', p.onHistory)}
-          {action('Supprimer', '🗑', p.onDelete, true)}
-        </div>
-        <span className="ml-0.5">
-          <TodoAssigneeAvatar
-            value={item.assignee}
-            personas={p.personas}
-            seen={p.seen}
-            subject={`#${item.ref}`}
-            onChange={item.state === 'open' ? p.onAssign : undefined}
-          />
+        <span className="flex w-5 justify-center">
+          {item.note && !editing && (
+            <Tooltip label={noteOpen ? 'Masquer la note' : 'Voir la note'} placement="top">
+              <button
+                type="button"
+                aria-label={noteOpen ? 'Masquer la note' : 'Voir la note'}
+                aria-expanded={noteOpen}
+                onClick={() => setNoteOpen(!noteOpen)}
+                className={cn(
+                  'flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--theme-bg-overlay)]',
+                  noteOpen ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]',
+                )}
+              >
+                <NoteIcon size={13} />
+              </button>
+            </Tooltip>
+          )}
         </span>
+        <TodoAssigneeAvatar
+          value={item.assignee}
+          personas={p.personas}
+          seen={p.seen}
+          subject={`#${item.ref}`}
+          onChange={item.state === 'open' ? p.onAssign : undefined}
+        />
+        <CommentActionsMenu actions={actions} label={`Actions de #${item.ref}`} className="group-hover/todo:opacity-100" />
       </div>
 
       <div className="col-start-3 col-end-5 flex flex-wrap items-center gap-1 text-[11px] text-[var(--theme-text-faint)]">{sub}</div>
@@ -689,7 +705,7 @@ function TodoHistory({ ticketId, itemId, item, onBack }: { ticketId: string; ite
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2 text-[12px]">
-        <button type="button" className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]" onClick={onBack}>← Retour</button>
+        <button type="button" className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]" onClick={onBack}><span className="inline-flex items-center gap-0.5"><ChevronLeftIcon size={12} /> Retour</span></button>
         <span className="min-w-0 flex-1 truncate text-[var(--theme-text-secondary)]">Historique — {title}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2">

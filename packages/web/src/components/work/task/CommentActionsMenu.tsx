@@ -39,7 +39,16 @@ function MoreIcon() {
   );
 }
 
-export function CommentActionsMenu({ actions, className }: { actions: CommentAction[]; className?: string }) {
+export function CommentActionsMenu({
+  actions,
+  className,
+  label = 'Actions du commentaire',
+}: {
+  actions: CommentAction[];
+  className?: string;
+  /** Accessible name of the button and the menu (e.g. « Actions de #3 » on a todo row). */
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
   const { refs, floatingStyles, context } = useFloating({
     open,
@@ -78,7 +87,7 @@ export function CommentActionsMenu({ actions, className }: { actions: CommentAct
       <button
         ref={refs.setReference}
         type="button"
-        aria-label="Actions du commentaire"
+        aria-label={label}
         title="Actions"
         className={cn(
           'shrink-0 rounded p-1 leading-none text-[var(--theme-text-faint)] transition-opacity hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] focus-visible:opacity-100 group-hover/comment:opacity-100',
@@ -95,7 +104,7 @@ export function CommentActionsMenu({ actions, className }: { actions: CommentAct
             <div
               ref={refs.setFloating}
               style={floatingStyles}
-              aria-label="Actions du commentaire"
+              aria-label={label}
               className="z-50 min-w-[210px] rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] p-1 text-[12px] shadow-lg"
               {...getFloatingProps()}
             >

@@ -47,6 +47,12 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/** Item actions live in the row's "⋯" menu. */
+function openMenuItem(ref: number, label: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Actions de #${ref}` }));
+  fireEvent.click(screen.getByRole('menuitem', { name: label }));
+}
+
 describe('TodoPanel', () => {
   it('invites to start a list when the ticket has none', async () => {
     api.fetchTicketTodos.mockResolvedValue([]);
@@ -100,7 +106,7 @@ describe('TodoPanel', () => {
     api.fetchTicketTodos.mockResolvedValue([item(1)]);
     render(<TodoPanel ticketId="t1" />);
     await screen.findByText('Item 1');
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    openMenuItem(1, 'Supprimer');
     expect(await screen.findByText(/a été créé par/)).toBeTruthy();
     expect(api.deleteTicketTodo).not.toHaveBeenCalled();
   });
@@ -111,7 +117,7 @@ describe('TodoPanel', () => {
     api.deleteTicketTodo.mockResolvedValue({ item: item(1), history: [{}] });
     render(<TodoPanel ticketId="t1" />);
     await screen.findByText('Item 1');
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    openMenuItem(1, 'Supprimer');
     expect(screen.queryByText('Item 1')).toBeNull();
     expect(api.deleteTicketTodo).toHaveBeenCalledWith('t1', 'i1');
     await waitFor(() => expect(toastInfo).toHaveBeenCalledWith('#1 supprimé', expect.anything()));
@@ -128,7 +134,7 @@ describe('TodoPanel', () => {
     api.deleteTicketTodo.mockReturnValue(new Promise((r) => { finish = r; }));
     render(<TodoPanel ticketId="t1" />);
     await screen.findByText('Item 1');
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    openMenuItem(1, 'Supprimer');
     act(() => ws.handler!({ type: 'todo:updated', data: item(1, { state: 'done' }) }));
     expect(screen.queryByText('Item 1')).toBeNull();
     await act(async () => finish({ item: item(1), history: [{}] }));
@@ -168,10 +174,37 @@ describe('TodoPanel', () => {
     }]);
     render(<TodoPanel ticketId="t1" />);
     await screen.findByText('Item 1');
-    fireEvent.click(screen.getByRole('button', { name: '⟲ Historique' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Historique' }));
     expect(await screen.findByText('mcp')).toBeTruthy();
     expect(screen.getByText('Builder')).toBeTruthy();
     expect(screen.getByText('Fait')).toBeTruthy();
+  });
+});
+
+describe('TodoPanel — row layout (nas: no hover icons pushing the text, no emoji)', () => {
+  it('keeps the actions in a "⋯" menu right of the assignee, not as buttons in the row', async () => {
+    api.fetchTicketTodos.mockResolvedValue([item(1, { note: 'détail' })]);
+    render(<TodoPanel ticketId="t1" />);
+    const row = await screen.findByTestId('todo-row-1');
+    const buttons = [...row.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
+    // Checkbox, note indicator, avatar, menu — always rendered, so hover changes no width.
+    expect(buttons).toEqual(['Marquer #1 fait', 'Voir la note', "#1 — Pour n'importe qui (changer)", 'Actions de #1']);
+    fireEvent.click(screen.getByRole('button', { name: 'Actions de #1' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
+      'Marquer fait', 'Modifier le texte', 'Modifier la note', "Annuler l'item…", "Historique de l'item", 'Supprimer',
+    ]);
+  });
+
+  it('draws its icons in SVG: no emoji or pictographic glyph in the panel', async () => {
+    api.fetchTicketTodos.mockResolvedValue([
+      item(1, { note: 'n' }),
+      item(2, { state: 'done', stateChangedByName: 'nas', stateChangedByType: 'user', stateChangedAt: '2026-11-03T10:00:00.000Z' }),
+    ]);
+    const { container } = render(<TodoPanel ticketId="t1" />);
+    await screen.findByText('Item 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Actions de #1' }));
+    const text = container.textContent + document.body.textContent;
+    expect(text).not.toMatch(/[\u2190-\u21FF\u22EE\u22EF\u2300-\u27FF\u2B00-\u2BFF\u{1F300}-\u{1FAFF}]/u);
   });
 });
 
