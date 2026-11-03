@@ -235,6 +235,25 @@ describe('TodoPanel — note from the "⋯" menu (nas: « Ajouter une note » di
   });
 });
 
+describe('TodoPanel — note view (nas: a discreet aside, not an input-looking box)', () => {
+  it('renders the note as small muted italics with a hairline, no boxed surface, in theme colours only', async () => {
+    api.fetchTicketTodos.mockResolvedValue([item(1, { note: 'Vérifier aussi le contexte injecté' })]);
+    render(<TodoPanel ticketId="t1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Voir la note' }));
+    const note = screen.getByTestId('todo-note-1');
+    expect(note.textContent).toContain('Vérifier aussi le contexte injecté');
+    const cls = note.className;
+    // No field look: no surface background, no rounded box.
+    expect(cls).not.toMatch(/bg-|rounded|border-y|border-r|(^|\s)border(\s|$)/);
+    expect(cls).toMatch(/border-l /);
+    // Smaller than the item, italic, muted — and only theme variables (dark/light).
+    expect(cls).toMatch(/italic/);
+    expect(cls).toMatch(/text-\[11\.5px\]/);
+    expect(cls).toMatch(/\[&_p\]:text-\[var\(--theme-text-muted\)\]/);
+    expect(cls).not.toMatch(/(^|\s)text-(gray|zinc|slate|neutral)-/);
+  });
+});
+
 describe('TodoPanel — assignment', () => {
   it('shows who each item is for, and reassigns from the avatar', async () => {
     api.fetchTicketTodos.mockResolvedValue([item(1, { assignee: { type: 'user', name: 'nas' } }), item(2)]);

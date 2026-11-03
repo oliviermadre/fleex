@@ -624,7 +624,16 @@ function TodoRow(p: RowProps) {
         />
       )}
       {item.note && noteOpen && editing !== 'note' && (
-        <div className="col-start-3 col-end-5 mt-1 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[12px]">
+        // A quiet aside, not a field: no box, a hairline on the left, small muted italics.
+        // MarkdownRenderer hard-codes text-sm / text-primary on p and li, hence the descendant overrides.
+        <div
+          data-testid={`todo-note-${item.ref}`}
+          className={cn(
+            'col-start-3 col-end-5 mt-0.5 border-l border-[var(--theme-border)] pl-2 text-[11.5px] italic leading-4 text-[var(--theme-text-muted)]',
+            '[&_li]:py-0 [&_li]:text-[11.5px] [&_li]:leading-4 [&_li]:text-[var(--theme-text-muted)]',
+            '[&_p]:mb-1 [&_p]:text-[11.5px] [&_p]:leading-4 [&_p]:text-[var(--theme-text-muted)] [&_p:last-child]:mb-0',
+          )}
+        >
           <MessageMarkdown body={item.note} />
         </div>
       )}
