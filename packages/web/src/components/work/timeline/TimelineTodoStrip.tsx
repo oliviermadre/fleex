@@ -162,8 +162,11 @@ function TodoChipButton({
           top,
           width: CHIP_H,
           height: CHIP_H,
-          color: `var(--tint-${hue}-solid)`,
-          background: `var(--tint-${hue}-bg)`,
+          // The tint bg is translucent: lay it over the opaque surface so the dashed
+          // baseline does not show through, and use the tint's text tone (readable in light
+          // and dark) for the glyph — the same tone the grouped chips use.
+          color: `var(--tint-${hue}-text)`,
+          background: `linear-gradient(var(--tint-${hue}-bg), var(--tint-${hue}-bg)), var(--theme-bg-surface)`,
           borderColor: `var(--tint-${hue}-border)`,
         }}
       >

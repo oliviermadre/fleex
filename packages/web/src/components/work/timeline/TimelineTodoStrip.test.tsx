@@ -121,6 +121,16 @@ describe('TicketTimeline — todo strip', () => {
     expect((document.activeElement as HTMLElement).dataset.timelineNode).toBeTruthy();
   });
 
+  // nas: on a single-event pill the translucent tint let the dashed baseline show through,
+  // and the solid-tone check on its pale background read as a blot.
+  it('paints a single-event pill opaque, its glyph in the tint text tone', () => {
+    setup([mark(1, at(10, 20), 'done', { actorName: 'Builder' })]);
+    const pill = document.querySelector<HTMLElement>('[data-timeline-node^="todo:"]')!;
+    expect(pill.style.background).toContain('var(--theme-bg-surface)');
+    expect(pill.style.background).toContain('var(--tint-green-bg)');
+    expect(pill.style.color).toBe('var(--tint-green-text)');
+  });
+
   it('draws its icons in SVG: no emoji or pictographic glyph', () => {
     setup(MARKS);
     expect(screen.getByTestId('todo-strip').textContent).not.toMatch(GLYPH);
