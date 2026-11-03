@@ -9,8 +9,12 @@ import { NOW, TICKET_ID, at, fixture591 } from './timeline.fixture';
 import { BAND } from './layoutAnnotations';
 import { GEOMETRY } from './layoutTimeline';
 import { TimelineDrawer } from './TimelineDrawer';
+import type { TodoMark } from './todoMarks';
 
-vi.mock('./useTicketTimeline', () => ({ useTicketTimeline: () => ({ model: buildTimeline(fixture591(), NOW) }) }));
+const timeline = vi.hoisted(() => ({ todoMarks: [] as TodoMark[] }));
+vi.mock('./useTicketTimeline', () => ({
+  useTicketTimeline: () => ({ model: buildTimeline(fixture591(), NOW), todoMarks: timeline.todoMarks }),
+}));
 
 const task = { id: TICKET_ID, number: 591, title: 'Importer', boardName: 'Fleex', status: 'doing', type: 'build' } as WorkTask;
 
@@ -36,7 +40,10 @@ const click = (el: Element) => {
   fireEvent.click(el);
 };
 
-beforeEach(() => vi.useFakeTimers());
+beforeEach(() => {
+  vi.useFakeTimers();
+  timeline.todoMarks = [];
+});
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -99,5 +106,59 @@ describe('TimelineDrawer — cards', () => {
     click(card);
     wait(10);
     expect(viewer()).toBeNull();
+  });
+});
+
+const mark = (i: number, over: Partial<TodoMark> = {}): TodoMark => ({
+  id: `m${i}`, itemId: `i${i}`, ref: i, kind: 'done', at: Date.parse(at(9, 30)) + i * 100, itemText: `Item ${i}`,
+  actorType: 'agent', actorName: 'Builder', source: 'cli', reason: null, deleted: false, ...over,
+});
+
+describe('TimelineDrawer — todo chips', () => {
+  it('hovering a chip shows its events, leaving closes them; a click pins them', () => {
+    timeline.todoMarks = [mark(1), mark(2), mark(3)];
+    setup([], BAND.twoRows);
+    const chip = screen.getByTestId('todo-chip');
+    fireEvent.mouseEnter(chip);
+    wait(200);
+    expect(screen.getAllByTestId('todo-mark-row')).toHaveLength(3);
+    fireEvent.mouseLeave(chip);
+    wait(300);
+    expect(screen.queryByTestId('todo-mark-row')).toBeNull();
+
+    click(chip);
+    wait(10);
+    fireEvent.mouseLeave(chip);
+    wait(500);
+    expect(screen.getAllByTestId('todo-mark-row')).toHaveLength(3);
+    click(chip);
+    wait(10);
+    expect(screen.queryByTestId('todo-mark-row')).toBeNull();
+  });
+
+  it('a row opens the Todo panel on that item, the footer on the History', () => {
+    timeline.todoMarks = [mark(1), mark(2)];
+    useWorkStore.setState({ rightPanel: 'context', todoFocus: null });
+    setup([], BAND.twoRows);
+    click(screen.getByTestId('todo-chip'));
+    wait(10);
+    fireEvent.click(screen.getAllByTestId('todo-mark-row')[1]!);
+    expect(useWorkStore.getState().rightPanel).toBe('todo');
+    expect(useWorkStore.getState().todoFocus).toMatchObject({ itemId: 'i2', view: 'list' });
+
+    click(screen.getByTestId('todo-chip'));
+    wait(10);
+    fireEvent.click(screen.getByRole('button', { name: "Ouvrir l'historique de la todo" }));
+    expect(useWorkStore.getState().todoFocus).toMatchObject({ itemId: null, view: 'history' });
+  });
+
+  it('takes the strip height from the annotation band: a drawer with room for one card row falls back to pills', () => {
+    setup([ann('a')], BAND.oneRow);
+    expect(screen.getByTestId('annotation-card')).toBeTruthy();
+    cleanup();
+    timeline.todoMarks = [mark(1)];
+    setup([ann('a')], BAND.oneRow);
+    expect(screen.queryByTestId('annotation-card')).toBeNull();
+    expect(screen.getByTestId('annotation-pill')).toBeTruthy();
   });
 });

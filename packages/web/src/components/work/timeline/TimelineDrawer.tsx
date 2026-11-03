@@ -9,6 +9,8 @@
  * frieze reports clicks with a screen rect, the drawer opens the popover there.
  * A click pins the reader / list, a second click on the same card unpins and
  * closes it; in the mini band, hovering a pill shows it unpinned (gone on leave).
+ * Todo chips (the strip under the frieze) follow the same hover / pin rules;
+ * their rows open the Todo panel on the item, their footer on the History.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
@@ -21,12 +23,14 @@ import { useBottomDrawerResize } from '../useBottomDrawerResize';
 import { openTicketSessionInWork } from '../openInWork';
 import type { WorkTask } from '../types';
 import type { TimelineAction } from './buildTimeline';
-import { TicketTimeline, type TimelineAnnotationsProps } from './TicketTimeline';
+import { TicketTimeline, type TimelineAnnotationsProps, type TimelineTodosProps } from './TicketTimeline';
 import { AnnotationComposer, AnnotationStackList, AnnotationViewer, type AnchorRect } from './AnnotationPopovers';
 import type { PlacedCard } from './layoutAnnotations';
 import { cardNodeId } from './TimelineAnnotationBand';
 import { useTicketTimeline } from './useTicketTimeline';
 import { GEOMETRY } from './layoutTimeline';
+import { todoStripHeight, type TodoChip } from './layoutTodoStrip';
+import { TodoMarksPopover } from './TodoMarksPopover';
 
 /** Vertical padding of the drawer around the timeline content. */
 const DRAWER_PAD = 16;
@@ -74,7 +78,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
   const zoom = useWorkStore((s) => s.timelineZoom);
   const setZoom = useWorkStore((s) => s.setTimelineZoom);
   const onMouseDown = useBottomDrawerResize(setTimelineHeight);
-  const { model } = useTicketTimeline(task, deliverables);
+  const { model, todoMarks } = useTicketTimeline(task, deliverables);
   const ticketCreatedAt = useTicketStore((s) => s.tickets.find((t) => t.id === task.id)?.createdAt ?? null);
 
   // ── Annotations ──
@@ -84,6 +88,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
   const [composerAnchor, setComposerAnchor] = useState<AnchorRect | null>(null);
   const [viewer, setViewer] = useState<({ id: string } & OpenAt) | null>(null);
   const [stack, setStack] = useState<({ ids: string[] } & OpenAt) | null>(null);
+  const [todoPop, setTodoPop] = useState<({ chip: TodoChip } & OpenAt) | null>(null);
   const [contentH, setContentH] = useState(0);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -94,7 +99,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hoverBlocked = useRef(false);
   useEffect(() => {
-    hoverBlocked.current = !!(viewer?.pinned || stack?.pinned || composer);
+    hoverBlocked.current = !!(viewer?.pinned || stack?.pinned || todoPop?.pinned || composer);
   });
   useEffect(() => () => clearTimeout(hoverTimer.current), []);
   const hoverKeep = useCallback(() => clearTimeout(hoverTimer.current), []);
@@ -103,6 +108,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
     hoverTimer.current = setTimeout(() => {
       setViewer((v) => (v?.pinned ? v : null));
       setStack((s) => (s?.pinned ? s : null));
+      setTodoPop((t) => (t?.pinned ? t : null));
     }, HOVER_CLOSE_MS);
   }, []);
 
@@ -126,6 +132,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
     onCreateAt: (at: number, anchor: AnchorRect) => {
       setViewer(null);
       setStack(null);
+      setTodoPop(null);
       setComposerAnchor(anchor);
       useAnnotationStore.getState().openComposer({
         mode: 'create', ticketId: task.id, draft: { at: new Date(at).toISOString(), title: '', body: '', tone: 'info' },
@@ -133,6 +140,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
     },
     onOpenCard: (card: PlacedCard<UiAnnotation>, anchor: AnchorRect) => {
       clearTimeout(hoverTimer.current);
+      setTodoPop(null);
       const node = cardNodeId(card);
       if (card.kind === 'stack') {
         setViewer(null);
@@ -158,6 +166,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
       const node = cardNodeId(card);
       hoverTimer.current = setTimeout(() => {
         if (hoverBlocked.current) return;
+        setTodoPop(null);
         if (card.kind === 'stack') {
           setViewer(null);
           setStack({ ids: card.items.map((i) => i.annotation.id), anchor, node, pinned: false });
@@ -168,6 +177,31 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
       }, HOVER_OPEN_MS);
     },
   }), [list, highlight, task.id, hoverClose]);
+
+  // ── Todo chips ──
+  const todos = useMemo<TimelineTodosProps>(() => ({
+    marks: todoMarks,
+    activeKey: todoPop?.chip.key ?? null,
+    pinnedKey: todoPop?.pinned ? todoPop.chip.key : null,
+    onOpenChip: (chip: TodoChip, anchor: AnchorRect) => {
+      clearTimeout(hoverTimer.current);
+      setViewer(null);
+      setStack(null);
+      setTodoPop((t) => (t?.chip.key === chip.key && t.pinned ? null : { chip, anchor, node: `todo:${chip.key}`, pinned: true }));
+    },
+    onHoverChip: (chip: TodoChip, anchor: AnchorRect | null) => {
+      if (!anchor) return hoverClose();
+      if (hoverBlocked.current) return;
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = setTimeout(() => {
+        if (hoverBlocked.current) return;
+        setViewer(null);
+        setStack(null);
+        setTodoPop({ chip, anchor, node: `todo:${chip.key}`, pinned: false });
+      }, HOVER_OPEN_MS);
+    },
+  }), [todoMarks, todoPop, hoverClose]);
+  const todoH = todoStripHeight(todoMarks, filters.todos);
 
   const closeComposer = useCallback(() => {
     // Closing a failed draft's retry keeps the red card: "Réessayer / Abandonner" stays on it.
@@ -227,12 +261,13 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
         onToggleFilter={toggleTimelineFilter}
         onAction={onAction}
         annotations={annotations}
+        todos={todos}
         onContentHeight={setContentH}
         zoom={zoom}
         onZoom={setZoom}
-        // What the user's drawer height leaves above the frieze decides the band:
-        // two rows, one row, then pills only as it shrinks.
-        maxBandHeight={height - DRAWER_PAD - GEOMETRY.height}
+        // What the user's drawer height leaves above the frieze (and the todo strip
+        // under it) decides the band: two rows, one row, then pills only as it shrinks.
+        maxBandHeight={height - DRAWER_PAD - GEOMETRY.height - todoH}
       />
       {composer && composerAnchor && (
         <AnnotationComposer
@@ -274,6 +309,23 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
           onDelete={() => {
             setViewer(null);
             void useAnnotationStore.getState().remove(task.id, viewed.id);
+          }}
+        />
+      )}
+      {todoPop && (
+        <TodoMarksPopover
+          chip={todoPop.chip}
+          anchor={todoPop.anchor}
+          pinned={todoPop.pinned}
+          hover={{ onMouseEnter: hoverKeep, onMouseLeave: hoverClose }}
+          onClose={() => setTodoPop(null)}
+          onOpenItem={(itemId) => {
+            setTodoPop(null);
+            useWorkStore.getState().focusTodo({ itemId, view: 'list' });
+          }}
+          onOpenHistory={(itemId) => {
+            setTodoPop(null);
+            useWorkStore.getState().focusTodo({ itemId, view: 'history' });
           }}
         />
       )}

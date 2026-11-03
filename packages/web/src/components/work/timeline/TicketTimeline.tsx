@@ -15,6 +15,10 @@
  * they never widen it nor move a picto. Hovering the band (or ⌥ + hovering
  * the frieze) shows a "+" at the instant under the cursor; clicking it, or
  * pressing A on a focused picto, asks to annotate that instant.
+ *
+ * Todo marks (optional `todos` prop) live in a strip UNDER the frieze, laid out
+ * the same way (interpolated x, no slot taken): a ticket without todo history
+ * has no strip at all, so its timeline does not move by a pixel.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TicketType } from '@fleex/shared';
@@ -36,6 +40,9 @@ import type { UiAnnotation } from '../../../stores/annotationStore';
 import { ghostTop, inCreateStrip, instantAtCursor, layoutAnnotationBand, rowsForBudget, timeAnchors, type CursorInstant, type PlacedCard } from './layoutAnnotations';
 import { AnnotationAnchors, TimelineAnnotationBand, cardNodeId } from './TimelineAnnotationBand';
 import type { AnchorRect } from './AnnotationPopovers';
+import { layoutTodoStrip, type TodoChip, type TodoStrip } from './layoutTodoStrip';
+import { TimelineTodoStrip, todoChipNodeId } from './TimelineTodoStrip';
+import type { TodoMark } from './todoMarks';
 
 const COLUMN_W = 232;
 const STICK_SLACK = 40;
@@ -59,6 +66,18 @@ export interface TimelineAnnotationsProps {
   onHoverCard?: (card: PlacedCard<UiAnnotation>, anchor: AnchorRect | null) => void;
 }
 
+export interface TimelineTodosProps {
+  marks: readonly TodoMark[];
+  /** Chip whose reader is open (hover lines drawn), and whether a click pinned it. */
+  activeKey: string | null;
+  pinnedKey: string | null;
+  onOpenChip: (chip: TodoChip, anchor: AnchorRect) => void;
+  /** The cursor entered a chip (`anchor`) or left it (`null`). */
+  onHoverChip?: (chip: TodoChip, anchor: AnchorRect | null) => void;
+}
+
+const NO_STRIP: TodoStrip = { chips: [], height: 0 };
+
 export interface TicketTimelineProps {
   header: TicketTimelineHeader;
   model: TimelineModel | null;
@@ -67,7 +86,9 @@ export interface TicketTimelineProps {
   onAction: (action: TimelineAction, event: TimelineEvent) => void;
   /** Omitted → no annotation band at all (e.g. a read-only host). */
   annotations?: TimelineAnnotationsProps;
-  /** Total content height (band + frieze), so the host can make room for it. */
+  /** Omitted → no todo strip. */
+  todos?: TimelineTodosProps;
+  /** Total content height (band + frieze + todo strip), so the host can make room for it. */
   onContentHeight?: (height: number) => void;
   /** Horizontal zoom of the frieze (ZOOM_LEVELS); `onZoom` omitted → no zoom control. */
   zoom?: number;
@@ -84,7 +105,7 @@ const rectOf = (el: Element): AnchorRect => {
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 };
 
-export function TicketTimeline({ header, model, filters, onToggleFilter, onAction, annotations, onContentHeight, zoom = 1, onZoom, maxBandHeight }: TicketTimelineProps) {
+export function TicketTimeline({ header, model, filters, onToggleFilter, onAction, annotations, todos, onContentHeight, zoom = 1, onZoom, maxBandHeight }: TicketTimelineProps) {
   const viewport = useRef<HTMLDivElement>(null);
   // Viewport width: a short frieze is stretched to fill it.
   const [viewportW, setViewportW] = useState(0);
@@ -107,7 +128,11 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     [layout, annotations, anchors, filters.annotations, maxBandHeight],
   );
   const bandH = band.height;
-  const contentH = bandH + GEOMETRY.height;
+  const strip = useMemo(
+    () => (layout && todos && filters.todos ? layoutTodoStrip(todos.marks, anchors, layout.width) : NO_STRIP),
+    [layout, todos, anchors, filters.todos],
+  );
+  const contentH = bandH + GEOMETRY.height + strip.height;
   useEffect(() => onContentHeight?.(contentH), [contentH, onContentHeight]);
   const content = useRef<HTMLDivElement>(null);
   const [ghost, setGhost] = useState<CursorInstant | null>(null);
@@ -148,8 +173,9 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
   const order = useMemo(() => {
     const nodes = layout?.items.map((i) => ({ id: i.event.id, x: i.x })) ?? [];
     for (const c of band.cards) nodes.push({ id: cardNodeId(c), x: c.kind === 'card' ? c.item.x : c.items[0]!.x });
+    for (const c of strip.chips) nodes.push({ id: todoChipNodeId(c), x: c.minX });
     return nodes.sort((a, b) => a.x - b.x).map((n) => n.id);
-  }, [layout, band]);
+  }, [layout, band, strip]);
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const id = (e.target as HTMLElement).dataset?.timelineNode;
@@ -194,14 +220,15 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     if (!canAnnotate) return;
     const c = cursorAt(e);
     const overNode = (e.target as HTMLElement).closest('button');
-    const show = c && (inCreateStrip(c.y, bandH) || (e.altKey && c.y >= bandH && !overNode));
+    const onFrieze = !!c && c.y >= bandH && c.y < bandH + GEOMETRY.height;
+    const show = c && (inCreateStrip(c.y, bandH) || (e.altKey && onFrieze && !overNode));
     setGhost(show ? instantAtCursor(layout!, anchors, c.x) : null);
   };
   const onContentClick = (e: React.MouseEvent) => {
     if (!canAnnotate || (e.target as HTMLElement).closest('button')) return;
     const c = cursorAt(e);
     // A plain click in the band (e.g. to blur a card) must not annotate: only ⌥ + click does.
-    if (!c || !e.altKey) return;
+    if (!c || !e.altKey || c.y >= bandH + GEOMETRY.height) return;
     const hit = instantAtCursor(layout!, anchors, c.x);
     const r = content.current!.getBoundingClientRect();
     annotations!.onCreateAt(hit.at, { left: r.left + hit.x - 1, top: r.top + ghostTop(bandH), width: 2, height: 22 });
@@ -365,6 +392,20 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
               onOpenCard={(card, el) => annotations.onOpenCard(card, rectOf(el))}
               onHoverCard={annotations.onHoverCard && ((card, el) => annotations.onHoverCard!(card, el ? rectOf(el) : null))}
               onCreate={(at, el) => annotations.onCreateAt(at, rectOf(el))}
+            />
+          )}
+          {todos && (
+            <TimelineTodoStrip
+              strip={strip}
+              top={bandH + GEOMETRY.height}
+              spineY={bandH + GEOMETRY.spineY + 3}
+              x0={layout.spine.x0}
+              x1={layout.nowX}
+              width={layout.width}
+              activeKey={todos.activeKey}
+              pinnedKey={todos.pinnedKey}
+              onOpen={(chip, el) => todos.onOpenChip(chip, rectOf(el))}
+              onHover={todos.onHoverChip && ((chip, el) => todos.onHoverChip!(chip, el ? rectOf(el) : null))}
             />
           )}
           </div>

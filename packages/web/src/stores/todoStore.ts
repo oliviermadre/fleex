@@ -34,6 +34,8 @@ interface TodoState {
   remove: (ticketId: string, itemId: string) => Promise<boolean>;
   /** Undo of a delete: the server restores the item, it comes back in place. */
   undelete: (ticketId: string, itemId: string) => Promise<boolean>;
+  /** Flash a row (e.g. the item a Timeline mark points to). */
+  flash: (itemId: string) => void;
 }
 
 const byPosition = (a: TicketTodoItem, b: TicketTodoItem) => a.position - b.position || a.ref - b.ref;
@@ -154,6 +156,8 @@ export const useTodoStore = create<TodoState>((set, get) => {
       if (!ok && before) setList(ticketId, (l) => upsert(l, before));
       return ok;
     },
+
+    flash,
 
     undelete: async (ticketId, itemId) => {
       deleting.delete(itemId);

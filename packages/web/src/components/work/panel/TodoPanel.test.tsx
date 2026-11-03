@@ -321,3 +321,32 @@ describe('pastedItems', () => {
     expect(pastedItems('- [ ] Un\n\n2. Deux\n* Trois')).toEqual(['Un', 'Deux', 'Trois']);
   });
 });
+
+describe('TodoPanel — opened from the Timeline (a mark of the todo strip)', () => {
+  it('unfolds the section of a closed item and flashes it', async () => {
+    const { useWorkStore } = await import('../../../stores/workStore');
+    api.fetchTicketTodos.mockResolvedValue([
+      item(1),
+      item(2, { state: 'cancelled', stateChangedByName: 'Builder', stateChangedByType: 'agent', stateChangedAt: '2026-11-03T10:00:00.000Z' }),
+    ]);
+    render(<TodoPanel ticketId="t1" />);
+    await screen.findByText('Item 1');
+    // Annulé is folded by default: #2 is not shown.
+    expect(screen.queryByTestId('todo-row-2')).toBeNull();
+    act(() => useWorkStore.getState().focusTodo({ itemId: 'i2', view: 'list' }));
+    expect(await screen.findByTestId('todo-row-2')).toBeTruthy();
+    expect(useTodoStore.getState().flashing.i2).toBe(true);
+    // Consumed: reopening the panel later does not replay it.
+    expect(useWorkStore.getState().todoFocus).toBeNull();
+  });
+
+  it('opens the History when asked', async () => {
+    const { useWorkStore } = await import('../../../stores/workStore');
+    api.fetchTicketTodos.mockResolvedValue([item(1)]);
+    api.fetchTicketTodoEvents.mockResolvedValue([]);
+    render(<TodoPanel ticketId="t1" />);
+    await screen.findByText('Item 1');
+    act(() => useWorkStore.getState().focusTodo({ itemId: null, view: 'history' }));
+    await waitFor(() => expect(api.fetchTicketTodoEvents).toHaveBeenCalledWith('t1', undefined));
+  });
+});

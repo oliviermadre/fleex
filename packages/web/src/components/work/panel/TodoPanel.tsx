@@ -26,6 +26,7 @@ import { tintSolid } from '../../../lib/tints';
 import * as api from '../../../services/api';
 import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
 import { useTodoStore } from '../../../stores/todoStore';
+import { useWorkStore } from '../../../stores/workStore';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import { Input } from '../../ui/Input';
 import { Tooltip } from '../../ui/Tooltip';
@@ -107,6 +108,32 @@ export function TodoPanel({ ticketId }: { ticketId: string }) {
     const store = useAgentPersonaStore.getState();
     if (!store.loaded) void store.loadPersonas();
   }, []);
+
+  // A request from the Timeline: open the History, or show an item (its section
+  // unfolded, scrolled to, flashed). Consumed once handled, so reopening the
+  // panel later does not replay it; a list focus waits for the list to load.
+  const todoFocus = useWorkStore((s) => s.todoFocus);
+  useEffect(() => {
+    if (!todoFocus) return;
+    if (todoFocus.view === 'history') {
+      setHistory({ itemId: todoFocus.itemId });
+    } else {
+      const target = items.find((i) => i.id === todoFocus.itemId);
+      if (!target) {
+        if (!loaded) return;
+      } else {
+        setHistory(null);
+        if (mineOnly && target.assignee?.type !== 'user') setMineOnly(false);
+        if (target.state === 'done') setDoneOpen(true);
+        if (target.state === 'cancelled') setCancelledOpen(true);
+        useTodoStore.getState().flash(target.id);
+        requestAnimationFrame(() => {
+          document.querySelector(`[data-testid="todo-row-${target.ref}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+        });
+      }
+    }
+    useWorkStore.setState({ todoFocus: null });
+  }, [todoFocus, items, loaded, mineOnly]);
 
   // Personas already seen on this ticket's list come first in the picker.
   const seen = useMemo(() => {

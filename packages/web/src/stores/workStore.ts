@@ -29,8 +29,19 @@ export type DraftType = TicketType;
 /** How the queue groups its rows. 'activity' is the handoff default. */
 export type QueueGroupBy = 'activity' | 'repo' | 'type' | 'priority' | 'board' | 'status';
 /** Event categories the Timeline can hide (the spine — runs, steps — never is). */
-export type TimelineFilterKey = 'status' | 'cli' | 'pr' | 'deliverables' | 'comments' | 'annotations';
+export type TimelineFilterKey = 'status' | 'cli' | 'pr' | 'deliverables' | 'comments' | 'annotations' | 'todos';
 export type TimelineFilters = Record<TimelineFilterKey, boolean>;
+
+/**
+ * A request, from outside the Todo panel (the Timeline), to show an item or the
+ * history. `nonce` makes the same request twice still fire.
+ */
+export interface TodoFocusRequest {
+  /** The item to show (list) or whose history to open; null = the whole list's history. */
+  itemId: string | null;
+  view: 'list' | 'history';
+  nonce: number;
+}
 
 /**
  * The recognized source an import prefilled the draft from. Kept on the draft so
@@ -91,6 +102,8 @@ export interface WorkState {
   /** Free-text search over task titles. */
   search: string;
   rightPanel: RightPanel;
+  /** Last focus request for the Todo panel (not persisted). */
+  todoFocus: TodoFocusRequest | null;
   /**
    * Active scratchpad tab per ticket ('__global__' or 'org/name'), so the Notes
    * panel reopens on the tab you last used for that ticket. Resolved against the
@@ -159,6 +172,8 @@ export interface WorkState {
   /** Open a right panel, or toggle it closed when it's already the active one. */
   toggleRightPanel: (panel: Exclude<RightPanel, null>) => void;
   setRightPanel: (panel: RightPanel) => void;
+  /** Open the Todo panel on an item (scrolled to, flashed) or on the history. */
+  focusTodo: (request: Omit<TodoFocusRequest, 'nonce'>) => void;
   /** Remember which scratchpad tab is active for a ticket. */
   setActiveScratchTab: (ticketId: string, tabKey: string) => void;
   setSelectedThread: (id: string | null) => void;
@@ -307,7 +322,7 @@ const clampTimelineHeight = (h: number) =>
   Math.min(TIMELINE_MAX_HEIGHT, Math.max(TIMELINE_MIN_HEIGHT, Math.round(h)));
 
 const DEFAULT_TIMELINE_FILTERS: TimelineFilters = {
-  status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true,
+  status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true,
 };
 
 type ModeFlags = Pick<WorkState, 'shellMode' | 'codeMode' | 'workflowMode'>;
@@ -477,6 +492,7 @@ export const useWorkStore = create<WorkState>((set, get) => {
   return {
     ...load(),
     shellFocusRequest: null,
+    todoFocus: null,
 
     // Picking a row inside the queue never touches the pin.
     selectTicket: (id) => commit({ selectedTicketId: id, view: 'task' }),
@@ -493,6 +509,10 @@ export const useWorkStore = create<WorkState>((set, get) => {
     toggleRightPanel: (panel) =>
       commit({ rightPanel: get().rightPanel === panel ? null : panel }),
     setRightPanel: (rightPanel) => commit({ rightPanel }),
+    focusTodo: (request) => {
+      commit({ rightPanel: 'todo' });
+      set({ todoFocus: { ...request, nonce: (get().todoFocus?.nonce ?? 0) + 1 } });
+    },
     setActiveScratchTab: (ticketId, tabKey) =>
       commit({ activeScratchTabByTicket: { ...get().activeScratchTabByTicket, [ticketId]: tabKey } }),
     setSelectedThread: (selectedThreadId) => commit({ selectedThreadId }),
