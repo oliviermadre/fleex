@@ -75,7 +75,6 @@ function createMocks() {
     handleAgentMentionInReview: vi.fn().mockResolvedValue(undefined),
     handleAgentWorkCompletion: vi.fn().mockResolvedValue(undefined),
     handleDeliverableCreated: vi.fn().mockResolvedValue(undefined),
-    handleMentionWaitingForInfo: vi.fn().mockResolvedValue(undefined),
     handleTicketDone: vi.fn().mockResolvedValue(undefined),
     handleHumanCommentPosted: vi.fn().mockResolvedValue(undefined),
     onTicketUpdate: null,
@@ -351,24 +350,6 @@ describe('DomainEventListener', () => {
       expect(mocks.autoReviewWorkflow.handleAgentWorkCompletion).toHaveBeenCalledWith({
         ticketId: 't1',
         completedAgentName: 'agent-a',
-      });
-    });
-
-    it('should trigger handleMentionWaitingForInfo on mention.waiting_for_info', async () => {
-      vi.mocked(mocks.mentionStore.getById).mockResolvedValue(null);
-
-      eventBus.emit({
-        type: 'mention.waiting_for_info',
-        mentionId: 'm1',
-        ticketId: 't1',
-        targetAgent: 'agent-a',
-        occurredAt: new Date(),
-      });
-      await new Promise((r) => setTimeout(r, 10));
-
-      expect(mocks.autoReviewWorkflow.handleMentionWaitingForInfo).toHaveBeenCalledWith({
-        ticketId: 't1',
-        agentName: 'agent-a',
       });
     });
 
