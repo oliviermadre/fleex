@@ -18,6 +18,7 @@ import { ConfirmModal } from '../../ui/ConfirmModal';
 import { QueueFiltersPopover } from './QueueFiltersPopover';
 import { QueueDisplayPopover, GROUP_BY_OPTIONS } from './QueueDisplayPopover';
 import { ViewPicker } from './ViewPicker';
+import { ChevronDownIcon } from '../../ui/icons/TodoIcons';
 import { ViewNameModal } from './ViewNameModal';
 import {
   createView,
@@ -80,26 +81,69 @@ function describeConfig(config: QueueConfig, queue: WorkQueueModel): string {
 
 type NameModal = { kind: 'create' } | { kind: 'rename'; view: SavedView } | null;
 
-/** A group header: caret, label, count — click to fold. */
-function GroupHeader({ group, nested, collapsed, onToggle }: { group: QueueGroup; nested?: boolean; collapsed: boolean; onToggle: () => void }) {
+/**
+ * A group header — click anywhere to fold. Two distinct signatures so the
+ * hierarchy reads at a glance against the (bigger, brighter) task rows:
+ * - level 1 is a band: tinted full-width strip, rule above (except the first
+ *   group), count pill pushed right;
+ * - level 2 is an underlined subheading: 12px label, then a hairline running to
+ *   the right edge — the ornament that says "header, not task".
+ */
+function GroupHeader({
+  group,
+  nested,
+  first,
+  collapsed,
+  onToggle,
+}: {
+  group: QueueGroup;
+  nested?: boolean;
+  first?: boolean;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
-      className={cn('flex w-full items-center gap-1.5 pb-1 pr-3 text-left', nested ? 'pl-6 pt-1.5' : 'pl-3 pt-2')}
+      data-testid={nested ? 'queue-subgroup-header' : 'queue-group-header'}
+      className={cn(
+        'group/header flex w-full items-center gap-1.5 pr-3 text-left',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-accent)]',
+        nested
+          ? cn('pl-5 py-1 hover:bg-[var(--theme-bg-hover)]', !first && 'mt-1')
+          : cn(
+              'min-h-[28px] pl-2.5 py-1.5 bg-[var(--theme-bg-base)] hover:bg-[var(--theme-bg-hover)]',
+              !first && 'mt-2 border-t border-[var(--theme-border)]',
+            ),
+      )}
     >
-      <span className="w-2 text-[8px] text-[var(--theme-text-faint)]">{collapsed ? '▸' : '▾'}</span>
+      <span className="flex w-4 shrink-0 items-center justify-center text-[var(--theme-text-muted)] group-hover/header:text-[var(--theme-text-secondary)]">
+        <ChevronDownIcon
+          size={nested ? 12 : 14}
+          className={cn('transition-transform duration-150', collapsed && '-rotate-90')}
+        />
+      </span>
       <span
         className={cn(
-          'text-[10.5px] font-semibold',
-          nested ? 'tracking-[0.02em]' : 'tracking-[0.06em]',
-          group.tone ?? (nested ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]'),
+          'truncate font-semibold',
+          nested ? 'text-[12px]' : 'text-[11px] uppercase tracking-[0.06em]',
+          group.tone ?? 'text-[var(--theme-text-secondary)]',
         )}
       >
         {group.label}
       </span>
-      <span className="text-[10.5px] text-[var(--theme-text-faint)]">{group.items.length}</span>
+      {nested ? (
+        <>
+          <span className="shrink-0 text-[10.5px] text-[var(--theme-text-faint)]">{group.items.length}</span>
+          <span aria-hidden="true" data-testid="queue-subgroup-rule" className="ml-2 h-px flex-1 bg-[var(--theme-border)]" />
+        </>
+      ) : (
+        <span className="ml-auto shrink-0 rounded-full bg-[var(--theme-bg-overlay)] px-1.5 text-[10.5px] leading-[17px] text-[var(--theme-text-muted)]">
+          {group.items.length}
+        </span>
+      )}
     </button>
   );
 }
@@ -366,14 +410,20 @@ export function WorkQueue({ queue, onOpenExecution }: Props) {
           </div>
         )}
 
-        {queue.groups.map((g) => (
+        {queue.groups.map((g, gi) => (
           <div key={g.key} className="pb-1">
-            <GroupHeader group={g} collapsed={collapsed.has(g.key)} onToggle={() => toggleCollapsed(g.key)} />
+            <GroupHeader group={g} first={gi === 0} collapsed={collapsed.has(g.key)} onToggle={() => toggleCollapsed(g.key)} />
             {!collapsed.has(g.key) &&
-              (g.subgroups ?? [{ ...g, key: '' }]).map((sub) => (
+              (g.subgroups ?? [{ ...g, key: '' }]).map((sub, si) => (
                 <div key={sub.key || g.key}>
                   {sub.key && (
-                    <GroupHeader group={sub} nested collapsed={collapsed.has(sub.key)} onToggle={() => toggleCollapsed(sub.key)} />
+                    <GroupHeader
+                      group={sub}
+                      nested
+                      first={si === 0}
+                      collapsed={collapsed.has(sub.key)}
+                      onToggle={() => toggleCollapsed(sub.key)}
+                    />
                   )}
                   {!collapsed.has(sub.key) &&
                     sub.items.map((task) => (
