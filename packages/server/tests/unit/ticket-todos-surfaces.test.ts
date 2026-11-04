@@ -71,8 +71,12 @@ describe('buildSdkOptions — the identity an agent run hands to the CLI it spaw
     expect((orchestrator.env as Record<string, string>).FLEEX_ACTOR_PERSONA).toBeUndefined();
   });
 
-  it('leaves the SDK default env alone when no actor is given', () => {
-    expect(buildSdkOptions('edit', { model: 'm', systemPrompt: '' }).env).toBeUndefined();
+  it('exports no FLEEX_ACTOR_* when no actor is given, on top of the inherited env', () => {
+    const env = buildSdkOptions('edit', { model: 'm', systemPrompt: '' }).env as Record<string, string>;
+    // Whatever the server itself inherited, nothing is added on top of it.
+    expect(env.FLEEX_ACTOR_TYPE).toBe(process.env.FLEEX_ACTOR_TYPE);
+    expect(env.FLEEX_ACTOR_NAME).toBe(process.env.FLEEX_ACTOR_NAME);
+    expect(env.PATH).toBe(process.env.PATH);
   });
 });
 
