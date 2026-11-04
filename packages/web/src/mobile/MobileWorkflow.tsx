@@ -297,6 +297,7 @@ function MobileStepDetail({
           <MarkdownEditor
             variant="composer"
             surfaceKind="workflow_gate_notes"
+            enableFileUpload
             value={notes}
             onChange={setNotes}
             minRows={2}
@@ -323,6 +324,7 @@ function MobileStepDetail({
           <MarkdownEditor
             variant="composer"
             surfaceKind="workflow_review_response"
+            enableFileUpload
             value={notes}
             onChange={setNotes}
             minRows={3}

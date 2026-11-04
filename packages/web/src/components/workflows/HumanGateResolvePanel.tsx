@@ -38,6 +38,7 @@ export function HumanGateResolvePanel({ runId, stepRunId, outcomes, onResolve }:
       <MarkdownEditor
         variant="composer"
         surfaceKind="workflow_gate_notes"
+        enableFileUpload
         value={notes}
         onChange={setNotes}
         minRows={3}

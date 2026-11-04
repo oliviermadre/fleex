@@ -121,3 +121,14 @@ describe('HumanGateResolvePanel note persistence', () => {
     expect(container.querySelector('textarea')!.value).toBe('precious note');
   });
 });
+
+describe('HumanGateResolvePanel attachments', () => {
+  // A reject is where the reviewer most needs to show what is wrong: the notes
+  // field must accept images (paperclip, paste, drop) like every other composer.
+  it('offers the file attach button on the gate notes', () => {
+    const { queryByTitle } = render(
+      <HumanGateResolvePanel runId="run1" stepRunId="step1" outcomes={['approve', 'reject']} onResolve={vi.fn()} />,
+    );
+    expect(queryByTitle('Attach file')).not.toBeNull();
+  });
+});

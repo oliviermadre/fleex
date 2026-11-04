@@ -121,3 +121,13 @@ describe('NeedsReviewRespondPanel response persistence', () => {
     expect(container.querySelector('textarea')!.value).toBe('precious answer');
   });
 });
+
+describe('NeedsReviewRespondPanel attachments', () => {
+  // Answering an agent's question may need a screenshot, same as a ticket comment.
+  it('offers the file attach button on the response', () => {
+    const { queryByTitle } = render(
+      <NeedsReviewRespondPanel runId="run1" stepRunId="step1" question="Which one?" onSubmit={vi.fn()} />,
+    );
+    expect(queryByTitle('Attach file')).not.toBeNull();
+  });
+});

@@ -66,6 +66,7 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
       <MarkdownEditor
         variant="composer"
         surfaceKind="workflow_review_response"
+        enableFileUpload
         value={response}
         onChange={setResponse}
         minRows={4}

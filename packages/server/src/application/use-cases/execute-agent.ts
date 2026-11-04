@@ -2546,7 +2546,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         `\n## Repositories\n\n${subject.repos.map((r) => `- ${r}`).join('\n')}\n`,
       );
     }
-    composer.track(
+    // Resolved here only: with no ticket there is no decision comment, so the Run
+    // history is the one channel carrying images from gate notes / human answers.
+    // The ticket path keeps `track()` so the image is not injected twice.
+    await composer.trackResolved(
       { kind: 'workflow_instructions', section: 'Workflow step', label: 'Step instructions' },
       '\n---\n\n' + workflowContextPrompt,
     );
