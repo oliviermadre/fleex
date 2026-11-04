@@ -2,6 +2,22 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act, fireEvent } from '@testing-library/react';
 import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 
+// Controllable upload: the test decides when the server answers.
+const uploadMock = vi.hoisted(() => ({ resolve: null as null | ((v: unknown) => void) }));
+vi.mock('../../services/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/api')>()),
+  uploadFile: vi.fn(
+    () => new Promise((resolve) => {
+      uploadMock.resolve = resolve;
+    }),
+  ),
+}));
+
+function pasteImage(textarea: HTMLTextAreaElement) {
+  const file = new File(['png-bytes'], 'shot.png', { type: 'image/png' });
+  fireEvent.paste(textarea, { clipboardData: { files: [file] } });
+}
+
 /** In-memory localStorage (Node 22's experimental global shadows jsdom's). */
 function installMemoryStorage() {
   const store = new Map<string, string>();
@@ -129,5 +145,34 @@ describe('NeedsReviewRespondPanel attachments', () => {
       <NeedsReviewRespondPanel runId="run1" stepRunId="step1" question="Which one?" onSubmit={vi.fn()} />,
     );
     expect(queryByTitle('Attach file')).not.toBeNull();
+  });
+});
+
+describe('NeedsReviewRespondPanel upload in progress', () => {
+  // The answer is posted then the step retries right away: sending while the
+  // image uploads would hand the agent a placeholder instead of the image.
+  it('blocks sending until the pasted image is uploaded, then sends the real link', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { container, getByText } = render(
+      <NeedsReviewRespondPanel runId="run1" stepRunId="up1" question="Which one?" onSubmit={onSubmit} />,
+    );
+    const textarea = container.querySelector('textarea')!;
+    fireEvent.change(textarea, { target: { value: 'this one ' } });
+    textarea.setSelectionRange(9, 9);
+    await act(async () => {
+      pasteImage(textarea);
+    });
+
+    expect((getByText('Send & retry') as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      uploadMock.resolve!({ originalName: 'shot.png', url: '/api/files/abc' });
+    });
+
+    expect((getByText('Send & retry') as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(getByText('Send & retry'));
+    });
+    expect(onSubmit).toHaveBeenCalledWith('this one ![shot.png](/api/files/abc)');
   });
 });

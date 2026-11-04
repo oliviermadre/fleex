@@ -2,6 +2,22 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act, fireEvent } from '@testing-library/react';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
 
+// Controllable upload: the test decides when the server answers.
+const uploadMock = vi.hoisted(() => ({ resolve: null as null | ((v: unknown) => void) }));
+vi.mock('../../services/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/api')>()),
+  uploadFile: vi.fn(
+    () => new Promise((resolve) => {
+      uploadMock.resolve = resolve;
+    }),
+  ),
+}));
+
+function pasteImage(textarea: HTMLTextAreaElement) {
+  const file = new File(['png-bytes'], 'shot.png', { type: 'image/png' });
+  fireEvent.paste(textarea, { clipboardData: { files: [file] } });
+}
+
 /** In-memory localStorage (Node 22's experimental global shadows jsdom's). */
 function installMemoryStorage() {
   const store = new Map<string, string>();
@@ -130,5 +146,35 @@ describe('HumanGateResolvePanel attachments', () => {
       <HumanGateResolvePanel runId="run1" stepRunId="step1" outcomes={['approve', 'reject']} onResolve={vi.fn()} />,
     );
     expect(queryByTitle('Attach file')).not.toBeNull();
+  });
+});
+
+describe('HumanGateResolvePanel upload in progress', () => {
+  // A gate decision is irreversible: resolving while an image is still uploading
+  // would ship the `![Uploading …](fleex-upload-…)` placeholder to the decision
+  // comment and the Run history, and the next agent would never see the image.
+  it('blocks every outcome until the pasted image is uploaded, then sends the real link', async () => {
+    const onResolve = vi.fn().mockResolvedValue(undefined);
+    const { container, getByText } = render(
+      <HumanGateResolvePanel runId="run1" stepRunId="up1" outcomes={['approve', 'reject']} onResolve={onResolve} />,
+    );
+    const textarea = container.querySelector('textarea')!;
+    await act(async () => {
+      pasteImage(textarea);
+    });
+
+    expect(textarea.value).toContain('fleex-upload-');
+    expect((getByText('reject') as HTMLButtonElement).disabled).toBe(true);
+    expect((getByText('approve') as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      uploadMock.resolve!({ originalName: 'shot.png', url: '/api/files/abc' });
+    });
+
+    expect((getByText('reject') as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(getByText('reject'));
+    });
+    expect(onResolve).toHaveBeenCalledWith('reject', '![shot.png](/api/files/abc)');
   });
 });

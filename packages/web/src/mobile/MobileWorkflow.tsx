@@ -255,6 +255,8 @@ function MobileStepDetail({
 }) {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
+  // Submitting mid-upload would send the upload placeholder instead of the image.
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const act = async (fn: () => Promise<void>) => {
@@ -298,6 +300,7 @@ function MobileStepDetail({
             variant="composer"
             surfaceKind="workflow_gate_notes"
             enableFileUpload
+            onUploadingChange={setUploading}
             value={notes}
             onChange={setNotes}
             minRows={2}
@@ -307,7 +310,7 @@ function MobileStepDetail({
             {gateOutcomes.map((o) => (
               <button
                 key={o}
-                disabled={busy}
+                disabled={busy || uploading}
                 onClick={() => act(() => onResolveGate(stepRun.id, o, notes.trim() || undefined))}
                 className="min-h-11 rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
               >
@@ -325,13 +328,14 @@ function MobileStepDetail({
             variant="composer"
             surfaceKind="workflow_review_response"
             enableFileUpload
+            onUploadingChange={setUploading}
             value={notes}
             onChange={setNotes}
             minRows={3}
             placeholder="Ta réponse (postée en commentaire, puis l'étape est relancée)"
           />
           <button
-            disabled={busy || !notes.trim()}
+            disabled={busy || uploading || !notes.trim()}
             onClick={() => act(() => onRespondReview(notes.trim(), stepRun.id))}
             className="min-h-11 rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >

@@ -30,6 +30,8 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
     `needs_review_response_${runId}_${stepRunId}`,
   );
   const [busy, setBusy] = useState(false);
+  // Sending mid-upload would post the upload placeholder instead of the image.
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
@@ -67,6 +69,7 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
         variant="composer"
         surfaceKind="workflow_review_response"
         enableFileUpload
+        onUploadingChange={setUploading}
         value={response}
         onChange={setResponse}
         minRows={4}
@@ -75,7 +78,7 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
       />
       {error && <div className="text-xs text-[var(--theme-danger)]">{error}</div>}
       <div className="flex justify-end">
-        <Button variant="primary" size="sm" disabled={busy || !response.trim()} onClick={submit}>
+        <Button variant="primary" size="sm" disabled={busy || uploading || !response.trim()} onClick={submit}>
           {busy ? 'Sending…' : 'Send & retry'}
         </Button>
       </div>

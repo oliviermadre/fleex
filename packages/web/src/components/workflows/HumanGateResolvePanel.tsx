@@ -15,6 +15,8 @@ export function HumanGateResolvePanel({ runId, stepRunId, outcomes, onResolve }:
     `human_gate_note_${runId}_${stepRunId}`,
   );
   const [busy, setBusy] = useState(false);
+  // Resolving mid-upload would send the upload placeholder instead of the image.
+  const [uploading, setUploading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const click = async (outcome: string) => {
@@ -39,6 +41,7 @@ export function HumanGateResolvePanel({ runId, stepRunId, outcomes, onResolve }:
         variant="composer"
         surfaceKind="workflow_gate_notes"
         enableFileUpload
+        onUploadingChange={setUploading}
         value={notes}
         onChange={setNotes}
         minRows={3}
@@ -47,7 +50,7 @@ export function HumanGateResolvePanel({ runId, stepRunId, outcomes, onResolve }:
       {submitError && <div className="text-xs text-[var(--theme-danger)]">{submitError}</div>}
       <div className="flex flex-wrap gap-2">
         {outcomes.map((o) => (
-          <Button key={o} variant="primary" size="sm" disabled={busy} onClick={() => click(o)}>
+          <Button key={o} variant="primary" size="sm" disabled={busy || uploading} onClick={() => click(o)}>
             {o}
           </Button>
         ))}
