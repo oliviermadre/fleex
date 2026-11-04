@@ -47,3 +47,26 @@ describe('effectiveMaxTurns — what the Execution Log reports', () => {
     expect(effectiveMaxTurns('talk', 500)).toBeUndefined();
   });
 });
+
+describe('buildSdkOptions — background tasks are disabled (claude-code#103157 workaround)', () => {
+  // Every Fleex run has an `outputFormat`, and the CLI forces StructuredOutput at
+  // each turn end even while background sub-agents / Bash are still running. A
+  // run that fans out then waits would hand back a partial result (a PR review
+  // with no code analysed) and its tasks would be killed. Until upstream fixes
+  // it, every run must be synchronous — including runs without an actor.
+  const cases: Array<[string, Parameters<typeof buildSdkOptions>[1]]> = [
+    ['no actor', ctx],
+    ['an actor', { ...ctx, actorName: 'Builder', actorPersona: 'builder' }],
+    ['a structured output', { ...ctx, outputFormat: { type: 'json_schema', schema: {} } }],
+  ];
+  for (const mode of ['talk', 'plan', 'edit'] as const) {
+    for (const [label, c] of cases) {
+      it(`sets CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 in ${mode} mode with ${label}`, () => {
+        const env = buildSdkOptions(mode, c).env as Record<string, string> | undefined;
+        expect(env?.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS).toBe('1');
+        // `env` replaces the SDK default: the CLI must still find git, fleex, …
+        expect(env?.PATH).toBe(process.env.PATH);
+      });
+    }
+  }
+});

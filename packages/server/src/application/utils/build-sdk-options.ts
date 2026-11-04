@@ -72,6 +72,26 @@ export function effectiveMaxTurns(
   return resolveMaxTurns(configured);
 }
 
+/**
+ * TEMPORARY workaround — forces every Agent / Bash call of a run to be
+ * synchronous (no `run_in_background`, no background sub-agents).
+ *
+ * Why: with an `outputFormat` (every Fleex run has one), the Claude Code CLI
+ * injects `[structured-output-enforce] … Call this tool now.` at EVERY turn
+ * end, without checking for still-running background tasks. A run that fans
+ * out sub-agents and ends its turn to wait for them is forced to hand back a
+ * partial StructuredOutput, then `streamSdkQuery` stops at that `result` and
+ * kills the CLI with the tasks still running. Upstream bug:
+ * https://github.com/anthropics/claude-code/issues/103157
+ *
+ * Remove once a CLI release stops enforcing structured output while
+ * background tasks are pending (and `streamSdkQuery` waits for them):
+ * sub-agents then run in parallel again.
+ */
+export const NO_BACKGROUND_TASKS_ENV: Readonly<Record<string, string>> = {
+  CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
+};
+
 /** The env a run exports so the `fleex` CLI it spawns acts in its name. */
 export function agentActorEnv(actorName: string, personaSlug?: string): Record<string, string> {
   return {
@@ -99,7 +119,11 @@ export function buildSdkOptions(
 
   if (ctx.outputFormat) base.outputFormat = ctx.outputFormat;
   // `env` replaces the SDK's default (process.env): keep everything else.
-  if (ctx.actorName) base.env = { ...process.env, ...agentActorEnv(ctx.actorName, ctx.actorPersona) };
+  base.env = {
+    ...process.env,
+    ...NO_BACKGROUND_TASKS_ENV,
+    ...(ctx.actorName ? agentActorEnv(ctx.actorName, ctx.actorPersona) : {}),
+  };
 
   switch (effectiveMode) {
     case 'talk':

@@ -2,6 +2,7 @@ import type { ParsedSlackMessageUrl } from '@fleex/shared';
 import type { SlackImportPort, SlackImportResult } from '../../application/ports/slack-import.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { SdkConcurrencyLimiter } from '../../application/services/sdk-concurrency-limiter.js';
+import { NO_BACKGROUND_TASKS_ENV } from '../../application/utils/build-sdk-options.js';
 
 /**
  * Model used for the Slack synthesis. Haiku is fast and more than capable of the
@@ -110,6 +111,8 @@ export class ClaudeSlackImportAdapter implements SlackImportPort {
         allowDangerouslySkipPermissions: true,
         maxTurns: MAX_TURNS,
         outputFormat: OUTPUT_FORMAT,
+        // Same workaround as buildSdkOptions: structured output + background tasks = truncated run.
+        env: { ...process.env, ...NO_BACKGROUND_TASKS_ENV },
         abortController,
         ...(cliPath ? { pathToClaudeCodeExecutable: cliPath } : {}),
       };
