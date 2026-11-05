@@ -26,6 +26,11 @@ import { actionsAiRoutes } from './infrastructure/http/actions-ai.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
 import { savedViewsRoutes } from './infrastructure/http/saved-views.routes.js';
+import { agendaRoutes } from './infrastructure/http/agenda.routes.js';
+import { GetAgendaUseCase } from './application/use-cases/get-agenda.js';
+import { calendarEventsRoutes } from './infrastructure/http/calendar-events.routes.js';
+import { KvMissedSlotRecorder } from './application/services/missed-slots.js';
+import { createGoogleAgenda } from './infrastructure/google/index.js';
 import { worktreeCleanupRoutes } from './infrastructure/http/worktree-cleanup.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
 import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
@@ -137,6 +142,23 @@ async function main() {
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));
   await app.register(savedViewsRoutes({ kvStore: container.kvStore }));
+  const googleAgenda = createGoogleAgenda({ kvStore: container.kvStore, deliverableStore: container.deliverableStore, logger: container.logger });
+  await app.register(googleAgenda.routes);
+  await app.register(agendaRoutes({
+    getAgenda: new GetAgendaUseCase(
+      container.ticketStore, container.routineStore, container.workflowRunStore, container.domainEventLogStore,
+      googleAgenda.source, // Google Calendar (read-only); null without a KV store
+      { ticketGroups: container.ticketGroupStore, kvStore: container.kvStore, links: googleAgenda.links ? () => googleAgenda.links!.byEventKey() : undefined },
+    ),
+    kvStore: container.kvStore,
+    deliverableStore: container.deliverableStore,
+    stepRunStore: container.stepRunStore,
+  }));
+  await app.register(calendarEventsRoutes({
+    kvStore: container.kvStore,
+    // Read late: unified-ws replaces `container.ticketBroadcast` once the socket is up.
+    broadcast: (type, data) => container.ticketBroadcast(type, data),
+  }));
   await app.register(claudeUsageRoutes(container));
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
@@ -313,6 +335,8 @@ async function main() {
   // unmerged code. See scheduler-role.ts.
   if (container.routineStore && container.runRoutine) {
     if (container.schedulerRole.armed) {
+      // Agenda R3: the slots the no-replay rule drops are kept as "missed".
+      if (container.kvStore) container.routineScheduler.setMissedSlotRecorder(new KvMissedSlotRecorder(container.kvStore));
       container.routineScheduler.start(ROUTINE_TICK_INTERVAL_MS);
     } else {
       container.logger.info(

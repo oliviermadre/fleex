@@ -20,11 +20,22 @@ import {
   type UseInteractionsReturn,
 } from '@floating-ui/react';
 import type { CSSProperties, RefObject } from 'react';
+import { titleBarBottom } from '../components/actions/terminalAnchor';
 
 // Re-export so call-sites import everything from one place.
 export { FloatingPortal, FloatingFocusManager } from '@floating-ui/react';
 
 const VIEWPORT_PADDING = 8;
+
+/**
+ * Viewport padding for flip/shift/size. In the desktop app the Electron title
+ * bar is drawn over the top of the page, so the top edge starts below it —
+ * otherwise a popover clamped to the top slides under the bar and its title is
+ * unreadable. Read at compute time (derivable option) so it tracks the bar.
+ */
+export function viewportPadding() {
+  return { top: titleBarBottom() + VIEWPORT_PADDING, right: VIEWPORT_PADDING, bottom: VIEWPORT_PADDING, left: VIEWPORT_PADDING };
+}
 /** Keeps a tooltip's arrow clear of the bubble's rounded corners. */
 const ARROW_PADDING = 6;
 
@@ -112,10 +123,10 @@ export function usePopover({
   const middleware = useMemo(
     () => [
       offset(gap),
-      flip({ padding: VIEWPORT_PADDING }),
-      shift({ padding: VIEWPORT_PADDING }),
-      size({
-        padding: VIEWPORT_PADDING,
+      flip(() => ({ padding: viewportPadding() })),
+      shift(() => ({ padding: viewportPadding() })),
+      size(() => ({
+        padding: viewportPadding(),
         apply({ availableHeight, elements }) {
           const capped = maxHeight != null ? Math.min(availableHeight, maxHeight) : availableHeight;
           Object.assign(elements.floating.style, {
@@ -123,7 +134,7 @@ export function usePopover({
             overflowY: 'auto',
           });
         },
-      }),
+      })),
     ],
     [gap, maxHeight],
   );
@@ -161,17 +172,17 @@ export function useContextMenuPopover({
   const middleware = useMemo(
     () => [
       offset(0),
-      flip({ padding: VIEWPORT_PADDING }),
-      shift({ padding: VIEWPORT_PADDING }),
-      size({
-        padding: VIEWPORT_PADDING,
+      flip(() => ({ padding: viewportPadding() })),
+      shift(() => ({ padding: viewportPadding() })),
+      size(() => ({
+        padding: viewportPadding(),
         apply({ availableHeight, elements }) {
           Object.assign(elements.floating.style, {
             maxHeight: `${Math.max(0, availableHeight)}px`,
             overflowY: 'auto',
           });
         },
-      }),
+      })),
     ],
     [],
   );
@@ -257,8 +268,8 @@ export function useTooltip({
   const middleware = useMemo(
     () => [
       offset(gap),
-      flip({ padding: VIEWPORT_PADDING }),
-      shift({ padding: VIEWPORT_PADDING }),
+      flip(() => ({ padding: viewportPadding() })),
+      shift(() => ({ padding: viewportPadding() })),
       // Last: it reads the final position, after flip/shift have settled.
       ...(arrow ? [arrowMiddleware({ element: arrowRef, padding: ARROW_PADDING })] : []),
     ],

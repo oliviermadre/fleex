@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 
 /** The screens that have saved views. */
-const SCOPES = new Set(['work']);
+const SCOPES = new Set(['work', 'agenda']);
 const NAME_MAX = 60;
 const MAX_VIEWS = 200;
 

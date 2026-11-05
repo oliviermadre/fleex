@@ -13,6 +13,10 @@ export type {
 } from './types/session.js';
 
 export { slugify } from './slugify.js';
+export {
+  expandCalendarEvent, calendarEventItemId, calendarEventLinkKey, CALENDAR_EVENT_LINK_PREFIX, EVENT_OCCURRENCE_CAP,
+} from './agenda-events.js';
+export type { EventOccurrence } from './agenda-events.js';
 
 export {
   TICKET_COMPLEXITIES,
@@ -786,3 +790,24 @@ export { diffTemplates, isEmptyDiff } from './workflow/apply/diff.js';
 export type { DiffEntry, TemplateDiff, DiffableTemplate } from './workflow/apply/diff.js';
 export { buildApplyDocumentation, renderApplyDocumentationMarkdown } from './workflow/apply/documentation.js';
 export type { ApplyDocumentation, DocumentationInput } from './workflow/apply/documentation.js';
+
+export type {
+  AgendaItemType,
+  AgendaShape,
+  AgendaTicketRef,
+  AgendaRoutineRef,
+  AgendaWaitSegment,
+  AgendaItem,
+  AgendaResponse,
+  AgendaView,
+  AgendaPrefs,
+  CalendarEvent,
+  CalendarEventInput,
+  CalendarEventRecurrence,
+  AgendaExternalLink,
+  AgendaGoogleCalendar,
+  AgendaGoogleStatus,
+  AgendaAttendee,
+  AgendaRsvp,
+} from './types/agenda.js';
+export { AGENDA_ITEM_TYPES, AGENDA_RSVPS, DEFAULT_AGENDA_PREFS, GOGCLI_SETUP_URL, GOGCLI_INSTALL_COMMAND } from './types/agenda.js';

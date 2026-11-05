@@ -4,12 +4,27 @@ import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-
 import type { RunRoutineUseCase } from '../../application/use-cases/run-routine.js';
 import type { EventBus } from '../../application/event-bus.js';
 import type { RoutineEntity } from '../entities/routine.entity.js';
-import { computeNextRunAt, nextCronRunAfter } from './routine-schedule.js';
+import { computeNextRunAt, nextCronRunAfter, runTimesBetween } from './routine-schedule.js';
 
 /** How often the tick runs. A minute is the resolution a 5-field cron promises. */
 export const ROUTINE_TICK_INTERVAL_MS = 60_000;
 
 export const SCHEDULER_TRIGGERED_BY = 'routine-scheduler';
+
+/** At most this many missed slots are recorded per detection (a `* * * * *` down for a week is 10 000). */
+export const MISSED_SLOT_CAP = 500;
+
+/** A cron slot that never fired because no scheduler was running at the time (agenda R3). */
+export interface MissedSlot {
+  routineId: string;
+  slotAt: Date;
+  detectedAt: Date;
+}
+
+/** Where missed slots go. Optional: without one, detection is simply skipped. */
+export interface MissedSlotRecorder {
+  record(slots: MissedSlot[]): Promise<void>;
+}
 
 /**
  * What this instance intends to do with one due occurrence, decided before any
@@ -61,6 +76,7 @@ export class RoutineSchedulerService {
   private routineStore: RoutineStorePort | null = null;
   private runStore: WorkflowRunStorePort | null = null;
   private runRoutine: RunRoutineUseCase | null = null;
+  private missedSlots: MissedSlotRecorder | null = null;
   /** Resolved once the boot recompute is done; every tick awaits it. */
   private booting: Promise<void> | null = null;
 
@@ -79,6 +95,30 @@ export class RoutineSchedulerService {
     this.routineStore = deps.routineStore;
     this.runStore = deps.runStore;
     this.runRoutine = deps.runRoutine;
+  }
+
+  /**
+   * Records the cron slots the no-replay rule drops (agenda R3 `scheduler_down`).
+   * Bookkeeping only: a recorder failure is logged and never blocks scheduling.
+   */
+  setMissedSlotRecorder(recorder: MissedSlotRecorder | null): void {
+    this.missedSlots = recorder;
+  }
+
+  /**
+   * Cron slots of `routine` in `[from, to]` (both inclusive), capped, handed to
+   * the recorder. Disabled, `once` and `manual` routines record nothing.
+   */
+  private async recordMissed(routine: RoutineEntity, from: Date, to: Date, now: Date): Promise<void> {
+    const recorder = this.missedSlots;
+    if (!recorder || !routine.enabled || routine.trigger.kind !== 'cron') return;
+    try {
+      const { times } = runTimesBetween(routine.trigger, from, new Date(to.getTime() + 1), MISSED_SLOT_CAP);
+      if (times.length === 0) return;
+      await recorder.record(times.map((slotAt) => ({ routineId: routine.id, slotAt, detectedAt: now })));
+    } catch (err) {
+      this.logger.warn('Could not record missed routine slots', { routineId: routine.id, error: String(err) });
+    }
   }
 
   /**
@@ -164,6 +204,10 @@ export class RoutineSchedulerService {
         next = null;
       }
       if (sameInstant(routine.nextRunAt, next)) continue;
+      // A stored slot in the past never fired, nor did any slot after it up to
+      // now: the re-arm below jumps over all of them (no replay).
+      const stale = routine.nextRunAt;
+      if (stale && stale.getTime() <= now.getTime()) await this.recordMissed(routine, stale, now, now);
       await store.rearm(routine.id, next);
     }
   }
@@ -211,6 +255,10 @@ export class RoutineSchedulerService {
           });
           continue;
         }
+
+        // The observed slot is handled (launched or skipped) once; the slots
+        // after it that are already past are dropped by the no-replay rule.
+        await this.recordMissed(routine, new Date(observed.getTime() + 1), now, now);
 
         if (occurrence.kind === 'skip') this.announceSkip(routine, occurrence.activeRunId);
         else await this.launch(routine);

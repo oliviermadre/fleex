@@ -21,6 +21,18 @@ const sizeClasses: Record<ButtonSize, string> = {
   md: 'px-3 py-1.5 text-sm',
 };
 
+/** The Button look, for an `<a>` that must look exactly like a Button (external links). */
+export function buttonClasses(variant: ButtonVariant = 'secondary', size: ButtonSize = 'md', className?: string): string {
+  return cn(
+    'inline-flex items-center justify-center rounded-md font-medium transition-colors',
+    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--theme-accent)]',
+    'disabled:opacity-50 disabled:pointer-events-none',
+    variantClasses[variant],
+    sizeClasses[size],
+    className,
+  );
+}
+
 export function Button({
   variant = 'secondary',
   size = 'md',
@@ -30,14 +42,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={cn(
-        'inline-flex items-center justify-center rounded-md font-medium transition-colors',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--theme-accent)]',
-        'disabled:opacity-50 disabled:pointer-events-none',
-        variantClasses[variant],
-        sizeClasses[size],
-        className
-      )}
+      className={buttonClasses(variant, size, className)}
       disabled={disabled}
       {...props}
     />

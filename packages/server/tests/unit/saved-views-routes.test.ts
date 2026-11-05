@@ -67,9 +67,10 @@ describe('saved views routes', () => {
     expect((await app.inject({ method: 'PUT', url: '/api/saved-views/work', payload: { views: [] } })).statusCode).toBe(501);
   });
 
-  it('only knows the work scope', async () => {
+  it('only knows the work and agenda scopes', async () => {
     const app = await appWith(memoryKv());
     expect((await app.inject({ method: 'GET', url: '/api/saved-views/focus' })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/api/saved-views/agenda' })).statusCode).toBe(200);
   });
 
   it('reads a corrupted document as no views rather than failing the screen', async () => {

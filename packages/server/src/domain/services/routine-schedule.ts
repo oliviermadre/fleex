@@ -123,3 +123,44 @@ export function nextCronRunAfter(trigger: RoutineTrigger, from: Date): Date | nu
   if (trigger.kind !== 'cron') return null;
   return nextRunTimes(trigger, from, 1)[0] ?? null;
 }
+
+/**
+ * Every fire time in `[from, to)`, capped at `cap` — what the agenda shows as
+ * upcoming occurrences. Same parser as the scheduler, so the agenda can never
+ * promise a slot the scheduler would not fire. `truncated` is true when the cap
+ * cut the list short (a `*​/5` routine over six weeks is ~12 000 slots).
+ *
+ * Unlike {@link nextRunTimes}, `from` is inclusive: a slot exactly at the window
+ * start belongs to that window.
+ */
+export function runTimesBetween(
+  trigger: RoutineTrigger,
+  from: Date,
+  to: Date,
+  cap: number,
+): { times: Date[]; truncated: boolean } {
+  assertTriggerValid(trigger);
+  if (trigger.kind === 'manual' || cap <= 0 || to.getTime() <= from.getTime()) return { times: [], truncated: false };
+
+  if (trigger.kind === 'once') {
+    const at = new Date(trigger.runAt);
+    const inside = at.getTime() >= from.getTime() && at.getTime() < to.getTime();
+    return { times: inside ? [at] : [], truncated: false };
+  }
+
+  // cron-parser's `next()` is strictly after `currentDate`; start 1 ms early so
+  // a slot exactly at `from` is included.
+  const it = CronExpressionParser.parse(trigger.cron.trim(), {
+    currentDate: new Date(from.getTime() - 1),
+    endDate: to,
+    tz: trigger.timezone,
+  });
+  const times: Date[] = [];
+  while (it.hasNext()) {
+    const t = it.next().toDate();
+    if (t.getTime() >= to.getTime()) break;
+    if (times.length >= cap) return { times, truncated: true };
+    times.push(t);
+  }
+  return { times, truncated: false };
+}

@@ -132,6 +132,26 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
     return rows.map(rowToEntity);
   }
 
+  async getOverlapping(from: Date, to: Date): Promise<WorkflowRunEntity[]> {
+    // Paginated like getAll, but bounded by the window: only the runs that overlap it.
+    const rows: WorkflowRunRow[] = [];
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('workflow_runs')
+        .select('*')
+        .lt('started_at', to.toISOString())
+        .or(`completed_at.is.null,completed_at.gte.${from.toISOString()}`)
+        .order('started_at', { ascending: false })
+        .order('id')
+        .range(offset, offset + PAGE - 1);
+      if (error) throw new Error(`SupabaseWorkflowRunStore.getOverlapping failed: ${error.message}`);
+      const page = data as WorkflowRunRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(rowToEntity);
+  }
+
   async save(run: WorkflowRunEntity): Promise<void> {
     const { error } = await this.conn.client.from('workflow_runs').upsert({
       id: run.id,

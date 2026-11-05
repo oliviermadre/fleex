@@ -2116,3 +2116,103 @@ export function openWorktreeHooksDir(repo: string): Promise<{ dir: string }> {
   return request('/worktree-actions/hooks/open', { method: 'POST', body: JSON.stringify({ repo }) });
 }
 
+
+// ── Agenda ──
+
+export function fetchAgenda(from: Date, to: Date, calendars: string[] = []): Promise<import('@fleex/shared').AgendaResponse> {
+  const q = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+  if (calendars.length) q.set('calendars', calendars.join(','));
+  return request(`/agenda?${q}`);
+}
+
+/** Null when the storage has no KV store (501): prefs then live in memory only. */
+export async function fetchAgendaPrefs(): Promise<import('@fleex/shared').AgendaPrefs | null> {
+  const res = await fetch(`${API_URL}/agenda/prefs`);
+  if (res.status === 501) return null;
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+/** No automatic toast: the store words the failure itself and keeps the user's choice. */
+export async function saveAgendaPrefs(prefs: import('@fleex/shared').AgendaPrefs): Promise<void> {
+  const res = await fetch(`${API_URL}/agenda/prefs`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(prefs),
+  });
+  if (!res.ok && res.status !== 501) throw new Error(`API error ${res.status}`);
+}
+
+/**
+ * The deliverables a routine / workflow run produced. No toast, and [] on a
+ * 404 (older server without the endpoint, or a purged run): the popover then
+ * simply shows no deliverable section.
+ */
+export async function fetchAgendaRunDeliverables(runId: string): Promise<import('@fleex/shared').TicketDeliverable[]> {
+  const res = await fetch(`${API_URL}/agenda/runs/${encodeURIComponent(runId)}/deliverables`);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const body = (await res.json()) as { deliverables?: import('@fleex/shared').TicketDeliverable[] };
+  return body.deliverables ?? [];
+}
+
+/**
+ * The agenda card's ticket reads. No toast: the card shows its own error line,
+ * and a ticket deleted since the agenda loaded must not raise a global toast.
+ */
+export function fetchAgendaTicket(id: string): Promise<import('@fleex/shared').Ticket> {
+  return browseRequest(`/tickets/${encodeURIComponent(id)}`);
+}
+
+export function fetchAgendaTicketDeliverables(ticketId: string): Promise<import('@fleex/shared').TicketDeliverable[]> {
+  return browseRequest(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
+}
+
+// ── Agenda: free events (E1) ──
+
+type CalendarEvent = import('@fleex/shared').CalendarEvent;
+type CalendarEventInput = import('@fleex/shared').CalendarEventInput;
+
+export function createCalendarEvent(input: CalendarEventInput): Promise<CalendarEvent> {
+  return request('/calendar-events', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateCalendarEvent(id: string, patch: Partial<CalendarEventInput>): Promise<CalendarEvent> {
+  return request(`/calendar-events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  await request<void>(`/calendar-events/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ── Agenda: Google Calendar (E3) and meeting ↔ deliverable links ──
+
+/** The gogcli setup the agenda reads Google through; `refresh` skips the server's cached answer. */
+export function fetchAgendaGoogleStatus(refresh = false): Promise<import('@fleex/shared').AgendaGoogleStatus> {
+  return request(`/agenda/google/status${refresh ? '?refresh=1' : ''}`);
+}
+
+/**
+ * No toast: the deliverable overlay reads this on every open, and a storage
+ * without the links table (501) or an older server must stay silent.
+ */
+export async function fetchAgendaExternalLinks(filter: { deliverableId?: string; eventKey?: string } = {}): Promise<import('@fleex/shared').AgendaExternalLink[]> {
+  const q = new URLSearchParams();
+  if (filter.deliverableId) q.set('deliverableId', filter.deliverableId);
+  if (filter.eventKey) q.set('eventKey', filter.eventKey);
+  const { links } = await browseRequest<{ links: import('@fleex/shared').AgendaExternalLink[] }>(`/agenda/external-links?${q}`);
+  return links ?? [];
+}
+
+export function createAgendaExternalLink(input: { eventKey: string; deliverableId: string; eventTitle: string; eventStart: string }): Promise<import('@fleex/shared').AgendaExternalLink> {
+  return request('/agenda/external-links', { method: 'POST', body: JSON.stringify({ ...input, source: 'manual' }) });
+}
+
+/** My answer to a Google invitation (written through gogcli on the server). */
+export async function respondToAgendaMeeting(input: { calendarId: string; eventId: string; status: 'accepted' | 'tentative' | 'declined' }): Promise<void> {
+  await request<unknown>('/agenda/google/respond', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function deleteAgendaExternalLink(id: string): Promise<void> {
+  await request<void>(`/agenda/external-links/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
