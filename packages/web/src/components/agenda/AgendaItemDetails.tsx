@@ -309,7 +309,7 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
   return (
     <div className="max-h-[min(70vh,560px)] w-[380px] space-y-2 overflow-y-auto p-3 text-xs">
       <div className="flex items-start gap-2">
-        <LabelIcon type={item.type} overdue={item.overdue} size={18} className="mt-0.5" />
+        <LabelIcon type={item.type} overdue={item.overdue} item={item} size={18} className="mt-0.5" />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold leading-5 text-[var(--theme-text-primary)]">
             {item.ticket && item.type !== 'pr.merged' ? <span className="mr-1 tabular-nums text-[var(--theme-text-muted)]">#{item.ticket.displayId}</span> : null}

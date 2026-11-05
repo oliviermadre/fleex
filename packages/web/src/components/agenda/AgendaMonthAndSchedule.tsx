@@ -1,6 +1,6 @@
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { AgendaChip, GroupChipLabel, WaitIcon, type OnOpen } from './AgendaChip';
+import { AgendaChip, GroupChipLabel, WaitIcon, useAgendaColors, type OnOpen } from './AgendaChip';
 import { chipStyle } from './agendaLabels';
 import { DragWrap, useAgendaDnd } from './AgendaDnd';
 import { addDays, dayKey, isBar, itemDays, parseDayKey, workflowShortName, openWait } from './agendaLayout';
@@ -24,12 +24,13 @@ function dayGroups(items: AgendaItem[], now: Date): AgendaItem[][] {
 
 function GroupChip({ items, onOpen, dimmed }: { items: AgendaItem[]; onOpen: OnOpen; dimmed: boolean }) {
   const it0 = items[0]!;
+  const colors = useAgendaColors();
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onOpen({ group: items }, e.currentTarget); }}
       className={cn('flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125', dimmed && 'opacity-25')}
-      style={chipStyle(it0)}
+      style={chipStyle(it0, colors)}
     >
       <GroupChipLabel items={items} />
     </button>

@@ -99,6 +99,23 @@ describe('<AgendaGoogleSection/>', () => {
     expect(useAgendaStore.getState().prefs.googleCalendars).toEqual(['team@x']);
   });
 
+  it('lists the primary calendar first, then the others alphabetically', () => {
+    useAgendaStore.setState({
+      google: {
+        ...connected,
+        calendars: [
+          { id: 'z', name: 'zeta', primary: false },
+          { id: 'b', name: 'Bravo', primary: false },
+          { id: 'me', name: 'Olivier', primary: true },
+          { id: 'a', name: 'alpha', primary: false },
+        ],
+      },
+    });
+    renderSection();
+    const names = screen.getAllByRole('checkbox').map((c) => c.textContent?.replace('primary', '').trim());
+    expect(names.slice(0, 4)).toEqual(['Olivier', 'alpha', 'Bravo', 'zeta']);
+  });
+
   it('toggles the working-location events', () => {
     renderSection();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Show working location' }));

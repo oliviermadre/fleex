@@ -78,6 +78,7 @@ export function mergeAgendaPrefs(stored: Partial<AgendaPrefs> | null | undefined
     labels: { ...DEFAULT_AGENDA_PREFS.labels, ...stored.labels },
     routines: { ...DEFAULT_AGENDA_PREFS.routines, ...stored.routines },
     filters: { ...DEFAULT_AGENDA_PREFS.filters, ...stored.filters },
+    colors: { ...DEFAULT_AGENDA_PREFS.colors, ...stored.colors },
   };
 }
 

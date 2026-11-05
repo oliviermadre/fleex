@@ -5,7 +5,10 @@ import { useAgendaStore } from '../../stores/agendaStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { MultiSelect } from '../ui/MultiSelect';
 import { cn } from '../../lib/cn';
-import { AGENDA_LABELS, FAMILIES, LABEL_BY_TYPE } from './agendaLabels';
+import { AGENDA_LABELS, FAMILIES, itemHue, labelHue, routineColorKey } from './agendaLabels';
+import type { AgendaItem } from '@fleex/shared';
+import type { TintHue } from '../../lib/tints';
+import { AgendaColorPicker, AgendaInlineColorPicker } from './AgendaColorPicker';
 import { LabelIcon } from './AgendaChip';
 import { AgendaSavedViews } from './AgendaSavedViews';
 import { AgendaGoogleSection } from './AgendaGoogleSection';
@@ -114,6 +117,15 @@ export function AgendaSidebar() {
     updatePrefs((p) => ({ ...p, routines: on ? {} : Object.fromEntries(routines.map((r) => [r.id, false])) }));
   const toggleRoutine = (id: string) =>
     updatePrefs((p) => ({ ...p, routines: { ...p.routines, [id]: p.routines[id] === false } }));
+  const colors = prefs.colors;
+  const setColor = (key: string, hue: TintHue | null) =>
+    updatePrefs((p) => {
+      const next = { ...p.colors };
+      if (hue) next[key] = hue;
+      else delete next[key];
+      return { ...p, colors: next };
+    });
+  const routineHue = (id: string) => itemHue({ type: 'routine.run', routine: { id } } as AgendaItem, colors);
   const isDirty = Object.keys(prefs.labels).length > 0
     || Object.keys(prefs.routines).length > 0
     || (Object.keys(DEFAULT_AGENDA_PREFS.filters) as (keyof AgendaPrefs['filters'])[]).some((k) => (prefs.filters[k]?.length ?? 0) > 0);
@@ -122,82 +134,7 @@ export function AgendaSidebar() {
     <div className="flex h-full flex-col overflow-y-auto px-2.5 py-3 text-xs">
       <MiniCalendar />
       <AgendaSavedViews />
-
-      <div className="mt-4 mb-1 text-[10.5px] uppercase tracking-wide text-[var(--theme-text-muted)]">Labels</div>
-      {FAMILIES.map((fam) => {
-        const labels = AGENDA_LABELS.filter((l) => l.family === fam.key);
-        const on = labels.filter((l) => labelOn(prefs, l.type)).length;
-        return (
-          <div key={fam.key} className="mb-1">
-            <div className="flex items-center">
-              <button
-                type="button"
-                onClick={() => setLabels(labels.map((l) => l.type), on !== labels.length)}
-                className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 font-semibold text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]"
-              >
-                <Check state={on === labels.length ? 'on' : on === 0 ? 'off' : 'mixed'} />
-                {fam.label}
-              </button>
-              {fam.key === 'routines' && routines.length > 0 && (
-                <AgendaSidebarMenu label="Choose the routines to show" hint={hiddenRoutines ? `${hiddenRoutines} hidden` : null}>
-                  <div className="mb-1 flex items-center gap-2 px-1 text-[10.5px] uppercase tracking-wide text-[var(--theme-text-muted)]">
-                    <span className="flex-1">Routines</span>
-                    <button type="button" className="normal-case text-[var(--theme-accent)] hover:underline" onClick={() => setAllRoutines(true)}>All</button>
-                    <button type="button" className="normal-case text-[var(--theme-accent)] hover:underline" onClick={() => setAllRoutines(false)}>None</button>
-                  </div>
-                  {routines.map((r) => {
-                    const isOn = prefs.routines[r.id] !== false;
-                    return (
-                      <button
-                        key={r.id}
-                        type="button"
-                        role="checkbox"
-                        aria-checked={isOn}
-                        onClick={() => toggleRoutine(r.id)}
-                        title={r.name}
-                        className={cn('flex w-full items-center gap-2 rounded px-1 py-0.5 hover:bg-[var(--theme-bg-hover)]', isOn ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]')}
-                      >
-                        <Check state={isOn ? 'on' : 'off'} hue={LABEL_BY_TYPE['routine.run'].hue} />
-                        <LabelIcon type="routine.run" />
-                        <span className="flex-1 truncate text-left">{r.name}</span>
-                        <span className="tabular-nums text-[10.5px] text-[var(--theme-text-faint)]">{counts.byRoutine.get(r.id) ?? 0}</span>
-                      </button>
-                    );
-                  })}
-                </AgendaSidebarMenu>
-              )}
-            </div>
-            {labels.map((l) => {
-              const isOn = labelOn(prefs, l.type);
-              return (
-                <div key={l.type} className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => setLabels([l.type], !isOn)}
-                    className={cn('flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 pl-6 pr-1 hover:bg-[var(--theme-bg-hover)]', isOn ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]')}
-                  >
-                    <Check state={isOn ? 'on' : 'off'} hue={l.hue} />
-                    <LabelIcon type={l.type} />
-                    <span className="flex-1 truncate text-left">{l.label}</span>
-                    <span className="tabular-nums text-[10.5px] text-[var(--theme-text-faint)]">{counts.byType.get(l.type) ?? 0}</span>
-                  </button>
-                  {l.type === 'external' && google && (
-                    <AgendaSidebarMenu
-                      label="Google Calendar settings"
-                      hint={!google.connected ? 'Set up' : googleError ? 'Error' : null}
-                      hintTone="warning"
-                    >
-                      <AgendaGoogleSection />
-                    </AgendaSidebarMenu>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
-
-      <div className="mt-3 mb-1 text-[10.5px] uppercase tracking-wide text-[var(--theme-text-muted)]">Filters</div>
+      <div className="mt-4 mb-1 text-[10.5px] uppercase tracking-wide text-[var(--theme-text-muted)]">Filters</div>
       <div className="space-y-1.5">
         <MultiSelect
           label="Boards"
@@ -234,6 +171,94 @@ export function AgendaSidebar() {
           <span className="inline-flex items-center gap-1"><ReopenIcon size={12} /> Reset labels &amp; filters</span>
         </button>
       )}
+
+      <div className="mt-4 mb-1 text-[10.5px] uppercase tracking-wide text-[var(--theme-text-muted)]">Labels</div>
+      {FAMILIES.map((fam) => {
+        const labels = AGENDA_LABELS.filter((l) => l.family === fam.key);
+        const on = labels.filter((l) => labelOn(prefs, l.type)).length;
+        return (
+          <div key={fam.key} className="mb-1">
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setLabels(labels.map((l) => l.type), on !== labels.length)}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 font-semibold text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]"
+              >
+                <Check state={on === labels.length ? 'on' : on === 0 ? 'off' : 'mixed'} />
+                {fam.label}
+              </button>
+              {fam.key === 'routines' && routines.length > 0 && (
+                <AgendaSidebarMenu label="Choose the routines to show" hint={hiddenRoutines ? `${hiddenRoutines} hidden` : null}>
+                  <div className="mb-1 flex items-center gap-2 px-1 text-[10.5px] uppercase tracking-wide text-[var(--theme-text-muted)]">
+                    <span className="flex-1">Routines</span>
+                    <button type="button" className="normal-case text-[var(--theme-accent)] hover:underline" onClick={() => setAllRoutines(true)}>All</button>
+                    <button type="button" className="normal-case text-[var(--theme-accent)] hover:underline" onClick={() => setAllRoutines(false)}>None</button>
+                  </div>
+                  {routines.map((r) => {
+                    const isOn = prefs.routines[r.id] !== false;
+                    return (
+                      <div key={r.id} className="group flex flex-wrap items-center">
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={isOn}
+                          onClick={() => toggleRoutine(r.id)}
+                          title={r.name}
+                          className={cn('flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 hover:bg-[var(--theme-bg-hover)]', isOn ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]')}
+                        >
+                          <Check state={isOn ? 'on' : 'off'} hue={routineHue(r.id)} />
+                          <LabelIcon type="routine.run" routineId={r.id} />
+                          <span className="flex-1 truncate text-left">{r.name}</span>
+                          <span className="tabular-nums text-[10.5px] text-[var(--theme-text-faint)]">{counts.byRoutine.get(r.id) ?? 0}</span>
+                        </button>
+                        <AgendaInlineColorPicker
+                          name={r.name}
+                          hue={routineHue(r.id)}
+                          custom={!!colors[routineColorKey(r.id)]}
+                          onPick={(h) => setColor(routineColorKey(r.id), h)}
+                        />
+                      </div>
+                    );
+                  })}
+                </AgendaSidebarMenu>
+              )}
+            </div>
+            {labels.map((l) => {
+              const isOn = labelOn(prefs, l.type);
+              return (
+                <div key={l.type} className="group flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setLabels([l.type], !isOn)}
+                    className={cn('flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 pl-6 pr-1 hover:bg-[var(--theme-bg-hover)]', isOn ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]')}
+                  >
+                    <Check state={isOn ? 'on' : 'off'} hue={labelHue(l.type, colors)} />
+                    <LabelIcon type={l.type} />
+                    <span className="flex-1 truncate text-left">{l.label}</span>
+                    <span className="tabular-nums text-[10.5px] text-[var(--theme-text-faint)]">{counts.byType.get(l.type) ?? 0}</span>
+                  </button>
+                  <AgendaColorPicker
+                    name={l.label}
+                    hue={labelHue(l.type, colors)}
+                    custom={!!colors[l.type]}
+                    onPick={(h) => setColor(l.type, h)}
+                  />
+                  {l.type === 'external' && google && (
+                    <AgendaSidebarMenu
+                      label="Google Calendar settings"
+                      hint={!google.connected ? 'Set up' : googleError ? 'Error' : null}
+                      hintTone="warning"
+                    >
+                      <AgendaGoogleSection />
+                    </AgendaSidebarMenu>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
     </div>
   );
 }

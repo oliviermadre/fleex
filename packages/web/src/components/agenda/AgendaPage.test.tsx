@@ -86,6 +86,24 @@ describe('<AgendaPage/>', () => {
     expect(document.querySelector('[data-agenda-more]')).toBeNull();
   });
 
+  it('hovering one day of a run that spans several days lights its band on every day', async () => {
+    useAgendaStore.setState({ prefs: { ...DEFAULT_AGENDA_PREFS, view: 'week' } });
+    vi.mocked(api.fetchAgendaPrefs).mockResolvedValue({ ...DEFAULT_AGENDA_PREFS, view: 'week' });
+    const mon = weekStart(now);
+    const d = (days: number, h: number) => new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + days, h).toISOString();
+    // Mon 22:00 → Tue 10:00: one item, two bands (one per column).
+    const run = { ...response.items[0]!, id: 'workflow.run:long', runId: 'long', start: d(0, 22), end: d(1, 10) };
+    vi.mocked(api.fetchAgenda).mockResolvedValue({ ...response, items: [run] });
+    renderPage();
+    await waitFor(() => expect(document.querySelectorAll('[data-agenda-item="workflow.run:long"]')).toHaveLength(2));
+    const [monday, tuesday] = [...document.querySelectorAll('[data-agenda-item="workflow.run:long"]')];
+    fireEvent.mouseEnter(tuesday!);
+    expect(monday!.hasAttribute('data-agenda-hovered')).toBe(true);
+    expect(tuesday!.hasAttribute('data-agenda-hovered')).toBe(true);
+    fireEvent.mouseLeave(tuesday!);
+    expect(monday!.hasAttribute('data-agenda-hovered')).toBe(false);
+  });
+
   it('opens the ticket in the Tasks view from the run popover — the agenda itself never acts on the run', async () => {
     renderPage();
     const chip = await waitFor(() => {

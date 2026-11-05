@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { AgendaChip, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, type OnOpen } from './AgendaChip';
-import { chipStyle, dotStyle, statusHue } from './agendaLabels';
+import { AgendaChip, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, useAgendaColors, type OnOpen } from './AgendaChip';
+import { chipStyle, dotStyle, statusHue, type AgendaColors } from './agendaLabels';
 import {
   HOUR_PX, LANES_MAX_SHARE, LANE_PX, MAX_COLS, addDays, assignLanes, dayKey, groupHourly, isBar, itemDays, layoutDay, minutesOfDay, openWait, segmentForDay, startOfDay, workflowShortName, type DaySegment,
 } from './agendaLayout';
@@ -33,6 +33,14 @@ interface Props {
 export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, onPickDay, onCreateAllDay }: Props) {
   const dnd = useAgendaDnd();
   const preview = dnd?.preview ?? null;
+  const colors = useAgendaColors();
+  // A block over several days is one item drawn in several columns: hovering
+  // any of its pieces lights them all.
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const hoverProps = (id: string) => ({
+    onMouseEnter: () => setHoverId(id),
+    onMouseLeave: () => setHoverId((h) => (h === id ? null : h)),
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   const first = days[0]!;
   const last = days[days.length - 1]!;
@@ -111,7 +119,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                     onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
                     onDoubleClick={() => onOpenTicket(it)}
                     className={cn('relative flex min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125', !isHit(it) && 'opacity-25')}
-                    style={{ ...chipStyle(it), gridColumn: `${s + 1} / ${e + 1}`, ...(it.type === 'routine.run' ? { borderColor: 'var(--tint-red-solid)', background: 'var(--tint-red-bg)' } : {}) }}
+                    style={{ ...chipStyle(it, colors), gridColumn: `${s + 1} / ${e + 1}`, ...(it.type === 'routine.run' ? { borderColor: 'var(--tint-red-solid)', background: 'var(--tint-red-bg)' } : {}) }}
                     title={it.title}
                   >
                     <WaitHatches item={it} from={from} to={to} now={now} vertical={false} />
@@ -175,6 +183,9 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                   key={seg.item.id}
                   seg={seg}
                   now={now}
+                  colors={colors}
+                  hovered={hoverId === seg.item.id}
+                  hoverProps={hoverProps(seg.item.id)}
                   dimmed={!isHit(seg.item)}
                   style={{
                     top: (seg.startMin / 60) * HOUR_PX + GAP_PX,
@@ -219,7 +230,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                       type="button"
                       onClick={(ev) => onOpen({ group: e.items }, ev.currentTarget)}
                       className={cn('absolute flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] leading-4 hover:brightness-125', !e.items.some(isHit) && 'opacity-25')}
-                      style={{ ...chipStyle(it0), ...pos }}
+                      style={{ ...chipStyle(it0, colors), ...pos }}
                     >
                       <GroupChipLabel items={e.items} />
                     </button>
@@ -237,8 +248,11 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                     onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
                     onDoubleClick={() => onOpenTicket(it)}
                     onPointerDown={draggable ? (ev) => dnd.beginItem(ev, it, 'move') : undefined}
+                    {...hoverProps(it.id)}
+                    data-agenda-hovered={hoverId === it.id || undefined}
                     className={cn(
                       'absolute flex overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125',
+                      hoverId === it.id && 'brightness-125 ring-1 ring-[var(--theme-text-primary)]',
                       draggable ? 'cursor-grab' : 'cursor-pointer',
                       dnd?.draggingId === it.id && 'opacity-40',
                       compact ? 'flex-row items-center gap-1' : 'flex-col',
@@ -246,7 +260,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                       seg.continuesBefore && 'rounded-t-none',
                       !isHit(it) && 'opacity-25',
                     )}
-                    style={{ ...chipStyle(it), ...pos }}
+                    style={{ ...chipStyle(it, colors), ...pos }}
                     title={it.title}
                   >
                     {it.shape === 'block' && <WaitHatches item={it} from={seg.from} to={seg.to} now={now} vertical />}
@@ -298,9 +312,12 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
  * number written vertically and its human waits hatched. The full name, the
  * workflow and the current wait are in the tooltip and the popover.
  */
-function WorkflowBand({ seg, now, dimmed, style, onOpen, onOpenTicket }: {
+function WorkflowBand({ seg, now, colors, hovered, hoverProps, dimmed, style, onOpen, onOpenTicket }: {
   seg: DaySegment;
   now: Date;
+  colors: AgendaColors;
+  hovered: boolean;
+  hoverProps: { onMouseEnter: () => void; onMouseLeave: () => void };
   dimmed: boolean;
   style: CSSProperties;
   onOpen: OnOpen;
@@ -317,15 +334,18 @@ function WorkflowBand({ seg, now, dimmed, style, onOpen, onOpenTicket }: {
       type="button"
       data-agenda-item={it.id}
       data-agenda-band
+      data-agenda-hovered={hovered || undefined}
       onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
       onDoubleClick={() => onOpenTicket(it)}
+      {...hoverProps}
       className={cn(
         'absolute flex cursor-pointer flex-col items-center overflow-hidden rounded-sm pt-0.5 hover:brightness-125',
+        hovered && 'brightness-125 ring-1 ring-[var(--theme-text-primary)]',
         seg.continuesAfter && 'rounded-b-none',
         seg.continuesBefore && 'rounded-t-none',
         dimmed && 'opacity-25',
       )}
-      style={{ ...chipStyle(it), borderLeftWidth: 1, ...style }}
+      style={{ ...chipStyle(it, colors), borderLeftWidth: 1, ...style }}
       title={tip}
     >
       <WaitHatches item={it} from={seg.from} to={seg.to} now={now} vertical />

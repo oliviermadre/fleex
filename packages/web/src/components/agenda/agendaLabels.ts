@@ -19,12 +19,13 @@ export const AGENDA_LABELS: AgendaLabel[] = [
   { type: 'ticket.created', label: 'Created', icon: TicketPlusIcon, hue: 'blue', family: 'tickets' },
   { type: 'ticket.done', label: 'Done', icon: CircleCheckIcon, hue: 'green', family: 'tickets' },
   { type: 'ticket.due', label: 'Due dates', icon: FlagIcon, hue: 'orange', family: 'tickets' },
-  { type: 'routine.run', label: 'Runs', icon: RoutineRunIcon, hue: 'purple', family: 'routines' },
-  { type: 'routine.upcoming', label: 'Upcoming', icon: UpcomingIcon, hue: 'purple', family: 'routines' },
+  { type: 'routine.run', label: 'Runs', icon: RoutineRunIcon, hue: 'pink', family: 'routines' },
+  { type: 'routine.upcoming', label: 'Upcoming', icon: UpcomingIcon, hue: 'pink', family: 'routines' },
   { type: 'routine.skipped', label: 'Skipped', icon: CancelIcon, hue: 'gray', family: 'routines' },
   { type: 'routine.missed', label: 'Missed', icon: MissedIcon, hue: 'gray', family: 'routines' },
   { type: 'workflow.run', label: 'Workflow runs', icon: WorkflowRunIcon, hue: 'indigo', family: 'workflows' },
-  { type: 'pr.merged', label: 'PRs merged', icon: GitMergeIcon, hue: 'pink', family: 'production' },
+  // GitHub's merged colour (purple), as on the Tasks PR glyph.
+  { type: 'pr.merged', label: 'PRs merged', icon: GitMergeIcon, hue: 'purple', family: 'production' },
   { type: 'event', label: 'Events', icon: CalendarEventIcon, hue: 'teal', family: 'calendar' },
   { type: 'external', label: 'Google Calendar', icon: ExternalCalendarIcon, hue: 'blue', family: 'calendar' },
 ];
@@ -59,9 +60,32 @@ export function eventHue(item: AgendaItem): TintHue | null {
   return c && (TINT_HUES as string[]).includes(c) ? (c as TintHue) : null;
 }
 
-/** Chip colours from the label's tint (or the event's own colour) (inline: the hue is data-driven). */
-export function chipStyle(item: AgendaItem): CSSProperties {
-  const hue = eventHue(item) ?? LABEL_BY_TYPE[item.type].hue;
+/** The user's colour picks: key = item type, or `routine:<id>` for one routine. */
+export type AgendaColors = Record<string, string>;
+
+export const routineColorKey = (routineId: string) => `routine:${routineId}`;
+
+const asHue = (c: string | undefined): TintHue | null =>
+  c && (TINT_HUES as string[]).includes(c) ? (c as TintHue) : null;
+
+/** A label's hue: the user's pick, else the label default. */
+export function labelHue(type: AgendaItemType, colors?: AgendaColors): TintHue {
+  return asHue(colors?.[type]) ?? LABEL_BY_TYPE[type].hue;
+}
+
+/**
+ * An item's hue, most specific first: the free event's own colour, the
+ * routine's pick, the label's pick, the label default.
+ */
+export function itemHue(item: AgendaItem, colors?: AgendaColors): TintHue {
+  return eventHue(item)
+    ?? (item.routine ? asHue(colors?.[routineColorKey(item.routine.id)]) : null)
+    ?? labelHue(item.type, colors);
+}
+
+/** Chip colours from the item's hue (inline: the hue is data-driven). */
+export function chipStyle(item: AgendaItem, colors?: AgendaColors): CSSProperties {
+  const hue = itemHue(item, colors);
   const upcoming = item.type === 'routine.upcoming';
   const skipped = item.type === 'routine.skipped' || item.type === 'routine.missed';
   const red = item.overdue;

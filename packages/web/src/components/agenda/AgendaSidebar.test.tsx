@@ -93,3 +93,33 @@ describe('<AgendaSidebar/> · routine list in a menu', () => {
     expect(screen.getByTestId('agenda-google')).toBeTruthy();
   });
 });
+
+describe('<AgendaSidebar/> · layout and colours', () => {
+  it('puts the filters and their reset at the top, under the saved views, before the labels', () => {
+    useAgendaStore.setState({ prefs: { ...DEFAULT_AGENDA_PREFS, filters: { ...DEFAULT_AGENDA_PREFS.filters, tags: ['x'] } } });
+    renderSidebar();
+    const text = document.body.textContent ?? '';
+    expect(text.indexOf('Filters')).toBeLessThan(text.indexOf('Labels'));
+    expect(text.indexOf('Reset labels')).toBeLessThan(text.indexOf('Labels'));
+  });
+
+  it('picks a colour per label, saved in the prefs, and goes back to the default', () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: 'Colour of PRs merged' }));
+    fireEvent.click(screen.getByRole('button', { name: 'teal' }));
+    expect(useAgendaStore.getState().prefs.colors).toEqual({ 'pr.merged': 'teal' });
+    fireEvent.click(screen.getByRole('button', { name: 'Colour of PRs merged' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Default colour' }));
+    expect(useAgendaStore.getState().prefs.colors).toEqual({});
+  });
+
+  it('picks a colour per routine from the routine menu', () => {
+    const d = useAgendaStore.getState().data!;
+    useAgendaStore.setState({ data: { ...d, routines: [{ id: 'sync', name: 'Sync backlog', emoji: '' }] } });
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose the routines to show' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Colour of Sync backlog' }));
+    fireEvent.click(screen.getByRole('button', { name: 'orange' }));
+    expect(useAgendaStore.getState().prefs.colors).toEqual({ 'routine:sync': 'orange' });
+  });
+});

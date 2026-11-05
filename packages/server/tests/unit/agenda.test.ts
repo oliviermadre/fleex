@@ -250,7 +250,7 @@ describe('agenda routes', () => {
     expect((await a.inject({ method: 'PUT', url: '/api/agenda/prefs', payload: prefs })).statusCode).toBe(200);
     expect((await a.inject({ url: '/api/agenda/prefs' })).json()).toEqual({
       ...prefs, filters: { boards: ['b'], epics: [], repos: [], tags: [] },
-      drawerOpen: true, googleCalendars: [], showWorkingLocation: false,
+      drawerOpen: true, googleCalendars: [], showWorkingLocation: false, colors: {},
     });
   });
 
@@ -258,7 +258,7 @@ describe('agenda routes', () => {
     const old = parseAgendaPrefs({ version: 1, labels: {}, routines: {}, filters: { boards: [], tags: ['x'] }, view: 'week' });
     expect('prefs' in old && old.prefs).toEqual({
       version: 1, labels: {}, routines: {}, filters: { boards: [], epics: [], repos: [], tags: ['x'] }, view: 'week',
-      drawerOpen: true, googleCalendars: [], showWorkingLocation: false,
+      drawerOpen: true, googleCalendars: [], showWorkingLocation: false, colors: {},
     });
     const full = parseAgendaPrefs({
       labels: { event: false }, routines: {}, filters: { boards: [], epics: ['g1'], repos: ['o/r'], tags: [] }, view: 'day',
@@ -270,6 +270,13 @@ describe('agenda routes', () => {
     });
     expect('error' in parseAgendaPrefs({ labels: {}, routines: {}, filters: { boards: [], tags: [], epics: 'g1' }, view: 'day' })).toBe(true);
     expect('error' in parseAgendaPrefs({ labels: {}, routines: {}, filters: { boards: [], tags: [] }, view: 'day', drawerOpen: 'yes' })).toBe(true);
+  });
+
+  it('keeps the colour picked per label and per routine, and refuses a non-string colour', () => {
+    const base = { labels: {}, routines: {}, filters: { boards: [], tags: [] }, view: 'week' };
+    const ok = parseAgendaPrefs({ ...base, colors: { 'pr.merged': 'purple', 'routine:r1': 'teal' } });
+    expect('prefs' in ok && ok.prefs.colors).toEqual({ 'pr.merged': 'purple', 'routine:r1': 'teal' });
+    expect('error' in parseAgendaPrefs({ ...base, colors: { 'pr.merged': 3 } })).toBe(true);
   });
 
   it('passes ?calendars=a,b to the use case as calendar ids, and nothing when absent', async () => {

@@ -220,6 +220,11 @@ export interface AgendaPrefs {
   googleCalendars: string[];
   /** Show Google `workingLocation` all-day events (hidden by default). */
   showWorkingLocation: boolean;
+  /**
+   * Colour picked per label (key = item type) or per routine (key =
+   * `routine:<id>`), a tint hue name. Absent key = the label's default hue.
+   */
+  colors: Record<string, string>;
 }
 
 export const DEFAULT_AGENDA_PREFS: AgendaPrefs = {
@@ -231,4 +236,5 @@ export const DEFAULT_AGENDA_PREFS: AgendaPrefs = {
   drawerOpen: true,
   googleCalendars: [],
   showWorkingLocation: false,
+  colors: {},
 };

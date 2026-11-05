@@ -23,7 +23,7 @@ const isBoolRecord = (v: unknown): v is Record<string, boolean> =>
 export function parseAgendaPrefs(body: unknown): { prefs: AgendaPrefs } | { error: string } {
   if (!isObject(body)) return { error: 'prefs must be an object' };
   if (JSON.stringify(body).length > PREFS_MAX_BYTES) return { error: 'prefs are too large' };
-  const { labels, routines, filters, view, drawerOpen, googleCalendars, showWorkingLocation } = body;
+  const { labels, routines, filters, view, drawerOpen, googleCalendars, showWorkingLocation, colors } = body;
   if (!isBoolRecord(labels)) return { error: 'labels must map a label to a boolean' };
   if (!isBoolRecord(routines)) return { error: 'routines must map a routine id to a boolean' };
   if (!isObject(filters) || !isStringArray(filters['boards']) || !isStringArray(filters['tags'])) {
@@ -38,6 +38,9 @@ export function parseAgendaPrefs(body: unknown): { prefs: AgendaPrefs } | { erro
   if (drawerOpen !== undefined && typeof drawerOpen !== 'boolean') return { error: 'drawerOpen must be a boolean' };
   if (googleCalendars !== undefined && !isStringArray(googleCalendars)) return { error: 'googleCalendars must be a string array' };
   if (showWorkingLocation !== undefined && typeof showWorkingLocation !== 'boolean') return { error: 'showWorkingLocation must be a boolean' };
+  if (colors !== undefined && !(isObject(colors) && Object.values(colors).every((x) => typeof x === 'string'))) {
+    return { error: 'colors must map a label or routine to a colour name' };
+  }
   const keptLabels = Object.fromEntries(Object.entries(labels).filter(([k]) => TYPES.has(k)));
   return {
     prefs: {
@@ -49,6 +52,7 @@ export function parseAgendaPrefs(body: unknown): { prefs: AgendaPrefs } | { erro
       drawerOpen: drawerOpen ?? DEFAULT_AGENDA_PREFS.drawerOpen,
       googleCalendars: googleCalendars ?? DEFAULT_AGENDA_PREFS.googleCalendars,
       showWorkingLocation: showWorkingLocation ?? DEFAULT_AGENDA_PREFS.showWorkingLocation,
+      colors: (colors as Record<string, string> | undefined) ?? DEFAULT_AGENDA_PREFS.colors,
     },
   };
 }

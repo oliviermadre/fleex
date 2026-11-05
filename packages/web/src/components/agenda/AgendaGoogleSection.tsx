@@ -129,10 +129,14 @@ export function AgendaGoogleSection() {
     void useAgendaStore.getState().refresh();
   };
 
+  // Primary first, then the others by name.
+  const calendars = [...google.calendars].sort((a, b) =>
+    Number(!!b.primary) - Number(!!a.primary) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
   return (
     <div className="space-y-0.5 p-1" data-testid="agenda-google">
       <div className="truncate text-[11px] text-[var(--theme-text-muted)]" title={google.email ?? undefined}>{google.email ?? 'Connected'}</div>
-      {google.calendars.map((c) => {
+      {calendars.map((c) => {
         const on = selected.has(c.id);
         // The last calendar can't be unticked: an empty list means "primary only".
         const locked = on && selected.size === 1;

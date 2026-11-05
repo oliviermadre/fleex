@@ -4,7 +4,8 @@ import type { AgendaItemType } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { tintText } from '../../lib/tints';
 import { HandIcon, PauseIcon, QuestionIcon } from '../ui/icons/AgendaIcons';
-import { LABEL_BY_TYPE, chipStyle, dotStyle, hatchStyle, statusHue } from './agendaLabels';
+import { LABEL_BY_TYPE, chipStyle, dotStyle, hatchStyle, itemHue, labelHue, statusHue, type AgendaColors } from './agendaLabels';
+import { useAgendaStore } from '../../stores/agendaStore';
 import { formatDuration, openWait, workflowShortName } from './agendaLayout';
 
 export type OpenTarget = { item: AgendaItem } | { group: AgendaItem[] };
@@ -16,10 +17,26 @@ const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { h
  * The label's SVG icon, tinted with the label hue (red when overdue). The
  * routines' own emoji are never drawn: one iconography for the whole page.
  */
-export function LabelIcon({ type, size = 12, overdue, className }: { type: AgendaItemType; size?: number; overdue?: boolean; className?: string }) {
-  const label = LABEL_BY_TYPE[type];
-  const Glyph = label.icon;
-  return <Glyph size={size} className={cn('shrink-0', tintText(overdue ? 'red' : label.hue), className)} />;
+/** The user's colour picks (labels and routines), from the saved prefs. */
+export const useAgendaColors = (): AgendaColors => useAgendaStore((s) => s.prefs.colors);
+
+export function LabelIcon({ type, size = 12, overdue, className, item, routineId }: {
+  type: AgendaItemType;
+  size?: number;
+  overdue?: boolean;
+  className?: string;
+  /** Tint with this item's hue (its routine's colour, an event's own colour). */
+  item?: AgendaItem;
+  /** Tint with this routine's colour (sidebar routine list). */
+  routineId?: string;
+}) {
+  const colors = useAgendaColors();
+  const Glyph = LABEL_BY_TYPE[type].icon;
+  const hue = overdue ? 'red'
+    : item ? itemHue(item, colors)
+    : routineId ? itemHue({ type, routine: { id: routineId } } as AgendaItem, colors)
+    : labelHue(type, colors);
+  return <Glyph size={size} className={cn('shrink-0', tintText(hue), className)} />;
 }
 
 /** The icon of a human wait: pause at a gate, question mark for an agent question. */
@@ -34,7 +51,7 @@ export function GroupChipLabel({ items }: { items: AgendaItem[] }) {
   const it0 = items[0]!;
   return (
     <>
-      <LabelIcon type={it0.type} />
+      <LabelIcon type={it0.type} item={it0} />
       <span className="truncate">{it0.routine?.name ?? LABEL_BY_TYPE[it0.type].label}</span>
       <span className="shrink-0 font-bold text-[var(--theme-text-secondary)]">&times;{items.length}</span>
     </>
@@ -65,7 +82,7 @@ export function ChipName({ item }: { item: AgendaItem }) {
   }
   return (
     <>
-      <LabelIcon type={item.type} overdue={item.overdue} />
+      <LabelIcon type={item.type} overdue={item.overdue} item={item} />
       <span className={cn('truncate', (item.type === 'routine.skipped' || item.type === 'routine.missed') && 'line-through')}>{item.title}</span>
     </>
   );
@@ -117,13 +134,14 @@ export function AgendaChip({ item, onOpen, dimmed, time = true, children }: {
   time?: boolean;
   children?: ReactNode;
 }) {
+  const colors = useAgendaColors();
   return (
     <button
       type="button"
       data-agenda-item={item.id}
       onClick={(e: MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onOpen({ item }, e.currentTarget); }}
       className={cn('relative flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125', dimmed && 'opacity-25')}
-      style={chipStyle(item)}
+      style={chipStyle(item, colors)}
       title={item.title}
     >
       {time && item.shape !== 'allDay' && <span className="shrink-0 text-[10px] text-[var(--theme-text-muted)]">{fmtTime(item.start)}</span>}
