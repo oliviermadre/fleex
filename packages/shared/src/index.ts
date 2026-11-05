@@ -786,3 +786,16 @@ export { diffTemplates, isEmptyDiff } from './workflow/apply/diff.js';
 export type { DiffEntry, TemplateDiff, DiffableTemplate } from './workflow/apply/diff.js';
 export { buildApplyDocumentation, renderApplyDocumentationMarkdown } from './workflow/apply/documentation.js';
 export type { ApplyDocumentation, DocumentationInput } from './workflow/apply/documentation.js';
+
+export type {
+  AgendaItemType,
+  AgendaShape,
+  AgendaTicketRef,
+  AgendaRoutineRef,
+  AgendaWaitSegment,
+  AgendaItem,
+  AgendaResponse,
+  AgendaView,
+  AgendaPrefs,
+} from './types/agenda.js';
+export { AGENDA_ITEM_TYPES, DEFAULT_AGENDA_PREFS } from './types/agenda.js';
