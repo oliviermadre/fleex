@@ -2156,6 +2156,18 @@ export async function fetchAgendaRunDeliverables(runId: string): Promise<import(
   return body.deliverables ?? [];
 }
 
+/**
+ * The agenda card's ticket reads. No toast: the card shows its own error line,
+ * and a ticket deleted since the agenda loaded must not raise a global toast.
+ */
+export function fetchAgendaTicket(id: string): Promise<import('@fleex/shared').Ticket> {
+  return browseRequest(`/tickets/${encodeURIComponent(id)}`);
+}
+
+export function fetchAgendaTicketDeliverables(ticketId: string): Promise<import('@fleex/shared').TicketDeliverable[]> {
+  return browseRequest(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
+}
+
 // ── Agenda: free events (E1) ──
 
 type CalendarEvent = import('@fleex/shared').CalendarEvent;

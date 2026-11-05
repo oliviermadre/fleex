@@ -4,8 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import type { AgendaItem, BoardWithCounts, Ticket, TicketDeliverable } from '@fleex/shared';
 
 vi.mock('../../services/api', () => ({
-  fetchTicket: vi.fn(),
-  fetchTicketDeliverables: vi.fn(),
+  fetchAgendaTicket: vi.fn(),
+  fetchAgendaTicketDeliverables: vi.fn(),
   fetchAgendaRunDeliverables: vi.fn(),
 }));
 
@@ -39,8 +39,8 @@ function renderCard(item: AgendaItem) {
 }
 
 beforeEach(() => {
-  vi.mocked(api.fetchTicket).mockResolvedValue(ticket);
-  vi.mocked(api.fetchTicketDeliverables).mockResolvedValue([deliv('d-t', 'Spec of the agenda', { ticketId: 'tk-1', type: 'spec' })]);
+  vi.mocked(api.fetchAgendaTicket).mockResolvedValue(ticket);
+  vi.mocked(api.fetchAgendaTicketDeliverables).mockResolvedValue([deliv('d-t', 'Spec of the agenda', { ticketId: 'tk-1', type: 'spec' })]);
   vi.mocked(api.fetchAgendaRunDeliverables).mockResolvedValue([deliv('d-r', 'Weekly digest')]);
   useTicketStore.setState({ boards: [{ id: 'b1', name: 'Fleex', emoji: '', createdAt: '' } as unknown as BoardWithCounts] });
   useUIStore.setState({ deliverableOverlay: null });
@@ -61,7 +61,7 @@ describe('<AgendaItemDetails/>', () => {
     expect(api.fetchAgendaRunDeliverables).toHaveBeenCalledWith('run-1');
     expect(screen.getByText('Deliverables of this run')).toBeTruthy();
     expect(screen.getByText('Launched manually')).toBeTruthy();
-    expect(api.fetchTicket).not.toHaveBeenCalled();
+    expect(api.fetchAgendaTicket).not.toHaveBeenCalled();
     fireEvent.click(row);
     expect(useUIStore.getState().deliverableOverlay?.id).toBe('d-r');
   });
@@ -89,13 +89,13 @@ describe('<AgendaItemDetails/>', () => {
     expect(screen.getByText('Agenda')).toBeTruthy();
     expect(screen.getByText('High')).toBeTruthy();
     expect(screen.getByText('#642')).toBeTruthy();
-    expect(api.fetchTicketDeliverables).toHaveBeenCalledWith('tk-1');
+    expect(api.fetchAgendaTicketDeliverables).toHaveBeenCalledWith('tk-1');
     expect(api.fetchAgendaRunDeliverables).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Open ticket' })).toBeTruthy();
   });
 
   it('says so when the ticket deliverables cannot be loaded', async () => {
-    vi.mocked(api.fetchTicketDeliverables).mockRejectedValue(new Error('boom'));
+    vi.mocked(api.fetchAgendaTicketDeliverables).mockRejectedValue(new Error('boom'));
     renderCard({
       id: 'ticket.created:tk-1', type: 'ticket.created', shape: 'point', start: NOW.toISOString(), title: ticket.title,
       ticket: { id: 'tk-1', displayId: 642, title: ticket.title, boardId: 'b1', status: 'done', tags: [], epicIds: [], repos: [] },

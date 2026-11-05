@@ -236,7 +236,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                       <ChipBadges item={it} />
                     </span>
                     {!compact && it.type === 'workflow.run' && <span className="relative w-full"><WorkflowSubline item={it} now={now} /></span>}
-                    {!compact && it.shape === 'block' && it.type !== 'workflow.run' && (
+                    {!compact && it.shape === 'block' && it.type !== 'workflow.run' && e.span === e.cols && (
                       <span className="relative text-[10px] text-[var(--theme-text-muted)]">
                         {new Date(it.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} - {it.end ? new Date(it.end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : 'now'}
                       </span>

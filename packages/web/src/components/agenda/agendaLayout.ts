@@ -19,7 +19,7 @@ export const POINT_MIN = 18;
 /** Kept for callers of the old name. */
 export const MIN_BLOCK_MIN = POINT_MIN;
 /** Visible columns per overlap cluster before the rest folds into "+N". */
-export const MAX_COLS = { day: 6, week: 3 } as const;
+export const MAX_COLS = { day: 6, week: 2 } as const;
 
 export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());

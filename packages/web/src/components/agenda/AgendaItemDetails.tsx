@@ -286,8 +286,8 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
   const isRun = item.type === 'routine.run' || item.type === 'workflow.run';
   const runId = isRun ? item.runId ?? null : null;
 
-  const ticket = useLoad(ticketId, () => api.fetchTicket(ticketId!));
-  const ticketDelivs = useLoad(ticketId && `${ticketId}:d`, () => api.fetchTicketDeliverables(ticketId!));
+  const ticket = useLoad(ticketId, () => api.fetchAgendaTicket(ticketId!));
+  const ticketDelivs = useLoad(ticketId && `${ticketId}:d`, () => api.fetchAgendaTicketDeliverables(ticketId!));
   const runDelivs = useLoad(runId, () => api.fetchAgendaRunDeliverables(runId!));
   const runIds = new Set(runDelivs?.state === 'ok' ? runDelivs.data.map((d) => d.id) : []);
 
