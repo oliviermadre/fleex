@@ -84,6 +84,37 @@ describe('<AgendaPage/>', () => {
     expect(await screen.findByText('task view')).toBeTruthy();
   });
 
+  it('a click beside an open popover only closes it — it must not chain into the "new event" editor', async () => {
+    renderPage();
+    const chip = await waitFor(() => {
+      const el = document.querySelector('[data-agenda-item="workflow.run:r1"]');
+      if (!el) throw new Error('not yet');
+      return el as HTMLElement;
+    });
+    fireEvent.click(chip);
+    await screen.findByRole('button', { name: 'Open ticket' });
+
+    const col = document.querySelector('[data-agenda-col]') as HTMLElement;
+    fireEvent.pointerDown(col, { button: 0, clientX: 10, clientY: 300 });
+    fireEvent.pointerUp(window, { button: 0, clientX: 10, clientY: 300 });
+    await new Promise((r) => setTimeout(r, 0));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Open ticket' })).toBeNull());
+    expect(useEventEditor.getState().editor).toBeNull();
+
+    const cell = document.querySelector('[data-agenda-day]') as HTMLElement;
+    fireEvent.click(document.querySelector('[data-agenda-item="workflow.run:r1"]') as HTMLElement);
+    await screen.findByRole('button', { name: 'Open ticket' });
+    fireEvent.pointerDown(cell, { button: 0 });
+    fireEvent.click(cell);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Open ticket' })).toBeNull());
+    expect(useEventEditor.getState().editor).toBeNull();
+
+    // With nothing open, the same click creates as before.
+    fireEvent.pointerDown(cell, { button: 0 });
+    fireEvent.click(cell);
+    expect(useEventEditor.getState().editor).not.toBeNull();
+  });
+
   it('hides a routine the user unchecked, without refetching', async () => {
     renderPage();
     await waitFor(() => expect(document.querySelector('[data-agenda-item="routine.run:s1"]')).toBeTruthy());

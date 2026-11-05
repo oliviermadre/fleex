@@ -8,6 +8,7 @@ import * as api from '../../services/api';
 import { toast } from '../../lib/toast';
 import { appWs } from '../../services/websocket';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { useDismissBeforeCreate } from './useDismissBeforeCreate';
 import { Button } from '../ui/Button';
 import { Spinner } from '../ui/Spinner';
 import { cn } from '../../lib/cn';
@@ -112,6 +113,7 @@ export function AgendaPage() {
   const searchRef = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState<OpenTarget | null>(null);
   const pop = usePopover({ placement: 'right-start', gap: 6, role: 'dialog', open: target !== null, onOpenChange: (o) => { if (!o) setTarget(null); }, enableClick: false });
+  useDismissBeforeCreate(target !== null, () => setTarget(null), () => pop.refs.floating.current);
 
   useEffect(() => { void init(); }, [init]);
   const stableRefresh = useCallback(() => { void refresh(); }, [refresh]);
