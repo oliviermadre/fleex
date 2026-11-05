@@ -2116,3 +2116,28 @@ export function openWorktreeHooksDir(repo: string): Promise<{ dir: string }> {
   return request('/worktree-actions/hooks/open', { method: 'POST', body: JSON.stringify({ repo }) });
 }
 
+
+// ── Agenda ──
+
+export function fetchAgenda(from: Date, to: Date): Promise<import('@fleex/shared').AgendaResponse> {
+  const q = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+  return request(`/api/agenda?${q}`);
+}
+
+/** Null when the storage has no KV store (501): prefs then live in memory only. */
+export async function fetchAgendaPrefs(): Promise<import('@fleex/shared').AgendaPrefs | null> {
+  const res = await fetch(`${API_URL}/api/agenda/prefs`);
+  if (res.status === 501) return null;
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+/** No automatic toast: the store words the failure itself and keeps the user's choice. */
+export async function saveAgendaPrefs(prefs: import('@fleex/shared').AgendaPrefs): Promise<void> {
+  const res = await fetch(`${API_URL}/api/agenda/prefs`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(prefs),
+  });
+  if (!res.ok && res.status !== 501) throw new Error(`API error ${res.status}`);
+}

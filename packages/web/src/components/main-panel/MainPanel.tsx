@@ -19,6 +19,7 @@ import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { FocusView } from '../focus/FocusView';
 import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 import { RoutinesPage } from '../routines/RoutinesPage';
+import { AgendaPage } from '../agenda/AgendaPage';
 import { DocumentsPage } from '../documents/DocumentsPage';
 import { AssistantConversation } from '../assistant/AssistantConversation';
 import { WorkView } from '../work/WorkView';
@@ -60,6 +61,10 @@ export function MainPanel() {
 
   if (activePanel === 'routines') {
     return <RoutinesPage />;
+  }
+
+  if (activePanel === 'agenda') {
+    return <AgendaPage />;
   }
 
   if (activePanel === 'analytics') {

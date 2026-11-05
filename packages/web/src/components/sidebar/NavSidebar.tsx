@@ -138,6 +138,21 @@ export function NavSidebar() {
             onClick={() => navigate('/execution-log')}
           />
 
+          {/* Agenda — every dated thing (tickets, runs, routines, PRs) on a calendar. */}
+          <NavItem
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="5" width="18" height="16" rx="2" />
+                <path d="M3 10h18M8 3v4M16 3v4" />
+              </svg>
+            }
+            label="Agenda"
+            shortLabel="Agenda"
+            active={activePanel === 'agenda'}
+            collapsed={navCollapsed}
+            onClick={() => navigate('/agenda')}
+          />
+
           {/* Routines — workflow runs with no ticket. The badge counts routines
               whose active run is blocked on a gate or waiting for an answer:
               those runs have no ticket, so nothing else in the nav surfaces them. */}

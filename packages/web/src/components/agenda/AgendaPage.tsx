@@ -1,0 +1,197 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import type { AgendaItem, AgendaView } from '@fleex/shared';
+import { useAgendaStore } from '../../stores/agendaStore';
+import { appWs } from '../../services/websocket';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { Button } from '../ui/Button';
+import { Spinner } from '../ui/Spinner';
+import { cn } from '../../lib/cn';
+import { AgendaTimeGrid } from './AgendaTimeGrid';
+import { AgendaMonth, AgendaSchedule } from './AgendaMonthAndSchedule';
+import { AgendaItemDetails } from './AgendaItemDetails';
+import { AgendaChip, type OpenTarget } from './AgendaChip';
+import { addDays, isVisible, matchesQuery, windowFor } from './agendaLayout';
+
+const VIEWS: { key: AgendaView; label: string; hotkey: string }[] = [
+  { key: 'day', label: 'Day', hotkey: 'd' },
+  { key: 'week', label: 'Week', hotkey: 'w' },
+  { key: 'month', label: 'Month', hotkey: 'm' },
+  { key: 'schedule', label: 'Schedule', hotkey: 'a' },
+];
+
+function periodLabel(view: AgendaView, anchor: Date): string {
+  const { from, to } = windowFor(view, anchor);
+  if (view === 'day') return anchor.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  if (view === 'month') return anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const last = addDays(to, -1);
+  const sameYear = from.getFullYear() === last.getFullYear();
+  const a = from.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
+  const b = last.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${a} – ${b}`;
+}
+
+/** Re-render once a minute: the "now" line and running blocks grow. */
+function useMinuteNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+/**
+ * Refetch the window when a run, routine or ticket changes. Bursts (a step
+ * completes, the next starts…) coalesce into one request a second later.
+ */
+function useAgendaLiveUpdates(refresh: () => void) {
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsub = appWs.onChannel('tickets', (raw) => {
+      if (!/^(workflow|routine|ticket):/.test(raw.type)) return;
+      if (timer) return;
+      timer = setTimeout(() => { timer = null; refresh(); }, 1000);
+    });
+    return () => { unsub(); if (timer) clearTimeout(timer); };
+  }, [refresh]);
+}
+
+export function AgendaPage() {
+  const navigate = useNavigate();
+  const { anchor, data, loading, error, prefs, prefsLoaded, query, init, refresh, setView, go, goToday, goToDay, setQuery } = useAgendaStore();
+  const now = useMinuteNow();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [target, setTarget] = useState<OpenTarget | null>(null);
+  const pop = usePopover({ placement: 'right-start', gap: 6, role: 'dialog', open: target !== null, onOpenChange: (o) => { if (!o) setTarget(null); }, enableClick: false });
+
+  useEffect(() => { void init(); }, [init]);
+  const stableRefresh = useCallback(() => { void refresh(); }, [refresh]);
+  useAgendaLiveUpdates(stableRefresh);
+
+  const visible = useMemo(() => (data?.items ?? []).filter((it) => isVisible(it, prefs)), [data, prefs]);
+  const isHit = useCallback((it: AgendaItem) => matchesQuery(it, query), [query]);
+  const hits = query ? visible.filter(isHit).length : null;
+
+  const open = useCallback((t: OpenTarget, el: HTMLElement) => {
+    pop.refs.setReference(el);
+    setTarget(t);
+  }, [pop.refs]);
+  const openTicket = useCallback((it: AgendaItem) => {
+    if (it.type !== 'workflow.run' || !it.ticket) return;
+    setTarget(null);
+    navigate(`/work/${it.ticket.id}`);
+  }, [navigate]);
+  const pickDay = useCallback((d: Date) => goToDay(d, 'day'), [goToDay]);
+
+  // Keyboard: ← → period, t today, d/w/m/a views, / search — never while typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowLeft') go(-1);
+      else if (e.key === 'ArrowRight') go(1);
+      else if (e.key === 't') goToday();
+      else if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); }
+      else {
+        const v = VIEWS.find((x) => x.hotkey === e.key);
+        if (v) setView(v.key);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [go, goToday, setView]);
+
+  const { from } = windowFor(prefs.view, anchor);
+  const days = prefs.view === 'day' ? [anchor] : Array.from({ length: 7 }, (_, i) => addDays(from, i));
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-[var(--theme-bg-base)]">
+      <div className="flex h-13 shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2">
+        <Button size="sm" onClick={goToday}>Today</Button>
+        <Button size="sm" variant="ghost" onClick={() => go(-1)} title="Previous (←)">‹</Button>
+        <Button size="sm" variant="ghost" onClick={() => go(1)} title="Next (→)">›</Button>
+        <span className="ml-1 whitespace-nowrap text-base font-semibold text-[var(--theme-text-primary)]">{periodLabel(prefs.view, anchor)}</span>
+        <span className="rounded border border-[var(--theme-border)] px-1.5 text-[11px] text-[var(--theme-text-muted)]" title="The grid uses your browser's time zone">
+          {Intl.DateTimeFormat().resolvedOptions().timeZone}
+        </span>
+        {loading && <Spinner size={12} />}
+        <span className="rounded-full border border-[var(--theme-border)] px-2 text-[11px] text-[var(--theme-text-secondary)]">
+          <b className="text-[var(--theme-text-primary)]">{visible.length}</b> visible
+        </span>
+        {error && <Button size="sm" variant="ghost" onClick={() => void refresh()}>Retry</Button>}
+        <span className="flex-1" />
+        <input
+          ref={searchRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') { setQuery(''); e.currentTarget.blur(); } }}
+          placeholder="Search (/)"
+          className="h-7 w-40 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2 text-xs text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
+        />
+        <div className="inline-flex rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] p-0.5">
+          {VIEWS.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => setView(v.key)}
+              title={`${v.label} (${v.hotkey})`}
+              className={cn('rounded-md px-2.5 py-0.5 text-xs', prefs.view === v.key ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {query && (
+        <div className="mx-3 mt-1.5 flex items-center gap-2 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)]">
+          {hits ? `${hits} match${hits > 1 ? 'es' : ''} for “${query}” — the others are dimmed` : `No events match “${query}”`}
+          <button type="button" className="text-[var(--theme-accent)]" onClick={() => setQuery('')}>Clear</button>
+        </div>
+      )}
+      {data && data.truncated.length > 0 && (
+        <div className="mx-3 mt-1.5 rounded-md border border-[var(--tint-yellow-border)] bg-[var(--tint-yellow-bg)] px-2 py-1 text-xs text-[var(--tint-yellow-text)]">
+          Some high-frequency routines are not fully shown (capped at 500 upcoming occurrences).
+        </div>
+      )}
+
+      {!prefsLoaded || !data ? (
+        <div className="flex flex-1 items-center justify-center text-sm text-[var(--theme-text-muted)]">
+          {error ? <span>{error}</span> : <Spinner size={16} />}
+        </div>
+      ) : prefs.view === 'month' ? (
+        <AgendaMonth from={from} anchorMonth={anchor.getMonth()} items={visible} now={now} isHit={isHit} onOpen={open} onPickDay={pickDay} />
+      ) : prefs.view === 'schedule' ? (
+        <AgendaSchedule items={visible} now={now} isHit={isHit} onOpen={open} />
+      ) : (
+        <AgendaTimeGrid days={days} items={visible} now={now} isHit={isHit} onOpen={open} onOpenTicket={openTicket} onPickDay={pickDay} />
+      )}
+
+      {target && (
+        <FloatingPortal>
+          <div
+            ref={pop.refs.setFloating}
+            style={pop.floatingStyles}
+            {...pop.getFloatingProps()}
+            className="z-50 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] shadow-xl"
+          >
+            {'item' in target ? (
+              <AgendaItemDetails item={target.item} now={now} onClose={() => setTarget(null)} />
+            ) : (
+              <div className="w-80 space-y-0.5 p-2">
+                <div className="px-1 pb-1 text-xs font-semibold text-[var(--theme-text-primary)]">
+                  {target.group[0]!.routine?.name ?? target.group[0]!.title} ×{target.group.length}
+                </div>
+                {target.group.map((it) => (
+                  <AgendaChip key={it.id} item={it} onOpen={(t) => setTarget(t)} dimmed={!isHit(it)} />
+                ))}
+              </div>
+            )}
+          </div>
+        </FloatingPortal>
+      )}
+    </div>
+  );
+}

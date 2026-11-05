@@ -17,6 +17,7 @@ import { TicketsContentPanel } from '../tickets/TicketsContentPanel';
 import { AgentListPanel } from '../agents/AgentListPanel';
 import { AssistantSidebar } from '../assistant/AssistantSidebar';
 import { RoutinesContentPanel } from '../routines/RoutinesContentPanel';
+import { AgendaSidebar } from '../agenda/AgendaSidebar';
 import { describeTrigger } from '../routines/RoutineDetail';
 import { useRoutineStore } from '../../stores/routineStore';
 import { RoutineIcon } from '../../lib/primitives';
@@ -51,6 +52,7 @@ export function ContentPanel() {
       {activePanel === 'cluster' && null}
       {activePanel === 'scratchpads' && <ScratchpadsContent />}
       {activePanel === 'routines' && <RoutinesContentPanel />}
+      {activePanel === 'agenda' && <AgendaSidebar />}
       {activePanel === 'analytics' && <AnalyticsNav />}
       {activePanel === 'settings' && <SettingsNav />}
       {activePanel === 'assistant' && <AssistantSidebar />}
