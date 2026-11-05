@@ -163,7 +163,10 @@ export function AgendaPage() {
         apply: (it) => applyPlanToItem(plan, it),
       });
       try {
-        await api.updateCalendarEvent(plan.eventId, plan.patch);
+        const saved = await api.updateCalendarEvent(plan.eventId, plan.patch);
+        // Put the saved event in place before the override goes: nothing on screen
+        // ever falls back to the pre-drop position.
+        useAgendaStore.getState().applyLocalEvent(saved.id, saved);
         const what = plan.edge === 'end' ? 'resized' : 'moved';
         toast.success(plan.series ? `"${ev.title}" ${what}: the whole series` : `"${ev.title}" ${what} to ${plan.preview.label}`);
         await refresh();

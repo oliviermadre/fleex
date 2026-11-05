@@ -77,6 +77,8 @@ interface AgendaStore {
 
 /** Monotonic counter: a slow response for a window we already left must not win. */
 let seq = 0;
+/** The newest refresh in flight: a superseded refresh waits for it before resolving. */
+let latest: Promise<void> = Promise.resolve();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -164,17 +166,26 @@ export const useAgendaStore = create<AgendaStore>((set, get) => {
       await get().refresh();
     },
 
-    refresh: async () => {
+    // Resolves once the data on screen is at least as fresh as this call. When a newer
+    // refresh supersedes this one (e.g. a websocket refetch), it waits for that one:
+    // callers that drop an optimistic override after `await refresh()` must never
+    // uncover the stale data underneath (the drag & drop "jump back" bug).
+    refresh: () => {
       const { prefs, anchor } = get();
       const { from, to } = windowFor(prefs.view, anchor);
       const mine = ++seq;
       set({ loading: true, error: null });
-      try {
-        const data = await api.fetchAgenda(from, to, prefs.googleCalendars);
-        if (mine === seq) set({ data, loading: false });
-      } catch (e) {
-        if (mine === seq) set({ loading: false, error: e instanceof Error ? e.message : String(e) });
-      }
+      const run = (async () => {
+        try {
+          const data = await api.fetchAgenda(from, to, prefs.googleCalendars);
+          if (mine === seq) set({ data, loading: false });
+        } catch (e) {
+          if (mine === seq) set({ loading: false, error: e instanceof Error ? e.message : String(e) });
+        }
+        if (mine !== seq) await latest;
+      })();
+      latest = run;
+      return run;
     },
 
     applyLocalEvent: (eventId, event) => {
