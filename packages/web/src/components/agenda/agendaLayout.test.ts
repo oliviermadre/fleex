@@ -3,7 +3,7 @@ import type { AgendaItem, AgendaPrefs } from '@fleex/shared';
 import { DEFAULT_AGENDA_PREFS } from '@fleex/shared';
 import {
   windowFor, shiftAnchor, daysCovered, isBar, itemDays, segmentForDay, groupHourly, layoutDay,
-  isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, POINT_MIN, MAX_COLS, type GridEntry,
+  assignLanes, isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, POINT_MIN, MAX_COLS, type GridEntry,
 } from './agendaLayout';
 
 // Local-time constructors: these tests are about the browser's own calendar.
@@ -161,11 +161,36 @@ describe('groupHourly / layoutDay', () => {
       // Nothing is lost: every item is drawn, grouped or behind a "+N".
       const shown = out.flatMap((x) => (x.kind === 'item' ? [x.seg.item.id] : x.items.map((i) => i.id)));
       expect(shown.sort()).toEqual(items.map((i) => i.id).sort());
-      expect(out.some((x) => x.kind === 'more')).toBe(true);
+      // The narrow Week column still folds the overflow; the Day view avoids it.
+      if (maxCols === MAX_COLS.week) expect(out.some((x) => x.kind === 'more')).toBe(true);
       drawn.push(out.filter((x) => x.kind !== 'more').length);
     }
     // The Day view, wider, draws more of the burst before folding.
     expect(drawn[1]!).toBeGreaterThan(drawn[0]!);
+  });
+});
+
+describe('assignLanes — workflow runs as thin bands', () => {
+  const day = L(2026, 11, 5);
+  it('gives each overlapping run its own lane and reuses a lane once it is free — never a "+N"', () => {
+    const runs = [
+      block('a', L(2026, 11, 5, 9, 0), L(2026, 11, 5, 11, 0)),
+      block('b', L(2026, 11, 5, 9, 30), L(2026, 11, 5, 10, 0)),
+      block('c', L(2026, 11, 5, 10, 15), L(2026, 11, 5, 10, 45)),
+      block('d', L(2026, 11, 5, 9, 45), L(2026, 11, 5, 12, 0)),
+      block('e', L(2026, 11, 5, 9, 50), L(2026, 11, 5, 10, 10)),
+    ];
+    const { lanes, placed } = assignLanes(runs.map((r) => segmentForDay(r, day, NOW)!));
+    const lane = Object.fromEntries(placed.map((p) => [p.seg.item.id, p.lane]));
+    expect(placed).toHaveLength(5);
+    expect(lanes).toBe(4);
+    expect(lane.c).toBe(lane.b); // b ended at 10:00, c starts at 10:15
+  });
+
+  it('keeps a run begun yesterday in today\'s lanes — it is never hidden in a group', () => {
+    const run = block('y', L(2026, 11, 4, 22, 0), L(2026, 11, 5, 2, 0));
+    expect(assignLanes([segmentForDay(run, L(2026, 11, 4), NOW)!]).lanes).toBe(1);
+    expect(assignLanes([segmentForDay(run, day, NOW)!]).lanes).toBe(1);
   });
 });
 

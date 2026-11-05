@@ -64,7 +64,7 @@ function SetupSteps({ google }: { google: AgendaGoogleStatus }) {
     }
   };
   return (
-    <div className="space-y-1.5 py-1 pl-6 pr-1 text-[11px] text-[var(--theme-text-muted)]" data-testid="agenda-google">
+    <div className="space-y-1.5 p-1 text-[11px] text-[var(--theme-text-muted)]" data-testid="agenda-google">
       <p>
         Google Calendar is read through <strong className="text-[var(--theme-text-secondary)]">gogcli</strong>, a separate
         tool set up on the machine running Fleex — not in Fleex.
@@ -130,7 +130,7 @@ export function AgendaGoogleSection() {
   };
 
   return (
-    <div className="space-y-0.5 py-1 pl-6 pr-1" data-testid="agenda-google">
+    <div className="space-y-0.5 p-1" data-testid="agenda-google">
       <div className="truncate text-[11px] text-[var(--theme-text-muted)]" title={google.email ?? undefined}>{google.email ?? 'Connected'}</div>
       {google.calendars.map((c) => {
         const on = selected.has(c.id);

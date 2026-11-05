@@ -71,6 +71,21 @@ describe('<AgendaPage/>', () => {
     expect(screen.getAllByText('vue agenda dans routines').length).toBeGreaterThan(0);
   });
 
+  it('draws workflow runs as thin bands that are never folded into a "+N", however crowded the hour is', async () => {
+    const runs = Array.from({ length: 6 }, (_, i) => ({
+      ...response.items[0]!, id: `workflow.run:b${i}`, runId: `b${i}`, start: at(9, i), end: at(10, 30),
+      ticket: { ...ticket, id: `tk-${700 + i}`, displayId: 700 + i },
+    }));
+    const pts = Array.from({ length: 12 }, (_, i) => ({
+      id: `ticket.created:p${i}`, type: 'ticket.created' as const, shape: 'point' as const, start: at(9, i * 2), title: `t${i}`,
+    }));
+    vi.mocked(api.fetchAgenda).mockResolvedValue({ ...response, items: [...runs, ...pts] });
+    renderPage();
+    // Six overlapping runs: six bands, none grouped, none behind a "+N".
+    await waitFor(() => expect(document.querySelectorAll('[data-agenda-band]')).toHaveLength(6));
+    expect(document.querySelector('[data-agenda-more]')).toBeNull();
+  });
+
   it('opens the ticket in the Tasks view from the run popover — the agenda itself never acts on the run', async () => {
     renderPage();
     const chip = await waitFor(() => {

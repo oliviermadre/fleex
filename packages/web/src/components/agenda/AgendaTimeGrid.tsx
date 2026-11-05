@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { AgendaChip, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, type OnOpen } from './AgendaChip';
-import { chipStyle } from './agendaLabels';
+import { chipStyle, dotStyle, statusHue } from './agendaLabels';
 import {
-  HOUR_PX, MAX_COLS, addDays, dayKey, groupHourly, isBar, itemDays, layoutDay, minutesOfDay, segmentForDay, startOfDay,
+  HOUR_PX, LANES_MAX_SHARE, LANE_PX, MAX_COLS, addDays, assignLanes, dayKey, groupHourly, isBar, itemDays, layoutDay, minutesOfDay, openWait, segmentForDay, startOfDay, workflowShortName, type DaySegment,
 } from './agendaLayout';
 import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon } from '../ui/icons/AgendaIcons';
 import { DragWrap, SlotPreview, useAgendaDnd } from './AgendaDnd';
@@ -63,8 +63,11 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
     const key = dayKey(d);
     const allDay = items.filter((it) => it.shape === 'allDay' && itemDays(it, now).includes(key));
     const segs = items.map((it) => segmentForDay(it, d, now)).filter((s): s is NonNullable<typeof s> => s !== null);
+    // Workflow runs get their own thin lanes; everything else shares what is left.
+    const lanes = assignLanes(segs.filter((s) => s.item.type === 'workflow.run'));
+    const others = segs.filter((s) => s.item.type !== 'workflow.run');
     const count = items.filter((it) => itemDays(it, now).includes(key)).length;
-    return { day: d, key, allDay, entries: layoutDay(groupHourly(segs), maxCols), count };
+    return { day: d, key, allDay, lanes, entries: layoutDay(groupHourly(others), maxCols), count };
   });
 
   return (
@@ -150,7 +153,12 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
               </span>
             ))}
           </div>
-          {perDay.map(({ key, day, entries }) => (
+          {perDay.map(({ key, day, entries, lanes }) => {
+            const n = lanes.lanes;
+            // One lane is at most LANE_PX wide and all of them at most LANES_MAX_SHARE of the column.
+            const laneW = n ? `min(${LANE_PX}px, ${(LANES_MAX_SHARE * 100) / n}%)` : '0px';
+            const lanesW = n ? `min(${n * LANE_PX}px, ${LANES_MAX_SHARE * 100}%)` : '0px';
+            return (
             <div
               key={key}
               data-agenda-col={key}
@@ -162,6 +170,22 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
               )}
               style={{ backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${HOUR_PX - 1}px, var(--theme-border) ${HOUR_PX - 1}px, var(--theme-border) ${HOUR_PX}px)` }}
             >
+              {lanes.placed.map(({ seg, lane }) => (
+                <WorkflowBand
+                  key={seg.item.id}
+                  seg={seg}
+                  now={now}
+                  dimmed={!isHit(seg.item)}
+                  style={{
+                    top: (seg.startMin / 60) * HOUR_PX + GAP_PX,
+                    height: Math.max(1, ((seg.endMin - seg.startMin) / 60) * HOUR_PX - 2 * GAP_PX),
+                    left: `calc(${laneW} * ${lane} + ${GAP_PX}px)`,
+                    width: `calc(${laneW} - ${GAP_PX}px)`,
+                  }}
+                  onOpen={onOpen}
+                  onOpenTicket={onOpenTicket}
+                />
+              ))}
               {entries.map((e) => {
                 const top = (e.startMin / 60) * HOUR_PX + GAP_PX;
                 const height = Math.max(1, ((e.endMin - e.startMin) / 60) * HOUR_PX - 2 * GAP_PX);
@@ -169,8 +193,8 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                 const pos = {
                   top,
                   height,
-                  left: `calc(${(e.col / e.cols) * 100}% + ${GAP_PX}px)`,
-                  width: `calc(${(e.span / e.cols) * 100}% - ${2 * GAP_PX}px)`,
+                  left: `calc(${lanesW} + (100% - ${lanesW}) * ${e.col / e.cols} + ${GAP_PX}px)`,
+                  width: `calc((100% - ${lanesW}) * ${e.span / e.cols} - ${2 * GAP_PX}px)`,
                 };
                 if (e.kind === 'more') {
                   return (
@@ -261,9 +285,55 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * A workflow run in the hour grid: a thin band (≤ LANE_PX) with its ticket
+ * number written vertically and its human waits hatched. The full name, the
+ * workflow and the current wait are in the tooltip and the popover.
+ */
+function WorkflowBand({ seg, now, dimmed, style, onOpen, onOpenTicket }: {
+  seg: DaySegment;
+  now: Date;
+  dimmed: boolean;
+  style: CSSProperties;
+  onOpen: OnOpen;
+  onOpenTicket: (item: AgendaItem) => void;
+}) {
+  const it = seg.item;
+  const wait = openWait(it);
+  const tip = [
+    it.ticket ? `#${it.ticket.displayId} ${it.ticket.title}` : it.title,
+    [workflowShortName(it.workflowName), wait ? `waiting at ${wait.stepName}` : it.status].filter(Boolean).join(' · '),
+  ].join('\n');
+  return (
+    <button
+      type="button"
+      data-agenda-item={it.id}
+      data-agenda-band
+      onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
+      onDoubleClick={() => onOpenTicket(it)}
+      className={cn(
+        'absolute flex cursor-pointer flex-col items-center overflow-hidden rounded-sm pt-0.5 hover:brightness-125',
+        seg.continuesAfter && 'rounded-b-none',
+        seg.continuesBefore && 'rounded-t-none',
+        dimmed && 'opacity-25',
+      )}
+      style={{ ...chipStyle(it), borderLeftWidth: 1, ...style }}
+      title={tip}
+    >
+      <WaitHatches item={it} from={seg.from} to={seg.to} now={now} vertical />
+      <span className={cn('relative h-1.5 w-1.5 shrink-0 rounded-full', it.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(it.status))} />
+      <span className="relative mt-0.5 text-[10px] font-bold leading-none tabular-nums [writing-mode:vertical-rl]">
+        {it.ticket ? `#${it.ticket.displayId}` : workflowShortName(it.workflowName)}
+      </span>
+      <span className="sr-only">{it.ticket?.title ?? it.title}</span>
+    </button>
   );
 }

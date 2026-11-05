@@ -71,3 +71,25 @@ describe('<AgendaSidebar/> · Epic and Repo filters', () => {
     expect(screen.getByText(/Items without the field/)).toBeTruthy();
   });
 });
+
+describe('<AgendaSidebar/> · routine list in a menu', () => {
+  it('keeps the per-routine checkboxes out of the sidebar, in a menu at the right of "Routines"', () => {
+    useAgendaStore.setState({ data: { ...data([]), routines: [{ id: 'sync', name: 'Sync backlog', emoji: '' }, { id: 'wf', name: 'WisprFlow Puller', emoji: '' }] } });
+    renderSidebar();
+    expect(screen.queryByText('Sync backlog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose the routines to show' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Sync backlog/ }));
+    expect(useAgendaStore.getState().prefs.routines).toEqual({ sync: false });
+    expect(screen.getByText('1 hidden')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    expect(useAgendaStore.getState().prefs.routines).toEqual({});
+  });
+
+  it('puts the Google Calendar settings in a menu at the right of its label, flagged "Set up" until gogcli works', () => {
+    useAgendaStore.setState({ google: { provider: 'gogcli', installed: false, version: null, connected: false, email: null, calendars: [], error: null, setupUrl: 'https://gogcli.sh/quickstart.html' } });
+    renderSidebar();
+    expect(screen.queryByTestId('agenda-google')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Google Calendar settings' }));
+    expect(screen.getByTestId('agenda-google')).toBeTruthy();
+  });
+});

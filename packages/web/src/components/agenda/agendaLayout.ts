@@ -18,8 +18,15 @@ export const HOUR_PX = 60;
 export const POINT_MIN = 18;
 /** Kept for callers of the old name. */
 export const MIN_BLOCK_MIN = POINT_MIN;
-/** Visible columns per overlap cluster before the rest folds into "+N". */
-export const MAX_COLS = { day: 6, week: 2 } as const;
+/**
+ * Visible columns per overlap cluster before the rest folds into "+N". Workflow
+ * runs are not counted: they live in their own narrow lanes (`assignLanes`).
+ */
+export const MAX_COLS = { day: 8, week: 3 } as const;
+/** Max width of one workflow lane: a thin band, so the rest keeps the room. */
+export const LANE_PX = 20;
+/** The lanes never take more than this share of a day column. */
+export const LANES_MAX_SHARE = 0.45;
 
 export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -203,6 +210,27 @@ export function groupHourly(segs: DaySegment[]): GridEntry[] {
     }
   }
   return out;
+}
+
+/**
+ * Workflow runs are drawn as thin vertical bands on the left of the day
+ * column, one lane each — never grouped, never folded into "+N": a run that
+ * started yesterday must show in both columns, not hide in a "+2". Lanes are
+ * packed first-free, so two runs that don't overlap share a lane.
+ */
+export function assignLanes(segs: DaySegment[]): { lanes: number; placed: { seg: DaySegment; lane: number }[] } {
+  const sorted = [...segs].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin);
+  const ends: number[] = [];
+  const placedSegs = sorted.map((seg) => {
+    let lane = ends.findIndex((end) => end <= seg.startMin);
+    if (lane < 0) {
+      lane = ends.length;
+      ends.push(0);
+    }
+    ends[lane] = seg.endMin;
+    return { seg, lane };
+  });
+  return { lanes: ends.length, placed: placedSegs };
 }
 
 const overlaps = (a: { startMin: number; endMin: number }, b: { startMin: number; endMin: number }) =>
