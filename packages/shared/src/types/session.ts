@@ -72,6 +72,8 @@ export interface AgentWorktreeInfo {
   readonly ticketId: string;
   readonly ticketDisplayId: number;
   readonly ticketTitle: string;
+  /** The ticket's locked slug: names its workspace folder (see `ticketWorkspaceId`). */
+  readonly ticketSlug: string;
   /** Kanban status of the linked ticket — drives which sidebar flow the worktree lands in. */
   readonly ticketStatus: import('./ticket.js').TicketStatus;
   readonly agentPersonaId: string;

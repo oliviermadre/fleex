@@ -27,7 +27,7 @@ import { resetToasts } from '../stores/toastStore';
 
 function ticket(id: string, displayId: number, title: string): Ticket {
   return {
-    id, boardId: 'b1', displayId, title, description: '', status: 'doing', priority: 'high', complexity: null, type: null, position: 0,
+    id, boardId: 'b1', displayId, title, slug: 'slug', description: '', status: 'doing', priority: 'high', complexity: null, type: null, position: 0,
     tags: [], links: [], blocked: false, favorite: false, dueDate: null, assignee: null, agentClaimedAt: null,
     githubMetadata: null, archivedAt: null, firstDoingAt: null, statusChangedAt: '2026-09-28T08:00:00Z',
     conversationMode: 'talk', modelOverride: null, effortOverride: null, fastMode: false,

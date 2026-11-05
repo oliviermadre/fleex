@@ -89,6 +89,11 @@ export interface Ticket {
   readonly boardId: string;
   readonly displayId: number;
   readonly title: string;
+  /**
+   * The title at creation, slugified, then locked: a rename never changes it.
+   * Names the workspace folder and the git branch (`ticketWorkspaceId`, `ticketBranchName`).
+   */
+  readonly slug: string;
   readonly description: string;
   readonly status: TicketStatus;
   readonly priority: TicketPriority;

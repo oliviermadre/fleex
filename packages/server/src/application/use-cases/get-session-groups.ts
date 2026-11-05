@@ -1,7 +1,7 @@
 import type { Session, SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@fleex/shared';
 import type { SessionEntity } from '../../domain/entities.js';
 import { SessionGroupingService } from '../../domain/services/session-grouping.js';
-import { buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { ticketWorkspaceId } from '../../domain/services/branch-utils.js';
 import type { SessionNamingService } from '../../domain/services/session-naming.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
@@ -244,6 +244,7 @@ export class GetSessionGroupsUseCase {
         ticketId: ticket.id,
         ticketDisplayId: ticket.displayId,
         ticketTitle: ticket.title,
+        ticketSlug: ticket.slug,
         ticketStatus: ticket.status,
         agentPersonaId: persona?.id ?? '',
         agentName: persona?.name ?? '',
@@ -457,7 +458,7 @@ export class GetSessionGroupsUseCase {
         // Path doesn't exist — reconcile into the ticket's workspace
         // (workspaces/{workspaceId}/{repo}), the single homogeneous convention.
         const agent = ref.wt.agentWorktree!;
-        const workspaceId = buildTicketWorkspaceId(agent.ticketTitle, agent.ticketId);
+        const workspaceId = ticketWorkspaceId({ id: agent.ticketId, slug: agent.ticketSlug });
         const result = await this.reconcileWorktree!.execute(
           ref.org,
           ref.name,

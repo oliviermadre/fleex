@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { ticketBranchName, ticketWorkspaceId, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -63,7 +63,7 @@ export class CreateSessionFromTicketUseCase {
       const colonIdx = worktreeLink.ref.indexOf(':');
       branchName = colonIdx > 0 ? worktreeLink.ref.substring(colonIdx + 1) : (worktreeLink.label || worktreeLink.ref);
     } else {
-      branchName = buildTicketBranchName(ticket.title, ticket.id);
+      branchName = ticketBranchName(ticket);
     }
 
     // Extract PR number from github_pr link (format: "org/name#number")
@@ -76,7 +76,7 @@ export class CreateSessionFromTicketUseCase {
     }
 
     // Create workspace and write manifest
-    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+    const workspaceId = ticketWorkspaceId(ticket);
     const workspacePath = this.resolver.workspacePath(workspaceId);
     mkdirSync(workspacePath, { recursive: true });
     const manifestPath = join(workspacePath, '.fleex.json');

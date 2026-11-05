@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { ticketBranchName, ticketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import type { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
@@ -1077,17 +1077,13 @@ Be concise and decision-oriented. Write in the same language as the panel member
       branchName = colonIdx > 0 ? existingWorktreeLink.ref.substring(colonIdx + 1) : (existingWorktreeLink.label || existingWorktreeLink.ref);
       createNewBranch = false;
     } else {
-      const slug = ticket.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 40);
-      branchName = `agent/${ticket.displayId}-${slug}`;
+      // The locked slug, not the title: a renamed ticket keeps its branch name.
+      branchName = `agent/${ticket.displayId}-${ticket.slug}`;
       createNewBranch = true;
     }
 
     // Create workspace + manifest
-    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+    const workspaceId = ticketWorkspaceId(ticket);
     const workspaceRoot = this.resolver!.workspacePath(workspaceId);
     mkdirSync(workspaceRoot, { recursive: true });
     const manifestPath = join(workspaceRoot, '.fleex.json');
@@ -1138,7 +1134,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
           });
         } catch {
           if (!repoCreateNew) {
-            usedBranch = buildTicketBranchName(ticket.title, ticket.id);
+            usedBranch = ticketBranchName(ticket);
             await this.createWorktree.execute(repo.org, repo.name, wtPath, {
               branch: usedBranch,
               createNewBranch: true,

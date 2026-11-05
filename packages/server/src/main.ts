@@ -6,6 +6,7 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
+import { BackfillTicketSlugsUseCase } from './application/use-cases/backfill-ticket-slugs.js';
 import { createContainer } from './infrastructure/container.js';
 import { fleexServerFactory } from './infrastructure/http/server-factory.js';
 import { migrateRepositoryPatterns } from './domain/services/repository-pattern-migration.js';
@@ -257,6 +258,14 @@ async function main() {
   const heartbeat = new WsHeartbeat();
   await app.register(unifiedWsPlugin(container, container.jsonlFileWatcher, heartbeat));
   await app.register(agentWsPlugin(container, heartbeat));
+
+  // Lock the slug of tickets renamed before slugs were stored, from their
+  // workspace folder — before serving anything that derives a path from it.
+  try {
+    await new BackfillTicketSlugsUseCase(container.ticketStore, container.resolver, container.logger).execute();
+  } catch (err) {
+    container.logger.warn('Failed to backfill ticket slugs at startup', { error: String(err) });
+  }
 
   // Auto-resolve repository patterns at startup if needed
   {

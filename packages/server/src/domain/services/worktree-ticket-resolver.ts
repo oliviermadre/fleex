@@ -3,7 +3,7 @@
  *
  * Fleex creates two branch shapes:
  *   - `ticket/<6-hex>-<slug>` — the first 6 hex chars of the ticket UUID
- *     (see buildTicketBranchName in branch-utils).
+ *     (see ticketBranchName in @fleex/shared).
  *   - `agent/<displayId>-<slug>` — the ticket's human display id.
  *
  * Returns the extracted key, or null for a branch that follows neither
