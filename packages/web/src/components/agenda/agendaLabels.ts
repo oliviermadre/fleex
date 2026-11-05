@@ -127,7 +127,7 @@ export function chipStyle(item: AgendaItem, colors?: AgendaColors, match?: Searc
   return {
     background: upcoming || skipped ? 'transparent' : v(h, 'bg'),
     border: `1px ${upcoming || skipped ? 'dashed' : 'solid'} ${v(h, 'border')}`,
-    borderLeft: `3px ${upcoming || skipped ? 'dashed' : 'solid'} ${v(h, 'solid')}`,
+    borderLeft: `3px solid ${v(h, 'solid')}`,
     color: 'var(--theme-text-primary)',
     opacity: match === 'dim' ? 0.2 : upcoming ? 0.8 : 1,
     ...(match === 'hit' ? { boxShadow: '0 0 0 2px var(--tint-yellow-solid)', zIndex: 20 } : {}),

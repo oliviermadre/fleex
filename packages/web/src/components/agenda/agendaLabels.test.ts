@@ -39,4 +39,12 @@ describe('agenda colours', () => {
     expect(colorToken('#123abc', 'bg')).toContain('color-mix');
     expect(chipStyle(run('sync'), { [routineColorKey('sync')]: '#123abc' }).borderLeft).toContain('#123abc');
   });
+
+  it('keeps the left accent border solid on upcoming and skipped chips — only the outline is dashed', () => {
+    for (const type of ['routine.upcoming', 'routine.skipped'] as const) {
+      const style = chipStyle({ ...run('sync'), type, shape: 'point' });
+      expect(style.borderLeft).toMatch(/^3px solid /);
+      expect(style.border).toMatch(/dashed/);
+    }
+  });
 });
