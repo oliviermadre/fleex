@@ -10,5 +10,11 @@ export interface WorkflowRunStorePort {
   getByStatus(status: WorkflowRunStatus): Promise<WorkflowRunEntity[]>;
   /** Returns every workflow run, ordered by startedAt DESC. Used by the Execution Log view. */
   getAll(): Promise<WorkflowRunEntity[]>;
+  /**
+   * Runs that overlap `[from, to)`: started before `to` and still running or
+   * completed at/after `from`. Bounded read for the agenda — `getAll()` loads every
+   * run with its template snapshot and times out on a large instance.
+   */
+  getOverlapping(from: Date, to: Date): Promise<WorkflowRunEntity[]>;
   save(run: WorkflowRunEntity): Promise<void>;
 }

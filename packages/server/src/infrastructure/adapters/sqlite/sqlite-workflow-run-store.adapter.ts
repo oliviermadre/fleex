@@ -62,6 +62,15 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
     return rows.map((r) => this.toEntity(r));
   }
 
+  async getOverlapping(from: Date, to: Date): Promise<WorkflowRunEntity[]> {
+    const rows = this.conn.db.prepare(
+      `SELECT * FROM workflow_runs
+       WHERE started_at < ? AND (completed_at IS NULL OR completed_at >= ?)
+       ORDER BY started_at DESC`,
+    ).all(to.toISOString(), from.toISOString()) as Row[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async save(run: WorkflowRunEntity): Promise<void> {
     // Use INSERT … ON CONFLICT DO UPDATE (upsert-in-place) instead of INSERT OR REPLACE.
     // INSERT OR REPLACE performs DELETE + INSERT, which triggers ON DELETE CASCADE on

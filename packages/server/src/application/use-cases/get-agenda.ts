@@ -316,7 +316,8 @@ export function buildAgenda(src: AgendaSources, w: AgendaWindow): AgendaResponse
 
 /**
  * GET /api/agenda — reads every source in parallel, then {@link buildAgenda}.
- * Runs come from `getAll()` filtered in memory, like the statistics use case;
+ * Runs come from `getOverlapping(from, to)` — never `getAll()`, which loads every
+ * run with its template snapshot and times out on a large Supabase instance;
  * events are read once per family with the window (widened back to the oldest
  * overlapping run, so a wait that began before `from` is still bounded).
  */
@@ -346,7 +347,7 @@ export class GetAgendaUseCase {
     const [tickets, routines, allRuns, groups, calendarEvents, missedSlots, eventLinks] = await Promise.all([
       this.ticketStore.getAllTickets(),
       this.routineStore ? this.routineStore.getAll() : Promise.resolve([]),
-      this.runStore ? this.runStore.getAll() : Promise.resolve([]),
+      this.runStore ? this.runStore.getOverlapping(w.from, w.to) : Promise.resolve([]),
       this.loadEpics(),
       kv ? listCalendarEvents(kv) : Promise.resolve([]),
       kv ? listMissedSlots(kv) : Promise.resolve([]),

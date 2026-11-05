@@ -259,3 +259,25 @@ describe('removeTicket — intentional cascade preserved (AC5)', () => {
     expect(await stepRunStore.getByWorkflowRun('run-1')).toHaveLength(0);
   });
 });
+
+// ── getOverlapping: the agenda's bounded read (getAll timed out on Supabase) ──
+
+describe('WorkflowRunStore.getOverlapping', () => {
+  const at = (iso: string) => new Date(iso);
+  const runAt = (id: string, start: string, end: string | null) => new WorkflowRunEntity(
+    id, 'ticket-1', 'tmpl-1', SNAPSHOT, end ? 'completed' : 'running', null, '@test', 'test',
+    at(start), end ? at(end) : null, at(start), at(start),
+  );
+
+  it('returns runs that overlap the window — including one started before it and one still running — and nothing else', async () => {
+    await ticketStore.createTicket(makeTicket());
+    await runStore.save(runAt('before', '2026-11-01T08:00:00.000Z', '2026-11-01T09:00:00.000Z'));
+    await runStore.save(runAt('spans-in', '2026-11-01T22:00:00.000Z', '2026-11-02T03:00:00.000Z'));
+    await runStore.save(runAt('inside', '2026-11-03T10:00:00.000Z', '2026-11-03T11:00:00.000Z'));
+    await runStore.save(runAt('still-running', '2026-10-30T10:00:00.000Z', null));
+    await runStore.save(runAt('after', '2026-11-09T10:00:00.000Z', '2026-11-09T11:00:00.000Z'));
+
+    const runs = await runStore.getOverlapping(at('2026-11-02T00:00:00.000Z'), at('2026-11-09T00:00:00.000Z'));
+    expect(runs.map((r) => r.id).sort()).toEqual(['inside', 'spans-in', 'still-running']);
+  });
+});

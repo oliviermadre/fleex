@@ -467,9 +467,23 @@ describe('GetAgendaUseCase — sources', () => {
         log.filter((e) => !eventType || e.eventType === eventType || e.eventType.startsWith(`${eventType}.`)),
     } as never;
     const [tickets, routines] = stores([t], []);
-    const res = await new GetAgendaUseCase(tickets, routines, { getAll: async () => [r1] } as never, eventLog).execute(W);
+    const res = await new GetAgendaUseCase(tickets, routines, { getOverlapping: async () => [r1] } as never, eventLog).execute(W);
     expect(ofType(res, 'workflow.run')[0]!.segments).toEqual([
       { kind: 'gate', stepName: 'Check Spec', start: '2026-11-05T08:30:00.000Z', end: '2026-11-05T09:15:00.000Z' },
     ]);
+  });
+
+  it('reads only the runs that overlap the window, never every run (regression: getAll() hit the Supabase statement timeout)', async () => {
+    const t = ticket({ id: 't1', createdAt: '2026-11-03T10:00:00Z' });
+    const r1 = run({ id: 'r1', ticketId: 't1', start: '2026-11-05T08:00:00Z', end: '2026-11-05T10:00:00Z' });
+    const windows: [string, string][] = [];
+    const runStore = {
+      getAll: async () => { throw new Error('canceling statement due to statement timeout'); },
+      getOverlapping: async (from: Date, to: Date) => { windows.push([from.toISOString(), to.toISOString()]); return [r1]; },
+    } as never;
+    const [tickets, routines] = stores([t], []);
+    const res = await new GetAgendaUseCase(tickets, routines, runStore, null).execute(W);
+    expect(windows).toEqual([[W.from.toISOString(), W.to.toISOString()]]);
+    expect(ofType(res, 'workflow.run').map((i) => i.id)).toHaveLength(1);
   });
 });
