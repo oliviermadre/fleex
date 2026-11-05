@@ -12,7 +12,7 @@ import { PrBadgeGroup } from '../ui/PrBadgeGroup';
 import { FocusStatusBadge } from '../focus/FocusTicketLead';
 import { PriorityIndicator, PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { ComplexityBadge, complexityDescription } from '../tickets/ComplexityBadge';
-import { TicketTypeIcon } from '../tickets/TicketTypeBadge';
+import { TicketTypeIconSvg } from '../tickets/TicketTypeIconSvg';
 import { MeetJoinButton } from './AgendaMeetingDetails';
 import { tintClasses } from '../../lib/tints';
 import { ExternalLinkIcon, HandIcon, DocumentIcon, RepeatIcon } from '../ui/icons/AgendaIcons';
@@ -185,7 +185,7 @@ function TicketStrip({ item, ticket }: { item: AgendaItem; ticket: Load<Ticket> 
       <div className="flex flex-wrap items-center gap-1.5 text-[var(--theme-text-secondary)]">
         <FocusStatusBadge ticket={{ status }} />
         {t && <Pic title={`Priority: ${PRIORITY_LABELS[t.priority] ?? t.priority}`}><PriorityIndicator priority={t.priority} /></Pic>}
-        {t?.type && <Pic title={`Type: ${TICKET_TYPE_LABELS[t.type]}`}><TicketTypeIcon type={t.type} /></Pic>}
+        {t?.type && <Pic title={`Type: ${TICKET_TYPE_LABELS[t.type]}`}><TicketTypeIconSvg type={t.type} size={14} /></Pic>}
         {t?.complexity && <Pic title={`Complexity: ${complexityDescription(t.complexity)}`}><ComplexityBadge complexity={t.complexity} /></Pic>}
         {t?.favorite && (
           <Pic title="Favorite">

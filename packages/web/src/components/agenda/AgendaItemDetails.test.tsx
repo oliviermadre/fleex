@@ -96,7 +96,7 @@ describe('<AgendaItemDetails/>', () => {
   });
 
   it('gives a done ticket its status, board, metadata and deliverables', async () => {
-    vi.mocked(api.fetchAgendaTicket).mockResolvedValue({ ...ticket, favorite: true, blocked: true } as Ticket);
+    vi.mocked(api.fetchAgendaTicket).mockResolvedValue({ ...ticket, favorite: true, blocked: true, type: 'build' } as Ticket);
     renderCard({
       id: 'ticket.done:tk-1', type: 'ticket.done', shape: 'point', start: NOW.toISOString(), title: ticket.title,
       ticket: { id: 'tk-1', displayId: 642, title: ticket.title, boardId: 'b1', status: 'done', tags: ['ux'], epicIds: ['e1'], repos: [] },
@@ -112,6 +112,10 @@ describe('<AgendaItemDetails/>', () => {
     expect(within(strip).getByTitle('Priority: High')).toBeTruthy();
     expect(within(strip).getByTitle('Favorite')).toBeTruthy();
     expect(within(strip).getByTitle('Blocked')).toBeTruthy();
+    // The type uses Fleex's SVG glyph (as in Tasks), not the old emoji.
+    const type = within(strip).getByTitle('Type: Build');
+    expect(type.querySelector('svg')).toBeTruthy();
+    expect(type.textContent).not.toContain('🔨');
     expect(screen.getByText('#642')).toBeTruthy();
     expect(api.fetchAgendaTicketDeliverables).toHaveBeenCalledWith('tk-1');
     expect(api.fetchAgendaRunDeliverables).not.toHaveBeenCalled();
