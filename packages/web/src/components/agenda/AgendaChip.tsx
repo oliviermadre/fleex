@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent, ReactNode } from 'react';
+import { createContext, useContext, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import type { AgendaItem } from '@fleex/shared';
 import type { AgendaItemType } from '@fleex/shared';
 import { cn } from '../../lib/cn';
@@ -9,6 +9,35 @@ import { formatDuration, openWait, workflowShortName } from './agendaLayout';
 
 export type OpenTarget = { item: AgendaItem } | { group: AgendaItem[] };
 export type OnOpen = (target: OpenTarget, el: HTMLElement) => void;
+
+/**
+ * Hover preview, like the Timeline's annotation pills: hovering an opener shows
+ * its card, leaving hides it; the click (onOpen) pins it. Provided by the page;
+ * absent (null) where hovering must not swap the card, e.g. inside a "+N" list.
+ */
+export interface AgendaHover {
+  enter: (target: OpenTarget, el: HTMLElement) => void;
+  leave: () => void;
+}
+export const AgendaHoverContext = createContext<AgendaHover | null>(null);
+
+type HoverHandlers = { onMouseEnter?: () => void; onMouseLeave?: () => void };
+
+/** Mouse handlers that preview `target` on hover, chained after `extra` (e.g. the multi-day highlight). */
+export function useHoverOpen() {
+  const hover = useContext(AgendaHoverContext);
+  return (target: OpenTarget, extra?: HoverHandlers) => ({
+    onMouseEnter: (e: MouseEvent<HTMLElement>) => {
+      extra?.onMouseEnter?.();
+      // A held button means a drag is going on: no preview under the ghost.
+      if (hover && e.buttons === 0) hover.enter(target, e.currentTarget);
+    },
+    onMouseLeave: () => {
+      extra?.onMouseLeave?.();
+      hover?.leave();
+    },
+  });
+}
 
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
@@ -173,11 +202,13 @@ export function AgendaChip({ item, onOpen, match, time = true, children }: {
   children?: ReactNode;
 }) {
   const colors = useAgendaColors();
+  const hoverOpen = useHoverOpen();
   return (
     <button
       type="button"
       data-agenda-item={item.id}
       onClick={(e: MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onOpen({ item }, e.currentTarget); }}
+      {...hoverOpen({ item })}
       className={cn('relative flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125')}
       data-agenda-match={match}
       style={chipStyle(item, colors, match)}

@@ -1,6 +1,6 @@
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { AgendaChip, GroupChipLabel, WaitIcon, useAgendaColors, type OnOpen } from './AgendaChip';
+import { AgendaChip, GroupChipLabel, WaitIcon, useAgendaColors, useHoverOpen, type OnOpen } from './AgendaChip';
 import { chipStyle, groupMatch, type SearchMatch } from './agendaLabels';
 import { DragWrap, useAgendaDnd } from './AgendaDnd';
 import { addDays, dayKey, isBar, itemDays, parseDayKey, workflowShortName, openWait } from './agendaLayout';
@@ -25,10 +25,12 @@ function dayGroups(items: AgendaItem[], now: Date): AgendaItem[][] {
 function GroupChip({ items, onOpen, match }: { items: AgendaItem[]; onOpen: OnOpen; match: SearchMatch }) {
   const it0 = items[0]!;
   const colors = useAgendaColors();
+  const hoverOpen = useHoverOpen();
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onOpen({ group: items }, e.currentTarget); }}
+      {...hoverOpen({ group: items })}
       className={cn('flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125')}
       data-agenda-match={match}
       style={chipStyle(it0, colors, match)}

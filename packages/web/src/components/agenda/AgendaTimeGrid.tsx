@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { AgendaChip, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, useAgendaColors, type OnOpen } from './AgendaChip';
+import { AgendaChip, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, useAgendaColors, useHoverOpen, type OnOpen } from './AgendaChip';
 import { chipStyle, dotStyle, groupMatch, statusHue, type AgendaColors, type SearchMatch } from './agendaLabels';
 import {
   HOUR_PX, LANES_MAX_SHARE, LANE_PX, MAX_COLS, addDays, assignLanes, dayKey, groupHourly, isBar, itemDays, layoutDay, minutesOfDay, openWait, segmentForDay, startOfDay, workflowShortName, type DaySegment,
@@ -37,6 +37,7 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
   // A block over several days is one item drawn in several columns: hovering
   // any of its pieces lights them all.
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const hoverOpen = useHoverOpen();
   const hoverProps = (id: string) => ({
     onMouseEnter: () => setHoverId(id),
     onMouseLeave: () => setHoverId((h) => (h === id ? null : h)),
@@ -118,6 +119,7 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                     data-agenda-item={it.id}
                     onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
                     onDoubleClick={() => onOpenTicket(it)}
+                    {...hoverOpen({ item: it })}
                     className={cn('relative flex min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125')}
                     data-agenda-match={match(it)}
                     style={{ ...chipStyle(it, colors, match(it)), gridColumn: `${s + 1} / ${e + 1}`, ...(it.type === 'routine.run' ? { borderColor: 'var(--tint-red-solid)', background: 'var(--tint-red-bg)' } : {}) }}
@@ -215,6 +217,7 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                       type="button"
                       data-agenda-more={e.items.length}
                       onClick={(ev) => onOpen({ group: e.items }, ev.currentTarget)}
+                      {...hoverOpen({ group: e.items })}
                       title={`${e.items.length} more`}
                       className="absolute flex items-center justify-center overflow-hidden rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1 text-[10.5px] font-semibold text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]"
                       style={pos}
@@ -230,6 +233,7 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                       key={`g-${it0.id}`}
                       type="button"
                       onClick={(ev) => onOpen({ group: e.items }, ev.currentTarget)}
+                      {...hoverOpen({ group: e.items })}
                       className={cn('absolute flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] leading-4 hover:brightness-125')}
                       data-agenda-match={groupMatch(e.items, match)}
                       style={{ ...chipStyle(it0, colors, groupMatch(e.items, match)), ...pos }}
@@ -250,7 +254,7 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                     onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
                     onDoubleClick={() => onOpenTicket(it)}
                     onPointerDown={draggable ? (ev) => dnd.beginItem(ev, it, 'move') : undefined}
-                    {...hoverProps(it.id)}
+                    {...hoverOpen({ item: it }, hoverProps(it.id))}
                     data-agenda-hovered={hoverId === it.id || undefined}
                     className={cn(
                       'absolute flex overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125',
@@ -326,6 +330,7 @@ function WorkflowBand({ seg, now, colors, hovered, hoverProps, match, style, onO
   onOpenTicket: (item: AgendaItem) => void;
 }) {
   const it = seg.item;
+  const hoverOpen = useHoverOpen();
   const wait = openWait(it);
   const tip = [
     it.ticket ? `#${it.ticket.displayId} ${it.ticket.title}` : it.title,
@@ -339,7 +344,7 @@ function WorkflowBand({ seg, now, colors, hovered, hoverProps, match, style, onO
       data-agenda-hovered={hovered || undefined}
       onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
       onDoubleClick={() => onOpenTicket(it)}
-      {...hoverProps}
+      {...hoverOpen({ item: it }, hoverProps)}
       className={cn(
         'absolute flex cursor-pointer flex-col items-center overflow-hidden rounded-sm pt-0.5 hover:brightness-125',
         hovered && 'brightness-125 ring-1 ring-[var(--theme-text-primary)]',

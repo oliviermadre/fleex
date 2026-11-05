@@ -15,7 +15,7 @@ import { cn } from '../../lib/cn';
 import { AgendaTimeGrid } from './AgendaTimeGrid';
 import { AgendaMonth, AgendaSchedule } from './AgendaMonthAndSchedule';
 import { AgendaItemDetails } from './AgendaItemDetails';
-import { AgendaChip, type OpenTarget } from './AgendaChip';
+import { AgendaChip, AgendaHoverContext, type AgendaHover, type OpenTarget } from './AgendaChip';
 import { ChevronLeftIcon, ChevronRightIcon, PanelRightIcon, PlusIcon } from '../ui/icons/AgendaIcons';
 import { addDays, dayKey, isVisible, matchesQuery, windowFor } from './agendaLayout';
 import type { SearchMatch } from './agendaLabels';
@@ -107,14 +107,58 @@ function useAgendaLiveUpdates(refresh: () => void) {
   }, [refresh]);
 }
 
+/** Same delays as the Timeline's annotation pills (TimelineDrawer). */
+const HOVER_OPEN_MS = 150;
+const HOVER_CLOSE_MS = 200;
+
+/** Identity of an opened card: the item (all its day segments) or the group of a "+N". */
+function targetKey(t: OpenTarget): string {
+  return 'item' in t ? `i:${t.item.id}` : `g:${t.group.map((it) => it.id).join(',')}`;
+}
+
+type Shown = { target: OpenTarget; pinned: boolean } | null;
+
+/**
+ * Hover preview of an item's card, like the Timeline's annotations: hovering an
+ * item shows its card, leaving the item (and the card) hides it. Never replaces
+ * a card pinned by a click.
+ */
+function useHoverPreview(shown: Shown, setShown: (fn: (cur: Shown) => Shown) => void, setReference: (el: HTMLElement) => void): AgendaHover & { cancel: () => void } {
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pinned = useRef(false);
+  pinned.current = !!shown?.pinned;
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return useMemo(() => ({
+    enter: (t: OpenTarget, el: HTMLElement) => {
+      if (pinned.current) return;
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        if (pinned.current) return;
+        setReference(el);
+        setShown(() => ({ target: t, pinned: false }));
+      }, HOVER_OPEN_MS);
+    },
+    leave: () => {
+      clearTimeout(timer.current);
+      if (pinned.current) return;
+      timer.current = setTimeout(() => setShown((cur) => (cur?.pinned ? cur : null)), HOVER_CLOSE_MS);
+    },
+    cancel: () => clearTimeout(timer.current),
+  }), [setShown, setReference]);
+}
+
 export function AgendaPage() {
   const navigate = useNavigate();
   const { anchor, data, loading, error, prefs, prefsLoaded, query, init, refresh, setView, go, goToday, goToDay, setQuery, updatePrefs } = useAgendaStore();
   const now = useMinuteNow();
   const searchRef = useRef<HTMLInputElement>(null);
-  const [target, setTarget] = useState<OpenTarget | null>(null);
+  // The open card and whether a click pinned it (a hover preview is not pinned).
+  const [shown, setShown] = useState<{ target: OpenTarget; pinned: boolean } | null>(null);
+  const target = shown?.target ?? null;
+  const setTarget = useCallback((t: OpenTarget | null) => setShown(t ? { target: t, pinned: true } : null), []);
   const pop = usePopover({ placement: 'right-start', gap: 6, role: 'dialog', open: target !== null, onOpenChange: (o) => { if (!o) setTarget(null); }, enableClick: false });
-  useDismissBeforeCreate(target !== null, () => setTarget(null), () => pop.refs.floating.current);
+  useDismissBeforeCreate(!!shown?.pinned, () => setTarget(null), () => pop.refs.floating.current);
+  const hover = useHoverPreview(shown, setShown, pop.refs.setReference);
 
   useEffect(() => { void init(); }, [init]);
   const stableRefresh = useCallback(() => { void refresh(); }, [refresh]);
@@ -129,10 +173,13 @@ export function AgendaPage() {
   const match = useCallback((it: AgendaItem): SearchMatch => (query.trim() ? (matchesQuery(it, query) ? 'hit' : 'dim') : undefined), [query]);
   const hits = query ? visible.filter((it) => match(it) !== 'dim').length : null;
 
+  // Click: pins the card (a hover preview of the same item becomes pinned);
+  // a click on the item whose card is pinned hides it.
   const open = useCallback((t: OpenTarget, el: HTMLElement) => {
+    hover.cancel();
     pop.refs.setReference(el);
-    setTarget(t);
-  }, [pop.refs]);
+    setShown((cur) => (cur?.pinned && targetKey(cur.target) === targetKey(t) ? null : { target: t, pinned: true }));
+  }, [pop.refs, hover]);
   const openTicket = useCallback((it: AgendaItem) => {
     if (it.type !== 'workflow.run' || !it.ticket) return;
     setTarget(null);
@@ -247,6 +294,7 @@ export function AgendaPage() {
 
   return (
     <AgendaDndContext.Provider value={dnd}>
+    <AgendaHoverContext.Provider value={hover}>
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
       <div className="flex h-13 shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2">
         <Button size="sm" variant="primary" onClick={createNext} title="Create an event (c)" className="inline-flex items-center gap-1">
@@ -333,6 +381,8 @@ export function AgendaPage() {
             ref={pop.refs.setFloating}
             style={pop.floatingStyles}
             {...pop.getFloatingProps()}
+            onMouseEnter={hover.cancel}
+            onMouseLeave={hover.leave}
             className="z-50 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] shadow-xl"
           >
             {'item' in target ? (
@@ -344,9 +394,12 @@ export function AgendaPage() {
                     ? `${target.group[0]!.routine?.name ?? target.group[0]!.title} \u00d7${target.group.length}`
                     : `${target.group.length} items`}
                 </div>
-                {target.group.map((it) => (
-                  <AgendaChip key={it.id} item={it} onOpen={(t) => setTarget(t)} match={match(it)} />
-                ))}
+                {/* No hover preview inside the list: it would replace the list itself. */}
+                <AgendaHoverContext.Provider value={null}>
+                  {target.group.map((it) => (
+                    <AgendaChip key={it.id} item={it} onOpen={(t) => setTarget(t)} match={match(it)} />
+                  ))}
+                </AgendaHoverContext.Provider>
               </div>
             )}
           </div>
@@ -355,6 +408,7 @@ export function AgendaPage() {
       <EventEditorHost />
       <DragGhost ghost={ghost} refused={refused} />
     </div>
+    </AgendaHoverContext.Provider>
     </AgendaDndContext.Provider>
   );
 }

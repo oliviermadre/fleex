@@ -117,6 +117,46 @@ describe('<AgendaPage/>', () => {
     expect(await screen.findByText('task view')).toBeTruthy();
   });
 
+  it('items behave like the Timeline annotations: hover previews the card, a click pins it, a second click / Escape hides it', async () => {
+    renderPage();
+    const chip = () => document.querySelector('[data-agenda-item="workflow.run:r1"]') as HTMLElement;
+    await waitFor(() => { if (!chip()) throw new Error('not yet'); });
+    const card = () => screen.queryByRole('button', { name: 'Open ticket' });
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    // Hover shows it, leaving hides it on its own.
+    fireEvent.mouseEnter(chip());
+    await screen.findByRole('button', { name: 'Open ticket' });
+    fireEvent.mouseLeave(chip());
+    await waitFor(() => expect(card()).toBeNull());
+
+    // The cursor can travel into the card without it closing.
+    fireEvent.mouseEnter(chip());
+    await screen.findByRole('button', { name: 'Open ticket' });
+    fireEvent.mouseLeave(chip());
+    fireEvent.mouseEnter(screen.getByRole('dialog'));
+    await wait(300);
+    expect(card()).not.toBeNull();
+    fireEvent.mouseLeave(screen.getByRole('dialog'));
+    await waitFor(() => expect(card()).toBeNull());
+
+    // A click pins it: leaving no longer hides it…
+    fireEvent.mouseEnter(chip());
+    fireEvent.click(chip());
+    fireEvent.mouseLeave(chip());
+    await wait(300);
+    expect(card()).not.toBeNull();
+    // …a second click on the item does.
+    fireEvent.click(chip());
+    await waitFor(() => expect(card()).toBeNull());
+
+    // Escape hides a pinned card too.
+    fireEvent.click(chip());
+    await screen.findByRole('button', { name: 'Open ticket' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(card()).toBeNull());
+  });
+
   it('a click beside an open popover only closes it — it must not chain into the "new event" editor', async () => {
     renderPage();
     const chip = await waitFor(() => {
