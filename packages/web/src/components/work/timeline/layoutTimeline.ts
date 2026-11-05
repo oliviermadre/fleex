@@ -93,6 +93,10 @@ export type TimelineFilters = Record<TimelineFilterKey, boolean>;
 
 /** Whether the filters let an event through. The spine is never filterable. */
 export function isVisible(e: TimelineEvent, f: TimelineFilters): boolean {
+  // « Compacter les échanges »: the folded comments / deliverables live in their
+  // capsule; the not-yet-started mentions only exist as capsules.
+  if (e.absorbedBy && f.exchanges) return false;
+  if (e.compactOnly && !f.exchanges) return false;
   switch (e.kind) {
     case 'status':
     case 'priority':

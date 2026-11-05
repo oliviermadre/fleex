@@ -40,7 +40,8 @@ export type DraftType = TicketType;
 /** The `viewDrafts` key of « All tasks » (no saved view active). */
 export const ALL_TASKS_VIEW = '__all__';
 /** Event categories the Timeline can hide (the spine — runs, steps — never is). */
-export type TimelineFilterKey = 'status' | 'cli' | 'pr' | 'deliverables' | 'comments' | 'annotations' | 'todos';
+/** `exchanges` is a display setting (« Compacter les échanges »), not a category to hide. */
+export type TimelineFilterKey = 'status' | 'cli' | 'pr' | 'deliverables' | 'comments' | 'annotations' | 'todos' | 'exchanges';
 export type TimelineFilters = Record<TimelineFilterKey, boolean>;
 
 /**
@@ -316,7 +317,7 @@ const clampTimelineHeight = (h: number) =>
   Math.min(TIMELINE_MAX_HEIGHT, Math.max(TIMELINE_MIN_HEIGHT, Math.round(h)));
 
 const DEFAULT_TIMELINE_FILTERS: TimelineFilters = {
-  status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true,
+  status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true, exchanges: true,
 };
 
 type ModeFlags = Pick<WorkState, 'shellMode' | 'codeMode' | 'workflowMode'>;

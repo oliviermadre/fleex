@@ -342,7 +342,7 @@ describe('workStore — one bottom panel at a time', () => {
     const st = fresh.getState();
     expect([st.shellOpen, st.timelineOpen]).toEqual([true, false]);
     expect(st.timelineHeight).toBe(160);
-    expect(st.timelineFilters).toEqual({ status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true });
+    expect(st.timelineFilters).toEqual({ status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true, exchanges: true });
   });
 });
 

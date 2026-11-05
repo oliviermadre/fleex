@@ -7,7 +7,7 @@ import type { TimelineFilterKey } from '../../../stores/workStore';
 
 afterEach(cleanup);
 
-const ALL: TimelineFilters = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true };
+const ALL: TimelineFilters = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true, exchanges: false };
 
 /** Wires the menu to real state, like the store does, to observe what a user sees. */
 function Harness({ initial, spy }: { initial: TimelineFilters; spy: (k: TimelineFilterKey) => void }) {
@@ -47,7 +47,8 @@ describe('TimelineFilterMenu', () => {
   it('lists the 7 categories in order (Todo after Annotations), toggles immediately and stays open', () => {
     const { button, spy } = setup();
     fireEvent.click(button);
-    const boxes = screen.getAllByRole('checkbox');
+    // The categories come first; « Compacter les échanges » is a display setting below them.
+    const boxes = screen.getAllByRole('checkbox').slice(0, 7);
     expect(boxes.map((b) => b.parentElement!.textContent)).toEqual(['Statuts', 'CLI', 'PR', 'Livrables', 'Commentaires', 'Annotations', 'Todo']);
     expect(boxes.every((b) => (b as HTMLInputElement).checked)).toBe(true);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Commentaires' }));
@@ -66,6 +67,21 @@ describe('TimelineFilterMenu', () => {
     fireEvent.click(second.button);
     fireEvent.click(screen.getByRole('button', { name: 'Tout afficher' }));
     expect(second.spy.mock.calls.map((c) => c[0])).toEqual(['cli', 'pr']);
+    expect(screen.queryByTestId('timeline-filter-badge')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Tout afficher' })).toBeNull();
+  });
+
+  // A display setting, not a hidden category: switching to the detailed view must not
+  // light the badge up, nor be undone by « Tout afficher ».
+  it('offers « Compacter les échanges » in an « Affichage » section, out of the badge', () => {
+    const { button, spy } = setup({ ...ALL, exchanges: true });
+    fireEvent.click(button);
+    expect(screen.getByText('Affichage')).toBeTruthy();
+    const box = screen.getByRole('checkbox', { name: 'Compacter les échanges' }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    expect(spy).toHaveBeenCalledWith('exchanges');
+    expect(box.checked).toBe(false);
     expect(screen.queryByTestId('timeline-filter-badge')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tout afficher' })).toBeNull();
   });

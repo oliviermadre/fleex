@@ -194,3 +194,32 @@ export function emptySources(): TimelineSources {
     runs: [], prs: [], prDates: {}, sessions: {}, names: { personas: {}, panels: {}, skills: {} },
   };
 }
+
+/**
+ * A ticket like #765: `n` back-to-back user ⇄ agent exchanges (a mention, its
+ * run, an agent reply and a deliverable each), 20 min apart from 9:00 — the
+ * pattern « Compacter les échanges » folds into one capsule each.
+ */
+export function exchangesTicket(n: number): TimelineSources {
+  const src = emptySources();
+  const comments: TicketComment[] = [];
+  const mentions: TicketMention[] = [];
+  const executions: AgentExecution[] = [];
+  const deliverables: TicketDeliverable[] = [];
+  src.ticket = { ...src.ticket, createdAt: at(8, 50, 28), statusChangedAt: at(8, 50, 28), updatedAt: at(8, 50, 28) };
+  src.names.personas = { 'p-b': 'Builder', builder: 'Builder' };
+  for (let i = 0; i < n; i++) {
+    const t = (min: number) => at(9 + Math.floor((i * 20 + min) / 60), (i * 20 + min) % 60, 28);
+    comments.push(
+      comment({ id: `ask-${i}`, body: `@agent:builder étape ${i}`, createdAt: t(0) }),
+      comment({ id: `reply-${i}`, authorType: 'agent', authorName: 'Builder', body: `Fait ${i}`, createdAt: t(6) }),
+    );
+    mentions.push(mention({ id: `m-${i}`, commentId: `ask-${i}`, targetAgent: 'builder', createdAt: t(0) }));
+    executions.push(execution({
+      id: `x-${i}`, personaId: 'p-b', mentionId: `m-${i}`, startedAt: t(1), completedAt: t(6),
+      commentId: `reply-${i}`, deliverableId: `d-${i}`,
+    }));
+    deliverables.push(deliverable({ id: `d-${i}`, mentionId: `m-${i}`, type: 'code', title: `Patch ${i}`, createdAt: t(5) }));
+  }
+  return { ...src, comments, mentions, executions, deliverables };
+}

@@ -5,7 +5,7 @@
  */
 import { cn } from '../../../lib/cn';
 import { tint } from '../../../lib/tints';
-import type { TimelineEvent, TooltipContent } from './buildTimeline';
+import type { TimelineAction, TimelineEvent, TooltipContent } from './buildTimeline';
 import { GlyphIcon, glyphHue } from './TimelineGlyph';
 import { PrIcon } from '../queue/QueuePrGlyph';
 import { getPrBadgeClasses } from '../../../lib/prBadgeStyle';
@@ -22,8 +22,20 @@ function Chip({ chip }: { chip: NonNullable<TooltipContent['chip']> }) {
   );
 }
 
-export function TimelineTooltip({ event }: { event: TimelineEvent }) {
-  const t = event.tooltip;
+/**
+ * `content` overrides the event's own tooltip (an exchange capsule shows its
+ * exchange card); `onAction` makes its `links` clickable.
+ */
+export function TimelineTooltip({
+  event,
+  content,
+  onAction,
+}: {
+  event: TimelineEvent;
+  content?: TooltipContent;
+  onAction?: (action: TimelineAction, event: TimelineEvent) => void;
+}) {
+  const t = content ?? event.tooltip;
   const g = event.glyph;
   return (
     <div className="w-[300px] max-w-[80vw] space-y-2 p-0.5 text-[12px] font-normal">
@@ -55,6 +67,20 @@ export function TimelineTooltip({ event }: { event: TimelineEvent }) {
             </div>
           ))}
         </dl>
+      )}
+      {t.links && t.links.length > 0 && onAction && (
+        <div className="flex flex-col items-start gap-0.5 border-t border-[var(--theme-border)] pt-1.5">
+          {t.links.map((l, i) => (
+            <button
+              key={`${l.label}-${i}`}
+              type="button"
+              className="max-w-full truncate rounded px-1 text-left text-[11px] text-[var(--theme-accent)] hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--theme-accent)]"
+              onClick={() => onAction(l.action, event)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
       )}
       {t.footer && (
         <div className="border-t border-[var(--theme-border)] pt-1.5 text-[11px] text-[var(--theme-text-muted)]">{t.footer}</div>

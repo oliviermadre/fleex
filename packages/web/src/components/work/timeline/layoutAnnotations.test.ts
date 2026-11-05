@@ -25,7 +25,7 @@ import {
 } from './layoutAnnotations';
 import { NOW, at, fixture591 } from './timeline.fixture';
 
-const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true };
+const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true, exchanges: false };
 
 function annotation(id: string, iso: string, over: Partial<TimelineAnnotation> = {}): TimelineAnnotation {
   return {

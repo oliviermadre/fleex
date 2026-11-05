@@ -94,6 +94,28 @@ export interface TooltipContent {
   chip: { text: string; tone: NoteTone | 'running' | 'muted' } | null;
   rows: [string, string][];
   footer: string | null;
+  /** Action links (exchange capsules: message, reply, each deliverable, logs). */
+  links?: { label: string; action: TimelineAction }[];
+}
+
+/**
+ * One user ⇄ agent exchange (a persona / skill / panel run outside workflows),
+ * folded into its spine node when « Compacter les échanges » is on.
+ */
+export interface TimelineExchange {
+  /** The user comment that mentioned the agent (R1), when absorbed. */
+  triggerCommentId: string | null;
+  /** User answers to a waiting_for_info question that this round absorbed (R2). */
+  answerCommentIds: string[];
+  /** The agent comment this round posted (last one). `waiting`: it asks a question. */
+  reply: { commentId: string; excerpt: string; waiting: boolean } | null;
+  /** Deliverables this round produced, oldest first. */
+  deliverables: { id: string; type: string; title: string; unread: boolean }[];
+  /** The mention waits for the user's answer (last round of a waiting_for_info mention). */
+  waiting: boolean;
+  /** Tooltip and aria-label of the capsule (the node's own ones stay the detailed ones). */
+  tooltip: TooltipContent;
+  ariaLabel: string;
 }
 
 export interface TimelineEvent {
@@ -123,6 +145,12 @@ export interface TimelineEvent {
   status?: TicketStatus;
   /** Status events only: the date is a guess (untracked move). */
   approximate?: boolean;
+  /** Comments / deliverables folded into an exchange node: that node's id. */
+  absorbedBy?: string;
+  /** Set on an exchange node (persona / skill / panel run outside workflows). */
+  exchange?: TimelineExchange;
+  /** Queued / failed-before-start mention (R4): drawn in compact mode only. */
+  compactOnly?: boolean;
 }
 
 export interface TimelineZone {
@@ -288,6 +316,9 @@ const STEP_RUN_STATUS_FR: Record<string, string> = {
   running: 'en cours', completed: 'ok', failed: 'échec', needs_review: 'à valider',
   awaiting_routing: 'routage à choisir', cancelled: 'annulé',
 };
+
+/** R2: a user answer is folded into the next round only if the agent restarts within this window. */
+export const EXCHANGE_ANSWER_WINDOW_MS = 5 * 60_000;
 
 // Greedy on the workflow name: "workflow:Feature → PR → Valider la spec" names step "Valider la spec".
 const GATE_DECISION_AUTHOR = /^workflow:(.+)\s*→\s*(.+)$/;
@@ -830,6 +861,8 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
   const mentionById = new Map(src.mentions.map((m) => [m.id, m]));
   const commentById = new Map(src.comments.map((c) => [c.id, c]));
   const standalone = src.executions.filter((e) => !eventIdByExecution.has(e.id));
+  /** Exchange nodes (persona / skill / panel runs outside workflows) → what ran. */
+  const exchangeRuns = new Map<string, { kind: TimelinePrimitive; mention: TicketMention | null; execs: AgentExecution[] }>();
   const panelGroups = new Map<string, AgentExecution[]>();
   const transcripts: AgentExecution[] = [];
 
@@ -882,6 +915,7 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
       ariaLabel: `Exécution ${label}, ${hhmm(at)}`,
     });
     eventIdByExecution.set(e.id, id);
+    if (kind !== 'workflow') exchangeRuns.set(id, { kind, mention, execs: [e] });
   }
 
   // Panels: every member runs its own execution under one mention → ONE node.
@@ -921,6 +955,7 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
       ariaLabel: `Panel ${panelName}, ${hhmm(at)}`,
     });
     for (const e of sorted) eventIdByExecution.set(e.id, id);
+    exchangeRuns.set(id, { kind: 'panel', mention, execs: sorted });
   }
 
   // ── CLI sessions (top lane) ──
@@ -1103,6 +1138,8 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
     }
   }
 
+  foldExchanges(src, drafts, exchangeRuns, mentionById, commentById, clamp, now);
+
   // ── Phase metrics: duration and human interventions per status zone ──
   // An intervention is a human action that unblocks or steers the work:
   //  - a user comment (mentions and answers to a waiting_for_info included — the
@@ -1170,14 +1207,14 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
   let prevSpineAt: number | null = null;
   const events: TimelineEvent[] = drafts.map((d) => {
     let clock = hhmm(d.at);
-    if (d.lane === 'spine') {
+    if (d.lane === 'spine' && !d.compactOnly) {
       if (prevSpineAt != null && !sameLocalDay(prevSpineAt, d.at)) clock = ddmmhhmm(d.at);
       prevSpineAt = d.at;
     }
     return { ...d, clock };
   });
 
-  const agentic = events.filter((e) => e.kind === 'step' || e.kind === 'run');
+  const agentic = events.filter((e) => (e.kind === 'step' || e.kind === 'run') && !e.compactOnly);
   let activeSpan: TimelineModel['activeSpan'] = null;
   if (agentic.length > 0) {
     const live = agentic.some((e) => e.state === 'running' || e.state === 'pending');
@@ -1191,6 +1228,209 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
   const summary = summarizeZones(zones, createdAt, now);
 
   return { events, zones, summary, pendingFork, undatedPrs, activeSpan, now };
+}
+
+// ── Exchanges ─────────────────────────────────────────────────────────────────
+
+const PRIMITIVE_FR: Record<TimelinePrimitive, string> = { persona: 'Persona', skill: 'Skill', panel: 'Panel', workflow: 'Workflow' };
+
+const isCompactable = (m: TicketMention) => m.targetType === 'agent' || m.targetType === 'skill' || m.targetType === 'panel';
+
+/**
+ * Fold every user ⇄ agent exchange into its spine node (spec « échanges
+ * compactés », rules R1–R4). Only ADDS fields: `exchange` on the run nodes,
+ * `absorbedBy` on the comments / deliverables they swallow, and compact-only
+ * nodes for mentions that have not started. Whether they are drawn is the
+ * renderer's call (`isVisible`), so the detailed frieze stays byte-identical.
+ */
+function foldExchanges(
+  src: TimelineSources,
+  drafts: Draft[],
+  exchangeRuns: Map<string, { kind: TimelinePrimitive; mention: TicketMention | null; execs: AgentExecution[] }>,
+  mentionById: Map<string, TicketMention>,
+  commentById: Map<string, TicketComment>,
+  clamp: (t: number) => number,
+  now: number,
+) {
+  const draftById = new Map(drafts.map((d) => [d.id, d]));
+  const startOf = (e: AgentExecution) => ms(e.startedAt) ?? now;
+  const mentionsByComment = new Map<string, TicketMention[]>();
+  for (const m of src.mentions) {
+    const list = mentionsByComment.get(m.commentId);
+    if (list) list.push(m);
+    else mentionsByComment.set(m.commentId, [m]);
+  }
+
+  const state = new Map<string, { trigger: string | null; answers: string[]; outputs: Draft[] }>();
+  for (const id of exchangeRuns.keys()) state.set(id, { trigger: null, answers: [], outputs: [] });
+
+  // Rounds of a real mention, oldest first (a waiting_for_info mention re-runs under the same id).
+  const rounds = new Map<string, string[]>();
+  for (const [id, r] of exchangeRuns) {
+    if (!r.mention) continue;
+    const list = rounds.get(r.mention.id) ?? [];
+    list.push(id);
+    rounds.set(r.mention.id, list);
+  }
+  const firstStart = (id: string) => startOf(exchangeRuns.get(id)!.execs[0]!);
+  for (const list of rounds.values()) list.sort((a, b) => firstStart(a) - firstStart(b));
+
+  // R4: a compactable mention that has not started (or failed before starting).
+  const queued = new Map<string, string>();
+  const withExec = new Set(src.executions.map((e) => e.mentionId));
+  for (const m of src.mentions) {
+    if (!isCompactable(m) || withExec.has(m.id)) continue;
+    const st: NodeState | null = m.status === 'pending' || m.status === 'acknowledged' ? 'pending' : m.status === 'failed' ? 'ko' : null;
+    if (!st) continue;
+    const trigger = commentById.get(m.commentId);
+    const at = clamp(ms(trigger?.createdAt ?? m.createdAt) ?? now);
+    const kind: TimelinePrimitive = m.targetType === 'skill' ? 'skill' : m.targetType === 'panel' ? 'panel' : 'persona';
+    const label = kind === 'persona'
+      ? personaLabel(src.names, m.targetAgent) ?? `@${m.targetAgent}`
+      : kind === 'skill' ? src.names.skills[m.targetAgent] ?? m.targetAgent : `Panel · ${src.names.panels[m.targetAgent]?.name ?? m.targetAgent}`;
+    const id = `run:pending:${m.id}`;
+    const chipText = st === 'ko' ? 'échec' : 'en file';
+    const d: Draft = {
+      id, kind: 'run', at, lane: 'spine', parentId: null,
+      glyph: { type: 'primitive', kind }, label, sub: null, state: st, attempt: 1, note: null, gate: false,
+      tooltip: { ...blankTooltip(label, `${PRIMITIVE_FR[kind]} · mention`), chip: chipFor(st, chipText) },
+      action: null,
+      ariaLabel: `Échange avec ${label}, ${hhmm(at)}, ${chipText}`,
+      compactOnly: true,
+    };
+    drafts.push(d);
+    draftById.set(id, d);
+    exchangeRuns.set(id, { kind, mention: m, execs: [] });
+    state.set(id, { trigger: null, answers: [], outputs: [] });
+    rounds.set(m.id, [id]);
+    queued.set(id, chipText);
+  }
+
+  // R1: the mentioning user comment → the first round of each of its mentions.
+  // Hidden only when EVERY mention of the comment is folded into a node.
+  for (const [mentionId, list] of rounds) {
+    const m = mentionById.get(mentionId)!;
+    const c = commentById.get(m.commentId);
+    if (!c || c.authorType !== 'user') continue;
+    state.get(list[0]!)!.trigger = c.id;
+    const all = mentionsByComment.get(c.id) ?? [];
+    const folded = all.every((x) => rounds.has(x.id));
+    const d = draftById.get(`comment:${c.id}`);
+    if (folded && d && !d.absorbedBy) d.absorbedBy = list[0]!;
+  }
+
+  // R2: the user's answer to a question → the round it woke up.
+  const userComments = src.comments
+    .filter((c) => c.authorType === 'user')
+    .map((c) => ({ c, at: ms(c.createdAt) ?? now }))
+    .sort((a, b) => a.at - b.at);
+  for (const list of rounds.values()) {
+    for (let k = 1; k < list.length; k++) {
+      const prev = exchangeRuns.get(list[k - 1]!)!.execs;
+      const cur = exchangeRuns.get(list[k]!)!.execs[0];
+      if (!cur || prev.length === 0) continue;
+      const prevEnd = Math.max(...prev.map((e) => ms(e.completedAt) ?? startOf(e)));
+      const curStart = startOf(cur);
+      // The latest user comment before the restart: no other one can sit in between.
+      let last: (typeof userComments)[number] | null = null;
+      for (const u of userComments) if (u.at <= curStart) last = u;
+      if (!last || last.at < prevEnd || curStart - last.at > EXCHANGE_ANSWER_WINDOW_MS) continue;
+      if (mentionsByComment.has(last.c.id)) continue;
+      const d = draftById.get(`comment:${last.c.id}`);
+      if (!d || d.absorbedBy) continue;
+      d.absorbedBy = list[k]!;
+      state.get(list[k]!)!.answers.push(last.c.id);
+    }
+  }
+
+  // R3: the outputs attached to the node (the deliverable's own run first, else its parent).
+  const nodeOfExec = new Map<string, string>();
+  for (const [id, r] of exchangeRuns) for (const e of r.execs) nodeOfExec.set(e.id, id);
+  for (const d of drafts) {
+    if (d.absorbedBy) continue;
+    let target: string | null = null;
+    if (d.kind === 'deliverable') {
+      const delivId = d.id.slice('deliv:'.length);
+      const own = src.executions.find((e) => e.deliverableId === delivId);
+      target = (own && nodeOfExec.get(own.id)) ?? d.parentId;
+    } else if (d.kind === 'comment' && d.lane === 'bottom') {
+      target = d.parentId;
+    }
+    if (!target || !state.has(target)) continue;
+    d.absorbedBy = target;
+    state.get(target)!.outputs.push(d);
+  }
+
+  // Fill each node.
+  for (const [id, r] of exchangeRuns) {
+    const node = draftById.get(id)!;
+    const st = state.get(id)!;
+    const outputs = [...st.outputs].sort((a, b) => a.at - b.at);
+    const replyDraft = [...outputs].reverse().find((o) => o.kind === 'comment');
+    const list = r.mention ? rounds.get(r.mention.id) : undefined;
+    const waiting = !!r.mention && r.mention.status === 'waiting_for_info' && list?.[list.length - 1] === id;
+    const replyComment = replyDraft ? commentById.get(replyDraft.id.slice('comment:'.length)) : undefined;
+    const reply = replyComment ? { commentId: replyComment.id, excerpt: excerpt(replyComment.body, 80), waiting } : null;
+    const deliverables = outputs
+      .filter((o) => o.kind === 'deliverable' && o.glyph.type === 'deliverable')
+      .map((o) => ({
+        id: o.id.slice('deliv:'.length),
+        type: o.glyph.type === 'deliverable' ? o.glyph.deliverableType : '',
+        title: o.label,
+        unread: o.glyph.type === 'deliverable' && o.glyph.unread,
+      }));
+
+    const asked = st.trigger ? commentById.get(st.trigger) : undefined;
+    const answer = st.answers.length ? commentById.get(st.answers[st.answers.length - 1]!) : undefined;
+    const row = (k: string) => node.tooltip.rows.find((x) => x[0] === k)?.[1];
+    const rows: [string, string][] = [];
+    if (answer) rows.push(['Ta réponse', excerpt(answer.body, 80)]);
+    else if (asked) rows.push(['Message', excerpt(asked.body, 80)]);
+    if (row('Membres')) rows.push(['Membres', row('Membres')!]);
+    if (reply) rows.push([waiting ? 'Question' : 'Réponse', reply.excerpt]);
+    if (deliverables.length) rows.push([deliverables.length > 1 ? 'Livrables' : 'Livrable', deliverables.map((x) => x.title).join(' · ')]);
+    rows.push(['Quand', whenLabel(node.at, now)]);
+    const askedAt = ms((answer ?? asked)?.createdAt);
+    const lastOut = outputs[outputs.length - 1];
+    if (askedAt != null && lastOut) {
+      const delay = durationLabel(new Date(askedAt).toISOString(), new Date(lastOut.at).toISOString());
+      if (delay) rows.push(['Délai', delay]);
+    }
+    if (row('Durée')) rows.push(['Durée', row('Durée')!]);
+    if (row('Coût')) rows.push(['Coût', row('Coût')!]);
+
+    const links: { label: string; action: TimelineAction }[] = [];
+    if (asked) links.push({ label: 'Voir ton message', action: { type: 'comment', commentId: asked.id } });
+    for (const a of st.answers) links.push({ label: 'Voir ta réponse', action: { type: 'comment', commentId: a } });
+    if (reply) links.push({ label: waiting ? 'Voir la question' : 'Voir la réponse', action: { type: 'comment', commentId: reply.commentId } });
+    for (const x of deliverables) links.push({ label: `Ouvrir « ${x.title} »`, action: { type: 'deliverable', deliverableId: x.id } });
+    if (node.action) links.push({ label: "Logs d'exécution", action: node.action });
+
+    const chip: TooltipContent['chip'] = queued.has(id)
+      ? node.tooltip.chip
+      : waiting ? { text: 'attend ta réponse', tone: 'warn' } : node.tooltip.chip;
+    const parts = [reply && (waiting ? 'question en attente' : 'réponse'), deliverables.length && `${deliverables.length} livrable${deliverables.length > 1 ? 's' : ''}`]
+      .filter(Boolean)
+      .join(' et ');
+    node.exchange = {
+      triggerCommentId: st.trigger,
+      answerCommentIds: st.answers,
+      reply,
+      deliverables,
+      waiting,
+      tooltip: {
+        overline: `Échange · ${PRIMITIVE_FR[r.kind]}`,
+        title: node.tooltip.title,
+        chip,
+        rows,
+        footer: null,
+        links,
+      },
+      ariaLabel: queued.has(id)
+        ? node.ariaLabel
+        : `Échange avec ${node.label.split(' · ')[0]}, ${hhmm(node.at)}, ${parts || 'sans sortie'}${waiting ? ', attend ta réponse' : ''}`,
+    };
+  }
 }
 
 /** The pending decision of an active run, if any (logic of gateCards.ts). */

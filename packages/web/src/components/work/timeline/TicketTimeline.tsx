@@ -30,7 +30,7 @@ import { TicketTypeIconSvg } from '../../tickets/TicketTypeIconSvg';
 import { TimelineZoomControl } from './TimelineZoomControl';
 import type { TimelineAction, TimelineEvent, TimelineModel } from './buildTimeline';
 import { GEOMETRY, layoutTimeline, type TimelineFilters } from './layoutTimeline';
-import { LanePicto, SpineNode } from './TimelineNode';
+import { LanePicto, SpineNode, type CapsuleSegments } from './TimelineNode';
 import { TimelineOutOfLifeBand, TimelineZoneBands, TimelineZoneMetrics, TimelineZonePills } from './TimelineZones';
 import { TimelineFilterMenu } from './TimelineFilterMenu';
 import { TimelineTimeSummary } from './TimelineTimeSummary';
@@ -234,6 +234,12 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     annotations!.onCreateAt(hit.at, { left: r.left + hit.x - 1, top: r.top + ghostTop(bandH), width: 2, height: 22 });
   };
 
+  // « Compacter les échanges »: exchange nodes become capsules, whose segments follow the filters.
+  const segments = useMemo<CapsuleSegments | null>(
+    () => (filters.exchanges ? { reply: filters.comments, deliverables: filters.deliverables } : null),
+    [filters.exchanges, filters.comments, filters.deliverables],
+  );
+
   const eventsById = useMemo(() => new Map(model?.events.map((e) => [e.id, e]) ?? []), [model]);
   const fork = model?.pendingFork && layout?.byId.get(model.pendingFork.anchorId) ? model.pendingFork : null;
   const forkFrom = fork ? layout!.byId.get(fork.anchorId)!.x : 0;
@@ -384,7 +390,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
 
             {layout.items.map((it) =>
               it.event.lane === 'spine' ? (
-                <SpineNode key={it.event.id} item={it} onAction={onAction} />
+                <SpineNode key={it.event.id} item={it} onAction={onAction} segments={segments} />
               ) : it.event.lane === 'status' ? null : (
                 <LanePicto key={it.event.id} item={it} onAction={onAction} />
               ),
