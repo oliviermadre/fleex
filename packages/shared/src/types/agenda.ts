@@ -78,7 +78,7 @@ export interface AgendaItem {
   /** W1 only: the step running or waiting right now. */
   currentStep?: string | null;
   segments?: AgendaWaitSegment[];
-  /** R1: 'schedule' / 'manual' / … — the run's `triggeredFrom`. */
+  /** R1: the run's `triggeredFrom` — 'schedule' for the scheduler, anything else is a manual launch. */
   triggeredFrom?: string | null;
   /** R2: the cron expression and its time zone. */
   cron?: string | null;

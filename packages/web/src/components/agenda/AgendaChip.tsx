@@ -16,7 +16,7 @@ function Badges({ item }: { item: AgendaItem }) {
       {(item.type === 'routine.run' || item.type === 'workflow.run') && (
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', item.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(item.status))} />
       )}
-      {item.type === 'routine.run' && item.triggeredFrom === 'manual' && <span title="Launched manually">✋</span>}
+      {item.type === 'routine.run' && item.triggeredFrom && item.triggeredFrom !== 'schedule' && <span title="Launched manually">✋</span>}
     </>
   );
 }

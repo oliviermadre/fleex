@@ -95,8 +95,8 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
         </div>
       )}
 
-      {item.type === 'routine.run' && item.triggeredFrom && item.triggeredFrom !== 'schedule' && item.triggeredFrom !== 'cron' && (
-        <div className="text-[var(--theme-text-muted)]">✋ launched {item.triggeredFrom}</div>
+      {item.type === 'routine.run' && item.triggeredFrom && item.triggeredFrom !== 'schedule' && (
+        <div className="text-[var(--theme-text-muted)]">✋ launched manually</div>
       )}
       {item.type === 'routine.upcoming' && item.cron && (
         <div className="text-[var(--theme-text-muted)]">cron <code>{item.cron}</code>{item.timezone ? ` · ${item.timezone}` : ''}</div>

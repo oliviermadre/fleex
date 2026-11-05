@@ -42,7 +42,8 @@ export const useAgendaStore = create<AgendaStore>((set, get) => ({
     if (!get().prefsLoaded) {
       try {
         const prefs = await api.fetchAgendaPrefs();
-        set({ prefs: prefs ?? DEFAULT_AGENDA_PREFS });
+        // Merge over the defaults: a field a later version added is never undefined.
+        set({ prefs: prefs ? { ...DEFAULT_AGENDA_PREFS, ...prefs, filters: { ...DEFAULT_AGENDA_PREFS.filters, ...prefs.filters } } : DEFAULT_AGENDA_PREFS });
       } catch {
         toast.error("Couldn't load your agenda preferences — showing the defaults");
       }

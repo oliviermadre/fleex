@@ -107,7 +107,7 @@ export function AgendaPage() {
   const days = prefs.view === 'day' ? [anchor] : Array.from({ length: 7 }, (_, i) => addDays(from, i));
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--theme-bg-base)]">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
       <div className="flex h-13 shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2">
         <Button size="sm" onClick={goToday}>Today</Button>
         <Button size="sm" variant="ghost" onClick={() => go(-1)} title="Previous (←)">‹</Button>
