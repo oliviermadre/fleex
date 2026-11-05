@@ -353,6 +353,12 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
               {item.ticket && item.type !== 'pr.merged' ? <span className="mr-1 tabular-nums text-[var(--theme-text-muted)]">#{item.ticket.displayId}</span> : null}
               {item.title}
             </div>
+            {item.type === 'pr.merged' && item.ticket && (
+              <div className="truncate text-[var(--theme-text-secondary)]" data-testid="agenda-pr-ticket" title={`#${item.ticket.displayId} ${item.ticket.title}`}>
+                <span className="mr-1 font-semibold tabular-nums text-[var(--theme-text-primary)]">#{item.ticket.displayId}</span>
+                {item.ticket.title}
+              </div>
+            )}
             <div className="text-[var(--theme-text-muted)]">
               {label.label}
               {item.routine ? ` · ${item.routine.name}` : ''}
@@ -380,7 +386,7 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
         {item.type === 'ticket.due' && item.overdue && (
           <div className="text-[var(--tint-red-text)]">Overdue: the ticket is still {item.ticket?.status}</div>
         )}
-        {item.type === 'pr.merged' && item.prRef && (
+        {item.type === 'pr.merged' && item.prRef && item.prRef !== item.title && (
           <div className="text-[var(--theme-text-muted)]">{item.prRef}</div>
         )}
         {isRun && <RunMeta item={item} now={now} />}

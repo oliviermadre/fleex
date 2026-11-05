@@ -137,6 +137,17 @@ function Badges({ item }: { item: AgendaItem }) {
   );
 }
 
+/** "odys-travel/agentic-dmc-2#77" → "agentic-dmc-2#77". */
+export function shortPrRef(ref: string): string {
+  return ref.split('/').pop() ?? ref;
+}
+
+/** Hover title of a chip: a merged PR also names its ticket. */
+export function chipHoverTitle(item: AgendaItem): string {
+  if (item.type === 'pr.merged' && item.ticket) return `#${item.ticket.displayId} ${item.ticket.title} · ${item.prRef ?? item.title}`;
+  return item.title;
+}
+
 /** The one-line name: workflow runs lead with the ticket number. */
 export function ChipName({ item }: { item: AgendaItem }) {
   if (item.type === 'workflow.run' && item.ticket) {
@@ -144,6 +155,17 @@ export function ChipName({ item }: { item: AgendaItem }) {
       <>
         <span className="shrink-0 font-bold tabular-nums">#{item.ticket.displayId}</span>
         <span className="truncate font-semibold">{item.ticket.title}</span>
+      </>
+    );
+  }
+  if (item.type === 'pr.merged' && item.ticket) {
+    // A merged PR leads with the ticket it belongs to; the repo#number follows, muted.
+    return (
+      <>
+        <LabelIcon type={item.type} overdue={item.overdue} item={item} />
+        <span className="shrink-0 font-bold tabular-nums">#{item.ticket.displayId}</span>
+        <span className="truncate">{item.ticket.title}</span>
+        <span className="shrink-0 text-[10px] text-[var(--theme-text-muted)]">{shortPrRef(item.prRef ?? item.title)}</span>
       </>
     );
   }
@@ -212,7 +234,7 @@ export function AgendaChip({ item, onOpen, match, time = true, children }: {
       className={cn('relative flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125')}
       data-agenda-match={match}
       style={chipStyle(item, colors, match)}
-      title={item.title}
+      title={chipHoverTitle(item)}
     >
       {time && item.shape !== 'allDay' && <span className="shrink-0 text-[10px] text-[var(--theme-text-muted)]">{fmtTime(item.start)}</span>}
       <ChipName item={item} />

@@ -163,6 +163,20 @@ describe('<AgendaItemDetails/>', () => {
     expect(footer.querySelectorAll('[class*="bg-[var(--theme-accent)]"]')).toHaveLength(1);
   });
 
+  it('a merged PR names the ticket it belongs to in the header, not only the repo#number', async () => {
+    renderCard({
+      id: 'pr.merged:2', type: 'pr.merged', shape: 'point', start: NOW.toISOString(), title: 'odys-travel/agentic-dmc-2#77', prRef: 'odys-travel/agentic-dmc-2#77',
+      ticket: { id: 'tk-1', displayId: 766, title: 'Skill Discovery Call : sortie en anglais', boardId: 'b1', status: 'reviewing', tags: [], epicIds: [], repos: [] },
+    } as unknown as AgendaItem);
+    const header = screen.getByTestId('agenda-card-header');
+    const line = within(header).getByTestId('agenda-pr-ticket');
+    expect(line.textContent).toContain('#766');
+    expect(line.textContent).toContain('Skill Discovery Call : sortie en anglais');
+    // The repo#number already is the title: no duplicate line in the body.
+    expect(within(screen.getByTestId('agenda-card-body')).queryByText('odys-travel/agentic-dmc-2#77')).toBeNull();
+    await screen.findByText('Spec of the agenda');
+  });
+
   it('a Google meeting: Join Meet is the primary action, Open in Google Calendar a secondary Fleex button', () => {
     renderCard({
       id: 'external:x', type: 'external', shape: 'block', start: '2099-11-05T09:00:00Z', end: '2099-11-05T10:00:00Z', title: 'Weekly sync',
