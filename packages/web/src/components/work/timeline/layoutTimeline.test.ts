@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildTimeline } from './buildTimeline';
 import { LANE_WIDTH, MAX_STRETCH, ZOOM_LEVELS, gap, layoutTimeline, type TimelineLayout } from './layoutTimeline';
-import { NOW, at, comment, emptySources, execution, fixture591 } from './timeline.fixture';
+import { NOW, at, comment, emptySources, execution, exchangesTicket, fixture591, mention } from './timeline.fixture';
 
-const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true };
+const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true, exchanges: false };
 
 /** Every pair of pictos sharing a lane must not overlap (the point of the ticket). */
 function expectNoOverlap(l: TimelineLayout) {
@@ -82,7 +82,7 @@ describe('layoutTimeline — ticket #591 (screenshots)', () => {
 
 describe('layoutTimeline — filters', () => {
   it('hides categories but never the spine', () => {
-    const none = { status: false, cli: false, pr: false, deliverables: false, comments: false, annotations: false, todos: false };
+    const none = { status: false, cli: false, pr: false, deliverables: false, comments: false, annotations: false, todos: false, exchanges: false };
     const l = layoutTimeline(buildTimeline(fixture591(), NOW), none);
     expect(l.zones).toEqual([]);
     expect(new Set(l.items.map((i) => i.event.lane))).toEqual(new Set(['spine', 'top'])); // workflowStart stays
@@ -235,5 +235,41 @@ describe('layoutTimeline — zoom', () => {
       expectNoOverlap(l);
       expectMonotonic(l);
     }
+  });
+});
+
+describe('layoutTimeline — « Compacter les échanges »', () => {
+  const COMPACT = { ...ALL, exchanges: true };
+
+  it('places neither the folded comments nor the deliverables, and adds no width (AC10)', () => {
+    const model = buildTimeline(exchangesTicket(10), NOW);
+    const detailed = layoutTimeline(model, ALL);
+    const compact = layoutTimeline(model, COMPACT);
+    // 10 × (user comment + run + agent reply + deliverable) → 10 capsules.
+    const agentic = (l: TimelineLayout) => l.items.filter((i) => i.event.kind !== 'status' && i.event.kind !== 'created');
+    expect(agentic(detailed)).toHaveLength(40);
+    expect(agentic(compact).map((i) => i.event.id)).toEqual(Array.from({ length: 10 }, (_, i) => `run:x-${i}`));
+    expect(compact.width).toBeLessThanOrEqual(detailed.width);
+    expectNoOverlap(compact);
+  });
+
+  it('the detailed mode is the frieze of today: same placement as before the setting existed (AC6)', () => {
+    const model = buildTimeline(fixture591(), NOW);
+    const { exchanges: _ignored, ...legacy } = ALL;
+    const before = layoutTimeline(model, legacy as typeof ALL);
+    const after = layoutTimeline(model, ALL);
+    expect(after.items.map((i) => [i.event.id, i.x])).toEqual(before.items.map((i) => [i.event.id, i.x]));
+  });
+
+  it('draws a queued mention only in compact mode (AC3)', () => {
+    const src = emptySources();
+    src.comments = [comment({ id: 'c', body: '@agent:pm go', createdAt: at(9, 30) })];
+    src.mentions = [mention({ id: 'm', commentId: 'c', status: 'pending' })];
+    const model = buildTimeline(src, NOW);
+    const ids = (l: TimelineLayout) => l.items.map((i) => i.event.id);
+    expect(ids(layoutTimeline(model, ALL))).toContain('comment:c');
+    expect(ids(layoutTimeline(model, ALL))).not.toContain('run:pending:m');
+    expect(ids(layoutTimeline(model, COMPACT))).toContain('run:pending:m');
+    expect(ids(layoutTimeline(model, COMPACT))).not.toContain('comment:c');
   });
 });

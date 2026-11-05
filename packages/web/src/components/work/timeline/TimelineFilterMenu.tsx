@@ -125,6 +125,25 @@ export function TimelineFilterMenu({
                   </button>
                 </>
               )}
+              {/* Display setting, not a category: kept out of the badge and of « Tout afficher ». */}
+              <div className="mb-1 mt-2 border-t border-[var(--theme-border)] pt-1.5 text-[10px] uppercase tracking-wide text-[var(--theme-text-faint)]">
+                Affichage
+              </div>
+              <label
+                className={cn(
+                  'flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-[var(--theme-bg-hover)]',
+                  filters.exchanges ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
+                )}
+                title="Un échange (ton message → le run → sa réponse et ses livrables) = un seul nœud"
+              >
+                <input
+                  type="checkbox"
+                  className="m-0 accent-[var(--theme-accent)]"
+                  checked={!!filters.exchanges}
+                  onChange={() => onToggleFilter('exchanges')}
+                />
+                Compacter les échanges
+              </label>
             </div>
           </FloatingFocusManager>
         </FloatingPortal>

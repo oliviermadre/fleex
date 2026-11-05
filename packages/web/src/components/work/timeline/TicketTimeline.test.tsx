@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { TicketTimeline } from './TicketTimeline';
 import { buildTimeline } from './buildTimeline';
-import { NOW, activity, at, emptySources, fixture591 } from './timeline.fixture';
+import { NOW, activity, at, comment, emptySources, exchangesTicket, execution, fixture591, mention } from './timeline.fixture';
 import type { TimelineAnnotation } from '@fleex/shared';
 import type { TimelineAnnotationsProps } from './TicketTimeline';
 import { BAND, CREATE_STRIP, PILL, PILL_TOP } from './layoutAnnotations';
@@ -17,7 +17,7 @@ afterEach(cleanup);
  */
 const GLYPH = /[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
 
-const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true };
+const ALL = { status: true, cli: true, pr: true, deliverables: true, comments: true, annotations: true, todos: true, exchanges: false };
 const header = { number: 591, title: 'Importer une tâche depuis Slack', boardName: 'Fleex', status: 'doing', type: 'build' };
 
 function setup(filters = ALL) {
@@ -422,5 +422,93 @@ describe('TicketTimeline — control column', () => {
       />,
     );
     expect((screen.getByRole('button', { name: 'Étaler la frise' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+// « Compacter les échanges »: one exchange = one capsule (round + reply + deliverable segments).
+describe('TicketTimeline — exchange capsules', () => {
+  const COMPACT = { ...ALL, exchanges: true };
+
+  function renderExchanges(filters = COMPACT, src = exchangesTicket(3)) {
+    const onAction = vi.fn();
+    render(<TicketTimeline header={header} model={buildTimeline(src, NOW)} filters={filters} onToggleFilter={vi.fn()} onAction={onAction} />);
+    return { onAction };
+  }
+  const nodes = () => [...document.querySelectorAll('[data-timeline-node]')].map((n) => (n as HTMLElement).dataset.timelineNode);
+
+  it('draws one capsule per exchange and nothing in the lanes for it (AC1, AC10)', () => {
+    renderExchanges();
+    expect(nodes().filter((id) => !id!.startsWith('status:') && id !== 'created')).toEqual(['run:x-0', 'run:x-1', 'run:x-2']);
+    expect(screen.getAllByTestId('timeline-capsule-tray')).toHaveLength(3);
+    expect(screen.queryAllByTestId('timeline-connector')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Échange avec @Builder, 09:01, réponse et 1 livrable' })).toBeTruthy();
+  });
+
+  it('opens the run, the reply and the deliverable from their own segment (AC5)', () => {
+    const { onAction } = renderExchanges();
+    fireEvent.click(screen.getByRole('button', { name: 'Échange avec @Builder, 09:01, réponse et 1 livrable' }));
+    expect(onAction.mock.calls[0]![0]).toMatchObject({ type: 'execution', executionId: 'x-0' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Réponse de @Builder' })[0]!);
+    expect(onAction.mock.calls[1]![0]).toEqual({ type: 'comment', commentId: 'reply-0' });
+    fireEvent.click(screen.getByRole('button', { name: 'Livrable code : Patch 0' }));
+    expect(onAction.mock.calls[2]![0]).toEqual({ type: 'deliverable', deliverableId: 'd-0' });
+  });
+
+  it('lists the exchange in its tooltip, with a link to each piece (AC5)', async () => {
+    const { onAction } = renderExchanges();
+    fireEvent.focus(screen.getByRole('button', { name: 'Échange avec @Builder, 09:01, réponse et 1 livrable' }));
+    expect(await screen.findByText('Échange · Persona')).toBeTruthy();
+    expect(screen.getByText('étape 0')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Voir ton message' }));
+    expect(onAction.mock.calls[0]![0]).toEqual({ type: 'comment', commentId: 'ask-0' });
+    fireEvent.click(screen.getByRole('button', { name: 'Ouvrir « Patch 0 »' }));
+    expect(onAction.mock.calls[1]![0]).toEqual({ type: 'deliverable', deliverableId: 'd-0' });
+  });
+
+  it('counts several deliverables on one segment and shows the unread dot (AC2)', () => {
+    const src = exchangesTicket(1);
+    src.deliverables = [...src.deliverables, { ...src.deliverables[0]!, id: 'd-extra', title: 'Rapport', type: 'report', createdAt: at(9, 5, 28) }];
+    src.seenDeliverableIds = new Set(['d-0']);
+    renderExchanges(COMPACT, src);
+    const seg = screen.getByTestId('timeline-capsule-deliverable');
+    expect(seg.getAttribute('aria-label')).toBe('Livrable report : Rapport (2 livrables)');
+    expect(seg.textContent).toContain('2');
+    expect(within(seg).getByLabelText('non lu')).toBeTruthy();
+  });
+
+  it('turns the reply into a yellow « ? » while the agent waits for an answer (AC4)', () => {
+    const src = exchangesTicket(1);
+    src.mentions = [mention({ ...src.mentions[0]!, status: 'waiting_for_info' })];
+    renderExchanges(COMPACT, src);
+    const q = screen.getByRole('button', { name: 'Question de @Builder, attend ta réponse' });
+    expect(q.textContent).toBe('?');
+  });
+
+  it('shows « … » in the tray of a running exchange with no output yet, and a dashed queued node (AC3)', () => {
+    const src = emptySources();
+    src.comments = [comment({ id: 'a', body: '@agent:pm go', createdAt: at(9, 30) }), comment({ id: 'b', body: '@agent:pm next', createdAt: at(9, 40) })];
+    src.mentions = [mention({ id: 'ma', commentId: 'a', status: 'acknowledged' }), mention({ id: 'mb', commentId: 'b', status: 'pending' })];
+    src.executions = [execution({ id: 'xa', mentionId: 'ma', startedAt: at(9, 31), status: 'running' })];
+    renderExchanges(COMPACT, src);
+    expect(screen.getByLabelText('en cours')).toBeTruthy();
+    const queued = document.querySelector('[data-timeline-node="run:pending:mb"]')!;
+    expect(queued.className).toContain('border-dashed');
+  });
+
+  it('hides a segment with its category filter, never the round (AC9)', () => {
+    renderExchanges({ ...COMPACT, comments: false });
+    expect(screen.queryAllByTestId('timeline-capsule-reply')).toHaveLength(0);
+    expect(screen.getAllByTestId('timeline-capsule-deliverable')).toHaveLength(3);
+    cleanup();
+    renderExchanges({ ...COMPACT, comments: false, deliverables: false });
+    expect(screen.queryAllByTestId('timeline-capsule-tray')).toHaveLength(0);
+    expect(nodes()).toContain('run:x-0');
+  });
+
+  it('switched off, draws today\'s detailed frieze (AC6)', () => {
+    renderExchanges(ALL);
+    expect(screen.queryAllByTestId('timeline-capsule-tray')).toHaveLength(0);
+    expect(nodes()).toEqual(expect.arrayContaining(['comment:ask-0', 'comment:reply-0', 'deliv:d-0', 'run:x-0']));
+    expect(screen.getAllByRole('button', { name: /^Exécution @Builder/ })).toHaveLength(3);
   });
 });

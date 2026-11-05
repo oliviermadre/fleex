@@ -644,3 +644,185 @@ describe('buildTimeline — summary', () => {
     expect(lastDone.tooltip.rows).toContainEqual(['Total Done', '30 min']);
   });
 });
+
+// « Compacter les échanges »: a user ⇄ agent exchange is folded into its run node.
+// The detailed frieze must stay the same, so the model only ADDS fields
+// (`exchange`, `absorbedBy`, `compactOnly`); the renderer picks the mode.
+describe('buildTimeline — exchanges (compact mode)', () => {
+  /** @Builder asked at 9:00, ran 9:01 → 9:10, replied and delivered. */
+  function exchangeSources(): TimelineSources {
+    const src = emptySources();
+    src.names.personas = { 'p-b': 'Builder', builder: 'Builder' };
+    src.comments = [
+      comment({ id: 'c-ask', body: '@agent:builder ajoute la vue agenda', createdAt: at(9, 0) }),
+      comment({ id: 'c-reply', authorType: 'agent', authorName: 'Builder', body: 'Vue agenda ajoutée.', createdAt: at(9, 10) }),
+    ];
+    src.mentions = [mention({ id: 'm1', commentId: 'c-ask', targetAgent: 'builder' })];
+    src.executions = [
+      execution({ id: 'x1', personaId: 'p-b', mentionId: 'm1', startedAt: at(9, 1), completedAt: at(9, 10), commentId: 'c-reply', deliverableId: 'd1', costUsd: 0.5 }),
+    ];
+    src.deliverables = [deliverable({ id: 'd1', mentionId: 'm1', type: 'code', title: 'Vue agenda', createdAt: at(9, 9) })];
+    return src;
+  }
+
+  it('R1 + R3: the run node absorbs the mentioning comment, the agent reply and the deliverable (AC1)', () => {
+    const m = buildTimeline(exchangeSources(), NOW);
+    const node = byId(m.events, 'run:x1');
+    expect(node.exchange).toMatchObject({
+      triggerCommentId: 'c-ask',
+      answerCommentIds: [],
+      reply: { commentId: 'c-reply', waiting: false },
+      deliverables: [{ id: 'd1', type: 'code', title: 'Vue agenda', unread: true }],
+      waiting: false,
+    });
+    expect(byId(m.events, 'comment:c-ask').absorbedBy).toBe('run:x1');
+    expect(byId(m.events, 'comment:c-reply').absorbedBy).toBe('run:x1');
+    expect(byId(m.events, 'deliv:d1').absorbedBy).toBe('run:x1');
+  });
+
+  it('gives the capsule its own tooltip (message, reply, delay, links), the detailed one is untouched', () => {
+    const m = buildTimeline(exchangeSources(), NOW);
+    const node = byId(m.events, 'run:x1');
+    const t = node.exchange!.tooltip;
+    expect(t.overline).toBe('Échange · Persona');
+    expect(Object.fromEntries(t.rows)).toMatchObject({
+      Message: 'ajoute la vue agenda', Réponse: 'Vue agenda ajoutée.', Livrable: 'Vue agenda', Délai: '10 min', Durée: '9 min', Coût: '$0.50',
+    });
+    expect(t.links!.map((l) => l.label)).toEqual(['Voir ton message', 'Voir la réponse', 'Ouvrir « Vue agenda »', "Logs d'exécution"]);
+    expect(t.links![0]!.action).toEqual({ type: 'comment', commentId: 'c-ask' });
+    expect(node.exchange!.ariaLabel).toBe('Échange avec @Builder, 09:01, réponse et 1 livrable');
+    // The node's own tooltip is the one the detailed frieze shows today.
+    expect(node.tooltip.overline).toBe('Persona · mention');
+    expect(node.ariaLabel).toBe('Exécution @Builder, 09:01');
+  });
+
+  it('keeps a mentioning comment visible when one of its mentions cannot be compacted (@workflow:, AC7/AC8)', () => {
+    const src = exchangeSources();
+    src.mentions = [...src.mentions, mention({ id: 'm-wf', commentId: 'c-ask', targetAgent: 'spec-dev', targetType: 'workflow' })];
+    const m = buildTimeline(src, NOW);
+    expect(byId(m.events, 'comment:c-ask').absorbedBy).toBeUndefined();
+    // …but the capsule still knows what triggered it.
+    expect(byId(m.events, 'run:x1').exchange!.triggerCommentId).toBe('c-ask');
+  });
+
+  it('a comment mentioning two agents is absorbed once both have a node (AC8)', () => {
+    const src = exchangeSources();
+    src.names.personas.p2 = 'QA';
+    src.mentions = [...src.mentions, mention({ id: 'm2', commentId: 'c-ask', targetAgent: 'qa' })];
+    src.executions = [...src.executions, execution({ id: 'x2', personaId: 'p2', mentionId: 'm2', startedAt: at(9, 2) })];
+    const m = buildTimeline(src, NOW);
+    expect(byId(m.events, 'run:x1').exchange!.triggerCommentId).toBe('c-ask');
+    expect(byId(m.events, 'run:x2').exchange!.triggerCommentId).toBe('c-ask');
+    expect(byId(m.events, 'comment:c-ask').absorbedBy).toBeDefined();
+  });
+
+  it('never folds workflow steps, @workflow: runs, unattached agent comments nor plain user comments (AC7)', () => {
+    const src = fixture591();
+    src.comments = [...src.comments, comment({ id: 'c-free', authorType: 'agent', authorName: 'Bot', body: 'hello', createdAt: at(9, 30) })];
+    const m = buildTimeline(src, NOW);
+    expect(m.events.filter((e) => e.kind === 'step').every((e) => !e.exchange)).toBe(true);
+    expect(byId(m.events, 'comment:c-last').absorbedBy).toBeUndefined();
+    expect(byId(m.events, 'comment:c-free').absorbedBy).toBeUndefined();
+    expect(byId(m.events, 'comment:c-gate').absorbedBy).toBeUndefined();
+    // The @PM run of #591 is an exchange: its brief is folded into it.
+    expect(byId(m.events, 'deliv:d-brief').absorbedBy).toBe('run:x-pm');
+    expect(byId(m.events, 'deliv:d-code').absorbedBy).toBeUndefined();
+  });
+
+  describe('R2: an answer to the agent\'s question', () => {
+    /** Round 1 asks (waiting_for_info), the user answers, round 2 runs under the same mention. */
+    function rounds(answerAt: string, round2At: string, extra: Parameters<typeof comment>[0][] = []): TimelineSources {
+      const src = exchangeSources();
+      src.mentions = [mention({ id: 'm1', commentId: 'c-ask', targetAgent: 'builder', status: 'resolved' })];
+      src.comments = [
+        ...src.comments,
+        comment({ id: 'c-answer', body: 'oui, force le lundi', createdAt: answerAt }),
+        ...extra.map((c) => comment(c)),
+      ];
+      src.executions = [
+        ...src.executions,
+        execution({ id: 'x1b', personaId: 'p-b', mentionId: 'm1', startedAt: round2At, completedAt: null }),
+      ];
+      return src;
+    }
+
+    it('is absorbed by the round it woke up, which is its own node (AC4)', () => {
+      const m = buildTimeline(rounds(at(9, 20), at(9, 21)), NOW);
+      expect(byId(m.events, 'comment:c-answer').absorbedBy).toBe('run:x1b');
+      expect(byId(m.events, 'run:x1b').exchange).toMatchObject({ triggerCommentId: null, answerCommentIds: ['c-answer'] });
+      expect(byId(m.events, 'run:x1').exchange!.triggerCommentId).toBe('c-ask');
+      expect(Object.fromEntries(byId(m.events, 'run:x1b').exchange!.tooltip.rows)['Ta réponse']).toBe('oui, force le lundi');
+    });
+
+    it('stays visible when the agent restarted more than 5 min later', () => {
+      const m = buildTimeline(rounds(at(9, 20), at(9, 26)), NOW);
+      expect(byId(m.events, 'comment:c-answer').absorbedBy).toBeUndefined();
+    });
+
+    it('stays visible when another user comment came in between', () => {
+      const m = buildTimeline(rounds(at(9, 20), at(9, 22), [{ id: 'c-other', body: 'ah et aussi…', createdAt: at(9, 21) }]), NOW);
+      expect(byId(m.events, 'comment:c-answer').absorbedBy).toBeUndefined();
+    });
+
+    it('stays visible when posted while round 1 was still running', () => {
+      const m = buildTimeline(rounds(at(9, 5), at(9, 11)), NOW);
+      expect(byId(m.events, 'comment:c-answer').absorbedBy).toBeUndefined();
+    });
+  });
+
+  it('flags the last round of a waiting_for_info mention: its reply is a question (AC4)', () => {
+    const src = exchangeSources();
+    src.mentions = [mention({ id: 'm1', commentId: 'c-ask', targetAgent: 'builder', status: 'waiting_for_info' })];
+    const node = byId(buildTimeline(src, NOW).events, 'run:x1');
+    expect(node.exchange!.waiting).toBe(true);
+    expect(node.exchange!.reply!.waiting).toBe(true);
+    expect(node.exchange!.tooltip.chip).toEqual({ text: 'attend ta réponse', tone: 'warn' });
+    // The execution itself completed: the detailed node is unchanged.
+    expect(node.state).toBe('ok');
+  });
+
+  describe('R4: a mention that has not started', () => {
+    function queuedSources(status: 'pending' | 'acknowledged' | 'failed' | 'resolved'): TimelineSources {
+      const src = emptySources();
+      src.names.personas = { builder: 'Builder' };
+      src.comments = [comment({ id: 'c-ask', body: '@agent:builder go', createdAt: at(9, 30) })];
+      src.mentions = [mention({ id: 'm1', commentId: 'c-ask', targetAgent: 'builder', status })];
+      return src;
+    }
+
+    it('pending → a compact-only "queued" node at the comment\'s time, which absorbs the comment (AC3)', () => {
+      const m = buildTimeline(queuedSources('pending'), NOW);
+      const node = byId(m.events, 'run:pending:m1');
+      expect(node).toMatchObject({ kind: 'run', lane: 'spine', state: 'pending', compactOnly: true, label: '@Builder', action: null });
+      expect(node.at).toBe(new Date(at(9, 30)).getTime());
+      expect(node.exchange!.triggerCommentId).toBe('c-ask');
+      expect(byId(m.events, 'comment:c-ask').absorbedBy).toBe('run:pending:m1');
+      // A compact-only node does not stretch the agentic span of the detailed frieze.
+      expect(m.activeSpan).toBeNull();
+    });
+
+    it('is replaced by the run once an execution exists — never both (AC3)', () => {
+      const src = queuedSources('acknowledged');
+      src.executions = [execution({ id: 'x1', mentionId: 'm1', startedAt: at(9, 31), status: 'running' })];
+      const m = buildTimeline(src, NOW);
+      expect(m.events.some((e) => e.id === 'run:pending:m1')).toBe(false);
+      expect(byId(m.events, 'comment:c-ask').absorbedBy).toBe('run:x1');
+    });
+
+    it('failed before starting → a ko node', () => {
+      expect(byId(buildTimeline(queuedSources('failed'), NOW).events, 'run:pending:m1').state).toBe('ko');
+    });
+
+    it('resolved without any execution (replaced / cancelled) → no node, the comment stays visible', () => {
+      const m = buildTimeline(queuedSources('resolved'), NOW);
+      expect(m.events.some((e) => e.compactOnly)).toBe(false);
+      expect(byId(m.events, 'comment:c-ask').absorbedBy).toBeUndefined();
+    });
+
+    it('@workflow: mentions never get a queued node', () => {
+      const src = queuedSources('pending');
+      src.mentions = [mention({ id: 'm1', commentId: 'c-ask', targetAgent: 'wf', targetType: 'workflow', status: 'pending' })];
+      expect(buildTimeline(src, NOW).events.some((e) => e.compactOnly)).toBe(false);
+    });
+  });
+});
