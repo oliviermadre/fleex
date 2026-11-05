@@ -3,7 +3,7 @@ import type { AgendaItem, AgendaPrefs } from '@fleex/shared';
 import { DEFAULT_AGENDA_PREFS } from '@fleex/shared';
 import {
   windowFor, shiftAnchor, daysCovered, isBar, itemDays, segmentForDay, groupHourly, layoutDay,
-  assignLanes, isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, POINT_MIN, MAX_COLS, type GridEntry,
+  assignLanes, isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, isoWeek, POINT_MIN, MAX_COLS, type GridEntry,
 } from './agendaLayout';
 
 // Local-time constructors: these tests are about the browser's own calendar.
@@ -227,5 +227,19 @@ describe('formatting', () => {
 
   it('drops the parenthesis from a workflow name', () => {
     expect(workflowShortName('Spec Dev PR (HITL)')).toBe('Spec Dev PR');
+  });
+});
+
+describe('isoWeek — the numbers shown before each mini-calendar row', () => {
+  it('matches Google Calendar and the "FW 2026-W45" epics', () => {
+    expect(isoWeek(L(2026, 11, 2))).toBe(45); // Mon Nov 2
+    expect(isoWeek(L(2026, 11, 8))).toBe(45); // Sun Nov 8 still belongs to Monday's week
+    expect(isoWeek(L(2026, 10, 26))).toBe(44);
+    expect(isoWeek(L(2026, 11, 30))).toBe(49);
+  });
+  it('handles year boundaries (ISO 8601)', () => {
+    expect(isoWeek(L(2026, 1, 1))).toBe(1);    // Thu Jan 1 2026
+    expect(isoWeek(L(2027, 1, 1))).toBe(53);   // Fri Jan 1 2027 → week 53 of 2026
+    expect(isoWeek(L(2024, 12, 30))).toBe(1);  // Mon Dec 30 2024 → week 1 of 2025
   });
 });

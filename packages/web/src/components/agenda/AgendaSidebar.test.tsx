@@ -138,3 +138,21 @@ describe('<AgendaSidebar/> · layout and colours', () => {
     expect(useAgendaStore.getState().prefs.colors).toEqual({ 'routine:sync': 'orange' });
   });
 });
+
+describe('<AgendaSidebar/> · mini calendar', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('shows the ISO week number before each row and circles today, even inside the highlighted week', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 5, 11, 30));
+    useAgendaStore.setState({ anchor: new Date(2026, 10, 5), prefs: { ...DEFAULT_AGENDA_PREFS, view: 'week' } });
+    renderSidebar();
+    const weeks = [...document.querySelectorAll('[data-agenda-week-number]')].map((n) => n.textContent);
+    expect(weeks).toEqual(['44', '45', '46', '47', '48', '49']);
+    const today = document.querySelector('[aria-current="date"]') as HTMLElement;
+    expect(today.textContent).toBe('5');
+    // The bubble sits on the inner span, so the week highlight on the button can't hide it.
+    expect(today.className).toContain('accent-muted');
+    expect((today.firstElementChild as HTMLElement).className).toMatch(/rounded-full.*bg-\[var\(--theme-accent\)\]/);
+  });
+});

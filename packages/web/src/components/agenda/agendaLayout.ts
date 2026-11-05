@@ -42,6 +42,17 @@ export function weekStart(d: Date): Date {
   return addDays(day, -((day.getDay() + 6) % 7));
 }
 
+/**
+ * ISO 8601 week number (weeks start Monday, week 1 holds the year's first
+ * Thursday) — the same numbering as Google Calendar and the "FW 2026-W45" epics.
+ */
+export function isoWeek(d: Date): number {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 3 - ((t.getUTCDay() + 6) % 7)); // Thursday of this week
+  const firstThursday = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+  return 1 + Math.round(((t.getTime() - firstThursday.getTime()) / 86_400_000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+}
+
 /** Local 'YYYY-MM-DD'. */
 export function dayKey(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');

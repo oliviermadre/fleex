@@ -14,7 +14,7 @@ import { AgendaGoogleSection } from './AgendaGoogleSection';
 import { AgendaSidebarMenu } from './AgendaSidebarMenu';
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ReopenIcon } from '../ui/icons/AgendaIcons';
 import { MinusIcon } from '../ui/icons/TodoIcons';
-import { addDays, dayKey, labelOn, startOfDay, weekStart, windowFor } from './agendaLayout';
+import { addDays, dayKey, isoWeek, labelOn, startOfDay, weekStart, windowFor } from './agendaLayout';
 
 function Check({ state, hue }: { state: 'on' | 'off' | 'mixed'; hue?: AgendaColor }) {
   const color = hue ? colorToken(hue, 'solid') : 'var(--theme-text-secondary)';
@@ -41,27 +41,54 @@ function MiniCalendar() {
         <span>{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
         <button type="button" className="rounded px-1.5 hover:bg-[var(--theme-bg-overlay)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} aria-label="Next month"><ChevronRightIcon size={12} /></button>
       </div>
-      <div className="grid grid-cols-7 text-center">
+      <div className="grid grid-cols-[1.75rem_repeat(7,minmax(0,1fr))] text-center">
+        <div />
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i} className="py-0.5 text-[10px] text-[var(--theme-text-faint)]">{d}</div>)}
-        {Array.from({ length: 42 }, (_, i) => {
-          const d = addDays(start, i);
-          const k = dayKey(d);
-          const inRange = prefs.view !== 'schedule' && d >= from && d < to;
-          return (
-            <button
-              key={k}
-              type="button"
-              onClick={() => goToDay(startOfDay(d))}
+        {Array.from({ length: 6 }, (_, row) => {
+          const monday = addDays(start, row * 7);
+          return [
+            <div
+              key={`w${row}`}
+              data-agenda-week-number
+              title={`Week ${isoWeek(monday)}`}
               className={cn(
-                'h-6 rounded-full hover:bg-[var(--theme-bg-overlay)]',
-                d.getMonth() !== month.getMonth() ? 'text-[var(--theme-text-faint)]' : 'text-[var(--theme-text-secondary)]',
-                inRange && 'rounded-none bg-[var(--theme-accent-muted)]',
-                k === todayKey && 'rounded-full bg-[var(--theme-accent)] font-semibold text-[var(--theme-accent-fg)]',
+                'flex h-6 items-center justify-center bg-[var(--theme-bg-overlay)] text-[10px] font-medium text-[var(--theme-text-muted)]',
+                row === 0 && 'rounded-t-md',
+                row === 5 && 'rounded-b-md',
               )}
             >
-              {d.getDate()}
-            </button>
-          );
+              {isoWeek(monday)}
+            </div>,
+            ...Array.from({ length: 7 }, (_, col) => {
+              const d = addDays(monday, col);
+              const k = dayKey(d);
+              const inRange = prefs.view !== 'schedule' && d >= from && d < to;
+              const isToday = k === todayKey;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => goToDay(startOfDay(d))}
+                  aria-current={isToday ? 'date' : undefined}
+                  className={cn('group flex h-6 items-center justify-center', inRange && 'bg-[var(--theme-accent-muted)]')}
+                >
+                  <span
+                    className={cn(
+                      'flex h-[22px] w-[22px] items-center justify-center rounded-full',
+                      isToday
+                        ? 'bg-[var(--theme-accent)] font-semibold text-[var(--theme-accent-fg)]'
+                        : cn(
+                            'group-hover:bg-[var(--theme-bg-overlay)]',
+                            d.getMonth() !== month.getMonth() ? 'text-[var(--theme-text-faint)]' : 'text-[var(--theme-text-secondary)]',
+                          ),
+                    )}
+                  >
+                    {d.getDate()}
+                  </span>
+                </button>
+              );
+            }),
+          ];
         })}
       </div>
     </div>
