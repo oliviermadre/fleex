@@ -4,7 +4,6 @@ import type { Ticket } from '@fleex/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
-import { useTicketWorkspaceStore } from '../../stores/ticketWorkspaceStore';
 import { WorkTopBarActions } from './WorkTopBarActions';
 
 const SVG = '<svg viewBox="0 0 8 8"></svg>';
@@ -23,8 +22,6 @@ beforeEach(() => {
     executeWorkspaceAction,
   });
   useTicketStore.setState({ tickets: [ticket] });
-  // The folder the server resolved — here the name the ticket had at creation.
-  useTicketWorkspaceStore.setState({ byTicket: { [ticket.id]: { title: ticket.title, workspaceId: 'abc123-old-title' } } });
   usePinnedActionsStore.setState({ statuses: {}, running: {}, runs: {} });
 });
 
@@ -69,11 +66,7 @@ describe('WorkTopBarActions tooltips', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open in Cursor' }));
     expect(executeWorkspaceAction).toHaveBeenCalledTimes(1);
     expect(executeWorkspaceAction.mock.calls[0]![0]).toBe(workspaceAction);
-    expect(executeWorkspaceAction.mock.calls[0]![1]).toMatchObject({
-      ticket_id: ticket.id,
-      // Not derived from the current title: a renamed ticket keeps its folder.
-      workspace_path: '/base/workspaces/abc123-old-title',
-    });
+    expect(executeWorkspaceAction.mock.calls[0]![1]).toMatchObject({ ticket_id: ticket.id });
   });
 });
 

@@ -6,13 +6,11 @@ import * as api from '../../services/api';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useWorktreeActionsStore } from '../../stores/worktreeActionsStore';
-import { useTicketWorkspaceStore } from '../../stores/ticketWorkspaceStore';
 import { WorktreeActionsGroup } from './WorktreeActionsGroup';
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/api')>()),
   fetchWorktreeActions: vi.fn(),
-  fetchTicketWorkspace: vi.fn(),
 }));
 
 const ticket = { id: 'abcdef12-0000-0000-0000-000000000000', displayId: 7, title: 'repo actions', links: [] } as unknown as Ticket;
@@ -29,8 +27,6 @@ function view(name: string): WorktreeActionsView {
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   useWorktreeActionsStore.setState({ byRoot: {}, servers: {}, setups: {} });
-  useTicketWorkspaceStore.setState({ byTicket: {} });
-  vi.mocked(api.fetchTicketWorkspace).mockResolvedValue({ workspaceId: 'abcdef-repo-actions', path: '/base/workspaces/abcdef-repo-actions', exists: true });
   useSettingsStore.setState((s) => ({ settings: { ...s.settings, basePath: '/base' } }));
 });
 afterEach(cleanup);
@@ -38,7 +34,7 @@ afterEach(cleanup);
 describe('WorktreeActionsGroup', () => {
   it('shows 4 worktrees and puts the rest behind +N; a pick joins the bar with its menu open', async () => {
     // WHY (PRD §8.1): a ticket over many repos must not push the top bar off screen.
-    const root = buildWorkspaceContext(ticket, '/base', 'abcdef-repo-actions').workspace_path;
+    const root = buildWorkspaceContext(ticket, '/base').workspace_path;
     vi.mocked(api.fetchWorktreeActions).mockImplementation(async (path) => {
       expect(path).toBe(root);
       return { worktrees: ['a', 'b', 'c', 'd', 'e', 'f'].map(view) };
@@ -49,17 +45,6 @@ describe('WorktreeActionsGroup', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /^f/ }));
     expect(screen.getAllByTestId('worktree-action-button')).toHaveLength(5);
     expect(screen.getByTestId('worktree-action-menu')).toBeTruthy();
-  });
-
-  it('reads the worktrees of the folder the server resolved, not of the current title', async () => {
-    // WHY: the workspace folder keeps the name it got at creation. After a rename,
-    // deriving it from the new title points at an empty folder and every worktree
-    // button disappears.
-    vi.mocked(api.fetchTicketWorkspace).mockResolvedValue({ workspaceId: 'abcdef-old-title', path: '', exists: true });
-    vi.mocked(api.fetchWorktreeActions).mockResolvedValue({ worktrees: [view('a')] });
-    render(<MemoryRouter><WorktreeActionsGroup ticket={{ ...ticket, title: 'renamed' }} /></MemoryRouter>);
-    await waitFor(() => expect(screen.getAllByTestId('worktree-action-button')).toHaveLength(1));
-    expect(api.fetchWorktreeActions).toHaveBeenCalledWith('/base/workspaces/abcdef-old-title');
   });
 
   it('renders nothing while the ticket has no worktree', async () => {

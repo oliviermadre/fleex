@@ -39,7 +39,6 @@ beforeEach(async () => {
       },
     },
     resolver: {
-      workspacesRoot: () => join(root, 'workspaces'),
       workspacePath: (id: string) => join(root, 'workspaces', id),
       workspaceRepoPath: (id: string, name: string) => join(root, 'workspaces', id, name),
       barePath: (org: string, name: string) => join(root, '.bare', org, `${name}.git`),

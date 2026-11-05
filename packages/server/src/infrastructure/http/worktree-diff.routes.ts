@@ -1,7 +1,7 @@
 import { basename, dirname, isAbsolute, resolve, sep } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { RepoDiff, RepoTree, WorktreeDiff, WorktreeFile, WorktreeTree } from '@fleex/shared';
-import { resolveTicketWorkspaceId } from '../../domain/services/ticket-workspace-locator.js';
+import { ticketWorkspaceId } from '../../domain/services/branch-utils.js';
 import { changedLineNumbers, parseUnifiedDiff } from '../../domain/services/diff-parser.js';
 import { buildFileTree, parseStatusPorcelain } from '../../domain/services/file-tree.js';
 import type { Container } from '../container.js';
@@ -34,7 +34,7 @@ export function worktreeDiffRoutes(container: Container) {
     const ticket = await container.ticketStore.getTicketById(ticketId);
     if (!ticket) return [];
 
-    const workspaceId = resolveTicketWorkspaceId(container.resolver, ticket, container.logger);
+    const workspaceId = ticketWorkspaceId(ticket);
     const repoLinks = ticket.links.filter((l) => l.type === 'repository' && l.ref?.includes('/'));
     const wtLinks = ticket.links.filter((l) => l.type === 'worktree' && l.ref);
 

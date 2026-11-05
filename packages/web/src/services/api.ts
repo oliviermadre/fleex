@@ -1935,34 +1935,14 @@ export async function fetchActionRunCapabilities(): Promise<import('@fleex/share
 /**
  * The workspace folder is created lazily (on session/agent start), so it may
  * not exist yet for tickets that never ran one (e.g. lead/meeting). Best-effort,
- * silent: null when the folder isn't there to run in; else the folder the server
- * resolved (`workspaceId` absent from older servers).
+ * silent: true only when the folder is there to run in.
  */
-export async function ensureTicketWorkspace(ticketId: string): Promise<{ workspaceId?: string } | null> {
+export async function ensureTicketWorkspace(ticketId: string): Promise<boolean> {
   try {
     const res = await fetch(`${API_URL}/tickets/${ticketId}/ensure-workspace`, { method: 'POST' });
-    if (!res.ok) return null;
-    const body = (await res.json().catch(() => ({}))) as { workspaceId?: unknown };
-    return typeof body.workspaceId === 'string' ? { workspaceId: body.workspaceId } : {};
+    return res.ok;
   } catch {
-    return null;
-  }
-}
-
-/**
- * Where the ticket's workspace folder is (or will be created). The server finds
- * it by ticket id: after a rename the folder keeps its original name, which the
- * client cannot derive from the title. Silent: null on any failure.
- */
-export async function fetchTicketWorkspace(
-  ticketId: string,
-): Promise<{ workspaceId: string; path: string; exists: boolean } | null> {
-  try {
-    const res = await fetch(`${API_URL}/tickets/${encodeURIComponent(ticketId)}/workspace`);
-    if (!res.ok) return null;
-    return (await res.json()) as { workspaceId: string; path: string; exists: boolean };
-  } catch {
-    return null;
+    return false;
   }
 }
 
