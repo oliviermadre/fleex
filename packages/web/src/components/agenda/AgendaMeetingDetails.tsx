@@ -1,5 +1,5 @@
 /**
- * A Google meeting on the agenda card: join link, my answer (Yes / Maybe / No,
+ * A Google meeting on the agenda card: my answer (Yes / Maybe / No,
  * written to Google through gogcli), the notes and the guests with their
  * answers. The links to deliverables live in <AgendaMeetingLinks/>.
  */
@@ -9,6 +9,7 @@ import * as api from '../../services/api';
 import { useAgendaStore } from '../../stores/agendaStore';
 import { cn } from '../../lib/cn';
 import { Spinner } from '../ui/Spinner';
+import { buttonClasses } from '../ui/Button';
 import { CheckIcon, CancelIcon, QuestionIcon, VideoIcon } from '../ui/icons/AgendaIcons';
 
 type Answer = Exclude<AgendaRsvp, 'needsAction'>;
@@ -34,8 +35,11 @@ function useLiveItem(item: AgendaItem): AgendaItem {
   return useAgendaStore((s) => s.data?.items.find((i) => i.id === item.id)) ?? item;
 }
 
-/** "Join Google Meet": a button that opens the video link in a new tab. */
-export function MeetJoinButton({ url, compact }: { url: string; compact?: boolean }) {
+/**
+ * "Join Google Meet": a link that looks like a Fleex button (primary by
+ * default) and opens the video call in a new tab. Lives in the card footer.
+ */
+export function MeetJoinButton({ url, variant = 'primary' }: { url: string; variant?: 'primary' | 'secondary' }) {
   const isMeet = /meet\.google\.com/.test(url);
   return (
     <a
@@ -43,14 +47,10 @@ export function MeetJoinButton({ url, compact }: { url: string; compact?: boolea
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-md font-medium text-white',
-        compact ? 'px-1.5 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs',
-      )}
-      style={{ background: 'var(--tint-blue-solid)' }}
+      className={buttonClasses(variant, 'sm', 'gap-1')}
       title={url}
     >
-      <VideoIcon size={compact ? 12 : 14} />
+      <VideoIcon size={12} />
       {isMeet ? 'Join Google Meet' : 'Join video call'}
     </a>
   );
@@ -178,12 +178,8 @@ export function AgendaMeetingDetails({ item: opened }: { item: AgendaItem }) {
   const guests = ext.attendeeList ?? [];
   return (
     <>
-      {(ext.meetUrl || ext.canRespond) && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--theme-border)] pt-2">
-          {ext.meetUrl && <MeetJoinButton url={ext.meetUrl} />}
-          {ext.canRespond && <RsvpControl item={item} />}
-        </div>
-      )}
+      {/* The join link is in the card footer, with the other actions. */}
+      {ext.canRespond && <RsvpControl item={item} />}
       {ext.location && (
         <div className="text-[var(--theme-text-secondary)]"><span className="text-[var(--theme-text-muted)]">Location </span><Linkified text={ext.location} /></div>
       )}

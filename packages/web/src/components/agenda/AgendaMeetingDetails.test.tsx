@@ -8,7 +8,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import * as api from '../../services/api';
-import { AgendaMeetingDetails, attendeeSummary } from './AgendaMeetingDetails';
+import { AgendaMeetingDetails, MeetJoinButton, attendeeSummary } from './AgendaMeetingDetails';
 import { AgendaChip } from './AgendaChip';
 import { chipStyle } from './agendaLabels';
 import { useAgendaStore, withRsvp } from '../../stores/agendaStore';
@@ -59,11 +59,9 @@ afterEach(() => {
 });
 
 describe('<AgendaMeetingDetails/>', () => {
-  it('shows the Meet join link, the notes with live links, and every guest with their answer', () => {
+  it('shows the notes with live links and every guest with their answer (the join link is in the card footer)', () => {
     render(<AgendaMeetingDetails item={meeting()} />);
-    const join = screen.getByRole('link', { name: /Join Google Meet/ });
-    expect(join.getAttribute('href')).toBe('https://meet.google.com/abc-defg-hij');
-    expect(join.getAttribute('target')).toBe('_blank');
+    expect(screen.queryByRole('link', { name: /Join Google Meet/ })).toBeNull();
 
     const notes = screen.getByTestId('agenda-meeting-notes');
     expect(notes.textContent).toContain('Roadmap');
@@ -109,7 +107,14 @@ describe('<AgendaMeetingDetails/>', () => {
   it('offers no answer on a meeting I organize or am not invited to', () => {
     render(<AgendaMeetingDetails item={meeting({ rsvp: null, canRespond: false })} />);
     expect(screen.queryByTestId('agenda-rsvp')).toBeNull();
-    expect(screen.getByRole('link', { name: /Join Google Meet/ })).toBeTruthy();
+  });
+
+  it('the join link is a Fleex button opening the call in a new tab', () => {
+    render(<MeetJoinButton url="https://meet.google.com/abc-defg-hij" />);
+    const join = screen.getByRole('link', { name: /Join Google Meet/ });
+    expect(join.getAttribute('href')).toBe('https://meet.google.com/abc-defg-hij');
+    expect(join.getAttribute('target')).toBe('_blank');
+    expect(join.className).toContain('bg-[var(--theme-accent)]');
   });
 });
 
