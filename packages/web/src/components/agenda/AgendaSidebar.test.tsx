@@ -113,6 +113,21 @@ describe('<AgendaSidebar/> · layout and colours', () => {
     expect(useAgendaStore.getState().prefs.colors).toEqual({});
   });
 
+  it('offers 15 base colours plus a custom colour, and keeps a custom pick', () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: 'Colour of PRs merged' }));
+    const picker = screen.getByTestId('agenda-color-picker');
+    // 3 rows of 5 swatches (the 10 tints + 5 extras), then the custom input.
+    expect(picker.querySelectorAll('button[aria-pressed]')).toHaveLength(15);
+    fireEvent.click(screen.getByRole('button', { name: '#06b6d4' }));
+    expect(useAgendaStore.getState().prefs.colors).toEqual({ 'pr.merged': '#06b6d4' });
+    fireEvent.click(screen.getByRole('button', { name: 'Colour of PRs merged' }));
+    fireEvent.change(screen.getByLabelText('Custom colour'), { target: { value: '#123abc' } });
+    expect(useAgendaStore.getState().prefs.colors).toEqual({ 'pr.merged': '#123abc' });
+    // The custom input does not close the picker (the native dialog would go with it).
+    expect(screen.getByTestId('agenda-color-picker')).toBeTruthy();
+  });
+
   it('picks a colour per routine from the routine menu', () => {
     const d = useAgendaStore.getState().data!;
     useAgendaStore.setState({ data: { ...d, routines: [{ id: 'sync', name: 'Sync backlog', emoji: '' }] } });

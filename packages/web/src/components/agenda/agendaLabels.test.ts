@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { AgendaItem } from '@fleex/shared';
-import { itemHue, labelHue, routineColorKey } from './agendaLabels';
+import { BASE_SWATCHES, chipStyle, colorToken, itemHue, labelHue, routineColorKey } from './agendaLabels';
 
 const run = (routineId: string): AgendaItem => ({
   id: `routine.run:${routineId}`, type: 'routine.run', shape: 'block', start: '', title: routineId,
@@ -23,7 +23,20 @@ describe('agenda colours', () => {
     expect(itemHue(run('other'), {})).toBe(labelHue('routine.run'));
   });
 
-  it('ignores a stored colour that is not a known tint', () => {
-    expect(labelHue('pr.merged', { 'pr.merged': '#ff0000' })).toBe('purple');
+  it('keeps a custom hex pick, ignores anything else', () => {
+    expect(labelHue('pr.merged', { 'pr.merged': '#FF0000' })).toBe('#ff0000');
+    expect(labelHue('pr.merged', { 'pr.merged': 'red; background: url(x)' })).toBe('purple');
+    expect(labelHue('pr.merged', { 'pr.merged': '#fff' })).toBe('purple');
+  });
+
+  it('offers 15 distinct base colours', () => {
+    expect(new Set(BASE_SWATCHES).size).toBe(15);
+  });
+
+  it('draws a custom hex with derived, theme-relative tokens', () => {
+    expect(colorToken('teal', 'bg')).toBe('var(--tint-teal-bg)');
+    expect(colorToken('#123abc', 'solid')).toBe('#123abc');
+    expect(colorToken('#123abc', 'bg')).toContain('color-mix');
+    expect(chipStyle(run('sync'), { [routineColorKey('sync')]: '#123abc' }).borderLeft).toContain('#123abc');
   });
 });

@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
-import { TINT_HUES, type TintHue } from '../../lib/tints';
 import { CheckIcon } from '../ui/icons/AgendaIcons';
+import { BASE_SWATCHES, colorToken, type AgendaColor } from './agendaLabels';
 
-function Palette({ hue, custom, onPick }: { hue: TintHue; custom: boolean; onPick: (hue: TintHue | null) => void }) {
+/** The hue wheel of the custom-colour button. */
+const WHEEL = 'conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444)';
+
+function Palette({ hue, custom, onPick }: { hue: AgendaColor; custom: boolean; onPick: (hue: AgendaColor | null, close?: boolean) => void }) {
+  const isCustom = !BASE_SWATCHES.includes(hue);
   return (
     <>
       <div className="grid grid-cols-5 gap-1.5">
-        {TINT_HUES.map((h) => (
+        {BASE_SWATCHES.map((h) => (
           <button
             key={h}
             type="button"
@@ -17,11 +21,29 @@ function Palette({ hue, custom, onPick }: { hue: TintHue; custom: boolean; onPic
             aria-pressed={h === hue}
             onClick={() => onPick(h)}
             className="grid h-6 w-6 place-items-center rounded-full hover:ring-2 hover:ring-[var(--theme-border)]"
-            style={{ background: `var(--tint-${h}-solid)` }}
+            style={{ background: colorToken(h, 'solid') }}
           >
             {h === hue && <CheckIcon size={12} className="text-white [stroke-width:3]" />}
           </button>
         ))}
+      </div>
+      <div className="mt-2 flex items-center gap-2 border-t border-[var(--theme-border)] pt-2">
+        {/* The native colour input brings the full picker (and the eyedropper where the browser has one). */}
+        <label
+          title="Custom colour"
+          className={cn('relative grid h-6 w-6 shrink-0 cursor-pointer place-items-center rounded-full hover:ring-2 hover:ring-[var(--theme-border)]', isCustom && 'ring-2 ring-[var(--theme-text-primary)]')}
+          style={{ background: WHEEL }}
+        >
+          <input
+            type="color"
+            aria-label="Custom colour"
+            value={hue.startsWith('#') ? hue : '#3b82f6'}
+            onChange={(e) => onPick(e.target.value as AgendaColor, false)}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+          {isCustom && <span className="h-3 w-3 rounded-full border border-white" style={{ background: hue }} />}
+        </label>
+        <span>{isCustom ? hue : 'Custom colour'}</span>
       </div>
       {custom && (
         <button
@@ -45,11 +67,11 @@ interface PickerProps {
   /** What is being coloured, for the button's accessible name. */
   name: string;
   /** The current hue (picked or default). */
-  hue: TintHue;
+  hue: AgendaColor;
   /** Whether `hue` is a user pick (vs the default). */
   custom: boolean;
   /** `null` = back to the default. */
-  onPick: (hue: TintHue | null) => void;
+  onPick: (hue: AgendaColor | null) => void;
 }
 
 /**
@@ -62,11 +84,11 @@ export function AgendaInlineColorPicker({ name, hue, custom, onPick }: PickerPro
   return (
     <>
       <button type="button" aria-label={`Colour of ${name}`} aria-expanded={open} title={`Colour of ${name}`} onClick={() => setOpen((o) => !o)} className={swatchClass(custom || open)}>
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: `var(--tint-${hue}-solid)` }} />
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorToken(hue, 'solid') }} />
       </button>
       {open && (
         <div className="basis-full py-1.5 pl-6" data-testid="agenda-color-picker">
-          <Palette hue={hue} custom={custom} onPick={(h) => { onPick(h); setOpen(false); }} />
+          <Palette hue={hue} custom={custom} onPick={(h, close = true) => { onPick(h); if (close) setOpen(false); }} />
         </div>
       )}
     </>
@@ -75,7 +97,7 @@ export function AgendaInlineColorPicker({ name, hue, custom, onPick }: PickerPro
 
 /**
  * A colour swatch at the right of a sidebar row (a label). It opens the tint
- * palette; "Default colour" drops the pick. Shown on row hover, and always
+ * palette (15 base colours and a custom one); "Default colour" drops the pick. Shown on row hover, and always
  * once a colour has been picked.
  */
 export function AgendaColorPicker({ name, hue, custom, onPick }: PickerProps) {
@@ -90,7 +112,7 @@ export function AgendaColorPicker({ name, hue, custom, onPick }: PickerProps) {
         title={`Colour of ${name}`}
         className={swatchClass(custom || open)}
       >
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: `var(--tint-${hue}-solid)` }} />
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorToken(hue, 'solid') }} />
       </button>
       {open && (
         <FloatingPortal>
@@ -101,7 +123,7 @@ export function AgendaColorPicker({ name, hue, custom, onPick }: PickerProps) {
             data-testid="agenda-color-picker"
             className="z-50 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-2 text-xs text-[var(--theme-text-secondary)] shadow-xl"
           >
-            <Palette hue={hue} custom={custom} onPick={(h) => { onPick(h); setOpen(false); }} />
+            <Palette hue={hue} custom={custom} onPick={(h, close = true) => { onPick(h); if (close) setOpen(false); }} />
           </div>
         </FloatingPortal>
       )}

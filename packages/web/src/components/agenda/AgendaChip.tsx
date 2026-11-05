@@ -2,9 +2,8 @@ import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import type { AgendaItem } from '@fleex/shared';
 import type { AgendaItemType } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { tintText } from '../../lib/tints';
 import { HandIcon, PauseIcon, QuestionIcon } from '../ui/icons/AgendaIcons';
-import { LABEL_BY_TYPE, chipStyle, dotStyle, hatchStyle, itemHue, labelHue, statusHue, type AgendaColors } from './agendaLabels';
+import { LABEL_BY_TYPE, chipStyle, colorToken, dotStyle, hatchStyle, itemHue, labelHue, statusHue, type AgendaColors } from './agendaLabels';
 import { useAgendaStore } from '../../stores/agendaStore';
 import { formatDuration, openWait, workflowShortName } from './agendaLayout';
 
@@ -32,11 +31,15 @@ export function LabelIcon({ type, size = 12, overdue, className, item, routineId
 }) {
   const colors = useAgendaColors();
   const Glyph = LABEL_BY_TYPE[type].icon;
-  const hue = overdue ? 'red'
+  const hue = overdue ? 'red' as const
     : item ? itemHue(item, colors)
     : routineId ? itemHue({ type, routine: { id: routineId } } as AgendaItem, colors)
     : labelHue(type, colors);
-  return <Glyph size={size} className={cn('shrink-0', tintText(hue), className)} />;
+  return (
+    <span className="contents" style={{ color: colorToken(hue, 'text') }}>
+      <Glyph size={size} className={cn('shrink-0', className)} />
+    </span>
+  );
 }
 
 /** The icon of a human wait: pause at a gate, question mark for an agent question. */

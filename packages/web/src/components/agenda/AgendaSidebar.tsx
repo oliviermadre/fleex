@@ -5,9 +5,8 @@ import { useAgendaStore } from '../../stores/agendaStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { MultiSelect } from '../ui/MultiSelect';
 import { cn } from '../../lib/cn';
-import { AGENDA_LABELS, FAMILIES, itemHue, labelHue, routineColorKey } from './agendaLabels';
+import { AGENDA_LABELS, FAMILIES, colorToken, itemHue, labelHue, routineColorKey, type AgendaColor } from './agendaLabels';
 import type { AgendaItem } from '@fleex/shared';
-import type { TintHue } from '../../lib/tints';
 import { AgendaColorPicker, AgendaInlineColorPicker } from './AgendaColorPicker';
 import { LabelIcon } from './AgendaChip';
 import { AgendaSavedViews } from './AgendaSavedViews';
@@ -17,8 +16,8 @@ import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ReopenIcon } from '../ui/
 import { MinusIcon } from '../ui/icons/TodoIcons';
 import { addDays, dayKey, labelOn, startOfDay, weekStart, windowFor } from './agendaLayout';
 
-function Check({ state, hue }: { state: 'on' | 'off' | 'mixed'; hue?: string }) {
-  const color = hue ? `var(--tint-${hue}-solid)` : 'var(--theme-text-secondary)';
+function Check({ state, hue }: { state: 'on' | 'off' | 'mixed'; hue?: AgendaColor }) {
+  const color = hue ? colorToken(hue, 'solid') : 'var(--theme-text-secondary)';
   return (
     <span
       className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-[3px] text-[9px] font-black text-[var(--theme-bg-base)]"
@@ -118,7 +117,7 @@ export function AgendaSidebar() {
   const toggleRoutine = (id: string) =>
     updatePrefs((p) => ({ ...p, routines: { ...p.routines, [id]: p.routines[id] === false } }));
   const colors = prefs.colors;
-  const setColor = (key: string, hue: TintHue | null) =>
+  const setColor = (key: string, hue: AgendaColor | null) =>
     updatePrefs((p) => {
       const next = { ...p.colors };
       if (hue) next[key] = hue;
