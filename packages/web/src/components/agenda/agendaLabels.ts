@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { AgendaItem, AgendaItemType } from '@fleex/shared';
-import type { TintHue } from '../../lib/tints';
+import { TINT_HUES, type TintHue } from '../../lib/tints';
 import {
   CalendarEventIcon, CircleCheckIcon, ExternalCalendarIcon, FlagIcon, GitMergeIcon, MissedIcon, RoutineRunIcon,
   TicketPlusIcon, UpcomingIcon, WorkflowRunIcon, CancelIcon, type AgendaIconComponent,
@@ -53,9 +53,15 @@ export function statusHue(status: string | null | undefined): TintHue {
 
 const v = (hue: TintHue, token: 'bg' | 'border' | 'solid' | 'text') => `var(--tint-${hue}-${token})`;
 
-/** Chip colours from the label's tint (inline: the hue is data-driven). */
+/** E1: the colour picked for a free event, when it is a known tint hue. */
+export function eventHue(item: AgendaItem): TintHue | null {
+  const c = item.type === 'event' ? item.event?.color : null;
+  return c && (TINT_HUES as string[]).includes(c) ? (c as TintHue) : null;
+}
+
+/** Chip colours from the label's tint (or the event's own colour) (inline: the hue is data-driven). */
 export function chipStyle(item: AgendaItem): CSSProperties {
-  const hue = LABEL_BY_TYPE[item.type].hue;
+  const hue = eventHue(item) ?? LABEL_BY_TYPE[item.type].hue;
   const upcoming = item.type === 'routine.upcoming';
   const skipped = item.type === 'routine.skipped' || item.type === 'routine.missed';
   const red = item.overdue;

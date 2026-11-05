@@ -267,16 +267,7 @@ function CalendarMeta({ item }: { item: AgendaItem }) {
         {ext && ext.attendees > 0 && <Field label="Attendees">{ext.attendees}</Field>}
       </div>
       {ev?.description && <div className="whitespace-pre-wrap text-[var(--theme-text-secondary)]">{ev.description}</div>}
-      {ext && ext.links.length > 0 && (
-        <ul className="space-y-0.5">
-          {ext.links.map((l) => (
-            <li key={l.id} className="flex items-center gap-1.5 text-[var(--theme-text-secondary)]">
-              <DocumentIcon size={12} className="shrink-0 text-[var(--theme-text-muted)]" />
-              <span className="truncate">{l.deliverableTitle}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* The attached deliverables are listed by <AgendaMeetingLinks/>. */}
     </Section>
   );
 }

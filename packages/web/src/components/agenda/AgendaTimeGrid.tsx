@@ -7,6 +7,8 @@ import {
   HOUR_PX, MAX_COLS, addDays, dayKey, groupHourly, isBar, itemDays, layoutDay, minutesOfDay, segmentForDay, startOfDay,
 } from './agendaLayout';
 import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon } from '../ui/icons/AgendaIcons';
+import { DragWrap, SlotPreview, useAgendaDnd } from './AgendaDnd';
+import { canDrag, canResize } from './agendaDrag';
 
 /** Gap kept around every rectangle, so two neighbours never touch. */
 const GAP_PX = 1;
@@ -20,10 +22,17 @@ interface Props {
   onOpen: OnOpen;
   onOpenTicket: (item: AgendaItem) => void;
   onPickDay: (day: Date) => void;
+  /**
+   * A18: a click on an empty all-day cell. (A click / drag on an empty slot of
+   * the hour grid goes through the drag controller's `onSelect`.)
+   */
+  onCreateAllDay?: (dayKey: string) => void;
 }
 
 /** Day / Week: an all-day band (due dates, 3+ day bars) over a 24-hour grid. */
-export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, onPickDay }: Props) {
+export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, onPickDay, onCreateAllDay }: Props) {
+  const dnd = useAgendaDnd();
+  const preview = dnd?.preview ?? null;
   const scrollRef = useRef<HTMLDivElement>(null);
   const first = days[0]!;
   const last = days[days.length - 1]!;
@@ -52,7 +61,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
 
   const perDay = days.map((d) => {
     const key = dayKey(d);
-    const allDay = items.filter((it) => it.shape === 'allDay' && it.start === key);
+    const allDay = items.filter((it) => it.shape === 'allDay' && itemDays(it, now).includes(key));
     const segs = items.map((it) => segmentForDay(it, d, now)).filter((s): s is NonNullable<typeof s> => s !== null);
     const count = items.filter((it) => itemDays(it, now).includes(key)).length;
     return { day: d, key, allDay, entries: layoutDay(groupHourly(segs), maxCols), count };
@@ -116,8 +125,17 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
           </>
         )}
         {perDay.map(({ key, allDay }) => (
-          <div key={key} className="flex min-h-6 min-w-0 flex-col gap-0.5 border-l border-[var(--theme-border)] p-0.5">
-            {allDay.map((it) => <AgendaChip key={it.id} item={it} onOpen={onOpen} dimmed={!isHit(it)} />)}
+          <div
+            key={key}
+            data-agenda-day={key}
+            onClick={(e) => { if (e.target === e.currentTarget) onCreateAllDay?.(key); }}
+            title={onCreateAllDay ? 'Click to add an all-day event' : undefined}
+            className={cn(
+              'flex min-h-6 min-w-0 flex-col gap-0.5 border-l border-[var(--theme-border)] p-0.5',
+              preview?.dayKey === key && preview.startMin === null && 'bg-[var(--theme-bg-overlay)] outline-2 -outline-offset-2 outline-dashed outline-[var(--theme-accent)]',
+            )}
+          >
+            {allDay.map((it) => <DragWrap key={it.id} item={it}><AgendaChip item={it} onOpen={onOpen} dimmed={!isHit(it)} /></DragWrap>)}
           </div>
         ))}
       </div>
@@ -135,7 +153,13 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
           {perDay.map(({ key, day, entries }) => (
             <div
               key={key}
-              className={cn('relative border-l border-[var(--theme-border)]', (day.getDay() === 0 || day.getDay() === 6) && 'bg-[var(--theme-bg-hover)]')}
+              data-agenda-col={key}
+              onPointerDown={(e) => { if (e.target === e.currentTarget && dnd) dnd.beginSelect(e, key); }}
+              className={cn(
+                'relative border-l border-[var(--theme-border)]',
+                (day.getDay() === 0 || day.getDay() === 6) && 'bg-[var(--theme-bg-hover)]',
+                preview?.dayKey === key && preview.startMin === null && 'outline-2 -outline-offset-2 outline-dashed outline-[var(--theme-accent)]',
+              )}
               style={{ backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${HOUR_PX - 1}px, var(--theme-border) ${HOUR_PX - 1}px, var(--theme-border) ${HOUR_PX}px)` }}
             >
               {entries.map((e) => {
@@ -180,6 +204,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                 const { seg } = e;
                 const it = seg.item;
                 const compact = height < 34;
+                const draggable = !!dnd && canDrag(it);
                 return (
                   <button
                     key={it.id}
@@ -187,8 +212,11 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                     data-agenda-item={it.id}
                     onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
                     onDoubleClick={() => onOpenTicket(it)}
+                    onPointerDown={draggable ? (ev) => dnd.beginItem(ev, it, 'move') : undefined}
                     className={cn(
                       'absolute flex overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125',
+                      draggable ? 'cursor-grab' : 'cursor-pointer',
+                      dnd?.draggingId === it.id && 'opacity-40',
                       compact ? 'flex-row items-center gap-1' : 'flex-col',
                       seg.continuesAfter && 'rounded-b-none',
                       seg.continuesBefore && 'rounded-t-none',
@@ -214,9 +242,19 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                       </span>
                     )}
                     {seg.continuesAfter && <ArrowDownIcon size={10} className="absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[var(--theme-text-secondary)]" />}
+                    {draggable && canResize(it) && !seg.continuesAfter && (
+                      <span
+                        aria-hidden
+                        data-agenda-resize={it.id}
+                        title="Drag to change the end"
+                        onPointerDown={(ev) => { ev.stopPropagation(); dnd.beginItem(ev, it, 'resize'); }}
+                        className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize"
+                      />
+                    )}
                   </button>
                 );
               })}
+              {preview?.dayKey === key && <SlotPreview preview={preview} refused={dnd?.refused ?? false} />}
               {key === todayKey && (
                 <div className="pointer-events-none absolute -left-px right-0 z-50 h-0.5 bg-[var(--tint-red-solid)]" style={{ top: (minutesOfDay(now) / 60) * HOUR_PX }}>
                   <span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-[var(--tint-red-solid)]" />

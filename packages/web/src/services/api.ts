@@ -2188,12 +2188,16 @@ export function agendaGoogleConnectUrl(): string {
   return `/auth/google-calendar?return_to=${encodeURIComponent(window.location.origin)}`;
 }
 
+/**
+ * No toast: the deliverable overlay reads this on every open, and a storage
+ * without the links table (501) or an older server must stay silent.
+ */
 export async function fetchAgendaExternalLinks(filter: { deliverableId?: string; eventKey?: string } = {}): Promise<import('@fleex/shared').AgendaExternalLink[]> {
   const q = new URLSearchParams();
   if (filter.deliverableId) q.set('deliverableId', filter.deliverableId);
   if (filter.eventKey) q.set('eventKey', filter.eventKey);
-  const { links } = await request<{ links: import('@fleex/shared').AgendaExternalLink[] }>(`/agenda/external-links?${q}`);
-  return links;
+  const { links } = await browseRequest<{ links: import('@fleex/shared').AgendaExternalLink[] }>(`/agenda/external-links?${q}`);
+  return links ?? [];
 }
 
 export function createAgendaExternalLink(input: { eventKey: string; deliverableId: string; eventTitle: string; eventStart: string }): Promise<import('@fleex/shared').AgendaExternalLink> {

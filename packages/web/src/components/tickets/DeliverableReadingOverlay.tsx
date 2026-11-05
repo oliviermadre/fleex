@@ -9,6 +9,7 @@ import { DeliverableTypeBadge } from '../ui/DeliverableTypeBadge';
 import { maximizeLabel, maximizedStyle, onAButton, WindowButton } from '../ui/WindowButton';
 import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { TicketPickerModal } from './TicketPickerModal';
+import { DeliverableMeetingLinks } from './DeliverableMeetingLinks';
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -167,6 +168,8 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
 
           <WindowButton kind="close" label="Close (Esc)" onClick={close} />
         </div>
+
+        <DeliverableMeetingLinks deliverableId={deliverable.id} onNavigate={close} />
 
         {/* Content */}
         {isHtml ? (

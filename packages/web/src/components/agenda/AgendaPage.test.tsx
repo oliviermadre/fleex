@@ -7,12 +7,22 @@ vi.mock('../../services/api', () => ({
   fetchAgendaPrefs: vi.fn(),
   saveAgendaPrefs: vi.fn(),
   fetchAgenda: vi.fn(),
+  fetchTickets: vi.fn(),
+  updateTicket: vi.fn(),
+  createCalendarEvent: vi.fn(),
 }));
 vi.mock('../../services/websocket', () => ({ appWs: { onChannel: () => () => {} } }));
 
 import * as api from '../../services/api';
 import { AgendaPage } from './AgendaPage';
 import { useAgendaStore } from '../../stores/agendaStore';
+import { useEventEditor } from './EventEditor';
+import { addDays, dayKey, weekStart } from './agendaLayout';
+
+// jsdom has no PointerEvent: without it fireEvent drops button / clientX.
+if (typeof window.PointerEvent === 'undefined') {
+  (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent = class extends MouseEvent {};
+}
 
 const now = new Date();
 const at = (h: number, m = 0) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m).toISOString();
@@ -45,8 +55,14 @@ beforeEach(() => {
   useAgendaStore.setState({ data: null, prefs: { ...DEFAULT_AGENDA_PREFS, view: 'day' }, prefsLoaded: false, query: '' });
   vi.mocked(api.fetchAgendaPrefs).mockResolvedValue({ ...DEFAULT_AGENDA_PREFS, view: 'day' });
   vi.mocked(api.fetchAgenda).mockResolvedValue(response);
+  vi.mocked(api.fetchTickets).mockResolvedValue([]);
+  vi.mocked(api.saveAgendaPrefs).mockResolvedValue(undefined as never);
+  useEventEditor.setState({ editor: null, deleting: null });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe('<AgendaPage/>', () => {
   it('leads a workflow run with its ticket number, so two "Spec Dev PR" runs can be told apart', async () => {
@@ -75,5 +91,55 @@ describe('<AgendaPage/>', () => {
     act(() => useAgendaStore.getState().updatePrefs((p) => ({ ...p, routines: { sync: false } })));
     await waitFor(() => expect(document.querySelector('[data-agenda-item="routine.run:s1"]')).toBeNull());
     expect(vi.mocked(api.fetchAgenda).mock.calls.length).toBe(calls);
+  });
+
+  it('opens the event editor from the Create button and from the c key', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Create/ }));
+    expect(await screen.findByRole('form', { name: 'New event' })).toBeTruthy();
+    act(() => useEventEditor.getState().close());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'New event' })).toBeNull());
+    fireEvent.keyDown(window, { key: 'c' });
+    expect(await screen.findByRole('form', { name: 'New event' })).toBeTruthy();
+  });
+
+  it('toggles the "To schedule" drawer and remembers it in the prefs', async () => {
+    renderPage();
+    const toggle = await screen.findByRole('button', { name: /To schedule/ });
+    expect(screen.getByRole('complementary', { name: 'To schedule' })).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(useAgendaStore.getState().prefs.drawerOpen).toBe(false);
+    expect(screen.queryByRole('complementary', { name: 'To schedule' })).toBeNull();
+  });
+
+  it('drags a due date to another day: optimistic move, then updateTicket at noon UTC', async () => {
+    const monday = weekStart(now);
+    const from = dayKey(now);
+    const to = dayKey(addDays(monday, now.getDay() === 1 ? 2 : 0));
+    const due = {
+      id: 'ticket.due:tk-765', type: 'ticket.due' as const, shape: 'allDay' as const, start: from, title: ticket.title, ticket,
+    };
+    vi.mocked(api.fetchAgenda).mockResolvedValue({ ...response, items: [due] });
+    vi.mocked(api.updateTicket).mockResolvedValue({} as never);
+    useAgendaStore.setState({ prefs: { ...DEFAULT_AGENDA_PREFS, view: 'week' } });
+    vi.mocked(api.fetchAgendaPrefs).mockResolvedValue({ ...DEFAULT_AGENDA_PREFS, view: 'week' });
+    renderPage();
+    const chip = await waitFor(() => {
+      const el = document.querySelector('[data-agenda-draggable="ticket.due:tk-765"]');
+      if (!el) throw new Error('not yet');
+      return el as HTMLElement;
+    });
+    const cell = document.querySelector(`[data-agenda-day="${to}"]`) as HTMLElement;
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => cell;
+    try {
+      fireEvent.pointerDown(chip, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(window, { clientX: 80, clientY: 12 });
+      fireEvent.pointerUp(window, { clientX: 80, clientY: 12 });
+    } finally {
+      document.elementFromPoint = orig;
+    }
+    await waitFor(() => expect(cell.querySelector('[data-agenda-item="ticket.due:tk-765"]')).toBeTruthy());
+    expect(api.updateTicket).toHaveBeenCalledWith('tk-765', { dueDate: `${to}T12:00:00.000Z` });
   });
 });

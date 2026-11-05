@@ -10,6 +10,8 @@ interface NameInputModalProps {
   title: string;
   placeholder?: string;
   confirmLabel?: string;
+  /** Pre-filled name (rename); blank by default. */
+  defaultValue?: string;
   /** Show an emoji field left of the name, pre-filled with `defaultValue`. */
   emoji?: { defaultValue: string };
   /** `emoji` is the normalised emoji, or undefined when the field is absent or left blank. */
@@ -22,6 +24,7 @@ export function NameInputModal({
   title,
   placeholder,
   confirmLabel = 'Créer',
+  defaultValue = '',
   emoji,
   onConfirm,
   onClose,
@@ -33,10 +36,10 @@ export function NameInputModal({
   // Reset values when modal opens
   useEffect(() => {
     if (open) {
-      setValue('');
+      setValue(defaultValue);
       setEmojiValue(defaultEmoji);
     }
-  }, [open, defaultEmoji]);
+  }, [open, defaultEmoji, defaultValue]);
 
   const trimmed = value.trim();
   const isValid = trimmed.length > 0;

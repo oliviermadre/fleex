@@ -54,6 +54,13 @@ describe('multi-day blocks (Google Calendar rule)', () => {
     expect(itemDays(b, NOW)).toEqual(['2026-11-03', '2026-11-04', '2026-11-05']);
   });
 
+  it('spreads a multi-day all-day event over its inclusive last day', () => {
+    const ev: AgendaItem = { id: 'event:e', type: 'event', shape: 'allDay', start: '2026-10-30', end: '2026-11-02', title: 'Offsite' };
+    expect(itemDays(ev, NOW)).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
+    expect(itemDays({ ...ev, end: '2026-10-30' }, NOW)).toEqual(['2026-10-30']);
+    expect(itemDays({ ...ev, end: null }, NOW)).toEqual(['2026-10-30']);
+  });
+
   it('does not spill a block that ends at 00:00 sharp onto the next day', () => {
     const b = block('r', L(2026, 11, 4, 21, 0), L(2026, 11, 5, 0, 0));
     expect(daysCovered(b, NOW)).toBe(1);

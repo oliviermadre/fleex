@@ -7,6 +7,8 @@ import { MultiSelect } from '../ui/MultiSelect';
 import { cn } from '../../lib/cn';
 import { AGENDA_LABELS, FAMILIES, LABEL_BY_TYPE } from './agendaLabels';
 import { LabelIcon } from './AgendaChip';
+import { AgendaSavedViews } from './AgendaSavedViews';
+import { AgendaGoogleSection } from './AgendaGoogleSection';
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ReopenIcon } from '../ui/icons/AgendaIcons';
 import { MinusIcon } from '../ui/icons/TodoIcons';
 import { addDays, dayKey, labelOn, startOfDay, weekStart, windowFor } from './agendaLayout';
@@ -64,8 +66,9 @@ function MiniCalendar() {
 }
 
 /**
- * /agenda's left panel: mini calendar, labels (one checkbox per routine under
- * Routines), and the board / tag filters. Every change is saved server-side.
+ * /agenda's left panel: mini calendar, saved views, labels (one checkbox per
+ * routine under Routines, Google Calendar settings under Calendar), and the
+ * board / epic / repo / tag filters. Every change is saved server-side.
  */
 export function AgendaSidebar() {
   const { data, prefs, updatePrefs } = useAgendaStore();
@@ -85,17 +88,32 @@ export function AgendaSidebar() {
     for (const it of data?.items ?? []) for (const t of it.ticket?.tags ?? []) s.add(t);
     return [...s].sort();
   }, [data]);
+  const epics = useMemo(() => {
+    const known = new Map((data?.epics ?? []).map((e) => [e.id, e.name]));
+    // A selected epic missing from this window keeps its row, so it can be unticked.
+    for (const id of prefs.filters.epics) if (!known.has(id)) known.set(id, id);
+    return [...known].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [data, prefs.filters.epics]);
+  const repos = useMemo(() => {
+    const s = new Set<string>(prefs.filters.repos);
+    for (const it of data?.items ?? []) for (const r of it.ticket?.repos ?? []) s.add(r);
+    return [...s].sort();
+  }, [data, prefs.filters.repos]);
+  const setFilter = (key: keyof AgendaPrefs['filters'], v: string[]) =>
+    updatePrefs((p: AgendaPrefs) => ({ ...p, filters: { ...p.filters, [key]: v } }));
 
   const setLabels = (types: AgendaItemType[], on: boolean) =>
     updatePrefs((p) => ({ ...p, labels: { ...p.labels, ...Object.fromEntries(types.map((t) => [t, on])) } }));
   const toggleRoutine = (id: string) =>
     updatePrefs((p) => ({ ...p, routines: { ...p.routines, [id]: p.routines[id] === false } }));
-  const isDirty = JSON.stringify({ l: prefs.labels, r: prefs.routines, f: prefs.filters })
-    !== JSON.stringify({ l: DEFAULT_AGENDA_PREFS.labels, r: DEFAULT_AGENDA_PREFS.routines, f: DEFAULT_AGENDA_PREFS.filters });
+  const isDirty = Object.keys(prefs.labels).length > 0
+    || Object.keys(prefs.routines).length > 0
+    || (Object.keys(DEFAULT_AGENDA_PREFS.filters) as (keyof AgendaPrefs['filters'])[]).some((k) => (prefs.filters[k]?.length ?? 0) > 0);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto px-2.5 py-3 text-xs">
       <MiniCalendar />
+      <AgendaSavedViews />
 
       <div className="mt-4 mb-1 text-[10.5px] uppercase tracking-wide text-[var(--theme-text-muted)]">Labels</div>
       {FAMILIES.map((fam) => {
@@ -149,6 +167,7 @@ export function AgendaSidebar() {
                 })}
               </>
             )}
+            {fam.key === 'calendar' && <AgendaGoogleSection />}
           </div>
         );
       })}
@@ -159,21 +178,33 @@ export function AgendaSidebar() {
           label="Boards"
           values={prefs.filters.boards}
           options={boards.map((b) => ({ value: b.id, label: `${b.emoji ?? ''} ${b.name}`.trim() }))}
-          onChange={(v) => updatePrefs((p: AgendaPrefs) => ({ ...p, filters: { ...p.filters, boards: v } }))}
+          onChange={(v) => setFilter('boards', v)}
+        />
+        <MultiSelect
+          label="Epics"
+          values={prefs.filters.epics}
+          options={epics}
+          onChange={(v) => setFilter('epics', v)}
+        />
+        <MultiSelect
+          label="Repos"
+          values={prefs.filters.repos}
+          options={repos.map((r) => ({ value: r, label: r }))}
+          onChange={(v) => setFilter('repos', v)}
         />
         <MultiSelect
           label="Tags"
           values={prefs.filters.tags}
           options={tags.map((t) => ({ value: t, label: t }))}
-          onChange={(v) => updatePrefs((p: AgendaPrefs) => ({ ...p, filters: { ...p.filters, tags: v } }))}
+          onChange={(v) => setFilter('tags', v)}
         />
-        <div className="text-[11px] text-[var(--theme-text-faint)]">Items without a board or tags (routine runs, PRs without a ticket) stay visible.</div>
+        <div className="text-[11px] text-[var(--theme-text-faint)]">Items without the field (routine runs, events, meetings, PRs without a ticket) stay visible.</div>
       </div>
       {isDirty && (
         <button
           type="button"
           className="mt-3 self-start text-[var(--theme-accent)]"
-          onClick={() => updatePrefs((p) => ({ ...p, labels: {}, routines: {}, filters: { boards: [], epics: [], repos: [], tags: [] } }))}
+          onClick={() => updatePrefs((p) => ({ ...p, labels: {}, routines: {}, filters: { ...DEFAULT_AGENDA_PREFS.filters } }))}
         >
           <span className="inline-flex items-center gap-1"><ReopenIcon size={12} /> Reset labels &amp; filters</span>
         </button>

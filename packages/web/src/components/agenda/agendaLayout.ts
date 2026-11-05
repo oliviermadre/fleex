@@ -104,7 +104,13 @@ export function isBar(item: AgendaItem, now: Date): boolean {
 
 /** Local day keys an item appears on (for the month grid and day counts). */
 export function itemDays(item: AgendaItem, now: Date): string[] {
-  if (item.shape === 'allDay') return [item.start];
+  if (item.shape === 'allDay') {
+    // A multi-day all-day event (E1) carries its inclusive last day in `end`.
+    if (!item.end || item.end <= item.start) return [item.start];
+    const out: string[] = [];
+    for (let d = parseDayKey(item.start), k = item.start; k <= item.end && out.length < 366; d = addDays(d, 1), k = dayKey(d)) out.push(k);
+    return out;
+  }
   const first = startOfDay(new Date(item.start));
   if (item.shape !== 'block') return [dayKey(first)];
   const last = lastDayOf(item, now);

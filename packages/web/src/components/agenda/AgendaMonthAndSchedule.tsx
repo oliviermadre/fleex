@@ -2,6 +2,7 @@ import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { AgendaChip, GroupChipLabel, WaitIcon, type OnOpen } from './AgendaChip';
 import { chipStyle } from './agendaLabels';
+import { DragWrap, useAgendaDnd } from './AgendaDnd';
 import { addDays, dayKey, isBar, itemDays, parseDayKey, workflowShortName, openWait } from './agendaLayout';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -35,7 +36,7 @@ function GroupChip({ items, onOpen, dimmed }: { items: AgendaItem[]; onOpen: OnO
   );
 }
 
-export function AgendaMonth({ from, anchorMonth, items, now, isHit, onOpen, onPickDay }: {
+export function AgendaMonth({ from, anchorMonth, items, now, isHit, onOpen, onPickDay, onCreateAllDay }: {
   from: Date;
   anchorMonth: number;
   items: AgendaItem[];
@@ -43,7 +44,10 @@ export function AgendaMonth({ from, anchorMonth, items, now, isHit, onOpen, onPi
   isHit: (item: AgendaItem) => boolean;
   onOpen: OnOpen;
   onPickDay: (day: Date) => void;
+  /** A18: a click on the empty part of a cell. */
+  onCreateAllDay?: (dayKey: string) => void;
 }) {
+  const preview = useAgendaDnd()?.preview ?? null;
   const byDay = new Map<string, AgendaItem[]>();
   for (const it of items) for (const k of itemDays(it, now)) (byDay.get(k) ?? byDay.set(k, []).get(k)!).push(it);
   const todayKey = dayKey(now);
@@ -59,11 +63,20 @@ export function AgendaMonth({ from, anchorMonth, items, now, isHit, onOpen, onPi
           const groups = dayGroups(byDay.get(key) ?? [], now);
           const shown = groups.slice(0, MAX_CHIPS);
           return (
-            <div key={key} className={cn('flex min-h-24 min-w-0 flex-col gap-0.5 overflow-hidden border-b border-r border-[var(--theme-border)] p-1', day.getMonth() !== anchorMonth && 'bg-[var(--theme-bg-hover)]')}>
+            <div
+              key={key}
+              data-agenda-day={key}
+              onClick={() => onCreateAllDay?.(key)}
+              className={cn(
+                'flex min-h-24 min-w-0 flex-col gap-0.5 overflow-hidden border-b border-r border-[var(--theme-border)] p-1',
+                day.getMonth() !== anchorMonth && 'bg-[var(--theme-bg-hover)]',
+                preview?.dayKey === key && 'bg-[var(--theme-bg-overlay)] outline-2 -outline-offset-2 outline-dashed outline-[var(--theme-accent)]',
+              )}
+            >
               <div className="flex items-center">
                 <button
                   type="button"
-                  onClick={() => onPickDay(day)}
+                  onClick={(e) => { e.stopPropagation(); onPickDay(day); }}
                   className={cn('h-5 min-w-5 rounded-full px-1 text-xs', key === todayKey ? 'bg-[var(--theme-accent)] font-semibold text-[var(--theme-accent-fg)]' : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)]')}
                 >
                   {day.getDate()}
@@ -71,10 +84,10 @@ export function AgendaMonth({ from, anchorMonth, items, now, isHit, onOpen, onPi
                 {groups.length > 0 && <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">{(byDay.get(key) ?? []).length}</span>}
               </div>
               {shown.map((g) => g.length === 1
-                ? <AgendaChip key={g[0]!.id} item={g[0]!} onOpen={onOpen} dimmed={!isHit(g[0]!)} time={!isBar(g[0]!, now)} />
+                ? <DragWrap key={g[0]!.id} item={g[0]!}><AgendaChip item={g[0]!} onOpen={onOpen} dimmed={!isHit(g[0]!)} time={!isBar(g[0]!, now)} /></DragWrap>
                 : <GroupChip key={`${g[0]!.type}-${g[0]!.id}`} items={g} onOpen={onOpen} dimmed={!g.some(isHit)} />)}
               {groups.length > MAX_CHIPS && (
-                <button type="button" onClick={() => onPickDay(day)} className="self-start rounded px-1 text-[11px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)]">
+                <button type="button" onClick={(e) => { e.stopPropagation(); onPickDay(day); }} className="self-start rounded px-1 text-[11px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)]">
                   +{groups.length - MAX_CHIPS} more
                 </button>
               )}
