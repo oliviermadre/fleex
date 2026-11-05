@@ -2,7 +2,7 @@ import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import type { AgendaItem } from '@fleex/shared';
 import type { AgendaItemType } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { HandIcon, PauseIcon, QuestionIcon } from '../ui/icons/AgendaIcons';
+import { HandIcon, PauseIcon, QuestionIcon, VideoIcon } from '../ui/icons/AgendaIcons';
 import { LABEL_BY_TYPE, chipStyle, colorToken, dotStyle, hatchStyle, itemHue, labelHue, statusHue, type AgendaColors, type SearchMatch } from './agendaLabels';
 import { useAgendaStore } from '../../stores/agendaStore';
 import { formatDuration, openWait, workflowShortName } from './agendaLayout';
@@ -61,7 +61,40 @@ export function GroupChipLabel({ items }: { items: AgendaItem[] }) {
   );
 }
 
-/** Status dot for runs, a hand for a manual routine launch. */
+/**
+ * Join the call straight from the chip, until the meeting ends. A span, not a
+ * link: the chip itself is a button. It stops the click and the pointer so the
+ * card doesn't open and no drag starts.
+ */
+function MeetShortcut({ item }: { item: AgendaItem }) {
+  const url = item.type === 'external' ? item.external?.meetUrl : null;
+  if (!url || item.external?.rsvp === 'declined') return null;
+  const end = item.end ? new Date(item.end).getTime() : null;
+  if (end !== null && end < Date.now()) return null;
+  const open = (e: { stopPropagation: () => void; preventDefault: () => void }) => {
+    e.stopPropagation();
+    e.preventDefault();
+    window.open(url, '_blank', 'noopener');
+  };
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      title={`Join: ${url}`}
+      aria-label="Join the video call"
+      data-agenda-meet={item.id}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={open}
+      onKeyDown={(e) => { if (e.key === 'Enter') open(e); }}
+      className="flex shrink-0 cursor-pointer rounded px-0.5 hover:bg-[var(--theme-bg-overlay)]"
+      style={{ color: 'var(--tint-blue-solid)' }}
+    >
+      <VideoIcon size={12} />
+    </span>
+  );
+}
+
+/** Status dot for runs, a hand for a manual routine launch, a join shortcut for a call. */
 function Badges({ item }: { item: AgendaItem }) {
   return (
     <>
@@ -69,6 +102,8 @@ function Badges({ item }: { item: AgendaItem }) {
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', item.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(item.status))} />
       )}
       {item.type === 'routine.run' && item.triggeredFrom && item.triggeredFrom !== 'schedule' && <span title="Launched manually" className="flex shrink-0 text-[var(--theme-text-muted)]"><HandIcon size={11} /></span>}
+      {item.type === 'external' && item.external?.rsvp === 'tentative' && <span title="You answered maybe" className="flex shrink-0 text-[var(--theme-text-muted)]"><QuestionIcon size={10} /></span>}
+      <MeetShortcut item={item} />
     </>
   );
 }
@@ -86,7 +121,7 @@ export function ChipName({ item }: { item: AgendaItem }) {
   return (
     <>
       <LabelIcon type={item.type} overdue={item.overdue} item={item} />
-      <span className={cn('truncate', (item.type === 'routine.skipped' || item.type === 'routine.missed') && 'line-through')}>{item.title}</span>
+      <span className={cn('truncate', (item.type === 'routine.skipped' || item.type === 'routine.missed' || item.external?.rsvp === 'declined') && 'line-through')}>{item.title}</span>
     </>
   );
 }

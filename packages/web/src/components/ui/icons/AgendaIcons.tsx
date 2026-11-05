@@ -273,3 +273,13 @@ export function PanelRightIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/** A video camera: join the meeting (Google Meet, Zoom…). */
+export function VideoIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="6.5" width="12.5" height="11" rx="2" />
+      <path d="M15.5 10.5 21 7.5v9l-5.5-3" />
+    </Icon>
+  );
+}

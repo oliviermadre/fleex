@@ -15,6 +15,7 @@ import {
   GoogleNotConnectedError,
   type GoogleCalendarClient,
   type GoogleCalendarEvent,
+  type GoogleRsvpStatus,
 } from '../google/google-calendar.client.js';
 import { ExternalLinksStore, eventKeyOf, eventStartOf, findMeeting } from '../google/external-links.js';
 
@@ -37,6 +38,11 @@ export function localDayWindow(date: string): { from: Date; to: Date } | null {
   if (from.getFullYear() !== y || from.getMonth() !== m - 1 || from.getDate() !== d) return null;
   return { from, to: new Date(y, m - 1, d + 1) };
 }
+
+const RSVP_STATUSES: ReadonlySet<string> = new Set<GoogleRsvpStatus>(['accepted', 'tentative', 'declined']);
+/** An RSVP writes to Google: gog's account needs the calendar scope, not the read-only one. */
+export const RSVP_SCOPE_HINT = 'Answering an invitation writes to Google Calendar: authorize gog with write access — '
+  + 'gog auth add you@example.com --services calendar (without --readonly)';
 
 const isNonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 
@@ -96,6 +102,38 @@ export function googleAgendaRoutes(deps: GoogleAgendaRoutesDeps) {
         }
       }
       return status;
+    });
+
+    // ── My answer to an invitation (the one write to Google) ──
+
+    app.post<{ Body: unknown }>('/api/agenda/google/respond', async (request, reply) => {
+      const r = ready(reply);
+      if (!r) return reply;
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const { calendarId, eventId, status } = body;
+      if (!isNonEmpty(calendarId) || !isNonEmpty(eventId)) {
+        return reply.code(400).send({ error: 'calendarId and eventId are required', code: 'INVALID_BODY' });
+      }
+      if (typeof status !== 'string' || !RSVP_STATUSES.has(status)) {
+        return reply.code(400).send({ error: 'status must be accepted, tentative or declined', code: 'INVALID_BODY' });
+      }
+      try {
+        await r.client.respond(calendarId, eventId, status as GoogleRsvpStatus);
+      } catch (err) {
+        // A read-only token: Google answers "insufficient scopes" (403) or gog asks for consent again.
+        if (err instanceof GoogleNotConnectedError || (err instanceof GoogleApiError && err.status === 403)) {
+          return reply.code(409).send({
+            error: `${RSVP_SCOPE_HINT} (${err.message})`,
+            code: 'GOOGLE_WRITE_NOT_AUTHORIZED',
+            setupUrl: GOGCLI_SETUP_URL,
+          });
+        }
+        if (err instanceof GoogleApiError && err.status === 404) {
+          return reply.code(404).send({ error: `No Google event ${eventId} in calendar ${calendarId}`, code: 'EVENT_NOT_FOUND' });
+        }
+        return googleFailure(reply, err);
+      }
+      return { calendarId, eventId, status };
     });
 
     // ── Links ──

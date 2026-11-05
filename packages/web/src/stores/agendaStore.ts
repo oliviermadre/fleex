@@ -9,6 +9,7 @@ import {
   type AgendaGoogleStatus,
   type AgendaPrefs,
   type AgendaResponse,
+  type AgendaRsvp,
   type AgendaView,
 } from '@fleex/shared';
 import * as api from '../services/api';
@@ -57,6 +58,8 @@ interface AgendaStore {
    * runs, event log, Google through gog — seconds on a real instance).
    */
   applyLocalEvent: (eventId: string, event: CalendarEvent | null) => void;
+  /** Show my answer to a Google meeting before the agenda reloads. */
+  applyLocalRsvp: (itemId: string, rsvp: AgendaRsvp) => void;
   setView: (view: AgendaView) => void;
   go: (dir: 1 | -1) => void;
   goToday: () => void;
@@ -88,6 +91,18 @@ const SAVE_DEBOUNCE_MS = 500;
  * as the server; attached deliverables and the ticket ref are kept when the
  * occurrence already existed — the next refetch completes the rest.
  */
+/** My answer to a Google meeting, shown at once: the item's `rsvp`, its status and my row in the guest list. */
+export function withRsvp(data: AgendaResponse, itemId: string, rsvp: AgendaRsvp): AgendaResponse {
+  return {
+    ...data,
+    items: data.items.map((it) => {
+      if (it.id !== itemId || !it.external) return it;
+      const attendeeList = it.external.attendeeList?.map((a) => (a.self ? { ...a, response: rsvp } : a));
+      return { ...it, status: rsvp, external: { ...it.external, rsvp, ...(attendeeList ? { attendeeList } : {}) } };
+    }),
+  };
+}
+
 export function withLocalEvent(data: AgendaResponse, eventId: string, event: CalendarEvent | null): AgendaResponse {
   const isMine = (it: AgendaItem) => it.type === 'event' && it.event?.id === eventId;
   const before = new Map(data.items.filter(isMine).map((it) => [it.id, it]));
@@ -191,6 +206,11 @@ export const useAgendaStore = create<AgendaStore>((set, get) => {
     applyLocalEvent: (eventId, event) => {
       const data = get().data;
       if (data) set({ data: withLocalEvent(data, eventId, event) });
+    },
+
+    applyLocalRsvp: (itemId, rsvp) => {
+      const data = get().data;
+      if (data) set({ data: withRsvp(data, itemId, rsvp) });
     },
 
     setView: (view) => {

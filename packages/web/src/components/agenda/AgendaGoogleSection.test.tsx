@@ -47,7 +47,7 @@ describe('<AgendaGoogleSection/>', () => {
     expect(section.textContent).toMatch(/not in Fleex/);
     expect(screen.getByText('brew install openclaw/tap/gogcli')).toBeTruthy();
     expect(screen.getByText('gog auth credentials <client_secret.json>')).toBeTruthy();
-    expect(screen.getByText(/gog auth add .* --services calendar --readonly/)).toBeTruthy();
+    expect(screen.getByText(/gog auth add .* --services calendar$/)).toBeTruthy();
     const link = screen.getByRole('link', { name: /Setup guide/ });
     expect(link.getAttribute('href')).toBe(SETUP);
     expect(link.getAttribute('target')).toBe('_blank');

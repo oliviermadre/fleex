@@ -2208,6 +2208,11 @@ export function createAgendaExternalLink(input: { eventKey: string; deliverableI
   return request('/agenda/external-links', { method: 'POST', body: JSON.stringify({ ...input, source: 'manual' }) });
 }
 
+/** My answer to a Google invitation (written through gogcli on the server). */
+export async function respondToAgendaMeeting(input: { calendarId: string; eventId: string; status: 'accepted' | 'tentative' | 'declined' }): Promise<void> {
+  await request<unknown>('/agenda/google/respond', { method: 'POST', body: JSON.stringify(input) });
+}
+
 export async function deleteAgendaExternalLink(id: string): Promise<void> {
   await request<void>(`/agenda/external-links/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

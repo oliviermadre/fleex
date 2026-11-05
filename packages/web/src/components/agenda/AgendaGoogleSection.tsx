@@ -46,7 +46,7 @@ function SetupSteps({ google }: { google: AgendaGoogleStatus }) {
   const steps: { label: string; cmd?: string; done: boolean }[] = [
     { label: 'Install gogcli', cmd: GOGCLI_INSTALL_COMMAND, done: google.installed },
     { label: 'Google Cloud project: enable the Calendar API, create a Desktop OAuth client, then', cmd: 'gog auth credentials <client_secret.json>', done: false },
-    { label: 'Authorize your account (read-only)', cmd: 'gog auth add you@example.com --services calendar --readonly', done: false },
+    { label: 'Authorize your account (calendar access, so you can answer invitations from Fleex)', cmd: 'gog auth add you@example.com --services calendar', done: false },
   ];
   const check = async () => {
     setChecking(true);

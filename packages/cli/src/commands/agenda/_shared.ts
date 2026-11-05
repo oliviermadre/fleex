@@ -50,7 +50,7 @@ export function describeAgendaError(err: unknown): string {
   if (!(err instanceof AgendaApiError)) return err instanceof Error ? err.message : String(err);
   switch (err.code) {
     case 'GOOGLE_NOT_CONNECTED':
-      return 'Google Calendar is read through gogcli, which is not set up on the Fleex server. Install it (brew install openclaw/tap/gogcli), authorize your account (gog auth add you@example.com --services calendar --readonly), then retry. Setup guide: https://gogcli.sh/quickstart.html';
+      return 'Google Calendar is read through gogcli, which is not set up on the Fleex server. Install it (brew install openclaw/tap/gogcli), authorize your account (gog auth add you@example.com --services calendar), then retry. Setup guide: https://gogcli.sh/quickstart.html';
     case 'EVENT_NOT_FOUND':
       return `Meeting not found: ${err.message}. Check --google-event / --calendar, or the --match-title and --date (server local day).`;
     case 'AMBIGUOUS_EVENT': {

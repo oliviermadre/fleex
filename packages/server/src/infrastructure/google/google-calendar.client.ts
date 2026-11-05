@@ -43,8 +43,22 @@ export interface GoogleCalendarEvent {
   end?: GoogleEventTime;
   recurringEventId?: string;
   originalStartTime?: GoogleEventTime;
-  attendees?: { email?: string; self?: boolean; resource?: boolean; responseStatus?: string }[];
+  description?: string;
+  hangoutLink?: string;
+  conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
+  organizer?: { email?: string; displayName?: string; self?: boolean };
+  attendees?: {
+    email?: string;
+    displayName?: string;
+    self?: boolean;
+    organizer?: boolean;
+    optional?: boolean;
+    resource?: boolean;
+    responseStatus?: string;
+  }[];
 }
+
+export type GoogleRsvpStatus = 'accepted' | 'tentative' | 'declined';
 
 export interface GoogleCalendarListEntry {
   id: string;
@@ -145,16 +159,16 @@ export class GoogleCalendarClient {
     this.logger = deps.logger;
   }
 
-  /** Read-only, scriptable, never prompts. */
-  private baseArgs(): string[] {
-    const args = ['--json', '--no-input', '--readonly', '--color=never'];
+  /** Scriptable, never prompts; read-only unless `write` (an RSVP is the one write Fleex does). */
+  private baseArgs(write = false): string[] {
+    const args = ['--json', '--no-input', ...(write ? [] : ['--readonly']), '--color=never'];
     if (this.account) args.push('--account', this.account);
     return args;
   }
 
   /** Run a gog command; parsed JSON on success, typed errors otherwise. */
-  private async gog(args: string[]): Promise<Record<string, unknown>> {
-    const res = await this.run([...this.baseArgs(), ...args]);
+  private async gog(args: string[], write = false): Promise<Record<string, unknown>> {
+    const res = await this.run([...this.baseArgs(write), ...args]);
     if (res.notFound) throw new GogNotInstalledError(this.bin);
     if (res.code === 0) {
       const body = parseJson(res.stdout);
@@ -248,5 +262,15 @@ export class GoogleCalendarClient {
       if (err instanceof GoogleApiError) this.logger?.warn('gog calendar event failed', { error: err.message });
       throw err;
     }
+  }
+
+  /**
+   * My answer to an invitation (`gog calendar respond`). Needs a gog account
+   * authorized with the calendar scope, not `--readonly`. Clears the cached
+   * event windows so the next agenda read shows the answer.
+   */
+  async respond(calendarId: string, eventId: string, status: GoogleRsvpStatus): Promise<void> {
+    await this.gog(['calendar', 'respond', calendarId, eventId, '--status', status], true);
+    for (const key of [...this.cache.keys()]) if (key.startsWith('events|')) this.cache.delete(key);
   }
 }

@@ -1,4 +1,5 @@
 import { AgendaEventActions } from './AgendaEventActions';
+import { AgendaMeetingDetails } from './AgendaMeetingDetails';
 import { AgendaEventLinks, AgendaMeetingLinks } from './AgendaMeetingLinks';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -254,20 +255,19 @@ function RunMeta({ item, now }: { item: AgendaItem; now: Date }) {
   );
 }
 
-/** Free events and Google meetings: the basics, for now. */
+/** Free events: recurrence and description. Google meetings have <AgendaMeetingDetails/>. */
 function CalendarMeta({ item }: { item: AgendaItem }) {
   const ev = item.event;
-  const ext = item.external;
-  if (!ev && !ext) return null;
+  if (!ev || (!ev.recurrence && !ev.description)) return null;
   return (
-    <Section title={item.type === 'external' ? 'Google Calendar' : 'Event'}>
-      <div className="grid grid-cols-[84px_1fr] items-center gap-x-2 gap-y-1">
-        {ev?.recurrence && <Field label="Repeats">{ev.recurrence}{ev.recurrenceUntil ? ` until ${fmtDate(ev.recurrenceUntil)}` : ''}</Field>}
-        {ext?.location && <Field label="Location">{ext.location}</Field>}
-        {ext && ext.attendees > 0 && <Field label="Attendees">{ext.attendees}</Field>}
-      </div>
-      {ev?.description && <div className="whitespace-pre-wrap text-[var(--theme-text-secondary)]">{ev.description}</div>}
-      {/* The attached deliverables are listed by <AgendaMeetingLinks/> / <AgendaEventLinks/>. */}
+    <Section title="Event">
+      {ev.recurrence && (
+        <div className="grid grid-cols-[84px_1fr] items-center gap-x-2 gap-y-1">
+          <Field label="Repeats">{ev.recurrence}{ev.recurrenceUntil ? ` until ${fmtDate(ev.recurrenceUntil)}` : ''}</Field>
+        </div>
+      )}
+      {ev.description && <div className="whitespace-pre-wrap text-[var(--theme-text-secondary)]">{ev.description}</div>}
+      {/* The attached deliverables are listed by <AgendaEventLinks/>. */}
     </Section>
   );
 }
@@ -348,6 +348,7 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
       <DeliverableList load={runDelivs} title="Deliverables of this run" onClose={onClose} hideWhenEmpty />
       <DeliverableList load={ticketDelivs} title="Ticket deliverables" exclude={runIds} onClose={onClose} />
       <CalendarMeta item={item} />
+      {item.type === 'external' && <AgendaMeetingDetails item={item} />}
       {item.type === 'event' && <AgendaEventLinks item={item} onClose={onClose} />}
       {item.type === 'event' && <AgendaEventActions item={item} onClose={onClose} />}
       {item.type === 'external' && <AgendaMeetingLinks item={item} onClose={onClose} />}

@@ -124,12 +124,20 @@ export function chipStyle(item: AgendaItem, colors?: AgendaColors, match?: Searc
   const skipped = item.type === 'routine.skipped' || item.type === 'routine.missed';
   const red = item.overdue;
   const h: AgendaColor = red ? 'red' : hue;
+  // A Google invitation looks like it does in Google Calendar: outlined while
+  // unanswered, hatched for maybe, faded (and struck through, see ChipName) when declined.
+  const rsvp = item.type === 'external' ? item.external?.rsvp ?? null : null;
+  const background = upcoming || skipped || rsvp === 'needsAction' || rsvp === 'declined'
+    ? 'transparent'
+    : rsvp === 'tentative'
+      ? `repeating-linear-gradient(135deg, ${v(h, 'bg')} 0 5px, transparent 5px 10px)`
+      : v(h, 'bg');
   return {
-    background: upcoming || skipped ? 'transparent' : v(h, 'bg'),
-    border: `1px ${upcoming || skipped ? 'dashed' : 'solid'} ${v(h, 'border')}`,
+    background,
+    border: `1px ${upcoming || skipped ? 'dashed' : 'solid'} ${rsvp === 'needsAction' ? v(h, 'solid') : v(h, 'border')}`,
     borderLeft: `3px solid ${v(h, 'solid')}`,
-    color: 'var(--theme-text-primary)',
-    opacity: match === 'dim' ? 0.2 : upcoming ? 0.8 : 1,
+    color: rsvp === 'declined' ? 'var(--theme-text-muted)' : 'var(--theme-text-primary)',
+    opacity: match === 'dim' ? 0.2 : upcoming ? 0.8 : rsvp === 'declined' ? 0.6 : 1,
     ...(match === 'hit' ? { boxShadow: '0 0 0 2px var(--tint-yellow-solid)', zIndex: 20 } : {}),
   };
 }

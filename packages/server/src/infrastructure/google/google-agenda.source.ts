@@ -4,7 +4,7 @@
  * no items, not an error;
  * an API failure throws so the use case reports it in `errors.external`.
  */
-import type { AgendaExternalLink, AgendaItem } from '@fleex/shared';
+import type { AgendaAttendee, AgendaExternalLink, AgendaItem, AgendaRsvp } from '@fleex/shared';
 import { GoogleNotConnectedError, type GoogleCalendarClient, type GoogleCalendarEvent } from './google-calendar.client.js';
 import { eventKeyOf, type ExternalLinksStore } from './external-links.js';
 
@@ -26,6 +26,69 @@ function toIso(value: string): string {
   return Number.isNaN(d.getTime()) ? value : d.toISOString();
 }
 
+const RSVPS: ReadonlySet<string> = new Set(['accepted', 'tentative', 'declined', 'needsAction']);
+const asRsvp = (v: string | undefined): AgendaRsvp => (v && RSVPS.has(v) ? (v as AgendaRsvp) : 'needsAction');
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+/**
+ * Google stores event notes as light HTML (`<br>`, `<a>`, `<b>`, lists). The
+ * card shows plain text: line breaks kept, a link's target kept next to its
+ * label when they differ, every other tag dropped, entities decoded.
+ */
+export function notesToText(html: string | undefined | null): string | null {
+  if (!html) return null;
+  const text = html
+    .replace(/\r\n?/g, '\n')
+    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, label: string) => {
+      const l = label.replace(/<[^>]+>/g, '').trim();
+      return !l || l === href ? href : `${l} (${href})`;
+    })
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li\b[^>]*>/gi, '\n• ')
+    .replace(/<\/(p|div|ul|ol|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+      if (e[0] === '#') {
+        const code = e[1]?.toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+      }
+      return ENTITIES[e.toLowerCase()] ?? m;
+    })
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || null;
+}
+
+/** The video link: Meet's `hangoutLink`, else the conference's video entry point (Zoom, Teams…). */
+export function meetUrlOf(event: GoogleCalendarEvent): string | null {
+  if (event.hangoutLink) return event.hangoutLink;
+  const video = event.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video' && e.uri);
+  return video?.uri ?? null;
+}
+
+const RSVP_ORDER: Record<AgendaRsvp, number> = { accepted: 0, tentative: 1, needsAction: 2, declined: 3 };
+
+/** Guests without rooms, organizer first, then me, then by answer and name. */
+export function attendeesOf(event: GoogleCalendarEvent): AgendaAttendee[] {
+  const organizerEmail = event.organizer?.email?.toLowerCase() ?? null;
+  const list: AgendaAttendee[] = (event.attendees ?? [])
+    .filter((a) => !a.resource && a.email)
+    .map((a) => ({
+      email: a.email!,
+      name: a.displayName?.trim() || null,
+      response: asRsvp(a.responseStatus),
+      organizer: a.organizer === true || (organizerEmail !== null && a.email!.toLowerCase() === organizerEmail),
+      self: a.self === true,
+      optional: a.optional === true,
+    }));
+  const rank = (a: AgendaAttendee) => (a.organizer ? 0 : a.self ? 1 : 2);
+  return list.sort((a, b) => rank(a) - rank(b)
+    || RSVP_ORDER[a.response] - RSVP_ORDER[b.response]
+    || (a.name ?? a.email).localeCompare(b.name ?? b.email));
+}
+
 /** One Google event → one agenda item; null for cancelled or start-less events. */
 export function mapGoogleEvent(
   event: GoogleCalendarEvent,
@@ -35,6 +98,13 @@ export function mapGoogleEvent(
   if (event.status === 'cancelled') return null;
   const eventKey = eventKeyOf(event);
   const self = event.attendees?.find((a) => a.self);
+  const attendeeList = attendeesOf(event);
+  // I can answer when I'm a guest; an organizer's own event has nothing to answer.
+  const iOrganize = event.organizer?.self === true || self?.organizer === true;
+  const rsvp = self && !iOrganize ? asRsvp(self.responseStatus) : null;
+  const organizer = event.organizer?.email
+    ? { email: event.organizer.email, name: event.organizer.displayName?.trim() || null, self: event.organizer.self === true }
+    : null;
   const base = {
     id: `external:${eventKey}`,
     type: 'external' as const,
@@ -43,9 +113,16 @@ export function mapGoogleEvent(
     external: {
       calendarId,
       eventKey,
+      eventId: event.id,
       htmlLink: event.htmlLink ?? null,
-      attendees: (event.attendees ?? []).filter((a) => !a.resource).length,
+      attendees: attendeeList.length,
       location: event.location ?? null,
+      meetUrl: meetUrlOf(event),
+      description: notesToText(event.description),
+      organizer,
+      attendeeList,
+      rsvp,
+      canRespond: rsvp !== null,
       eventType: event.eventType ?? 'default',
       links,
     },

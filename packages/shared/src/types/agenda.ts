@@ -87,6 +87,19 @@ export interface CalendarEvent {
 export type CalendarEventInput = Pick<CalendarEvent, 'title' | 'allDay' | 'start' | 'end'>
   & Partial<Pick<CalendarEvent, 'description' | 'color' | 'ticketId' | 'epicId' | 'recurrence' | 'recurrenceUntil'>>;
 
+/** My answer to a Google invitation. */
+export type AgendaRsvp = 'accepted' | 'tentative' | 'declined' | 'needsAction';
+export const AGENDA_RSVPS: readonly AgendaRsvp[] = ['accepted', 'tentative', 'declined', 'needsAction'];
+
+export interface AgendaAttendee {
+  email: string;
+  name: string | null;
+  response: AgendaRsvp;
+  organizer: boolean;
+  self: boolean;
+  optional: boolean;
+}
+
 /** A deliverable attached to a Google meeting or to a free event (E1) — the link only lives in Fleex. */
 export interface AgendaExternalLink {
   id: string;
@@ -184,9 +197,22 @@ export interface AgendaItem {
   external?: {
     calendarId: string;
     eventKey: string;
+    /** Google's event id (the instance id for one occurrence of a series): what an RSVP targets. */
+    eventId?: string;
     htmlLink: string | null;
     attendees: number;
     location: string | null;
+    /** Google Meet (or other video) join link. */
+    meetUrl?: string | null;
+    /** The event's notes, as plain text (Google stores HTML). */
+    description?: string | null;
+    organizer?: { email: string; name: string | null; self: boolean } | null;
+    /** Guests, rooms excluded. */
+    attendeeList?: AgendaAttendee[];
+    /** My answer when I'm a guest; null when I'm not invited (my own event, a calendar I only read). */
+    rsvp?: AgendaRsvp | null;
+    /** I'm a guest and not the organizer: Yes / Maybe / No apply. */
+    canRespond?: boolean;
     /** 'default' | 'outOfOffice' | 'workingLocation' | 'focusTime'… */
     eventType: string;
     links: AgendaExternalLink[];
