@@ -385,6 +385,28 @@ describe('buildAgenda — refs, epics, missed slots, free events', () => {
     expect(evs.find((i) => i.id === 'event:off')).toMatchObject({ shape: 'allDay', start: '2026-11-05', end: '2026-11-06' });
     expect(evs.some((i) => i.id === 'event:old')).toBe(false);
   });
+
+  it('attaches the linked deliverables to each event occurrence by its link key — per occurrence for a series', () => {
+    const lk = (key: string, id: string) => ({
+      id, provider: 'fleex' as const, eventKey: key, deliverableId: `d-${id}`, deliverableTitle: id,
+      eventTitle: 'x', eventStart: '', source: 'manual' as const, createdAt: '',
+    });
+    const r = build({
+      calendarEvents: [
+        calEvent({ id: 'once' }),
+        calEvent({ id: 'daily', recurrence: 'daily', start: '2026-11-02T08:00:00.000Z', end: '2026-11-02T08:15:00.000Z', recurrenceUntil: '2026-11-03' }),
+      ],
+      eventLinks: new Map([
+        ['fleex-event:once', [lk('fleex-event:once', 'notes')]],
+        ['fleex-event:daily|2026-11-03T08:00:00.000Z', [lk('fleex-event:daily|2026-11-03T08:00:00.000Z', 'tuesday')]],
+      ]),
+    });
+    const evs = ofType(r, 'event');
+    expect(evs.find((i) => i.id === 'event:once')?.eventLinks?.map((l) => l.id)).toEqual(['notes']);
+    // A note taken at Tuesday's occurrence must not show on Monday's.
+    expect(evs.find((i) => i.id === 'event:daily:2026-11-02T08:00:00.000Z')?.eventLinks).toEqual([]);
+    expect(evs.find((i) => i.id === 'event:daily:2026-11-03T08:00:00.000Z')?.eventLinks?.map((l) => l.id)).toEqual(['tuesday']);
+  });
 });
 
 describe('GetAgendaUseCase — sources', () => {

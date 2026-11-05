@@ -1,4 +1,5 @@
 import type {
+  AgendaExternalLink,
   AgendaItem,
   AgendaResponse,
   AgendaRoutineRef,
@@ -19,6 +20,7 @@ import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
 import type { KvStorePort } from '../ports/kv-store.port.js';
 import { runTimesBetween } from '../../domain/services/routine-schedule.js';
 import { expandCalendarEvent, listCalendarEvents, EVENT_OCCURRENCE_CAP } from './calendar-events.js';
+import { calendarEventItemId, calendarEventLinkKey } from '@fleex/shared';
 import { listMissedSlots, type StoredMissedSlot } from '../services/missed-slots.js';
 
 /** Upcoming occurrences per routine and per request — a `*​/5` routine is ~2 000 slots a week. */
@@ -51,6 +53,8 @@ export interface AgendaSources {
   epics?: { id: string; name: string }[];
   /** E1 free events (series; the builder expands recurrences). */
   calendarEvents?: CalendarEvent[];
+  /** Deliverables attached to free events, by link key (`calendarEventLinkKey`). */
+  eventLinks?: Map<string, AgendaExternalLink[]>;
   /** R3 slots the scheduler never fired. */
   missedSlots?: StoredMissedSlot[];
   /** Items from an external source (Google), already shaped. */
@@ -286,9 +290,10 @@ export function buildAgenda(src: AgendaSources, w: AgendaWindow): AgendaResponse
     const t = e.ticketId ? ticketsById.get(e.ticketId) : undefined;
     for (const occ of expandCalendarEvent(e, w.from, w.to, EVENT_OCCURRENCE_CAP)) {
       items.push({
-        id: e.recurrence ? `event:${e.id}:${occ.start}` : `event:${e.id}`,
+        id: calendarEventItemId(e, occ.start),
         type: 'event', shape: e.allDay ? 'allDay' : 'block', start: occ.start, end: occ.end,
         title: e.title, event: e, ticket: t ? ticketRef(t) : null,
+        eventLinks: src.eventLinks?.get(calendarEventLinkKey(e, occ.start)) ?? [],
       });
     }
   }
@@ -322,7 +327,12 @@ export class GetAgendaUseCase {
     private readonly runStore: WorkflowRunStorePort | null,
     private readonly eventLog: DomainEventLogStorePort | null,
     private readonly external: AgendaExternalSource | null = null,
-    private readonly more: { ticketGroups?: TicketGroupStorePort | null; kvStore?: KvStorePort | null } = {},
+    private readonly more: {
+      ticketGroups?: TicketGroupStorePort | null;
+      kvStore?: KvStorePort | null;
+      /** Deliverable links grouped by key (the link store lives in infrastructure). */
+      links?: () => Promise<Map<string, AgendaExternalLink[]>>;
+    } = {},
   ) {}
 
   async execute(w: AgendaWindow, opts: { calendarIds?: string[] } = {}): Promise<AgendaResponse> {
@@ -333,13 +343,14 @@ export class GetAgendaUseCase {
         (err: unknown) => ({ items: [], error: err instanceof Error ? err.message : String(err) }),
       )
       : Promise.resolve({ items: [], error: null });
-    const [tickets, routines, allRuns, groups, calendarEvents, missedSlots] = await Promise.all([
+    const [tickets, routines, allRuns, groups, calendarEvents, missedSlots, eventLinks] = await Promise.all([
       this.ticketStore.getAllTickets(),
       this.routineStore ? this.routineStore.getAll() : Promise.resolve([]),
       this.runStore ? this.runStore.getAll() : Promise.resolve([]),
       this.loadEpics(),
       kv ? listCalendarEvents(kv) : Promise.resolve([]),
       kv ? listMissedSlots(kv) : Promise.resolve([]),
+      this.more.links ? this.more.links().catch(() => new Map<string, AgendaExternalLink[]>()) : Promise.resolve(new Map<string, AgendaExternalLink[]>()),
     ]);
     const runs = allRuns.filter((r) => {
       const end = r.completedAt ? r.completedAt.getTime() : Infinity;
@@ -357,7 +368,7 @@ export class GetAgendaUseCase {
     const external = await externalP;
     const res = buildAgenda({
       tickets, routines, runs, events: families.flat(),
-      memberships: groups.memberships, epics: groups.epics, calendarEvents, missedSlots, externalItems: external.items,
+      memberships: groups.memberships, epics: groups.epics, calendarEvents, eventLinks, missedSlots, externalItems: external.items,
     }, w);
     if (external.error !== null) res.errors.external = external.error;
     return res;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AgendaExternalLink, AgendaItem, DeliverableListItem } from '@fleex/shared';
+import { calendarEventLinkKey, type AgendaExternalLink, type AgendaItem, type DeliverableListItem } from '@fleex/shared';
 import * as api from '../../services/api';
 import { documentsService } from '../../services/documentsService';
 import { useAgendaStore } from '../../stores/agendaStore';
@@ -76,26 +76,35 @@ function useDeliverableSearch(open: boolean, search: string, meetingTitle: strin
   return state;
 }
 
-function AttachPicker({ item, linkedIds, onAttached }: { item: AgendaItem; linkedIds: Set<string>; onAttached: (l: AgendaExternalLink) => void }) {
+/** What deliverables are attached to: a Google meeting occurrence or a free event occurrence. */
+export interface LinkTarget {
+  /** The link key: Google `eventKey`, or `calendarEventLinkKey()` for a free event. */
+  key: string;
+  title: string;
+  start: string;
+  /** Wording in the toasts: "attached to the meeting" / "to the event". */
+  noun: 'meeting' | 'event';
+}
+
+function AttachPicker({ target, linkedIds, onAttached }: { target: LinkTarget; linkedIds: Set<string>; onAttached: (l: AgendaExternalLink) => void }) {
   const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ role: 'dialog', maxHeight: 360 });
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
-  const { loading, items, error } = useDeliverableSearch(open, search, item.title);
+  const { loading, items, error } = useDeliverableSearch(open, search, target.title);
   const { suggested, others } = useMemo(
-    () => rankDeliverables(items.filter((d) => !linkedIds.has(d.id)), { title: item.title, start: item.start }),
-    [items, linkedIds, item.title, item.start],
+    () => rankDeliverables(items.filter((d) => !linkedIds.has(d.id)), { title: target.title, start: target.start }),
+    [items, linkedIds, target.title, target.start],
   );
 
   const attach = async (d: DeliverableListItem) => {
-    const eventKey = item.external?.eventKey;
-    if (!eventKey || busy) return;
+    if (busy) return;
     setBusy(true);
     try {
-      const link = await api.createAgendaExternalLink({ eventKey, deliverableId: d.id, eventTitle: item.title, eventStart: item.start });
+      const link = await api.createAgendaExternalLink({ eventKey: target.key, deliverableId: d.id, eventTitle: target.title, eventStart: target.start });
       onAttached(link);
       setOpen(false);
       setSearch('');
-      toast.success(`"${d.title}" attached to the meeting`);
+      toast.success(`"${d.title}" attached to the ${target.noun}`);
       void useAgendaStore.getState().refresh();
     } catch {
       // `request` already raised the error toast.
@@ -171,15 +180,18 @@ function AttachPicker({ item, linkedIds, onAttached }: { item: AgendaItem; linke
 }
 
 /**
- * E3 — deliverables attached to a Google meeting: list (open / unlink) and
- * attach. The link only lives in Fleex; nothing is written to Google.
+ * Deliverables attached to a Google meeting (E3) or a free event (E1): list
+ * (open / unlink) and attach. The link only lives in Fleex.
  */
-export function AgendaMeetingLinks({ item, onClose }: { item: AgendaItem; onClose: () => void }) {
-  const [links, setLinks] = useState<AgendaExternalLink[]>(item.external?.links ?? []);
-  useEffect(() => setLinks(item.external?.links ?? []), [item.external?.links]);
+export function DeliverableLinks({ target, links: initial, footnote, onClose }: {
+  target: LinkTarget;
+  links: AgendaExternalLink[];
+  footnote?: string;
+  onClose: () => void;
+}) {
+  const [links, setLinks] = useState<AgendaExternalLink[]>(initial);
+  useEffect(() => setLinks(initial), [initial]);
   const linkedIds = useMemo(() => new Set(links.map((l) => l.deliverableId)), [links]);
-  const ext = item.external;
-  if (!ext) return null;
 
   const open = async (l: AgendaExternalLink) => {
     try {
@@ -199,7 +211,7 @@ export function AgendaMeetingLinks({ item, onClose }: { item: AgendaItem; onClos
     }
     setLinks((cur) => cur.filter((x) => x.id !== l.id));
     void useAgendaStore.getState().refresh();
-    toast.info(`"${l.deliverableTitle}" unlinked from the meeting`, {
+    toast.info(`"${l.deliverableTitle}" unlinked from the ${target.noun}`, {
       action: {
         label: 'Undo',
         onClick: () => {
@@ -215,7 +227,7 @@ export function AgendaMeetingLinks({ item, onClose }: { item: AgendaItem; onClos
   };
 
   return (
-    <div className="space-y-1 border-t border-[var(--theme-border)] pt-2" data-testid="agenda-meeting-links">
+    <div className="space-y-1 border-t border-[var(--theme-border)] pt-2" data-testid="agenda-deliverable-links">
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[var(--theme-text-muted)]">Attached deliverables</div>
       {links.length > 0 && (
         <ul className="space-y-0.5">
@@ -247,8 +259,38 @@ export function AgendaMeetingLinks({ item, onClose }: { item: AgendaItem; onClos
           ))}
         </ul>
       )}
-      <AttachPicker item={item} linkedIds={linkedIds} onAttached={(l) => setLinks((cur) => [...cur, l])} />
-      <div className="text-[11px] text-[var(--theme-text-faint)]">The link lives in Fleex only: nothing is written to Google Calendar.</div>
+      <AttachPicker target={target} linkedIds={linkedIds} onAttached={(l) => setLinks((cur) => [...cur, l])} />
+      {footnote && <div className="text-[11px] text-[var(--theme-text-faint)]">{footnote}</div>}
     </div>
+  );
+}
+
+const NO_LINKS: AgendaExternalLink[] = [];
+
+/** E3 — deliverables attached to a Google meeting (nothing is written to Google). */
+export function AgendaMeetingLinks({ item, onClose }: { item: AgendaItem; onClose: () => void }) {
+  const ext = item.external;
+  if (!ext) return null;
+  return (
+    <DeliverableLinks
+      target={{ key: ext.eventKey, title: item.title, start: item.start, noun: 'meeting' }}
+      links={ext.links ?? NO_LINKS}
+      footnote="The link lives in Fleex only: nothing is written to Google Calendar."
+      onClose={onClose}
+    />
+  );
+}
+
+/** E1 — deliverables attached to one occurrence of a free event. */
+export function AgendaEventLinks({ item, onClose }: { item: AgendaItem; onClose: () => void }) {
+  const ev = item.event;
+  if (!ev) return null;
+  return (
+    <DeliverableLinks
+      target={{ key: calendarEventLinkKey(ev, item.start), title: item.title, start: item.start, noun: 'event' }}
+      links={item.eventLinks ?? NO_LINKS}
+      footnote={ev.recurrence ? 'Attached to this occurrence only.' : undefined}
+      onClose={onClose}
+    />
   );
 }

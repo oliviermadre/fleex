@@ -17,6 +17,7 @@ import { EventEditor, draftForAllDay, draftForRange, draftFromEvent, draftToInpu
 import { AgendaEventActions } from './AgendaEventActions';
 import { ticketsToSchedule } from './AgendaDrawer';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useAgendaStore, withLocalEvent } from '../../stores/agendaStore';
 
 const ev = (over: Partial<CalendarEvent> = {}): CalendarEvent => ({
   id: 'ev1', title: 'Standup', description: 'daily sync', allDay: false,
@@ -66,6 +67,20 @@ describe('<EventEditor/> — create', () => {
       start: new Date(2026, 10, 10, 10, 0).toISOString(), end: new Date(2026, 10, 10, 11, 15).toISOString(),
       description: 'Sprint review', color: 'pink', ticketId: null, epicId: null, recurrence: 'weekly', recurrenceUntil: '2026-12-31',
     });
+  });
+
+  it('shows the created event in the agenda at once, without waiting for the refetch', async () => {
+    // The full refetch reads tickets, runs, the event log and Google: seconds on a
+    // real instance. Here it never answers — the event must still be there.
+    vi.mocked(api.fetchAgenda).mockReturnValue(new Promise(() => {}));
+    useAgendaStore.setState({ data: { from: '2026-11-09T00:00:00.000Z', to: '2026-11-16T00:00:00.000Z', generatedAt: '', items: [], routines: [], truncated: [], epics: [], errors: {} } });
+    const onClose = vi.fn();
+    render(<EventEditor draft={draftForRange('2026-11-10', 600, 660)} event={null} onClose={onClose} />);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Demo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(useAgendaStore.getState().data!.items).toEqual([expect.objectContaining({ id: 'event:new', type: 'event', title: 'Demo', shape: 'block' })]);
+    expect(api.fetchAgenda).toHaveBeenCalled();
   });
 
   it('shows the validation inline and posts nothing', async () => {
@@ -143,5 +158,29 @@ describe('ticketsToSchedule (drawer)', () => {
     expect(ticketsToSchedule(list, { ...none, epics: ['e2'] }, '').map((x) => x.id)).not.toContain('t8');
     expect(ticketsToSchedule(list, none, '#7').map((x) => x.id)).toEqual(['t7']);
     expect(ticketsToSchedule(list, none, '', new Set(['t1'])).map((x) => x.id)).not.toContain('t1');
+  });
+});
+
+describe('withLocalEvent', () => {
+  const data = (items: import('@fleex/shared').AgendaItem[] = []) => ({
+    from: '2026-11-02T00:00:00.000Z', to: '2026-11-09T00:00:00.000Z', generatedAt: '', items, routines: [], truncated: [], epics: [], errors: {},
+  });
+  const daily = ev({ id: 'd', recurrence: 'daily', start: '2026-11-02T08:00:00.000Z', end: '2026-11-02T08:15:00.000Z', recurrenceUntil: '2026-11-04' });
+
+  it('expands a series over the loaded window, like the server', () => {
+    const out = withLocalEvent(data(), 'd', daily);
+    expect(out.items.map((i) => i.id)).toEqual([
+      'event:d:2026-11-02T08:00:00.000Z', 'event:d:2026-11-03T08:00:00.000Z', 'event:d:2026-11-04T08:00:00.000Z',
+    ]);
+  });
+
+  it('replaces an edited event and keeps its attached deliverables; a delete removes it and nothing else', () => {
+    const other = { id: 'ticket.created:x', type: 'ticket.created', shape: 'point', start: '2026-11-03T10:00:00.000Z', title: 'x' } as const;
+    const links = [{ id: 'l', provider: 'fleex', eventKey: 'fleex-event:ev1', deliverableId: 'd', deliverableTitle: 'Notes', eventTitle: '', eventStart: '', source: 'manual', createdAt: '' }] as import('@fleex/shared').AgendaExternalLink[];
+    const before = withLocalEvent(data([other]), 'ev1', ev());
+    const linked = { ...before, items: before.items.map((i) => (i.id === 'event:ev1' ? { ...i, eventLinks: links } : i)) };
+    const edited = withLocalEvent(linked, 'ev1', ev({ title: 'Renamed' }));
+    expect(edited.items.find((i) => i.id === 'event:ev1')).toMatchObject({ title: 'Renamed', eventLinks: links });
+    expect(withLocalEvent(edited, 'ev1', null).items.map((i) => i.id)).toEqual(['ticket.created:x']);
   });
 });

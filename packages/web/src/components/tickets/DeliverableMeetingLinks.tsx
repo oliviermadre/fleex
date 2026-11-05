@@ -5,9 +5,14 @@ import * as api from '../../services/api';
 import { useAgendaStore } from '../../stores/agendaStore';
 import { CalendarIcon } from '../ui/icons/AgendaIcons';
 
-const fmtWhen = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** An all-day start is a local 'YYYY-MM-DD' day, not a UTC instant. */
+const startDate = (start: string) => new Date(DAY_RE.test(start) ? `${start}T00:00:00` : start);
+
+const fmtWhen = (start: string) => {
+  const d = startDate(start);
+  const day = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  return DAY_RE.test(start) ? day : `${day} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 };
 
 function Lines({ links, go }: { links: AgendaExternalLink[]; go: (l: AgendaExternalLink) => void }) {
@@ -22,7 +27,7 @@ function Lines({ links, go }: { links: AgendaExternalLink[]; go: (l: AgendaExter
           className="flex min-w-0 items-center gap-1.5 self-start text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:underline"
         >
           <CalendarIcon size={12} className="shrink-0 text-[var(--theme-text-muted)]" />
-          <span className="truncate">Meeting: {l.eventTitle} · {fmtWhen(l.eventStart)}</span>
+          <span className="truncate">{l.provider === 'fleex' ? 'Event' : 'Meeting'}: {l.eventTitle} · {fmtWhen(l.eventStart)}</span>
         </button>
       ))}
     </div>
@@ -42,13 +47,13 @@ async function openDay(l: AgendaExternalLink, close: () => void, toAgenda: () =>
   close();
   const agenda = useAgendaStore.getState();
   if (!agenda.prefsLoaded) await agenda.init().catch(() => {});
-  useAgendaStore.getState().goToDay(new Date(l.eventStart), 'day');
+  useAgendaStore.getState().goToDay(startDate(l.eventStart), 'day');
   toAgenda();
 }
 
 /**
- * E3 — "Meeting: <title> · <when>" lines in the reading overlay, one per Google
- * meeting the deliverable is attached to. Failures (501, older server) show nothing.
+ * "Meeting: <title> · <when>" (Google, E3) / "Event: …" (free event, E1) lines
+ * in the reading overlay, one per meeting or event the deliverable is attached to. Failures (501, older server) show nothing.
  */
 export function DeliverableMeetingLinks({ deliverableId, onNavigate }: { deliverableId: string; onNavigate: () => void }) {
   const inRouter = useInRouterContext();

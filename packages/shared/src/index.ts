@@ -13,6 +13,10 @@ export type {
 } from './types/session.js';
 
 export { slugify } from './slugify.js';
+export {
+  expandCalendarEvent, calendarEventItemId, calendarEventLinkKey, CALENDAR_EVENT_LINK_PREFIX, EVENT_OCCURRENCE_CAP,
+} from './agenda-events.js';
+export type { EventOccurrence } from './agenda-events.js';
 
 export {
   TICKET_COMPLEXITIES,

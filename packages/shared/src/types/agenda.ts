@@ -87,11 +87,15 @@ export interface CalendarEvent {
 export type CalendarEventInput = Pick<CalendarEvent, 'title' | 'allDay' | 'start' | 'end'>
   & Partial<Pick<CalendarEvent, 'description' | 'color' | 'ticketId' | 'epicId' | 'recurrence' | 'recurrenceUntil'>>;
 
-/** A deliverable attached to a Google meeting — the link only lives in Fleex. */
+/** A deliverable attached to a Google meeting or to a free event (E1) — the link only lives in Fleex. */
 export interface AgendaExternalLink {
   id: string;
-  provider: 'google';
-  /** iCalUID, plus `|<originalStartTime>` for one occurrence of a recurring meeting. */
+  /** `fleex`: a free event, keyed by `calendarEventLinkKey()`. */
+  provider: 'google' | 'fleex';
+  /**
+   * Google: iCalUID, plus `|<originalStartTime>` for one occurrence of a recurring meeting.
+   * Free event: `fleex-event:<id>`, plus `|<occurrence start>` for a recurring one.
+   */
   eventKey: string;
   deliverableId: string;
   deliverableTitle: string;
@@ -174,6 +178,8 @@ export interface AgendaItem {
   missedReason?: 'scheduler_down' | null;
   /** E1: the event (the series, for a recurring one). */
   event?: CalendarEvent | null;
+  /** E1: the deliverables attached to this occurrence. */
+  eventLinks?: AgendaExternalLink[];
   /** E3: the Google meeting. */
   external?: {
     calendarId: string;

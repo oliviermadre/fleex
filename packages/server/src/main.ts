@@ -148,7 +148,7 @@ async function main() {
     getAgenda: new GetAgendaUseCase(
       container.ticketStore, container.routineStore, container.workflowRunStore, container.domainEventLogStore,
       googleAgenda.source, // Google Calendar (read-only); null without a KV store
-      { ticketGroups: container.ticketGroupStore, kvStore: container.kvStore },
+      { ticketGroups: container.ticketGroupStore, kvStore: container.kvStore, links: googleAgenda.links ? () => googleAgenda.links!.byEventKey() : undefined },
     ),
     kvStore: container.kvStore,
     deliverableStore: container.deliverableStore,

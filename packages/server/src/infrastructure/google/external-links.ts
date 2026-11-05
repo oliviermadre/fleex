@@ -4,7 +4,7 @@
  * written to.
  */
 import { randomUUID } from 'node:crypto';
-import type { AgendaExternalLink } from '@fleex/shared';
+import { CALENDAR_EVENT_LINK_PREFIX, type AgendaExternalLink } from '@fleex/shared';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 import type { GoogleCalendarEvent } from './google-calendar.client.js';
 
@@ -163,7 +163,7 @@ export class ExternalLinksStore {
     }
     const link: AgendaExternalLink = {
       id: this.newId(),
-      provider: 'google',
+      provider: input.eventKey.startsWith(CALENDAR_EVENT_LINK_PREFIX) ? 'fleex' : 'google',
       eventKey: input.eventKey,
       deliverableId: input.deliverableId,
       deliverableTitle: input.deliverableTitle,

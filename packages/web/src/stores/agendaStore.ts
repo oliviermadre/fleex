@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import {
   DEFAULT_AGENDA_PREFS,
+  EVENT_OCCURRENCE_CAP,
+  calendarEventItemId,
+  expandCalendarEvent,
+  type AgendaItem,
+  type CalendarEvent,
   type AgendaGoogleStatus,
   type AgendaPrefs,
   type AgendaResponse,
@@ -46,6 +51,12 @@ interface AgendaStore {
 
   init: () => Promise<void>;
   refresh: () => Promise<void>;
+  /**
+   * A free event was created, edited (`event`) or deleted (`null`): show it at
+   * once from the API answer, without waiting for the full refetch (tickets,
+   * runs, event log, Google through gog — seconds on a real instance).
+   */
+  applyLocalEvent: (eventId: string, event: CalendarEvent | null) => void;
   setView: (view: AgendaView) => void;
   go: (dir: 1 | -1) => void;
   goToday: () => void;
@@ -68,6 +79,32 @@ interface AgendaStore {
 let seq = 0;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const SAVE_DEBOUNCE_MS = 500;
+
+/**
+ * `data` with the items of free event `eventId` replaced by the occurrences of
+ * `event` in the loaded window (removed when `event` is null). Same expansion
+ * as the server; attached deliverables and the ticket ref are kept when the
+ * occurrence already existed — the next refetch completes the rest.
+ */
+export function withLocalEvent(data: AgendaResponse, eventId: string, event: CalendarEvent | null): AgendaResponse {
+  const isMine = (it: AgendaItem) => it.type === 'event' && it.event?.id === eventId;
+  const before = new Map(data.items.filter(isMine).map((it) => [it.id, it]));
+  const items = data.items.filter((it) => !isMine(it));
+  if (event) {
+    for (const occ of expandCalendarEvent(event, new Date(data.from), new Date(data.to), EVENT_OCCURRENCE_CAP)) {
+      const id = calendarEventItemId(event, occ.start);
+      const prev = before.get(id);
+      items.push({
+        id, type: 'event', shape: event.allDay ? 'allDay' : 'block', start: occ.start, end: occ.end,
+        title: event.title, event,
+        ticket: prev?.ticket && prev.ticket.id === event.ticketId ? prev.ticket : null,
+        eventLinks: prev?.eventLinks ?? [],
+      });
+    }
+  }
+  items.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.id < b.id ? -1 : 1));
+  return { ...data, items };
+}
 
 /** Stored prefs from an older version lack the newer fields: fill them from the defaults. */
 export function mergeAgendaPrefs(stored: Partial<AgendaPrefs> | null | undefined): AgendaPrefs {
@@ -138,6 +175,11 @@ export const useAgendaStore = create<AgendaStore>((set, get) => {
       } catch (e) {
         if (mine === seq) set({ loading: false, error: e instanceof Error ? e.message : String(e) });
       }
+    },
+
+    applyLocalEvent: (eventId, event) => {
+      const data = get().data;
+      if (data) set({ data: withLocalEvent(data, eventId, event) });
     },
 
     setView: (view) => {

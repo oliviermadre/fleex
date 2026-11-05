@@ -8,15 +8,11 @@ import type { KvStorePort } from '../ports/kv-store.port.js';
  * every user of the instance.
  */
 export const CALENDAR_EVENT_PREFIX = 'agenda:event:';
-/** Occurrences of one recurring series per request. */
-export const EVENT_OCCURRENCE_CAP = 500;
-
 const TITLE_MAX = 120;
 const COLOR_MAX = 20;
 const DESCRIPTION_MAX = 10_000;
 const RECURRENCES = new Set<CalendarEventRecurrence>(['daily', 'weekly', 'monthly']);
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const DAY_MS = 24 * 3600_000;
 
 const eventKey = (id: string) => `${CALENDAR_EVENT_PREFIX}${id}`;
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -166,70 +162,6 @@ export async function listCalendarEvents(kv: KvStorePort): Promise<CalendarEvent
   return rows.map((r) => readEvent(r.value)).filter((e): e is CalendarEvent => e !== null);
 }
 
-// ── Recurrence expansion ──
+// ── Recurrence expansion: pure, shared with the web (see @fleex/shared) ──
 
-export interface EventOccurrence {
-  /** Same format as the event: ISO instant, or 'YYYY-MM-DD' when all-day. */
-  start: string;
-  /** ISO instant (exclusive), or the inclusive last day when all-day. */
-  end: string;
-}
-
-const dayMs = (day: string) => Date.parse(`${day}T00:00:00Z`);
-const toDay = (t: number) => new Date(t).toISOString().slice(0, 10);
-
-/**
- * The occurrences of `event` overlapping `[from, to)`, at most `cap`.
- *
- * Recurrence is date arithmetic on the UTC fields (a 09:00Z weekly stays at
- * 09:00Z across a DST change). Monthly keeps the day of month and skips the
- * months that lack it (the 31st has no February occurrence). An all-day day is
- * in the window when its noon UTC is within 12 h of it — the rule the due
- * dates use, robust to the client's local-midnight bounds.
- */
-export function expandCalendarEvent(event: CalendarEvent, from: Date, to: Date, cap: number = EVENT_OCCURRENCE_CAP): EventOccurrence[] {
-  if (cap <= 0) return [];
-  const allDay = event.allDay;
-  const s0 = allDay ? dayMs(event.start) : Date.parse(event.start);
-  const e0 = allDay ? dayMs(event.end) : Date.parse(event.end);
-  if (Number.isNaN(s0) || Number.isNaN(e0)) return [];
-  const duration = e0 - s0;
-  // All-day: noon of the first day < `to + 12h` ⇔ start < to, and noon of the
-  // last day ≥ `from - 12h` ⇔ last day's midnight ≥ from - 24h.
-  const lo = allDay ? from.getTime() - DAY_MS : from.getTime();
-  const hi = to.getTime();
-  const overlaps = (s: number) => (allDay ? s < hi && s + duration >= lo : s < hi && s + duration > lo);
-  const fmt = (s: number): EventOccurrence => (allDay
-    ? { start: toDay(s), end: toDay(s + duration) }
-    : { start: new Date(s).toISOString(), end: new Date(s + duration).toISOString() });
-
-  if (!event.recurrence) return overlaps(s0) ? [fmt(s0)] : [];
-
-  const until = event.recurrenceUntil ? dayMs(event.recurrenceUntil) + DAY_MS : Infinity; // exclusive
-  const base = new Date(s0);
-  const at = (k: number): number | null => {
-    if (event.recurrence === 'monthly') {
-      const t = Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + k, base.getUTCDate(),
-        base.getUTCHours(), base.getUTCMinutes(), base.getUTCSeconds(), base.getUTCMilliseconds());
-      return new Date(t).getUTCDate() === base.getUTCDate() ? t : null;
-    }
-    const days = event.recurrence === 'weekly' ? 7 : 1;
-    return s0 + k * days * DAY_MS;
-  };
-  // Jump close to the window rather than walking a years-old series from its
-  // first occurrence. An occurrence k starts at most k × period after s0.
-  const period = event.recurrence === 'monthly' ? 31 * DAY_MS : event.recurrence === 'weekly' ? 7 * DAY_MS : DAY_MS;
-  const k0 = Math.max(0, Math.floor((lo - duration - s0) / period) - 1);
-
-  const out: EventOccurrence[] = [];
-  for (let k = k0, guard = 0; guard < cap * 4 + 64; k++, guard++) {
-    const s = at(k);
-    if (s === null) continue;
-    if (s >= hi || s >= until) break;
-    if (overlaps(s)) {
-      out.push(fmt(s));
-      if (out.length >= cap) break;
-    }
-  }
-  return out;
-}
+export { expandCalendarEvent, EVENT_OCCURRENCE_CAP, type EventOccurrence } from '@fleex/shared';

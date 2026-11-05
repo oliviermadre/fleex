@@ -370,6 +370,11 @@ describe('google agenda routes', () => {
     const again = await app.inject({ method: 'POST', url: '/api/agenda/external-links', payload: body });
     expect(again.statusCode).toBe(200);
     expect(again.json().id).toBe(link.id);
+    // A free event (E1) uses the same store: its key marks the link as a Fleex one.
+    const onEvent = await app.inject({ method: 'POST', url: '/api/agenda/external-links', payload: { ...body, eventKey: 'fleex-event:ev1' } });
+    expect(onEvent.statusCode).toBe(201);
+    expect(onEvent.json()).toMatchObject({ provider: 'fleex', eventKey: 'fleex-event:ev1' });
+    await app.inject({ method: 'DELETE', url: `/api/agenda/external-links/${onEvent.json().id}` });
     expect((await app.inject({ method: 'POST', url: '/api/agenda/external-links', payload: { ...body, deliverableId: 'nope' } })).statusCode).toBe(404);
     expect((await app.inject({ method: 'POST', url: '/api/agenda/external-links', payload: { deliverableId: 'd1' } })).statusCode).toBe(400);
     await app.inject({ method: 'POST', url: '/api/agenda/external-links', payload: { ...body, eventKey: 'k2' } });

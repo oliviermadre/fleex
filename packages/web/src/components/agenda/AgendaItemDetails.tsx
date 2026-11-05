@@ -1,5 +1,5 @@
 import { AgendaEventActions } from './AgendaEventActions';
-import { AgendaMeetingLinks } from './AgendaMeetingLinks';
+import { AgendaEventLinks, AgendaMeetingLinks } from './AgendaMeetingLinks';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AgendaItem, Ticket, TicketDeliverable } from '@fleex/shared';
@@ -267,7 +267,7 @@ function CalendarMeta({ item }: { item: AgendaItem }) {
         {ext && ext.attendees > 0 && <Field label="Attendees">{ext.attendees}</Field>}
       </div>
       {ev?.description && <div className="whitespace-pre-wrap text-[var(--theme-text-secondary)]">{ev.description}</div>}
-      {/* The attached deliverables are listed by <AgendaMeetingLinks/>. */}
+      {/* The attached deliverables are listed by <AgendaMeetingLinks/> / <AgendaEventLinks/>. */}
     </Section>
   );
 }
@@ -348,6 +348,7 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
       <DeliverableList load={runDelivs} title="Deliverables of this run" onClose={onClose} hideWhenEmpty />
       <DeliverableList load={ticketDelivs} title="Ticket deliverables" exclude={runIds} onClose={onClose} />
       <CalendarMeta item={item} />
+      {item.type === 'event' && <AgendaEventLinks item={item} onClose={onClose} />}
       {item.type === 'event' && <AgendaEventActions item={item} onClose={onClose} />}
       {item.type === 'external' && <AgendaMeetingLinks item={item} onClose={onClose} />}
 

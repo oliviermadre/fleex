@@ -14,7 +14,7 @@ vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), i
 import * as api from '../../services/api';
 import { documentsService } from '../../services/documentsService';
 import { toast } from '../../lib/toast';
-import { AgendaMeetingLinks, normalizeTitle, rankDeliverables } from './AgendaMeetingLinks';
+import { AgendaEventLinks, AgendaMeetingLinks, normalizeTitle, rankDeliverables } from './AgendaMeetingLinks';
 import { useUIStore } from '../../stores/uiStore';
 
 const START = '2026-11-05T09:00:00.000Z';
@@ -121,5 +121,43 @@ describe('<AgendaMeetingLinks/>', () => {
     fireEvent.click(screen.getByRole('button', { name: /Attach deliverable/ }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Search deliverables' }), { target: { value: 'roadmap' } });
     await waitFor(() => expect(vi.mocked(documentsService.list).mock.calls.some((c) => c[0].search === 'roadmap')).toBe(true));
+  });
+});
+
+describe('<AgendaEventLinks/> — deliverables on a free event (E1)', () => {
+  const freeEvent = (over: Partial<AgendaItem> = {}, recurrence: 'weekly' | null = null): AgendaItem => ({
+    id: recurrence ? `event:ev1:${START}` : 'event:ev1', type: 'event', shape: 'block', start: START, end: '2026-11-05T10:00:00.000Z', title: 'Planning',
+    event: {
+      id: 'ev1', title: 'Planning', description: null, allDay: false, start: START, end: '2026-11-05T10:00:00.000Z', color: null,
+      ticketId: null, epicId: null, recurrence, recurrenceUntil: null, createdAt: '', updatedAt: '',
+    },
+    eventLinks: [],
+    ...over,
+  });
+
+  it('attaches a deliverable to a one-off event under its Fleex key', async () => {
+    render(<AgendaEventLinks item={freeEvent()} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /Attach deliverable/ }));
+    const box = await screen.findByRole('listbox', { name: 'Deliverables' });
+    fireEvent.click(await within(box).findByRole('option', { name: /Roadmap Q4/ }));
+    await waitFor(() => expect(api.createAgendaExternalLink).toHaveBeenCalledWith({
+      eventKey: 'fleex-event:ev1', deliverableId: 'd-old', eventTitle: 'Planning', eventStart: START,
+    }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('"Roadmap Q4" attached to the event'));
+    expect(screen.queryByText(/Google Calendar/)).toBeNull();
+  });
+
+  it('attaches to the clicked occurrence of a recurring event, not the whole series', async () => {
+    render(<AgendaEventLinks item={freeEvent({}, 'weekly')} onClose={() => {}} />);
+    expect(screen.getByText('Attached to this occurrence only.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Attach deliverable/ }));
+    const box = await screen.findByRole('listbox', { name: 'Deliverables' });
+    fireEvent.click(await within(box).findByRole('option', { name: /Roadmap Q4/ }));
+    await waitFor(() => expect(api.createAgendaExternalLink).toHaveBeenCalledWith(expect.objectContaining({ eventKey: `fleex-event:ev1|${START}` })));
+  });
+
+  it('lists what is already attached', () => {
+    render(<AgendaEventLinks item={freeEvent({ eventLinks: [link({ provider: 'fleex', eventKey: 'fleex-event:ev1' })] })} onClose={() => {}} />);
+    expect(screen.getByText('Notes of last week')).toBeTruthy();
   });
 });

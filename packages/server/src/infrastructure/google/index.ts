@@ -22,7 +22,9 @@ export function createGoogleAgenda(deps: {
   client?: GoogleCalendarClient;
 }) {
   const client = deps.kvStore ? (deps.client ?? new GoogleCalendarClient({ logger: deps.logger })) : null;
-  const source = deps.kvStore && client ? new GoogleAgendaSource(client, new ExternalLinksStore(deps.kvStore)) : null;
+  const links = deps.kvStore ? new ExternalLinksStore(deps.kvStore) : null;
+  const source = links && client ? new GoogleAgendaSource(client, links) : null;
   const routes = googleAgendaRoutes({ kvStore: deps.kvStore, deliverableStore: deps.deliverableStore, client, logger: deps.logger });
-  return { routes, source, client };
+  // `links` also carries the deliverables attached to free events (E1).
+  return { routes, source, client, links };
 }

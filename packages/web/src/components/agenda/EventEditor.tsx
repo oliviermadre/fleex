@@ -143,6 +143,11 @@ export function reportFailure(e: unknown, message: string): void {
 }
 
 const refreshAgenda = () => useAgendaStore.getState().refresh();
+/** Show the change at once, then reconcile with the server in the background. */
+const showNow = (eventId: string, event: CalendarEvent | null) => {
+  useAgendaStore.getState().applyLocalEvent(eventId, event);
+  void refreshAgenda();
+};
 
 // ── Delete with Undo ──
 
@@ -153,13 +158,13 @@ export async function deleteEventWithUndo(ev: CalendarEvent): Promise<boolean> {
     reportFailure(e, "Couldn't delete the event");
     return false;
   }
-  void refreshAgenda();
+  showNow(ev.id, null);
   toast.info(`"${ev.title}" deleted`, {
     action: {
       label: 'Undo',
       onClick: () => {
         api.createCalendarEvent(eventToInput(ev))
-          .then(() => { toast.success(`"${ev.title}" restored`); return refreshAgenda(); })
+          .then((back) => { toast.success(`"${ev.title}" restored`); showNow(back.id, back); })
           .catch((e: unknown) => reportFailure(e, "Couldn't restore the event"));
       },
     },
@@ -244,15 +249,10 @@ export function EventEditor({ draft: initial, event, onClose }: { draft: EventDr
     if (!input || busy) return;
     setBusy(true);
     try {
-      if (event) {
-        await api.updateCalendarEvent(event.id, input);
-        toast.success(recurring ? 'Event updated (whole series)' : 'Event updated');
-      } else {
-        await api.createCalendarEvent(input);
-        toast.success(`"${input.title}" created`);
-      }
+      const saved = event ? await api.updateCalendarEvent(event.id, input) : await api.createCalendarEvent(input);
+      toast.success(event ? (recurring ? 'Event updated (whole series)' : 'Event updated') : `"${input.title}" created`);
       onClose();
-      void refreshAgenda();
+      showNow(saved.id, saved);
     } catch (err) {
       reportFailure(err, event ? "Couldn't update the event" : "Couldn't create the event");
     } finally {
