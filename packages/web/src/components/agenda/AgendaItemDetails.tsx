@@ -342,9 +342,10 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
         <div className="text-[var(--theme-text-muted)]">{item.prRef}</div>
       )}
 
+      {/* Order: ticket info, then the run, then every deliverable together, then the actions. */}
+      {item.ticket && <TicketMeta item={item} ticket={ticket} />}
       {isRun && <RunMeta item={item} now={now} />}
       <DeliverableList load={runDelivs} title="Deliverables of this run" onClose={onClose} hideWhenEmpty />
-      {item.ticket && <TicketMeta item={item} ticket={ticket} />}
       <DeliverableList load={ticketDelivs} title="Ticket deliverables" exclude={runIds} onClose={onClose} />
       <CalendarMeta item={item} />
       {item.type === 'event' && <AgendaEventActions item={item} onClose={onClose} />}

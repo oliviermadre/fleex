@@ -77,6 +77,22 @@ describe('<AgendaItemDetails/>', () => {
     expect(screen.queryByText(/Could not load/)).toBeNull();
   });
 
+  it('orders a workflow run card: ticket, then run, then all deliverables, then the buttons', async () => {
+    renderCard({
+      id: 'workflow.run:w1', type: 'workflow.run', shape: 'block', start: new Date(2026, 10, 5, 9).toISOString(),
+      end: new Date(2026, 10, 5, 10).toISOString(), status: 'completed', title: 'vue agenda dans routines', runId: 'run-w',
+      workflowName: 'Bugfix', ticket: { id: 'tk-1', displayId: 642, title: 'vue agenda dans routines', boardId: 'b1', status: 'done', tags: [], epicIds: [], repos: [] },
+    } as unknown as AgendaItem);
+    await screen.findByText('Spec of the agenda');
+    await screen.findByText('Deliverables of this run');
+    const order = ['Ticket', 'Workflow run', 'Deliverables of this run', 'Ticket deliverables', 'Open ticket']
+      .map((t) => screen.getByText(t, { exact: true }));
+    for (let i = 1; i < order.length; i++) {
+      // Each heading must come after the previous one in the document.
+      expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
   it('gives a done ticket its status, board, metadata and deliverables', async () => {
     renderCard({
       id: 'ticket.done:tk-1', type: 'ticket.done', shape: 'point', start: NOW.toISOString(), title: ticket.title,
