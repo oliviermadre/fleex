@@ -1,3 +1,5 @@
+import { AgendaEventActions } from './AgendaEventActions';
+import { AgendaMeetingLinks } from './AgendaMeetingLinks';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AgendaItem, Ticket, TicketDeliverable } from '@fleex/shared';
@@ -354,6 +356,8 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
       {item.ticket && <TicketMeta item={item} ticket={ticket} />}
       <DeliverableList load={ticketDelivs} title="Ticket deliverables" exclude={runIds} onClose={onClose} />
       <CalendarMeta item={item} />
+      {item.type === 'event' && <AgendaEventActions item={item} onClose={onClose} />}
+      {item.type === 'external' && <AgendaMeetingLinks item={item} onClose={onClose} />}
 
       <div className="flex flex-wrap gap-2 border-t border-[var(--theme-border)] pt-2">
         {item.ticket && <Button size="sm" variant="primary" onClick={openTicket}>Open ticket</Button>}

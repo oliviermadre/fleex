@@ -307,9 +307,18 @@ export function labelOn(prefs: AgendaPrefs, type: AgendaItemType): boolean {
 export function isVisible(item: AgendaItem, prefs: AgendaPrefs): boolean {
   if (!labelOn(prefs, item.type)) return false;
   if (item.routine && prefs.routines[item.routine.id] === false) return false;
-  const { boards, tags } = prefs.filters;
-  if (boards.length && item.ticket && !boards.includes(item.ticket.boardId)) return false;
-  if (tags.length && item.ticket && item.ticket.tags.length && !item.ticket.tags.some((t) => tags.includes(t))) return false;
+  if (item.type === 'external' && item.external?.eventType === 'workingLocation' && !prefs.showWorkingLocation) return false;
+  const { boards, epics, repos, tags } = prefs.filters;
+  const t = item.ticket;
+  if (!t) {
+    // A free event linked to an epic still answers the Epic filter.
+    if (epics.length && item.event?.epicId && !epics.includes(item.event.epicId)) return false;
+    return true;
+  }
+  if (boards.length && !boards.includes(t.boardId)) return false;
+  if (epics.length && t.epicIds?.length && !t.epicIds.some((e) => epics.includes(e))) return false;
+  if (repos.length && t.repos?.length && !t.repos.some((r) => repos.includes(r))) return false;
+  if (tags.length && t.tags.length && !t.tags.some((x) => tags.includes(x))) return false;
   return true;
 }
 

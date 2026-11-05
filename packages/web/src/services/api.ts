@@ -2119,8 +2119,9 @@ export function openWorktreeHooksDir(repo: string): Promise<{ dir: string }> {
 
 // ── Agenda ──
 
-export function fetchAgenda(from: Date, to: Date): Promise<import('@fleex/shared').AgendaResponse> {
+export function fetchAgenda(from: Date, to: Date, calendars: string[] = []): Promise<import('@fleex/shared').AgendaResponse> {
   const q = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+  if (calendars.length) q.set('calendars', calendars.join(','));
   return request(`/agenda?${q}`);
 }
 
@@ -2151,5 +2152,54 @@ export async function fetchAgendaRunDeliverables(runId: string): Promise<import(
   const res = await fetch(`${API_URL}/agenda/runs/${encodeURIComponent(runId)}/deliverables`);
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+  const body = (await res.json()) as { deliverables?: import('@fleex/shared').TicketDeliverable[] };
+  return body.deliverables ?? [];
+}
+
+// ── Agenda: free events (E1) ──
+
+type CalendarEvent = import('@fleex/shared').CalendarEvent;
+type CalendarEventInput = import('@fleex/shared').CalendarEventInput;
+
+export function createCalendarEvent(input: CalendarEventInput): Promise<CalendarEvent> {
+  return request('/calendar-events', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateCalendarEvent(id: string, patch: Partial<CalendarEventInput>): Promise<CalendarEvent> {
+  return request(`/calendar-events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  await request<void>(`/calendar-events/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ── Agenda: Google Calendar (E3) and meeting ↔ deliverable links ──
+
+export function fetchAgendaGoogleStatus(): Promise<import('@fleex/shared').AgendaGoogleStatus> {
+  return request('/agenda/google/status');
+}
+
+export async function disconnectAgendaGoogle(): Promise<void> {
+  await request<void>('/agenda/google', { method: 'DELETE' });
+}
+
+/** Full-page navigation: Google's consent screen, then back to /agenda. */
+export function agendaGoogleConnectUrl(): string {
+  return `/auth/google-calendar?return_to=${encodeURIComponent(window.location.origin)}`;
+}
+
+export async function fetchAgendaExternalLinks(filter: { deliverableId?: string; eventKey?: string } = {}): Promise<import('@fleex/shared').AgendaExternalLink[]> {
+  const q = new URLSearchParams();
+  if (filter.deliverableId) q.set('deliverableId', filter.deliverableId);
+  if (filter.eventKey) q.set('eventKey', filter.eventKey);
+  const { links } = await request<{ links: import('@fleex/shared').AgendaExternalLink[] }>(`/agenda/external-links?${q}`);
+  return links;
+}
+
+export function createAgendaExternalLink(input: { eventKey: string; deliverableId: string; eventTitle: string; eventStart: string }): Promise<import('@fleex/shared').AgendaExternalLink> {
+  return request('/agenda/external-links', { method: 'POST', body: JSON.stringify({ ...input, source: 'manual' }) });
+}
+
+export async function deleteAgendaExternalLink(id: string): Promise<void> {
+  await request<void>(`/agenda/external-links/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

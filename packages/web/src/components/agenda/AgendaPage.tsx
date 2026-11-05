@@ -50,7 +50,7 @@ function useAgendaLiveUpdates(refresh: () => void) {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsub = appWs.onChannel('tickets', (raw) => {
-      if (!/^(workflow|routine|ticket):/.test(raw.type)) return;
+      if (!/^(workflow|routine|ticket|calendar_event):/.test(raw.type)) return;
       if (timer) return;
       timer = setTimeout(() => { timer = null; refresh(); }, 1000);
     });
