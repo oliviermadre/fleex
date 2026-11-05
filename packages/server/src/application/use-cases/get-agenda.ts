@@ -352,7 +352,7 @@ export class GetAgendaUseCase {
       read('ticket.moved', w.from),
       read('pr.merged', w.from),
       read('routine.run_skipped', w.from),
-      runs.length ? read('workflow.', since) : Promise.resolve([]),
+      runs.length ? read('workflow', since) : Promise.resolve([]),
     ]);
     const external = await externalP;
     const res = buildAgenda({

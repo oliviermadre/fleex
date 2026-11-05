@@ -424,4 +424,23 @@ describe('GetAgendaUseCase — sources', () => {
     expect(r.errors).toEqual({ external: 'Google token expired' });
     expect(ofType(r, 'ticket.created')).toHaveLength(1);
   });
+
+  it('reads the workflow.* family from the event log so a run carries its hatched waits (regression: asked for "workflow." → matched nothing)', async () => {
+    const t = ticket({ id: 't1', createdAt: '2026-11-03T10:00:00Z' });
+    const r1 = run({ id: 'r1', ticketId: 't1', start: '2026-11-05T08:00:00Z', end: '2026-11-05T10:00:00Z' });
+    const log = [
+      ev('workflow.needs_review', '2026-11-05T08:30:00Z', { workflowRunId: 'r1', stepId: 'gate' }),
+      ev('workflow.step_completed', '2026-11-05T09:15:00Z', { workflowRunId: 'r1', stepId: 'gate' }),
+    ];
+    // Same matching as the sqlite / pg / supabase adapters: `event_type = ? OR event_type LIKE ? || '.%'`.
+    const eventLog = {
+      list: async ({ eventType }: { eventType?: string }) =>
+        log.filter((e) => !eventType || e.eventType === eventType || e.eventType.startsWith(`${eventType}.`)),
+    } as never;
+    const [tickets, routines] = stores([t], []);
+    const res = await new GetAgendaUseCase(tickets, routines, { getAll: async () => [r1] } as never, eventLog).execute(W);
+    expect(ofType(res, 'workflow.run')[0]!.segments).toEqual([
+      { kind: 'gate', stepName: 'Check Spec', start: '2026-11-05T08:30:00.000Z', end: '2026-11-05T09:15:00.000Z' },
+    ]);
+  });
 });

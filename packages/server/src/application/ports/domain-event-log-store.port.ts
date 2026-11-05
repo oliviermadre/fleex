@@ -5,7 +5,7 @@ export interface DomainEventLogStorePort {
   list(params: {
     limit: number;
     before?: string;           // cursor pagination by ID
-    eventType?: string;        // filter by type or prefix (e.g. 'ticket.')
+    eventType?: string;        // exact type, or a family without the dot: 'ticket' matches 'ticket.*' (adapters add the '.%')
     instanceId?: string;
     since?: Date;
     until?: Date;
