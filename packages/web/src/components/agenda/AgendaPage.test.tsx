@@ -16,17 +16,17 @@ import { useAgendaStore } from '../../stores/agendaStore';
 
 const now = new Date();
 const at = (h: number, m = 0) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m).toISOString();
-const ticket = { id: 'tk-765', displayId: 765, title: 'vue agenda dans routines', boardId: 'b', status: 'doing', tags: [] };
+const ticket = { id: 'tk-765', displayId: 765, title: 'vue agenda dans routines', boardId: 'b', status: 'doing', tags: [], epicIds: [], repos: [] };
 
 const response: AgendaResponse = {
-  from: '', to: '', generatedAt: '', truncated: [],
-  routines: [{ id: 'sync', name: 'Sync backlog', emoji: '🔄' }],
+  from: '', to: '', generatedAt: '', truncated: [], epics: [], errors: {},
+  routines: [{ id: 'sync', name: 'Sync backlog', emoji: '' }],
   items: [
     {
       id: 'workflow.run:r1', type: 'workflow.run', shape: 'block', start: at(0, 30), end: at(1, 30), status: 'completed',
       title: ticket.title, ticket, workflowName: 'Spec Dev PR (HITL)', segments: [], runId: 'r1',
     },
-    { id: 'routine.run:s1', type: 'routine.run', shape: 'block', start: at(0, 5), end: at(0, 6), status: 'completed', title: 'Sync backlog', routine: { id: 'sync', name: 'Sync backlog', emoji: '🔄' } },
+    { id: 'routine.run:s1', type: 'routine.run', shape: 'block', start: at(0, 5), end: at(0, 6), status: 'completed', title: 'Sync backlog', routine: { id: 'sync', name: 'Sync backlog', emoji: '' } },
   ],
 };
 

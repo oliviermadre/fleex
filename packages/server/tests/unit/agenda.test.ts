@@ -6,7 +6,10 @@ import { RoutineEntity } from '../../src/domain/entities/routine.entity.js';
 import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
 import { DomainEventLogEntity } from '../../src/domain/entities/domain-event-log.entity.js';
 import { runTimesBetween } from '../../src/domain/services/routine-schedule.js';
-import { buildAgenda, waitSegments, UPCOMING_CAP } from '../../src/application/use-cases/get-agenda.js';
+import { buildAgenda, waitSegments, UPCOMING_CAP, GetAgendaUseCase } from '../../src/application/use-cases/get-agenda.js';
+import type { CalendarEvent } from '@fleex/shared';
+import { TicketGroupEntity } from '../../src/domain/entities/ticket-group.entity.js';
+import { missedSlotKey } from '../../src/application/services/missed-slots.js';
 import { agendaRoutes, parseAgendaPrefs } from '../../src/infrastructure/http/agenda.routes.js';
 import type { KvStorePort } from '../../src/application/ports/kv-store.port.js';
 
@@ -245,7 +248,62 @@ describe('agenda routes', () => {
     expect((await a.inject({ url: '/api/agenda/prefs' })).json()).toMatchObject({ view: 'week', labels: {} });
     const prefs = { version: 1, labels: { 'routine.upcoming': false }, routines: { r1: false }, filters: { boards: ['b'], tags: [] }, view: 'month' };
     expect((await a.inject({ method: 'PUT', url: '/api/agenda/prefs', payload: prefs })).statusCode).toBe(200);
-    expect((await a.inject({ url: '/api/agenda/prefs' })).json()).toEqual(prefs);
+    expect((await a.inject({ url: '/api/agenda/prefs' })).json()).toEqual({
+      ...prefs, filters: { boards: ['b'], epics: [], repos: [], tags: [] },
+      drawerOpen: true, googleCalendars: [], showWorkingLocation: false,
+    });
+  });
+
+  it('reads prefs saved before the epic / repo / drawer / Google fields with their defaults, and keeps the new ones', () => {
+    const old = parseAgendaPrefs({ version: 1, labels: {}, routines: {}, filters: { boards: [], tags: ['x'] }, view: 'week' });
+    expect('prefs' in old && old.prefs).toEqual({
+      version: 1, labels: {}, routines: {}, filters: { boards: [], epics: [], repos: [], tags: ['x'] }, view: 'week',
+      drawerOpen: true, googleCalendars: [], showWorkingLocation: false,
+    });
+    const full = parseAgendaPrefs({
+      labels: { event: false }, routines: {}, filters: { boards: [], epics: ['g1'], repos: ['o/r'], tags: [] }, view: 'day',
+      drawerOpen: false, googleCalendars: ['primary', 'team@x'], showWorkingLocation: true,
+    });
+    expect('prefs' in full && full.prefs).toMatchObject({
+      labels: { event: false }, filters: { epics: ['g1'], repos: ['o/r'] }, drawerOpen: false,
+      googleCalendars: ['primary', 'team@x'], showWorkingLocation: true,
+    });
+    expect('error' in parseAgendaPrefs({ labels: {}, routines: {}, filters: { boards: [], tags: [], epics: 'g1' }, view: 'day' })).toBe(true);
+    expect('error' in parseAgendaPrefs({ labels: {}, routines: {}, filters: { boards: [], tags: [] }, view: 'day', drawerOpen: 'yes' })).toBe(true);
+  });
+
+  it('passes ?calendars=a,b to the use case as calendar ids, and nothing when absent', async () => {
+    const seen: unknown[] = [];
+    const a = Fastify();
+    await a.register(agendaRoutes({
+      getAgenda: { execute: async (_w, opts) => { seen.push(opts); return { items: [] } as unknown as AgendaResponse; } },
+      kvStore: null,
+    }));
+    await a.inject({ url: '/api/agenda?from=2026-11-02T00:00:00Z&to=2026-11-09T00:00:00Z&calendars=primary,%20team%40x' });
+    await a.inject({ url: '/api/agenda?from=2026-11-02T00:00:00Z&to=2026-11-09T00:00:00Z' });
+    expect(seen).toEqual([{ calendarIds: ['primary', 'team@x'] }, {}]);
+  });
+
+  it('lists the deliverables of a run, including the ones only tagged with a step run of it', async () => {
+    const dto = (id: string, at: string) => ({ id, createdAt: D(at), toDTO: () => ({ id }) });
+    const a = Fastify();
+    await a.register(agendaRoutes({
+      getAgenda: { execute: async () => ({}) as AgendaResponse },
+      kvStore: null,
+      deliverableStore: {
+        getByWorkflowRun: async (runId: string) => (runId === 'run1' ? [dto('d2', '2026-11-05T10:00:00Z')] : []) as never,
+        getByStepRun: async (stepId: string) => (stepId === 's1' ? [dto('d1', '2026-11-05T09:00:00Z'), dto('d2', '2026-11-05T10:00:00Z')] : []) as never,
+      },
+      stepRunStore: { getByWorkflowRun: async () => [{ id: 's1' }, { id: 's2' }] as never },
+    }));
+    const res = await a.inject({ url: '/api/agenda/runs/run1/deliverables' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ deliverables: [{ id: 'd1' }, { id: 'd2' }] });
+  });
+
+  it('answers 501 for run deliverables without a deliverable store', async () => {
+    const { a } = await app();
+    expect((await a.inject({ url: '/api/agenda/runs/run1/deliverables' })).statusCode).toBe(501);
   });
 
   it('drops label keys it does not know instead of refusing the save, and refuses a bad view', () => {
@@ -257,5 +315,113 @@ describe('agenda routes', () => {
   it('answers 501 on storage without a KV store', async () => {
     const { a } = await app(null);
     expect((await a.inject({ url: '/api/agenda/prefs' })).statusCode).toBe(501);
+  });
+});
+
+describe('buildAgenda — refs, epics, missed slots, free events', () => {
+  const calEvent = (over: Partial<CalendarEvent>): CalendarEvent => ({
+    id: 'ev1', title: 'Standup', description: null, allDay: false, start: '2026-11-03T09:00:00.000Z', end: '2026-11-03T09:30:00.000Z',
+    color: null, ticketId: null, epicId: null, recurrence: null, recurrenceUntil: null,
+    createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z', ...over,
+  });
+
+  it('fills a ticket ref with its epics and linked repositories, the routine ref with its trigger kind, and lists epics', () => {
+    const t = ticket({
+      id: 't1', createdAt: '2026-11-03T10:00:00Z',
+      links: [
+        { id: 'l1', type: 'repository', ref: 'odys-travel/fleex', label: '', url: null, createdAt: '' },
+        { id: 'l2', type: 'github_pr', ref: 'odys-travel/fleex#1', label: '', url: null, createdAt: '' },
+      ],
+    });
+    const r = build({
+      tickets: [t], routines: [routine('m', { kind: 'manual' })],
+      memberships: [{ ticketId: 't1', groupId: 'g2' }, { ticketId: 't1', groupId: 'g1' }, { ticketId: 'other', groupId: 'g1' }],
+      epics: [{ id: 'g2', name: 'Zeta' }, { id: 'g1', name: 'Alpha' }],
+    });
+    expect(ofType(r, 'ticket.created')[0]!.ticket).toMatchObject({ epicIds: ['g2', 'g1'], repos: ['odys-travel/fleex'] });
+    expect(r.routines[0]).toMatchObject({ id: 'm', triggerKind: 'manual' });
+    expect(r.epics).toEqual([{ id: 'g1', name: 'Alpha' }, { id: 'g2', name: 'Zeta' }]);
+    expect(r.errors).toEqual({});
+  });
+
+  it('shows the missed slots of a known routine inside the window only', () => {
+    const r = build({
+      routines: [routine('h', { kind: 'cron', cron: '0 * * * *', timezone: 'UTC' }, false)],
+      missedSlots: [
+        { routineId: 'h', slotAt: '2026-11-04T02:00:00.000Z', detectedAt: '2026-11-04T04:30:00.000Z', reason: 'scheduler_down' },
+        { routineId: 'h', slotAt: '2026-10-20T02:00:00.000Z', detectedAt: '2026-10-20T04:30:00.000Z', reason: 'scheduler_down' },
+        { routineId: 'gone', slotAt: '2026-11-04T03:00:00.000Z', detectedAt: '2026-11-04T04:30:00.000Z', reason: 'scheduler_down' },
+      ],
+    });
+    expect(ofType(r, 'routine.missed')).toEqual([expect.objectContaining({
+      id: 'routine.missed:h:2026-11-04T02:00:00.000Z', shape: 'point', start: '2026-11-04T02:00:00.000Z',
+      missedReason: 'scheduler_down', routine: expect.objectContaining({ id: 'h' }), cron: '0 * * * *',
+    })]);
+  });
+
+  it('shows a one-off event as a block, a recurring one once per occurrence, and an all-day one with its inclusive last day', () => {
+    const r = build({
+      tickets: [ticket({ id: 't9' })],
+      calendarEvents: [
+        calEvent({ id: 'once', ticketId: 't9' }),
+        calEvent({ id: 'daily', recurrence: 'daily', start: '2026-10-01T08:00:00.000Z', end: '2026-10-01T08:15:00.000Z', recurrenceUntil: '2026-11-04' }),
+        calEvent({ id: 'off', allDay: true, start: '2026-11-05', end: '2026-11-06', title: 'Off' }),
+        calEvent({ id: 'old', start: '2026-10-01T09:00:00.000Z', end: '2026-10-01T10:00:00.000Z' }),
+      ],
+    });
+    const evs = ofType(r, 'event');
+    expect(evs.find((i) => i.id === 'event:once')).toMatchObject({ shape: 'block', start: '2026-11-03T09:00:00.000Z', end: '2026-11-03T09:30:00.000Z', ticket: { id: 't9' }, event: { id: 'once' } });
+    // Window Mon 2 → Sun 8 (Paris); the series stops on Wed 4.
+    expect(evs.filter((i) => i.event?.id === 'daily').map((i) => i.id)).toEqual([
+      'event:daily:2026-11-02T08:00:00.000Z', 'event:daily:2026-11-03T08:00:00.000Z', 'event:daily:2026-11-04T08:00:00.000Z',
+    ]);
+    expect(evs.find((i) => i.id === 'event:off')).toMatchObject({ shape: 'allDay', start: '2026-11-05', end: '2026-11-06' });
+    expect(evs.some((i) => i.id === 'event:old')).toBe(false);
+  });
+});
+
+describe('GetAgendaUseCase — sources', () => {
+  const kvWith = (rows: Record<string, unknown>): KvStorePort => ({
+    get: async () => null, set: async () => {}, delete: async () => {},
+    listByPrefix: async (p) => Object.entries(rows).filter(([k]) => k.startsWith(p)).map(([key, v]) => ({ key, value: JSON.stringify(v) })),
+  });
+  const stores = (tickets: TicketEntity[], routines: RoutineEntity[]) => [
+    { getAllTickets: async () => tickets } as never,
+    { getAll: async () => routines } as never,
+    null, null,
+  ] as const;
+
+  it('reads epics once per group, events and missed slots from the KV store, and passes the calendar ids to the external source', async () => {
+    const t = ticket({ id: 't1', createdAt: '2026-11-03T10:00:00Z' });
+    const g = TicketGroupEntity.create({ id: 'g1', name: 'Agenda' });
+    const groupCalls: string[] = [];
+    const ticketGroups = {
+      getAllTicketGroups: async () => [g],
+      getMembershipsByGroup: async (id: string) => { groupCalls.push(id); return [{ ticketId: 't1', groupId: id }]; },
+    } as never;
+    const kv = kvWith({
+      'agenda:event:e1': { id: 'e1', title: 'Demo', description: null, allDay: false, start: '2026-11-04T14:00:00.000Z', end: '2026-11-04T15:00:00.000Z', color: null, ticketId: null, epicId: null, recurrence: null, recurrenceUntil: null, createdAt: '', updatedAt: '' },
+      [missedSlotKey('h', '2026-11-04T02:00:00.000Z')]: { routineId: 'h', slotAt: '2026-11-04T02:00:00.000Z', detectedAt: '2026-11-04T04:30:00.000Z', reason: 'scheduler_down' },
+    });
+    const calls: unknown[] = [];
+    const external = { list: async (from: Date, to: Date, ids: string[]) => { calls.push(ids); return [{ id: 'external:x', type: 'external' as const, shape: 'point' as const, start: '2026-11-04T10:00:00.000Z', title: 'Meet' }]; } };
+    const uc = new GetAgendaUseCase(...stores([t], [routine('h', { kind: 'cron', cron: '0 * * * *', timezone: 'UTC' })]), external, { ticketGroups, kvStore: kv });
+    const r = await uc.execute(W, { calendarIds: ['primary'] });
+    expect(groupCalls).toEqual(['g1']);
+    expect(r.epics).toEqual([{ id: 'g1', name: 'Agenda' }]);
+    expect(ofType(r, 'ticket.created')[0]!.ticket?.epicIds).toEqual(['g1']);
+    expect(ofType(r, 'event').map((i) => i.id)).toEqual(['event:e1']);
+    expect(ofType(r, 'routine.missed')).toHaveLength(1);
+    expect(ofType(r, 'external').map((i) => i.id)).toEqual(['external:x']);
+    expect(calls).toEqual([['primary']]);
+    expect(r.errors).toEqual({});
+  });
+
+  it('keeps the rest of the agenda when the external source fails, and says why in errors.external', async () => {
+    const t = ticket({ id: 't1', createdAt: '2026-11-03T10:00:00Z' });
+    const external = { list: async () => { throw new Error('Google token expired'); } };
+    const r = await new GetAgendaUseCase(...stores([t], []), external).execute(W);
+    expect(r.errors).toEqual({ external: 'Google token expired' });
+    expect(ofType(r, 'ticket.created')).toHaveLength(1);
   });
 });

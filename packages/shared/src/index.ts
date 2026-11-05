@@ -797,5 +797,11 @@ export type {
   AgendaResponse,
   AgendaView,
   AgendaPrefs,
+  CalendarEvent,
+  CalendarEventInput,
+  CalendarEventRecurrence,
+  AgendaExternalLink,
+  AgendaGoogleCalendar,
+  AgendaGoogleStatus,
 } from './types/agenda.js';
 export { AGENDA_ITEM_TYPES, DEFAULT_AGENDA_PREFS } from './types/agenda.js';

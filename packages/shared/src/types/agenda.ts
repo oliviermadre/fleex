@@ -13,8 +13,11 @@ export type AgendaItemType =
   | 'routine.run'
   | 'routine.upcoming'
   | 'routine.skipped'
+  | 'routine.missed'
   | 'workflow.run'
-  | 'pr.merged';
+  | 'pr.merged'
+  | 'event'
+  | 'external';
 
 export const AGENDA_ITEM_TYPES: readonly AgendaItemType[] = [
   'ticket.created',
@@ -23,8 +26,11 @@ export const AGENDA_ITEM_TYPES: readonly AgendaItemType[] = [
   'routine.run',
   'routine.upcoming',
   'routine.skipped',
+  'routine.missed',
   'workflow.run',
   'pr.merged',
+  'event',
+  'external',
 ];
 
 /**
@@ -41,12 +47,73 @@ export interface AgendaTicketRef {
   boardId: string;
   status: string;
   tags: string[];
+  /** Epics (ticket groups) the ticket belongs to — F2. */
+  epicIds: string[];
+  /** Repositories linked to the ticket ("org/name") — F4. */
+  repos: string[];
 }
 
 export interface AgendaRoutineRef {
   id: string;
   name: string;
   emoji: string;
+  /** 'once' routines can be rescheduled by dragging their upcoming slot. */
+  triggerKind?: 'cron' | 'once' | 'manual';
+}
+
+/** E1 — a free event created in the agenda (stored by Fleex, shared by the instance). */
+export type CalendarEventRecurrence = 'daily' | 'weekly' | 'monthly';
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  allDay: boolean;
+  /** ISO instant, or 'YYYY-MM-DD' when `allDay`. */
+  start: string;
+  /** ISO instant (exclusive), or 'YYYY-MM-DD' (inclusive last day) when `allDay`. */
+  end: string;
+  /** A tint hue name (lib/tints) or null for the label colour. */
+  color: string | null;
+  ticketId: string | null;
+  epicId: string | null;
+  recurrence: CalendarEventRecurrence | null;
+  /** 'YYYY-MM-DD', inclusive; null = forever. */
+  recurrenceUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CalendarEventInput = Pick<CalendarEvent, 'title' | 'allDay' | 'start' | 'end'>
+  & Partial<Pick<CalendarEvent, 'description' | 'color' | 'ticketId' | 'epicId' | 'recurrence' | 'recurrenceUntil'>>;
+
+/** A deliverable attached to a Google meeting — the link only lives in Fleex. */
+export interface AgendaExternalLink {
+  id: string;
+  provider: 'google';
+  /** iCalUID, plus `|<originalStartTime>` for one occurrence of a recurring meeting. */
+  eventKey: string;
+  deliverableId: string;
+  deliverableTitle: string;
+  /** Copied on the link so users who don't see this calendar can still read it. */
+  eventTitle: string;
+  eventStart: string;
+  source: 'manual' | 'cli';
+  createdAt: string;
+}
+
+export interface AgendaGoogleCalendar {
+  id: string;
+  name: string;
+  primary: boolean;
+}
+
+export interface AgendaGoogleStatus {
+  /** GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are set on the server. */
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  calendars: AgendaGoogleCalendar[];
 }
 
 /**
@@ -89,6 +156,21 @@ export interface AgendaItem {
   overdue?: boolean;
   /** R1 / W1: the run to open. */
   runId?: string | null;
+  /** R3: why the slot was missed. */
+  missedReason?: 'scheduler_down' | null;
+  /** E1: the event (the series, for a recurring one). */
+  event?: CalendarEvent | null;
+  /** E3: the Google meeting. */
+  external?: {
+    calendarId: string;
+    eventKey: string;
+    htmlLink: string | null;
+    attendees: number;
+    location: string | null;
+    /** 'default' | 'outOfOffice' | 'workingLocation' | 'focusTime'… */
+    eventType: string;
+    links: AgendaExternalLink[];
+  } | null;
 }
 
 export interface AgendaResponse {
@@ -101,6 +183,10 @@ export interface AgendaResponse {
   routines: AgendaRoutineRef[];
   /** Upcoming occurrences hit the per-routine cap (500) for these routine ids. */
   truncated: string[];
+  /** Epics, so the sidebar can list the Epic filter by name. */
+  epics: { id: string; name: string }[];
+  /** A source that failed (Google…) — the other types are still served. */
+  errors: Partial<Record<AgendaItemType, string>>;
 }
 
 export type AgendaView = 'day' | 'week' | 'month' | 'schedule';
@@ -112,14 +198,23 @@ export interface AgendaPrefs {
   labels: Partial<Record<AgendaItemType, boolean>>;
   /** Absent key = shown. Keyed by routine id. */
   routines: Record<string, boolean>;
-  filters: { boards: string[]; tags: string[] };
+  filters: { boards: string[]; epics: string[]; repos: string[]; tags: string[] };
   view: AgendaView;
+  /** The "To schedule" drawer (open tickets without a due date). */
+  drawerOpen: boolean;
+  /** Google calendars read; [] = the primary one only. */
+  googleCalendars: string[];
+  /** Show Google `workingLocation` all-day events (hidden by default). */
+  showWorkingLocation: boolean;
 }
 
 export const DEFAULT_AGENDA_PREFS: AgendaPrefs = {
   version: 1,
   labels: {},
   routines: {},
-  filters: { boards: [], tags: [] },
+  filters: { boards: [], epics: [], repos: [], tags: [] },
   view: 'week',
+  drawerOpen: true,
+  googleCalendars: [],
+  showWorkingLocation: false,
 };

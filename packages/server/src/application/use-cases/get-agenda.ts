@@ -4,6 +4,8 @@ import type {
   AgendaRoutineRef,
   AgendaTicketRef,
   AgendaWaitSegment,
+  CalendarEvent,
+  TicketGroupMembership,
 } from '@fleex/shared';
 import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { RoutineEntity } from '../../domain/entities/routine.entity.js';
@@ -13,7 +15,11 @@ import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { RoutineStorePort } from '../ports/routine-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
+import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
+import type { KvStorePort } from '../ports/kv-store.port.js';
 import { runTimesBetween } from '../../domain/services/routine-schedule.js';
+import { expandCalendarEvent, listCalendarEvents, EVENT_OCCURRENCE_CAP } from './calendar-events.js';
+import { listMissedSlots, type StoredMissedSlot } from '../services/missed-slots.js';
 
 /** Upcoming occurrences per routine and per request — a `*​/5` routine is ~2 000 slots a week. */
 export const UPCOMING_CAP = 500;
@@ -39,6 +45,24 @@ export interface AgendaSources {
   runs: WorkflowRunEntity[];
   /** Domain events (`ticket.moved`, `pr.merged`, `routine.run_skipped`, `workflow.*`). */
   events: DomainEventLogEntity[];
+  /** Ticket ↔ epic memberships — fills `AgendaTicketRef.epicIds`. */
+  memberships?: TicketGroupMembership[];
+  /** Every epic, for the sidebar filter. */
+  epics?: { id: string; name: string }[];
+  /** E1 free events (series; the builder expands recurrences). */
+  calendarEvents?: CalendarEvent[];
+  /** R3 slots the scheduler never fired. */
+  missedSlots?: StoredMissedSlot[];
+  /** Items from an external source (Google), already shaped. */
+  externalItems?: AgendaItem[];
+}
+
+/**
+ * A calendar outside Fleex (Google…). Implemented elsewhere; a rejection is
+ * reported in `errors.external` and the rest of the agenda is still served.
+ */
+export interface AgendaExternalSource {
+  list(from: Date, to: Date, calendarIds: string[]): Promise<AgendaItem[]>;
 }
 
 export interface AgendaWindow {
@@ -51,12 +75,16 @@ const iso = (d: Date) => d.toISOString();
 const inWindow = (t: number, w: AgendaWindow) => t >= w.from.getTime() && t < w.to.getTime();
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
-function ticketRef(t: TicketEntity): AgendaTicketRef {
-  return { id: t.id, displayId: t.displayId, title: t.title, boardId: t.boardId, status: t.status, tags: t.tags };
+function makeTicketRef(epicIdsByTicket: Map<string, string[]>) {
+  return (t: TicketEntity): AgendaTicketRef => ({
+    id: t.id, displayId: t.displayId, title: t.title, boardId: t.boardId, status: t.status, tags: t.tags,
+    epicIds: epicIdsByTicket.get(t.id) ?? [],
+    repos: t.links.filter((l) => l.type === 'repository').map((l) => l.ref),
+  });
 }
 
 function routineRef(r: RoutineEntity): AgendaRoutineRef {
-  return { id: r.id, name: r.name, emoji: r.emoji };
+  return { id: r.id, name: r.name, emoji: r.emoji, triggerKind: r.trigger.kind };
 }
 
 /** 'YYYY-MM-DD' of a stored due date (kept as a calendar day, no time zone). */
@@ -101,6 +129,12 @@ export function buildAgenda(src: AgendaSources, w: AgendaWindow): AgendaResponse
   const ticketsById = new Map(src.tickets.map((t) => [t.id, t]));
   const routinesById = new Map(src.routines.map((r) => [r.id, r]));
   const today = dayKey(w.now);
+  const epicIdsByTicket = new Map<string, string[]>();
+  for (const m of src.memberships ?? []) {
+    const list = epicIdsByTicket.get(m.ticketId);
+    if (list) { if (!list.includes(m.groupId)) list.push(m.groupId); } else epicIdsByTicket.set(m.ticketId, [m.groupId]);
+  }
+  const ticketRef = makeTicketRef(epicIdsByTicket);
 
   // ── Tickets: T1 created, T4 due ──
   for (const t of src.tickets) {
@@ -232,6 +266,36 @@ export function buildAgenda(src: AgendaSources, w: AgendaWindow): AgendaResponse
     }
   }
 
+  // ── R3 missed: slots the scheduler was not running for ──
+  for (const m of src.missedSlots ?? []) {
+    const at = Date.parse(m.slotAt);
+    if (!inWindow(at, w)) continue;
+    const r = routinesById.get(m.routineId);
+    if (!r) continue; // deleted routine
+    const slot = iso(new Date(at));
+    items.push({
+      id: `routine.missed:${r.id}:${slot}`, type: 'routine.missed', shape: 'point', start: slot,
+      title: r.name, routine: routineRef(r), missedReason: m.reason,
+      cron: r.trigger.kind === 'cron' ? r.trigger.cron : null,
+      timezone: r.trigger.kind === 'cron' ? r.trigger.timezone : null,
+    });
+  }
+
+  // ── E1 free events, one item per occurrence ──
+  for (const e of src.calendarEvents ?? []) {
+    const t = e.ticketId ? ticketsById.get(e.ticketId) : undefined;
+    for (const occ of expandCalendarEvent(e, w.from, w.to, EVENT_OCCURRENCE_CAP)) {
+      items.push({
+        id: e.recurrence ? `event:${e.id}:${occ.start}` : `event:${e.id}`,
+        type: 'event', shape: e.allDay ? 'allDay' : 'block', start: occ.start, end: occ.end,
+        title: e.title, event: e, ticket: t ? ticketRef(t) : null,
+      });
+    }
+  }
+
+  // ── E3 external (already shaped by the source) ──
+  items.push(...(src.externalItems ?? []));
+
   items.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.id < b.id ? -1 : 1));
   return {
     from: iso(w.from),
@@ -240,6 +304,8 @@ export function buildAgenda(src: AgendaSources, w: AgendaWindow): AgendaResponse
     items,
     routines: src.routines.map(routineRef).sort((a, b) => a.name.localeCompare(b.name)),
     truncated,
+    epics: [...(src.epics ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    errors: {},
   };
 }
 
@@ -255,13 +321,25 @@ export class GetAgendaUseCase {
     private readonly routineStore: RoutineStorePort | null,
     private readonly runStore: WorkflowRunStorePort | null,
     private readonly eventLog: DomainEventLogStorePort | null,
+    private readonly external: AgendaExternalSource | null = null,
+    private readonly more: { ticketGroups?: TicketGroupStorePort | null; kvStore?: KvStorePort | null } = {},
   ) {}
 
-  async execute(w: AgendaWindow): Promise<AgendaResponse> {
-    const [tickets, routines, allRuns] = await Promise.all([
+  async execute(w: AgendaWindow, opts: { calendarIds?: string[] } = {}): Promise<AgendaResponse> {
+    const kv = this.more.kvStore ?? null;
+    const externalP: Promise<{ items: AgendaItem[]; error: string | null }> = this.external
+      ? this.external.list(w.from, w.to, opts.calendarIds ?? []).then(
+        (items) => ({ items, error: null }),
+        (err: unknown) => ({ items: [], error: err instanceof Error ? err.message : String(err) }),
+      )
+      : Promise.resolve({ items: [], error: null });
+    const [tickets, routines, allRuns, groups, calendarEvents, missedSlots] = await Promise.all([
       this.ticketStore.getAllTickets(),
       this.routineStore ? this.routineStore.getAll() : Promise.resolve([]),
       this.runStore ? this.runStore.getAll() : Promise.resolve([]),
+      this.loadEpics(),
+      kv ? listCalendarEvents(kv) : Promise.resolve([]),
+      kv ? listMissedSlots(kv) : Promise.resolve([]),
     ]);
     const runs = allRuns.filter((r) => {
       const end = r.completedAt ? r.completedAt.getTime() : Infinity;
@@ -276,6 +354,21 @@ export class GetAgendaUseCase {
       read('routine.run_skipped', w.from),
       runs.length ? read('workflow.', since) : Promise.resolve([]),
     ]);
-    return buildAgenda({ tickets, routines, runs, events: families.flat() }, w);
+    const external = await externalP;
+    const res = buildAgenda({
+      tickets, routines, runs, events: families.flat(),
+      memberships: groups.memberships, epics: groups.epics, calendarEvents, missedSlots, externalItems: external.items,
+    }, w);
+    if (external.error !== null) res.errors.external = external.error;
+    return res;
+  }
+
+  /** Epics and their memberships: one read for the groups, one per group — never per ticket. */
+  private async loadEpics(): Promise<{ epics: { id: string; name: string }[]; memberships: TicketGroupMembership[] }> {
+    const store = this.more.ticketGroups;
+    if (!store) return { epics: [], memberships: [] };
+    const groups = await store.getAllTicketGroups();
+    const lists = await Promise.all(groups.map((g) => store.getMembershipsByGroup(g.id)));
+    return { epics: groups.map((g) => ({ id: g.id, name: g.name })), memberships: lists.flat() };
   }
 }

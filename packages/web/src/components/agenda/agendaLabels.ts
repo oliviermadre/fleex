@@ -1,24 +1,32 @@
 import type { CSSProperties } from 'react';
 import type { AgendaItem, AgendaItemType } from '@fleex/shared';
 import type { TintHue } from '../../lib/tints';
+import {
+  CalendarEventIcon, CircleCheckIcon, ExternalCalendarIcon, FlagIcon, GitMergeIcon, MissedIcon, RoutineRunIcon,
+  TicketPlusIcon, UpcomingIcon, WorkflowRunIcon, CancelIcon, type AgendaIconComponent,
+} from '../ui/icons/AgendaIcons';
 
 export interface AgendaLabel {
   type: AgendaItemType;
   label: string;
-  icon: string;
+  /** An SVG line icon; the label hue tints it through `currentColor`. */
+  icon: AgendaIconComponent;
   hue: TintHue;
-  family: 'tickets' | 'routines' | 'workflows' | 'production';
+  family: 'tickets' | 'routines' | 'workflows' | 'production' | 'calendar';
 }
 
 export const AGENDA_LABELS: AgendaLabel[] = [
-  { type: 'ticket.created', label: 'Created', icon: '🎫', hue: 'blue', family: 'tickets' },
-  { type: 'ticket.done', label: 'Done', icon: '✅', hue: 'green', family: 'tickets' },
-  { type: 'ticket.due', label: 'Due dates', icon: '🚩', hue: 'orange', family: 'tickets' },
-  { type: 'routine.run', label: 'Runs', icon: '⟳', hue: 'purple', family: 'routines' },
-  { type: 'routine.upcoming', label: 'Upcoming', icon: '◌', hue: 'purple', family: 'routines' },
-  { type: 'routine.skipped', label: 'Skipped', icon: '⊘', hue: 'gray', family: 'routines' },
-  { type: 'workflow.run', label: 'Workflow runs', icon: '⑂', hue: 'indigo', family: 'workflows' },
-  { type: 'pr.merged', label: 'PRs merged', icon: '🔀', hue: 'pink', family: 'production' },
+  { type: 'ticket.created', label: 'Created', icon: TicketPlusIcon, hue: 'blue', family: 'tickets' },
+  { type: 'ticket.done', label: 'Done', icon: CircleCheckIcon, hue: 'green', family: 'tickets' },
+  { type: 'ticket.due', label: 'Due dates', icon: FlagIcon, hue: 'orange', family: 'tickets' },
+  { type: 'routine.run', label: 'Runs', icon: RoutineRunIcon, hue: 'purple', family: 'routines' },
+  { type: 'routine.upcoming', label: 'Upcoming', icon: UpcomingIcon, hue: 'purple', family: 'routines' },
+  { type: 'routine.skipped', label: 'Skipped', icon: CancelIcon, hue: 'gray', family: 'routines' },
+  { type: 'routine.missed', label: 'Missed', icon: MissedIcon, hue: 'gray', family: 'routines' },
+  { type: 'workflow.run', label: 'Workflow runs', icon: WorkflowRunIcon, hue: 'indigo', family: 'workflows' },
+  { type: 'pr.merged', label: 'PRs merged', icon: GitMergeIcon, hue: 'pink', family: 'production' },
+  { type: 'event', label: 'Events', icon: CalendarEventIcon, hue: 'teal', family: 'calendar' },
+  { type: 'external', label: 'Google Calendar', icon: ExternalCalendarIcon, hue: 'blue', family: 'calendar' },
 ];
 
 export const LABEL_BY_TYPE = Object.fromEntries(AGENDA_LABELS.map((l) => [l.type, l])) as Record<AgendaItemType, AgendaLabel>;
@@ -28,6 +36,7 @@ export const FAMILIES: { key: AgendaLabel['family']; label: string }[] = [
   { key: 'routines', label: 'Routines' },
   { key: 'workflows', label: 'Workflows' },
   { key: 'production', label: 'Production' },
+  { key: 'calendar', label: 'Calendar' },
 ];
 
 /** Run status → hue, same mapping as the routine history. */
@@ -48,7 +57,7 @@ const v = (hue: TintHue, token: 'bg' | 'border' | 'solid' | 'text') => `var(--ti
 export function chipStyle(item: AgendaItem): CSSProperties {
   const hue = LABEL_BY_TYPE[item.type].hue;
   const upcoming = item.type === 'routine.upcoming';
-  const skipped = item.type === 'routine.skipped';
+  const skipped = item.type === 'routine.skipped' || item.type === 'routine.missed';
   const red = item.overdue;
   const h = red ? 'red' : hue;
   return {

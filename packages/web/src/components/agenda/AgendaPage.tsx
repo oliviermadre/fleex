@@ -11,6 +11,7 @@ import { AgendaTimeGrid } from './AgendaTimeGrid';
 import { AgendaMonth, AgendaSchedule } from './AgendaMonthAndSchedule';
 import { AgendaItemDetails } from './AgendaItemDetails';
 import { AgendaChip, type OpenTarget } from './AgendaChip';
+import { ChevronLeftIcon, ChevronRightIcon } from '../ui/icons/AgendaIcons';
 import { addDays, isVisible, matchesQuery, windowFor } from './agendaLayout';
 
 const VIEWS: { key: AgendaView; label: string; hotkey: string }[] = [
@@ -110,8 +111,8 @@ export function AgendaPage() {
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
       <div className="flex h-13 shrink-0 items-center gap-2 border-b border-[var(--theme-border)] px-3 py-2">
         <Button size="sm" onClick={goToday}>Today</Button>
-        <Button size="sm" variant="ghost" onClick={() => go(-1)} title="Previous (←)">‹</Button>
-        <Button size="sm" variant="ghost" onClick={() => go(1)} title="Next (→)">›</Button>
+        <Button size="sm" variant="ghost" onClick={() => go(-1)} title="Previous period (left arrow key)" aria-label="Previous"><ChevronLeftIcon size={14} /></Button>
+        <Button size="sm" variant="ghost" onClick={() => go(1)} title="Next period (right arrow key)" aria-label="Next"><ChevronRightIcon size={14} /></Button>
         <span className="ml-1 whitespace-nowrap text-base font-semibold text-[var(--theme-text-primary)]">{periodLabel(prefs.view, anchor)}</span>
         <span className="rounded border border-[var(--theme-border)] px-1.5 text-[11px] text-[var(--theme-text-muted)]" title="The grid uses your browser's time zone">
           {Intl.DateTimeFormat().resolvedOptions().timeZone}
@@ -182,7 +183,9 @@ export function AgendaPage() {
             ) : (
               <div className="w-80 space-y-0.5 p-2">
                 <div className="px-1 pb-1 text-xs font-semibold text-[var(--theme-text-primary)]">
-                  {target.group[0]!.routine?.name ?? target.group[0]!.title} ×{target.group.length}
+                  {new Set(target.group.map((it) => `${it.type}|${it.routine?.id ?? ''}`)).size === 1
+                    ? `${target.group[0]!.routine?.name ?? target.group[0]!.title} \u00d7${target.group.length}`
+                    : `${target.group.length} items`}
                 </div>
                 {target.group.map((it) => (
                   <AgendaChip key={it.id} item={it} onOpen={(t) => setTarget(t)} dimmed={!isHit(it)} />

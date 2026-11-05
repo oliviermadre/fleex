@@ -7,8 +7,19 @@
 import type { AgendaItem, AgendaItemType, AgendaPrefs, AgendaView } from '@fleex/shared';
 
 export const DAY_MS = 24 * 3600_000;
-/** Minimum rendered duration in the grid, so a 3-second run is still clickable. */
-export const MIN_BLOCK_MIN = 22;
+/** Height of one hour in the Day / Week grid. 60 px: one minute is one pixel. */
+export const HOUR_PX = 60;
+/**
+ * Rendered height (in minutes, = px at HOUR_PX 60) of an instant and of any
+ * block shorter than that: a 3-second run is still a clickable 18 px row, and
+ * the layout reserves exactly the space it is drawn in, so it never sits on a
+ * neighbour.
+ */
+export const POINT_MIN = 18;
+/** Kept for callers of the old name. */
+export const MIN_BLOCK_MIN = POINT_MIN;
+/** Visible columns per overlap cluster before the rest folds into "+N". */
+export const MAX_COLS = { day: 6, week: 3 } as const;
 
 export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -107,9 +118,9 @@ export interface DaySegment {
   item: AgendaItem;
   startMin: number;
   endMin: number;
-  /** The block began on an earlier day (draw "↑ cont."). */
+  /** The block began on an earlier day (draw an up arrow + "cont."). */
   continuesBefore: boolean;
-  /** The block goes on past midnight (draw "↓"). */
+  /** The block goes on past midnight (draw a down arrow). */
   continuesAfter: boolean;
   /** The instants this piece covers — used to clip the wait hatching. */
   from: Date;
@@ -124,8 +135,9 @@ export function segmentForDay(item: AgendaItem, day: Date, now: Date): DaySegmen
   const start = new Date(item.start);
   if (item.shape === 'point') {
     if (start < dayStart || start >= dayEnd) return null;
-    const s = minutesOfDay(start);
-    return { item, startMin: s, endMin: Math.min(1440, s + MIN_BLOCK_MIN), continuesBefore: false, continuesAfter: false, from: start, to: start };
+    // Pulled up at 23:50 so the row keeps its full height inside the day.
+    const s = Math.min(minutesOfDay(start), 1440 - POINT_MIN);
+    return { item, startMin: s, endMin: s + POINT_MIN, continuesBefore: false, continuesAfter: false, from: start, to: start };
   }
   const end = endOf(item, now);
   if (!(start < dayEnd && (end > dayStart || dayKey(start) === dayKey(dayStart)))) return null;
@@ -133,18 +145,29 @@ export function segmentForDay(item: AgendaItem, day: Date, now: Date): DaySegmen
   const after = end > dayEnd;
   const from = before ? dayStart : start;
   const to = after ? dayEnd : end;
-  const startMin = before ? 0 : minutesOfDay(start);
+  let startMin = before ? 0 : minutesOfDay(start);
   const rawEnd = after ? 1440 : startMin + (to.getTime() - from.getTime()) / 60_000;
+  // A short run is drawn (and laid out) as an instant row.
+  if (rawEnd - startMin < POINT_MIN) startMin = Math.min(startMin, 1440 - POINT_MIN);
   return {
-    item, startMin, endMin: Math.min(1440, Math.max(rawEnd, startMin + MIN_BLOCK_MIN)),
+    item, startMin, endMin: Math.min(1440, Math.max(rawEnd, startMin + POINT_MIN)),
     continuesBefore: before, continuesAfter: after, from, to,
   };
 }
 
-/** A grid entry: one segment, or several same-routine items of one hour merged into ×N. */
+/**
+ * A grid entry: one segment, several same-routine items of one hour merged
+ * into ×N, or a "+N" chip holding what did not fit in the visible columns.
+ * After `layoutDay`, an entry is drawn from column `col` over `span` columns,
+ * out of `cols` for its overlap cluster.
+ */
+interface Placed { startMin: number; endMin: number; col: number; cols: number; span: number }
 export type GridEntry =
-  | { kind: 'item'; seg: DaySegment; startMin: number; endMin: number; col: number; cols: number }
-  | { kind: 'group'; items: AgendaItem[]; startMin: number; endMin: number; col: number; cols: number };
+  | ({ kind: 'item'; seg: DaySegment } & Placed)
+  | ({ kind: 'group'; items: AgendaItem[] } & Placed)
+  | ({ kind: 'more'; items: AgendaItem[] } & Placed);
+
+const placed = (startMin: number, endMin: number): Placed => ({ startMin, endMin, col: 0, cols: 1, span: 1 });
 
 /**
  * More than 2 short items of the same type (and same routine) in the same
@@ -157,7 +180,7 @@ export function groupHourly(segs: DaySegment[]): GridEntry[] {
   for (const s of segs) {
     const short = s.endMin - s.startMin <= 30;
     if (s.item.type === 'workflow.run' || !short) {
-      out.push({ kind: 'item', seg: s, startMin: s.startMin, endMin: s.endMin, col: 0, cols: 1 });
+      out.push({ kind: 'item', seg: s, ...placed(s.startMin, s.endMin) });
       continue;
     }
     const key = `${s.item.type}|${s.item.routine?.id ?? ''}|${Math.floor(s.startMin / 60)}`;
@@ -167,24 +190,46 @@ export function groupHourly(segs: DaySegment[]): GridEntry[] {
   }
   for (const b of buckets.values()) {
     if (b.length > 2) {
-      const h = Math.floor(b[0]!.startMin / 60) * 60;
-      out.push({ kind: 'group', items: b.map((s) => s.item), startMin: h, endMin: h + MIN_BLOCK_MIN, col: 0, cols: 1 });
+      const h = Math.min(b[0]!.startMin, ...b.map((s) => s.startMin));
+      out.push({ kind: 'group', items: b.map((s) => s.item), ...placed(h, h + POINT_MIN) });
     } else {
-      for (const s of b) out.push({ kind: 'item', seg: s, startMin: s.startMin, endMin: s.endMin, col: 0, cols: 1 });
+      for (const s of b) out.push({ kind: 'item', seg: s, ...placed(s.startMin, s.endMin) });
     }
   }
   return out;
 }
 
+const overlaps = (a: { startMin: number; endMin: number }, b: { startMin: number; endMin: number }) =>
+  a.startMin < b.endMin && b.startMin < a.endMin;
+
+const itemsOf = (e: GridEntry): AgendaItem[] => (e.kind === 'item' ? [e.seg.item] : e.items);
+
 /**
- * Overlap layout. Entries that overlap get distinct columns (`col` of `cols`);
- * the view renders them as a Google-Calendar cascade (each later column offset
- * to the right and drawn on top) so a 4-run burst stays readable.
+ * Overlap layout — nothing is ever drawn on top of anything.
+ *
+ * 1. Entries are cut into clusters (chains of overlapping entries) and each
+ *    cluster is packed into columns, first free column wins (longest first
+ *    on a tie, so a long block takes the left edge).
+ * 2. A cluster that needs more than `maxCols` columns keeps its first
+ *    `maxCols − 1` columns; the last visible column takes what was packed
+ *    there and beyond, one entry at a time: an entry that overlaps no other
+ *    such entry and finds the column free is drawn, the others fold into a
+ *    "+N" chip (one per hour, POINT_MIN tall, stacked below the previous
+ *    thing in that column).
+ * 3. Expand: each drawn entry widens to the right over every column that is
+ *    free for its whole duration.
+ *
+ * The returned entries (items, ×N groups and "+N" chips) are disjoint
+ * rectangles: same column ⇒ disjoint times; overlapping times ⇒ disjoint
+ * column ranges.
  */
-export function layoutDay<T extends { startMin: number; endMin: number; col: number; cols: number }>(entries: T[]): T[] {
+export function layoutDay(entries: GridEntry[], maxCols = Infinity): GridEntry[] {
+  const cap = Math.max(2, maxCols);
   const sorted = [...entries].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin);
-  let cluster: T[] = [];
+  const out: GridEntry[] = [];
+  let cluster: GridEntry[] = [];
   let clusterEnd = -1;
+
   const flush = () => {
     const colEnds: number[] = [];
     for (const e of cluster) {
@@ -196,17 +241,57 @@ export function layoutDay<T extends { startMin: number; endMin: number; col: num
       colEnds[i] = e.endMin;
       e.col = i;
     }
-    for (const e of cluster) e.cols = colEnds.length;
+    let shown = cluster;
+    let cols = colEnds.length;
+    if (cols > cap) {
+      cols = cap;
+      const last = cap - 1;
+      shown = cluster.filter((e) => e.col < last);
+      const rest = cluster.filter((e) => e.col >= last);
+      let lastEnd = -1;
+      let chip: Extract<GridEntry, { kind: 'more' }> | null = null;
+      let chipHour = -1;
+      for (const e of rest) {
+        const lonely = !rest.some((o) => o !== e && overlaps(o, e));
+        if (lonely && e.startMin >= lastEnd) {
+          e.col = last;
+          shown.push(e);
+          lastEnd = e.endMin;
+          continue;
+        }
+        const hour = Math.floor(e.startMin / 60);
+        const start = Math.max(lastEnd, e.startMin);
+        if (chip && (hour === chipHour || start + POINT_MIN > 1440)) {
+          chip.items.push(...itemsOf(e));
+          continue;
+        }
+        chip = { kind: 'more', items: [...itemsOf(e)], ...placed(start, start + POINT_MIN), col: last };
+        chipHour = hour;
+        shown.push(chip);
+        lastEnd = chip.endMin;
+      }
+    }
+    for (const e of shown) {
+      e.cols = cols;
+      e.span = 1;
+    }
+    for (const e of shown) {
+      let span = 1;
+      while (e.col + span < cols && !shown.some((o) => o !== e && o.col <= e.col + span && o.col + o.span > e.col + span && overlaps(o, e))) span++;
+      e.span = span;
+    }
+    out.push(...shown.sort((a, b) => a.startMin - b.startMin || a.col - b.col));
     cluster = [];
     clusterEnd = -1;
   };
+
   for (const e of sorted) {
     if (cluster.length && e.startMin >= clusterEnd) flush();
     cluster.push(e);
     clusterEnd = Math.max(clusterEnd, e.endMin);
   }
   if (cluster.length) flush();
-  return sorted;
+  return out;
 }
 
 /** Every label is on unless the user turned it off. */

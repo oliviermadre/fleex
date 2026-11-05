@@ -2141,3 +2141,15 @@ export async function saveAgendaPrefs(prefs: import('@fleex/shared').AgendaPrefs
   });
   if (!res.ok && res.status !== 501) throw new Error(`API error ${res.status}`);
 }
+
+/**
+ * The deliverables a routine / workflow run produced. No toast, and [] on a
+ * 404 (older server without the endpoint, or a purged run): the popover then
+ * simply shows no deliverable section.
+ */
+export async function fetchAgendaRunDeliverables(runId: string): Promise<import('@fleex/shared').TicketDeliverable[]> {
+  const res = await fetch(`${API_URL}/agenda/runs/${encodeURIComponent(runId)}/deliverables`);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}

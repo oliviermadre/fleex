@@ -3,7 +3,7 @@ import type { AgendaItem, AgendaPrefs } from '@fleex/shared';
 import { DEFAULT_AGENDA_PREFS } from '@fleex/shared';
 import {
   windowFor, shiftAnchor, daysCovered, isBar, itemDays, segmentForDay, groupHourly, layoutDay,
-  isVisible, matchesQuery, formatDuration, workflowShortName, dayKey,
+  isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, POINT_MIN, MAX_COLS, type GridEntry,
 } from './agendaLayout';
 
 // Local-time constructors: these tests are about the browser's own calendar.
@@ -36,7 +36,7 @@ describe('windowFor / shiftAnchor', () => {
 });
 
 describe('multi-day blocks (Google Calendar rule)', () => {
-  it('cuts a 2-day block at midnight: one piece per column, flagged ↓ then ↑', () => {
+  it('cuts a 2-day block at midnight: one piece per column, flagged "continues after" then "continues before"', () => {
     const b = block('r', L(2026, 11, 2, 21, 30), L(2026, 11, 3, 11, 0));
     expect(daysCovered(b, NOW)).toBe(2);
     expect(isBar(b, NOW)).toBe(false);
@@ -65,9 +65,16 @@ describe('multi-day blocks (Google Calendar rule)', () => {
     expect(seg.endMin).toBe(11 * 60 + 30);
   });
 
-  it('keeps a 3-second run tall enough to click', () => {
+  it('lays a 3-second run out as an instant row, exactly POINT_MIN tall', () => {
     const seg = segmentForDay(block('r', L(2026, 11, 5, 9, 5), L(2026, 11, 5, 9, 5)), L(2026, 11, 5), NOW)!;
-    expect(seg.endMin - seg.startMin).toBeGreaterThanOrEqual(20);
+    expect(seg.endMin - seg.startMin).toBe(POINT_MIN);
+    const p = segmentForDay(point('p', L(2026, 11, 5, 9, 5)), L(2026, 11, 5), NOW)!;
+    expect(p.endMin - p.startMin).toBe(POINT_MIN);
+  });
+
+  it('keeps an instant at 23:55 inside the day, at full height', () => {
+    const p = segmentForDay(point('p', L(2026, 11, 5, 23, 55)), L(2026, 11, 5), NOW)!;
+    expect([p.startMin, p.endMin]).toEqual([1440 - POINT_MIN, 1440]);
   });
 });
 
@@ -76,7 +83,7 @@ describe('groupHourly / layoutDay', () => {
   const seg = (it: AgendaItem) => segmentForDay(it, day, NOW)!;
 
   it('merges 3+ chips of the same routine in one hour into ×N, but leaves two alone', () => {
-    const sync = { id: 'sync', name: 'Sync', emoji: '🔄' };
+    const sync = { id: 'sync', name: 'Sync', emoji: '' };
     const three = [5, 25, 45].map((m) => seg(point(`s${m}`, L(2026, 11, 5, 9, m), { routine: sync })));
     const two = [5, 25].map((m) => seg(point(`w${m}`, L(2026, 11, 5, 10, m), { routine: { id: 'w', name: 'W', emoji: '' } })));
     const out = groupHourly([...three, ...two]);
@@ -89,16 +96,75 @@ describe('groupHourly / layoutDay', () => {
     expect(groupHourly(runs).every((e) => e.kind === 'item')).toBe(true);
   });
 
-  it('gives overlapping entries distinct columns and a free slot back to a later one', () => {
-    const e = (startMin: number, endMin: number) => ({ startMin, endMin, col: 0, cols: 1 });
+  const e = (startMin: number, endMin: number, id = `${startMin}-${endMin}`): GridEntry => ({
+    kind: 'item', seg: { item: point(id, NOW), startMin, endMin, continuesBefore: false, continuesAfter: false, from: NOW, to: NOW },
+    startMin, endMin, col: 0, cols: 1, span: 1,
+  });
+
+  it('gives overlapping entries side-by-side columns and a free slot back to a later one', () => {
     const out = layoutDay([e(540, 600), e(550, 620), e(610, 640), e(700, 720)]);
-    expect(out.map((x) => [x.col, x.cols])).toEqual([[0, 2], [1, 2], [0, 2], [0, 1]]);
+    expect(out.map((x) => [x.startMin, x.col, x.cols])).toEqual([[540, 0, 2], [550, 1, 2], [610, 0, 2], [700, 0, 1]]);
+  });
+
+  it('expands an entry to the right over the columns that stay free for its whole duration', () => {
+    // A long block, two points side by side at 9:00, then one lone point at 10:00.
+    const out = layoutDay([e(480, 720), e(540, 558), e(545, 563), e(600, 618)]);
+    const at = (s: number) => out.find((x) => x.startMin === s)!;
+    expect(at(480)).toMatchObject({ col: 0, span: 1, cols: 3 });
+    expect(at(540)).toMatchObject({ col: 1, span: 1 });
+    expect(at(545)).toMatchObject({ col: 2, span: 1 });
+    // Nothing next to it at 10:00: it takes both right-hand columns.
+    expect(at(600)).toMatchObject({ col: 1, span: 2 });
+  });
+
+  it('caps the visible columns and folds the rest into a "+N" chip in the last column', () => {
+    const out = layoutDay([e(540, 600), e(541, 600), e(542, 600), e(543, 600), e(544, 600)], 3);
+    expect(Math.max(...out.map((x) => x.col + x.span))).toBe(3);
+    const more = out.filter((x) => x.kind === 'more');
+    expect(more).toHaveLength(1);
+    expect(more[0]).toMatchObject({ col: 2, span: 1, startMin: 542, endMin: 542 + POINT_MIN });
+    expect(more[0]!.kind === 'more' && more[0]!.items).toHaveLength(3);
+    expect(out.filter((x) => x.kind === 'item')).toHaveLength(2);
+  });
+
+  it('keeps a lone entry in the last column when it fits there', () => {
+    const out = layoutDay([e(540, 600), e(541, 600), e(542, 560), e(543, 560), e(570, 588)], 3);
+    expect(out.find((x) => x.startMin === 570)).toMatchObject({ kind: 'item', col: 2 });
+    expect(out.find((x) => x.kind === 'more')!).toMatchObject({ col: 2 });
+  });
+
+  it('never draws one rectangle over another, even in a real burst', () => {
+    // 4 overlapping workflow runs, 10 routine instants and a 4-hour block, on one morning.
+    const runs = [0, 7, 15, 22].map((m) => block(`run${m}`, L(2026, 11, 5, 9, m), L(2026, 11, 5, 10, 30 + m)));
+    const pts = Array.from({ length: 10 }, (_, i) => point(`pt${i}`, L(2026, 11, 5, 9, i * 6), { routine: { id: `r${i % 4}`, name: `R${i % 4}`, emoji: '' } }));
+    const long = block('long', L(2026, 11, 5, 8, 0), L(2026, 11, 5, 12, 0), { type: 'routine.run' });
+    const items = [...runs, ...pts, long];
+    const drawn: number[] = [];
+    for (const maxCols of [MAX_COLS.week, MAX_COLS.day]) {
+      const out = layoutDay(groupHourly(items.map(seg)), maxCols);
+      expect(Math.max(...out.map((x) => x.col + x.span))).toBeLessThanOrEqual(maxCols);
+      for (const a of out) {
+        for (const b of out) {
+          if (a === b) continue;
+          const sameTime = a.startMin < b.endMin && b.startMin < a.endMin;
+          const sameCols = a.col < b.col + b.span && b.col < a.col + a.span;
+          expect(sameTime && sameCols, `${a.kind}@${a.startMin}/c${a.col} vs ${b.kind}@${b.startMin}/c${b.col}`).toBe(false);
+        }
+      }
+      // Nothing is lost: every item is drawn, grouped or behind a "+N".
+      const shown = out.flatMap((x) => (x.kind === 'item' ? [x.seg.item.id] : x.items.map((i) => i.id)));
+      expect(shown.sort()).toEqual(items.map((i) => i.id).sort());
+      expect(out.some((x) => x.kind === 'more')).toBe(true);
+      drawn.push(out.filter((x) => x.kind !== 'more').length);
+    }
+    // The Day view, wider, draws more of the burst before folding.
+    expect(drawn[1]!).toBeGreaterThan(drawn[0]!);
   });
 });
 
 describe('filters and search', () => {
   const prefs = (over: Partial<AgendaPrefs>): AgendaPrefs => ({ ...DEFAULT_AGENDA_PREFS, ...over });
-  const t = { id: 't', displayId: 642, title: 'vue agenda dans routines', boardId: 'fleex', status: 'doing', tags: ['ux'] };
+  const t = { id: 't', displayId: 642, title: 'vue agenda dans routines', boardId: 'fleex', status: 'doing', tags: ['ux'], epicIds: [], repos: [] };
 
   it('hides a label the user unchecked and a routine the user unchecked', () => {
     const r = point('x', NOW, { routine: { id: 'sync', name: 'Sync', emoji: '' } });
@@ -108,7 +174,7 @@ describe('filters and search', () => {
   });
 
   it('applies the board filter to ticket items only — a routine run has no board and stays visible', () => {
-    const p = prefs({ filters: { boards: ['odys'], tags: [] } });
+    const p = prefs({ filters: { boards: ['odys'], epics: [], repos: [], tags: [] } });
     expect(isVisible(block('w', NOW, null, { ticket: t }), p)).toBe(false);
     expect(isVisible(point('r', NOW), p)).toBe(true);
   });

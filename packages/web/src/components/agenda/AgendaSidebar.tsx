@@ -6,6 +6,9 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { MultiSelect } from '../ui/MultiSelect';
 import { cn } from '../../lib/cn';
 import { AGENDA_LABELS, FAMILIES, LABEL_BY_TYPE } from './agendaLabels';
+import { LabelIcon } from './AgendaChip';
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ReopenIcon } from '../ui/icons/AgendaIcons';
+import { MinusIcon } from '../ui/icons/TodoIcons';
 import { addDays, dayKey, labelOn, startOfDay, weekStart, windowFor } from './agendaLayout';
 
 function Check({ state, hue }: { state: 'on' | 'off' | 'mixed'; hue?: string }) {
@@ -15,7 +18,7 @@ function Check({ state, hue }: { state: 'on' | 'off' | 'mixed'; hue?: string }) 
       className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-[3px] text-[9px] font-black text-[var(--theme-bg-base)]"
       style={{ border: `1.5px solid ${color}`, background: state === 'off' ? 'transparent' : color }}
     >
-      {state === 'on' ? '✓' : state === 'mixed' ? '–' : ''}
+      {state === 'on' ? <CheckIcon size={10} className="[stroke-width:3]" /> : state === 'mixed' ? <MinusIcon size={10} className="[stroke-width:3]" /> : null}
     </span>
   );
 }
@@ -29,9 +32,9 @@ function MiniCalendar() {
   return (
     <div className="select-none text-[11px]">
       <div className="mb-1 flex items-center justify-between font-semibold text-[var(--theme-text-primary)]">
-        <button type="button" className="rounded px-1.5 hover:bg-[var(--theme-bg-overlay)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button>
+        <button type="button" className="rounded px-1.5 hover:bg-[var(--theme-bg-overlay)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} aria-label="Previous month"><ChevronLeftIcon size={12} /></button>
         <span>{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
-        <button type="button" className="rounded px-1.5 hover:bg-[var(--theme-bg-overlay)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button>
+        <button type="button" className="rounded px-1.5 hover:bg-[var(--theme-bg-overlay)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} aria-label="Next month"><ChevronRightIcon size={12} /></button>
       </div>
       <div className="grid grid-cols-7 text-center">
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i} className="py-0.5 text-[10px] text-[var(--theme-text-faint)]">{d}</div>)}
@@ -118,7 +121,8 @@ export function AgendaSidebar() {
                   className={cn('flex w-full items-center gap-2 rounded py-0.5 pl-6 pr-1 hover:bg-[var(--theme-bg-hover)]', isOn ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]')}
                 >
                   <Check state={isOn ? 'on' : 'off'} hue={l.hue} />
-                  <span className="flex-1 truncate text-left">{l.icon} {l.label}</span>
+                  <LabelIcon type={l.type} />
+                  <span className="flex-1 truncate text-left">{l.label}</span>
                   <span className="tabular-nums text-[10.5px] text-[var(--theme-text-faint)]">{counts.byType.get(l.type) ?? 0}</span>
                 </button>
               );
@@ -137,7 +141,8 @@ export function AgendaSidebar() {
                       className={cn('flex w-full items-center gap-2 rounded py-0.5 pl-10 pr-1 hover:bg-[var(--theme-bg-hover)]', isOn ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]')}
                     >
                       <Check state={isOn ? 'on' : 'off'} hue={LABEL_BY_TYPE['routine.run'].hue} />
-                      <span className="flex-1 truncate text-left">{r.emoji} {r.name}</span>
+                      <LabelIcon type="routine.run" />
+                      <span className="flex-1 truncate text-left">{r.name}</span>
                       <span className="tabular-nums text-[10.5px] text-[var(--theme-text-faint)]">{counts.byRoutine.get(r.id) ?? 0}</span>
                     </button>
                   );
@@ -168,9 +173,9 @@ export function AgendaSidebar() {
         <button
           type="button"
           className="mt-3 self-start text-[var(--theme-accent)]"
-          onClick={() => updatePrefs((p) => ({ ...p, labels: {}, routines: {}, filters: { boards: [], tags: [] } }))}
+          onClick={() => updatePrefs((p) => ({ ...p, labels: {}, routines: {}, filters: { boards: [], epics: [], repos: [], tags: [] } }))}
         >
-          ↺ Reset labels & filters
+          <span className="inline-flex items-center gap-1"><ReopenIcon size={12} /> Reset labels &amp; filters</span>
         </button>
       )}
     </div>

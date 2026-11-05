@@ -1,7 +1,7 @@
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { AgendaChip, type OnOpen } from './AgendaChip';
-import { LABEL_BY_TYPE, chipStyle } from './agendaLabels';
+import { AgendaChip, GroupChipLabel, WaitIcon, type OnOpen } from './AgendaChip';
+import { chipStyle } from './agendaLabels';
 import { addDays, dayKey, isBar, itemDays, parseDayKey, workflowShortName, openWait } from './agendaLayout';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -30,9 +30,7 @@ function GroupChip({ items, onOpen, dimmed }: { items: AgendaItem[]; onOpen: OnO
       className={cn('flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125', dimmed && 'opacity-25')}
       style={chipStyle(it0)}
     >
-      <span className="shrink-0">{it0.routine?.emoji || LABEL_BY_TYPE[it0.type].icon}</span>
-      <span className="truncate">{it0.routine?.name ?? LABEL_BY_TYPE[it0.type].label}</span>
-      <span className="shrink-0 font-bold text-[var(--theme-text-secondary)]">×{items.length}</span>
+      <GroupChipLabel items={items} />
     </button>
   );
 }
@@ -131,7 +129,8 @@ export function AgendaSchedule({ items, now, isHit, onOpen }: {
                       <AgendaChip item={it0} onOpen={onOpen} dimmed={!isHit(it0)}>
                         {it0.type === 'workflow.run' && (
                           <span className="ml-1 shrink-0 text-[10.5px] text-[var(--theme-text-muted)]">
-                            {workflowShortName(it0.workflowName)}{wait ? ` · ${wait.kind === 'gate' ? '⏸' : '❓'} ${wait.stepName}` : ''}
+                            {workflowShortName(it0.workflowName)}
+                            {wait && <> · <WaitIcon kind={wait.kind} className="align-[-1px]" /> {wait.stepName}</>}
                           </span>
                         )}
                       </AgendaChip>

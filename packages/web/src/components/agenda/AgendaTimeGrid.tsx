@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { AgendaChip, ChipBadges, ChipName, WaitHatches, WorkflowSubline, type OnOpen } from './AgendaChip';
-import { LABEL_BY_TYPE, chipStyle } from './agendaLabels';
+import { AgendaChip, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, type OnOpen } from './AgendaChip';
+import { chipStyle } from './agendaLabels';
 import {
-  addDays, dayKey, groupHourly, isBar, itemDays, layoutDay, minutesOfDay, segmentForDay, startOfDay,
+  HOUR_PX, MAX_COLS, addDays, dayKey, groupHourly, isBar, itemDays, layoutDay, minutesOfDay, segmentForDay, startOfDay,
 } from './agendaLayout';
+import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon } from '../ui/icons/AgendaIcons';
 
-const HOUR_PX = 48;
+/** Gap kept around every rectangle, so two neighbours never touch. */
+const GAP_PX = 1;
 const WEEKDAY = (d: Date) => d.toLocaleDateString(undefined, { weekday: 'short' });
 
 interface Props {
@@ -29,6 +31,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
   const cols = `56px repeat(${days.length}, minmax(0, 1fr))`;
   const firstKey = dayKey(first);
   const lastKey = dayKey(last);
+  const maxCols = days.length === 1 ? MAX_COLS.day : MAX_COLS.week;
 
   // Scroll so "now − 3 h" (or 07:00 on another week) is at the top, once per period.
   useEffect(() => {
@@ -52,7 +55,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
     const allDay = items.filter((it) => it.shape === 'allDay' && it.start === key);
     const segs = items.map((it) => segmentForDay(it, d, now)).filter((s): s is NonNullable<typeof s> => s !== null);
     const count = items.filter((it) => itemDays(it, now).includes(key)).length;
-    return { day: d, key, allDay, entries: layoutDay(groupHourly(segs)), count };
+    return { day: d, key, allDay, entries: layoutDay(groupHourly(segs), maxCols), count };
   });
 
   return (
@@ -100,7 +103,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                     title={it.title}
                   >
                     <WaitHatches item={it} from={from} to={to} now={now} vertical={false} />
-                    {ds[0]! < firstKey && <span className="relative">◂</span>}
+                    {ds[0]! < firstKey && <ChevronLeftIcon size={11} className="relative shrink-0" />}
                     <span className="relative flex min-w-0 items-center gap-1"><ChipName item={it} /></span>
                     {it.type === 'workflow.run' && <span className="relative shrink-0"><WorkflowSubline item={it} now={now} /></span>}
                     {it.type === 'routine.run' && <span className="relative shrink-0 text-[10px] text-[var(--tint-red-text)]">stuck {it.status}</span>}
@@ -136,12 +139,30 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
               style={{ backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${HOUR_PX - 1}px, var(--theme-border) ${HOUR_PX - 1}px, var(--theme-border) ${HOUR_PX}px)` }}
             >
               {entries.map((e) => {
-                const top = (e.startMin / 60) * HOUR_PX;
-                const height = Math.max(18, ((e.endMin - e.startMin) / 60) * HOUR_PX) - 2;
-                // Google-Calendar cascade: later columns shift right and sit on top.
-                const step = e.cols > 1 ? Math.min(100 / e.cols, 22) : 0;
-                const left = e.col * step;
-                const pos = { top, height, left: `calc(${left}% + 2px)`, width: `calc(${100 - left}% - 4px)`, zIndex: 2 + e.col };
+                const top = (e.startMin / 60) * HOUR_PX + GAP_PX;
+                const height = Math.max(1, ((e.endMin - e.startMin) / 60) * HOUR_PX - 2 * GAP_PX);
+                // Side by side: each entry owns its columns, nothing is drawn over anything.
+                const pos = {
+                  top,
+                  height,
+                  left: `calc(${(e.col / e.cols) * 100}% + ${GAP_PX}px)`,
+                  width: `calc(${(e.span / e.cols) * 100}% - ${2 * GAP_PX}px)`,
+                };
+                if (e.kind === 'more') {
+                  return (
+                    <button
+                      key={`m-${e.startMin}-${e.items[0]!.id}`}
+                      type="button"
+                      data-agenda-more={e.items.length}
+                      onClick={(ev) => onOpen({ group: e.items }, ev.currentTarget)}
+                      title={`${e.items.length} more`}
+                      className="absolute flex items-center justify-center overflow-hidden rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1 text-[10.5px] font-semibold text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]"
+                      style={pos}
+                    >
+                      +{e.items.length}
+                    </button>
+                  );
+                }
                 if (e.kind === 'group') {
                   const it0 = e.items[0]!;
                   return (
@@ -149,12 +170,10 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                       key={`g-${it0.id}`}
                       type="button"
                       onClick={(ev) => onOpen({ group: e.items }, ev.currentTarget)}
-                      className={cn('absolute flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] hover:brightness-125', !e.items.some(isHit) && 'opacity-25')}
+                      className={cn('absolute flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] leading-4 hover:brightness-125', !e.items.some(isHit) && 'opacity-25')}
                       style={{ ...chipStyle(it0), ...pos }}
                     >
-                      <span className="shrink-0">{it0.routine?.emoji || LABEL_BY_TYPE[it0.type].icon}</span>
-                      <span className="truncate">{it0.routine?.name ?? LABEL_BY_TYPE[it0.type].label}</span>
-                      <span className="shrink-0 font-bold text-[var(--theme-text-secondary)]">×{e.items.length}</span>
+                      <GroupChipLabel items={e.items} />
                     </button>
                   );
                 }
@@ -169,7 +188,7 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                     onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
                     onDoubleClick={() => onOpenTicket(it)}
                     className={cn(
-                      'absolute flex overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 shadow-[-2px_0_0_var(--theme-bg-base)] hover:z-40 hover:brightness-125',
+                      'absolute flex overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125',
                       compact ? 'flex-row items-center gap-1' : 'flex-col',
                       seg.continuesAfter && 'rounded-b-none',
                       seg.continuesBefore && 'rounded-t-none',
@@ -180,17 +199,21 @@ export function AgendaTimeGrid({ days, items, now, isHit, onOpen, onOpenTicket, 
                   >
                     {it.shape === 'block' && <WaitHatches item={it} from={seg.from} to={seg.to} now={now} vertical />}
                     <span className="relative flex w-full min-w-0 items-center gap-1">
-                      {seg.continuesBefore && <span className="shrink-0 text-[10px] text-[var(--theme-text-muted)]">↑ cont.</span>}
+                      {seg.continuesBefore && (
+                        <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--theme-text-muted)]">
+                          <ArrowUpIcon size={10} /> cont.
+                        </span>
+                      )}
                       <ChipName item={it} />
                       <ChipBadges item={it} />
                     </span>
                     {!compact && it.type === 'workflow.run' && <span className="relative w-full"><WorkflowSubline item={it} now={now} /></span>}
                     {!compact && it.shape === 'block' && it.type !== 'workflow.run' && (
                       <span className="relative text-[10px] text-[var(--theme-text-muted)]">
-                        {new Date(it.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} – {it.end ? new Date(it.end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : 'now'}
+                        {new Date(it.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} - {it.end ? new Date(it.end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : 'now'}
                       </span>
                     )}
-                    {seg.continuesAfter && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] text-[var(--theme-text-secondary)]">↓</span>}
+                    {seg.continuesAfter && <ArrowDownIcon size={10} className="absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[var(--theme-text-secondary)]" />}
                   </button>
                 );
               })}

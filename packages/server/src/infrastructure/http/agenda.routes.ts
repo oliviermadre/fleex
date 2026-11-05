@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { AGENDA_ITEM_TYPES, DEFAULT_AGENDA_PREFS, type AgendaPrefs, type AgendaView } from '@fleex/shared';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
+import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
+import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
 import { MAX_WINDOW_MS, type GetAgendaUseCase } from '../../application/use-cases/get-agenda.js';
 
 const PREFS_KEY = 'agenda:prefs';
@@ -21,21 +23,32 @@ const isBoolRecord = (v: unknown): v is Record<string, boolean> =>
 export function parseAgendaPrefs(body: unknown): { prefs: AgendaPrefs } | { error: string } {
   if (!isObject(body)) return { error: 'prefs must be an object' };
   if (JSON.stringify(body).length > PREFS_MAX_BYTES) return { error: 'prefs are too large' };
-  const { labels, routines, filters, view } = body;
+  const { labels, routines, filters, view, drawerOpen, googleCalendars, showWorkingLocation } = body;
   if (!isBoolRecord(labels)) return { error: 'labels must map a label to a boolean' };
   if (!isBoolRecord(routines)) return { error: 'routines must map a routine id to a boolean' };
   if (!isObject(filters) || !isStringArray(filters['boards']) || !isStringArray(filters['tags'])) {
     return { error: 'filters.boards and filters.tags must be string arrays' };
   }
+  // Fields added after the first release: absent = default, so prefs stored
+  // by an older version still parse.
+  const epics = filters['epics'] ?? [];
+  const repos = filters['repos'] ?? [];
+  if (!isStringArray(epics) || !isStringArray(repos)) return { error: 'filters.epics and filters.repos must be string arrays' };
   if (typeof view !== 'string' || !VIEWS.has(view as AgendaView)) return { error: 'view must be day, week, month or schedule' };
+  if (drawerOpen !== undefined && typeof drawerOpen !== 'boolean') return { error: 'drawerOpen must be a boolean' };
+  if (googleCalendars !== undefined && !isStringArray(googleCalendars)) return { error: 'googleCalendars must be a string array' };
+  if (showWorkingLocation !== undefined && typeof showWorkingLocation !== 'boolean') return { error: 'showWorkingLocation must be a boolean' };
   const keptLabels = Object.fromEntries(Object.entries(labels).filter(([k]) => TYPES.has(k)));
   return {
     prefs: {
       version: 1,
       labels: keptLabels,
       routines,
-      filters: { boards: filters['boards'], tags: filters['tags'] },
+      filters: { boards: filters['boards'], epics, repos, tags: filters['tags'] },
       view: view as AgendaView,
+      drawerOpen: drawerOpen ?? DEFAULT_AGENDA_PREFS.drawerOpen,
+      googleCalendars: googleCalendars ?? DEFAULT_AGENDA_PREFS.googleCalendars,
+      showWorkingLocation: showWorkingLocation ?? DEFAULT_AGENDA_PREFS.showWorkingLocation,
     },
   };
 }
@@ -48,11 +61,15 @@ export function parseAgendaPrefs(body: unknown): { prefs: AgendaPrefs } | { erro
 export function agendaRoutes(deps: {
   getAgenda: Pick<GetAgendaUseCase, 'execute'>;
   kvStore: KvStorePort | null | undefined;
+  /** Run deliverables (`/api/agenda/runs/:runId/deliverables`); absent → 501. */
+  deliverableStore?: Pick<DeliverableStorePort, 'getByWorkflowRun' | 'getByStepRun'> | null;
+  /** Lets a ticket run's deliverables be found through its step runs. */
+  stepRunStore?: Pick<StepRunStorePort, 'getByWorkflowRun'> | null;
   now?: () => Date;
 }) {
   const now = deps.now ?? (() => new Date());
   return async function (app: FastifyInstance) {
-    app.get<{ Querystring: { from?: string; to?: string } }>('/api/agenda', async (request, reply) => {
+    app.get<{ Querystring: { from?: string; to?: string; calendars?: string } }>('/api/agenda', async (request, reply) => {
       const from = new Date(request.query.from ?? '');
       const to = new Date(request.query.to ?? '');
       if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) {
@@ -61,7 +78,26 @@ export function agendaRoutes(deps: {
       if (to.getTime() - from.getTime() > MAX_WINDOW_MS) {
         return reply.code(400).send({ error: 'the window is at most 43 days', code: 'INVALID_RANGE' });
       }
-      return deps.getAgenda.execute({ from, to, now: now() });
+      const calendarIds = (request.query.calendars ?? '').split(',').map((c) => c.trim()).filter(Boolean);
+      return deps.getAgenda.execute({ from, to, now: now() }, calendarIds.length ? { calendarIds } : {});
+    });
+
+    /**
+     * The deliverables of one run (routine or ticket). Routine runs tag theirs
+     * with the run id; a ticket run's deliverables may only carry the step run
+     * id, so those are read through the run's step runs too (deduped).
+     */
+    app.get<{ Params: { runId: string } }>('/api/agenda/runs/:runId/deliverables', async (request, reply) => {
+      const store = deps.deliverableStore;
+      if (!store) return reply.code(501).send({ error: 'Deliverables are unavailable on this storage' });
+      const { runId } = request.params;
+      const byRun = await store.getByWorkflowRun(runId);
+      const steps = deps.stepRunStore ? await deps.stepRunStore.getByWorkflowRun(runId) : [];
+      const byStep = (await Promise.all(steps.map((s) => store.getByStepRun(s.id)))).flat();
+      const seen = new Set<string>();
+      const all = [...byRun, ...byStep].filter((d) => (seen.has(d.id) ? false : (seen.add(d.id), true)));
+      all.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      return { deliverables: all.map((d) => d.toDTO()) };
     });
 
     app.get('/api/agenda/prefs', async (_request, reply) => {

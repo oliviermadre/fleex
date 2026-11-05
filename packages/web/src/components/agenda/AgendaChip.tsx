@@ -1,6 +1,9 @@
 import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import type { AgendaItem } from '@fleex/shared';
+import type { AgendaItemType } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tintText } from '../../lib/tints';
+import { HandIcon, PauseIcon, QuestionIcon } from '../ui/icons/AgendaIcons';
 import { LABEL_BY_TYPE, chipStyle, dotStyle, hatchStyle, statusHue } from './agendaLabels';
 import { formatDuration, openWait, workflowShortName } from './agendaLayout';
 
@@ -9,14 +12,43 @@ export type OnOpen = (target: OpenTarget, el: HTMLElement) => void;
 
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
-/** Status dot for runs, ✋ for a manual routine launch. */
+/**
+ * The label's SVG icon, tinted with the label hue (red when overdue). The
+ * routines' own emoji are never drawn: one iconography for the whole page.
+ */
+export function LabelIcon({ type, size = 12, overdue, className }: { type: AgendaItemType; size?: number; overdue?: boolean; className?: string }) {
+  const label = LABEL_BY_TYPE[type];
+  const Glyph = label.icon;
+  return <Glyph size={size} className={cn('shrink-0', tintText(overdue ? 'red' : label.hue), className)} />;
+}
+
+/** The icon of a human wait: pause at a gate, question mark for an agent question. */
+export function WaitIcon({ kind, size = 10, className }: { kind: 'gate' | 'question'; size?: number; className?: string }) {
+  return kind === 'gate'
+    ? <PauseIcon size={size} className={cn('inline shrink-0', className)} />
+    : <QuestionIcon size={size} className={cn('inline shrink-0', className)} />;
+}
+
+/** "Sync backlog ×3": the body of a same-routine group chip. */
+export function GroupChipLabel({ items }: { items: AgendaItem[] }) {
+  const it0 = items[0]!;
+  return (
+    <>
+      <LabelIcon type={it0.type} />
+      <span className="truncate">{it0.routine?.name ?? LABEL_BY_TYPE[it0.type].label}</span>
+      <span className="shrink-0 font-bold text-[var(--theme-text-secondary)]">&times;{items.length}</span>
+    </>
+  );
+}
+
+/** Status dot for runs, a hand for a manual routine launch. */
 function Badges({ item }: { item: AgendaItem }) {
   return (
     <>
       {(item.type === 'routine.run' || item.type === 'workflow.run') && (
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', item.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(item.status))} />
       )}
-      {item.type === 'routine.run' && item.triggeredFrom && item.triggeredFrom !== 'schedule' && <span title="Launched manually">✋</span>}
+      {item.type === 'routine.run' && item.triggeredFrom && item.triggeredFrom !== 'schedule' && <span title="Launched manually" className="flex shrink-0 text-[var(--theme-text-muted)]"><HandIcon size={11} /></span>}
     </>
   );
 }
@@ -31,16 +63,15 @@ export function ChipName({ item }: { item: AgendaItem }) {
       </>
     );
   }
-  const icon = item.routine?.emoji || LABEL_BY_TYPE[item.type].icon;
   return (
     <>
-      <span className="shrink-0">{icon}</span>
-      <span className={cn('truncate', item.type === 'routine.skipped' && 'line-through')}>{item.title}</span>
+      <LabelIcon type={item.type} overdue={item.overdue} />
+      <span className={cn('truncate', (item.type === 'routine.skipped' || item.type === 'routine.missed') && 'line-through')}>{item.title}</span>
     </>
   );
 }
 
-/** Second line of a workflow run: "Spec Dev PR · ⏸ Check Spec · 4 h 32". */
+/** Second line of a workflow run: "Spec Dev PR · (pause) Check Spec · 4 h 32". */
 export function WorkflowSubline({ item, now }: { item: AgendaItem; now: Date }) {
   const wait = openWait(item);
   return (
@@ -49,7 +80,7 @@ export function WorkflowSubline({ item, now }: { item: AgendaItem; now: Date }) 
       {' · '}
       {wait ? (
         <span className={wait.kind === 'gate' ? 'text-[var(--tint-yellow-text)]' : 'text-[var(--theme-text-secondary)]'}>
-          {wait.kind === 'gate' ? '⏸' : '❓'} {wait.stepName} · {formatDuration(now.getTime() - new Date(wait.start).getTime())}
+          <WaitIcon kind={wait.kind} className="mr-0.5 align-[-1px]" />{wait.stepName} · {formatDuration(now.getTime() - new Date(wait.start).getTime())}
         </span>
       ) : item.status === 'running' ? (item.currentStep ?? 'running') : item.status}
     </div>
