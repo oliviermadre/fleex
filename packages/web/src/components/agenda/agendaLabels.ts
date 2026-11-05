@@ -111,8 +111,14 @@ export function itemHue(item: AgendaItem, colors?: AgendaColors): AgendaColor {
     ?? labelHue(item.type, colors);
 }
 
-/** Chip colours from the item's hue (inline: the hue is data-driven). */
-export function chipStyle(item: AgendaItem, colors?: AgendaColors): CSSProperties {
+/** How a chip stands while a search is active: highlighted hit, dimmed miss, or no search. */
+export type SearchMatch = 'hit' | 'dim' | undefined;
+
+/**
+ * Chip colours from the item's hue (inline: the hue is data-driven). The search
+ * state goes through here too: an inline `opacity` would beat any opacity class.
+ */
+export function chipStyle(item: AgendaItem, colors?: AgendaColors, match?: SearchMatch): CSSProperties {
   const hue = itemHue(item, colors);
   const upcoming = item.type === 'routine.upcoming';
   const skipped = item.type === 'routine.skipped' || item.type === 'routine.missed';
@@ -123,7 +129,8 @@ export function chipStyle(item: AgendaItem, colors?: AgendaColors): CSSPropertie
     border: `1px ${upcoming || skipped ? 'dashed' : 'solid'} ${v(h, 'border')}`,
     borderLeft: `3px ${upcoming || skipped ? 'dashed' : 'solid'} ${v(h, 'solid')}`,
     color: 'var(--theme-text-primary)',
-    opacity: upcoming ? 0.8 : 1,
+    opacity: match === 'dim' ? 0.2 : upcoming ? 0.8 : 1,
+    ...(match === 'hit' ? { boxShadow: '0 0 0 2px var(--tint-yellow-solid)', zIndex: 20 } : {}),
   };
 }
 
@@ -138,3 +145,10 @@ export function hatchStyle(kind: 'gate' | 'question'): CSSProperties {
 }
 
 export const dotStyle = (hue: AgendaColor): CSSProperties => ({ background: v(hue, 'solid') });
+
+/** A grouped chip is a hit when any of its items is. */
+export function groupMatch(items: AgendaItem[], match: (item: AgendaItem) => SearchMatch): SearchMatch {
+  const ms = items.map(match);
+  if (ms.includes('hit')) return 'hit';
+  return ms.includes('dim') ? 'dim' : undefined;
+}

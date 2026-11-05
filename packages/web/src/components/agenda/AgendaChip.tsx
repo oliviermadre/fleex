@@ -3,7 +3,7 @@ import type { AgendaItem } from '@fleex/shared';
 import type { AgendaItemType } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { HandIcon, PauseIcon, QuestionIcon } from '../ui/icons/AgendaIcons';
-import { LABEL_BY_TYPE, chipStyle, colorToken, dotStyle, hatchStyle, itemHue, labelHue, statusHue, type AgendaColors } from './agendaLabels';
+import { LABEL_BY_TYPE, chipStyle, colorToken, dotStyle, hatchStyle, itemHue, labelHue, statusHue, type AgendaColors, type SearchMatch } from './agendaLabels';
 import { useAgendaStore } from '../../stores/agendaStore';
 import { formatDuration, openWait, workflowShortName } from './agendaLayout';
 
@@ -130,10 +130,10 @@ export function WaitHatches({ item, from, to, now, vertical }: { item: AgendaIte
 }
 
 /** A compact chip (month cells, all-day band, schedule rows, popover lists). */
-export function AgendaChip({ item, onOpen, dimmed, time = true, children }: {
+export function AgendaChip({ item, onOpen, match, time = true, children }: {
   item: AgendaItem;
   onOpen: OnOpen;
-  dimmed?: boolean;
+  match?: SearchMatch;
   time?: boolean;
   children?: ReactNode;
 }) {
@@ -143,8 +143,9 @@ export function AgendaChip({ item, onOpen, dimmed, time = true, children }: {
       type="button"
       data-agenda-item={item.id}
       onClick={(e: MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onOpen({ item }, e.currentTarget); }}
-      className={cn('relative flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125', dimmed && 'opacity-25')}
-      style={chipStyle(item, colors)}
+      className={cn('relative flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125')}
+      data-agenda-match={match}
+      style={chipStyle(item, colors, match)}
       title={item.title}
     >
       {time && item.shape !== 'allDay' && <span className="shrink-0 text-[10px] text-[var(--theme-text-muted)]">{fmtTime(item.start)}</span>}

@@ -207,3 +207,21 @@ describe('<AgendaPage/>', () => {
     expect(api.updateTicket).toHaveBeenCalledWith('tk-765', { dueDate: `${to}T12:00:00.000Z` });
   });
 });
+
+describe('<AgendaPage/> search', () => {
+  it('highlights the hits and really fades the others (the inline chip style used to force opacity back to 1)', async () => {
+    renderPage();
+    await waitFor(() => expect(document.querySelector('[data-agenda-item="routine.run:s1"]')).toBeTruthy());
+    act(() => { useAgendaStore.getState().setQuery('Sync'); });
+    const hit = document.querySelector('[data-agenda-item="routine.run:s1"]') as HTMLElement;
+    const miss = document.querySelector('[data-agenda-band="workflow.run:r1"], [data-agenda-item="workflow.run:r1"]') as HTMLElement;
+    await waitFor(() => expect(hit.getAttribute('data-agenda-match')).toBe('hit'));
+    expect(hit.style.boxShadow).toContain('var(--tint-yellow-solid)');
+    expect(miss.getAttribute('data-agenda-match')).toBe('dim');
+    expect(Number(miss.style.opacity)).toBeLessThan(0.5);
+
+    act(() => { useAgendaStore.getState().setQuery(''); });
+    await waitFor(() => expect(hit.getAttribute('data-agenda-match')).toBeNull());
+    expect(hit.style.opacity).toBe('1');
+  });
+});

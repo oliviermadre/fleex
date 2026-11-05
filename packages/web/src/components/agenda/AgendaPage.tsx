@@ -18,6 +18,7 @@ import { AgendaItemDetails } from './AgendaItemDetails';
 import { AgendaChip, type OpenTarget } from './AgendaChip';
 import { ChevronLeftIcon, ChevronRightIcon, PanelRightIcon, PlusIcon } from '../ui/icons/AgendaIcons';
 import { addDays, dayKey, isVisible, matchesQuery, windowFor } from './agendaLayout';
+import type { SearchMatch } from './agendaLabels';
 import { applyPlanToItem, dueDateFor, nextHalfHour, wallMinutes, type DropPlan } from './agendaDrag';
 import { AgendaDndContext, DragGhost, useAgendaDndController, type SelectRange } from './AgendaDnd';
 import { AgendaDrawer } from './AgendaDrawer';
@@ -125,8 +126,8 @@ export function AgendaPage() {
     () => applyOverrides(data?.items ?? [], overrides).filter((it) => isVisible(it, prefs)),
     [data, overrides, prefs],
   );
-  const isHit = useCallback((it: AgendaItem) => matchesQuery(it, query), [query]);
-  const hits = query ? visible.filter(isHit).length : null;
+  const match = useCallback((it: AgendaItem): SearchMatch => (query.trim() ? (matchesQuery(it, query) ? 'hit' : 'dim') : undefined), [query]);
+  const hits = query ? visible.filter((it) => match(it) !== 'dim').length : null;
 
   const open = useCallback((t: OpenTarget, el: HTMLElement) => {
     pop.refs.setReference(el);
@@ -313,11 +314,11 @@ export function AgendaPage() {
               {error ? <span>{error}</span> : <Spinner size={16} />}
             </div>
           ) : prefs.view === 'month' ? (
-            <AgendaMonth from={from} anchorMonth={anchor.getMonth()} items={visible} now={now} isHit={isHit} onOpen={open} onPickDay={pickDay} onCreateAllDay={createAllDay} />
+            <AgendaMonth from={from} anchorMonth={anchor.getMonth()} items={visible} now={now} match={match} onOpen={open} onPickDay={pickDay} onCreateAllDay={createAllDay} />
           ) : prefs.view === 'schedule' ? (
-            <AgendaSchedule items={visible} now={now} isHit={isHit} onOpen={open} />
+            <AgendaSchedule items={visible} now={now} match={match} onOpen={open} />
           ) : (
-            <AgendaTimeGrid days={days} items={visible} now={now} isHit={isHit} onOpen={open} onOpenTicket={openTicket} onPickDay={pickDay} onCreateAllDay={createAllDay} />
+            <AgendaTimeGrid days={days} items={visible} now={now} match={match} onOpen={open} onOpenTicket={openTicket} onPickDay={pickDay} onCreateAllDay={createAllDay} />
           )}
         </div>
         {prefsLoaded && prefs.drawerOpen && <AgendaDrawer hidden={scheduling} />}
@@ -341,7 +342,7 @@ export function AgendaPage() {
                     : `${target.group.length} items`}
                 </div>
                 {target.group.map((it) => (
-                  <AgendaChip key={it.id} item={it} onOpen={(t) => setTarget(t)} dimmed={!isHit(it)} />
+                  <AgendaChip key={it.id} item={it} onOpen={(t) => setTarget(t)} match={match(it)} />
                 ))}
               </div>
             )}

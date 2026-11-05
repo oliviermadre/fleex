@@ -1,7 +1,7 @@
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { AgendaChip, GroupChipLabel, WaitIcon, useAgendaColors, type OnOpen } from './AgendaChip';
-import { chipStyle } from './agendaLabels';
+import { chipStyle, groupMatch, type SearchMatch } from './agendaLabels';
 import { DragWrap, useAgendaDnd } from './AgendaDnd';
 import { addDays, dayKey, isBar, itemDays, parseDayKey, workflowShortName, openWait } from './agendaLayout';
 
@@ -22,27 +22,28 @@ function dayGroups(items: AgendaItem[], now: Date): AgendaItem[][] {
   return [...groups.values()].sort((a, b) => rank(a) - rank(b) || (a[0]!.start < b[0]!.start ? -1 : 1));
 }
 
-function GroupChip({ items, onOpen, dimmed }: { items: AgendaItem[]; onOpen: OnOpen; dimmed: boolean }) {
+function GroupChip({ items, onOpen, match }: { items: AgendaItem[]; onOpen: OnOpen; match: SearchMatch }) {
   const it0 = items[0]!;
   const colors = useAgendaColors();
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onOpen({ group: items }, e.currentTarget); }}
-      className={cn('flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125', dimmed && 'opacity-25')}
-      style={chipStyle(it0, colors)}
+      className={cn('flex w-full min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125')}
+      data-agenda-match={match}
+      style={chipStyle(it0, colors, match)}
     >
       <GroupChipLabel items={items} />
     </button>
   );
 }
 
-export function AgendaMonth({ from, anchorMonth, items, now, isHit, onOpen, onPickDay, onCreateAllDay }: {
+export function AgendaMonth({ from, anchorMonth, items, now, match, onOpen, onPickDay, onCreateAllDay }: {
   from: Date;
   anchorMonth: number;
   items: AgendaItem[];
   now: Date;
-  isHit: (item: AgendaItem) => boolean;
+  match: (item: AgendaItem) => SearchMatch;
   onOpen: OnOpen;
   onPickDay: (day: Date) => void;
   /** A18: a click on the empty part of a cell. */
@@ -85,8 +86,8 @@ export function AgendaMonth({ from, anchorMonth, items, now, isHit, onOpen, onPi
                 {groups.length > 0 && <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">{(byDay.get(key) ?? []).length}</span>}
               </div>
               {shown.map((g) => g.length === 1
-                ? <DragWrap key={g[0]!.id} item={g[0]!}><AgendaChip item={g[0]!} onOpen={onOpen} dimmed={!isHit(g[0]!)} time={!isBar(g[0]!, now)} /></DragWrap>
-                : <GroupChip key={`${g[0]!.type}-${g[0]!.id}`} items={g} onOpen={onOpen} dimmed={!g.some(isHit)} />)}
+                ? <DragWrap key={g[0]!.id} item={g[0]!}><AgendaChip item={g[0]!} onOpen={onOpen} match={match(g[0]!)} time={!isBar(g[0]!, now)} /></DragWrap>
+                : <GroupChip key={`${g[0]!.type}-${g[0]!.id}`} items={g} onOpen={onOpen} match={groupMatch(g, match)} />)}
               {groups.length > MAX_CHIPS && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); onPickDay(day); }} className="self-start rounded px-1 text-[11px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)]">
                   +{groups.length - MAX_CHIPS} more
@@ -101,10 +102,10 @@ export function AgendaMonth({ from, anchorMonth, items, now, isHit, onOpen, onPi
 }
 
 /** Schedule: a chronological list, grouped by day, with a "now" rule today. */
-export function AgendaSchedule({ items, now, isHit, onOpen }: {
+export function AgendaSchedule({ items, now, match, onOpen }: {
   items: AgendaItem[];
   now: Date;
-  isHit: (item: AgendaItem) => boolean;
+  match: (item: AgendaItem) => SearchMatch;
   onOpen: OnOpen;
 }) {
   const byDay = new Map<string, AgendaItem[]>();
@@ -138,9 +139,9 @@ export function AgendaSchedule({ items, now, isHit, onOpen }: {
                   <div key={it0.id}>
                     {marker && <div className="my-1 border-t-2 border-[var(--tint-red-solid)] text-[10px] font-bold text-[var(--tint-red-text)]">now</div>}
                     {g.length > 1 ? (
-                      <GroupChip items={g} onOpen={onOpen} dimmed={!g.some(isHit)} />
+                      <GroupChip items={g} onOpen={onOpen} match={groupMatch(g, match)} />
                     ) : (
-                      <AgendaChip item={it0} onOpen={onOpen} dimmed={!isHit(it0)}>
+                      <AgendaChip item={it0} onOpen={onOpen} match={match(it0)}>
                         {it0.type === 'workflow.run' && (
                           <span className="ml-1 shrink-0 text-[10.5px] text-[var(--theme-text-muted)]">
                             {workflowShortName(it0.workflowName)}
