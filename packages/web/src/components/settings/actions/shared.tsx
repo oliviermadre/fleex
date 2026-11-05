@@ -4,7 +4,6 @@ import type { ActionRunMode, PinnedIcon, WorkspaceAction } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { tint, tintClasses, tintText } from '../../../lib/tints';
 import { buildWorkspaceContext, type WorkspaceContext } from '../../../lib/templateUtils';
-import { useTicketWorkspaceId } from '../../../stores/ticketWorkspaceStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useWorkStore } from '../../../stores/workStore';
@@ -175,12 +174,10 @@ export function useContextTicket(): WorkspaceContext | null {
   const workTicketId = useWorkStore((s) => s.selectedTicketId);
   const tickets = useTicketStore((s) => s.tickets);
   const basePath = useSettingsStore((s) => s.settings.basePath);
-  const ticket = useMemo(() => (workTicketId ? tickets.find((t) => t.id === workTicketId) : undefined), [workTicketId, tickets]);
-  const workspaceId = useTicketWorkspaceId(ticket);
-  return useMemo(
-    () => (ticket && workspaceId ? buildWorkspaceContext(ticket, basePath, workspaceId) : null),
-    [ticket, basePath, workspaceId],
-  );
+  return useMemo(() => {
+    const ticket = workTicketId ? tickets.find((t) => t.id === workTicketId) : undefined;
+    return ticket ? buildWorkspaceContext(ticket, basePath) : null;
+  }, [workTicketId, tickets, basePath]);
 }
 
 /** Run a saved action from Settings (list row ▶, preview bar). Ticket actions need a context ticket. */

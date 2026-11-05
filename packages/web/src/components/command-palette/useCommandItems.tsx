@@ -4,7 +4,6 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { buildWorkspaceContext } from '../../lib/templateUtils';
-import { useTicketWorkspaceId } from '../../stores/ticketWorkspaceStore';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { usePinnedActionsStore } from '../../stores/pinnedActionsStore';
 import { STATUS_LABEL } from '../actions/actionStatus';
@@ -37,14 +36,6 @@ export function useCommandItems(query: string): CommandItem[] {
   const sessionDisplayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
 
   const ticketItems = useTicketStore((s) => s.tickets);
-
-  // The current ticket for workspace actions: the focused floating terminal's,
-  // else the task open in the Work view.
-  const workspaceTicketId =
-    (focusedFloatingPanelId ? ticketIdForSession(sessionGroups, focusedFloatingPanelId) : null) ??
-    (activePanel === 'work' ? workTicketId : null);
-  const workspaceTicket = workspaceTicketId ? ticketItems.find((t) => t.id === workspaceTicketId) : undefined;
-  const workspaceId = useTicketWorkspaceId(workspaceTicket);
 
   const allItems = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = [];
@@ -134,10 +125,13 @@ export function useCommandItems(query: string): CommandItem[] {
     // ── Workspace actions (conditional on the current ticket: the focused
     // floating terminal's, else the task open in the Work view) ──
     if (workspaceActions.length > 0) {
-      const ticket = workspaceTicket;
+      const ticketId =
+        (focusedFloatingPanelId ? ticketIdForSession(sessionGroups, focusedFloatingPanelId) : null) ??
+        (activePanel === 'work' ? workTicketId : null);
+      const ticket = ticketId ? ticketItems.find((t) => t.id === ticketId) : undefined;
 
-      if (ticket && workspaceId) {
-        const context = buildWorkspaceContext(ticket, basePath, workspaceId);
+      if (ticket) {
+        const context = buildWorkspaceContext(ticket, basePath);
         for (const action of workspaceActions) {
           if (action.enabled === false) continue;
           items.push({

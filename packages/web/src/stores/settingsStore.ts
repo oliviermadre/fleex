@@ -284,25 +284,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   executeWorkspaceAction: async (action: WorkspaceAction, context: WorkspaceContext) => {
+    const resolved = resolveTemplate(action.actionValue, context);
     if (action.actionType === 'url') {
-      window.open(resolveTemplate(action.actionValue, context), '_blank');
+      window.open(resolved, '_blank');
     } else if (action.actionType === 'shell') {
       // Materialize the workspace first so {{workspace_path}} points at a real
       // directory; if that failed, let the server's default cwd apply.
-      const workspace = await api.ensureTicketWorkspace(context.ticket_id);
-      const hasWorkspace = workspace !== null;
-      // The folder the server just ensured is the truth (a rename can make a
-      // cached context stale): rebuild the workspace variables from it.
-      if (workspace?.workspaceId && workspace.workspaceId !== context.workspace_name) {
-        const root = context.workspace_path.slice(0, context.workspace_path.length - context.workspace_name.length);
-        context = {
-          ...context,
-          workspace_path: `${root}${workspace.workspaceId}`,
-          workspace_name: workspace.workspaceId,
-          ticket_slug: workspace.workspaceId.slice(7),
-        };
-      }
-      const resolved = resolveTemplate(action.actionValue, context);
+      const hasWorkspace = await api.ensureTicketWorkspace(context.ticket_id);
       const mode: ActionRunMode = action.runMode ?? 'background';
       void usePinnedActionsStore.getState().run({
         sourceId: action.id,

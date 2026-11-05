@@ -38,6 +38,7 @@ function makeTicket(id: string, boardId: string, title: string): Ticket {
     status: 'todo',
     priority: 'none',
     complexity: null,
+    slug: 'slug',
     type: null,
     position: 0,
     tags: [],

@@ -159,22 +159,6 @@ describe('executeWorkspaceAction', () => {
     expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/base/workspaces/abc123-x' }));
   });
 
-  it('runs in the folder ensure-workspace resolved when the cached context is stale (renamed ticket)', async () => {
-    // WHY: a renamed ticket keeps its original folder; the server is the only one
-    // that knows it. Running in a path derived from a stale context would `cd` into
-    // a folder that does not exist (or worse, an empty one).
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ workspaceId: 'abc123-old-name' }), { status: 200 })));
-    try {
-      await useSettingsStore.getState().executeWorkspaceAction(action, context);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: '/base/workspaces/abc123-old-name',
-      command: 'ls /base/workspaces/abc123-old-name',
-    }));
-  });
-
   it('omits cwd when ensure-workspace failed, so the server default applies', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
     try {

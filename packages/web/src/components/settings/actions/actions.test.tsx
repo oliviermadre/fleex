@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, cleanup, fireEvent, screen, act, within, waitFor } from '@testing-library/react';
+import { render, cleanup, fireEvent, screen, act, within } from '@testing-library/react';
 import type { PinnedIcon } from '@fleex/shared';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { usePinnedActionsStore } from '../../../stores/pinnedActionsStore';
@@ -21,8 +21,7 @@ vi.mock('../../../services/api', async (importOriginal) => ({
   testPinnedProbe: vi.fn(),
   diagnoseBinary: vi.fn(async () => null),
   startActionRun: vi.fn(async () => ({ runId: 'r1', alreadyRunning: false })),
-  ensureTicketWorkspace: vi.fn(async () => ({})),
-  fetchTicketWorkspace: vi.fn(async (id: string) => ({ workspaceId: `${id.slice(0, 6)}-some-ticket`, path: '', exists: true })),
+  ensureTicketWorkspace: vi.fn(async () => true),
   suggestActionCommand: vi.fn(),
 }));
 
@@ -290,8 +289,6 @@ describe('ActionDetail Try', () => {
 
   it('materializes the ticket workspace before running a ticket action, like the real click', async () => {
     render(<ActionDetail scope="ticket" id="w" />);
-    await screen.findByRole('button', { name: '▶ Try' });
-    await waitFor(() => expect(screen.getByRole('button', { name: '▶ Try' })).not.toHaveProperty('disabled', true));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '▶ Try' }));
     });
@@ -301,9 +298,8 @@ describe('ActionDetail Try', () => {
   });
 
   it('omits cwd when the workspace could not be created', async () => {
-    vi.mocked(api.ensureTicketWorkspace).mockResolvedValueOnce(null);
+    vi.mocked(api.ensureTicketWorkspace).mockResolvedValueOnce(false);
     render(<ActionDetail scope="ticket" id="w" />);
-    await waitFor(() => expect(screen.getByRole('button', { name: '▶ Try' })).not.toHaveProperty('disabled', true));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '▶ Try' }));
     });

@@ -44,6 +44,7 @@ interface TicketRow {
   effort_override: string | null;
   fast_mode: boolean | null;
   complexity: string | null;
+  slug: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -100,6 +101,7 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     isEffortLevel(r.effort_override) ? r.effort_override : null,
     r.fast_mode === true,
     normalizeTicketComplexity(r.complexity),
+    r.slug ?? null,
   );
 }
 
@@ -243,6 +245,7 @@ export class SupabaseTicketStore implements TicketStorePort {
         status: ticket.status,
         priority: ticket.priority,
         complexity: ticket.complexity,
+      slug: ticket.slug,
         type: ticket.type,
         position: ticket.position,
         tags: ticket.tags,
@@ -276,6 +279,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       status: ticket.status,
       priority: ticket.priority,
       complexity: ticket.complexity,
+      slug: ticket.slug,
       type: ticket.type,
       position: ticket.position,
       tags: ticket.tags,
