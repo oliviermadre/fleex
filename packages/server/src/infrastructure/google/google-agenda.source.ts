@@ -1,6 +1,7 @@
 /**
  * Google meetings as agenda items (E3): the external source the agenda use
- * case merges with Fleex's own items. Not connected → no items, not an error;
+ * case merges with Fleex's own items, read through gogcli. gog not set up →
+ * no items, not an error;
  * an API failure throws so the use case reports it in `errors.external`.
  */
 import type { AgendaExternalLink, AgendaItem } from '@fleex/shared';
@@ -68,18 +69,17 @@ export function mapGoogleEvent(
 
 export class GoogleAgendaSource implements AgendaExternalSourceLike {
   constructor(
-    private readonly client: Pick<GoogleCalendarClient, 'isConnected' | 'listEvents'>,
+    private readonly client: Pick<GoogleCalendarClient, 'listEvents'>,
     private readonly links: Pick<ExternalLinksStore, 'byEventKey'>,
   ) {}
 
   async list(from: Date, to: Date, calendarIds: string[]): Promise<AgendaItem[]> {
-    if (!(await this.client.isConnected())) return [];
     const ids = calendarIds.length > 0 ? [...new Set(calendarIds)] : ['primary'];
     let perCalendar: GoogleCalendarEvent[][];
     try {
       perCalendar = await Promise.all(ids.map((id) => this.client.listEvents(id, from, to)));
     } catch (err) {
-      // Tokens dropped mid-request (refresh token revoked): same as never connected.
+      // gogcli not installed or not set up yet: no Google items, not an error (the sidebar explains the setup).
       if (err instanceof GoogleNotConnectedError) return [];
       throw err;
     }

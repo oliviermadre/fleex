@@ -1,41 +1,28 @@
 /**
- * Read-only Google Calendar client for the /agenda page (E3).
+ * Read-only Google Calendar client for the /agenda page (E3), on top of
+ * gogcli (`gog`, https://gogcli.sh).
  *
- * One Google account per Fleex instance: the OAuth tokens live in the KV store
- * under `agenda:google:tokens`, like `agenda:prefs`. The access token is
- * refreshed (refresh_token grant) a minute before it expires; calendar lists
- * are cached an hour and event windows five minutes, in memory.
+ * Fleex never runs an OAuth flow nor stores Google tokens: gog is installed
+ * on the server host (Homebrew) and set up there — Google Cloud project,
+ * OAuth client, `gog auth add` — and Fleex shells out to it in read-only mode
+ * (`--readonly --json --no-input`). The account read is gog's default one;
+ * FLEEX_GOG_ACCOUNT (or gog's own GOG_ACCOUNT) picks another. FLEEX_GOG_BIN
+ * overrides the binary path.
+ *
+ * Calendar lists are cached an hour and event windows five minutes, in memory.
  */
-import type { KvStorePort } from '../../application/ports/kv-store.port.js';
+import { execFile } from 'node:child_process';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-import { getGoogleConfig } from '../auth/oauth-providers.js';
 
-export const GOOGLE_TOKENS_KEY = 'agenda:google:tokens';
-export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-export const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
-export const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
-export const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
-export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly openid email';
-
-const REFRESH_MARGIN_MS = 60_000;
 const CALENDARS_TTL_MS = 3600_000;
 const EVENTS_TTL_MS = 5 * 60_000;
+const VERSION_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 200;
-const MAX_PAGES = 20;
+const GOG_TIMEOUT_MS = 30_000;
+const GOG_MAX_BUFFER = 32 * 1024 * 1024;
 
-export interface GoogleTokens {
-  accessToken: string;
-  refreshToken: string | null;
-  /** Epoch ms. */
-  expiresAt: number;
-  email: string | null;
-  scope: string;
-}
-
-export interface GoogleCredentials {
-  clientId: string;
-  clientSecret: string;
-}
+/** gog's documented exit codes (`gog schema --json` → automation.exit_codes). */
+export const GOG_EXIT = { usage: 2, auth_required: 4, not_found: 5, permission_denied: 6, rate_limited: 7, config: 10 } as const;
 
 export interface GoogleEventTime {
   date?: string;
@@ -43,7 +30,7 @@ export interface GoogleEventTime {
   timeZone?: string;
 }
 
-/** The subset of a Calendar API `Event` the agenda reads. */
+/** The subset of a Calendar API `Event` the agenda reads (gog passes them through). */
 export interface GoogleCalendarEvent {
   id: string;
   iCalUID?: string;
@@ -66,11 +53,19 @@ export interface GoogleCalendarListEntry {
   primary?: boolean;
 }
 
-/** No tokens stored, or Google refused the refresh token: the user must reconnect. */
+/** gog can't read calendars yet: not installed, no OAuth client, no account. Setup happens outside Fleex. */
 export class GoogleNotConnectedError extends Error {
-  constructor(message = 'Google Calendar is not connected') {
+  constructor(message = 'Google Calendar is not set up in gogcli') {
     super(message);
     this.name = 'GoogleNotConnectedError';
+  }
+}
+
+/** `gog` is not on the server PATH (nor at FLEEX_GOG_BIN). */
+export class GogNotInstalledError extends GoogleNotConnectedError {
+  constructor(bin: string) {
+    super(`gogcli is not installed on the Fleex server (\`${bin}\` not found) — brew install openclaw/tap/gogcli`);
+    this.name = 'GogNotInstalledError';
   }
 }
 
@@ -81,213 +76,120 @@ export class GoogleApiError extends Error {
   }
 }
 
-type FetchFn = typeof fetch;
-
-export interface GoogleCalendarClientDeps {
-  kvStore: KvStorePort;
-  fetch?: FetchFn;
-  now?: () => number;
-  /** Defaults to GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (the SSO client). */
-  credentials?: () => GoogleCredentials | null;
-  logger?: LoggerPort;
+export interface GogResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+  /** The binary itself wasn't found (ENOENT). */
+  notFound?: boolean;
 }
 
-function defaultCredentials(): GoogleCredentials | null {
-  const config = getGoogleConfig();
-  return config ? { clientId: config.clientId, clientSecret: config.clientSecret } : null;
+export type GogRunner = (args: string[]) => Promise<GogResult>;
+
+function defaultRunner(bin: string): GogRunner {
+  return (args) => new Promise((resolve) => {
+    execFile(bin, args, { timeout: GOG_TIMEOUT_MS, maxBuffer: GOG_MAX_BUFFER, encoding: 'utf8' }, (err, stdout, stderr) => {
+      if (!err) return resolve({ code: 0, stdout, stderr });
+      const e = err as NodeJS.ErrnoException & { code?: string | number; killed?: boolean };
+      if (e.code === 'ENOENT') return resolve({ code: 127, stdout: '', stderr: '', notFound: true });
+      const code = typeof e.code === 'number' ? e.code : 1;
+      resolve({ code, stdout: stdout ?? '', stderr: (stderr || (e.killed ? `gog timed out after ${GOG_TIMEOUT_MS / 1000}s` : e.message)) ?? '' });
+    });
+  });
 }
 
-/** The `email` claim of an id_token, without verifying it (it comes straight from Google over TLS). */
-export function emailFromIdToken(idToken: unknown): string | null {
-  if (typeof idToken !== 'string') return null;
-  const payload = idToken.split('.')[1];
-  if (!payload) return null;
+function parseJson(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
   try {
-    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>;
-    return typeof json['email'] === 'string' ? json['email'] : null;
+    const v = JSON.parse(trimmed) as unknown;
+    return v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
   } catch {
     return null;
   }
 }
 
-async function readJson(res: Response): Promise<Record<string, unknown>> {
-  const text = await res.text();
-  if (!text) return {};
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    return { error: text.slice(0, 200) };
+/** gog's error message: the `{"error":{class,message}}` envelope on stdout, else stderr. */
+function gogError(res: GogResult): { message: string; cls: string | null } {
+  const err = parseJson(res.stdout)?.['error'];
+  if (err && typeof err === 'object') {
+    const e = err as { message?: unknown; class?: unknown };
+    if (typeof e.message === 'string') return { message: e.message.trim(), cls: typeof e.class === 'string' ? e.class : null };
   }
+  return { message: res.stderr.trim().split('\n')[0] || `gog exited with code ${res.code}`, cls: null };
 }
 
-function errorText(body: Record<string, unknown>): string {
-  const err = body['error'];
-  if (typeof err === 'string') {
-    const desc = body['error_description'];
-    return typeof desc === 'string' ? `${err}: ${desc}` : err;
-  }
-  if (err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string') {
-    return (err as { message: string }).message;
-  }
-  return 'unknown error';
+export interface GoogleCalendarClientDeps {
+  /** Defaults to FLEEX_GOG_BIN, then `gog` on the PATH. */
+  bin?: string;
+  /** Defaults to FLEEX_GOG_ACCOUNT (gog falls back to GOG_ACCOUNT, then its default account). */
+  account?: string | null;
+  run?: GogRunner;
+  now?: () => number;
+  logger?: LoggerPort;
 }
 
 export class GoogleCalendarClient {
-  private readonly kv: KvStorePort;
-  private readonly fetchFn: FetchFn;
+  readonly bin: string;
+  private readonly account: string | null;
+  private readonly run: GogRunner;
   private readonly now: () => number;
-  private readonly credentials: () => GoogleCredentials | null;
   private readonly logger: LoggerPort | undefined;
   private readonly cache = new Map<string, { at: number; value: unknown }>();
-  /** One refresh at a time: parallel calendar reads share it. */
-  private refreshing: Promise<GoogleTokens> | null = null;
 
-  constructor(deps: GoogleCalendarClientDeps) {
-    this.kv = deps.kvStore;
-    this.fetchFn = deps.fetch ?? ((...args) => fetch(...args));
+  constructor(deps: GoogleCalendarClientDeps = {}) {
+    this.bin = deps.bin ?? (process.env['FLEEX_GOG_BIN'] || 'gog');
+    this.account = deps.account !== undefined ? deps.account : (process.env['FLEEX_GOG_ACCOUNT'] || null);
+    this.run = deps.run ?? defaultRunner(this.bin);
     this.now = deps.now ?? Date.now;
-    this.credentials = deps.credentials ?? defaultCredentials;
     this.logger = deps.logger;
   }
 
-  isConfigured(): boolean {
-    return this.credentials() !== null;
+  /** Read-only, scriptable, never prompts. */
+  private baseArgs(): string[] {
+    const args = ['--json', '--no-input', '--readonly', '--color=never'];
+    if (this.account) args.push('--account', this.account);
+    return args;
   }
 
-  /** The OAuth client id the consent screen is opened with; null when not configured. */
-  clientId(): string | null {
-    return this.credentials()?.clientId ?? null;
-  }
-
-  async getTokens(): Promise<GoogleTokens | null> {
-    const raw = await this.kv.get(GOOGLE_TOKENS_KEY);
-    if (!raw) return null;
-    try {
-      const t = JSON.parse(raw) as GoogleTokens;
-      return typeof t.accessToken === 'string' ? t : null;
-    } catch {
-      return null;
+  /** Run a gog command; parsed JSON on success, typed errors otherwise. */
+  private async gog(args: string[]): Promise<Record<string, unknown>> {
+    const res = await this.run([...this.baseArgs(), ...args]);
+    if (res.notFound) throw new GogNotInstalledError(this.bin);
+    if (res.code === 0) {
+      const body = parseJson(res.stdout);
+      if (!body) throw new GoogleApiError(`gog ${args.slice(0, 2).join(' ')}: unreadable output`, 502);
+      return body;
     }
+    const { message, cls } = gogError(res);
+    // Setup not done: no OAuth client (config), no / unknown account (usage), consent missing or expired (auth).
+    if (res.code === GOG_EXIT.auth_required || res.code === GOG_EXIT.config || cls === 'auth' || cls === 'config'
+      || (res.code === GOG_EXIT.usage && /account/i.test(message))) {
+      throw new GoogleNotConnectedError(message);
+    }
+    const status = res.code === GOG_EXIT.not_found ? 404 : res.code === GOG_EXIT.permission_denied ? 403 : res.code === GOG_EXIT.rate_limited ? 429 : 502;
+    throw new GoogleApiError(`gog ${args.slice(0, 2).join(' ')}: ${message}`, status);
   }
 
+  /** `gog --version` ("v0.47.1"), null when gog isn't installed. */
+  async version(): Promise<string | null> {
+    const hit = this.cached<string | null>('version', VERSION_TTL_MS);
+    if (hit !== undefined) return hit;
+    const res = await this.run(['--version']);
+    const value = res.notFound || res.code !== 0 ? null : (res.stdout.trim().split(/\s+/)[0] || null);
+    this.remember('version', value);
+    return value;
+  }
+
+  /** gog can read calendars with its current account. */
   async isConnected(): Promise<boolean> {
-    return (await this.getTokens()) !== null;
-  }
-
-  private async saveTokens(tokens: GoogleTokens): Promise<void> {
-    await this.kv.set(GOOGLE_TOKENS_KEY, JSON.stringify(tokens));
-  }
-
-  private requireCredentials(): GoogleCredentials {
-    const creds = this.credentials();
-    if (!creds) throw new GoogleNotConnectedError('GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set');
-    return creds;
-  }
-
-  private async postForm(url: string, params: Record<string, string>): Promise<{ res: Response; body: Record<string, unknown> }> {
-    const res = await this.fetchFn(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: new URLSearchParams(params).toString(),
-    });
-    return { res, body: await readJson(res) };
-  }
-
-  /** Authorization code → tokens (+ the account email), stored. */
-  async exchangeCode(code: string, redirectUri: string): Promise<GoogleTokens> {
-    const creds = this.requireCredentials();
-    const { res, body } = await this.postForm(GOOGLE_TOKEN_URL, {
-      code,
-      client_id: creds.clientId,
-      client_secret: creds.clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-    });
-    const accessToken = body['access_token'];
-    if (!res.ok || typeof accessToken !== 'string') {
-      throw new GoogleApiError(`Google token exchange failed: ${errorText(body)}`, res.status);
+    try {
+      await this.listCalendars();
+      return true;
+    } catch (err) {
+      if (err instanceof GoogleNotConnectedError) return false;
+      throw err;
     }
-    let email = emailFromIdToken(body['id_token']);
-    if (!email) {
-      try {
-        const info = await this.fetchFn(GOOGLE_USERINFO_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
-        const data = await readJson(info);
-        email = typeof data['email'] === 'string' ? data['email'] : null;
-      } catch {
-        email = null;
-      }
-    }
-    const previous = await this.getTokens();
-    const tokens: GoogleTokens = {
-      accessToken,
-      // Google only sends a refresh token on a consent screen; keep the old one otherwise.
-      refreshToken: typeof body['refresh_token'] === 'string' ? body['refresh_token'] : previous?.refreshToken ?? null,
-      expiresAt: this.now() + Number(body['expires_in'] ?? 3600) * 1000,
-      email,
-      scope: typeof body['scope'] === 'string' ? body['scope'] : GOOGLE_CALENDAR_SCOPE,
-    };
-    await this.saveTokens(tokens);
-    this.cache.clear();
-    return tokens;
-  }
-
-  private async refresh(tokens: GoogleTokens): Promise<GoogleTokens> {
-    if (!tokens.refreshToken) {
-      await this.kv.delete(GOOGLE_TOKENS_KEY);
-      throw new GoogleNotConnectedError('The Google access token expired and there is no refresh token: reconnect Google Calendar');
-    }
-    const creds = this.requireCredentials();
-    const { res, body } = await this.postForm(GOOGLE_TOKEN_URL, {
-      client_id: creds.clientId,
-      client_secret: creds.clientSecret,
-      refresh_token: tokens.refreshToken,
-      grant_type: 'refresh_token',
-    });
-    const accessToken = body['access_token'];
-    if (!res.ok || typeof accessToken !== 'string') {
-      if (body['error'] === 'invalid_grant') {
-        // Revoked from the Google account page, or expired: the user has to reconnect.
-        await this.kv.delete(GOOGLE_TOKENS_KEY);
-        this.logger?.warn('Google Calendar refresh token rejected, tokens dropped', { error: errorText(body) });
-        throw new GoogleNotConnectedError('Google refused the refresh token: reconnect Google Calendar');
-      }
-      throw new GoogleApiError(`Google token refresh failed: ${errorText(body)}`, res.status);
-    }
-    const next: GoogleTokens = {
-      ...tokens,
-      accessToken,
-      refreshToken: typeof body['refresh_token'] === 'string' ? body['refresh_token'] : tokens.refreshToken,
-      expiresAt: this.now() + Number(body['expires_in'] ?? 3600) * 1000,
-      scope: typeof body['scope'] === 'string' ? body['scope'] : tokens.scope,
-    };
-    await this.saveTokens(next);
-    return next;
-  }
-
-  /** A valid access token, refreshed when it expires within a minute. */
-  async getAccessToken(force = false): Promise<string> {
-    const tokens = await this.getTokens();
-    if (!tokens) throw new GoogleNotConnectedError();
-    if (!force && tokens.expiresAt - REFRESH_MARGIN_MS > this.now()) return tokens.accessToken;
-    if (!this.refreshing) {
-      this.refreshing = this.refresh(tokens).finally(() => { this.refreshing = null; });
-    }
-    return (await this.refreshing).accessToken;
-  }
-
-  /** GET on the Calendar API; one forced refresh + retry on a 401. */
-  private async apiGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
-    const qs = new URLSearchParams(params).toString();
-    const url = `${GOOGLE_CALENDAR_API}${path}${qs ? `?${qs}` : ''}`;
-    let token = await this.getAccessToken();
-    let res = await this.fetchFn(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
-    if (res.status === 401) {
-      token = await this.getAccessToken(true);
-      res = await this.fetchFn(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
-    }
-    const body = await readJson(res);
-    if (!res.ok) throw new GoogleApiError(`Google Calendar API ${res.status} on ${path}: ${errorText(body)}`, res.status);
-    return body as T;
   }
 
   private cached<T>(key: string, ttl: number): T | undefined {
@@ -314,16 +216,8 @@ export class GoogleCalendarClient {
   async listCalendars(): Promise<GoogleCalendarListEntry[]> {
     const hit = this.cached<GoogleCalendarListEntry[]>('calendars', CALENDARS_TTL_MS);
     if (hit) return hit;
-    const out: GoogleCalendarListEntry[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const params: Record<string, string> = { maxResults: '250' };
-      if (pageToken) params['pageToken'] = pageToken;
-      const body = await this.apiGet<{ items?: GoogleCalendarListEntry[]; nextPageToken?: string }>('/users/me/calendarList', params);
-      out.push(...(body.items ?? []));
-      pageToken = body.nextPageToken;
-      if (!pageToken) break;
-    }
+    const body = await this.gog(['calendar', 'calendars', '--all']);
+    const out = Array.isArray(body['calendars']) ? (body['calendars'] as GoogleCalendarListEntry[]) : [];
     this.remember('calendars', out);
     return out;
   }
@@ -333,53 +227,26 @@ export class GoogleCalendarClient {
     const key = `events|${calendarId}|${from.toISOString()}|${to.toISOString()}`;
     const hit = this.cached<GoogleCalendarEvent[]>(key, EVENTS_TTL_MS);
     if (hit) return hit;
-    const out: GoogleCalendarEvent[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const params: Record<string, string> = {
-        singleEvents: 'true',
-        orderBy: 'startTime',
-        timeMin: from.toISOString(),
-        timeMax: to.toISOString(),
-        maxResults: '250',
-      };
-      if (pageToken) params['pageToken'] = pageToken;
-      const body = await this.apiGet<{ items?: GoogleCalendarEvent[]; nextPageToken?: string }>(
-        `/calendars/${encodeURIComponent(calendarId)}/events`, params,
-      );
-      out.push(...(body.items ?? []));
-      pageToken = body.nextPageToken;
-      if (!pageToken) break;
-    }
+    const body = await this.gog([
+      'calendar', 'events', calendarId,
+      '--from', from.toISOString(), '--to', to.toISOString(),
+      '--all-pages', '--max', '250',
+    ]);
+    const out = Array.isArray(body['events']) ? (body['events'] as GoogleCalendarEvent[]) : [];
     this.remember(key, out);
     return out;
   }
 
-  /** One event (or one occurrence, by its instance id); null when Google answers 404/410. */
+  /** One event (or one occurrence, by its instance id); null when Google doesn't know it. */
   async getEvent(calendarId: string, eventId: string): Promise<GoogleCalendarEvent | null> {
     try {
-      return await this.apiGet<GoogleCalendarEvent>(
-        `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
-      );
+      const body = await this.gog(['calendar', 'event', calendarId, eventId]);
+      const event = (body['event'] && typeof body['event'] === 'object' ? body['event'] : body) as GoogleCalendarEvent;
+      return typeof event.id === 'string' ? event : null;
     } catch (err) {
-      if (err instanceof GoogleApiError && (err.status === 404 || err.status === 410)) return null;
+      if (err instanceof GoogleApiError && err.status === 404) return null;
+      if (err instanceof GoogleApiError) this.logger?.warn('gog calendar event failed', { error: err.message });
       throw err;
     }
-  }
-
-  /** Revoke the grant at Google (best effort) and forget the tokens. */
-  async disconnect(): Promise<void> {
-    const tokens = await this.getTokens();
-    const token = tokens?.refreshToken ?? tokens?.accessToken;
-    if (token) {
-      try {
-        const { res, body } = await this.postForm(GOOGLE_REVOKE_URL, { token });
-        if (!res.ok) this.logger?.warn('Google Calendar revoke failed', { status: res.status, error: errorText(body) });
-      } catch (err) {
-        this.logger?.warn('Google Calendar revoke failed', { error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-    await this.kv.delete(GOOGLE_TOKENS_KEY);
-    this.cache.clear();
   }
 }

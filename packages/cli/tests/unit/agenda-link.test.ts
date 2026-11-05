@@ -42,7 +42,7 @@ describe('agendaRequest / describeAgendaError', () => {
     const notConnected = await agendaRequest('POST', 'http://x', {}, respond(409, { error: 'nope', code: 'GOOGLE_NOT_CONNECTED' }) as never)
       .catch((e: unknown) => e);
     expect(notConnected).toBeInstanceOf(AgendaApiError);
-    expect(describeAgendaError(notConnected)).toMatch(/not connected.*\/agenda/i);
+    expect(describeAgendaError(notConnected)).toMatch(/gogcli.*not set up.*gogcli\.sh\/quickstart/i);
 
     const ambiguous = new AgendaApiError('2 meetings match', 409, 'AMBIGUOUS_EVENT', [
       { googleEventId: 'a', title: 'Sync A', start: '2026-11-05T09:00:00.000Z' },
@@ -83,7 +83,7 @@ describe('commands', () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as never);
     await expect(linkDef.action({ deliverable: 'd1', googleEvent: 'e1' })).rejects.toThrow('exit 1');
     expect(exit).toHaveBeenCalledWith(1);
-    expect(JSON.parse(out.join(''))).toMatchObject({ ok: false, error: expect.stringMatching(/not connected/i) });
+    expect(JSON.parse(out.join(''))).toMatchObject({ ok: false, error: expect.stringMatching(/gogcli/i) });
   });
 
   it('links filters by deliverable', async () => {

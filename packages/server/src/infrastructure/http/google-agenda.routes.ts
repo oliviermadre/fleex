@@ -1,16 +1,16 @@
 /**
- * Google Calendar on /agenda (E3): connect / disconnect the instance's Google
- * account, read its status, and link deliverables to meetings (UI and CLI).
- * Everything is stored in the KV store; without one every route answers 501.
+ * Google Calendar on /agenda (E3): status of the gogcli setup the agenda reads
+ * Google through, and deliverable ↔ meeting links (UI and CLI). There is no
+ * connect / disconnect here: gogcli is installed and authorized on the server
+ * host, outside Fleex (https://gogcli.sh/quickstart.html). Links live in the
+ * KV store; without one every route answers 501.
  */
-import { randomBytes } from 'node:crypto';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { AgendaExternalLink, AgendaGoogleStatus } from '@fleex/shared';
+import type { FastifyInstance, FastifyReply } from 'fastify';
+import { GOGCLI_SETUP_URL, type AgendaExternalLink, type AgendaGoogleStatus } from '@fleex/shared';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import {
-  GOOGLE_CALENDAR_SCOPE,
   GoogleApiError,
   GoogleNotConnectedError,
   type GoogleCalendarClient,
@@ -18,12 +18,8 @@ import {
 } from '../google/google-calendar.client.js';
 import { ExternalLinksStore, eventKeyOf, eventStartOf, findMeeting } from '../google/external-links.js';
 
-const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const STATE_COOKIE = 'fleex_gcal_state';
-const RETURN_COOKIE = 'fleex_gcal_return';
-const SHORT_COOKIE = 'Path=/; HttpOnly; SameSite=Lax; Max-Age=600';
-const CLEAR_COOKIE = 'Path=/; HttpOnly; Max-Age=0';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const NOT_SET_UP = `Google Calendar is read through gogcli, which isn't set up on the Fleex server — see ${GOGCLI_SETUP_URL}`;
 
 export interface GoogleAgendaRoutesDeps {
   kvStore: KvStorePort | null | undefined;
@@ -31,51 +27,6 @@ export interface GoogleAgendaRoutesDeps {
   client: GoogleCalendarClient | null | undefined;
   logger?: LoggerPort;
   now?: () => Date;
-}
-
-function parseCookie(header: string | undefined, name: string): string | null {
-  if (!header) return null;
-  const match = header.match(new RegExp(`(?:^|;)\\s*${name}=([^;]*)`));
-  return match ? match[1]! : null;
-}
-
-/**
- * Where Google sends the user back. Must be registered as an authorized
- * redirect URI on the OAuth client. Without AUTH_CALLBACK_BASE_URL it is the
- * server itself (PORT, 3000 by default).
- */
-export function googleCalendarRedirectUri(): string {
-  const base = process.env['AUTH_CALLBACK_BASE_URL'] || `http://localhost:${process.env['PORT'] || '3000'}`;
-  return `${base.replace(/\/+$/, '')}/auth/google-calendar/callback`;
-}
-
-/**
- * The web origin to land back on after the consent screen. In dev the web app
- * (Vite) and the server listen on different ports: the callback hits the
- * server, so it must redirect to the web origin the user came from. Only
- * loopback origins and AUTH_CALLBACK_BASE_URL's origin are trusted (no open
- * redirect); anything else falls back to a relative redirect.
- */
-export function safeReturnOrigin(candidate: string | undefined | null): string {
-  if (!candidate) return '';
-  let url: URL;
-  try {
-    url = new URL(candidate);
-  } catch {
-    return '';
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
-  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-  let configured = false;
-  const base = process.env['AUTH_CALLBACK_BASE_URL'];
-  if (base) {
-    try {
-      configured = new URL(base).origin === url.origin;
-    } catch {
-      configured = false;
-    }
-  }
-  return loopback || configured ? url.origin : '';
 }
 
 /** [from, to) of a 'YYYY-MM-DD' day in the server's local time zone. */
@@ -104,108 +55,47 @@ export function googleAgendaRoutes(deps: GoogleAgendaRoutesDeps) {
 
   function googleFailure(reply: FastifyReply, err: unknown) {
     if (err instanceof GoogleNotConnectedError) {
-      return reply.code(409).send({ error: `Google Calendar is not connected (${err.message}) — connect it from the /agenda page`, code: 'GOOGLE_NOT_CONNECTED' });
+      return reply.code(409).send({ error: `${NOT_SET_UP} (${err.message})`, code: 'GOOGLE_NOT_CONNECTED', setupUrl: GOGCLI_SETUP_URL });
     }
     const message = err instanceof Error ? err.message : String(err);
-    logger?.error('Google Calendar request failed', { error: message });
+    logger?.error('Google Calendar request (gog) failed', { error: message });
     const status = err instanceof GoogleApiError ? err.status : 0;
     return reply.code(502).send({ error: `Google Calendar request failed: ${message}`, code: 'GOOGLE_API_ERROR', status });
   }
 
   return async function (app: FastifyInstance) {
-    // ── Status ──
+    // ── Status: is gogcli installed and authorized? ──
 
-    app.get('/api/agenda/google/status', async (_request, reply) => {
+    app.get<{ Querystring: { refresh?: string } }>('/api/agenda/google/status', async (request, reply) => {
       const r = ready(reply);
       if (!r) return reply;
-      const tokens = await r.client.getTokens();
+      // "Check again" after running gog commands: don't serve the cached answer.
+      if (request.query.refresh) r.client.clearCache();
+      const version = await r.client.version();
       const status: AgendaGoogleStatus = {
-        configured: r.client.isConfigured(),
-        connected: tokens !== null,
-        email: tokens?.email ?? null,
-        calendars: [],
+        provider: 'gogcli', installed: version !== null, version,
+        connected: false, email: null, calendars: [], error: null, setupUrl: GOGCLI_SETUP_URL,
       };
-      if (!tokens) return status;
+      if (!version) return status;
       try {
         const calendars = await r.client.listCalendars();
+        status.connected = true;
         status.calendars = calendars.map((c) => ({
           id: c.id,
           name: c.summaryOverride || c.summary || c.id,
           primary: c.primary === true,
         }));
+        // The primary calendar's id is the account's email.
+        status.email = calendars.find((c) => c.primary)?.id ?? null;
       } catch (err) {
-        if (err instanceof GoogleNotConnectedError) {
-          // The refresh token was rejected and dropped: report it as disconnected.
-          return { ...status, connected: false, email: null };
+        status.error = err instanceof Error ? err.message : String(err);
+        if (!(err instanceof GoogleNotConnectedError)) {
+          // gog is set up but the read failed (network, quota): report it, don't call it a setup problem.
+          status.connected = true;
+          logger?.warn('Google Calendar: listing calendars through gog failed', { error: status.error });
         }
-        logger?.warn('Google Calendar: listing calendars failed', { error: err instanceof Error ? err.message : String(err) });
       }
       return status;
-    });
-
-    // ── OAuth: connect ──
-
-    app.get<{ Querystring: { return_to?: string } }>('/auth/google-calendar', async (request, reply) => {
-      const r = ready(reply);
-      if (!r) return reply;
-      const returnOrigin = safeReturnOrigin(request.query.return_to ?? request.headers.referer);
-      const clientId = r.client.clientId();
-      if (!clientId) return reply.redirect(`${returnOrigin}/agenda?google_error=not_configured`);
-      const state = randomBytes(16).toString('hex');
-      const params = new URLSearchParams({
-        client_id: clientId,
-        redirect_uri: googleCalendarRedirectUri(),
-        response_type: 'code',
-        scope: GOOGLE_CALENDAR_SCOPE,
-        access_type: 'offline',
-        prompt: 'consent',
-        include_granted_scopes: 'true',
-        state,
-      });
-      reply.header('Set-Cookie', `${STATE_COOKIE}=${state}; ${SHORT_COOKIE}`);
-      reply.header('Set-Cookie', `${RETURN_COOKIE}=${encodeURIComponent(returnOrigin)}; ${SHORT_COOKIE}`);
-      return reply.redirect(`${GOOGLE_AUTHORIZE_URL}?${params.toString()}`);
-    });
-
-    app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
-      '/auth/google-calendar/callback',
-      async (request: FastifyRequest<{ Querystring: { code?: string; state?: string; error?: string } }>, reply) => {
-        const r = ready(reply);
-        if (!r) return reply;
-        const returnOrigin = safeReturnOrigin(decodeURIComponent(parseCookie(request.headers.cookie, RETURN_COOKIE) ?? ''));
-        const back = (query: string) => {
-          reply.header('Set-Cookie', `${STATE_COOKIE}=; ${CLEAR_COOKIE}`);
-          reply.header('Set-Cookie', `${RETURN_COOKIE}=; ${CLEAR_COOKIE}`);
-          return reply.redirect(`${returnOrigin}/agenda?${query}`);
-        };
-        const { code, state, error } = request.query;
-        if (error) {
-          logger?.warn('Google Calendar consent refused', { error });
-          return back(`google_error=${encodeURIComponent(error)}`);
-        }
-        if (!code || !state) return back('google_error=missing_params');
-        if (state !== parseCookie(request.headers.cookie, STATE_COOKIE)) {
-          logger?.warn('Google Calendar OAuth state mismatch');
-          return back('google_error=state_mismatch');
-        }
-        try {
-          const tokens = await r.client.exchangeCode(code, googleCalendarRedirectUri());
-          logger?.info('Google Calendar connected', { email: tokens.email, offline: tokens.refreshToken !== null });
-          return back('google=connected');
-        } catch (err) {
-          logger?.error('Google Calendar code exchange failed', { error: err instanceof Error ? err.message : String(err) });
-          return back('google_error=exchange_failed');
-        }
-      },
-    );
-
-    // ── Disconnect ──
-
-    app.delete('/api/agenda/google', async (_request, reply) => {
-      const r = ready(reply);
-      if (!r) return reply;
-      await r.client.disconnect();
-      return reply.code(204).send();
     });
 
     // ── Links ──
@@ -271,10 +161,6 @@ export function googleAgendaRoutes(deps: GoogleAgendaRoutesDeps) {
 
       const deliverable = await deliverableStore.getById(deliverableId);
       if (!deliverable) return reply.code(404).send({ error: `Deliverable ${deliverableId} not found`, code: 'DELIVERABLE_NOT_FOUND' });
-      if (!(await r.client.isConnected())) {
-        return reply.code(409).send({ error: 'Google Calendar is not connected — connect it from the /agenda page', code: 'GOOGLE_NOT_CONNECTED' });
-      }
-
       let event: GoogleCalendarEvent | null;
       try {
         if (isNonEmpty(googleEventId)) {

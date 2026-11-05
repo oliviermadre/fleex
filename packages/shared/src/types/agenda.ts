@@ -108,12 +108,26 @@ export interface AgendaGoogleCalendar {
   primary: boolean;
 }
 
+/** gogcli (`gog`) reads Google Calendar for Fleex; it is installed and set up outside Fleex. */
+export const GOGCLI_SETUP_URL = 'https://gogcli.sh/quickstart.html';
+export const GOGCLI_INSTALL_COMMAND = 'brew install openclaw/tap/gogcli';
+
 export interface AgendaGoogleStatus {
-  /** GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are set on the server. */
-  configured: boolean;
+  /** Google Calendar is read through gogcli, never through an OAuth flow inside Fleex. */
+  provider: 'gogcli';
+  /** `gog` runs on the server host (PATH, or FLEEX_GOG_BIN). */
+  installed: boolean;
+  /** `gog --version`, null when not installed. */
+  version: string | null;
+  /** gog has an authorized account that can read calendars. */
   connected: boolean;
+  /** The account gog reads (its primary calendar id). */
   email: string | null;
   calendars: AgendaGoogleCalendar[];
+  /** gog's own message when it can't read calendars (credentials missing, no account…). */
+  error: string | null;
+  /** Where to set gogcli up (install, Google Cloud project, account). */
+  setupUrl: string;
 }
 
 /**

@@ -1,14 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
 import { DEFAULT_AGENDA_PREFS, type AgendaGoogleStatus } from '@fleex/shared';
 
 vi.mock('../../services/api', () => ({
   fetchAgenda: vi.fn(),
   saveAgendaPrefs: vi.fn(),
   fetchAgendaGoogleStatus: vi.fn(),
-  disconnectAgendaGoogle: vi.fn(),
-  agendaGoogleConnectUrl: vi.fn(() => '/auth/google-calendar?return_to=x'),
 }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -17,26 +14,23 @@ import { toast } from '../../lib/toast';
 import { AgendaGoogleSection } from './AgendaGoogleSection';
 import { useAgendaStore } from '../../stores/agendaStore';
 
+const SETUP = 'https://gogcli.sh/quickstart.html';
+const base = { provider: 'gogcli' as const, setupUrl: SETUP, error: null };
+const notInstalled: AgendaGoogleStatus = { ...base, installed: false, version: null, connected: false, email: null, calendars: [] };
+const notAuthorized: AgendaGoogleStatus = { ...notInstalled, installed: true, version: 'v0.47.1', error: 'OAuth client credentials missing (OAuth client ID JSON).' };
 const connected: AgendaGoogleStatus = {
-  configured: true, connected: true, email: 'olivier@example.com',
+  ...base, installed: true, version: 'v0.47.1', connected: true, email: 'olivier@example.com',
   calendars: [{ id: 'primary@x', name: 'Olivier', primary: true }, { id: 'team@x', name: 'Team', primary: false }],
 };
 const emptyAgenda = { from: '', to: '', generatedAt: '', items: [], routines: [], truncated: [], epics: [], errors: {} };
 
-let location = '';
-function Loc() {
-  const l = useLocation();
-  location = `${l.pathname}${l.search}`;
-  return null;
-}
-function renderSection(url = '/agenda') {
-  return render(<MemoryRouter initialEntries={[url]}><AgendaGoogleSection /><Loc /></MemoryRouter>);
+function renderSection() {
+  return render(<AgendaGoogleSection />);
 }
 
 beforeEach(() => {
   vi.mocked(api.fetchAgenda).mockResolvedValue(emptyAgenda);
   vi.mocked(api.fetchAgendaGoogleStatus).mockResolvedValue(connected);
-  vi.mocked(api.disconnectAgendaGoogle).mockResolvedValue();
   useAgendaStore.setState({ prefs: DEFAULT_AGENDA_PREFS, prefsFromServer: false, google: connected, data: emptyAgenda });
 });
 afterEach(() => {
@@ -45,25 +39,46 @@ afterEach(() => {
 });
 
 describe('<AgendaGoogleSection/>', () => {
-  it('says the server is not configured', () => {
-    useAgendaStore.setState({ google: { configured: false, connected: false, email: null, calendars: [] } });
+  it('not installed: says Google is read through gogcli, set up outside Fleex, with the install command and the setup guide', () => {
+    useAgendaStore.setState({ google: notInstalled });
     renderSection();
-    expect(screen.getByText(/isn't configured on this server \(GOOGLE_CLIENT_ID \/ GOOGLE_CLIENT_SECRET\)/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Connect Google Calendar' })).toBeNull();
+    const section = screen.getByTestId('agenda-google');
+    expect(section.textContent).toMatch(/read through gogcli/);
+    expect(section.textContent).toMatch(/not in Fleex/);
+    expect(screen.getByText('brew install openclaw/tap/gogcli')).toBeTruthy();
+    expect(screen.getByText('gog auth credentials <client_secret.json>')).toBeTruthy();
+    expect(screen.getByText(/gog auth add .* --services calendar --readonly/)).toBeTruthy();
+    const link = screen.getByRole('link', { name: /Setup guide/ });
+    expect(link.getAttribute('href')).toBe(SETUP);
+    expect(link.getAttribute('target')).toBe('_blank');
+    // No in-app OAuth any more.
+    expect(screen.queryByRole('button', { name: /Connect Google Calendar/ })).toBeNull();
   });
 
-  it('offers to connect when configured but not connected', () => {
-    useAgendaStore.setState({ google: { configured: true, connected: false, email: null, calendars: [] } });
-    const original = window.location;
-    const loc = { href: '' } as Location;
-    Object.defineProperty(window, 'location', { configurable: true, value: loc });
-    try {
-      renderSection();
-      fireEvent.click(screen.getByRole('button', { name: 'Connect Google Calendar' }));
-      expect(loc.href).toBe('/auth/google-calendar?return_to=x');
-    } finally {
-      Object.defineProperty(window, 'location', { configurable: true, value: original });
-    }
+  it('installed but not authorized: install step done, gog\'s error shown', () => {
+    useAgendaStore.setState({ google: notAuthorized });
+    renderSection();
+    expect(screen.queryByText('brew install openclaw/tap/gogcli')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toContain('OAuth client credentials missing');
+  });
+
+  it('Check again re-reads the status bypassing the server cache, and reloads the agenda once readable', async () => {
+    useAgendaStore.setState({ google: notAuthorized });
+    vi.mocked(api.fetchAgendaGoogleStatus).mockResolvedValueOnce(connected);
+    renderSection();
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await waitFor(() => expect(api.fetchAgendaGoogleStatus).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Google Calendar is readable through gogcli'));
+    await waitFor(() => expect(api.fetchAgenda).toHaveBeenCalled());
+    expect(screen.getByText('olivier@example.com')).toBeTruthy();
+  });
+
+  it('Check again while still not set up: says what is missing', async () => {
+    useAgendaStore.setState({ google: notInstalled });
+    vi.mocked(api.fetchAgendaGoogleStatus).mockResolvedValueOnce(notAuthorized);
+    renderSection();
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('gogcli is installed but not authorized yet'));
   });
 
   it('when connected: shows the account, the primary calendar ticked by default, and toggling writes the explicit list then refreshes', async () => {
@@ -90,13 +105,11 @@ describe('<AgendaGoogleSection/>', () => {
     expect(useAgendaStore.getState().prefs.showWorkingLocation).toBe(true);
   });
 
-  it('disconnects after confirmation', async () => {
+  it('when connected: names the gogcli dependency with its version and the setup link, no Disconnect', () => {
     renderSection();
-    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
-    const buttons = screen.getAllByRole('button', { name: 'Disconnect' });
-    fireEvent.click(buttons[buttons.length - 1]!);
-    await waitFor(() => expect(api.disconnectAgendaGoogle).toHaveBeenCalled());
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Google Calendar disconnected'));
+    expect(screen.getByText(/Read through gogcli v0\.47\.1/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /setup/ }).getAttribute('href')).toBe(SETUP);
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
   });
 
   it('shows the Google error of the last load', () => {
@@ -105,14 +118,4 @@ describe('<AgendaGoogleSection/>', () => {
     expect(screen.getByRole('alert').textContent).toContain('Google token expired');
   });
 
-  it('toasts the OAuth outcome from the URL, then removes the param', async () => {
-    renderSection('/agenda?google=connected');
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Google Calendar connected'));
-    await waitFor(() => expect(location).toBe('/agenda'));
-    expect(api.fetchAgendaGoogleStatus).toHaveBeenCalled();
-    cleanup();
-    renderSection('/agenda?google_error=access_denied&x=1');
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('access_denied')));
-    await waitFor(() => expect(location).toBe('/agenda?x=1'));
-  });
 });

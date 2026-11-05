@@ -53,8 +53,8 @@ interface AgendaStore {
   setQuery: (q: string) => void;
   updatePrefs: (fn: (p: AgendaPrefs) => AgendaPrefs) => void;
 
-  loadGoogle: () => Promise<void>;
-  disconnectGoogle: () => Promise<void>;
+  /** `refresh`: re-check gogcli on the server (after running the setup commands). */
+  loadGoogle: (refresh?: boolean) => Promise<void>;
 
   loadSavedViews: () => Promise<void>;
   saveCurrentAsView: (name: string) => Promise<void>;
@@ -173,17 +173,12 @@ export const useAgendaStore = create<AgendaStore>((set, get) => {
       }, SAVE_DEBOUNCE_MS);
     },
 
-    loadGoogle: async () => {
+    loadGoogle: async (refresh = false) => {
       try {
-        set({ google: await api.fetchAgendaGoogleStatus() });
+        set({ google: await api.fetchAgendaGoogleStatus(refresh) });
       } catch {
         set({ google: null });
       }
-    },
-    disconnectGoogle: async () => {
-      await api.disconnectAgendaGoogle();
-      await get().loadGoogle();
-      await get().refresh();
     },
 
     loadSavedViews: async () => {

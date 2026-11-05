@@ -17,7 +17,8 @@ const def: CommandDef = {
   ${DIM('$')} fleex agenda unlink <link-id>
 
 ${SECTION('Notes:')}
-  Google Calendar must be connected first, from the /agenda page. The link only
+  Google Calendar is read through gogcli (gog), set up on the Fleex server first:
+  https://gogcli.sh/quickstart.html. The link only
   lives in Fleex: nothing is written to Google. Linking twice is a no-op.
 `,
   action: (...args: unknown[]) => {

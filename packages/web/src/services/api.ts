@@ -2187,17 +2187,9 @@ export async function deleteCalendarEvent(id: string): Promise<void> {
 
 // ── Agenda: Google Calendar (E3) and meeting ↔ deliverable links ──
 
-export function fetchAgendaGoogleStatus(): Promise<import('@fleex/shared').AgendaGoogleStatus> {
-  return request('/agenda/google/status');
-}
-
-export async function disconnectAgendaGoogle(): Promise<void> {
-  await request<void>('/agenda/google', { method: 'DELETE' });
-}
-
-/** Full-page navigation: Google's consent screen, then back to /agenda. */
-export function agendaGoogleConnectUrl(): string {
-  return `/auth/google-calendar?return_to=${encodeURIComponent(window.location.origin)}`;
+/** The gogcli setup the agenda reads Google through; `refresh` skips the server's cached answer. */
+export function fetchAgendaGoogleStatus(refresh = false): Promise<import('@fleex/shared').AgendaGoogleStatus> {
+  return request(`/agenda/google/status${refresh ? '?refresh=1' : ''}`);
 }
 
 /**

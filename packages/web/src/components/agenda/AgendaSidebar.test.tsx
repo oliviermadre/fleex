@@ -7,7 +7,6 @@ vi.mock('../../services/api', () => ({
   fetchAgenda: vi.fn(),
   saveAgendaPrefs: vi.fn(),
   saveSavedViews: vi.fn(),
-  agendaGoogleConnectUrl: vi.fn(() => '/auth/google-calendar'),
 }));
 
 import { AgendaSidebar } from './AgendaSidebar';
