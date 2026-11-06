@@ -19,6 +19,9 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * and routine runs have no ticket to reach it through. `memory` is in because
  * "what do we already know about this?" is the question an assistant most needs
  * answered before acting, and the answer lives in this workspace's own history.
+ * `agenda` and `deliverable` are in so an assistant can read the agenda (Google
+ * meetings included, through Fleex), manage free events, and find, read and
+ * link deliverables — a routine's transcript has no ticket to reach it through.
  * Infra commands
  * (`start`, `stop`, `logs`, `doctor`, `self-update`, `token`, shell helpers)
  * drive processes on the host machine and stay off the surface on purpose.
@@ -28,7 +31,7 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * `tests/parity.bun.test.ts`). Narrowing the perimeter is a deliberate product
  * decision; silently dropping an option is a bug.
  */
-export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow', 'memory'] as const;
+export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow', 'memory', 'agenda', 'deliverable'] as const;
 
 /**
  * Leaf command names that mutate state. The host gates these (e.g. asks the
@@ -51,6 +54,8 @@ const MUTATING_LEAVES = new Set([
   // `workflow apply` creates or replaces a whole template (its --documentation
   // mode is read-only, but the leaf is classed by its writing mode)
   'apply',
+  // `agenda respond` answers a Google invitation — the one write to Google
+  'respond',
 ]);
 
 /** Options we never expose as tool params (handled specially or noise). */

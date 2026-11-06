@@ -17,6 +17,11 @@ export {
   expandCalendarEvent, calendarEventItemId, calendarEventLinkKey, CALENDAR_EVENT_LINK_PREFIX, EVENT_OCCURRENCE_CAP,
 } from './agenda-events.js';
 export type { EventOccurrence } from './agenda-events.js';
+export {
+  normalizeTitle, titlesMatch, findByTitle, matchesAgendaQuery, matchesAgendaFilters, matchesAttendee, matchAttendee, substringDistance, attendeeTolerance,
+  isLinkableAgendaItem, agendaItemLinkKey, encodeAgendaItemRef, decodeAgendaItemRef, isAgendaItemType, AGENDA_REF_PREFIX,
+} from './agenda-query.js';
+export type { AgendaFilters } from './agenda-query.js';
 
 export {
   TICKET_COMPLEXITIES,
