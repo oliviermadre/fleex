@@ -84,6 +84,46 @@ describe('<AgendaPage/>', () => {
     // Six overlapping runs: six bands, none grouped, none behind a "+N".
     await waitFor(() => expect(document.querySelectorAll('[data-agenda-band]')).toHaveLength(6));
     expect(document.querySelector('[data-agenda-more]')).toBeNull();
+    // The colour stripe is there from the first render, not only after a colour change.
+    for (const band of document.querySelectorAll<HTMLElement>('[data-agenda-band]')) {
+      expect(band.style.borderLeft).toMatch(/^3px solid /);
+      expect(band.style.borderLeftWidth).not.toBe('1px');
+    }
+  });
+
+  it('a band shows a status dot only while it runs (pulsing) or when it failed, and its label sits above the wait hatches', async () => {
+    const base = response.items[0]!;
+    const items = (['completed', 'cancelled', 'running', 'failed'] as const).map((status, i) => ({
+      ...base, id: `workflow.run:${status}`, runId: status, status, start: at(9 + i, 0), end: at(9 + i, 50),
+      segments: [{ kind: 'gate' as const, stepName: 'Check', start: at(9 + i, 10), end: at(9 + i, 40) }],
+    }));
+    vi.mocked(api.fetchAgenda).mockResolvedValue({ ...response, items });
+    renderPage();
+    await waitFor(() => expect(document.querySelectorAll('[data-agenda-band]')).toHaveLength(4));
+    const dot = (status: string) => document.querySelector(`[data-agenda-band][data-agenda-item="workflow.run:${status}"] .rounded-full`);
+    expect(dot('completed')).toBeNull();
+    expect(dot('cancelled')).toBeNull();
+    expect(dot('running')!.className).toContain('animate-pulse');
+    expect(dot('failed')!.getAttribute('style')).toContain('--tint-red-solid');
+    const label = document.querySelector('[data-agenda-item="workflow.run:completed"] [data-agenda-band-label]') as HTMLElement;
+    expect(label.style.background).toContain('linear-gradient');
+  });
+
+  it('draws back-and-forth agent runs on one ticket as one session band labelled ×N, each run marked,, opening the list of runs', async () => {
+    const run = (id: string, h: number, m: number) => ({
+      id: `agent.run:${id}`, type: 'agent.run' as const, shape: 'block' as const, start: at(h, m), end: at(h, m + 3), status: 'completed',
+      title: ticket.title, ticket, agent: { personaName: 'builder', model: 'opus', executionId: id, personaId: 'p', costUsd: 0 },
+    });
+    vi.mocked(api.fetchAgenda).mockResolvedValue({ ...response, items: [run('a', 9, 0), run('b', 9, 8), run('c', 9, 20), run('d', 11, 0)] });
+    renderPage();
+    await waitFor(() => expect(document.querySelectorAll('[data-agenda-band]')).toHaveLength(2));
+    const session = document.querySelector('[data-agenda-session="3"]') as HTMLElement;
+    // Labelled by its run count alone; the ticket stays in the tooltip.
+    expect(session.querySelector('[data-agenda-band-label]')!.textContent).toBe('\u00d73');
+    expect(session.getAttribute('title')).toContain('#765');
+    expect(session.querySelectorAll('[data-agenda-session-run]')).toHaveLength(3);
+    fireEvent.click(session);
+    await waitFor(() => expect(document.querySelectorAll('[data-agenda-item^="agent.run:"]').length).toBeGreaterThanOrEqual(4));
   });
 
   it('hovering one day of a run that spans several days lights its band on every day', async () => {

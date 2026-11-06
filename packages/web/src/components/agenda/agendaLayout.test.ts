@@ -3,7 +3,7 @@ import type { AgendaItem, AgendaPrefs } from '@fleex/shared';
 import { DEFAULT_AGENDA_PREFS } from '@fleex/shared';
 import {
   windowFor, shiftAnchor, daysCovered, isBar, itemDays, segmentForDay, groupHourly, layoutDay,
-  assignLanes, isBand, isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, isoWeek, POINT_MIN, MAX_COLS, type GridEntry,
+  assignLanes, isBand, isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, isoWeek, groupAgentSessions, POINT_MIN, MAX_COLS, type GridEntry,
 } from './agendaLayout';
 
 // Local-time constructors: these tests are about the browser's own calendar.
@@ -251,5 +251,45 @@ describe('isoWeek — the numbers shown before each mini-calendar row', () => {
     expect(isoWeek(L(2026, 1, 1))).toBe(1);    // Thu Jan 1 2026
     expect(isoWeek(L(2027, 1, 1))).toBe(53);   // Fri Jan 1 2027 → week 53 of 2026
     expect(isoWeek(L(2024, 12, 30))).toBe(1);  // Mon Dec 30 2024 → week 1 of 2025
+  });
+});
+
+describe('groupAgentSessions', () => {
+  const tk = (n: number) => ({ id: `tk-${n}`, displayId: n, title: `t${n}`, boardId: 'b', status: 'doing', tags: [], epicIds: [], repos: [] }) as unknown as AgendaItem['ticket'];
+  const agent = (id: string, n: number, h: number, m: number, mins: number, over: Partial<AgendaItem> = {}) =>
+    block(id, L(2026, 11, 5, h, m), L(2026, 11, 5, h, m + mins), { type: 'agent.run', ticket: tk(n), status: 'completed', ...over });
+
+  it('merges runs on one ticket that follow each other within 15 min into one session, first start to last end', () => {
+    const runs = [agent('a', 765, 9, 0, 3), agent('b', 765, 9, 10, 4), agent('c', 765, 9, 25, 2)];
+    const { items, runsOf } = groupAgentSessions(runs, NOW);
+    expect(items).toHaveLength(1);
+    const s = items[0]!;
+    expect(s.start).toBe(runs[0]!.start);
+    expect(s.end).toBe(runs[2]!.end);
+    expect(runsOf.get(s.id)!.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('cuts a session after a gap over 15 min, and never mixes tickets', () => {
+    const { items, runsOf } = groupAgentSessions([
+      agent('a', 765, 9, 0, 3), agent('b', 765, 9, 5, 3), agent('c', 765, 9, 30, 3), // 22 min after b ends
+      agent('x', 749, 9, 2, 3), agent('y', 749, 9, 8, 3),
+    ], NOW);
+    expect(items).toHaveLength(3);
+    expect([...runsOf.values()].map((rs) => rs.map((r) => r.id)).sort()).toEqual([['a', 'b'], ['x', 'y']]);
+    expect(items.find((i) => i.id === 'c')).toBeTruthy(); // a lone run stays itself
+  });
+
+  it('a session runs while any of its runs does; otherwise it ends as its last run', () => {
+    const live = groupAgentSessions([agent('a', 1, 9, 0, 3), agent('b', 1, 9, 5, 3, { status: 'running', end: null })], NOW).items[0]!;
+    expect(live.status).toBe('running');
+    expect(live.end).toBeNull();
+    const failed = groupAgentSessions([agent('a', 1, 9, 0, 3), agent('b', 1, 9, 5, 3, { status: 'failed' })], NOW).items[0]!;
+    expect(failed.status).toBe('failed');
+  });
+
+  it('leaves workflow runs, runs without a ticket and other items alone', () => {
+    const items = [block('w1', L(2026, 11, 5, 9), L(2026, 11, 5, 9, 5), { ticket: tk(1) }), block('w2', L(2026, 11, 5, 9, 6), L(2026, 11, 5, 9, 9), { ticket: tk(1) }),
+      agent('n1', 1, 9, 0, 2, { ticket: undefined }), agent('n2', 1, 9, 3, 2, { ticket: undefined })];
+    expect(groupAgentSessions(items, NOW).items.map((i) => i.id).sort()).toEqual(['n1', 'n2', 'w1', 'w2']);
   });
 });

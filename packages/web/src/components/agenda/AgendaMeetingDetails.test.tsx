@@ -10,7 +10,7 @@ vi.mock('../../services/api', () => ({
 import * as api from '../../services/api';
 import { AgendaMeetingDetails, MeetJoinButton, attendeeSummary } from './AgendaMeetingDetails';
 import { AgendaChip } from './AgendaChip';
-import { chipStyle } from './agendaLabels';
+import { CHIP_BASE, chipStyle } from './agendaLabels';
 import { useAgendaStore, withRsvp } from '../../stores/agendaStore';
 
 const meeting = (over: Partial<NonNullable<AgendaItem['external']>> = {}): AgendaItem => ({
@@ -80,7 +80,7 @@ describe('<AgendaMeetingDetails/>', () => {
     useAgendaStore.setState({ data: dataWith(item) });
     vi.mocked(api.respondToAgendaMeeting).mockResolvedValue(undefined);
     const outlined = chipStyle(useAgendaStore.getState().data!.items[0]!);
-    expect(outlined.background).toBe('transparent');
+    expect(outlined.background).toBe(CHIP_BASE);
 
     render(<AgendaMeetingDetails item={item} />);
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
@@ -90,7 +90,7 @@ describe('<AgendaMeetingDetails/>', () => {
     const after = useAgendaStore.getState().data!.items[0]!;
     expect(after.external!.rsvp).toBe('accepted');
     expect(after.external!.attendeeList!.find((a) => a.self)!.response).toBe('accepted');
-    expect(chipStyle(after).background).not.toBe('transparent');
+    expect(chipStyle(after).background).not.toBe(CHIP_BASE);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Yes' }).hasAttribute('disabled')).toBe(false));
   });
 
@@ -120,10 +120,11 @@ describe('<AgendaMeetingDetails/>', () => {
 
 describe('a meeting chip follows my answer', () => {
   it('outlined while unanswered, hatched for maybe, faded and struck through when declined, filled when going', () => {
-    expect(chipStyle(meeting({ rsvp: 'needsAction' })).background).toBe('transparent');
+    expect(chipStyle(meeting({ rsvp: 'needsAction' })).background).toBe(CHIP_BASE);
     expect(String(chipStyle(meeting({ rsvp: 'tentative' })).background)).toContain('repeating-linear-gradient');
     const declined = chipStyle(meeting({ rsvp: 'declined' }));
-    expect(declined.opacity).toBe(0.6);
+    expect(declined.opacity).toBe(1);
+    expect(declined.color).toBe('var(--theme-text-muted)');
     expect(String(chipStyle(meeting({ rsvp: 'accepted' })).background)).toContain('var(--');
     expect(String(chipStyle(meeting({ rsvp: null })).background)).toContain('var(--');
 

@@ -112,6 +112,29 @@ export function itemHue(item: AgendaItem, colors?: AgendaColors): AgendaColor {
     ?? labelHue(item.type, colors);
 }
 
+/** The opaque surface every chip sits on, so the grid's hour lines never cross it. */
+export const CHIP_BASE = 'var(--theme-bg-base)';
+
+/** A (translucent) tint laid over the opaque chip surface: same colour, nothing shows through. */
+export const opaqueBg = (tint: string) => `linear-gradient(${tint}, ${tint}), ${CHIP_BASE}`;
+
+/**
+ * A run shows a status dot only when it says something: pulsing while it runs,
+ * red when it failed. Completed or cancelled runs stay clean (the popover still says it).
+ */
+export const showRunDot = (status: string | null | undefined) => status === 'running' || status === 'failed';
+
+/**
+ * A backdrop for text drawn over wait hatches: the chip's own (opaque) fill, so
+ * the stripes stop around the label instead of running through it. Null when
+ * the item has no hatches.
+ */
+export function hatchTextBackdrop(item: AgendaItem, colors?: AgendaColors): CSSProperties | null {
+  if (!item.segments?.length) return null;
+  const h: AgendaColor = item.overdue ? 'red' : itemHue(item, colors);
+  return { background: opaqueBg(v(h, 'bg')), borderRadius: 2 };
+}
+
 /** How a chip stands while a search is active: highlighted hit, dimmed miss, or no search. */
 export type SearchMatch = 'hit' | 'dim' | undefined;
 
@@ -129,16 +152,18 @@ export function chipStyle(item: AgendaItem, colors?: AgendaColors, match?: Searc
   // unanswered, hatched for maybe, faded (and struck through, see ChipName) when declined.
   const rsvp = item.type === 'external' ? item.external?.rsvp ?? null : null;
   const background = upcoming || skipped || rsvp === 'needsAction' || rsvp === 'declined'
-    ? 'transparent'
+    ? CHIP_BASE
     : rsvp === 'tentative'
-      ? `repeating-linear-gradient(135deg, ${v(h, 'bg')} 0 5px, transparent 5px 10px)`
-      : v(h, 'bg');
+      ? `repeating-linear-gradient(135deg, ${v(h, 'bg')} 0 5px, transparent 5px 10px), ${CHIP_BASE}`
+      : opaqueBg(v(h, 'bg'));
   return {
     background,
     border: `1px ${upcoming || skipped ? 'dashed' : 'solid'} ${rsvp === 'needsAction' ? v(h, 'solid') : v(h, 'border')}`,
     borderLeft: `3px solid ${v(h, 'solid')}`,
-    color: rsvp === 'declined' ? 'var(--theme-text-muted)' : 'var(--theme-text-primary)',
-    opacity: match === 'dim' ? 0.2 : upcoming ? 0.8 : rsvp === 'declined' ? 0.6 : 1,
+    // Faded items read as secondary through muted text, not element opacity:
+    // a see-through chip lets the hour lines cross it.
+    color: rsvp === 'declined' || upcoming ? 'var(--theme-text-muted)' : 'var(--theme-text-primary)',
+    opacity: match === 'dim' ? 0.2 : 1,
     ...(match === 'hit' ? { boxShadow: '0 0 0 2px var(--tint-yellow-solid)', zIndex: 20 } : {}),
   };
 }

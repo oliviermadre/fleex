@@ -3,7 +3,7 @@ import type { AgendaItem } from '@fleex/shared';
 import type { AgendaItemType } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { HandIcon, PauseIcon, QuestionIcon, VideoIcon } from '../ui/icons/AgendaIcons';
-import { LABEL_BY_TYPE, chipStyle, colorToken, dotStyle, hatchStyle, itemHue, labelHue, statusHue, type AgendaColors, type SearchMatch } from './agendaLabels';
+import { LABEL_BY_TYPE, chipStyle, colorToken, dotStyle, hatchStyle, itemHue, labelHue, showRunDot, statusHue, type AgendaColors, type SearchMatch } from './agendaLabels';
 import { useAgendaStore } from '../../stores/agendaStore';
 import { formatDuration, openWait, workflowShortName } from './agendaLayout';
 
@@ -123,11 +123,11 @@ function MeetShortcut({ item }: { item: AgendaItem }) {
   );
 }
 
-/** Status dot for runs, a hand for a manual routine launch, a join shortcut for a call. */
+/** Status dot for runs (only while running or when failed), a hand for a manual routine launch, a join shortcut for a call. */
 function Badges({ item }: { item: AgendaItem }) {
   return (
     <>
-      {(item.type === 'routine.run' || item.type === 'workflow.run' || item.type === 'agent.run') && (
+      {(item.type === 'routine.run' || item.type === 'workflow.run' || item.type === 'agent.run') && showRunDot(item.status) && (
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', item.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(item.status))} />
       )}
       {item.type === 'routine.run' && item.triggeredFrom && item.triggeredFrom !== 'schedule' && <span title="Launched manually" className="flex shrink-0 text-[var(--theme-text-muted)]"><HandIcon size={11} /></span>}

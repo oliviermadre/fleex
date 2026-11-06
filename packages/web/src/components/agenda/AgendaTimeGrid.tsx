@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { AgendaChip, AgentSubline, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, useAgendaColors, useHoverOpen, type OnOpen } from './AgendaChip';
-import { chipStyle, dotStyle, groupMatch, statusHue, type AgendaColors, type SearchMatch } from './agendaLabels';
+import { chipStyle, colorToken, dotStyle, groupMatch, hatchTextBackdrop, itemHue, opaqueBg, showRunDot, statusHue, type AgendaColors, type SearchMatch } from './agendaLabels';
 import {
-  HOUR_PX, LANES_MAX_SHARE, LANE_PX, MAX_COLS, addDays, assignLanes, dayKey, formatDuration, groupHourly, isBand, isBar, itemDays, layoutDay, minutesOfDay, openWait, segmentForDay, startOfDay, workflowShortName, type DaySegment,
+  HOUR_PX, LANES_MAX_SHARE, LANE_PX, MAX_COLS, addDays, assignLanes, dayKey, groupAgentSessions, formatDuration, groupHourly, isBand, isBar, itemDays, layoutDay, minutesOfDay, openWait, segmentForDay, startOfDay, workflowShortName, type DaySegment,
 } from './agendaLayout';
 import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon } from '../ui/icons/AgendaIcons';
 import { DragWrap, SlotPreview, useAgendaDnd } from './AgendaDnd';
@@ -60,18 +60,21 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstKey, days.length]);
 
+  // Back-and-forth agent runs on one ticket are drawn as one session band.
+  const { items: gridItems, runsOf } = useMemo(() => groupAgentSessions(items, now), [items, now]);
+
   const bars = useMemo(
-    () => items.filter((it) => isBar(it, now)).filter((it) => {
+    () => gridItems.filter((it) => isBar(it, now)).filter((it) => {
       const ds = itemDays(it, now);
       return ds[0]! <= lastKey && ds[ds.length - 1]! >= firstKey;
     }),
-    [items, now, firstKey, lastKey],
+    [gridItems, now, firstKey, lastKey],
   );
 
   const perDay = days.map((d) => {
     const key = dayKey(d);
-    const allDay = items.filter((it) => it.shape === 'allDay' && itemDays(it, now).includes(key));
-    const segs = items.map((it) => segmentForDay(it, d, now)).filter((s): s is NonNullable<typeof s> => s !== null);
+    const allDay = gridItems.filter((it) => it.shape === 'allDay' && itemDays(it, now).includes(key));
+    const segs = gridItems.map((it) => segmentForDay(it, d, now)).filter((s): s is NonNullable<typeof s> => s !== null);
     // Workflow and agent runs get their own thin lanes; everything else shares what is left.
     const lanes = assignLanes(segs.filter((s) => isBand(s.item)));
     const others = segs.filter((s) => !isBand(s.item));
@@ -122,14 +125,14 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                     {...hoverOpen({ item: it })}
                     className={cn('relative flex min-w-0 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-[11px] leading-4 hover:brightness-125')}
                     data-agenda-match={match(it)}
-                    style={{ ...chipStyle(it, colors, match(it)), gridColumn: `${s + 1} / ${e + 1}`, ...(it.type === 'routine.run' ? { borderColor: 'var(--tint-red-solid)', background: 'var(--tint-red-bg)' } : {}) }}
+                    style={{ ...chipStyle(it, colors, match(it)), gridColumn: `${s + 1} / ${e + 1}`, ...(it.type === 'routine.run' ? { borderColor: 'var(--tint-red-solid)', background: opaqueBg('var(--tint-red-bg)') } : {}) }}
                     title={it.title}
                   >
                     <WaitHatches item={it} from={from} to={to} now={now} vertical={false} />
                     {ds[0]! < firstKey && <ChevronLeftIcon size={11} className="relative shrink-0" />}
-                    <span className="relative flex min-w-0 items-center gap-1"><ChipName item={it} /></span>
-                    {it.type === 'workflow.run' && <span className="relative shrink-0"><WorkflowSubline item={it} now={now} /></span>}
-                    {it.type === 'agent.run' && <span className="relative shrink-0"><AgentSubline item={it} now={now} /></span>}
+                    <span className="relative flex min-w-0 items-center gap-1 overflow-hidden px-0.5" style={hatchTextBackdrop(it, colors) ?? undefined}><ChipName item={it} /></span>
+                    {it.type === 'workflow.run' && <span className="relative shrink-0 px-0.5" style={hatchTextBackdrop(it, colors) ?? undefined}><WorkflowSubline item={it} now={now} /></span>}
+                    {it.type === 'agent.run' && <span className="relative shrink-0 px-0.5" style={hatchTextBackdrop(it, colors) ?? undefined}><AgentSubline item={it} now={now} /></span>}
                     {it.type === 'routine.run' && <span className="relative shrink-0 text-[10px] text-[var(--tint-red-text)]">stuck {it.status}</span>}
                     <span className="relative flex items-center gap-1"><ChipBadges item={it} /></span>
                   </button>
@@ -190,7 +193,8 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                   colors={colors}
                   hovered={hoverId === seg.item.id}
                   hoverProps={hoverProps(seg.item.id)}
-                  match={match(seg.item)}
+                  runs={runsOf.get(seg.item.id)}
+                  match={runsOf.has(seg.item.id) ? groupMatch(runsOf.get(seg.item.id)!, match) : match(seg.item)}
                   style={{
                     top: (seg.startMin / 60) * HOUR_PX + GAP_PX,
                     height: Math.max(1, ((seg.endMin - seg.startMin) / 60) * HOUR_PX - 2 * GAP_PX),
@@ -271,7 +275,7 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                     title={it.title}
                   >
                     {it.shape === 'block' && <WaitHatches item={it} from={seg.from} to={seg.to} now={now} vertical />}
-                    <span className="relative flex w-full min-w-0 items-center gap-1">
+                    <span className="relative flex w-full min-w-0 items-center gap-1" style={(it.shape === 'block' && hatchTextBackdrop(it, colors)) || undefined}>
                       {seg.continuesBefore && (
                         <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--theme-text-muted)]">
                           <ArrowUpIcon size={10} /> cont.
@@ -319,8 +323,10 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
  * number written vertically and its human waits hatched. The full name, the
  * workflow and the current wait are in the tooltip and the popover.
  */
-function WorkflowBand({ seg, now, colors, hovered, hoverProps, match, style, onOpen, onOpenTicket }: {
+function WorkflowBand({ seg, runs, now, colors, hovered, hoverProps, match, style, onOpen, onOpenTicket }: {
   seg: DaySegment;
+  /** Set when the band is a session of agent runs on one ticket (see groupAgentSessions). */
+  runs?: AgendaItem[];
   now: Date;
   colors: AgendaColors;
   hovered: boolean;
@@ -336,7 +342,9 @@ function WorkflowBand({ seg, now, colors, hovered, hoverProps, match, style, onO
   const agent = it.type === 'agent.run' ? it.agent : null;
   const tip = [
     it.ticket ? `#${it.ticket.displayId} ${it.ticket.title}` : it.title,
-    agent
+    runs
+      ? [`${agent?.personaName ?? 'Agent'} \u00d7${runs.length}`, formatDuration((it.end ? new Date(it.end) : now).getTime() - new Date(it.start).getTime()), it.status].filter(Boolean).join(' · ')
+      : agent
       ? [agent.personaName ?? 'Agent', agent.model, formatDuration((it.end ? new Date(it.end) : now).getTime() - new Date(it.start).getTime()), it.status].filter(Boolean).join(' · ')
       : [workflowShortName(it.workflowName), wait ? `waiting at ${wait.stepName}` : it.status].filter(Boolean).join(' · '),
   ].join('\n');
@@ -346,9 +354,10 @@ function WorkflowBand({ seg, now, colors, hovered, hoverProps, match, style, onO
       data-agenda-item={it.id}
       data-agenda-band
       data-agenda-hovered={hovered || undefined}
-      onClick={(ev) => onOpen({ item: it }, ev.currentTarget)}
+      data-agenda-session={runs?.length}
+      onClick={(ev) => onOpen(runs ? { group: runs } : { item: it }, ev.currentTarget)}
       onDoubleClick={() => onOpenTicket(it)}
-      {...hoverOpen({ item: it }, hoverProps)}
+      {...hoverOpen(runs ? { group: runs } : { item: it }, hoverProps)}
       className={cn(
         'absolute flex cursor-pointer flex-col items-center overflow-hidden rounded-sm pt-0.5 hover:brightness-125',
         hovered && 'brightness-125 ring-1 ring-[var(--theme-text-primary)]',
@@ -356,15 +365,50 @@ function WorkflowBand({ seg, now, colors, hovered, hoverProps, match, style, onO
         seg.continuesBefore && 'rounded-t-none',
       )}
       data-agenda-match={match}
-      style={{ ...chipStyle(it, colors, match), borderLeftWidth: 1, ...style }}
+      style={{ ...chipStyle(it, colors, match), ...style }}
       title={tip}
     >
       <WaitHatches item={it} from={seg.from} to={seg.to} now={now} vertical />
-      <span className={cn('relative h-1.5 w-1.5 shrink-0 rounded-full', it.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(it.status))} />
-      <span className="relative mt-0.5 text-[10px] font-bold leading-none tabular-nums [writing-mode:vertical-rl]">
-        {it.ticket ? `#${it.ticket.displayId}` : agent ? (agent.personaName ?? 'Agent') : workflowShortName(it.workflowName)}
-      </span>
+      {runs && <SessionRuns runs={runs} from={seg.from} to={seg.to} now={now} color={colorToken(itemHue(it, colors), 'border')} />}
+      {showRunDot(it.status) && <span className={cn('relative mb-0.5 h-1.5 w-1.5 shrink-0 rounded-full', it.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(it.status))} />}
+      {runs ? (
+        // A session is labelled by its run count alone, written across: a vertical
+        // "#765 ×9" never fits a short band. The ticket is in the tooltip and the list.
+        <span data-agenda-band-label className="relative px-px text-[10px] font-bold leading-none tracking-tighter tabular-nums" style={{ background: opaqueBg(colorToken(itemHue(it, colors), 'bg')), borderRadius: 2 }}>
+          {'\u00d7'}{runs.length}
+        </span>
+      ) : (
+        <span data-agenda-band-label className="relative py-0.5 text-[10px] font-bold leading-none tabular-nums [writing-mode:vertical-rl]" style={hatchTextBackdrop(it, colors) ?? undefined}>
+          {it.ticket ? `#${it.ticket.displayId}` : agent ? (agent.personaName ?? 'Agent') : workflowShortName(it.workflowName)}
+        </span>
+      )}
       <span className="sr-only">{it.ticket?.title ?? it.title}</span>
     </button>
+  );
+}
+
+/**
+ * The runs of a session inside its band: each run a filled stretch, the
+ * waits between them left pale — the rhythm of the back-and-forth at a glance.
+ */
+function SessionRuns({ runs, from, to, now, color }: { runs: AgendaItem[]; from: Date; to: Date; now: Date; color: string }) {
+  const span = to.getTime() - from.getTime();
+  if (span <= 0) return null;
+  return (
+    <>
+      {runs.map((r) => {
+        const a = Math.max(0, (new Date(r.start).getTime() - from.getTime()) / span);
+        const b = Math.min(1, ((r.end ? new Date(r.end) : now).getTime() - from.getTime()) / span);
+        if (b < 0 || a > 1) return null;
+        return (
+          <span
+            key={r.id}
+            data-agenda-session-run={r.id}
+            className="pointer-events-none absolute inset-x-0"
+            style={{ top: `${a * 100}%`, height: `max(2px, ${(b - a) * 100}%)`, background: color }}
+          />
+        );
+      })}
+    </>
   );
 }

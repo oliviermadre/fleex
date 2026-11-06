@@ -382,3 +382,60 @@ export function workflowShortName(name: string | null | undefined): string {
 export function openWait(item: AgendaItem) {
   return item.segments?.find((s) => s.end === null) ?? null;
 }
+
+/** Two agent runs on one ticket at most this far apart belong to the same session. */
+export const SESSION_GAP_MIN = 15;
+
+/**
+ * Agent runs come in bursts of back-and-forth on one ticket (a run, a reply, a
+ * run…), each a few minutes long. Drawn one by one they inflate to POINT_MIN
+ * and stair-step across many lanes. Runs on the same ticket that follow each
+ * other within SESSION_GAP_MIN are merged into one session item, spanning the
+ * first start to the last end; `runsOf` maps its id to the runs, oldest first.
+ * A lone run, a run without a ticket and every other item pass through as is.
+ */
+export function groupAgentSessions(items: AgendaItem[], now: Date): { items: AgendaItem[]; runsOf: Map<string, AgendaItem[]> } {
+  const runsOf = new Map<string, AgendaItem[]>();
+  const byTicket = new Map<string, AgendaItem[]>();
+  const out: AgendaItem[] = [];
+  for (const it of items) {
+    if (it.type === 'agent.run' && it.shape === 'block' && it.ticket) {
+      const list = byTicket.get(it.ticket.id) ?? [];
+      list.push(it);
+      byTicket.set(it.ticket.id, list);
+    } else out.push(it);
+  }
+  for (const runs of byTicket.values()) {
+    runs.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    let session: AgendaItem[] = [];
+    let sessionEnd = 0;
+    const flush = () => {
+      if (session.length === 1) out.push(session[0]!);
+      else if (session.length > 1) {
+        const first = session[0]!;
+        const last = session[session.length - 1]!;
+        const running = session.some((r) => r.status === 'running');
+        const id = `agent.session:${first.id}`;
+        out.push({
+          ...first,
+          id,
+          start: first.start,
+          end: running ? null : new Date(sessionEnd).toISOString(),
+          status: running ? 'running' : last.status,
+        });
+        runsOf.set(id, session);
+      }
+    };
+    for (const r of runs) {
+      const s = new Date(r.start).getTime();
+      if (session.length && s - sessionEnd > SESSION_GAP_MIN * 60_000) {
+        flush();
+        session = [];
+      }
+      session.push(r);
+      sessionEnd = Math.max(session.length === 1 ? 0 : sessionEnd, endOf(r, now).getTime());
+    }
+    flush();
+  }
+  return { items: out, runsOf };
+}
