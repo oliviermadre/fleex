@@ -15,6 +15,7 @@ export type AgendaItemType =
   | 'routine.skipped'
   | 'routine.missed'
   | 'workflow.run'
+  | 'agent.run'
   | 'pr.merged'
   | 'event'
   | 'external';
@@ -28,6 +29,7 @@ export const AGENDA_ITEM_TYPES: readonly AgendaItemType[] = [
   'routine.skipped',
   'routine.missed',
   'workflow.run',
+  'agent.run',
   'pr.merged',
   'event',
   'external',
@@ -187,6 +189,14 @@ export interface AgendaItem {
   overdue?: boolean;
   /** R1 / W1: the run to open. */
   runId?: string | null;
+  /** A1 (SDK agent run): who ran, on which model, for how much. */
+  agent?: {
+    executionId: string;
+    personaId: string;
+    personaName: string | null;
+    model: string | null;
+    costUsd: number | null;
+  } | null;
   /** R3: why the slot was missed. */
   missedReason?: 'scheduler_down' | null;
   /** E1: the event (the series, for a recurring one). */

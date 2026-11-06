@@ -1,4 +1,5 @@
 import type {
+  AgentExecution,
   AgendaExternalLink,
   AgendaItem,
   AgendaResponse,
@@ -18,6 +19,8 @@ import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
 import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
 import type { KvStorePort } from '../ports/kv-store.port.js';
+import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import { runTimesBetween } from '../../domain/services/routine-schedule.js';
 import { expandCalendarEvent, listCalendarEvents, EVENT_OCCURRENCE_CAP } from './calendar-events.js';
 import { calendarEventItemId, calendarEventLinkKey } from '@fleex/shared';
@@ -59,6 +62,19 @@ export interface AgendaSources {
   missedSlots?: StoredMissedSlot[];
   /** Items from an external source (Google), already shaped. */
   externalItems?: AgendaItem[];
+  /** SDK agent executions (any — the builder keeps the ones that overlap the window). */
+  executions?: AgentExecution[];
+  /** Persona names by id, for the agent runs. */
+  personaNames?: Map<string, string>;
+}
+
+/**
+ * A1: an execution the agenda draws as an agent run. Workflow-step executions
+ * (`workflow:` mention) are already inside their workflow band, and CLI
+ * sessions are manual work, not SDK runs.
+ */
+export function isAgendaAgentRun(e: AgentExecution): boolean {
+  return e.source !== 'cli' && !e.mentionId?.startsWith('workflow:');
 }
 
 /**
@@ -223,6 +239,30 @@ export function buildAgenda(src: AgendaSources, w: AgendaWindow): AgendaResponse
     }
   }
 
+  // ── A1 SDK agent runs overlapping the window ──
+  for (const e of src.executions ?? []) {
+    if (!isAgendaAgentRun(e)) continue;
+    const start = Date.parse(e.startedAt);
+    const running = e.status === 'running';
+    // A run that stopped without `completedAt` (interrupted) ends at its last event.
+    const endIso = running ? null : (e.completedAt ?? e.lastEventAt ?? iso(new Date(start + (e.durationMs ?? 0))));
+    const end = endIso ? Date.parse(endIso) : w.now.getTime();
+    if (!(start < w.to.getTime() && end >= w.from.getTime())) continue;
+    const t = e.ticketId ? ticketsById.get(e.ticketId) : undefined;
+    if (e.ticketId && !t) continue; // archived / deleted ticket
+    const r = e.routineId ? routinesById.get(e.routineId) : undefined;
+    const personaName = src.personaNames?.get(e.personaId) ?? null;
+    items.push({
+      id: `agent.run:${e.id}`, type: 'agent.run', shape: 'block',
+      start: iso(new Date(start)), end: endIso ? iso(new Date(end)) : null,
+      title: t?.title ?? r?.name ?? personaName ?? 'Agent run',
+      status: e.status,
+      ticket: t ? ticketRef(t) : null,
+      routine: r ? routineRef(r) : null,
+      agent: { executionId: e.id, personaId: e.personaId, personaName, model: e.model ?? null, costUsd: e.costUsd ?? null },
+    });
+  }
+
   // ── R2 upcoming: the scheduler's own parser, from max(from, now) ──
   const upFrom = new Date(Math.max(w.from.getTime(), w.now.getTime()));
   for (const r of src.routines) {
@@ -333,6 +373,9 @@ export class GetAgendaUseCase {
       kvStore?: KvStorePort | null;
       /** Deliverable links grouped by key (the link store lives in infrastructure). */
       links?: () => Promise<Map<string, AgendaExternalLink[]>>;
+      /** SDK agent runs (A1) — the cached store answers from memory. */
+      agentEvents?: AgentEventStorePort | null;
+      personas?: PersonaStorePort | null;
     } = {},
   ) {}
 
@@ -344,7 +387,9 @@ export class GetAgendaUseCase {
         (err: unknown) => ({ items: [], error: err instanceof Error ? err.message : String(err) }),
       )
       : Promise.resolve({ items: [], error: null });
-    const [tickets, routines, allRuns, groups, calendarEvents, missedSlots, eventLinks] = await Promise.all([
+    const agentEvents = this.more.agentEvents ?? null;
+    const personas = this.more.personas ?? null;
+    const [tickets, routines, allRuns, groups, calendarEvents, missedSlots, eventLinks, executions, personaList] = await Promise.all([
       this.ticketStore.getAllTickets(),
       this.routineStore ? this.routineStore.getAll() : Promise.resolve([]),
       this.runStore ? this.runStore.getOverlapping(w.from, w.to) : Promise.resolve([]),
@@ -352,6 +397,8 @@ export class GetAgendaUseCase {
       kv ? listCalendarEvents(kv) : Promise.resolve([]),
       kv ? listMissedSlots(kv) : Promise.resolve([]),
       this.more.links ? this.more.links().catch(() => new Map<string, AgendaExternalLink[]>()) : Promise.resolve(new Map<string, AgendaExternalLink[]>()),
+      agentEvents ? agentEvents.getAllExecutions().catch(() => []) : Promise.resolve([]),
+      personas ? personas.getAll().catch(() => []) : Promise.resolve([]),
     ]);
     const runs = allRuns.filter((r) => {
       const end = r.completedAt ? r.completedAt.getTime() : Infinity;
@@ -370,6 +417,7 @@ export class GetAgendaUseCase {
     const res = buildAgenda({
       tickets, routines, runs, events: families.flat(),
       memberships: groups.memberships, epics: groups.epics, calendarEvents, eventLinks, missedSlots, externalItems: external.items,
+      executions, personaNames: new Map(personaList.map((p) => [p.id, p.name])),
     }, w);
     if (external.error !== null) res.errors.external = external.error;
     return res;

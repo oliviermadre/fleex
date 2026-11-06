@@ -232,7 +232,7 @@ function RunMeta({ item, now }: { item: AgendaItem; now: Date }) {
   const manual = !!item.triggeredFrom && item.triggeredFrom !== 'schedule';
 
   return (
-    <Section title={item.type === 'workflow.run' ? 'Workflow run' : 'Run'}>
+    <Section title={item.type === 'workflow.run' ? 'Workflow run' : item.type === 'agent.run' ? 'Agent run' : 'Run'}>
       <div className="grid grid-cols-[84px_1fr] items-center gap-x-2 gap-y-1">
         {item.status && (
           <Field label="Status">
@@ -241,6 +241,9 @@ function RunMeta({ item, now }: { item: AgendaItem; now: Date }) {
           </Field>
         )}
         {item.workflowName && <Field label="Workflow"><b>{workflowShortName(item.workflowName)}</b></Field>}
+        {item.agent && <Field label="Agent"><b>{item.agent.personaName ?? item.agent.personaId}</b></Field>}
+        {item.agent?.model && <Field label="Model">{item.agent.model}</Field>}
+        {item.agent?.costUsd != null && <Field label="Cost">${item.agent.costUsd.toFixed(2)}</Field>}
         {item.type === 'routine.run' && (
           <Field label="Trigger">
             {manual ? <><HandIcon size={12} /> Launched manually</> : 'Schedule'}
@@ -313,7 +316,7 @@ export function AgendaItemDetails({ item, now, onClose }: { item: AgendaItem; no
   const selectRoutine = useRoutineStore((s) => s.select);
   const label = LABEL_BY_TYPE[item.type];
   const ticketId = item.ticket?.id ?? null;
-  const isRun = item.type === 'routine.run' || item.type === 'workflow.run';
+  const isRun = item.type === 'routine.run' || item.type === 'workflow.run' || item.type === 'agent.run';
   const runId = isRun ? item.runId ?? null : null;
 
   const ticket = useLoad(ticketId, () => api.fetchAgendaTicket(ticketId!));

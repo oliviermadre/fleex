@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { AgendaItem, AgendaItemType } from '@fleex/shared';
 import { TINT_HUES, type TintHue } from '../../lib/tints';
 import {
-  CalendarEventIcon, CircleCheckIcon, ExternalCalendarIcon, FlagIcon, GitMergeIcon, MissedIcon, RoutineRunIcon,
+  AgentRunIcon, CalendarEventIcon, CircleCheckIcon, ExternalCalendarIcon, FlagIcon, GitMergeIcon, MissedIcon, RoutineRunIcon,
   TicketPlusIcon, UpcomingIcon, WorkflowRunIcon, CancelIcon, type AgendaIconComponent,
 } from '../ui/icons/AgendaIcons';
 
@@ -24,6 +24,7 @@ export const AGENDA_LABELS: AgendaLabel[] = [
   { type: 'routine.skipped', label: 'Skipped', icon: CancelIcon, hue: 'gray', family: 'routines' },
   { type: 'routine.missed', label: 'Missed', icon: MissedIcon, hue: 'gray', family: 'routines' },
   { type: 'workflow.run', label: 'Workflow runs', icon: WorkflowRunIcon, hue: 'indigo', family: 'workflows' },
+  { type: 'agent.run', label: 'Agent runs', icon: AgentRunIcon, hue: 'orange', family: 'workflows' },
   // GitHub's merged colour (purple), as on the Tasks PR glyph.
   { type: 'pr.merged', label: 'PRs merged', icon: GitMergeIcon, hue: 'purple', family: 'production' },
   { type: 'event', label: 'Events', icon: CalendarEventIcon, hue: 'teal', family: 'calendar' },

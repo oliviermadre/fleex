@@ -203,7 +203,7 @@ export function groupHourly(segs: DaySegment[]): GridEntry[] {
   const out: GridEntry[] = [];
   for (const s of segs) {
     const short = s.endMin - s.startMin <= 30;
-    if (s.item.type === 'workflow.run' || !short) {
+    if (isBand(s.item) || !short) {
       out.push({ kind: 'item', seg: s, ...placed(s.startMin, s.endMin) });
       continue;
     }
@@ -337,6 +337,11 @@ export function layoutDay(entries: GridEntry[], maxCols = Infinity): GridEntry[]
   }
   if (cluster.length) flush();
   return out;
+}
+
+/** Runs drawn as thin bands in their own lanes: workflow runs and SDK agent runs. */
+export function isBand(item: AgendaItem): boolean {
+  return item.type === 'workflow.run' || item.type === 'agent.run';
 }
 
 /** Every label is on unless the user turned it off. */

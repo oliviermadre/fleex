@@ -3,7 +3,7 @@ import { cn } from '../../lib/cn';
 import { AgendaChip, GroupChipLabel, WaitIcon, useAgendaColors, useHoverOpen, type OnOpen } from './AgendaChip';
 import { chipStyle, groupMatch, type SearchMatch } from './agendaLabels';
 import { DragWrap, useAgendaDnd } from './AgendaDnd';
-import { addDays, dayKey, isBar, itemDays, parseDayKey, workflowShortName, openWait } from './agendaLayout';
+import { addDays, dayKey, isBand, isBar, itemDays, parseDayKey, workflowShortName, openWait } from './agendaLayout';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MAX_CHIPS = 4;
@@ -12,7 +12,7 @@ const MAX_CHIPS = 4;
 function dayGroups(items: AgendaItem[], now: Date): AgendaItem[][] {
   const groups = new Map<string, AgendaItem[]>();
   for (const it of items) {
-    const single = it.shape === 'allDay' || isBar(it, now) || it.type === 'workflow.run';
+    const single = it.shape === 'allDay' || isBar(it, now) || isBand(it);
     const key = single ? `one:${it.id}` : `${it.type}|${it.routine?.id ?? ''}`;
     const g = groups.get(key);
     if (g) g.push(it);
@@ -144,6 +144,11 @@ export function AgendaSchedule({ items, now, match, onOpen }: {
                       <GroupChip items={g} onOpen={onOpen} match={groupMatch(g, match)} />
                     ) : (
                       <AgendaChip item={it0} onOpen={onOpen} match={match(it0)}>
+                        {it0.type === 'agent.run' && (
+                          <span className="ml-1 shrink-0 text-[10.5px] text-[var(--theme-text-muted)]">
+                            {[it0.agent?.personaName ?? 'Agent', it0.agent?.model].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
                         {it0.type === 'workflow.run' && (
                           <span className="ml-1 shrink-0 text-[10.5px] text-[var(--theme-text-muted)]">
                             {workflowShortName(it0.workflowName)}

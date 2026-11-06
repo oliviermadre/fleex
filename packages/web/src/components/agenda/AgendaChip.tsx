@@ -127,7 +127,7 @@ function MeetShortcut({ item }: { item: AgendaItem }) {
 function Badges({ item }: { item: AgendaItem }) {
   return (
     <>
-      {(item.type === 'routine.run' || item.type === 'workflow.run') && (
+      {(item.type === 'routine.run' || item.type === 'workflow.run' || item.type === 'agent.run') && (
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', item.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(item.status))} />
       )}
       {item.type === 'routine.run' && item.triggeredFrom && item.triggeredFrom !== 'schedule' && <span title="Launched manually" className="flex shrink-0 text-[var(--theme-text-muted)]"><HandIcon size={11} /></span>}
@@ -150,7 +150,7 @@ export function chipHoverTitle(item: AgendaItem): string {
 
 /** The one-line name: workflow runs lead with the ticket number. */
 export function ChipName({ item }: { item: AgendaItem }) {
-  if (item.type === 'workflow.run' && item.ticket) {
+  if ((item.type === 'workflow.run' || item.type === 'agent.run') && item.ticket) {
     return (
       <>
         <span className="shrink-0 font-bold tabular-nums">#{item.ticket.displayId}</span>
@@ -189,6 +189,17 @@ export function WorkflowSubline({ item, now }: { item: AgendaItem; now: Date }) 
           <WaitIcon kind={wait.kind} className="mr-0.5 align-[-1px]" />{wait.stepName} · {formatDuration(now.getTime() - new Date(wait.start).getTime())}
         </span>
       ) : item.status === 'running' ? (item.currentStep ?? 'running') : item.status}
+    </div>
+  );
+}
+
+/** Second line of an agent run: "Dev · opus · 12 min". */
+export function AgentSubline({ item, now }: { item: AgendaItem; now: Date }) {
+  const a = item.agent;
+  const ms = (item.end ? new Date(item.end) : now).getTime() - new Date(item.start).getTime();
+  return (
+    <div className="truncate text-[10.5px] text-[var(--theme-text-muted)]">
+      {[a?.personaName ?? 'Agent', a?.model, formatDuration(ms)].filter(Boolean).join(' · ')}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import type { AgendaItem, AgendaPrefs } from '@fleex/shared';
 import { DEFAULT_AGENDA_PREFS } from '@fleex/shared';
 import {
   windowFor, shiftAnchor, daysCovered, isBar, itemDays, segmentForDay, groupHourly, layoutDay,
-  assignLanes, isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, isoWeek, POINT_MIN, MAX_COLS, type GridEntry,
+  assignLanes, isBand, isVisible, matchesQuery, formatDuration, workflowShortName, dayKey, isoWeek, POINT_MIN, MAX_COLS, type GridEntry,
 } from './agendaLayout';
 
 // Local-time constructors: these tests are about the browser's own calendar.
@@ -209,6 +209,16 @@ describe('filters and search', () => {
     const p = prefs({ filters: { boards: ['odys'], epics: [], repos: [], tags: [] } });
     expect(isVisible(block('w', NOW, null, { ticket: t }), p)).toBe(false);
     expect(isVisible(point('r', NOW), p)).toBe(true);
+  });
+
+  it('agent runs: on by default, follow the board filter through their ticket, drawn as bands', () => {
+    const a = block('a', NOW, null, { type: 'agent.run', ticket: t });
+    expect(isVisible(a, prefs({}))).toBe(true);
+    expect(isVisible(a, prefs({ labels: { 'agent.run': false } }))).toBe(false);
+    expect(isVisible(a, prefs({ filters: { boards: ['odys'], epics: [], repos: [], tags: [] } }))).toBe(false);
+    expect(isVisible(a, prefs({ filters: { boards: ['fleex'], epics: [], repos: [], tags: [] } }))).toBe(true);
+    expect(isBand(a)).toBe(true);
+    expect(isBand(point('r', NOW))).toBe(false);
   });
 
   it('finds every run of a ticket by its number', () => {

@@ -181,7 +181,7 @@ export function AgendaPage() {
     setShown((cur) => (cur?.pinned && targetKey(cur.target) === targetKey(t) ? null : { target: t, pinned: true }));
   }, [pop.refs, hover]);
   const openTicket = useCallback((it: AgendaItem) => {
-    if (it.type !== 'workflow.run' || !it.ticket) return;
+    if ((it.type !== 'workflow.run' && it.type !== 'agent.run') || !it.ticket) return;
     setTarget(null);
     navigate(`/work/${it.ticket.id}`);
   }, [navigate]);

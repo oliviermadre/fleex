@@ -51,6 +51,11 @@ export function RoutineRunIcon({ size = 14, className }: IconProps) {
   return <RoutineIcon size={size} className={className} tinted={false} strokeWidth={1.75} />;
 }
 
+/** The persona glyph, untinted: an SDK agent run. */
+export function AgentRunIcon({ size = 14, className }: IconProps) {
+  return <PrimitiveIcon kind="persona" size={size} className={className} tinted={false} />;
+}
+
 /** Workflow nodes graph, untinted. */
 export function WorkflowRunIcon({ size = 14, className }: IconProps) {
   return <PrimitiveIcon kind="workflow" size={size} className={className} tinted={false} />;

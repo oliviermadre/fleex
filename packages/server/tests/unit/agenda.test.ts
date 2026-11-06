@@ -7,7 +7,7 @@ import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity
 import { DomainEventLogEntity } from '../../src/domain/entities/domain-event-log.entity.js';
 import { runTimesBetween } from '../../src/domain/services/routine-schedule.js';
 import { buildAgenda, waitSegments, UPCOMING_CAP, GetAgendaUseCase } from '../../src/application/use-cases/get-agenda.js';
-import type { CalendarEvent } from '@fleex/shared';
+import type { AgentExecution, CalendarEvent } from '@fleex/shared';
 import { TicketGroupEntity } from '../../src/domain/entities/ticket-group.entity.js';
 import { missedSlotKey } from '../../src/application/services/missed-slots.js';
 import { agendaRoutes, parseAgendaPrefs } from '../../src/infrastructure/http/agenda.routes.js';
@@ -485,5 +485,45 @@ describe('GetAgendaUseCase — sources', () => {
     const res = await new GetAgendaUseCase(tickets, routines, runStore, null).execute(W);
     expect(windows).toEqual([[W.from.toISOString(), W.to.toISOString()]]);
     expect(ofType(res, 'workflow.run').map((i) => i.id)).toHaveLength(1);
+  });
+});
+
+describe('A1 agent runs', () => {
+  const exec = (over: Partial<AgentExecution> & { id: string; startedAt: string }): AgentExecution => ({
+    personaId: 'p1', ticketId: null, mentionId: 'm1', eventCount: 1, status: 'completed', completedAt: null, lastEventAt: null, ...over,
+  });
+
+  it('draws an SDK run as a block with its real duration, tied to its ticket or routine', () => {
+    const r = build({
+      tickets: [ticket({ id: 't7' })],
+      routines: [routine('r1', { kind: 'manual' })],
+      executions: [
+        exec({ id: 'x1', ticketId: 't7', startedAt: '2026-11-04T09:00:00Z', completedAt: '2026-11-04T09:12:00Z', model: 'opus', costUsd: 0.4 }),
+        exec({ id: 'x2', routineId: 'r1', startedAt: '2026-11-05T10:00:00Z', status: 'running' }),
+      ],
+      personaNames: new Map([['p1', 'Dev']]),
+    });
+    const runs = ofType(r, 'agent.run');
+    expect(runs.map((i) => [i.id, i.shape, i.start, i.end])).toEqual([
+      ['agent.run:x1', 'block', '2026-11-04T09:00:00.000Z', '2026-11-04T09:12:00.000Z'],
+      ['agent.run:x2', 'block', '2026-11-05T10:00:00.000Z', null],
+    ]);
+    expect(runs[0]!.ticket?.id).toBe('t7');
+    expect(runs[0]!.agent).toMatchObject({ personaName: 'Dev', model: 'opus', costUsd: 0.4 });
+    expect(runs[1]!.routine?.id).toBe('r1');
+  });
+
+  it('skips workflow-step and CLI executions, runs outside the window and deleted tickets', () => {
+    const r = build({
+      tickets: [ticket({ id: 't7' })],
+      executions: [
+        exec({ id: 'wf', mentionId: 'workflow:wf', startedAt: '2026-11-04T09:00:00Z', completedAt: '2026-11-04T09:10:00Z' }),
+        exec({ id: 'cli', source: 'cli', startedAt: '2026-11-04T09:00:00Z', completedAt: '2026-11-04T09:10:00Z' }),
+        exec({ id: 'old', startedAt: '2026-10-04T09:00:00Z', completedAt: '2026-10-04T09:10:00Z' }),
+        exec({ id: 'gone', ticketId: 'nope', startedAt: '2026-11-04T09:00:00Z', completedAt: '2026-11-04T09:10:00Z' }),
+        exec({ id: 'int', status: 'interrupted', startedAt: '2026-11-04T09:00:00Z', lastEventAt: '2026-11-04T09:03:00Z' }),
+      ],
+    });
+    expect(ofType(r, 'agent.run').map((i) => [i.id, i.end])).toEqual([['agent.run:int', '2026-11-04T09:03:00.000Z']]);
   });
 });

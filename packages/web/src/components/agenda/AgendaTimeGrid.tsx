@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { AgendaItem } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { AgendaChip, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, useAgendaColors, useHoverOpen, type OnOpen } from './AgendaChip';
+import { AgendaChip, AgentSubline, ChipBadges, ChipName, GroupChipLabel, WaitHatches, WorkflowSubline, useAgendaColors, useHoverOpen, type OnOpen } from './AgendaChip';
 import { chipStyle, dotStyle, groupMatch, statusHue, type AgendaColors, type SearchMatch } from './agendaLabels';
 import {
-  HOUR_PX, LANES_MAX_SHARE, LANE_PX, MAX_COLS, addDays, assignLanes, dayKey, groupHourly, isBar, itemDays, layoutDay, minutesOfDay, openWait, segmentForDay, startOfDay, workflowShortName, type DaySegment,
+  HOUR_PX, LANES_MAX_SHARE, LANE_PX, MAX_COLS, addDays, assignLanes, dayKey, formatDuration, groupHourly, isBand, isBar, itemDays, layoutDay, minutesOfDay, openWait, segmentForDay, startOfDay, workflowShortName, type DaySegment,
 } from './agendaLayout';
 import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon } from '../ui/icons/AgendaIcons';
 import { DragWrap, SlotPreview, useAgendaDnd } from './AgendaDnd';
@@ -72,9 +72,9 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
     const key = dayKey(d);
     const allDay = items.filter((it) => it.shape === 'allDay' && itemDays(it, now).includes(key));
     const segs = items.map((it) => segmentForDay(it, d, now)).filter((s): s is NonNullable<typeof s> => s !== null);
-    // Workflow runs get their own thin lanes; everything else shares what is left.
-    const lanes = assignLanes(segs.filter((s) => s.item.type === 'workflow.run'));
-    const others = segs.filter((s) => s.item.type !== 'workflow.run');
+    // Workflow and agent runs get their own thin lanes; everything else shares what is left.
+    const lanes = assignLanes(segs.filter((s) => isBand(s.item)));
+    const others = segs.filter((s) => !isBand(s.item));
     const count = items.filter((it) => itemDays(it, now).includes(key)).length;
     return { day: d, key, allDay, lanes, entries: layoutDay(groupHourly(others), maxCols), count };
   });
@@ -129,6 +129,7 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                     {ds[0]! < firstKey && <ChevronLeftIcon size={11} className="relative shrink-0" />}
                     <span className="relative flex min-w-0 items-center gap-1"><ChipName item={it} /></span>
                     {it.type === 'workflow.run' && <span className="relative shrink-0"><WorkflowSubline item={it} now={now} /></span>}
+                    {it.type === 'agent.run' && <span className="relative shrink-0"><AgentSubline item={it} now={now} /></span>}
                     {it.type === 'routine.run' && <span className="relative shrink-0 text-[10px] text-[var(--tint-red-text)]">stuck {it.status}</span>}
                     <span className="relative flex items-center gap-1"><ChipBadges item={it} /></span>
                   </button>
@@ -280,7 +281,7 @@ export function AgendaTimeGrid({ days, items, now, match, onOpen, onOpenTicket, 
                       <ChipBadges item={it} />
                     </span>
                     {!compact && it.type === 'workflow.run' && <span className="relative w-full"><WorkflowSubline item={it} now={now} /></span>}
-                    {!compact && it.shape === 'block' && it.type !== 'workflow.run' && e.span === e.cols && (
+                    {!compact && it.shape === 'block' && !isBand(it) && e.span === e.cols && (
                       <span className="relative text-[10px] text-[var(--theme-text-muted)]">
                         {new Date(it.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} - {it.end ? new Date(it.end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : 'now'}
                       </span>
@@ -332,9 +333,12 @@ function WorkflowBand({ seg, now, colors, hovered, hoverProps, match, style, onO
   const it = seg.item;
   const hoverOpen = useHoverOpen();
   const wait = openWait(it);
+  const agent = it.type === 'agent.run' ? it.agent : null;
   const tip = [
     it.ticket ? `#${it.ticket.displayId} ${it.ticket.title}` : it.title,
-    [workflowShortName(it.workflowName), wait ? `waiting at ${wait.stepName}` : it.status].filter(Boolean).join(' · '),
+    agent
+      ? [agent.personaName ?? 'Agent', agent.model, formatDuration((it.end ? new Date(it.end) : now).getTime() - new Date(it.start).getTime()), it.status].filter(Boolean).join(' · ')
+      : [workflowShortName(it.workflowName), wait ? `waiting at ${wait.stepName}` : it.status].filter(Boolean).join(' · '),
   ].join('\n');
   return (
     <button
@@ -358,7 +362,7 @@ function WorkflowBand({ seg, now, colors, hovered, hoverProps, match, style, onO
       <WaitHatches item={it} from={seg.from} to={seg.to} now={now} vertical />
       <span className={cn('relative h-1.5 w-1.5 shrink-0 rounded-full', it.status === 'running' && 'animate-pulse')} style={dotStyle(statusHue(it.status))} />
       <span className="relative mt-0.5 text-[10px] font-bold leading-none tabular-nums [writing-mode:vertical-rl]">
-        {it.ticket ? `#${it.ticket.displayId}` : workflowShortName(it.workflowName)}
+        {it.ticket ? `#${it.ticket.displayId}` : agent ? (agent.personaName ?? 'Agent') : workflowShortName(it.workflowName)}
       </span>
       <span className="sr-only">{it.ticket?.title ?? it.title}</span>
     </button>
