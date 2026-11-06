@@ -24,6 +24,7 @@ import { CheckIcon, RepeatIcon } from '../ui/icons/AgendaIcons';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useAgendaStore } from '../../stores/agendaStore';
 import { dayKey } from './agendaLayout';
+import { colorToken, labelHue } from './agendaLabels';
 import { shiftDayKey } from './agendaDrag';
 
 // ── Draft ⇄ input (pure) ──
@@ -222,6 +223,8 @@ export function useTicketsLoaded(): void {
 
 export function EventEditor({ draft: initial, event, onClose }: { draft: EventDraft; event: CalendarEvent | null; onClose: () => void }) {
   const [d, setD] = useState<EventDraft>(initial);
+  // The "Events label" choice shows the label's current colour (the sidebar pick).
+  const labelDefault = labelHue('event', useAgendaStore((st) => st.prefs.colors));
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const tickets = useTicketStore((s) => s.tickets);
@@ -295,19 +298,36 @@ export function EventEditor({ draft: initial, event, onClose }: { draft: EventDr
 
       <div className="space-y-1">
         <div className="text-xs font-medium text-[var(--theme-text-secondary)]">Colour</div>
-        <div className="flex flex-wrap gap-1.5">
-          {SWATCHES.map((h) => (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Default: no colour of its own, the event follows the Events label (sidebar). */}
+          <button
+            type="button"
+            aria-label="Default colour"
+            aria-pressed={d.color === null}
+            title="Follows the Events label colour, set in the sidebar"
+            onClick={() => set('color', null)}
+            className={cn(
+              'flex h-5 items-center gap-1 rounded-full border px-2 text-[11px] text-[var(--theme-text-secondary)]',
+              d.color === null ? 'border-[var(--theme-text-primary)] text-[var(--theme-text-primary)]' : 'border-dashed border-[var(--theme-border)]',
+            )}
+          >
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colorToken(labelDefault, 'solid') }} />
+            Events label
+            {d.color === null && <CheckIcon size={11} />}
+          </button>
+          <span aria-hidden className="mx-0.5 h-4 w-px bg-[var(--theme-border)]" />
+          {SWATCHES.filter((h): h is TintHue => h !== null).map((h) => (
             <button
               key={h ?? 'default'}
               type="button"
-              aria-label={h ? `Colour ${h}` : 'Default colour'}
+              aria-label={`Colour ${h}`}
               aria-pressed={d.color === h}
-              title={h ?? 'Default (Events label)'}
+              title={`${h} — this event only`}
               onClick={() => set('color', h)}
               className={cn('flex h-5 w-5 items-center justify-center rounded-full border', d.color === h ? 'border-[var(--theme-text-primary)]' : 'border-transparent')}
-              style={{ background: `var(--tint-${h ?? 'teal'}-${h ? 'solid' : 'bg'})` }}
+              style={{ background: `var(--tint-${h}-solid)` }}
             >
-              {d.color === h && <CheckIcon size={11} className={h ? 'text-[var(--theme-accent-fg)]' : 'text-[var(--theme-text-primary)]'} />}
+              {d.color === h && <CheckIcon size={11} className="text-[var(--theme-accent-fg)]" />}
             </button>
           ))}
         </div>

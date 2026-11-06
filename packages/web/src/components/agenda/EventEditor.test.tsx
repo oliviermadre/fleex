@@ -39,6 +39,21 @@ afterEach(() => {
 });
 
 describe('<EventEditor/> — create', () => {
+  it('"Events label" shows the label colour picked in the sidebar and clears an event colour', async () => {
+    const prev = useAgendaStore.getState().prefs;
+    useAgendaStore.setState({ prefs: { ...prev, colors: { event: '#f43f5e' } } });
+    render(<EventEditor draft={draftFromEvent(ev({ color: 'teal' }))} event={ev({ color: 'teal' })} onClose={() => {}} />);
+    const def = screen.getByRole('button', { name: 'Default colour' });
+    expect(def.getAttribute('aria-pressed')).toBe('false');
+    expect((def.querySelector('span') as HTMLElement).style.background).toBe('rgb(244, 63, 94)');
+    fireEvent.click(def);
+    expect(def.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.updateCalendarEvent).toHaveBeenCalled());
+    expect(vi.mocked(api.updateCalendarEvent).mock.calls[0]![1]).toMatchObject({ color: null });
+    useAgendaStore.setState({ prefs: prev });
+  });
+
   it('posts an all-day event with its inclusive last day', async () => {
     const onClose = vi.fn();
     render(<EventEditor draft={draftForAllDay('2026-11-10')} event={null} onClose={onClose} />);
