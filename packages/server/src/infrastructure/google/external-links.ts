@@ -4,7 +4,7 @@
  * written to.
  */
 import { randomUUID } from 'node:crypto';
-import { CALENDAR_EVENT_LINK_PREFIX, type AgendaExternalLink } from '@fleex/shared';
+import { CALENDAR_EVENT_LINK_PREFIX, normalizeTitle, titlesMatch, type AgendaExternalLink } from '@fleex/shared';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 import type { GoogleCalendarEvent } from './google-calendar.client.js';
 
@@ -47,29 +47,8 @@ export function eventStartOf(event: GoogleCalendarEvent): string {
   return event.start?.date ?? '';
 }
 
-/** Lowercase, no accents, no emojis or punctuation, single spaces. */
-export function normalizeTitle(title: string): string {
-  return title
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-}
-
-/**
- * Either normalised title contains the other (empty titles never match). Also
- * compared without spaces, so "Stand-up" (→ "stand up") matches "standup".
- */
-export function titlesMatch(a: string, b: string): boolean {
-  const na = normalizeTitle(a);
-  const nb = normalizeTitle(b);
-  if (!na || !nb) return false;
-  if (na.includes(nb) || nb.includes(na)) return true;
-  const ca = na.replace(/ /g, '');
-  const cb = nb.replace(/ /g, '');
-  return ca.includes(cb) || cb.includes(ca);
-}
+/** Title matching lives in @fleex/shared (the CLI matches agenda items with the same rules). */
+export { normalizeTitle, titlesMatch };
 
 const compact = (title: string) => normalizeTitle(title).replace(/ /g, '');
 

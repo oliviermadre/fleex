@@ -67,14 +67,36 @@ describe('commands', () => {
     vi.restoreAllMocks();
   });
 
-  it('link posts to /api/agenda/google/link and reports created', async () => {
+  it('link --google-event posts to /api/agenda/google/link and reports created', async () => {
     const fetchMock = respond(201, link);
     vi.stubGlobal('fetch', fetchMock);
-    await linkDef.action({ deliverable: 'd1', matchTitle: 'Daily', date: '2026-11-05' });
+    await linkDef.action({ deliverable: 'd1', googleEvent: 'e1', calendar: 'team' });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('http://localhost:1234/api/agenda/google/link');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body as string)).toEqual({ deliverableId: 'd1', matchTitle: 'Daily', date: '2026-11-05' });
+    expect(JSON.parse(init.body as string)).toEqual({ deliverableId: 'd1', googleEventId: 'e1', calendarId: 'team' });
+    expect(JSON.parse(out.join(''))).toEqual({ ok: true, created: true, link });
+  });
+
+  it('link --match-title finds the meeting in the agenda of that day (calendars from the prefs) and links it', async () => {
+    const daily = {
+      id: 'external:uid', type: 'external', shape: 'block', start: '2026-11-05T09:00:00.000Z', end: '2026-11-05T09:15:00.000Z', title: 'Daily',
+      external: { calendarId: 'team', eventKey: 'uid', htmlLink: null, attendees: 0, location: null, eventType: 'default', links: [] },
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      const json = url.includes('/api/agenda/prefs') ? { googleCalendars: ['team'] }
+        : url.includes('/api/agenda?') ? { items: [daily], errors: {} }
+        : link;
+      return new Response(JSON.stringify(json), { status: url.includes('external-links') ? 201 : 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await linkDef.action({ deliverable: 'd1', matchTitle: 'daily', date: '2026-11-05' });
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.find((u) => u.includes('/api/agenda?'))).toContain('calendars=team');
+    const post = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/api/agenda/external-links'))!;
+    expect(JSON.parse((post[1] as RequestInit).body as string)).toEqual({
+      eventKey: 'uid', deliverableId: 'd1', eventTitle: 'Daily', eventStart: '2026-11-05T09:00:00.000Z', source: 'cli',
+    });
     expect(JSON.parse(out.join(''))).toEqual({ ok: true, created: true, link });
   });
 

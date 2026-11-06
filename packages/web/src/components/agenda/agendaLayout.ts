@@ -4,7 +4,7 @@
  * are positioned from their local hours/minutes (never ms-since-midnight, which
  * drifts by an hour on DST days).
  */
-import type { AgendaItem, AgendaItemType, AgendaPrefs, AgendaView } from '@fleex/shared';
+import { matchesAgendaFilters, matchesAgendaQuery, type AgendaItem, type AgendaItemType, type AgendaPrefs, type AgendaView } from '@fleex/shared';
 
 export const DAY_MS = 24 * 3600_000;
 /** Height of one hour in the Day / Week grid. 60 px: one minute is one pixel. */
@@ -358,30 +358,11 @@ export function isVisible(item: AgendaItem, prefs: AgendaPrefs): boolean {
   if (!labelOn(prefs, item.type)) return false;
   if (item.routine && prefs.routines[item.routine.id] === false) return false;
   if (item.type === 'external' && item.external?.eventType === 'workingLocation' && !prefs.showWorkingLocation) return false;
-  const { boards, epics, repos, tags } = prefs.filters;
-  const t = item.ticket;
-  if (!t) {
-    // A free event linked to an epic still answers the Epic filter.
-    if (epics.length && item.event?.epicId && !epics.includes(item.event.epicId)) return false;
-    return true;
-  }
-  if (boards.length && !boards.includes(t.boardId)) return false;
-  if (epics.length && t.epicIds?.length && !t.epicIds.some((e) => epics.includes(e))) return false;
-  if (repos.length && t.repos?.length && !t.repos.some((r) => repos.includes(r))) return false;
-  if (tags.length && t.tags.length && !t.tags.some((x) => tags.includes(x))) return false;
-  return true;
+  return matchesAgendaFilters(item, prefs.filters);
 }
 
-/** Search: title, `#123`, ticket title, workflow and routine names. */
-export function matchesQuery(item: AgendaItem, q: string): boolean {
-  const needle = q.trim().toLowerCase().replace(/^#/, '');
-  if (!needle) return true;
-  const hay = [
-    item.title, item.workflowName, item.routine?.name, item.prRef,
-    item.ticket ? `${item.ticket.displayId} ${item.ticket.title}` : null,
-  ].filter(Boolean).join(' ').toLowerCase();
-  return hay.includes(needle);
-}
+/** Search: title, `#123`, ticket title, workflow and routine names (shared with the CLI). */
+export const matchesQuery = matchesAgendaQuery;
 
 /** "4 h 32", "2 d 3 h", "12 min", "18 s". */
 export function formatDuration(ms: number): string {
