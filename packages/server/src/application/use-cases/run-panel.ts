@@ -1077,8 +1077,9 @@ Be concise and decision-oriented. Write in the same language as the panel member
       branchName = colonIdx > 0 ? existingWorktreeLink.ref.substring(colonIdx + 1) : (existingWorktreeLink.label || existingWorktreeLink.ref);
       createNewBranch = false;
     } else {
-      // The locked slug, not the title: a renamed ticket keeps its branch name.
-      branchName = `agent/${ticket.displayId}-${ticket.slug}`;
+      // One branch per ticket, whoever derives it first (panel, agent run or
+      // session), fixed at creation: a renamed ticket keeps its branch name.
+      branchName = ticketBranchName(ticket);
       createNewBranch = true;
     }
 

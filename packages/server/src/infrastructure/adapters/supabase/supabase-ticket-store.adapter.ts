@@ -45,6 +45,8 @@ interface TicketRow {
   fast_mode: boolean | null;
   complexity: string | null;
   slug: string | null;
+  workspace_dir: string | null;
+  branch_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -102,6 +104,8 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     r.fast_mode === true,
     normalizeTicketComplexity(r.complexity),
     r.slug ?? null,
+    r.workspace_dir ?? null,
+    r.branch_name ?? null,
   );
 }
 
@@ -171,6 +175,25 @@ export class SupabaseTicketStore implements TicketStorePort {
       .is('archived_at', null);
     if (error) throw new Error(`SupabaseTicketStore.getAllTickets failed: ${error.message}`);
     return (data as TicketRow[]).map(ticketRowToEntity);
+  }
+
+  async getTicketsWithoutSlug(): Promise<TicketEntity[]> {
+    // Paginated: an unpaginated select is silently truncated at PostgREST's max-rows.
+    const PAGE = 1000;
+    const rows: TicketRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('tickets')
+        .select('*')
+        .is('slug', null)
+        .order('id')
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseTicketStore.getTicketsWithoutSlug failed: ${error.message}`);
+      const page = data as TicketRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(ticketRowToEntity);
   }
 
   async getTicketById(id: string): Promise<TicketEntity | null> {
@@ -245,7 +268,9 @@ export class SupabaseTicketStore implements TicketStorePort {
         status: ticket.status,
         priority: ticket.priority,
         complexity: ticket.complexity,
-      slug: ticket.slug,
+      slug: ticket.lockedSlug,
+      workspace_dir: ticket.workspaceDir,
+      branch_name: ticket.branchName,
         type: ticket.type,
         position: ticket.position,
         tags: ticket.tags,
@@ -279,7 +304,9 @@ export class SupabaseTicketStore implements TicketStorePort {
       status: ticket.status,
       priority: ticket.priority,
       complexity: ticket.complexity,
-      slug: ticket.slug,
+      slug: ticket.lockedSlug,
+      workspace_dir: ticket.workspaceDir,
+      branch_name: ticket.branchName,
       type: ticket.type,
       position: ticket.position,
       tags: ticket.tags,

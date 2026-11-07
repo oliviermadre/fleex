@@ -39,16 +39,25 @@ export class TicketEntity {
      * stored, until it is locked (see `slug`). Appended for the same reason as above.
      */
     public lockedSlug: string | null = null,
+    /**
+     * The folder / branch a ticket already had under the former naming
+     * (`<id6>-<slug>`, `ticket/…` or `agent/…`), kept so nothing on disk or in
+     * git is ever renamed. Set only by the boot backfill (`BackfillTicketNamingUseCase`);
+     * `null` for every ticket named `<displayId>-<slug>`. Appended for the same reason as above.
+     */
+    public workspaceDir: string | null = null,
+    public branchName: string | null = null,
   ) {}
 
   /**
    * The title at creation, slugified, then locked: a rename never changes it.
    * The workspace folder and the git branch derive from it, so they never move.
    *
-   * A legacy row (`lockedSlug` null) still derives it from its title, which it
-   * has never changed (renamed ones are backfilled from disk at boot), and
-   * locks it before its first rename — see `update()`. Stores persist this
-   * value, so any save locks it.
+   * A legacy row (`lockedSlug` null) still derives it from its title until the
+   * boot backfill locks it (from its folder if it was renamed), and locks it
+   * before its first rename — see `update()`. Stores persist `lockedSlug`, not
+   * this derived value: an unrelated save never locks a slug the backfill has
+   * yet to read from disk.
    */
   get slug(): string {
     return this.lockedSlug ?? slugifyTicketTitle(this.title);
@@ -442,6 +451,8 @@ export class TicketEntity {
       status: this.status,
       priority: this.priority,
       slug: this.slug,
+      workspaceDir: this.workspaceDir,
+      branchName: this.branchName,
       complexity: this.complexity,
       type: this.type,
       position: this.position,

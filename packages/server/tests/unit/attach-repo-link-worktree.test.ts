@@ -93,7 +93,7 @@ describe('attaching a repository link to a ticket with no workspace yet', () => 
   it('writes the workspace manifest so the worktree resolves back to its ticket', async () => {
     await attach('odys-travel/odys-front');
 
-    const manifest = join(root, 'workspaces', 'd1df20-test', '.fleex.json');
+    const manifest = join(root, 'workspaces', '584-test', '.fleex.json');
     expect(existsSync(manifest)).toBe(true);
     expect(JSON.parse(readFileSync(manifest, 'utf8'))).toEqual({ ticketId: TICKET_ID });
   });

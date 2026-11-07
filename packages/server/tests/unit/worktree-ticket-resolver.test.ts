@@ -2,6 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { parseTicketBranch } from '../../src/domain/services/worktree-ticket-resolver.js';
 
 describe('parseTicketBranch', () => {
+  it('extracts the display id from a fleex/ branch (the naming since tickets lock it at creation)', () => {
+    expect(parseTicketBranch('fleex/654-renommer-un-ticket')).toEqual({ displayId: 654 });
+  });
+
+  it('does not read a hex-looking display id as an id prefix', () => {
+    expect(parseTicketBranch('fleex/123456-foo')).toEqual({ displayId: 123456 });
+  });
+
   it('extracts the 6-hex id prefix from a ticket/ branch', () => {
     expect(parseTicketBranch('ticket/f0d211-from-362-r-duire-la-quadruple-duplicatio')).toEqual({ idPrefix: 'f0d211' });
   });

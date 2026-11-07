@@ -39,6 +39,8 @@ function makeTicket(id: string, boardId: string, title: string): Ticket {
     priority: 'none',
     complexity: null,
     slug: 'slug',
+    workspaceDir: null,
+    branchName: null,
     type: null,
     position: 0,
     tags: [],

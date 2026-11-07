@@ -2729,8 +2729,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       branchName = colonIdx > 0 ? existingWorktreeLink.ref.substring(colonIdx + 1) : (existingWorktreeLink.label || existingWorktreeLink.ref);
       createNewBranch = false;
     } else {
-      // The locked slug, not the title: a renamed ticket keeps its branch name.
-      branchName = `agent/${ticket.displayId}-${ticket.slug}`;
+      // One branch per ticket, whoever derives it first (agent run or session),
+      // fixed at creation: a renamed ticket keeps its branch name.
+      branchName = ticketBranchName(ticket);
       createNewBranch = true;
     }
 

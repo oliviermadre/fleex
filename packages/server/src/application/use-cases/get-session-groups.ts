@@ -244,7 +244,7 @@ export class GetSessionGroupsUseCase {
         ticketId: ticket.id,
         ticketDisplayId: ticket.displayId,
         ticketTitle: ticket.title,
-        ticketSlug: ticket.slug,
+        ticketWorkspaceId: ticketWorkspaceId(ticket),
         ticketStatus: ticket.status,
         agentPersonaId: persona?.id ?? '',
         agentName: persona?.name ?? '',
@@ -458,7 +458,7 @@ export class GetSessionGroupsUseCase {
         // Path doesn't exist — reconcile into the ticket's workspace
         // (workspaces/{workspaceId}/{repo}), the single homogeneous convention.
         const agent = ref.wt.agentWorktree!;
-        const workspaceId = ticketWorkspaceId({ id: agent.ticketId, slug: agent.ticketSlug });
+        const workspaceId = agent.ticketWorkspaceId;
         const result = await this.reconcileWorktree!.execute(
           ref.org,
           ref.name,

@@ -14,12 +14,38 @@ export function slugifyTicketTitle(title: string): string {
     .slice(0, 40);
 }
 
-/** The ticket's workspace directory name: `<short-id>-<slug>`. */
-export function ticketWorkspaceId(ticket: { id: string; slug: string }): string {
-  return `${ticket.id.slice(0, 6)}-${ticket.slug}`;
+/**
+ * What names a ticket on disk and in git. All of it is fixed once the ticket
+ * exists: `displayId` is assigned at insert and never changes, `slug` is locked
+ * at creation. `workspaceDir` / `branchName` are set only for a ticket that
+ * already had a folder or a branch under the former naming (backfilled at
+ * boot): they keep it where it is.
+ */
+export interface TicketNaming {
+  readonly displayId: number;
+  readonly slug: string;
+  readonly workspaceDir?: string | null;
+  readonly branchName?: string | null;
 }
 
-/** The ticket's git branch: `ticket/<short-id>-<slug>`. */
-export function ticketBranchName(ticket: { id: string; slug: string }): string {
-  return `ticket/${ticketWorkspaceId(ticket)}`;
+/**
+ * `<displayId>-<slug>`. Throws on a ticket not inserted yet (`displayId` 0):
+ * a name computed before the database assigns the number would be `0-foo`, a
+ * folder no later call finds again.
+ */
+function ticketHandle(ticket: TicketNaming): string {
+  if (!Number.isInteger(ticket.displayId) || ticket.displayId <= 0) {
+    throw new Error(`Cannot name the workspace of a ticket with no display id yet (slug "${ticket.slug}")`);
+  }
+  return `${ticket.displayId}-${ticket.slug}`;
+}
+
+/** The ticket's workspace directory name: `<displayId>-<slug>` (or the folder it already had). */
+export function ticketWorkspaceId(ticket: TicketNaming): string {
+  return ticket.workspaceDir ?? ticketHandle(ticket);
+}
+
+/** The ticket's git branch, shared by every linked repo: `fleex/<displayId>-<slug>` (or the branch it already had). */
+export function ticketBranchName(ticket: TicketNaming): string {
+  return ticket.branchName ?? `fleex/${ticketHandle(ticket)}`;
 }

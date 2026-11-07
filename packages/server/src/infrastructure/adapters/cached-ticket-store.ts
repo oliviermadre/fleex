@@ -106,6 +106,11 @@ export class CachedTicketStore implements TicketStorePort, RemoteCacheSync {
     return fresh;
   }
 
+  async getTicketsWithoutSlug(): Promise<TicketEntity[]> {
+    // Boot-time only, archived rows included: straight to the source of truth.
+    return this.inner.getTicketsWithoutSlug();
+  }
+
   async getTicketByDisplayId(displayId: number): Promise<TicketEntity | null> {
     await this.ensureWarmed();
     const cached = [...this.tickets.values()].find((t) => t.displayId === displayId);

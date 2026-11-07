@@ -18,13 +18,13 @@ export interface WorkspaceContext {
 }
 
 export function buildWorkspaceContext(ticket: Ticket, basePath: string): WorkspaceContext {
-  // From the locked slug, not the title: a renamed ticket keeps its folder.
+  // Fixed at creation, not from the title: a renamed ticket keeps its folder.
   const workspaceId = ticketWorkspaceId(ticket);
   return {
     workspace_path: `${basePath}/workspaces/${workspaceId}`,
     workspace_name: workspaceId,
     ticket_id: ticket.id,
-    ticket_slug: workspaceId.slice(7), // workspaceId is `<6-char-id>-<slug>`
+    ticket_slug: ticket.slug,
     ticket_display_id: String(ticket.displayId),
   };
 }

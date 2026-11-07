@@ -278,7 +278,7 @@ describe('ActionDetail keyboard', () => {
 });
 
 describe('ActionDetail Try', () => {
-  const ticket = { id: 'abc123', title: 'Some ticket', displayId: 7 } as unknown as ReturnType<typeof useTicketStore.getState>['tickets'][number];
+  const ticket = { id: 'abc123', title: 'Some ticket', displayId: 7, slug: 'some-ticket', workspaceDir: null, branchName: null } as unknown as ReturnType<typeof useTicketStore.getState>['tickets'][number];
 
   beforeEach(() => {
     useSettingsStore.setState({ settings: { ...useSettingsStore.getState().settings, basePath: '/base', workspaceActions: [{ id: 'w', icon: '', iconType: 'svg', label: 'Open', actionType: 'shell', actionValue: 'ls {{workspace_path}}' }] } });
@@ -294,7 +294,7 @@ describe('ActionDetail Try', () => {
     });
     expect(api.ensureTicketWorkspace).toHaveBeenCalledWith('abc123');
     expect(vi.mocked(api.ensureTicketWorkspace).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.startActionRun).mock.invocationCallOrder[0]!);
-    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ cwd: expect.stringContaining('/base/workspaces/abc123') }));
+    expect(api.startActionRun).toHaveBeenCalledWith(expect.objectContaining({ cwd: expect.stringContaining('/base/workspaces/7-some-ticket') }));
   });
 
   it('omits cwd when the workspace could not be created', async () => {

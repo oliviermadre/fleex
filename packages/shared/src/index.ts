@@ -38,6 +38,7 @@ export {
 export type { ComplexitySum } from './ticket-complexity.js';
 
 export { slugifyTicketTitle, ticketWorkspaceId, ticketBranchName } from './utils/workspace.js';
+export type { TicketNaming } from './utils/workspace.js';
 
 export {
   sanitizeForStorage,

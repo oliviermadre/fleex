@@ -157,13 +157,12 @@ export class CreateSessionFromTicketUseCase {
         sessionName = firstRepoLink.ref.substring(si + 1);
       }
     }
-    const ticketShortId = ticket.id.slice(0, 6);
     const session = await this.createSession.execute({
       cwd,
       type: 'shell',
       repositoryOrg: sessionOrg,
       repositoryName: sessionName,
-      displayName: `ticket-${ticketShortId}-session`,
+      displayName: `ticket-${ticket.displayId}-session`,
     });
 
     // Auto-link session to ticket

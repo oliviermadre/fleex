@@ -30,6 +30,8 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     priority: 'none',
     complexity: null,
     slug: 'slug',
+    workspaceDir: null,
+    branchName: null,
     type: null,
     position: 0,
     tags: [],

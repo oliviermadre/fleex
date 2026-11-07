@@ -98,7 +98,7 @@ export function resolveLeftClick(view: Pick<WorktreeActionsView, 'clickByState' 
   return item ? { kind: 'item', item, label: item.label } : { kind: 'menu', label: 'Open the menu' };
 }
 
-/** `ticket/775c62-repo-actions` → `775c62-repo-acti…`: a short tag to tell two worktrees of one repo apart. */
+/** `fleex/654-repo-actions` → `654-repo-actions` (and the former `ticket/775c62-repo-actions` → `775c62-repo-acti…`): a short tag to tell two worktrees of one repo apart. */
 export function shortBranch(branch: string): string {
   const last = branch.split('/').filter(Boolean).pop() ?? branch;
   return last.length > 14 ? `${last.slice(0, 13)}…` : last;
