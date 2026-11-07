@@ -150,7 +150,7 @@ describe('BackfillTicketNamingUseCase: tickets from before the naming was stored
   it('a folder and a worktree link: keeps both, no new folder', async () => {
     write(OLD, { ticketId: TICKET_ID });
     ticket.addLink('worktree', join(root, 'workspaces', OLD, 'app'), `ticket/${OLD}`, null, 'l-wt');
-    expect(await backfill()).toEqual({ locked: 1, kept: 1 });
+    expect(await backfill()).toEqual({ locked: 1, kept: 1, repaired: 0 });
     expect(ticket.slug).toBe('old');
     expect(ticketWorkspaceId(ticket)).toBe(OLD);
     expect(ticketBranchName(ticket)).toBe(`ticket/${OLD}`);
@@ -168,11 +168,30 @@ describe('BackfillTicketNamingUseCase: tickets from before the naming was stored
     expect(ticketBranchName(ticket)).toBe(`ticket/${OLD}`);
   });
 
-  it('a link from an agent run and no folder here: keeps the `agent/` branch, the folder takes the new format', async () => {
-    ticket.addLink('worktree', '/elsewhere/workspaces/e32654-old/app', 'agent/654-old', null, 'l-wt');
-    await backfill();
+  // Two machines on one Supabase: the first one to upgrade locks every row,
+  // reading only its own disk. A ticket started on the other machine must
+  // still keep the folder it has there, or that machine opens a fresh
+  // `<n>-<slug>` one and orphans the work in progress.
+  it('started on another machine sharing the database (link, no folder here): keeps the folder the link points into, and its branch', async () => {
+    ticket.addLink('worktree', '/Users/b/.fleex/workspaces/e32654-old/app', 'agent/654-old', null, 'l-wt');
+    expect(await backfill()).toEqual({ locked: 1, kept: 1, repaired: 0 });
+    expect(ticketWorkspaceId(ticket)).toBe(OLD);
     expect(ticketBranchName(ticket)).toBe('agent/654-old');
-    expect(ticketWorkspaceId(ticket)).toBe('654-foo');
+    expect(ticket.slug).toBe('old');
+  });
+
+  it('started on another machine, link path unreadable: the `ticket/<id6>-…` branch names the folder', async () => {
+    ticket.addLink('worktree', 'org/app:ticket/e32654-old', 'ticket/e32654-old', null, 'l-wt');
+    await backfill();
+    expect(ticketWorkspaceId(ticket)).toBe(OLD);
+    expect(ticketBranchName(ticket)).toBe(`ticket/${OLD}`);
+  });
+
+  it('a link into another ticket\'s folder, or a `fleex/` branch, names no former folder', async () => {
+    ticket.addLink('worktree', '/x/workspaces/aaaaaa-old/app', 'fleex/654-foo', null, 'l-wt');
+    await backfill();
+    expect(ticket.workspaceDir).toBeNull();
+    expect(ticketWorkspaceId(ticket)).toBe(FOO);
   });
 
   it('an `org/repo:branch` link (PR backfill) gives its branch', async () => {
@@ -182,7 +201,7 @@ describe('BackfillTicketNamingUseCase: tickets from before the naming was stored
   });
 
   it('neither folder nor link (never started): moves to the new format, slug from its current title', async () => {
-    expect(await backfill()).toEqual({ locked: 1, kept: 0 });
+    expect(await backfill()).toEqual({ locked: 1, kept: 0, repaired: 0 });
     expect(ticket.lockedSlug).toBe('foo');
     expect(ticketWorkspaceId(ticket)).toBe(FOO);
     expect(ticketBranchName(ticket)).toBe(FOO_BRANCH);
@@ -192,16 +211,50 @@ describe('BackfillTicketNamingUseCase: tickets from before the naming was stored
     write(OLD, { ticketId: TICKET_ID });
     await backfill();
     ticketStore.saveTicket.mockClear();
-    expect(await backfill()).toEqual({ locked: 0, kept: 0 });
+    expect(await backfill()).toEqual({ locked: 0, kept: 0, repaired: 0 });
     expect(ticketStore.saveTicket).not.toHaveBeenCalled();
     expect(ticketWorkspaceId(ticket)).toBe(OLD);
   });
 
-  it('never touches a slug already stored', async () => {
+  // The backfill failed at boot (Supabase unreachable), then a rename locked
+  // the slug: the row is no longer `slug IS NULL`, yet its folder was never
+  // recorded. Without the repair it'd move to `<n>-<slug>` for good.
+  it('a slug locked without the folder (rename after a failed backfill): records the folder, never touches the slug', async () => {
     write(OLD, { ticketId: TICKET_ID });
     ticket.lockedSlug = 'kept';
-    expect(await backfill()).toEqual({ locked: 0, kept: 0 });
+    const logger = new FakeLoggerPort();
+    const warn = vi.spyOn(logger, 'warn');
+    expect(await backfill(logger)).toEqual({ locked: 0, kept: 0, repaired: 1 });
+    expect(ticket.lockedSlug).toBe('kept');
+    expect(ticketWorkspaceId(ticket)).toBe(OLD);
+    expect(ticketBranchName(ticket)).toBe(`ticket/${OLD}`);
+    expect(warn).toHaveBeenCalledOnce();
+
+    ticketStore.saveTicket.mockClear();
+    expect(await backfill()).toEqual({ locked: 0, kept: 0, repaired: 0 });
+    expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+  });
+
+  it('the repair keeps a branch already recorded, and leaves a ticket in the new format alone', async () => {
+    write(OLD, { ticketId: TICKET_ID });
+    ticket.lockedSlug = 'old';
+    ticket.branchName = 'agent/654-old';
+    await backfill();
+    expect(ticketBranchName(ticket)).toBe('agent/654-old');
+
+    ticket.workspaceDir = null;
+    rmSync(join(root, 'workspaces', OLD), { recursive: true });
+    write('654-foo', { ticketId: TICKET_ID });
+    expect(await backfill()).toEqual({ locked: 0, kept: 0, repaired: 0 });
     expect(ticket.workspaceDir).toBeNull();
+  });
+
+  it('the repair leaves a ticket already started in the new format (`fleex/` link) where its work is', async () => {
+    write(OLD, { ticketId: TICKET_ID });
+    ticket.lockedSlug = 'foo';
+    ticket.addLink('worktree', '/x/workspaces/654-foo/app', FOO_BRANCH, null, 'l-wt');
+    expect(await backfill()).toEqual({ locked: 0, kept: 0, repaired: 0 });
+    expect(ticketWorkspaceId(ticket)).toBe(FOO);
   });
 
   it('a folder of another ticket sharing the 6-char prefix, or with no manifest, is ignored', async () => {
@@ -224,7 +277,7 @@ describe('BackfillTicketNamingUseCase: tickets from before the naming was stored
   });
 
   it('no workspaces root yet: still locks the slug', async () => {
-    expect(await backfill()).toEqual({ locked: 1, kept: 0 });
+    expect(await backfill()).toEqual({ locked: 1, kept: 0, repaired: 0 });
   });
 });
 
