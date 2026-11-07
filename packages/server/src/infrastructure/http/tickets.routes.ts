@@ -14,6 +14,7 @@ import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { registerFocusRoutes } from './focus.routes.js';
 import { registerTodoRoutes } from './todos.routes.js';
 import { resolveTodoActor } from './todo-actor.js';
+import { parseDeliverableBody } from './deliverable-body.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
@@ -1427,6 +1428,37 @@ export function ticketRoutes(container: Container) {
         deliverableFiltersFromQuery(request.query),
       );
       return facets;
+    });
+
+    // Create a standalone deliverable from the web UI — a document written by
+    // hand with no ticket behind it (Docs "+ New document", Agenda "+ New
+    // deliverable…"). The author is always the human: an `agentName` in the
+    // body is ignored, agents stay anchored to a ticket or a step run.
+    app.post('/api/deliverables', async (request, reply) => {
+      const parsed = parseDeliverableBody(request.body, { allowEmptyContent: true });
+      if (!parsed.ok) return reply.code(400).send({ error: 'INVALID_BODY', message: parsed.error });
+
+      const agentName = 'user';
+      const deliverable = await container.submitDeliverable.execute({
+        ticketId: null,
+        agentName,
+        type: parsed.data.type as DeliverableType,
+        title: parsed.data.title.trim(),
+        content: parsed.data.content,
+        status: parsed.data.status as DeliverableStatus | undefined,
+      });
+
+      container.eventBus.emit({
+        type: 'deliverable.created',
+        deliverableId: deliverable.id,
+        ticketId: null,
+        agentName,
+        status: deliverable.status,
+        title: deliverable.title,
+        occurredAt: new Date(),
+      });
+
+      return reply.code(201).send(deliverable.toDTO());
     });
 
     app.get<{ Params: { id: string } }>('/api/tickets/:id/deliverables', async (request) => {

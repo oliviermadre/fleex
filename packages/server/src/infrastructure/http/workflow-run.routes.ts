@@ -19,6 +19,7 @@ import type { SubmitDeliverableUseCase } from '../../application/use-cases/submi
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
 import type { EventBus } from '../../application/event-bus.js';
 import { InvalidDeliverableTypeError } from '../../domain/errors.js';
+import { parseDeliverableBody } from './deliverable-body.js';
 import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 
 // ── Manual validation helpers ──────────────────────────────────────────────
@@ -118,47 +119,6 @@ interface WorkflowRunRouteDeps {
   deliverableStore: DeliverableStorePort;
   eventBus: EventBus;
   authorNameResolver: () => string;
-}
-
-interface StepDeliverableBody {
-  title: string;
-  type: string;
-  content: string;
-  status?: string;
-  agentName?: string;
-}
-
-function parseStepDeliverableBody(
-  body: unknown,
-): { ok: true; data: StepDeliverableBody } | { ok: false; error: string } {
-  if (!isObject(body)) return { ok: false, error: 'body must be an object' };
-  if (!isString(body['title']) || body['title'].length === 0) {
-    return { ok: false, error: 'title must be a non-empty string' };
-  }
-  if (!isString(body['type']) || body['type'].length === 0) {
-    return { ok: false, error: 'type must be a non-empty string' };
-  }
-  // An empty deliverable is almost always a `--file` that read nothing; failing
-  // here is far cheaper to diagnose than an empty artifact in the run graph.
-  if (!isString(body['content']) || body['content'].length === 0) {
-    return { ok: false, error: 'content must be a non-empty string' };
-  }
-  if (body['status'] !== undefined && body['status'] !== 'draft' && body['status'] !== 'final') {
-    return { ok: false, error: 'status must be "draft" or "final"' };
-  }
-  if (body['agentName'] !== undefined && !isString(body['agentName'])) {
-    return { ok: false, error: 'agentName must be a string' };
-  }
-  return {
-    ok: true,
-    data: {
-      title: body['title'],
-      type: body['type'],
-      content: body['content'],
-      ...(isString(body['status']) ? { status: body['status'] } : {}),
-      ...(isString(body['agentName']) ? { agentName: body['agentName'] } : {}),
-    },
-  };
 }
 
 export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
@@ -302,7 +262,7 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
     app.post<{ Params: { id: string; stepRunId: string } }>(
       '/api/workflows/runs/:id/steps/:stepRunId/deliverables',
       async (request, reply) => {
-        const parsed = parseStepDeliverableBody(request.body);
+        const parsed = parseDeliverableBody(request.body);
         if (!parsed.ok) return reply.code(400).send({ error: 'INVALID_BODY', message: parsed.error });
 
         const run = await deps.runStore.getById(request.params.id);
