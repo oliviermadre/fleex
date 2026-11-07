@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { calendarEventLinkKey, type AgendaExternalLink, type AgendaItem, type DeliverableListItem } from '@fleex/shared';
+import { calendarEventLinkKey, type AgendaExternalLink, type AgendaItem, type DeliverableListItem, type TicketDeliverable } from '@fleex/shared';
 import * as api from '../../services/api';
 import { documentsService } from '../../services/documentsService';
 import { useAgendaStore } from '../../stores/agendaStore';
@@ -9,6 +9,8 @@ import { toast } from '../../lib/toast';
 import { cn } from '../../lib/cn';
 import { Spinner } from '../ui/Spinner';
 import { DocumentIcon, LinkIcon, SearchIcon, UnlinkIcon } from '../ui/icons/AgendaIcons';
+import { PlusIcon } from '../ui/icons/AnnotationIcons';
+import { DeliverableFormModal } from '../tickets/DeliverableFormModal';
 
 /** A deliverable written within this window after the meeting starts is suggested. */
 const SUGGEST_WINDOW_MS = 6 * 3600_000;
@@ -90,13 +92,15 @@ function AttachPicker({ target, linkedIds, onAttached }: { target: LinkTarget; l
   const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ role: 'dialog', maxHeight: 360 });
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Title the "New deliverable" modal opens with; null while it is closed. */
+  const [newTitle, setNewTitle] = useState<string | null>(null);
   const { loading, items, error } = useDeliverableSearch(open, search, target.title);
   const { suggested, others } = useMemo(
     () => rankDeliverables(items.filter((d) => !linkedIds.has(d.id)), { title: target.title, start: target.start }),
     [items, linkedIds, target.title, target.start],
   );
 
-  const attach = async (d: DeliverableListItem) => {
+  const attach = async (d: Pick<DeliverableListItem, 'id' | 'title'>, justCreated = false) => {
     if (busy) return;
     setBusy(true);
     try {
@@ -104,13 +108,21 @@ function AttachPicker({ target, linkedIds, onAttached }: { target: LinkTarget; l
       onAttached(link);
       setOpen(false);
       setSearch('');
-      toast.success(`"${d.title}" attached to the ${target.noun}`);
+      toast.success(`"${d.title}" ${justCreated ? 'created and attached' : 'attached'} to the ${target.noun}`);
       void useAgendaStore.getState().refresh();
     } catch {
-      // `request` already raised the error toast.
+      // `request` already raised the error toast. A deliverable created just
+      // now still exists: say so, rather than let it look lost.
+      if (justCreated) toast.warning(`"${d.title}" was created but not attached — attach it from the picker`);
     } finally {
       setBusy(false);
     }
+  };
+
+  // Nothing to attach yet: write it here, then attach it in the same move.
+  const startNew = () => {
+    setOpen(false);
+    setNewTitle(search.trim() || target.title);
   };
 
   const row = (d: DeliverableListItem) => (
@@ -146,7 +158,7 @@ function AttachPicker({ target, linkedIds, onAttached }: { target: LinkTarget; l
             ref={refs.setFloating}
             style={floatingStyles}
             {...getFloatingProps()}
-            className="z-50 w-[320px] overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] pb-1 text-xs shadow-xl"
+            className="z-50 w-[320px] overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-xs shadow-xl"
           >
             <div className="sticky top-0 z-[2] border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-2">
               <div className="relative flex items-center">
@@ -172,9 +184,26 @@ function AttachPicker({ target, linkedIds, onAttached }: { target: LinkTarget; l
               {suggested.length > 0 && others.length > 0 && heading('All deliverables')}
               {others.map(row)}
             </div>
+            {/* Always reachable — an empty list is exactly when it is needed. */}
+            <div className="sticky bottom-0 z-[2] mt-1 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-1 py-1">
+              <button
+                type="button"
+                onClick={startNew}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left font-medium text-[var(--theme-accent)] hover:bg-[var(--theme-bg-hover)]"
+              >
+                <PlusIcon size={12} className="shrink-0" /> New deliverable…
+              </button>
+            </div>
           </div>
         </FloatingPortal>
       )}
+      <DeliverableFormModal
+        open={newTitle !== null}
+        onClose={() => setNewTitle(null)}
+        initialTitle={newTitle ?? ''}
+        heading="New deliverable"
+        onCreated={(d: TicketDeliverable) => void attach(d, true)}
+      />
     </>
   );
 }

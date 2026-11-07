@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import type { TicketDeliverable } from '@fleex/shared';
 import { Modal } from '../ui/Modal';
 import * as api from '../../services/api';
 import { toast } from '../../lib/toast';
@@ -9,10 +10,16 @@ import { MarkdownEditor } from '../markdown/MarkdownEditor';
 interface DeliverableFormModalProps {
   open: boolean;
   onClose: () => void;
-  ticketId: string;
+  /** The ticket to attach it to. Without one, the deliverable is standalone. */
+  ticketId?: string | null;
+  /** Pre-fills the title each time the modal opens. */
+  initialTitle?: string;
+  heading?: string;
+  /** Called once created; the caller then owns the success feedback. */
+  onCreated?: (deliverable: TicketDeliverable) => void;
 }
 
-export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFormModalProps) {
+export function DeliverableFormModal({ open, onClose, ticketId, initialTitle = '', heading, onCreated }: DeliverableFormModalProps) {
   const selectableTypes = useDeliverableTypesStore((s) => s.types).filter((t) => !t.system);
   const defaultType = selectableTypes.some((t) => t.id === 'report') ? 'report' : (selectableTypes[0]?.id ?? 'report');
   const [title, setTitle] = useState('');
@@ -25,6 +32,10 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
   const [titleError, setTitleError] = useState('');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (open) setTitle(initialTitle);
+  }, [open, initialTitle]);
 
   const resetForm = useCallback(() => {
     setTitle('');
@@ -46,21 +57,19 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
     }
     setSaving(true);
     try {
-      await api.createDeliverable(ticketId, {
-        title: title.trim(),
-        type,
-        content,
-        status,
-        agentName: 'user',
-      });
-      toast.success('Deliverable created');
+      const payload = { title: title.trim(), type, content, status };
+      const created = ticketId
+        ? await api.createDeliverable(ticketId, { ...payload, agentName: 'user' })
+        : await api.createStandaloneDeliverable(payload);
+      if (onCreated) onCreated(created);
+      else toast.success('Deliverable created');
       handleClose();
     } catch {
       // error toast handled by api.ts
     } finally {
       setSaving(false);
     }
-  }, [ticketId, title, type, content, status, handleClose]);
+  }, [ticketId, title, type, content, status, handleClose, onCreated]);
 
   return (
     <Modal open={open} onClose={handleClose} maxWidth="max-w-2xl">
@@ -68,7 +77,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-[var(--theme-text-primary)]">
-            Add deliverable
+            {heading ?? (ticketId ? 'Add deliverable' : 'New document')}
           </h2>
           <button
             onClick={handleClose}

@@ -9,7 +9,19 @@ vi.mock('../../services/api', () => ({
   deleteAgendaExternalLink: vi.fn(),
 }));
 vi.mock('../../services/documentsService', () => ({ documentsService: { list: vi.fn() } }));
-vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
+// The form itself is DeliverableFormModal's business; here only what the picker
+// hands it (title, heading) and what it does with the created deliverable.
+vi.mock('../tickets/DeliverableFormModal', () => ({
+  DeliverableFormModal: ({ open, initialTitle, heading, ticketId, onCreated }: {
+    open: boolean; initialTitle?: string; heading?: string; ticketId?: string | null; onCreated?: (d: { id: string; title: string }) => void;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label={heading} data-ticket={String(ticketId ?? null)} data-title={initialTitle}>
+        <button type="button" onClick={() => onCreated?.({ id: 'd-new', title: initialTitle ?? '' })}>Create</button>
+      </div>
+    ) : null,
+}));
 
 import * as api from '../../services/api';
 import { documentsService } from '../../services/documentsService';
@@ -159,5 +171,60 @@ describe('<AgendaEventLinks/> — deliverables on a free event (E1)', () => {
   it('lists what is already attached', () => {
     render(<AgendaEventLinks item={freeEvent({ eventLinks: [link({ provider: 'fleex', eventKey: 'fleex-event:ev1' })] })} onClose={() => {}} />);
     expect(screen.getByText('Notes of last week')).toBeTruthy();
+  });
+});
+
+describe('+ New deliverable… — write the deliverable from the picker, attached in one go', () => {
+  // NaS logged "Contacted Unipile" and wanted to attach the message he had
+  // sent: it existed nowhere yet, and the picker could only link existing ones.
+  const openPicker = async (item: AgendaItem) => {
+    render(<AgendaMeetingLinks item={item} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /Attach deliverable/ }));
+    return screen.findByRole('listbox', { name: 'Deliverables' });
+  };
+
+  it('stays reachable when no deliverable matches — that is exactly when it is needed', async () => {
+    vi.mocked(documentsService.list).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+    await openPicker(meeting());
+    await screen.findByText('No deliverable found');
+    fireEvent.click(screen.getByRole('button', { name: /New deliverable/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'New deliverable' });
+    // Standalone (no ticket), titled after the event.
+    expect(dialog.getAttribute('data-ticket')).toBe('null');
+    expect(dialog.getAttribute('data-title')).toBe('Sprint Review');
+    // The picker made room for the modal.
+    expect(screen.queryByRole('listbox', { name: 'Deliverables' })).toBeNull();
+  });
+
+  it('pre-fills with what the user searched for, when they did', async () => {
+    await openPicker(meeting());
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search deliverables' }), { target: { value: '  Msg Unipile ' } });
+    fireEvent.click(screen.getByRole('button', { name: /New deliverable/ }));
+    expect((await screen.findByRole('dialog', { name: 'New deliverable' })).getAttribute('data-title')).toBe('Msg Unipile');
+  });
+
+  it('attaches the created deliverable to the event, with a single success toast', async () => {
+    await openPicker(meeting());
+    fireEvent.click(screen.getByRole('button', { name: /New deliverable/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create' }));
+
+    await waitFor(() => expect(api.createAgendaExternalLink).toHaveBeenCalledWith({
+      eventKey: 'ical-1', deliverableId: 'd-new', eventTitle: 'Sprint Review', eventStart: START,
+    }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('"Sprint Review" created and attached to the meeting'));
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(api.fetchAgenda).toHaveBeenCalled();
+  });
+
+  it('says the deliverable still exists when the link fails, so it is not taken for lost', async () => {
+    vi.mocked(api.createAgendaExternalLink).mockRejectedValue(new Error('500'));
+    await openPicker(meeting());
+    fireEvent.click(screen.getByRole('button', { name: /New deliverable/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create' }));
+
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('"Sprint Review" was created but not attached — attach it from the picker'));
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

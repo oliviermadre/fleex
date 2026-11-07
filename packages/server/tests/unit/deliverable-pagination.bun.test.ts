@@ -242,6 +242,30 @@ describe('search & origin', () => {
     expect(routineOnly.items[0].id).toBe('d-2001');
   });
 
+  it('tells a hand-written document apart from one whose ticket was deleted', async () => {
+    // Both have no ticket to show. The first was written in Docs with no
+    // anchor at all and must be findable again; the second lost its ticket and
+    // stays 'none' — the sidebar hides that bucket.
+    conn.db.exec('PRAGMA foreign_keys = OFF');
+    const standalone = new TicketDeliverableEntity(
+      'd-5000', null, 'user', 'plan', 'Msg Unipile', '', 1, 'final',
+      null, new Date(Date.UTC(2026, 3, 1)), new Date(Date.UTC(2026, 3, 1)), null, null,
+    );
+    await store.save(standalone);
+    const orphan = makeDeliverable(5001, 'plan');
+    (orphan as { ticketId: string | null }).ticketId = 't-deleted';
+    await store.save(orphan);
+
+    const facets = await store.getFacets({ types: ['spec', 'plan'] });
+    const byKind = Object.fromEntries(facets.originKinds.map((f) => [f.value, f.count]));
+    expect(byKind).toEqual({ ticket: 1, standalone: 1, none: 1 });
+
+    const page = await store.query({ limit: 10, offset: 0, originKinds: ['standalone'], types: ['plan'] });
+    expect(page.items.map((d) => d.id)).toEqual(['d-5000']);
+    // Nothing to name in the Origine column.
+    expect(page.origins['d-5000']).toBeUndefined();
+  });
+
   it('narrows the facet counts to the search', async () => {
     const facets = await store.getFacets({ search: 'briefing' });
 

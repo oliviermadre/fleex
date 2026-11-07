@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import type { DeliverableFacet } from '@fleex/shared';
 import { useDocumentsStore } from '../../stores/documentsStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
@@ -12,6 +13,7 @@ import {
   type PrimitiveKind,
 } from '../../lib/primitives';
 import { parseEmitter } from '../../lib/emitter';
+import { DocumentIcon } from '../ui/icons/AgendaIcons';
 import { useDocumentsSidebarWidth } from './useDocumentsSidebarWidth';
 
 interface FacetItem {
@@ -39,9 +41,11 @@ function toFacetItems(facets: DeliverableFacet[], active: Set<string>): FacetIte
  * The origin dimension. `none` (deleted ticket / run without routine) is left
  * out of this map on purpose: it names nothing the reader can act on.
  */
-const ORIGIN_META: Record<string, { label: string; Icon: typeof RoutineIcon }> = {
+// 'none' (the ticket was deleted) stays hidden: there is nothing to name.
+const ORIGIN_META: Record<string, { label: string; Icon: ComponentType<{ size?: number; className?: string }> }> = {
   ticket: { label: 'Ticket', Icon: TicketIcon },
   routine: { label: 'Routine', Icon: RoutineIcon },
+  standalone: { label: 'Standalone', Icon: DocumentIcon },
 };
 
 // Theme-accent fallback used when a type has no configured colour.

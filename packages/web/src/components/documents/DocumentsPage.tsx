@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { DeliverableListItem } from '@fleex/shared';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DeliverableListItem, TicketDeliverable } from '@fleex/shared';
 import { DOCUMENTS_PAGE_SIZE, useDocumentsStore } from '../../stores/documentsStore';
 import { DocumentsFilterSidebar } from './DocumentsFilterSidebar';
 import { CompileMemoryPanel } from './CompileMemoryPanel';
 import { DocumentRow } from './DocumentRow';
 import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
+import { DeliverableFormModal } from '../tickets/DeliverableFormModal';
+import { Button } from '../ui/Button';
+import { toast } from '../../lib/toast';
+import { useUIStore } from '../../stores/uiStore';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -58,6 +62,16 @@ export function DocumentsPage() {
   const loadingMore = useDocumentsStore((s) => s.loadingMore);
   const fetchAll = useDocumentsStore((s) => s.fetchAll);
   const loadMore = useDocumentsStore((s) => s.loadMore);
+  const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
+  const [creating, setCreating] = useState(false);
+
+  // A document written here has no ticket. Reload so it lands at the top of
+  // "Today" with the facet counts, then open it like a row click would.
+  const handleCreated = useCallback((created: TicketDeliverable) => {
+    toast.success('Document created');
+    void fetchAll();
+    openDeliverableOverlay(created);
+  }, [fetchAll, openDeliverableOverlay]);
 
   // Distinguishes "nothing here" from "nothing matched" in the empty state.
   const hasQuery = useDocumentsStore(
@@ -112,6 +126,7 @@ export function DocumentsPage() {
             ({deliverables.length} of {total})
           </span>
         </div>
+        <Button variant="primary" size="sm" onClick={() => setCreating(true)}>+ New document</Button>
       </div>
 
       {/* Its own row: collapsed it is one button, expanded it is a full panel with
@@ -190,6 +205,7 @@ export function DocumentsPage() {
 
       {/* Deliverable overlay (same as ticket view — supports detach) */}
       <DeliverableReadingOverlay />
+      <DeliverableFormModal open={creating} onClose={() => setCreating(false)} onCreated={handleCreated} />
     </div>
   );
 }
