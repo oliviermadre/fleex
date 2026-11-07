@@ -42,6 +42,9 @@ interface TicketRow {
   effort_override: string | null;
   fast_mode: number | null;
   complexity: string | null;
+  slug: string | null;
+  workspace_dir: string | null;
+  branch_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -108,13 +111,13 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     // would surface any race as an error rather than producing a duplicate.
     const stmt = this.conn.db.prepare(`
       INSERT INTO tickets
-        (id, board_id, display_id, title, description, status, priority, complexity, type, position,
+        (id, board_id, display_id, title, description, status, priority, complexity, slug, workspace_dir, branch_name, type, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
          github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at)
       VALUES
         (@id, @board_id,
          (SELECT COALESCE(MAX(display_id), 0) + 1 FROM tickets),
-         @title, @description, @status, @priority, @complexity, @type, @position,
+         @title, @description, @status, @priority, @complexity, @slug, @workspace_dir, @branch_name, @type, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
          @github_metadata, @archived_at, @first_doing_at, @status_changed_at, @created_at, @updated_at)
       RETURNING display_id
@@ -128,6 +131,9 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       status: ticket.status,
       priority: ticket.priority,
       complexity: ticket.complexity,
+      slug: ticket.lockedSlug,
+      workspace_dir: ticket.workspaceDir,
+      branch_name: ticket.branchName,
       type: ticket.type,
       position: ticket.position,
       tags: JSON.stringify(ticket.tags),
@@ -152,6 +158,11 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
 
   async getAllTickets(): Promise<TicketEntity[]> {
     const rows = this.conn.db.prepare('SELECT * FROM tickets WHERE archived_at IS NULL').all() as TicketRow[];
+    return rows.map((r) => this.toTicketEntity(r));
+  }
+
+  async getTicketsWithoutSlug(): Promise<TicketEntity[]> {
+    const rows = this.conn.db.prepare('SELECT * FROM tickets WHERE slug IS NULL').all() as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
   }
 
@@ -195,12 +206,12 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     // ON CONFLICT DO UPDATE performs an in-place UPDATE: no row is deleted, no cascade fires.
     const stmt = this.conn.db.prepare(`
       INSERT INTO tickets
-        (id, board_id, display_id, title, description, status, priority, complexity, type, position,
+        (id, board_id, display_id, title, description, status, priority, complexity, slug, workspace_dir, branch_name, type, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
          github_metadata, archived_at, first_doing_at, status_changed_at,
          conversation_mode, model_override, effort_override, fast_mode, created_at, updated_at)
       VALUES
-        (@id, @board_id, @display_id, @title, @description, @status, @priority, @complexity, @type, @position,
+        (@id, @board_id, @display_id, @title, @description, @status, @priority, @complexity, @slug, @workspace_dir, @branch_name, @type, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
          @github_metadata, @archived_at, @first_doing_at, @status_changed_at,
          @conversation_mode, @model_override, @effort_override, @fast_mode, @created_at, @updated_at)
@@ -212,6 +223,9 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
         status = excluded.status,
         priority = excluded.priority,
         complexity = excluded.complexity,
+        slug = excluded.slug,
+        workspace_dir = excluded.workspace_dir,
+        branch_name = excluded.branch_name,
         type = excluded.type,
         position = excluded.position,
         tags = excluded.tags,
@@ -242,6 +256,9 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       status: ticket.status,
       priority: ticket.priority,
       complexity: ticket.complexity,
+      slug: ticket.lockedSlug,
+      workspace_dir: ticket.workspaceDir,
+      branch_name: ticket.branchName,
       type: ticket.type,
       position: ticket.position,
       tags: JSON.stringify(ticket.tags),
@@ -453,6 +470,9 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       isEffortLevel(row.effort_override) ? row.effort_override : null,
       row.fast_mode === 1,
       normalizeTicketComplexity(row.complexity),
+      row.slug ?? null,
+      row.workspace_dir ?? null,
+      row.branch_name ?? null,
     );
   }
 

@@ -56,8 +56,8 @@ export class PgTicketStore implements TicketStorePort {
         id, board_id, title, description, status, priority, type, position,
         tags, links, blocked, favorite, due_date, assignee,
         agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at,
-        complexity
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+        complexity, slug, workspace_dir, branch_name
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
       RETURNING display_id`,
       [
         ticket.id,
@@ -82,6 +82,9 @@ export class PgTicketStore implements TicketStorePort {
         ticket.createdAt.toISOString(),
         ticket.updatedAt.toISOString(),
         ticket.complexity,
+        ticket.lockedSlug,
+        ticket.workspaceDir,
+        ticket.branchName,
       ],
     );
     if (rows.length === 0) throw new Error('createTicket failed to return display_id');
@@ -91,6 +94,11 @@ export class PgTicketStore implements TicketStorePort {
 
   async getAllTickets(): Promise<TicketEntity[]> {
     const { rows } = await this.db.query('SELECT * FROM tickets WHERE archived_at IS NULL');
+    return rows.map(rowToTicket);
+  }
+
+  async getTicketsWithoutSlug(): Promise<TicketEntity[]> {
+    const { rows } = await this.db.query('SELECT * FROM tickets WHERE slug IS NULL');
     return rows.map(rowToTicket);
   }
 
@@ -137,8 +145,8 @@ export class PgTicketStore implements TicketStorePort {
         tags, links, blocked, favorite, due_date, assignee,
         agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at,
         conversation_mode, model_override, effort_override, fast_mode, created_at, updated_at,
-        complexity
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+        complexity, slug, workspace_dir, branch_name
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
       ON CONFLICT (id) DO UPDATE SET
         board_id = $2,
         display_id = $3,
@@ -165,7 +173,10 @@ export class PgTicketStore implements TicketStorePort {
         fast_mode = $24,
         created_at = $25,
         updated_at = $26,
-        complexity = $27`,
+        complexity = $27,
+        slug = $28,
+        workspace_dir = $29,
+        branch_name = $30`,
       [
         ticket.id,
         ticket.boardId,
@@ -194,6 +205,9 @@ export class PgTicketStore implements TicketStorePort {
         ticket.createdAt.toISOString(),
         ticket.updatedAt.toISOString(),
         ticket.complexity,
+        ticket.lockedSlug,
+        ticket.workspaceDir,
+        ticket.branchName,
       ],
     );
   }
@@ -379,6 +393,9 @@ function rowToTicket(row: Record<string, unknown>): TicketEntity {
     isEffortLevel(row.effort_override) ? row.effort_override : null,
     row.fast_mode === true,
     normalizeTicketComplexity(row.complexity),
+    (row.slug as string | null) ?? null,
+    (row.workspace_dir as string | null) ?? null,
+    (row.branch_name as string | null) ?? null,
   );
 }
 

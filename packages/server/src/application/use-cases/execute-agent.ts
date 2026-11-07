@@ -6,7 +6,7 @@ import { inferModelCapabilities, resolveEffortLevel, parseRepoRef, DEFAULT_AGENT
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
+import { ticketBranchName, ticketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
@@ -2690,7 +2690,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // Create workspace + manifest first — independent of repos.
     let workspaceRoot: string;
     try {
-      const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+      const workspaceId = ticketWorkspaceId(ticket);
       workspaceRoot = this.resolver!.workspacePath(workspaceId);
       mkdirSync(workspaceRoot, { recursive: true });
       const manifestPath = join(workspaceRoot, '.fleex.json');
@@ -2721,7 +2721,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     // Determine branch: use existing worktree link's branch, or generate a new one
     const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
-    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+    const workspaceId = ticketWorkspaceId(ticket);
     let branchName: string;
     let createNewBranch: boolean;
     if (existingWorktreeLink) {
@@ -2729,12 +2729,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       branchName = colonIdx > 0 ? existingWorktreeLink.ref.substring(colonIdx + 1) : (existingWorktreeLink.label || existingWorktreeLink.ref);
       createNewBranch = false;
     } else {
-      const slug = ticket.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 40);
-      branchName = `agent/${ticket.displayId}-${slug}`;
+      // One branch per ticket, whoever derives it first (agent run or session),
+      // fixed at creation: a renamed ticket keeps its branch name.
+      branchName = ticketBranchName(ticket);
       createNewBranch = true;
     }
 
@@ -2784,7 +2781,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         } catch {
           // Branch may not exist on this repo (e.g. PR branch from another repo) — create a new one
           if (!repoCreateNew) {
-            usedBranch = buildTicketBranchName(ticket.title, ticket.id);
+            usedBranch = ticketBranchName(ticket);
             await this.createWorktree.execute(repo.org, repo.name, wtPath, {
               branch: usedBranch,
               createNewBranch: true,

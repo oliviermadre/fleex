@@ -402,7 +402,7 @@ GET /api/agents/v1/tickets/:id/worktree
 Response:
 
 ```json
-{ "linked": true, "worktree": { "id": "uuid", "path": "/abs/path", "branch": "ticket/abc123-slug", "createdAt": "iso8601" } }
+{ "linked": true, "worktree": { "id": "uuid", "path": "/abs/path", "branch": "fleex/654-slug", "createdAt": "iso8601" } }
 ```
 
 Or if no worktree is linked:
@@ -426,10 +426,10 @@ Body is optional — all fields are optional. `baseBranch` defaults to the repo'
 **201** (created) or **200** (already existed):
 
 ```json
-{ "created": true, "worktree": { "id": "uuid", "path": "/abs/path", "branch": "ticket/abc123-slug", "createdAt": "iso8601" } }
+{ "created": true, "worktree": { "id": "uuid", "path": "/abs/path", "branch": "fleex/654-slug", "createdAt": "iso8601" } }
 ```
 
-The ticket's board must have `repositoryOrg` and `repositoryName` set. The branch is auto-generated as `ticket/{shortId}-{slugified-title}`.
+The ticket's board must have `repositoryOrg` and `repositoryName` set. The branch is `fleex/{displayId}-{slug}`, where `slug` is the title at creation: fixed then, a rename never changes it (tickets started before this naming keep their former `ticket/…` / `agent/…` branch).
 
 **Recommended pattern** — single call to get your CWD:
 

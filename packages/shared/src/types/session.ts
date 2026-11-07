@@ -72,6 +72,8 @@ export interface AgentWorktreeInfo {
   readonly ticketId: string;
   readonly ticketDisplayId: number;
   readonly ticketTitle: string;
+  /** The ticket's workspace folder name (`ticketWorkspaceId`): fixed at creation, a rename never moves it. */
+  readonly ticketWorkspaceId: string;
   /** Kanban status of the linked ticket — drives which sidebar flow the worktree lands in. */
   readonly ticketStatus: import('./ticket.js').TicketStatus;
   readonly agentPersonaId: string;

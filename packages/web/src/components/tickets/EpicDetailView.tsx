@@ -17,6 +17,7 @@ import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { STATUS_COLORS } from '../../lib/statusColors';
 import { openTicketInWork } from '../work/openInWork';
+import { InlineEditableText } from '../ui/InlineEditableText';
 
 export function EpicDetailView() {
   const epicId = useTicketGroupStore((s) => s.selectedEpicDetailId);
@@ -79,7 +80,13 @@ export function EpicDetailView() {
           Back
         </button>
         <EditableEmoji value={group.emoji} onSave={(emoji) => updateGroup(group.id, { emoji })} />
-        <EditableName value={group.name} onSave={(name) => updateGroup(group.id, { name })} />
+        <InlineEditableText
+          value={group.name}
+          onCommit={(name) => updateGroup(group.id, { name })}
+          ariaLabel="Epic name"
+          className="text-sm font-semibold text-[var(--theme-text-primary)] hover:text-[var(--theme-accent)] transition-colors"
+          inputClassName="rounded border border-[var(--theme-accent)] bg-transparent px-1 py-0.5 text-sm font-semibold text-[var(--theme-text-primary)] focus:outline-none"
+        />
       </div>
 
       {/* Content area */}
@@ -307,43 +314,7 @@ const COLUMN_TITLE_COLOR: Record<string, string> = {
   cancelled: STATUS_COLORS.cancelled!.text,
 };
 
-// ── Editable Name / Emoji ──
-
-function EditableName({ value, onSave }: { value: string; onSave: (v: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => { setDraft(value); }, [value]);
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== value) onSave(trimmed);
-    setEditing(false);
-  };
-
-  if (!editing) {
-    return (
-      <button
-        className="text-sm font-semibold text-[var(--theme-text-primary)] hover:text-[var(--theme-accent)] transition-colors"
-        onClick={() => setEditing(true)}
-        title="Click to rename"
-      >
-        {value}
-      </button>
-    );
-  }
-
-  return (
-    <input
-      autoFocus
-      className="rounded border border-[var(--theme-accent)] bg-transparent px-1 py-0.5 text-sm font-semibold text-[var(--theme-text-primary)] focus:outline-none"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
-      onBlur={commit}
-    />
-  );
-}
+// ── Editable Emoji ──
 
 function EditableEmoji({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
