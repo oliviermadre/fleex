@@ -739,6 +739,16 @@ export async function fetchTicketDeliverables(ticketId: string): Promise<import(
   return request<import('@fleex/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
 }
 
+/** A deliverable with no ticket behind it, written by the user (Docs, Agenda). */
+export async function createStandaloneDeliverable(
+  payload: { title: string; type: string; content: string; status?: 'draft' | 'final' },
+): Promise<import('@fleex/shared').TicketDeliverable> {
+  return request<import('@fleex/shared').TicketDeliverable>('/deliverables', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function createDeliverable(
   ticketId: string,
   payload: { title: string; type: string; content: string; status?: 'draft' | 'final'; agentName?: string },
