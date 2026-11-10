@@ -35,6 +35,22 @@ describe('priceFor — Fable 5.1', () => {
   });
 });
 
+describe('priceFor — Fable 5.2', () => {
+  // Fable 5.2 dropped to $8/$40 with $0.20 cache reads. Copying the Fable 5.1 entry
+  // "by precedent" would over-bill every Fable 5.2 session by 25%.
+  it('is priced at $8/$40 per MTok with $0.20 cache reads, not at the Fable 5.1 rate', () => {
+    const p = priceFor('claude-fable-5-2')!;
+    const expected = { inp: 8e-6, out: 40e-6, read: 0.2e-6, w5: 10e-6, w1: 16e-6 };
+    for (const [k, v] of Object.entries(expected)) expect(p[k as keyof typeof p], k).toBeCloseTo(v, 15);
+    expect(priceFor('claude-fable-5-2')).not.toEqual(priceFor('claude-fable-5-1'));
+  });
+
+  it('resolves the dated-snapshot and fast-mode id variants to the same entry', () => {
+    expect(priceFor('claude-fable-5-2-20261101')).toEqual(priceFor('claude-fable-5-2'));
+    expect(priceFor('claude-fable-5-2-fast')).toEqual(priceFor('claude-fable-5-2'));
+  });
+});
+
 describe('priceFor — Sonnet generations', () => {
   it('prices the Sonnet 5.x line at $2/$10 per MTok', () => {
     for (const id of ['claude-sonnet-5', 'claude-sonnet-5-5']) {
@@ -98,6 +114,33 @@ describe('computeSessionCost — a Fable 5.1 transcript', () => {
   });
 });
 
+describe('computeSessionCost — a Fable 5.2 transcript', () => {
+  let dir: string;
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'fleex-fable52-pricing-'));
+    writeFileSync(
+      join(dir, 'fable.jsonl'),
+      JSON.stringify({
+        entrypoint: 'cli', timestamp: '2026-11-10T10:00:00Z', type: 'assistant',
+        message: { model: 'claude-fable-5-2', usage: {
+          input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 10_000,
+          cache_creation: { ephemeral_5m_input_tokens: 4000, ephemeral_1h_input_tokens: 0 },
+        } },
+      }) + '\n',
+    );
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('bills it at the Fable 5.2 rate', async () => {
+    const c = await computeSessionCost(join(dir, 'fable.jsonl'));
+
+    // 1000*8e-6 + 2000*40e-6 + 10000*0.2e-6 + 4000*10e-6 = 0.13
+    expect(c.cost).toBeCloseTo(0.13, 9);
+    expect(c.hasUnknownModel).toBe(false);
+    expect(c.model).toBe('claude-fable-5-2');
+  });
+});
+
 /**
  * `backfill-agentic-costs.ts` is standalone (it imports no workspace code) and
  * carries a byte-identical copy of the pricing table on purpose. Importing it
@@ -134,6 +177,29 @@ describe('pricing tables stay in sync', () => {
     expect(Object.keys(live).length).toBeGreaterThan(5);
     expect(live['claude-fable-5-1']).toBe('10e-6,50e-6');
     expect(backfill).toEqual(live);
+  });
+
+  // parseTable only sees plain `price(a, b)` entries; overridden ones
+  // (`{ ...price(), read }`) slip through it, so pin them line by line.
+  it('the three tables carry the same overridden Fable 5.2 entry', () => {
+    const line = "'claude-fable-5-2': { ...price(8e-6, 40e-6), read: 0.2e-6 },";
+    for (const rel of [
+      '../../src/application/utils/cli-session-ingest.ts',
+      '../../scripts/backfill-agentic-costs.ts',
+      '../../scripts/lib/transcript-cost.ts',
+    ]) {
+      expect(read(rel), rel).toContain(line);
+    }
+  });
+
+  it('the transcript-cost PRICING holds the same plain entries as the runtime table', () => {
+    const live = parseTable(
+      read('../../src/application/utils/cli-session-ingest.ts'),
+      'export const MODEL_PRICING: Record<string, Price> = {',
+    );
+    const transcript = parseTable(read('../../scripts/lib/transcript-cost.ts'), 'const PRICING: Record<string, Price> = {');
+    expect(transcript['claude-haiku-5-5']).toBe('0.1e-6,0.5e-6');
+    expect(transcript).toEqual(live);
   });
 
   it('every runtime pricing key is reachable through priceFor', () => {

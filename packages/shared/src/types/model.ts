@@ -125,6 +125,7 @@ const staticModel = (id: string, label: string, family: ModelFamily): ModelOptio
  *  - as the canonical default order when the dynamic list cannot be filtered
  */
 export const FALLBACK_MODELS: ModelOption[] = [
+  staticModel('claude-fable-5-2', 'Claude Fable 5.2', 'fable'),
   staticModel('claude-fable-5-1', 'Claude Fable 5.1', 'fable'),
   staticModel('claude-fable-5', 'Claude Fable 5', 'fable'),
   staticModel('claude-opus-5-5', 'Claude Opus 5.5', 'opus'),

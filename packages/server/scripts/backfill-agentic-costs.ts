@@ -54,6 +54,8 @@ const PRICING: Record<string, Price> = {
   'claude-haiku-5-5': price(0.1e-6, 0.5e-6),
   'claude-haiku-4-5': price(1e-6, 5e-6),
   'claude-haiku-4-5-20251001': price(1e-6, 5e-6),
+  // Fable 5.2 is $8/$40 (not Fable 5/5.1's $10/$50); cache reads $0.20/MTok (×0.025).
+  'claude-fable-5-2': { ...price(8e-6, 40e-6), read: 0.2e-6 },
   'claude-fable-5-1': price(10e-6, 50e-6),
   'claude-fable-5': price(10e-6, 50e-6),
   // Claude Code's synthetic (non-API) assistant messages — no billable cost.
