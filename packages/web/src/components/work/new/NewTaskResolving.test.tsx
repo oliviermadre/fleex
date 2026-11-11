@@ -21,7 +21,7 @@ vi.mock('../../../services/api', async (importOriginal) => ({
 const ENTRY_DRAFT: WorkDraft = {
   title: '', text: '', stage: 'entry', source: null,
   repoKeys: [], repoBaseBranches: {}, repoCheckoutRefs: {},
-  epicIds: [], boardId: 'b1', type: 'build', priority: 'none', complexity: null,
+  epicIds: [], boardId: 'b1', type: 'build', priority: 'none', complexity: null, startWithAssistant: true,
 };
 
 const findInput = () => screen.getByPlaceholderText('Paste a link, or name the task…') as HTMLInputElement;

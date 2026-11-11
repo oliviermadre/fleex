@@ -238,6 +238,7 @@ export type {
   TicketTodoItem,
   TicketTodoEvent,
   TodoWriteResult,
+  CommentAuthorType,
   MentionStatus,
   MentionTargetType,
   MentionExecutionMode,
@@ -816,3 +817,4 @@ export type {
   AgendaRsvp,
 } from './types/agenda.js';
 export { AGENDA_ITEM_TYPES, AGENDA_RSVPS, DEFAULT_AGENDA_PREFS, GOGCLI_SETUP_URL, GOGCLI_INSTALL_COMMAND } from './types/agenda.js';
+export type { AgentThread, AgentThreadStatus, AgentThreadTargetType } from './types/agent-thread.js';
