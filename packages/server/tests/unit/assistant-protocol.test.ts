@@ -191,6 +191,34 @@ describe('buildAssistantUserPrompt — thread deliverables', () => {
   });
 });
 
+describe('renderThreadDeliverables — the assistant reads what it delegated, whole', () => {
+  const d = (id: string, title: string, content: string) => ({ id, title, content, status: 'final', type: 'plan', agentName: 'The Builder', createdAt: 'now', mentionId: 'm1' }) as never;
+
+  it('a long study reaches the prompt down to its last line (it used to stop at 8 000 characters)', async () => {
+    const { buildAssistantUserPrompt } = await import('../../src/application/assistant/assistant-protocol.js');
+    const study = `# Étude\n${'un risque, sa parade.\n'.repeat(2000)}## F. Sources\nDERNIÈRE LIGNE DE L'ÉTUDE`;
+    expect(study.length).toBeGreaterThan(30_000);
+    const context = { ticket: { displayId: 1, title: 'T', status: 'doing', type: null, priority: 'none', description: '', conversationMode: 'plan' }, comments: [], deliverables: [] } as never;
+    const out = buildAssistantUserPrompt({ context, threads: [], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'resolved' }, threadDeliverables: [d('a', 'Étude', study)] });
+    expect(out).toContain(study);
+    expect(out).not.toContain('COUPÉ');
+    expect(out).not.toContain('tronqué');
+  });
+
+  it('past the budget: the latest deliverable stays whole, the older one is cut and says it was not read to the end', async () => {
+    const { renderThreadDeliverables, THREAD_DELIVERABLES_MAX_CHARS } = await import('../../src/application/assistant/assistant-protocol.js');
+    expect(THREAD_DELIVERABLES_MAX_CHARS).toBeGreaterThanOrEqual(400_000);
+    const v1 = `V1 ${'a'.repeat(100)} FIN V1`;
+    const v2 = `V2 ${'b'.repeat(60)} FIN V2`;
+    const out = renderThreadDeliverables([d('v1', 'Étude', v1), d('v2', 'Étude v2', v2)], 100);
+    expect(out).toContain(v2); // the version the agent delivered last is the one that matters
+    expect(out).not.toContain('FIN V1');
+    expect(out).toContain(`caractères sur ${v1.length}`);
+    expect(out).toContain("Tu n'as PAS lu la suite de ce livrable (id v1)");
+    expect(out.indexOf('Étude »')).toBeLessThan(out.indexOf('Étude v2 »')); // order of delivery kept
+  });
+});
+
 describe('buildAssistantEnvPreamble', () => {
   it('degrades gracefully without workspace or docs', async () => {
     const { buildAssistantEnvPreamble } = await import('../../src/application/assistant/assistant-protocol.js');

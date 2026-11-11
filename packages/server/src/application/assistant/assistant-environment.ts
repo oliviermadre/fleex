@@ -56,6 +56,19 @@ export interface AssistantEnvironmentPort {
   runCli(argv: string[], actor?: AssistantCliActor): Promise<{ ok: boolean; text: string }>;
 }
 
+/**
+ * Characters of one CLI result given back to the model (about 100k tokens).
+ * It was 20 000: a deliverable read with `fleex ticket deliverable show` stopped
+ * mid-sentence and the assistant reported on half a study. The cap is only a
+ * guard for the context window now, and the cut states what was not read.
+ */
+export const ASSISTANT_CLI_OUTPUT_MAX_CHARS = 400_000;
+
+export function capCliOutput(text: string, max = ASSISTANT_CLI_OUTPUT_MAX_CHARS): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}\n[… COUPÉ ICI : tu as lu ${max} caractères sur ${text.length}. Tu n'as PAS lu la suite : ne conclus pas comme si le contenu était complet, et dis-le à l'utilisateur si cette suite compte.]`;
+}
+
 export class AssistantEnvironment implements AssistantEnvironmentPort {
   readonly workspace: string | null;
   readonly cliBin: string;
@@ -96,7 +109,7 @@ export class AssistantEnvironment implements AssistantEnvironmentPort {
     try {
       const r = await this.execFn(command, args, { timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });
       const text = r.stdout.trim() || r.stderr.trim() || 'OK';
-      return { ok: true, text: text.length > 20_000 ? `${text.slice(0, 20_000)}\n[… tronqué]` : text };
+      return { ok: true, text: capCliOutput(text) };
     } catch (err) {
       // A refused command exits non-zero with its reason on stderr — or, with
       // `--json`, on stdout (`{ failures: [...] }`): the model must read WHY it

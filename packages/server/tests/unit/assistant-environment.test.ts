@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { AssistantEnvironment, cliInvocation } from '../../src/application/assistant/assistant-environment.js';
+import { ASSISTANT_CLI_OUTPUT_MAX_CHARS, AssistantEnvironment, capCliOutput, cliInvocation } from '../../src/application/assistant/assistant-environment.js';
 import { resolveTodoActor } from '../../src/infrastructure/http/todo-actor.js';
 import { actorHeaders } from '../../../cli/src/core/actor.js';
 import type { ExecFn } from '../../src/infrastructure/host/types.js';
@@ -98,5 +98,22 @@ describe('AssistantEnvironment.runCli', () => {
     expect(json.text).toContain(refusal);
     const human = await env(fail({ stdout: '', stderr: `[fleex] #3: ${refusal}` })).runCli(['ticket', 'todo', 'done', '1', '3'], NAS);
     expect(human).toEqual({ ok: false, text: `[fleex] #3: ${refusal}` });
+  });
+  it('gives a long deliverable back whole: the assistant must read all of what it delegated', async () => {
+    // A real study ran to ~30 000 characters; the old 20 000 cap cut it mid-sentence
+    // and the assistant reported on half of it.
+    const study = `# Étude\n${'ligne de contenu\n'.repeat(3000)}## F. Sources\nDERNIÈRE LIGNE`;
+    expect(study.length).toBeGreaterThan(40_000);
+    const r = await env(async () => ({ stdout: study, stderr: '' })).runCli(['ticket', 'deliverable', 'show', '82', 'd1']);
+    expect(r.text).toBe(study);
+  });
+
+  it('past the guard, the cut says how much was read and that the rest was not', () => {
+    const cut = capCliOutput('x'.repeat(50), 20);
+    expect(cut.startsWith('x'.repeat(20))).toBe(true);
+    expect(cut).toContain('20 caractères sur 50');
+    expect(cut).toContain("Tu n'as PAS lu la suite");
+    expect(capCliOutput('court', 20)).toBe('court');
+    expect(ASSISTANT_CLI_OUTPUT_MAX_CHARS).toBeGreaterThanOrEqual(400_000);
   });
 });

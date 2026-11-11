@@ -794,6 +794,38 @@ export function renderThreadStop(th: AgentThread): string {
   return parts.map((p) => ` · ${p}`).join('');
 }
 
+/**
+ * Characters of thread deliverables one prompt may carry (about 100k tokens).
+ * A deliverable is what the assistant delegated the work for: it reads it whole.
+ * The budget only exists so that a pathological thread cannot overflow the
+ * model's context; it is far above any real study, spec or report.
+ */
+export const THREAD_DELIVERABLES_MAX_CHARS = 400_000;
+
+/**
+ * The deliverables of a thread, in full. If the budget is ever exceeded, the
+ * most recent ones keep their whole text and the cut says so in plain words —
+ * a silent cut made the assistant report on a document it had half read.
+ */
+export function renderThreadDeliverables(list: readonly TicketDeliverable[], budget = THREAD_DELIVERABLES_MAX_CHARS): string {
+  if (list.length === 0) return '(aucun)';
+  let left = budget;
+  const bodies = new Map<string, string>();
+  for (const d of [...list].reverse()) {
+    if (d.content.length <= left) {
+      bodies.set(d.id, d.content);
+      left -= d.content.length;
+    } else {
+      const kept = d.content.slice(0, left);
+      left = 0;
+      bodies.set(d.id, `${kept}\n[… COUPÉ ICI : tu as lu ${kept.length} caractères sur ${d.content.length}. Tu n'as PAS lu la suite de ce livrable (id ${d.id}) : ne le résume pas et ne le juge pas comme si tu l'avais lu en entier, dis à l'utilisateur ce qui manque.]`);
+    }
+  }
+  return list
+    .map((d) => `### Livrable « ${d.title} » (${d.type}, ${d.status}, par ${d.agentName}, ${d.createdAt})\n${bodies.get(d.id)}`)
+    .join('\n\n');
+}
+
 function renderComment(c: TicketComment): string {
   const who = c.authorType === 'user' ? 'Utilisateur' : c.authorType === 'assistant' ? 'Assistant' : c.authorName;
   return `[${c.createdAt}] ${who}${c.threadId ? ` (thread ${c.threadId})` : ''} : ${c.body}`;
@@ -842,9 +874,7 @@ export function buildAssistantUserPrompt(p: {
   const threadDelivIds = new Set((p.threadDeliverables ?? []).map((d) => d.id));
   const deliverables = p.context.deliverables.filter((d) => !threadDelivIds.has(d.id)).slice(-10)
     .map((d) => `- ${d.title} (${d.status}, par ${d.agentName})`).join('\n') || '(aucun)';
-  const threadDeliverables = (p.threadDeliverables ?? [])
-    .map((d) => `### Livrable « ${d.title} » (${d.type}, ${d.status}, par ${d.agentName}, ${d.createdAt})\n${d.content.length > 8000 ? `${d.content.slice(0, 8000)}\n[… tronqué, ${d.content.length} caractères au total]` : d.content}`)
-    .join('\n\n') || '(aucun)';
+  const threadDeliverables = renderThreadDeliverables(p.threadDeliverables ?? []);
   const trig = p.trigger;
   let trigger: string;
   switch (trig.kind) {
