@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAssistantOutput, renderQuestion, assistantQuestions, buildAssistantSystemPrompt, buildAssistantUserPrompt, renderThreadStop, skillSummary, ACTION_TOOLS } from '../../src/application/assistant/assistant-protocol.js';
+import { parseAssistantOutput, renderQuestion, assistantQuestions, buildAssistantSystemPrompt, buildAssistantUserPrompt, renderThreadStop, skillSummary, ACTION_TOOLS, extractRequestedTargets, withOriginalMessage, renderMentionReminder, ORIGINAL_MESSAGE_HEADER } from '../../src/application/assistant/assistant-protocol.js';
 
 describe('parseAssistantOutput', () => {
   it('accepts a structured reply', () => {
@@ -435,5 +435,62 @@ describe('assistant user prompt — the todo section', () => {
   it('says nothing at all when todo access is off: the prompt is the one of before', () => {
     expect(build(null)).toBe(build());
     expect(build(null)).not.toMatch(/todo/i);
+  });
+});
+
+describe('mentions in a message to the assistant', () => {
+  const system = buildAssistantSystemPrompt({ persona: { soulMd: '', identityMd: '', memoryMd: '' }, personas: [], assistantName: 'Nas' });
+  const section = system.slice(system.indexOf("## Mentions de l'utilisateur"), system.indexOf("## Les actions de l'utilisateur priment"));
+
+  it('the prompt states the rules of the order: verbatim turn, continue an open thread, parallel then sequence, refusals, unknown slug, active workflow, hold, question', () => {
+    expect(section).toContain('est **un ordre**');
+    expect(section).toContain('**Le `turn` contient son message tel quel**, pièces jointes comprises');
+    expect(section).toContain('tu ne retires rien et tu ne réinterprètes pas sa demande');
+    expect(section).toContain('**Thread déjà ouvert avec la cible : continue-le.**');
+    expect(section).toContain('un thread par cible, dans ce même tour, en parallèle par défaut');
+    expect(section).toMatch(/En séquence si le message exprime un ordre\*\* \(« puis », « ensuite »\)/);
+    expect(section).toContain('**Le serveur refuse un lancement**');
+    expect(section).toContain('**Slug inconnu ou désactivé : aucun thread.** Donne la liste de ce qui existe');
+    expect(section).toContain("**Workflow mentionné alors qu'un run est actif : pas de second run.**");
+    expect(section).toContain('elle lève le blocage utilisateur de cette cible');
+    expect(section).toContain('ne lance rien, réponds');
+  });
+
+  it('extracts the four kinds in the order written, once each, with the grammar of comment mentions', () => {
+    expect(extractRequestedTargets('@skill:lint puis @agent:builder, @panel:archi, @workflow:review et encore @agent:builder')).toEqual([
+      { type: 'skill', name: 'lint' }, { type: 'agent', name: 'builder' }, { type: 'panel', name: 'archi' }, { type: 'workflow', name: 'review' },
+    ]);
+    expect(extractRequestedTargets('rien ici, ni olivier@example.com ni @nas ni ~~@agent:old~~')).toEqual([]);
+  });
+
+  it('withOriginalMessage appends what the turn lacks, and only then', () => {
+    expect(withOriginalMessage('Objectif : X.', ' @agent:c fais X ')).toBe(`Objectif : X.\n\n---\n${ORIGINAL_MESSAGE_HEADER}\n\n@agent:c fais X`);
+    expect(withOriginalMessage('Contexte.\n@agent:c  fais\nX\nFini.', '@agent:c fais X')).toBe('Contexte.\n@agent:c  fais\nX\nFini.');
+    // A paraphrase is not the message.
+    expect(withOriginalMessage('@agent:c fais Y', '@agent:c fais X')).toContain(ORIGINAL_MESSAGE_HEADER);
+  });
+
+  it('the trigger lists each target with what the model must do about it', () => {
+    const context = { ticket: { displayId: 7, title: 'T', status: 'doing', priority: 'none', conversationMode: 'plan', description: '' }, comments: [{ id: 'c1', body: 'hello', authorType: 'user', authorName: 'o', createdAt: '', threadId: null }], deliverables: [] } as never;
+    const out = buildAssistantUserPrompt({
+      context, threads: [], turns: [], trigger: { kind: 'user_message', commentId: 'c1' },
+      requestedTargets: [
+        { type: 'agent', name: 'a', valid: true },
+        { type: 'agent', name: 'b', valid: true, openThread: { id: 'th-b', status: 'idle' } },
+        { type: 'skill', name: 'zz', valid: false, error: 'Skill inconnu ou désactivé : « zz ». Skills disponibles : lint.' },
+      ],
+    });
+    const trigger = out.slice(out.indexOf('## Déclencheur'));
+    expect(trigger).toContain('- @agent:a — valide · aucun thread ouvert : ouvre-le ("delegate").');
+    expect(trigger).toContain('- @agent:b — valide · thread déjà ouvert th-b (idle) : continue-le ("continue_thread"), n\'en ouvre pas un second.');
+    expect(trigger).not.toContain('interrupt');
+    expect(trigger).toContain('- @skill:zz — INVALIDE');
+    expect(trigger).toContain('Skills disponibles : lint.');
+    // No mention, nothing added.
+    expect(buildAssistantUserPrompt({ context, threads: [], turns: [], trigger: { kind: 'user_message', commentId: 'c1' } })).not.toContain('Cibles mentionnées');
+  });
+
+  it('the reminder names the targets and offers both ways out', () => {
+    expect(renderMentionReminder([{ type: 'agent', name: 'x' }, { type: 'skill', name: 'y' }])).toMatch(/tu n'as pas traité @agent:x, @skill:y\..*délègue maintenant.*explique pourquoi/);
   });
 });

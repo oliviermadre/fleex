@@ -42,7 +42,39 @@ describe('assistant threads routes', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json()).toEqual({ comment: { id: 'c1' }, assistant: { personaId: 'pa', displayName: 'Nas' } });
     expect(posted[0]).toMatchObject({ authorType: 'user', authorName: 'Olivier', suppressAgentMentions: true, threadId: null });
-    expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'user_message', commentId: 'c1' } }]);
+    // The mention is an order for the assistant, not a direct mention: it travels with the turn.
+    expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'user_message', commentId: 'c1', requestedTargets: [{ type: 'agent', name: 'builder' }] } }]);
+  });
+
+  it('POST assistant/messages passes every mentioned target to the turn, in the order written, struck-through tags left out', async () => {
+    const app = Fastify();
+    const turns: Array<{ trigger: { requestedTargets?: unknown } }> = [];
+    await app.register(assistantThreadsRoutes({
+      ticketStore: { getTicketById: async () => ({ id: 't1' }) },
+      runAssistantTurn: { resolveAssistantPersona: async () => ({ id: 'pa', name: 'nas', displayName: 'Nas' }), execute: async (p: never) => { turns.push(p); } },
+      postComment: { execute: async () => ({ comment: { id: 'c1', toDTO: () => ({ id: 'c1' }) }, createdMentions: [] }) },
+      config: { get: () => ({}) }, eventBus: new EventBus(), threadStore: {}, commentStore: {}, mentionStore: {},
+    } as never));
+    await app.inject({
+      method: 'POST', url: '/api/tickets/t1/assistant/messages',
+      payload: { body: 'lance @workflow:review puis @skill:lint, demande à @panel:archi et @agent:builder (pas ~~@agent:old~~) — encore @skill:lint' },
+    });
+    expect(turns[0]!.trigger.requestedTargets).toEqual([
+      { type: 'workflow', name: 'review' }, { type: 'skill', name: 'lint' }, { type: 'panel', name: 'archi' }, { type: 'agent', name: 'builder' },
+    ]);
+  });
+
+  it('POST assistant/messages without a mention passes no target', async () => {
+    const app = Fastify();
+    const turns: Array<{ trigger: { requestedTargets?: unknown } }> = [];
+    await app.register(assistantThreadsRoutes({
+      ticketStore: { getTicketById: async () => ({ id: 't1' }) },
+      runAssistantTurn: { resolveAssistantPersona: async () => ({ id: 'pa', name: 'nas', displayName: 'Nas' }), execute: async (p: never) => { turns.push(p); } },
+      postComment: { execute: async () => ({ comment: { id: 'c1', toDTO: () => ({ id: 'c1' }) }, createdMentions: [] }) },
+      config: { get: () => ({}) }, eventBus: new EventBus(), threadStore: {}, commentStore: {}, mentionStore: {},
+    } as never));
+    await app.inject({ method: 'POST', url: '/api/tickets/t1/assistant/messages', payload: { body: 'où en est-on ?' } });
+    expect(turns[0]!.trigger.requestedTargets).toEqual([]);
   });
 
   it('GET /api/threads/open lists open threads', async () => {

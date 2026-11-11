@@ -146,6 +146,18 @@ describe('PostCommentUseCase — assistant threads', () => {
     expect(createdMentions.map((m) => m.targetType).sort()).toEqual(['skill', 'workflow']);
   });
 
+  // A thread turn relays the human's message as is: the tags it quotes belong to other threads.
+  for (const targetType of ['agent', 'panel', 'skill', 'workflow'] as const) {
+    it(`onlyMentionTarget (${targetType}) creates the mention of that one target, whatever other tags the body carries`, async () => {
+      const { createdMentions } = await useCase.execute({
+        ticketId: 't1', authorType: 'assistant', authorName: 'Nas', threadId: 'th1',
+        body: '@agent:x @panel:x @skill:x @workflow:x @agent:y @panel:y @skill:y @workflow:y',
+        onlyMentionTarget: { targetType, name: 'x' },
+      });
+      expect(createdMentions.map((m) => [m.targetType, m.targetAgent])).toEqual([[targetType, 'x']]);
+    });
+  }
+
   it('threadOf joins the thread of a comment without replying to it', async () => {
     const { comment: turn } = await useCase.execute({
       ticketId: 't1', authorType: 'assistant', authorName: 'Nas', body: '@skill:lint go', threadId: 'th1',

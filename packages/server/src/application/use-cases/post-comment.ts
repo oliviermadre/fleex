@@ -53,6 +53,12 @@ export class PostCommentUseCase {
      * instructions instead, so nothing launches twice.
      */
     suppressAgentMentions?: boolean;
+    /**
+     * Create the @agent:/@panel:/@skill:/@workflow: mention of this one target
+     * only. A thread turn sets it: the turn quotes the human's message as is,
+     * and the other tags it carries must not launch anything outside their own thread.
+     */
+    onlyMentionTarget?: { targetType: 'agent' | 'panel' | 'skill' | 'workflow'; name: string };
   }): Promise<{ comment: TicketCommentEntity; createdMentions: TicketMentionEntity[] }> {
     let threadId: string | null = params.threadId ?? null;
     const threadSource = params.parentId ?? params.threadOf;
@@ -89,12 +95,15 @@ export class PostCommentUseCase {
     const mentionMode: MentionExecutionMode = 'plan';
 
     const suppressedAgents = new Set(params.suppressMentionForAgents ?? []);
+    const only = params.onlyMentionTarget;
+    const allowed = (type: 'agent' | 'panel' | 'skill' | 'workflow', name: string) => !only || (only.targetType === type && only.name === name);
 
     const createdMentions: TicketMentionEntity[] = [];
     if (!skipAgentMentions) {
       for (const targetAgent of comment.mentions) {
         if (targetAgent === params.authorName) continue; // don't self-mention
         if (suppressedAgents.has(targetAgent)) continue; // re-mention of a waiting agent: wake the existing one, don't duplicate
+        if (!allowed('agent', targetAgent)) continue;
         const mention = TicketMentionEntity.create({
           id: randomUUID(),
           ticketId: params.ticketId,
@@ -112,6 +121,7 @@ export class PostCommentUseCase {
       const panelMentions = TicketCommentEntity.extractPanelMentions(params.body);
       for (const panelName of panelMentions) {
         if (panelName === params.authorName) continue; // don't self-mention
+        if (!allowed('panel', panelName)) continue;
         const mention = TicketMentionEntity.create({
           id: randomUUID(),
           ticketId: params.ticketId,
@@ -131,6 +141,7 @@ export class PostCommentUseCase {
       // Create mentions for @skill:xxx found in the body
       const skillMentions = TicketCommentEntity.extractSkillMentions(params.body);
       for (const commandName of skillMentions) {
+        if (!allowed('skill', commandName)) continue;
         const mention = TicketMentionEntity.create({
           id: randomUUID(),
           ticketId: params.ticketId,
@@ -147,6 +158,7 @@ export class PostCommentUseCase {
       // Create mentions for @workflow:xxx found in the body
       const workflowMentions = TicketCommentEntity.extractWorkflowMentions(params.body);
       for (const workflowSlug of workflowMentions) {
+        if (!allowed('workflow', workflowSlug)) continue;
         const mention = TicketMentionEntity.create({
           id: randomUUID(),
           ticketId: params.ticketId,

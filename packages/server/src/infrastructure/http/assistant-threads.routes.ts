@@ -3,6 +3,7 @@ import type { Container } from '../container.js';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import type { AgentThreadEntity } from '../../domain/entities/agent-thread.entity.js';
 import { computeParticipants } from '../../application/use-cases/thread-label.js';
+import { extractRequestedTargets } from '../../application/assistant/assistant-protocol.js';
 
 type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'generateThreadTitle' | 'config' | 'eventBus' | 'stopRun'>;
 
@@ -47,7 +48,11 @@ export function assistantThreadsRoutes(container: Deps) {
           targetType: m.targetType, sourceAgent: m.sourceAgent, occurredAt: now,
         });
       }
-      void container.runAssistantTurn.execute({ ticketId: ticket.id, trigger: { kind: 'user_message', commentId: comment.id } });
+      // `@type:slug` in a message to the assistant is an order to delegate, not a
+      // direct mention (none was created above): the turn receives the targets
+      // and the server checks, at its end, that each valid one was handled.
+      const requestedTargets = extractRequestedTargets(request.body.body);
+      void container.runAssistantTurn.execute({ ticketId: ticket.id, trigger: { kind: 'user_message', commentId: comment.id, requestedTargets } });
       return reply.code(201).send({
         comment: comment.toDTO(),
         assistant: { personaId: assistant.id, displayName: assistant.displayName || assistant.name },

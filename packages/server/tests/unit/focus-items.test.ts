@@ -159,6 +159,30 @@ describe('deriveFocusItems', () => {
     expect(items[0]!.question!.questions).toEqual(questions);
   });
 
+  // « Assistant & threads »: the assistant's question is a question like an agent's.
+  it('turns a pending question of the assistant into a question item, with its declared choices', () => {
+    const questions = [{ prompt: 'On y va ?', options: ['Go', 'Ajuster'] }];
+    const asked = { id: 'ca', ticketId: 'T1', authorType: 'assistant', authorName: 'Nas', body: 'Voici le mandat. On y va ?', createdAt: T2, questions } as TicketComment;
+    const { items } = deriveFocusItems(inputs({ tickets: [ticket('T1')], assistantQuestionByTicket: new Map([['T1', asked]]) }));
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: 'question', key: 'question:ca', since: T2,
+      question: { source: 'assistant', mentionId: null, askedBy: 'Nas', text: 'Voici le mandat. On y va ?', questions },
+    });
+    // Without it the same ticket is merely idle.
+    expect(deriveFocusItems(inputs({ tickets: [ticket('T1')] })).items[0]!.kind).toBe('idle');
+  });
+
+  it("the assistant's question stands for the question of the agent it relays: one item, the assistant's", () => {
+    const asked = { id: 'ca', ticketId: 'T1', authorType: 'assistant', authorName: 'Nas', body: 'Dev demande : global ?', createdAt: T2, questions: [{ prompt: 'Global ?', options: ['Oui', 'Non'] }] } as TicketComment;
+    const { items } = deriveFocusItems(inputs({
+      tickets: [ticket('T1')],
+      mentions: [mention('m1', 'T1', 'waiting_for_info')],
+      assistantQuestionByTicket: new Map([['T1', asked]]),
+    }));
+    expect(items.map((i) => [i.key, i.question?.source])).toEqual([['question:ca', 'assistant']]);
+  });
+
   it('carries the step output questions on a step question, null when absent', () => {
     const questions = [{ prompt: 'Repo ?', options: ['fleex', 'odys'] }];
     const r = run('r1', 'T1', 'needs_review');

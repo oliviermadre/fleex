@@ -1,10 +1,31 @@
 import type { AgentQuestion, AgentThread, AgentThreadTargetType, ConversationMode, TicketComment, TicketContext, TicketDeliverable } from '@fleex/shared';
 import { sanitizeQuestions } from '../utils/agent-questions.js';
+import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 
 export interface AssistantQuestion { text: string; options: string[] }
 
+/** A `@type:slug` the human wrote in a message to the assistant: an order to delegate to it. */
+export interface RequestedTarget { type: AgentThreadTargetType; name: string }
+
+/** A requested target as the turn sees it, once checked against what exists on this ticket. */
+export interface ResolvedRequestedTarget extends RequestedTarget {
+  /** Known and enabled. An invalid target opens no thread. */
+  valid: boolean;
+  /** Invalid: why, with the list of what exists (the text `delegate` would answer). */
+  error?: string;
+  /** The open thread with this target, if any: the order continues it. */
+  openThread?: { id: string; status: string };
+  /** Valid but it cannot be launched now, whatever the model does (a workflow run is already active): why. */
+  blocked?: string;
+}
+
 export type AssistantTrigger =
-  | { kind: 'user_message'; commentId: string }
+  | {
+      kind: 'user_message';
+      commentId: string;
+      /** The targets the server extracted from the message, in the order the human wrote them. */
+      requestedTargets?: RequestedTarget[];
+    }
   | { kind: 'ticket_created' }
   | {
       kind: 'thread_reply';
@@ -26,6 +47,62 @@ export type AssistantAction =
   | { action: 'stop_thread'; threadId: string; reason: string }
   | { action: 'request_mode'; threadId: string; mode: ConversationMode; message: string }
   | { action: 'conclude_thread'; threadId: string; summary: string; message: string | null; question: AssistantQuestion | null };
+
+/**
+ * The `@agent:` / `@skill:` / `@panel:` / `@workflow:` tags of a human message,
+ * in the order they were written. Same grammar as the mentions a comment
+ * creates (the comment entity's extractors, struck-through tags skipped) —
+ * there is one definition of what a mention is.
+ */
+export function extractRequestedTargets(body: string): RequestedTarget[] {
+  const found: RequestedTarget[] = [
+    ...TicketCommentEntity.extractMentions(body).map((name) => ({ type: 'agent' as const, name })),
+    ...TicketCommentEntity.extractSkillMentions(body).map((name) => ({ type: 'skill' as const, name })),
+    ...TicketCommentEntity.extractPanelMentions(body).map((name) => ({ type: 'panel' as const, name })),
+    ...TicketCommentEntity.extractWorkflowMentions(body).map((name) => ({ type: 'workflow' as const, name })),
+  ];
+  const at = (t: RequestedTarget) => body.indexOf(`@${t.type}:${t.name}`);
+  return found.sort((a, b) => at(a) - at(b));
+}
+
+/** How a `turn` carries the human's message when the model did not quote it in full. */
+export const ORIGINAL_MESSAGE_HEADER = "Message d'origine de l'utilisateur (transmis tel quel par le serveur) :";
+
+/**
+ * The turn sent to a target the human mentioned must contain their message as
+ * is, attachments included: the assistant may add context, it removes nothing.
+ * When the turn does not already contain it (whitespace aside), it is appended
+ * verbatim — nothing the model wrote is touched.
+ */
+export function withOriginalMessage(turn: string, original: string): string {
+  const flat = (x: string) => x.replace(/\s+/g, ' ').trim();
+  const message = original.trim();
+  if (!message || flat(turn).includes(flat(message))) return turn;
+  return `${turn.trimEnd()}\n\n---\n${ORIGINAL_MESSAGE_HEADER}\n\n${message}`;
+}
+
+/** The extra round the server sends when valid requested targets got no thread action. */
+export function renderMentionReminder(missing: RequestedTarget[]): string {
+  const tags = missing.map((t) => `@${t.type}:${t.name}`).join(', ');
+  return `Rappel du serveur : tu n'as pas traité ${tags}. L'utilisateur l'a mentionné dans son message et tu n'as fait aucune action de thread pour ${missing.length > 1 ? 'ces cibles' : 'cette cible'}. Une mention est un ordre : délègue maintenant ("delegate", ou "continue_thread" si un thread est ouvert avec elle), en transmettant son message tel quel. Si tu ne délègues pas — il posait seulement une question sur la cible, par exemple — explique pourquoi à l'utilisateur en une phrase : ce texte sera posté tel quel. Si ton message précédent le dit déjà, n'ajoute rien.`;
+}
+
+function renderRequestedTargets(targets: ResolvedRequestedTarget[]): string {
+  if (targets.length === 0) return '';
+  const lines = targets.map((t) => {
+    const tag = `@${t.type}:${t.name}`;
+    if (!t.valid) return `- ${tag} — INVALIDE : n'ouvre aucun thread, et donne à l'utilisateur la liste de ce qui existe. ${t.error ?? ''}`.trimEnd();
+    if (t.blocked) return `- ${tag} — valide, mais ${t.blocked} Ne lance rien pour cette cible et explique-le à l'utilisateur.`;
+    if (t.openThread) {
+      const running = t.openThread.status === 'running'
+        ? " Elle tourne encore : arrête et redirige (`interrupt: true`) si son travail en cours devient inutile ou nuisible, sinon laisse finir et transmets à la fin du tour."
+        : '';
+      return `- ${tag} — valide · thread déjà ouvert ${t.openThread.id} (${t.openThread.status}) : continue-le ("continue_thread"), n'en ouvre pas un second.${running}`;
+    }
+    return `- ${tag} — valide · aucun thread ouvert : ouvre-le ("delegate").`;
+  });
+  return `\n\nCibles mentionnées dans ce message (relevées par le serveur ; chaque mention valide est un ordre de délégation, voir « Mentions de l'utilisateur ») :\n${lines.join('\n')}`;
+}
 
 export const FORWARD_KEYS = ['ticket', 'worktrees', 'pr', 'deliverables'] as const;
 export const TARGET_TYPES: readonly AgentThreadTargetType[] = ['agent', 'skill', 'panel', 'workflow'];
@@ -413,7 +490,7 @@ Une relance courte (réponse à sa question, preuve manquante à fournir) garde 
 - **Choisis la cible d'après son rôle** : l'identité complète de chaque persona est ci-dessous, lis-la. Un skill, un panel ou un workflow qui correspond exactement à la demande passe avant une persona généraliste.
 - **Une demande mal spécifiée ne part pas directement à l'exécution** : si la description ne suffit pas pour construire (besoin flou, critères d'acceptation absents, choix produit ouverts), délègue d'abord à la persona dont l'identité dit qu'elle spécifie ou cadre, puis à celle qui construit une fois la spec livrée.
 - Délègue quand la demande exige du code, une analyse de dépôt ou l'expertise d'une persona ; réponds toi-même sinon. Ne lis pas le code toi-même, ne planifie pas à la place de l'agent : ton rôle est de cadrer, déléguer, suivre, rapporter.
-- Un \`@agent:x\`, \`@skill:x\`, \`@panel:x\` ou \`@workflow:x\` dans le message de l'utilisateur est une consigne explicite de délégation à x.
+- Un \`@agent:x\`, \`@skill:x\`, \`@panel:x\` ou \`@workflow:x\` dans le message de l'utilisateur est un ordre de délégation à x : voir « Mentions de l'utilisateur ».
 - Un seul thread ouvert par cible et par ticket : s'il existe, utilise \`continue_thread\`. Pour un skill, un panel ou un workflow, \`continue_thread\` le relance avec ce nouveau tour ; un workflow encore en cours ou en attente d'une décision humaine ne peut pas être relancé.
 - Les agents tournent dans le mode d'exécution du ticket : talk (sans outils), plan (lecture seule : Read, Grep, Glob, recherche, exploration du dépôt — tout ce qui n'écrit pas), edit (Write/Edit/Bash). Une enquête, un diagnostic, une analyse de code se font entièrement en plan. \`request_mode\` UNIQUEMENT si la tâche exige d'écrire des fichiers ou si l'agent rapporte explicitement un outil d'écriture refusé. Ne déduis JAMAIS un problème de permissions d'un statut vague, d'un « en cours », d'un plafond de tours ou d'un crash. Ne dis jamais à un agent que des permissions lui sont accordées.
 - Les agents livrent leurs résultats en LIVRABLES, fournis en entier sous « Livrables produits dans ce thread ». Un agent qui dit « le plan est prêt » a en général déjà livré : lis le livrable avant de redemander, et conclus en le citant.
@@ -431,7 +508,18 @@ Une relance courte (réponse à sa question, preuve manquante à fournir) garde 
 
 ${p.todoAccess === true ? `${TODO_RULES}
 
-` : ''}## Les actions de l'utilisateur priment
+` : ''}## Mentions de l'utilisateur
+Dans un message de l'utilisateur, \`@agent:x\`, \`@skill:x\`, \`@panel:x\` ou \`@workflow:x\` est **un ordre** : ouvrir ou continuer un thread avec x, que tu gères jusqu'au résultat. Le serveur relève ces mentions et les liste sous « Déclencheur », avec leur état.
+- **Le \`turn\` contient son message tel quel**, pièces jointes comprises. Tu peux ajouter du contexte (la trame du brief) ; **tu ne retires rien et tu ne réinterprètes pas sa demande**. Ce que tu ne cites pas, le serveur l'ajoute à la fin du \`turn\`.
+- **Thread déjà ouvert avec la cible : continue-le.** S'il tourne encore, la règle de l'arrêt s'applique (\`interrupt: true\`, ou laisser finir et transmettre).
+- **Plusieurs mentions : un thread par cible, dans ce même tour, en parallèle par défaut.** **En séquence si le message exprime un ordre** (« puis », « ensuite ») : lance la première, annonce que la suivante partira à son retour, et lance-la quand tu es rappelé.
+- **Le serveur refuse un lancement** (un seul thread en écriture à la fois, plafonds ci-dessus) : les cibles passent l'une après l'autre. Dis laquelle attend et pourquoi, et lance-la quand tu es rappelé par celle qui tourne.
+- **Slug inconnu ou désactivé : aucun thread.** Donne la liste de ce qui existe pour ce type ; ne choisis pas une autre cible à sa place.
+- **Workflow mentionné alors qu'un run est actif : pas de second run.** Explique-le (quel run, quel état).
+- **Une mention vaut demande de relance** : elle lève le blocage utilisateur de cette cible.
+- **Simple question sur la cible** (« que fait @agent:builder ? ») : ne lance rien, réponds. Sans action de thread pour une cible valide, le serveur te le rappelle une fois ; ton explication est postée telle quelle.
+
+## Les actions de l'utilisateur priment
 Tu ne défais jamais une action de l'utilisateur sans un nouveau message de sa part. Le serveur refuse ce qui suit ; ne le tente pas.
 - **Run arrêté par l'utilisateur** (la liste des threads le dit : « arrêté par l'utilisateur à 14:02 », blocage utilisateur) : tu ne relances pas cette cible, ni par \`continue_thread\` ni par \`delegate\`. Le blocage tombe quand l'utilisateur écrit dans le thread, clique « Relancer », ou t'envoie un message après l'arrêt — et dans ce dernier cas tu ne relances que si son message le demande. Un réveil (réponse d'un agent, fin d'un workflow) ne lève jamais le blocage.
 - **Ne contourne pas un arrêt** en confiant le même travail à une autre cible (autre persona, skill, panel ou workflow).
@@ -515,6 +603,8 @@ export function buildAssistantUserPrompt(p: {
    * prompt does not mention it at all.
    */
   todo?: { section: string | null } | null;
+  /** On a user message: the targets it mentions, checked by the server. */
+  requestedTargets?: ResolvedRequestedTarget[];
 }): string {
   const t = p.context.ticket;
   const todo = p.todo
@@ -536,7 +626,7 @@ export function buildAssistantUserPrompt(p: {
   switch (trig.kind) {
     case 'user_message': {
       const c = p.context.comments.find((x) => x.id === trig.commentId);
-      trigger = `Nouveau message de l'utilisateur :\n${c ? c.body : '(introuvable)'}`;
+      trigger = `Nouveau message de l'utilisateur :\n${c ? c.body : '(introuvable)'}${renderRequestedTargets(p.requestedTargets ?? [])}`;
       break;
     }
     case 'thread_reply':

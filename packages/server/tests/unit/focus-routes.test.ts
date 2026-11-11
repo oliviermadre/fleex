@@ -51,6 +51,7 @@ function deps() {
         getByTicket,
       },
       stepRunStore: { getByWorkflowRun },
+      config: { get: () => ({} as { workThreadsEnabled?: boolean }) },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
   };
@@ -70,6 +71,43 @@ describe('computeFocus', () => {
     expect(getByWorkflowRun.mock.calls.map((c) => c[0])).toEqual(['rg']);
     // Private comments never reach the Focus list.
     expect(res.items[0]!.lastAgentComment?.body).toBe('visible');
+  });
+
+  describe("the assistant's question", () => {
+    const T2 = '2026-09-28T10:00:00.000Z';
+    const T3 = '2026-09-28T11:00:00.000Z';
+    const questions = [{ prompt: 'On y va ?', options: ['Go', 'Ajuster'] }];
+    const comment = (id: string, authorType: string, createdAt: string, over: Record<string, unknown> = {}) => {
+      const value = { id, ticketId: 'T2', authorType, authorName: authorType === 'assistant' ? 'Nas' : 'Olivier', body: id, createdAt, threadId: null, questions: null, ...over };
+      return { ...dto(value), isVisibleTo: () => true };
+    };
+    const focus = async (comments: unknown[], enabled = true) => {
+      const { deps: d } = deps();
+      d.commentStore.getByTicketIds = async () => comments;
+      d.config.get = () => ({ workThreadsEnabled: enabled });
+      return (await computeFocus(d)).items.find((i) => i.ticketId === 'T2')!;
+    };
+
+    it('shows in Focus as a question, with its declared choices, when it is the last word of the main stream', async () => {
+      const item = await focus([comment('u1', 'user', T1), comment('a1', 'assistant', T2, { questions })]);
+      expect(item).toMatchObject({ kind: 'question', key: 'question:a1', question: { source: 'assistant', askedBy: 'Nas', questions } });
+    });
+
+    it('is no longer pending once the human wrote in the main stream after it', async () => {
+      expect((await focus([comment('a1', 'assistant', T2, { questions }), comment('u1', 'user', T3)])).kind).toBe('idle');
+    });
+
+    it('a later assistant message without questions closes it; a turn inside a thread does not count', async () => {
+      expect((await focus([comment('a1', 'assistant', T2, { questions }), comment('a2', 'assistant', T3)])).kind).toBe('idle');
+      expect((await focus([
+        comment('a1', 'assistant', T2, { questions }),
+        comment('a2', 'assistant', T3, { threadId: 'th1' }), comment('u1', 'user', T3, { threadId: 'th1' }),
+      ])).kind).toBe('question');
+    });
+
+    it('switch off: Focus is unchanged, the ticket stays idle', async () => {
+      expect((await focus([comment('a1', 'assistant', T2, { questions })], false)).kind).toBe('idle');
+    });
   });
 
   it('returns an empty list when no ticket is in Doing or Reviewing', async () => {

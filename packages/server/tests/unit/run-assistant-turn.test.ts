@@ -12,6 +12,7 @@ import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.entity.js';
 import type { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
 import type { CliTool } from '../../src/application/assistant/fleex-cli-tools.js';
+import { extractRequestedTargets, ORIGINAL_MESSAGE_HEADER } from '../../src/application/assistant/assistant-protocol.js';
 
 const logger = { info() {}, warn() {}, error() {}, debug() {} };
 
@@ -311,7 +312,7 @@ describe('RunAssistantTurnUseCase — conversation', () => {
     expect(call.system).toContain('**#1** · uuid `t1`');
     expect(call.system).toContain('Workspace Fleex : **qa**');
     expect(call.system).toContain('1 outils `fleex_*`');
-    expect(call.system.length).toBeLessThan(12000);
+    expect(call.system.length).toBeLessThan(14000); // rules only: no CLI help, no ticket content
     expect(call.tools).toEqual(['delegate', 'continue_thread', 'stop_thread', 'conclude_thread', 'request_mode', 'fleex_ticket_show']);
   });
 
@@ -1611,4 +1612,216 @@ describe('RunAssistantTurnUseCase — the ticket todo', () => {
       expect(resultBlocks(h, 1)[0]!.is_error).toBe(true);
     });
   }
+});
+
+describe('RunAssistantTurnUseCase — @type:slug in a message to the assistant is an order to delegate', () => {
+  const catalyst = () => persona('catalyst');
+  const review = { id: 'w-review', slug: 'review', name: 'Review', description: 'Code review then QA.', enabled: true };
+  const lint = { id: 's-lint', commandName: 'lint', name: 'lint', displayName: 'Lint', markdownContent: 'Lint.', enabled: true };
+  const delegateTo = (name: string, turn = 'go', targetType = 'agent') => ({ name: 'delegate', input: { targetType, name, brief: `brief ${name}`, turn } });
+  /** The human sends `body` to the assistant: the comment, and the trigger the route builds from it. */
+  const says = async (h: ReturnType<typeof harness>, id: string, body: string) => {
+    await pause();
+    await h.comments.save(TicketCommentEntity.create({ id, ticketId: 't1', authorType: 'user', authorName: 'Olivier', body }));
+    await pause();
+    return { kind: 'user_message' as const, commentId: id, requestedTargets: extractRequestedTargets(body) };
+  };
+  const userPrompt = (h: ReturnType<typeof harness>) => h.llmCalls[0]!.messages[0]!.content as string;
+  /** The reminders the server sent during the turn (plain user messages after the first). */
+  const reminders = (h: ReturnType<typeof harness>) => h.llmCalls.at(-1)!.messages.slice(1)
+    .filter((m) => m.role === 'user' && typeof m.content === 'string').map((m) => m.content as string);
+  const threadTurns = (h: ReturnType<typeof harness>, name: string) => {
+    const t = [...h.threads.saved.values()].find((x) => x.personaName === name);
+    return t ? h.comments.saved.filter((c) => c.threadId === t.id).map((c) => c.body) : [];
+  };
+  const mainStream = (h: ReturnType<typeof harness>) => h.comments.saved.filter((c) => c.threadId === null && c.authorType === 'assistant').map((c) => c.body);
+
+  // Acceptance criterion: « @agent:catalyst spécifie X » opens a catalyst thread whose first turn contains the original sentence.
+  it('the first turn of the thread contains the human sentence as is, even when the model rewrote it', async () => {
+    const h = harness([{ tools: [delegateTo('catalyst', 'Objectif : rédiger la spec de X.')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:catalyst spécifie X') });
+    const [turn] = threadTurns(h, 'catalyst');
+    expect(turn).toBe(`@agent:catalyst Objectif : rédiger la spec de X.\n\n---\n${ORIGINAL_MESSAGE_HEADER}\n\n@agent:catalyst spécifie X`);
+    expect(h.mentions.saved.map((m) => m.targetAgent)).toEqual(['catalyst']);
+    expect(userPrompt(h)).toContain('- @agent:catalyst — valide · aucun thread ouvert');
+    expect(reminders(h)).toEqual([]);
+  });
+
+  it('attachments travel with it: the file link of the message reaches the target unchanged', async () => {
+    const file = '![capture](/api/files/11111111-2222-4333-8444-555555555555)';
+    const h = harness([{ tools: [delegateTo('catalyst', 'Regarde la capture.')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', `@agent:catalyst que vois-tu ?\n\n${file}`) });
+    expect(threadTurns(h, 'catalyst')[0]).toContain(`@agent:catalyst que vois-tu ?\n\n${file}`);
+  });
+
+  it('a turn that already quotes the message in full is sent untouched (nothing is added twice)', async () => {
+    const h = harness([{ tools: [delegateTo('catalyst', 'Contexte : ticket e2e.\n« @agent:catalyst   spécifie X »\nDéfinition de fini : un livrable spec.')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:catalyst spécifie X') });
+    expect(threadTurns(h, 'catalyst')[0]).not.toContain(ORIGINAL_MESSAGE_HEADER);
+  });
+
+  it('a target the human did not mention gets the turn the model wrote, nothing more', async () => {
+    const h = harness([{ tools: [delegateTo('catalyst'), delegateTo('builder', 'construis')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:catalyst spécifie X') });
+    expect(threadTurns(h, 'builder')).toEqual(['@agent:builder construis']);
+  });
+
+  // Acceptance criterion: two mentions in one message ⇒ two threads opened in the same turn.
+  it('two mentions open two threads in the same turn; each turn launches its own target only, though both quote the whole message', async () => {
+    const h = harness([{ tools: [delegateTo('catalyst'), delegateTo('builder')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    const body = '@agent:catalyst spécifie X et @agent:builder prépare le terrain';
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', body) });
+    expect([...h.threads.saved.values()].map((t) => [t.personaName, t.status]).sort()).toEqual([['builder', 'running'], ['catalyst', 'running']]);
+    expect(threadTurns(h, 'catalyst')[0]).toContain(body);
+    expect(threadTurns(h, 'builder')[0]).toContain(body);
+    // One mention per thread: the tag of the other target, quoted in the turn, launched nothing.
+    expect(h.mentions.saved.map((m) => m.targetAgent).sort()).toEqual(['builder', 'catalyst']);
+    expect(h.llmCalls).toHaveLength(2);
+    expect(reminders(h)).toEqual([]);
+  });
+
+  // Acceptance criterion: the model ignores the mention on the first pass ⇒ the reminder round fires.
+  it('the model ignores the mention: the server sends ONE reminder round, and the delegation happens there', async () => {
+    const h = harness([{ text: 'Je regarde.' }, { tools: [delegateTo('catalyst', 'spec')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:catalyst spécifie X') });
+    expect(reminders(h)).toHaveLength(1);
+    expect(reminders(h)[0]).toMatch(/^Rappel du serveur : tu n'as pas traité @agent:catalyst\./);
+    expect(reminders(h)[0]).toContain('délègue');
+    expect(reminders(h)[0]).toContain('explique pourquoi');
+    expect(threadTurns(h, 'catalyst')[0]).toContain('@agent:catalyst spécifie X');
+    expect(h.llmCalls).toHaveLength(3);
+  });
+
+  it('it still does not delegate: its explanation is posted as is, nothing is launched by force, and it is not reminded twice', async () => {
+    const h = harness([{ text: 'Builder corrige les e2e.' }, { text: "Je n'ai pas lancé @agent:builder : tu demandais seulement ce qu'il fait." }, { text: 'jamais lu' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', 'que fait @agent:builder ?') });
+    expect(h.llmCalls).toHaveLength(2);
+    expect(mainStream(h)).toEqual(["Builder corrige les e2e.\n\nJe n'ai pas lancé @agent:builder : tu demandais seulement ce qu'il fait."]);
+    // The tag in the explanation is text: no thread, and no direct mention either.
+    expect(h.threads.saved.size).toBe(0);
+    expect(h.mentions.saved).toEqual([]);
+  });
+
+  it('only the targets left out are named in the reminder', async () => {
+    const h = harness([{ tools: [delegateTo('catalyst')] }, { text: 'Catalyst est lancé.' }, { text: 'Builder attendra.' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:catalyst spécifie puis @agent:builder construis') });
+    expect(reminders(h)).toHaveLength(1);
+    expect(reminders(h)[0]).toContain('@agent:builder');
+    expect(reminders(h)[0]).not.toContain('@agent:catalyst');
+  });
+
+  it('a message with no mention, and a wake-up, are never reminded', async () => {
+    const h = harness([{ text: 'ok' }, { text: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', 'où en est-on ?') });
+    expect(h.llmCalls).toHaveLength(1);
+    await h.uc.execute({ ticketId: 't1', trigger: wake('nope') });
+    expect(h.llmCalls).toHaveLength(2);
+  });
+
+  // The rule: a target is handled once the model made a thread action for it,
+  // whatever the server answered. A refusal it read and explained is not ignored.
+  it('a launch the server refused (one writer at a time) is not a mention ignored: no reminder, and the model is told to sequence', async () => {
+    const h = harness([{ tools: [delegateTo('builder'), delegateTo('catalyst')] }, { text: 'Builder est lancé ; Catalyst partira à son retour.' }, { text: 'jamais lu' }], { extraPersonas: [catalyst()] });
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:builder construis et @agent:catalyst documente') });
+    expect([...h.threads.saved.values()].map((t) => t.personaName)).toEqual(['builder']);
+    expect(String(resultBlocks(h, 1)[1]!.content)).toMatch(/^Refusé.*un seul thread à la fois peut écrire/);
+    expect(reminders(h)).toEqual([]);
+    expect(h.llmCalls).toHaveLength(2);
+    expect(h.llmCalls[0]!.system).toMatch(/Le serveur refuse un lancement.*les cibles passent l'une après l'autre/);
+    expect(mainStream(h)).toEqual(['Builder est lancé ; Catalyst partira à son retour.']);
+  });
+
+  it('the reminder fits in the round budget: with no round left, the server says itself what was not delegated', async () => {
+    const show = { name: 'fleex_ticket_show', input: { id: '1' } };
+    const rounds: Round[] = [...Array.from({ length: ASSISTANT_MAX_ROUNDS - 1 }, () => ({ tools: [show] })), { text: 'Voilà.' }, { text: 'jamais lu' }];
+    const h = harness(rounds);
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:builder corrige') });
+    expect(h.llmCalls).toHaveLength(ASSISTANT_MAX_ROUNDS);
+    expect(reminders(h)).toEqual([]);
+    expect(mainStream(h)[0]).toMatch(/^Voilà\.\n\nJe n'ai pas délégué à @agent:builder pendant ce tour\./);
+    expect(h.mentions.saved).toEqual([]);
+  });
+
+  it('an unknown or disabled slug opens no thread: the turn is told it is invalid, with what exists, and is not reminded about it', async () => {
+    const off = { ...lint, id: 's-off', commandName: 'old', enabled: false };
+    const h = harness([{ text: 'Je ne connais pas ces cibles. Skills : lint.' }, { text: 'jamais lu' }], { skills: [lint, off] });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:ghost et @skill:old, au travail') });
+    const prompt = userPrompt(h);
+    expect(prompt).toMatch(/- @agent:ghost — INVALIDE : n'ouvre aucun thread.*Personas disponibles : nas, builder/);
+    expect(prompt).toMatch(/- @skill:old — INVALIDE.*Skills disponibles : lint/);
+    expect(h.llmCalls).toHaveLength(1);
+    expect(h.threads.saved.size).toBe(0);
+    expect(h.mentions.saved).toEqual([]);
+  });
+
+  it('an open thread with the target is continued, not doubled; a running one is announced as such', async () => {
+    const h = harness([{ tools: [delegateTo('builder')] }, { text: '' }, { tools: [delegateTo('builder', 'la suite')] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const before = h.llmCalls.length;
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:builder ajoute les tests') });
+    expect(h.llmCalls[before]!.messages[0]!.content).toContain(`- @agent:builder — valide · thread déjà ouvert ${thread.id} (running) : continue-le`);
+    expect(h.llmCalls[before]!.messages[0]!.content).toContain('interrupt: true');
+    expect(h.threads.saved.size).toBe(1);
+    // Lot 1's rule: still on its previous turn, and no interrupt asked — nothing is sent, the model is told to wait.
+    expect(toolResults(h).at(-1)).toContain('travaille encore sur le tour précédent');
+    expect(reminders(h)).toEqual([]);
+  });
+
+  describe('a workflow mentioned while a run is active', () => {
+    const active = () => ({ workflows: [review], runs: [run('r0', 'manual', 'needs_review')] });
+
+    // Acceptance criterion: no second run, and a message that explains it.
+    it('the model tries anyway: refused, no thread, no mention — and its explanation is posted', async () => {
+      const h = harness([{ tools: [delegateTo('review', 'go', 'workflow')] }, { text: 'Un run de review attend déjà ta validation : je n’en lance pas un second.' }], active());
+      await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@workflow:review relance') });
+      expect(userPrompt(h)).toMatch(/- @workflow:review — valide, mais un workflow tourne déjà sur ce ticket \(run r0, needs_review\).*Ne lance rien/);
+      expect(h.threads.saved.size).toBe(0);
+      expect(h.mentions.saved).toEqual([]);
+      expect(toolResults(h)[0]).toContain('Un workflow tourne déjà sur ce ticket (run r0');
+      expect(mainStream(h)).toEqual(['Un run de review attend déjà ta validation : je n’en lance pas un second.']);
+    });
+
+    it('the model says nothing: the server posts the explanation itself, and sends no reminder (nothing could be launched)', async () => {
+      const h = harness([{ text: '' }, { text: 'jamais lu' }], active());
+      await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@workflow:review relance') });
+      expect(h.llmCalls).toHaveLength(1);
+      expect(mainStream(h)).toEqual(["Je n'ai pas lancé @workflow:review : un workflow tourne déjà sur ce ticket (run r0, needs_review) : un seul run actif par ticket, pas de second run."]);
+      expect(h.threads.saved.size).toBe(0);
+      expect(h.mentions.saved).toEqual([]);
+    });
+
+    it('with no active run the same mention is an ordinary order: ignored, it is reminded', async () => {
+      const h = harness([{ text: 'hmm' }, { tools: [delegateTo('review', 'go', 'workflow')] }, { text: '' }], { workflows: [review] });
+      await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@workflow:review lance') });
+      expect(reminders(h)).toHaveLength(1);
+      expect(h.mentions.saved.map((m) => m.targetType)).toEqual(['workflow']);
+    });
+  });
+
+  // Acceptance criterion: a target under userHold is accepted, since the message comes from the human.
+  it('a mention of a target the human had stopped is accepted: the hold is lifted and the thread relaunched', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }, { tools: [delegateTo('builder', 'reprends')] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); await h.mentions.save(m);
+    h.executeAgent.running[m.id] = ['exec-1'];
+    await h.stopRun.stopThread(thread, { by: 'user', reason: 'stop' });
+    expect(thread.userHoldAt).toBeInstanceOf(Date);
+
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', '@agent:builder reprends où tu en étais') });
+    expect(toolResults(h).at(-1)).not.toMatch(/^Refusé/);
+    expect(thread.userHoldAt).toBeNull();
+    expect(thread.status).toBe('running');
+    expect(h.mentions.saved).toHaveLength(2);
+    expect(threadTurns(h, 'builder').at(-1)).toContain('@agent:builder reprends où tu en étais');
+  });
+
+  it('what the assistant says in the main stream never launches a target, whatever tags it names', async () => {
+    const h = harness([{ text: 'Cibles : @agent:builder, @skill:lint, @workflow:review.' }], { skills: [lint], workflows: [review] });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', 'qui peut m’aider ?') });
+    expect(mainStream(h)).toEqual(['Cibles : @agent:builder, @skill:lint, @workflow:review.']);
+    expect(h.mentions.saved).toEqual([]);
+  });
 });

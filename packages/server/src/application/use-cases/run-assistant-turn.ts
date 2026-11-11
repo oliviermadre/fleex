@@ -41,6 +41,9 @@ import {
   renderQuestion,
   assistantQuestions,
   skillSummary,
+  renderMentionReminder,
+  withOriginalMessage,
+  type ResolvedRequestedTarget,
   type AssistantCapabilities,
   type AssistantAction,
   type AssistantTrigger,
@@ -240,8 +243,22 @@ export class RunAssistantTurnUseCase {
       capabilities,
       todoAccess,
     });
+    // The targets the human mentioned in this message: each valid one is an
+    // order to delegate, which the end of the turn checks.
+    const requested = trigger.kind === 'user_message' && trigger.requestedTargets?.length
+      ? await this.resolveRequestedTargets(ticket, trigger.requestedTargets, allThreads)
+      : [];
+    const originalMessage = requested.length > 0 && trigger.kind === 'user_message'
+      ? context.comments.find((c) => c.id === trigger.commentId)?.body ?? null
+      : null;
+    const targetKey = (type: string, name: string) => `${type}:${name}`;
+    const requestedKeys = new Set(requested.filter((t) => t.valid).map((t) => targetKey(t.type, t.name)));
+    /** Requested targets the model made a thread action for — accepted or refused, it read the answer. */
+    const handled = new Set<string>();
+    const unhandled = () => requested.filter((t) => t.valid && !t.blocked && !handled.has(targetKey(t.type, t.name)));
+    let reminded = false;
     const userPrompt = buildAssistantUserPrompt({
-      context, threads: allThreads.map((t) => t.toDTO()), trigger, turns, threadDeliverables,
+      context, threads: allThreads.map((t) => t.toDTO()), trigger, turns, threadDeliverables, requestedTargets: requested,
       // Grouped from the assistant's point of view: « For you » is what is assigned to its slug.
       todo: todoAccess ? { section: formatTodoContext(ticket.displayId, context.todos ?? [], { persona: assistant.name }) } : null,
     });
@@ -336,7 +353,19 @@ export class RunAssistantTurnUseCase {
           : '');
         if (spoken) said.push(spoken);
         finalText = said.join(ROUND_SEPARATOR);
-        if (toolUses.length === 0) break;
+        if (toolUses.length === 0) {
+          // The guarantee behind `@type:slug`: the model is ending its turn and a
+          // valid target the human mentioned got no thread action. One more
+          // round, once, inside the round budget: delegate, or say why. Nothing
+          // is launched by force — the human may only have asked about the target.
+          const missing = unhandled();
+          if (missing.length === 0 || reminded || round + 1 >= ASSISTANT_MAX_ROUNDS) break;
+          reminded = true;
+          const reminder = renderMentionReminder(missing);
+          await emitEvent('content_block_delta', { type: 'user', message: { content: [{ type: 'text', text: reminder }] } });
+          messages.push({ role: 'user', content: reminder });
+          continue;
+        }
 
         // The output cap cut the round short: the call being written when it hit
         // is incomplete, and must not run on half its arguments.
@@ -360,6 +389,19 @@ export class RunAssistantTurnUseCase {
             // applied on the state the previous one left. The limits on launches
             // are enforced in `apply`, against the ledger.
             threads = await this.deps.threadStore.getByTicket(ticketId);
+            const aimed = action.action === 'delegate'
+              ? targetKey(action.targetType, action.name)
+              : action.action !== 'reply'
+                ? (() => { const t = threads.find((x) => x.id === action.threadId); return t ? targetKey(t.targetType, t.personaName) : null; })()
+                : null;
+            if (aimed && requestedKeys.has(aimed)) {
+              handled.add(aimed);
+              // The human's message goes to the target they named as is: what the
+              // model left out of its turn is appended, nothing it wrote is changed.
+              if (originalMessage && (action.action === 'delegate' || action.action === 'continue_thread')) {
+                action.turn = withOriginalMessage(action.turn, originalMessage);
+              }
+            }
             text = await this.apply(ticket, assistant, action, threads, trigger, ledger);
             threadActionTaken = true;
             if (action.action === 'conclude_thread') concluded = true;
@@ -400,6 +442,20 @@ export class RunAssistantTurnUseCase {
         }, threads, trigger, ledger);
         finalText = '';
       }
+
+      // What the model left unsaid about a mention, the server says: a workflow
+      // that could not start because a run is active, when the turn said nothing
+      // at all; a valid target neither delegated to nor explained (no round was
+      // left for the reminder, or the model answered it with silence).
+      const notes: string[] = [];
+      if (!finalText) {
+        for (const t of requested) if (t.blocked) notes.push(`Je n'ai pas lancé @${t.type}:${t.name} : ${t.blocked}`);
+      }
+      const left = unhandled();
+      if (left.length > 0 && (!reminded || !finalText)) {
+        notes.push(`Je n'ai pas délégué à ${left.map((t) => `@${t.type}:${t.name}`).join(', ')} pendant ce tour. Redemande-le-moi si tu veux que je le fasse.`);
+      }
+      if (notes.length > 0) finalText = [finalText, ...notes].filter(Boolean).join(ROUND_SEPARATOR);
 
       if (finalText) {
         await this.postAssistant(ticket, assistant, null, finalText);
@@ -660,7 +716,8 @@ export class RunAssistantTurnUseCase {
     if (busy) return busy;
     if (current && current.status === 'waiting_for_info') {
       ledger.launched.add(thread.id);
-      await this.postAssistant(ticket, assistant, thread.id, `${thread.mentionTag} ${turn}`, { suppressMentionForAgents: [thread.personaName] });
+      // The waiting mention is woken below: this turn creates none, whatever tags it quotes.
+      await this.postAssistant(ticket, assistant, thread.id, `${thread.mentionTag} ${turn}`, { suppressAgentMentions: true });
       thread.recordTurn();
       thread.markRunning();
       await this.deps.threadStore.save(thread);
@@ -773,12 +830,41 @@ export class RunAssistantTurnUseCase {
 
   private async openTurn(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string, ledger: TurnLedger): Promise<void> {
     ledger.launched.add(thread.id);
-    const { createdMentions } = await this.postAssistant(ticket, assistant, thread.id, `${thread.mentionTag} ${turn}`);
+    // Only the thread's target is launched by its turn: the human's message is
+    // relayed as is, and the other tags it carries belong to their own threads.
+    const { createdMentions } = await this.postAssistant(ticket, assistant, thread.id, `${thread.mentionTag} ${turn}`, {
+      onlyMentionTarget: { targetType: thread.targetType, name: thread.personaName },
+    });
     const mention = createdMentions.find((m) => m.targetAgent === thread.personaName && m.targetType === thread.targetType);
     if (mention) thread.openTurn(mention.id);
     else thread.recordTurn();
     await this.deps.threadStore.save(thread);
     this.emit({ type: 'thread.updated', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
+  }
+
+  /**
+   * The targets the human mentioned, checked against what exists: valid or not
+   * (with the list of what exists), the open thread to continue, and whether a
+   * workflow run already active makes a launch impossible.
+   */
+  private async resolveRequestedTargets(
+    ticket: TicketEntity, targets: { type: AgentThreadTargetType; name: string }[], threads: AgentThreadEntity[],
+  ): Promise<ResolvedRequestedTarget[]> {
+    const busy = targets.some((t) => t.type === 'workflow') ? await this.activeWorkflowRun(ticket.id) : null;
+    const out: ResolvedRequestedTarget[] = [];
+    for (const t of targets) {
+      const target = await this.resolveTarget(t.type, t.name);
+      if ('error' in target) { out.push({ ...t, valid: false, error: target.error }); continue; }
+      const open = threads.find((x) => x.targetType === t.type && x.personaName === target.name && !x.isTerminal);
+      out.push({
+        type: t.type, name: target.name, valid: true,
+        ...(open ? { openThread: { id: open.id, status: open.status } } : {}),
+        ...(t.type === 'workflow' && busy
+          ? { blocked: `un workflow tourne déjà sur ce ticket (run ${busy.id}, ${busy.status}) : un seul run actif par ticket, pas de second run.` }
+          : {}),
+      });
+    }
+    return out;
   }
 
   /** Enabled skills, panels and workflows, as the system prompt lists them. */
@@ -842,10 +928,17 @@ export class RunAssistantTurnUseCase {
     assistant: AgentPersonaEntity,
     threadId: string | null,
     body: string,
-    extra: { suppressMentionForAgents?: string[]; suppressAgentMentions?: boolean; questions?: AgentQuestion[] | null } = {},
+    extra: {
+      suppressMentionForAgents?: string[]; suppressAgentMentions?: boolean; questions?: AgentQuestion[] | null;
+      onlyMentionTarget?: { targetType: AgentThreadTargetType; name: string };
+    } = {},
   ) {
     const authorName = assistant.displayName || assistant.name;
-    const result = await this.deps.postComment.execute({ ticketId: ticket.id, authorType: 'assistant', authorName, body, threadId, ...extra });
+    // What the assistant says in the main stream launches nobody: it names
+    // targets there (what exists, why it did not delegate), and a tag in that
+    // text must not start a run outside any thread. Launches are thread turns.
+    const mainStream = threadId === null ? { suppressAgentMentions: true } : {};
+    const result = await this.deps.postComment.execute({ ticketId: ticket.id, authorType: 'assistant', authorName, body, threadId, ...extra, ...mainStream });
     const now = new Date();
     this.emit({
       type: 'comment.posted', commentId: result.comment.id, ticketId: ticket.id, authorType: 'assistant', authorName,
