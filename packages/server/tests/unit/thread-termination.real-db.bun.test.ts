@@ -5,7 +5,10 @@
  * columns they create did not exist on real databases while every unit test (all on fakes)
  * stayed green. These tests would have failed on that.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Fastify from 'fastify';
 import { SqliteConnection } from '../../src/infrastructure/adapters/sqlite/connection.js';
 import { SqliteTicketStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-ticket-store.adapter.js';
@@ -37,6 +40,7 @@ let comments: SqliteCommentStoreAdapter;
 let mentions: SqliteMentionStoreAdapter;
 let agentEvents: SqliteAgentEventStoreAdapter;
 let threads: SqliteThreadStoreAdapter;
+let eventsDir: string;
 
 beforeEach(async () => {
   conn = new SqliteConnection(':memory:');
@@ -46,10 +50,19 @@ beforeEach(async () => {
   comments = new SqliteCommentStoreAdapter(conn);
   mentions = new SqliteMentionStoreAdapter(conn);
   agentEvents = new SqliteAgentEventStoreAdapter(conn);
+  // The store writes one .jsonl per execution under ~/.fleex. An assistant turn
+  // run here must neither depend on that directory existing (it does not on CI)
+  // nor leave files in the developer's real one.
+  eventsDir = await mkdtemp(join(tmpdir(), 'fleex-agent-events-'));
+  (agentEvents as unknown as { eventsDir: string }).eventsDir = eventsDir;
   threads = new SqliteThreadStoreAdapter(conn);
   const ticket = TicketEntity.create({ id: 't1', boardId: 'b1', displayId: 1, title: 'Panel thread' });
   ticket.updateExecutionConfig({ assistantPersonaId: 'p-nas' });
   await tickets.saveTicket(ticket);
+});
+
+afterEach(async () => {
+  await rm(eventsDir, { recursive: true, force: true });
 });
 
 /** A thread whose agent has one running execution, linked through comment → mention → execution. */
@@ -226,6 +239,8 @@ describe('Conclude and manual termination, on a real database', () => {
     expect(woken).toEqual([]);
     expect(await builderMentions()).toHaveLength(1);
     expect((await threads.getById(thread.id))!.userHoldAt).toBeInstanceOf(Date);
+    // The turn ran to its end: nothing was relaunched because the guard refused, not because the turn crashed.
+    expect((await comments.getByTicket('t1')).filter((c) => c.authorType === 'assistant').map((c) => c.body)).toContain('ok');
 
     // The human asks the assistant to resume, after the stop: accepted, hold lifted.
     await new Promise((r) => setTimeout(r, 5));
