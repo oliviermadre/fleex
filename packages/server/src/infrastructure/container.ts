@@ -517,6 +517,7 @@ export async function createContainer() {
   const runAssistantTurn = new RunAssistantTurnUseCase({
     threadStore, commentStore, mentionStore, ticketStore: ticketStore_, personaStore: personaStore_, postComment,
     getTicketContext, agentEventStore: agentEventStore_, executeAgent, stopRun, config, eventBus, logger,
+    deliverableStore, submitDeliverable,
     environment: assistantEnvironment,
     skillStore, panelStore, workflowTemplateStore, workflowRunStore,
   }, createAnthropicAssistantLlm(new Anthropic({ apiKey: anthropicApiKey || 'missing' })));

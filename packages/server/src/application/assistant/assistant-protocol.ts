@@ -49,6 +49,104 @@ export type AssistantAction =
   | { action: 'conclude_thread'; threadId: string; summary: string; message: string | null; question: AssistantQuestion | null };
 
 /**
+ * What the assistant does in a turn besides its thread actions: the mandate
+ * (propose, confirm, note a decision) and its grouped questions to the human.
+ */
+export type AssistantTurnTool =
+  | { tool: 'propose_mandate'; title: string; markdown: string }
+  | { tool: 'confirm_mandate' }
+  | { tool: 'note_decision'; decision: string; reason: string }
+  | { tool: 'ask_user'; questions: AssistantQuestion[] };
+
+/** The two answers to a mandate, as buttons. « Go » is the only thing that makes it final. */
+export const MANDATE_OPTIONS = ['Go', 'Ajuster'] as const;
+/** The deliverable type a mandate is written as. */
+export const MANDATE_DELIVERABLE_TYPE = 'plan';
+/** Questions one assistant message may declare (the same cap as an agent's). */
+export const MAX_ASSISTANT_QUESTIONS = 4;
+/** The section of the mandate where the decisions the assistant took alone are kept, turn after turn. */
+export const DECISIONS_HEADING = '## Décisions prises';
+
+/** True when a human message is the « Go » button (or the same word typed): nothing else validates a mandate without the model. */
+export function isGoAnswer(body: string): boolean {
+  return /^go[\s.!]*$/i.test(body.trim());
+}
+
+/** [start, end) of the « Décisions prises » section in the lines of a mandate, or null. */
+function decisionsRange(lines: string[]): [number, number] | null {
+  const start = lines.findIndex((l) => l.trim().toLowerCase().startsWith(DECISIONS_HEADING.toLowerCase()));
+  if (start < 0) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^#{1,2}\s/.test(lines[i]!)) { end = i; break; }
+  }
+  return [start, end];
+}
+
+/** The decisions noted in a mandate, one per entry (the section's bullet lines). */
+export function decisionsOf(content: string): string[] {
+  const lines = content.split('\n');
+  const range = decisionsRange(lines);
+  if (!range) return [];
+  return lines.slice(range[0] + 1, range[1]).map((l) => l.trim()).filter((l) => l.startsWith('- ')).map((l) => l.slice(2));
+}
+
+/**
+ * A decision appended to the « Décisions prises » section of a mandate (created
+ * at the end when absent). The mandate is the assistant's only memory between
+ * turns: what it notes here is what its final report can cite.
+ */
+export function appendDecision(content: string, decision: string, reason: string, at: Date): string {
+  const flat = (x: string) => x.replace(/\s+/g, ' ').trim();
+  const entry = `- ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC — ${flat(decision)} — Raison : ${flat(reason)}`;
+  const lines = content.split('\n');
+  const range = decisionsRange(lines);
+  if (!range) return `${content.trimEnd()}\n\n${DECISIONS_HEADING}\n${entry}\n`;
+  let last = range[1];
+  while (last > range[0] + 1 && !lines[last - 1]!.trim()) last--;
+  lines.splice(last, 0, entry);
+  return lines.join('\n');
+}
+
+/**
+ * The text of a revised mandate, with the decisions already noted in the
+ * previous version carried over when the revision does not restate them: a
+ * revision never erases what was decided.
+ */
+export function carryDecisions(markdown: string, previous: string): string {
+  if (decisionsRange(markdown.split('\n'))) return markdown;
+  const kept = decisionsOf(previous);
+  if (kept.length === 0) return markdown;
+  return `${markdown.trimEnd()}\n\n${DECISIONS_HEADING}\n${kept.map((d) => `- ${d}`).join('\n')}\n`;
+}
+
+/** What the ticket cost so far, from its executions. Unknown costs are counted apart, never as 0. */
+export interface TicketCost { knownUsd: number; counted: number; unknown: number; running: number }
+
+export function computeTicketCost(executions: ReadonlyArray<{ status?: string; costUsd?: number | null }>): TicketCost {
+  const cost: TicketCost = { knownUsd: 0, counted: 0, unknown: 0, running: 0 };
+  for (const e of executions) {
+    if (e.status === 'running') cost.running += 1;
+    else if (typeof e.costUsd === 'number' && Number.isFinite(e.costUsd)) { cost.knownUsd += e.costUsd; cost.counted += 1; }
+    else cost.unknown += 1;
+  }
+  return cost;
+}
+
+/** The cost line the assistant quotes in its final report. Information only: no threshold, no judgment. */
+export function renderTicketCost(c: TicketCost): string {
+  const usd = `${c.knownUsd.toFixed(2).replace('.', ',')} $`;
+  const unknown = c.unknown > 0 ? ` ; ${c.unknown} exécution(s) au coût inconnu, non comptée(s)` : '';
+  const running = c.running > 0 ? ` ; ${c.running} en cours, pas encore comptée(s)` : '';
+  if (c.counted === 0) {
+    return c.unknown > 0
+      ? `inconnu (${c.unknown} exécution(s) terminée(s), aucune n'a de coût enregistré)${running}. Dis « inconnu », pas 0.`
+      : `aucune exécution terminée pour l'instant${running}.`;
+  }
+  return `${c.unknown > 0 ? 'au moins ' : ''}${usd} sur ${c.counted} exécution(s) terminée(s), agents et tours d'assistant compris, hors tour en cours${unknown}${running}.${c.unknown > 0 ? ' Dis « au moins », le total réel est inconnu.' : ''}`;
+}
+
+/**
  * The `@agent:` / `@skill:` / `@panel:` / `@workflow:` tags of a human message,
  * in the order they were written. Same grammar as the mentions a comment
  * creates (the comment entity's extractors, struck-through tags skipped) —
@@ -115,6 +213,9 @@ export const ACTION_TOOL_NAMES = {
   conclude_thread: 'conclude_thread',
   request_mode: 'request_mode',
 } as const;
+
+/** The tools of `AssistantTurnTool`: mandate and questions to the human. */
+export const TURN_TOOL_NAMES = ['propose_mandate', 'confirm_mandate', 'note_decision', 'ask_user'] as const;
 
 export const ACTION_TOOLS: Array<{ name: string; description: string; input_schema: Record<string, unknown> }> = [
   {
@@ -190,6 +291,54 @@ export const ACTION_TOOLS: Array<{ name: string; description: string; input_sche
       required: ['threadId', 'mode', 'message'],
     },
   },
+  {
+    name: 'propose_mandate',
+    description: "Fin du cadrage d'une tâche à plusieurs étapes : écrit le mandat (livrable de type plan, en brouillon, à ton nom) ET pose à l'utilisateur la question « Go » / « Ajuster » à la fin de ce tour. Rappelé sur un mandat existant, il le révise (même livrable, nouvelle version, de nouveau en brouillon). Tant que le mandat est en brouillon, aucune cible qui écrit ne peut être lancée.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Titre du mandat, ex. « Mandat : export CSV des factures »' },
+        markdown: { type: 'string', description: "Le mandat, dans cet ordre : Objectif ; Critères d'acceptation ; Plan (les étapes) ; Ce que je décide seul ; Ce que je te remonte" },
+      },
+      required: ['title', 'markdown'],
+    },
+  },
+  {
+    name: 'confirm_mandate',
+    description: "L'utilisateur vient de valider le mandat avec ses propres mots (« vas-y », « ok pour moi ») : passe-le en final. Refusé hors d'un message de l'utilisateur postérieur au mandat. Inutile s'il a cliqué « Go » : le serveur l'a déjà fait.",
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'note_decision',
+    description: "Note une décision que tu prends seul pendant l'exécution du mandat, avec sa raison : elle est ajoutée à la section « Décisions prises » du mandat, que tu relis à chaque tour et que ton compte rendu final cite.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        decision: { type: 'string', description: 'Ce que tu as décidé, en une phrase' },
+        reason: { type: 'string', description: 'Pourquoi, en une phrase' },
+      },
+      required: ['decision', 'reason'],
+    },
+  },
+  {
+    name: 'ask_user',
+    description: `Pose tes questions à l'utilisateur, groupées en UN message (${MAX_ASSISTANT_QUESTIONS} au plus), avec des boutons : elles sont jointes à ton texte de ce tour, qui donne le contexte. Ne recopie pas les options dans ton texte.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        questions: {
+          type: 'array',
+          maxItems: MAX_ASSISTANT_QUESTIONS,
+          items: {
+            type: 'object',
+            properties: { text: { type: 'string', description: 'La question, 200 caractères au plus' }, options: { type: 'array', items: { type: 'string' }, description: '2 à 5 réponses, 80 caractères au plus chacune' } },
+            required: ['text', 'options'],
+          },
+        },
+      },
+      required: ['questions'],
+    },
+  },
 ];
 
 /** Validates a thread-action tool call into an `AssistantAction`, or null when unusable. */
@@ -197,6 +346,35 @@ export function parseActionToolInput(toolName: string, input: Record<string, unk
   const action = (ACTION_TOOL_NAMES as Record<string, string>)[toolName];
   if (!action) return null;
   return parseAssistantOutput({ ...input, action }, '');
+}
+
+/**
+ * Validates a mandate / question tool call, or null when unusable. `ask_user`
+ * keeps every well-formed question: the cap is the turn's to refuse, so that
+ * none is dropped in silence.
+ */
+export function parseTurnToolInput(toolName: string, input: Record<string, unknown>): AssistantTurnTool | null {
+  switch (toolName) {
+    case 'propose_mandate': {
+      const title = str(input.title);
+      const markdown = str(input.markdown);
+      return title && markdown ? { tool: 'propose_mandate', title, markdown } : null;
+    }
+    case 'confirm_mandate':
+      return { tool: 'confirm_mandate' };
+    case 'note_decision': {
+      const decision = str(input.decision);
+      const reason = str(input.reason);
+      return decision && reason ? { tool: 'note_decision', decision, reason } : null;
+    }
+    case 'ask_user': {
+      const raw = Array.isArray(input.questions) ? input.questions : [];
+      const questions = raw.map(question);
+      return questions.length > 0 && questions.every((q) => q !== null) ? { tool: 'ask_user', questions: questions as AssistantQuestion[] } : null;
+    }
+    default:
+      return null;
+  }
 }
 
 export const ASSISTANT_OUTPUT_SCHEMA: Record<string, unknown> = {
@@ -326,10 +504,16 @@ export function renderQuestion(q: AssistantQuestion | null | undefined): string 
   return `\n\n${q.text}\n${q.options.map((o) => `- ${o}`).join('\n')}`;
 }
 
-/** The assistant's question as the declared `questions` the UI renders one button per option from. */
-export function assistantQuestions(q: AssistantQuestion | null | undefined): AgentQuestion[] | null {
+/** Several questions restated in the comment body, in order (see `renderQuestion`). */
+export function renderQuestions(qs: readonly AssistantQuestion[]): string {
+  return qs.map((q) => renderQuestion(q)).join('');
+}
+
+/** The assistant's question(s) as the declared `questions` the UI renders one button per option from. */
+export function assistantQuestions(q: AssistantQuestion | readonly AssistantQuestion[] | null | undefined): AgentQuestion[] | null {
   if (!q) return null;
-  return sanitizeQuestions([{ prompt: q.text, options: q.options }]);
+  const list = Array.isArray(q) ? (q as readonly AssistantQuestion[]) : [q as AssistantQuestion];
+  return sanitizeQuestions(list.map((x) => ({ prompt: x.text, options: x.options })));
 }
 
 export interface AssistantEnvContext {
@@ -423,6 +607,25 @@ const MAX_RUNNING = PROMPT_LIMITS.runningThreadsPerTicket;
 const MAX_TURNS = PROMPT_LIMITS.turnsPerThread;
 
 /**
+ * The mandate and what follows it: when the human is asked, and when not. The
+ * step threshold is the todo's (lot 4); the turn cap and the 3-failure rule
+ * are stated where they live (« Règles ») and only referred to here.
+ */
+const MANDATE_RULES = `## Mandat et escalade
+- **Tâche à plusieurs étapes** (au moins 3 étapes, ou 2 délégations) : **termine le cadrage par un mandat, avant tout lancement de construction.** \`propose_mandate\` écrit le livrable (type plan, brouillon, à ton nom) et pose à l'utilisateur LA question « ${MANDATE_OPTIONS.join(' » / « ')} » à la fin du tour : n'en pose aucune autre dans ce tour. Le mandat contient, dans cet ordre : **Objectif** ; **Critères d'acceptation** ; **Plan** (les étapes — les items de la todo quand tu la tiens) ; **Ce que je décide seul** ; **Ce que je te remonte**. **Tâche courte : pas de mandat**, tu agis comme d'habitude.
+- **Tant que le mandat est en brouillon, le serveur refuse tout lancement d'une cible qui écrit** (persona en mode edit, skill, workflow) : cadrer, spécifier et lire restent possibles. **Seul l'utilisateur le valide** : s'il clique « Go », le serveur passe le mandat en final avant ton tour ; s'il le valide avec ses mots (« vas-y », « ok pour moi »), appelle \`confirm_mandate\`. Un réveil ne valide jamais un mandat, et tu ne modifies pas ce livrable par la CLI.
+- **« Ajuster » : retour au cadrage.** S'il n'a pas dit quoi changer, demande-le ; puis révise le mandat par \`propose_mandate\` (le même livrable, nouvelle version), qui repose la question.
+- **Après le Go, tu enchaînes sans autre validation**, jusqu'au compte rendu final. **Tu n'interromps l'utilisateur que pour** :
+  1. un **choix produit** que le mandat ne couvre pas ;
+  2. une **action irréversible ou externe** : merge, push sur une branche partagée, suppression, déploiement ;
+  3. un **blocage** : 3 échecs consécutifs, ou plafond de tours atteint (le serveur pose alors la question lui-même) ;
+  4. un **changement de mode d'exécution** (\`request_mode\`) ;
+  5. un **item de todo assigné à l'utilisateur** et qui bloque la suite.
+- **Tout le reste, tu le décides et tu le notes** : \`note_decision\` (la décision, sa raison) l'ajoute à la section « Décisions prises » du mandat. C'est ta seule mémoire d'un tour à l'autre : le mandat t'est redonné en entier à chaque tour, sous « Mandat ».
+- **Questions groupées** : quand tu dois interrompre, regroupe tes questions en UN message — \`ask_user\`, ${MAX_ASSISTANT_QUESTIONS} questions au plus, chacune avec ses options. **Pendant que tu attends, continue ce qui ne dépend pas de la réponse** : lance ou laisse tourner les autres étapes.
+- **Compte rendu final** (le mandat est exécuté, ou tu t'arrêtes) — un seul message, avec ces rubriques dans cet ordre : **Résultat** ; **Preuves** (tests lancés et leur résultat, lien de PR, livrables) ; **Décisions prises** (celles notées au mandat, chacune avec sa raison ; « aucune » s'il n'y en a pas) ; **Reste pour toi** (les items de todo de l'utilisateur encore ouverts ; « rien » sinon) ; **Coût total du ticket** (le chiffre donné sous « Coût du ticket », tel quel : une information, sans seuil ni jugement ; un coût inconnu se dit inconnu).`;
+
+/**
  * How the assistant steers the ticket's todo. Only in the prompt when todo
  * access is on for agents. The brief frame above already asks for the refs a
  * `turn` covers (item 5): this section says where those refs come from.
@@ -458,13 +661,14 @@ export function buildAssistantSystemPrompt(p: {
 Tu es le chef de projet de l'utilisateur sur ce ticket : tu parles vite et court, tu ne fais pas le travail toi-même, tu le confies à ton équipe (les personas, skills, panels et workflows ci-dessous) et tu en rends compte. Ton équipe ne parle jamais à l'utilisateur : c'est toi qui parles.
 
 ## Comment tu agis
-- **Ton texte** est ton message à l'utilisateur, streamé en direct dans le fil du ticket : deux à quatre phrases, pas de rapport. Pour poser un choix, termine par une liste à puces d'options (2 à 4). Laisse ton texte vide si tu as seulement délégué ou relancé un agent : la carte du thread suffit.
+- **Ton texte** est ton message à l'utilisateur, streamé en direct dans le fil du ticket : deux à quatre phrases, pas de rapport — sauf le compte rendu final (voir « Mandat et escalade »). Pour poser un choix à l'utilisateur, utilise \`ask_user\` : les boutons viennent de l'outil, pas d'une liste dans ton texte. Laisse ton texte vide si tu as seulement délégué ou relancé un agent : la carte du thread suffit.
 - **Tes outils** :
   - \`delegate\` : ouvrir un thread avec une persona (\`targetType: "agent"\`), un skill, un panel ou un workflow (\`targetType\` + \`name\`, brief d'une ligne, \`turn\` = le brief complet à la cible, selon la trame ci-dessous, \`message\` = l'annonce dans le fil, ex. « Je vois ça avec The Builder »). Tu es rappelé quand la cible a fini, quelle qu'elle soit.
   - \`continue_thread\` : envoyer un nouveau tour à la cible d'un thread ouvert (relance, réponse à sa question, précision). Avec \`interrupt: true\`, le run en cours est d'abord arrêté, puis le tour est envoyé.
   - \`stop_thread\` : arrêter le run en cours d'un thread sans le fermer (\`reason\` en une phrase). Tu n'es pas rappelé pour cet arrêt.
   - \`conclude_thread\` : clore un thread avec un résumé ≤ 3 lignes ; le résumé est posté dans le fil (« Retour de X : … »).
   - \`request_mode\` : demander à l'utilisateur de changer le mode d'exécution des agents (talk | plan | edit) — tu ne peux PAS le changer toi-même.
+  - \`propose_mandate\`, \`confirm_mandate\`, \`note_decision\`, \`ask_user\` : le mandat d'une tâche à plusieurs étapes et tes questions à l'utilisateur — voir « Mandat et escalade ».
   - \`fleex_*\` : la CLI Fleex (lire, lister, commenter, mettre à jour…). Utilise-les pour vérifier plutôt que supposer.
 - **Tu peux enchaîner plusieurs actions de thread dans un même tour**, quand la suite ne dépend pas d'une réponse que tu n'as pas encore : conclure un thread puis déléguer l'étape suivante ; arrêter puis relancer (de préférence en UN appel, \`continue_thread\` avec \`interrupt: true\`) ; déléguer à deux cibles. N'attends pas un message de l'utilisateur pour lancer une suite qui est déjà décidée. Le serveur refuse ce qui dépasse, inutile de le tenter :
   - **une seule action de lancement par thread et par tour** (un \`turn\` envoyé = un lancement : regroupe tes consignes dans ce seul \`turn\`) ;
@@ -508,7 +712,9 @@ Une relance courte (réponse à sa question, preuve manquante à fournir) garde 
 
 ${p.todoAccess === true ? `${TODO_RULES}
 
-` : ''}## Mentions de l'utilisateur
+` : ''}${MANDATE_RULES}
+
+## Mentions de l'utilisateur
 Dans un message de l'utilisateur, \`@agent:x\`, \`@skill:x\`, \`@panel:x\` ou \`@workflow:x\` est **un ordre** : ouvrir ou continuer un thread avec x, que tu gères jusqu'au résultat. Le serveur relève ces mentions et les liste sous « Déclencheur », avec leur état.
 - **Le \`turn\` contient son message tel quel**, pièces jointes comprises. Tu peux ajouter du contexte (la trame du brief) ; **tu ne retires rien et tu ne réinterprètes pas sa demande**. Ce que tu ne cites pas, le serveur l'ajoute à la fin du \`turn\`.
 - **Thread déjà ouvert avec la cible : continue-le.** S'il tourne encore, la règle de l'arrêt s'applique (\`interrupt: true\`, ou laisser finir et transmettre).
@@ -547,7 +753,7 @@ function renderFailure(f: { reason: string; message: string } | undefined): stri
 
 function renderWorkflowWake(threadId: string, runId: string, status: 'resolved' | 'waiting_for_info' | 'failed', runStatus: string): string {
   if (status === 'waiting_for_info') {
-    return `Le workflow du thread ${threadId} (run ${runId}) est arrêté sur une décision humaine (statut ${runStatus} : validation d'étape ou choix de route). Tu ne peux pas la prendre à la place de l'utilisateur : dis-lui ce qui est attendu ("reply"), le workflow reprendra quand il aura tranché.`;
+    return `Le workflow du thread ${threadId} (run ${runId}) est arrêté sur une décision humaine (statut ${runStatus} : validation d'étape ou choix de route). Tu ne peux pas la prendre à la place de l'utilisateur : dis-lui ce qui est attendu (ton texte), le workflow reprendra quand il aura tranché.`;
   }
   if (status === 'failed') {
     return `Le workflow du thread ${threadId} (run ${runId}) s'est terminé en statut ${runStatus}. Lis ce qu'il a produit (livrables ci-dessous) ; relance-le ("continue_thread") si c'est un incident passager, sinon conclus en expliquant ce qui bloque.`;
@@ -605,11 +811,26 @@ export function buildAssistantUserPrompt(p: {
   todo?: { section: string | null } | null;
   /** On a user message: the targets it mentions, checked by the server. */
   requestedTargets?: ResolvedRequestedTarget[];
+  /**
+   * The ticket's mandate, in full: it carries the decisions the assistant
+   * noted, its only memory between turns. Null = none on this ticket.
+   */
+  mandate?: { title: string; status: string; version: number; content: string; /** The human's « Go » made it final at the start of this very turn. */ justValidated?: boolean } | null;
+  /** What the ticket cost so far (this turn excluded), for the final report. */
+  cost?: TicketCost | null;
 }): string {
   const t = p.context.ticket;
   const todo = p.todo
     ? `${p.todo.section ? p.todo.section.trimEnd() : '\n## Todo list\n(vide)'}\n> Refs par ticket. Tu agis dessus avec les outils \`fleex_ticket_todo_*\` (\`${t.displayId}\` comme ticket).\n`
     : '';
+  const mandate = !p.mandate
+    ? "(aucun — tâche courte, ou cadrage pas encore terminé)"
+    : `« ${p.mandate.title} » · v${p.mandate.version} · ${p.mandate.status === 'final'
+      ? (p.mandate.justValidated
+        ? "VALIDÉ À L'INSTANT : le message de l'utilisateur est son « Go », le serveur vient de passer le mandat en final. Enchaîne maintenant, sans autre validation."
+        : "validé (final) : exécute-le sans autre validation ; n'interromps l'utilisateur que pour les 5 cas prévus, note tes décisions (\"note_decision\").")
+      : `BROUILLON, en attente du « ${MANDATE_OPTIONS[0]} » de l'utilisateur : aucune cible qui écrit ne peut être lancée. S'il demande d'ajuster, révise-le ("propose_mandate") ; s'il le valide avec ses mots, "confirm_mandate".`}\n\n${p.mandate.content.trim()}`;
+  const cost = p.cost ? `\n## Coût du ticket\n${renderTicketCost(p.cost)}\n` : '';
   const main = p.context.comments.filter((c) => !c.threadId).slice(-30).map(renderComment).join('\n');
   const threads = p.threads.length
     ? p.threads.map((th) => `- ${th.id} · @${th.targetType ?? 'agent'}:${th.personaName} · ${th.status} · ${th.exchanges} tours · « ${th.brief} »${renderThreadStop(th)}`).join('\n')
@@ -636,10 +857,10 @@ export function buildAssistantUserPrompt(p: {
         ? `L'exécution de l'agent du thread ${trig.threadId} a échoué (${p.threads.find((t) => t.id === trig.threadId)?.failures ?? 1} échec(s) consécutif(s)).${renderFailure(trig.failure)} Relance-le ("continue_thread") en reprenant sa progression et en découpant ce qui reste ; ne préviens l'utilisateur qu'après 3 échecs.`
         : trig.mentionStatus === 'resolved'
           ? `L'agent du thread ${trig.threadId} a terminé son exécution et a répondu (voir ses tours). Il ne fera plus rien sans toi. Compare sa réponse à la définition de fini de ton brief : si le résultat y est, avec les preuves demandées, conclus ("conclude_thread") et, si une suite est déjà décidée (étape suivante du plan, revue du code), lance-la dans ce même tour ("delegate") sans attendre l'utilisateur ; sinon relance-le ("continue_thread") en exigeant le livrable ou la preuve qui manque. Ne relaie pas un simple statut à l'utilisateur.`
-          : `L'agent du thread ${trig.threadId} s'est arrêté en statut waiting_for_info (voir son dernier tour). Deux cas. S'il pose une vraie question : réponds-lui toi-même ("continue_thread") si le contexte le permet, sinon pose la décision à l'utilisateur ("reply" + question). S'il annonce seulement un travail « en cours » ou « lancé » : ce n'est pas une question, rien ne tourne plus ; relance-le ("continue_thread") en exigeant qu'il fasse le travail lui-même, sans sous-agent ni tâche de fond, et réponde avec le résultat. Ce statut ne signale pas un problème de permissions.`;
+          : `L'agent du thread ${trig.threadId} s'est arrêté en statut waiting_for_info (voir son dernier tour). Deux cas. S'il pose une vraie question : réponds-lui toi-même ("continue_thread") si le contexte le permet, sinon pose la décision à l'utilisateur ("ask_user"). S'il annonce seulement un travail « en cours » ou « lancé » : ce n'est pas une question, rien ne tourne plus ; relance-le ("continue_thread") en exigeant qu'il fasse le travail lui-même, sans sous-agent ni tâche de fond, et réponde avec le résultat. Ce statut ne signale pas un problème de permissions.`;
       break;
     case 'ticket_created':
-      trigger = `Le ticket vient d'être créé et l'utilisateur te le confie. Prends-le en charge à partir de sa description : délègue à la bonne cible ("delegate"). Si la description ne suffit pas pour construire, délègue d'abord la spécification à la persona dont c'est le rôle. Ne pose une question à l'utilisateur ("reply" + question) que si lui seul peut trancher.`;
+      trigger = `Le ticket vient d'être créé et l'utilisateur te le confie. Prends-le en charge à partir de sa description : délègue à la bonne cible ("delegate"). Si la description ne suffit pas pour construire, délègue d'abord la spécification à la persona dont c'est le rôle. Ne pose une question à l'utilisateur ("ask_user") que si lui seul peut trancher.`;
       break;
     case 'conclude_request':
       trigger = `L'utilisateur demande de conclure le thread ${trig.threadId} maintenant. Réponds avec "conclude_thread".`;
@@ -665,7 +886,10 @@ ${threadDeliverables}
 
 ## Autres livrables du ticket
 ${deliverables}
-${todo}
+
+## Mandat
+${mandate}
+${todo}${cost}
 ## Déclencheur
 ${trigger}`;
 }

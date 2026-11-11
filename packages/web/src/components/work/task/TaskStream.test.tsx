@@ -67,6 +67,55 @@ describe('TaskStream — inline question card', () => {
   });
 });
 
+// Lot 6: the assistant asks in its own name (mandate, grouped questions). No
+// mention waits behind such a question, and other threads may be running.
+describe('TaskStream — the assistant\'s own question', () => {
+  const mandate = [{ prompt: 'Mandat « Export CSV » : je lance ?', options: ['Go', 'Ajuster'] }];
+  const asked = (over: Partial<TicketComment> = {}) => agentComment({ id: 'q', authorType: 'assistant', authorName: 'Nas', body: 'Le mandat est prêt.', questions: mandate, ...over });
+
+  it.each(['idle', 'running', 'waiting'] as const)('shows Go / Ajuster as buttons whatever the task activity (%s), and answers with the option text', (activity) => {
+    const onAnswer = vi.fn();
+    render(
+      <TaskStream ticketId="t1" description={null} comments={[asked()]} events={[]} executions={[]} deliverables={[]}
+        activity={activity} loading={false} error={null} onAnswer={onAnswer} onOpenExecution={vi.fn()} />,
+    );
+    expect(screen.getByRole('button', { name: 'Ajuster' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Go' }));
+    expect(onAnswer).toHaveBeenCalledWith('Go');
+  });
+
+  it('several questions are answered together, in one message', () => {
+    const onAnswer = vi.fn();
+    const questions = [{ prompt: 'Format ?', options: ['CSV', 'XLSX'] }, { prompt: 'En-têtes ?', options: ['Oui', 'Non'] }];
+    render(
+      <TaskStream ticketId="t1" description={null} comments={[asked({ questions })]} events={[]} executions={[]} deliverables={[]}
+        activity="running" loading={false} error={null} onAnswer={onAnswer} onOpenExecution={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'XLSX' }));
+    expect(onAnswer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('radio', { name: 'Non' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer les 2 réponses' }));
+    expect(onAnswer).toHaveBeenCalledWith('**Format ?** XLSX\n**En-têtes ?** Non');
+  });
+
+  it('a turn inside a thread does not close it; anything said after it in the main stream does', () => {
+    const later = '2026-10-02T17:00:00.000Z';
+    const { unmount } = renderStream([asked(), agentComment({ id: 't', authorType: 'assistant', authorName: 'Nas', body: '@agent:builder go', threadId: 'th1', createdAt: later })], 'running');
+    expect(screen.getByRole('button', { name: 'Go' })).toBeTruthy();
+    unmount();
+    renderStream([asked(), agentComment({ id: 'u', authorType: 'user', authorName: 'Olivier', body: 'Go', createdAt: later })], 'idle');
+    expect(screen.queryByRole('button', { name: 'Go' })).toBeNull();
+  });
+
+  it('the Focus popup owns the answer: no buttons here when action cards are off', () => {
+    render(
+      <TaskStream ticketId="t1" description={null} comments={[asked()]} events={[]} executions={[]} deliverables={[]}
+        activity="idle" loading={false} error={null} onAnswer={vi.fn()} onOpenExecution={vi.fn()} showActionCards={false} />,
+    );
+    expect(screen.queryByRole('button', { name: 'Go' })).toBeNull();
+  });
+});
+
 describe('TaskStream — the assistant\'s mode request', () => {
   const request = agentComment({
     id: 'mr', authorType: 'assistant', authorName: 'Nas',

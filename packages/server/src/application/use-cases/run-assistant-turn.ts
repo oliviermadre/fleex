@@ -25,6 +25,9 @@ import type { PostCommentUseCase } from './post-comment.js';
 import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { ExecuteAgentUseCase } from './execute-agent.js';
 import type { StopRunUseCase } from './stop-run.js';
+import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
+import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
+import type { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { resolveExecutionConfig } from '../utils/resolve-execution-config.js';
 import { priceFor } from '../utils/cli-session-ingest.js';
@@ -38,7 +41,20 @@ import {
   buildAssistantSystemPrompt,
   buildAssistantUserPrompt,
   parseActionToolInput,
+  parseTurnToolInput,
   renderQuestion,
+  renderQuestions,
+  isGoAnswer,
+  appendDecision,
+  carryDecisions,
+  decisionsOf,
+  computeTicketCost,
+  MANDATE_OPTIONS,
+  MANDATE_DELIVERABLE_TYPE,
+  MAX_ASSISTANT_QUESTIONS,
+  TURN_TOOL_NAMES,
+  type AssistantQuestion,
+  type AssistantTurnTool,
   assistantQuestions,
   skillSummary,
   renderMentionReminder,
@@ -69,6 +85,20 @@ export const TURN_CAP_OPTIONS = ['Continuer', 'Conclure'] as const;
 interface TurnLedger {
   /** Ids of the threads that received a turn during this assistant turn. */
   launched: Set<string>;
+}
+
+/**
+ * What the assistant asks the human at the end of this turn. Declared by
+ * `ask_user` or `propose_mandate`, attached to the turn's last comment — so
+ * the question is the last word of the main stream, where every surface looks
+ * for it.
+ */
+interface TurnAsk {
+  questions: AssistantQuestion[] | null;
+  /** The mandate's « Go » / « Ajuster » is the turn's question: it stands alone. */
+  mandate: boolean;
+  /** Said when the model wrote no text of its own. */
+  lead: string | null;
 }
 
 /** How a tool result names what was launched. */
@@ -137,6 +167,9 @@ export interface RunAssistantTurnDeps {
   executeAgent: Pick<ExecuteAgentUseCase, 'wakeUp'>;
   /** The single stop path: every run the assistant stops goes through it, with its author. */
   stopRun: Pick<StopRunUseCase, 'stopThread'>;
+  /** The mandate is a deliverable the server writes under the assistant's name. */
+  deliverableStore: Pick<DeliverableStorePort, 'getByTicket' | 'save'>;
+  submitDeliverable: Pick<SubmitDeliverableUseCase, 'execute'>;
   config: ConfigPort;
   eventBus: EventBus;
   logger: LoggerPort;
@@ -204,6 +237,21 @@ export class RunAssistantTurnUseCase {
       return;
     }
 
+    // The « Go » button: a human message that is exactly that word makes the
+    // pending mandate final, here, before the model reads anything. Only a
+    // human message later than the draft does — never a wake-up.
+    const mandate = await this.findMandate(ticket.id, assistant);
+    let mandateJustValidated = false;
+    if (mandate?.status === 'draft' && trigger.kind === 'user_message') {
+      const answer = await this.deps.commentStore.getById(trigger.commentId);
+      if (answer && isGoAnswer(answer.body) && (await this.humanValidated(trigger, mandate))) {
+        await this.finalizeMandate(ticket, mandate);
+        mandateJustValidated = true;
+      }
+    }
+    // Before this turn's own execution starts: the turn in flight is not in the sum.
+    const cost = computeTicketCost(await this.deps.agentEventStore.getExecutionsByTicket(ticketId));
+
     const [context, allThreads, personas, allCliTools, capabilities] = await Promise.all([
       this.deps.getTicketContext.execute({ ticketId, agentName: assistant.name }),
       this.deps.threadStore.getByTicket(ticketId),
@@ -261,6 +309,8 @@ export class RunAssistantTurnUseCase {
       context, threads: allThreads.map((t) => t.toDTO()), trigger, turns, threadDeliverables, requestedTargets: requested,
       // Grouped from the assistant's point of view: « For you » is what is assigned to its slug.
       todo: todoAccess ? { section: formatTodoContext(ticket.displayId, context.todos ?? [], { persona: assistant.name }) } : null,
+      mandate: mandate ? { title: mandate.title, status: mandate.status, version: mandate.version, content: mandate.content, justValidated: mandateJustValidated } : null,
+      cost,
     });
     // The assistant runs on its persona's model. The ticket's model and effort
     // overrides are set for the agents it delegates to, not for it.
@@ -326,6 +376,7 @@ export class RunAssistantTurnUseCase {
     let threadActionTaken = false;
     let threads = allThreads;
     const ledger: TurnLedger = { launched: new Set() };
+    const ask: TurnAsk = { questions: null, mandate: false, lead: null };
 
     try {
       for (let round = 0; round < ASSISTANT_MAX_ROUNDS; round++) {
@@ -379,6 +430,7 @@ export class RunAssistantTurnUseCase {
           let text: string;
           let isError = false;
           const action = call.id === truncated ? null : parseActionToolInput(call.name, input);
+          const turnTool = call.id === truncated ? null : parseTurnToolInput(call.name, input);
           const cli = cliByName.get(call.name);
           if (call.id === truncated) {
             text = "Appel tronqué : ta réponse a atteint la limite de sortie avant la fin de cet appel, il n'a pas été exécuté. Refais-le, plus court.";
@@ -405,6 +457,10 @@ export class RunAssistantTurnUseCase {
             text = await this.apply(ticket, assistant, action, threads, trigger, ledger);
             threadActionTaken = true;
             if (action.action === 'conclude_thread') concluded = true;
+          } else if (turnTool) {
+            const r = await this.applyTurnTool(ticket, assistant, turnTool, trigger, ask);
+            text = r.text;
+            isError = !r.ok;
           } else if (cli && cli.name === 'fleex_ticket_comment' && MENTION_TAG.test(String(input.body ?? ''))) {
             // A comment through the CLI is posted as the user: its tags would launch
             // targets outside any thread, with no author and no wake-up.
@@ -413,14 +469,23 @@ export class RunAssistantTurnUseCase {
           } else if (cli) {
             try {
               const argv = cliToolArgv(cli, input, this.deps.environment.workspace);
-              const r = await this.deps.environment.runCli(argv, cliActor);
-              text = r.text;
-              isError = !r.ok;
+              // The CLI updates any deliverable, status included: through it the
+              // model could validate its own mandate. The mandate only changes
+              // through the mandate tools.
+              const guarded = cli.commandPath.join(' ') === 'ticket deliverable update' ? await this.findMandate(ticket.id, assistant) : null;
+              if (guarded && argv.includes(guarded.id)) {
+                text = "Refusé, rien n'a été modifié : ce livrable est le mandat. Révise-le par `propose_mandate`, note une décision par `note_decision` ; seul l'utilisateur le valide (« Go »).";
+                isError = true;
+              } else {
+                const r = await this.deps.environment.runCli(argv, cliActor);
+                text = r.text;
+                isError = !r.ok;
+              }
             } catch (err) {
               text = `Arguments invalides : ${err instanceof Error ? err.message : String(err)}`;
               isError = true;
             }
-          } else if (call.name in { delegate: 1, continue_thread: 1, stop_thread: 1, conclude_thread: 1, request_mode: 1 }) {
+          } else if (call.name in { delegate: 1, continue_thread: 1, stop_thread: 1, conclude_thread: 1, request_mode: 1 } || (TURN_TOOL_NAMES as readonly string[]).includes(call.name)) {
             text = 'Arguments invalides pour cette action (champs requis manquants).';
             isError = true;
           } else {
@@ -457,7 +522,12 @@ export class RunAssistantTurnUseCase {
       }
       if (notes.length > 0) finalText = [finalText, ...notes].filter(Boolean).join(ROUND_SEPARATOR);
 
-      if (finalText) {
+      // The questions declared this turn close it: one comment, the model's text
+      // then the questions, with their buttons.
+      const declared = ask.questions ? assistantQuestions(ask.questions) : null;
+      if (ask.questions && declared) {
+        await this.postAssistant(ticket, assistant, null, `${finalText || ask.lead || ''}${renderQuestions(ask.questions)}`.trim(), { questions: declared });
+      } else if (finalText) {
         await this.postAssistant(ticket, assistant, null, finalText);
       } else if (!threadActionTaken) {
         this.deps.logger.warn('Assistant produced neither text nor action', { ticketId, executionId });
@@ -488,6 +558,17 @@ export class RunAssistantTurnUseCase {
       // repair) is not them asking for more work: the assistant may only conclude.
       if (trigger.kind === 'thread_reply' && (ticket.status === 'done' || ticket.status === 'cancelled')) {
         return `Refusé, rien n'a été lancé : le ticket est en statut « ${ticket.status} ». Sur un réveil, tu peux seulement conclure les threads ouverts ("conclude_thread") ; ne relance rien tant que l'utilisateur ne le demande pas.`;
+      }
+      // A mandate waits for the human's « Go »: nothing that writes starts
+      // before it. Framing (a target that only reads or talks) stays possible.
+      const pending = await this.findMandate(ticket.id, assistant);
+      if (pending?.status === 'draft') {
+        const openId = action.action === 'continue_thread' ? action.threadId : null;
+        const open = openId ? threads.find((t) => t.id === openId) : null;
+        const aim = action.action === 'delegate' ? { type: action.targetType, name: action.name } : open ? { type: open.targetType, name: open.personaName } : null;
+        if (aim && (await this.targetWrites(ticket, aim.type, aim.name, null))) {
+          return `Refusé, rien n'a été lancé : le mandat « ${pending.title} » est en brouillon et attend le « ${MANDATE_OPTIONS[0]} » de l'utilisateur. Aucune cible qui écrit (persona en mode edit, skill, workflow) ne part avant. Seul un message de l'utilisateur le valide : attends sa réponse, et ne confie pas ce travail à une autre cible. Cadrer ou spécifier avec une cible qui ne fait que lire reste possible.`;
+        }
       }
       const relayed = await this.relayAttachments(ticket, action.turn);
       if ('error' in relayed) return relayed.error;
@@ -590,6 +671,116 @@ export class RunAssistantTurnUseCase {
         await this.postAssistant(ticket, assistant, null, `${lead}Retour de ${who} : ${action.summary}${renderQuestion(action.question)}`, { questions: assistantQuestions(action.question) });
         this.emit({ type: 'thread.concluded', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
         return `Thread conclu ; le résumé a été posté dans le fil.`;
+      }
+    }
+  }
+
+  /**
+   * The ticket's mandate: the `plan` deliverable written under the assistant's
+   * name (the latest one, should several exist). Only `propose_mandate` writes
+   * under that name — the CLI attributes its deliverables to `cli`.
+   */
+  private async findMandate(ticketId: string, assistant: AgentPersonaEntity): Promise<TicketDeliverableEntity | null> {
+    const author = assistant.displayName || assistant.name;
+    return (await this.deps.deliverableStore.getByTicket(ticketId))
+      .filter((d) => d.type === MANDATE_DELIVERABLE_TYPE && d.agentName === author)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null;
+  }
+
+  /**
+   * True when this turn is a message of the human written after the mandate
+   * was last proposed: the only thing that may validate it. A wake-up, a
+   * relaunch, the ticket's creation never do — and neither does the message
+   * the mandate was proposed in answer to.
+   */
+  private async humanValidated(trigger: AssistantTrigger, mandate: TicketDeliverableEntity): Promise<boolean> {
+    if (trigger.kind !== 'user_message') return false;
+    const comment = await this.deps.commentStore.getById(trigger.commentId);
+    return !!comment && comment.authorType === 'user' && comment.createdAt.getTime() > mandate.updatedAt.getTime();
+  }
+
+  private async saveMandate(ticket: TicketEntity, mandate: TicketDeliverableEntity, oldStatus: string): Promise<void> {
+    await this.deps.deliverableStore.save(mandate);
+    this.emit({
+      type: 'deliverable.updated', deliverableId: mandate.id, ticketId: ticket.id, agentName: mandate.agentName,
+      oldStatus, newStatus: mandate.status, oldType: mandate.type, newType: mandate.type, title: mandate.title, occurredAt: new Date(),
+    });
+  }
+
+  private async finalizeMandate(ticket: TicketEntity, mandate: TicketDeliverableEntity): Promise<void> {
+    const oldStatus = mandate.status;
+    mandate.update({ status: 'final' });
+    await this.saveMandate(ticket, mandate, oldStatus);
+  }
+
+  /** Applies a mandate / question tool and returns the tool result the model reads back. */
+  private async applyTurnTool(
+    ticket: TicketEntity, assistant: AgentPersonaEntity, tool: AssistantTurnTool, trigger: AssistantTrigger, ask: TurnAsk,
+  ): Promise<{ ok: boolean; text: string }> {
+    const mandate = await this.findMandate(ticket.id, assistant);
+    switch (tool.tool) {
+      case 'propose_mandate': {
+        let version: number;
+        if (mandate) {
+          // A revision: the same deliverable, a new version, a draft again —
+          // whatever it was. What was decided so far is carried over.
+          const oldStatus = mandate.status;
+          mandate.update({ title: tool.title, content: carryDecisions(tool.markdown, mandate.content), status: 'draft' });
+          await this.saveMandate(ticket, mandate, oldStatus);
+          version = mandate.version;
+        } else {
+          try {
+            const created = await this.deps.submitDeliverable.execute({
+              ticketId: ticket.id, agentName: assistant.displayName || assistant.name,
+              type: MANDATE_DELIVERABLE_TYPE, title: tool.title, content: tool.markdown, status: 'draft',
+            });
+            this.emit({ type: 'deliverable.created', deliverableId: created.id, ticketId: ticket.id, agentName: created.agentName, status: created.status, title: created.title, occurredAt: new Date() });
+            version = created.version;
+          } catch (err) {
+            return { ok: false, text: `Le mandat n'a pas pu être écrit : ${err instanceof Error ? err.message : String(err)}. Rien n'a été posé à l'utilisateur.` };
+          }
+        }
+        const replaced = ask.questions && !ask.mandate;
+        ask.questions = [{ text: `Mandat « ${tool.title} » : je lance ?`, options: [...MANDATE_OPTIONS] }];
+        ask.mandate = true;
+        ask.lead = `Le mandat est prêt : « ${tool.title} » (livrable plan, brouillon v${version}).`;
+        return {
+          ok: true,
+          text: `Mandat écrit : livrable plan « ${tool.title} », brouillon v${version}. La question « ${MANDATE_OPTIONS.join(' » / « ')} » sera posée à l'utilisateur à la fin de ce tour, avec ton texte : ne la répète pas et n'en pose pas d'autre${replaced ? " (tes questions `ask_user` de ce tour sont retirées : pose-les dans le mandat, ou après le Go)" : ''}. Aucune cible qui écrit ne part avant son Go.`,
+        };
+      }
+
+      case 'confirm_mandate': {
+        if (!mandate) return { ok: false, text: "Aucun mandat sur ce ticket : rien à valider. Propose-le d'abord (`propose_mandate`) si la tâche a plusieurs étapes." };
+        if (mandate.status === 'final') return { ok: true, text: 'Le mandat est déjà validé (final) : enchaîne.' };
+        if (!(await this.humanValidated(trigger, mandate))) {
+          return { ok: false, text: `Refusé, le mandat reste en brouillon : seul un message de l'utilisateur postérieur au mandat le valide. Ce tour n'en est pas un (${trigger.kind === 'user_message' ? 'son message est antérieur au mandat' : 'réveil, pas un message de sa part'}). Attends sa réponse à la question « ${MANDATE_OPTIONS.join(' » / « ')} ».` };
+        }
+        await this.finalizeMandate(ticket, mandate);
+        return { ok: true, text: `Mandat « ${mandate.title} » validé (final). Enchaîne sans autre validation ; n'interromps l'utilisateur que pour les 5 cas prévus.` };
+      }
+
+      case 'note_decision': {
+        if (!mandate) return { ok: false, text: "Aucun mandat sur ce ticket (tâche courte) : rien n'a été noté. Dis ta décision et sa raison dans ton message à l'utilisateur." };
+        if (mandate.status !== 'final') return { ok: false, text: "Le mandat est encore en brouillon : rien n'a été noté. Ce que tu décides pendant le cadrage s'écrit dans le mandat lui-même (`propose_mandate`)." };
+        mandate.update({ content: appendDecision(mandate.content, tool.decision, tool.reason, new Date()) });
+        await this.saveMandate(ticket, mandate, mandate.status);
+        return { ok: true, text: `Décision notée au mandat (${decisionsOf(mandate.content).length} au total, section « Décisions prises »). Ton compte rendu final les cite.` };
+      }
+
+      case 'ask_user': {
+        if (ask.mandate) return { ok: false, text: `Refusé : ce tour pose déjà la question du mandat (« ${MANDATE_OPTIONS.join(' » / « ')} »), et elle est seule. Mets ce qui reste à trancher dans le mandat, ou pose-le après le Go.` };
+        const all = [...(ask.questions ?? []), ...tool.questions];
+        if (all.length > MAX_ASSISTANT_QUESTIONS) {
+          return { ok: false, text: `Refusé, rien n'a été posé : ${MAX_ASSISTANT_QUESTIONS} questions au plus par message, tu en déclares ${all.length}. Regroupe-les, ou garde celles qui bloquent vraiment.` };
+        }
+        // What is declared is what the human gets: a question the UI could not
+        // render (too few or too long options) is refused, not dropped.
+        if ((assistantQuestions(all)?.length ?? 0) !== all.length) {
+          return { ok: false, text: "Refusé, rien n'a été posé : chaque question a 2 à 5 options distinctes, de 80 caractères au plus. Corrige et rappelle `ask_user`." };
+        }
+        ask.questions = all;
+        return { ok: true, text: `${all.length} question(s) déclarée(s) : elles seront posées à l'utilisateur à la fin de ce tour, à la suite de ton texte. Ne recopie pas les options. En attendant sa réponse, continue ce qui n'en dépend pas.` };
       }
     }
   }

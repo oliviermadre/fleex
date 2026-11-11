@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 import { RunAssistantTurnUseCase, assistantTurnCostUsd, ASSISTANT_MAX_ROUNDS, MAX_ASSISTANT_TURNS_PER_THREAD, MAX_LAUNCHES_PER_TURN, MAX_RUNNING_THREADS_PER_TICKET } from '../../src/application/use-cases/run-assistant-turn.js';
 import { StopRunUseCase } from '../../src/application/use-cases/stop-run.js';
+import { SubmitDeliverableUseCase } from '../../src/application/use-cases/submit-deliverable.js';
+import type { TicketDeliverableEntity } from '../../src/domain/entities/ticket-deliverable.entity.js';
 import type { AssistantLlm, AssistantUsage } from '../../src/application/assistant/assistant-llm.js';
 import { PostCommentUseCase } from '../../src/application/use-cases/post-comment.js';
 import { AssistantThreadListener } from '../../src/application/assistant-thread-listener.js';
@@ -36,6 +38,11 @@ class FakeThreadStore {
   async getOpen() { return [...this.saved.values()].filter((t) => !t.isTerminal); }
   async save(t: AgentThreadEntity) { this.saved.set(t.id, t); }
 }
+class FakeDeliverableStore {
+  saved: TicketDeliverableEntity[] = [];
+  async getByTicket(ticketId: string) { return this.saved.filter((d) => d.ticketId === ticketId); }
+  async save(d: TicketDeliverableEntity) { if (!this.saved.includes(d)) this.saved.push(d); }
+}
 class FakeAgentEventStore {
   executions: unknown[] = []; events: Array<{ eventType: string; data: unknown }> = [];
   async startExecution(p: unknown) { this.executions.push(p); }
@@ -49,7 +56,9 @@ class FakeAgentEventStore {
   stopped: Array<{ id: string; by: string; reason: string | null }> = [];
   async markExecutionsStopped(ids: string[], by: string, reason?: string | null) { for (const id of ids) this.stopped.push({ id, by, reason: reason ?? null }); }
   startedAt: Record<string, string> = {};
-  async getExecutionsByTicket() { return Object.entries(this.startedAt).map(([id, startedAt]) => ({ id, startedAt })); }
+  /** Finished executions of the ticket with what they cost (null = unknown), for the cost line of the prompt. */
+  costs: Array<{ status: string; costUsd: number | null }> = [];
+  async getExecutionsByTicket() { return [...Object.entries(this.startedAt).map(([id, startedAt]) => ({ id, startedAt })), ...this.costs]; }
 }
 /**
  * The process-side of a run: which executions are live for which mention.
@@ -190,6 +199,8 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
   const executeAgent = new FakeExecuteAgent(agentEvents, mentions, eventBus);
   const emitted: string[] = [];
   eventBus.on('*', (e) => { emitted.push(e.type); });
+  const deliverables = new FakeDeliverableStore();
+  const config = { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: 'workThreadsEnabled' in opts ? opts.workThreadsEnabled : true, todoAgentAccess: opts.todoAgentAccess }) };
   const postComment = new PostCommentUseCase(comments as never, mentions as never, { saveActivity: async () => {} } as never, logger as never);
   const llmCalls: Array<{ model: string; thinking: boolean | undefined; system: string; tools: string[]; messages: Anthropic.MessageParam[] }> = [];
   const cliCalls: string[][] = [];
@@ -234,12 +245,15 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
     getTicketContext: {
       execute: async () => ({
         ticket: ticket.toDTO(), comments: (await comments.getByTicket('t1')).map((c) => c.toDTO()),
-        mentions: { pending: [], all: mentions.saved.map((m) => m.toDTO()) }, deliverables: opts.deliverables ?? [], activity: [], relevantSummaries: [], epics: [], memorySnippets: [],
+        mentions: { pending: [], all: mentions.saved.map((m) => m.toDTO()) }, deliverables: [...(opts.deliverables ?? []), ...deliverables.saved.map((d) => d.toDTO())], activity: [], relevantSummaries: [], epics: [], memorySnippets: [],
         ...(opts.todos ? { todos: opts.todos } : {}),
       }),
     } as never,
     agentEventStore: agentEvents as never, executeAgent: executeAgent as never, stopRun,
-    config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: 'workThreadsEnabled' in opts ? opts.workThreadsEnabled : true, todoAgentAccess: opts.todoAgentAccess }) } as never,
+    // The real use case on a fake store: the mandate is written the way production writes a deliverable.
+    deliverableStore: deliverables as never,
+    submitDeliverable: new SubmitDeliverableUseCase(deliverables as never, { saveActivity: async () => {} } as never, config as never, logger as never),
+    config: config as never,
     eventBus, logger: logger as never,
     skillStore: {
       getEnabled: async () => (opts.skills ?? []).filter((x) => x.enabled),
@@ -261,7 +275,7 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
     },
   }, llm);
   const setLlm = (next: AssistantLlm) => { (uc as unknown as { llm: AssistantLlm }).llm = next; };
-  return { uc, ticket, comments, mentions, threads, agentEvents, executeAgent, eventBus, stopRun, workflowCancels, emitted, llmCalls, cliCalls, cliActors, setLlm };
+  return { uc, ticket, comments, mentions, threads, deliverables, agentEvents, executeAgent, eventBus, stopRun, workflowCancels, emitted, llmCalls, cliCalls, cliActors, setLlm };
 }
 
 const user = (commentId: string) => ({ kind: 'user_message' as const, commentId });
@@ -312,8 +326,8 @@ describe('RunAssistantTurnUseCase — conversation', () => {
     expect(call.system).toContain('**#1** · uuid `t1`');
     expect(call.system).toContain('Workspace Fleex : **qa**');
     expect(call.system).toContain('1 outils `fleex_*`');
-    expect(call.system.length).toBeLessThan(14000); // rules only: no CLI help, no ticket content
-    expect(call.tools).toEqual(['delegate', 'continue_thread', 'stop_thread', 'conclude_thread', 'request_mode', 'fleex_ticket_show']);
+    expect(call.system.length).toBeLessThan(18000); // rules only: no CLI help, no ticket content
+    expect(call.tools).toEqual(['delegate', 'continue_thread', 'stop_thread', 'conclude_thread', 'request_mode', 'propose_mandate', 'confirm_mandate', 'note_decision', 'ask_user', 'fleex_ticket_show']);
   });
 
   it('a CLI comment carrying a mention tag is refused: it would launch a target outside any thread', async () => {
@@ -1823,5 +1837,336 @@ describe('RunAssistantTurnUseCase — @type:slug in a message to the assistant i
     await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c1', 'qui peut m’aider ?') });
     expect(mainStream(h)).toEqual(['Cibles : @agent:builder, @skill:lint, @workflow:review.']);
     expect(h.mentions.saved).toEqual([]);
+  });
+});
+
+describe('RunAssistantTurnUseCase — mandate and escalation (lot 6)', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 3));
+  const catalyst = () => persona('catalyst');
+  const sentinel = () => persona('sentinel');
+  const team = { extraPersonas: [catalyst(), sentinel()] };
+  const delegateTo = (name: string, turn = 'go') => ({ name: 'delegate', input: { targetType: 'agent', name, brief: `brief ${name}`, turn } });
+  const MANDATE = '## Objectif\nExport CSV.\n\n## Critères d\'acceptation\n- le fichier se télécharge\n\n## Plan\n1. spec 2. build 3. revue\n\n## Ce que je décide seul\nLe nommage.\n\n## Ce que je te remonte\nLe merge.';
+  const propose = (markdown = MANDATE, title = 'Mandat : export CSV') => ({ name: 'propose_mandate', input: { title, markdown } });
+  const says = async (h: ReturnType<typeof harness>, id: string, body: string) => {
+    await tick();
+    await h.comments.save(TicketCommentEntity.create({ id, ticketId: 't1', authorType: 'user', authorName: 'Olivier', body }));
+    await tick();
+    return user(id);
+  };
+  /** One assistant turn with its own script; returns the tool results the model read, in order. */
+  const turn = async (h: ReturnType<typeof harness>, trigger: Parameters<typeof h.uc.execute>[0]['trigger'], rounds: Round[]) => {
+    let n = 0;
+    const first = h.llmCalls.length;
+    h.setLlm(async (p, onText) => {
+      h.llmCalls.push({ model: p.model, thinking: p.thinking, system: p.system, tools: [], messages: p.messages });
+      const r = rounds[n++] ?? {};
+      if (r.text) onText(r.text);
+      const content: Anthropic.ContentBlock[] = [...(r.text ? [textBlock(r.text)] : []), ...(r.tools ?? []).map((t, i) => toolUse(t.name, t.input, `m-${first}-${n}-${i}`))];
+      return { content, stopReason: r.tools?.length ? 'tool_use' : 'end_turn' };
+    });
+    await h.uc.execute({ ticketId: 't1', trigger });
+    return {
+      results: resultBlocks(h, h.llmCalls.length - 1).map((r) => String(r.content)),
+      prompt: h.llmCalls[first]!.messages[0]!.content as string,
+    };
+  };
+  const mandateOf = (h: ReturnType<typeof harness>) => h.deliverables.saved[0]!;
+  const main = (h: ReturnType<typeof harness>) => h.comments.saved.filter((c) => c.threadId === null && c.authorType === 'assistant');
+  const byTarget = (h: ReturnType<typeof harness>, name: string) => [...h.threads.saved.values()].find((t) => t.personaName === name);
+  /** A harness whose ticket is in edit mode (a persona then writes) with a mandate proposed and waiting. */
+  const withDraft = async () => {
+    const h = harness([], team);
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    await turn(h, await says(h, 'c1', 'Fais l’export CSV'), [{ text: 'Voici le mandat.', tools: [propose()] }, {}]);
+    return h;
+  };
+
+  it('propose_mandate writes a draft `plan` deliverable under the assistant’s name and asks ONE question, Go / Ajuster, on the last comment of the turn', async () => {
+    const h = await withDraft();
+    expect(h.deliverables.saved).toHaveLength(1);
+    expect(mandateOf(h)).toMatchObject({ type: 'plan', status: 'draft', agentName: 'Nas', title: 'Mandat : export CSV', version: 1, content: MANDATE, ticketId: 't1' });
+    expect(h.emitted).toContain('deliverable.created');
+    const posted = main(h);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.questions).toEqual([{ prompt: 'Mandat « Mandat : export CSV » : je lance ?', options: ['Go', 'Ajuster'] }]);
+    expect(posted[0]!.body).toBe('Voici le mandat.\n\nMandat « Mandat : export CSV » : je lance ?\n- Go\n- Ajuster');
+  });
+
+  it('the mandate question stands alone: ask_user in the same turn is refused, and questions asked before it are withdrawn', async () => {
+    const h = harness([], team);
+    const { results } = await turn(h, await says(h, 'c1', 'Fais l’export CSV'), [
+      { tools: [{ name: 'ask_user', input: { questions: [{ text: 'CSV ou XLSX ?', options: ['CSV', 'XLSX'] }] } }] },
+      { tools: [propose()] },
+      { tools: [{ name: 'ask_user', input: { questions: [{ text: 'Autre ?', options: ['Oui', 'Non'] }] } }] },
+      {},
+    ]);
+    expect(results[1]).toContain('`ask_user` de ce tour sont retirées');
+    expect(results[2]).toMatch(/^Refusé/);
+    expect(main(h).at(-1)!.questions).toEqual([{ prompt: 'Mandat « Mandat : export CSV » : je lance ?', options: ['Go', 'Ajuster'] }]);
+    // No text from the model: the server says what the question is about.
+    expect(main(h).at(-1)!.body).toContain('Le mandat est prêt : « Mandat : export CSV » (livrable plan, brouillon v1).');
+  });
+
+  // Acceptance criterion, server part: once a mandate is proposed, a `plan` deliverable exists and no writing launch precedes the human's Go.
+  it('while the mandate is a draft, a launch that writes is refused — in the proposing turn, on a wake-up, and on a human message that is not a Go', async () => {
+    const h = harness([], team);
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    const same = await turn(h, await says(h, 'c1', 'Fais l’export CSV'), [{ tools: [propose()] }, { tools: [delegateTo('builder')] }, {}]);
+    expect(same.results[1]).toMatch(/^Refusé, rien n'a été lancé : le mandat « Mandat : export CSV » est en brouillon/);
+    const woken = await turn(h, { kind: 'ticket_created' }, [{ tools: [delegateTo('builder')] }, {}]);
+    expect(woken.results[0]).toMatch(/^Refusé/);
+    const other = await turn(h, await says(h, 'c2', 'et pense aux accents'), [{ tools: [delegateTo('builder')] }, {}]);
+    expect(other.results[0]).toMatch(/^Refusé/);
+    expect(h.threads.saved.size).toBe(0);
+    expect(h.mentions.saved).toEqual([]);
+    expect(mandateOf(h).status).toBe('draft');
+  });
+
+  it('the guard covers skills and continue_thread too, and leaves framing possible: a persona that only reads is launched', async () => {
+    const lint = { id: 's1', commandName: 'lint', name: 'lint', displayName: 'Lint', markdownContent: 'Lint.', enabled: true };
+    const h = harness([], { ...team, skills: [lint] });
+    // Ticket in plan mode: the spec persona reads, it does not write.
+    await turn(h, await says(h, 'c0', 'Cadre l’export'), [{ tools: [delegateTo('catalyst', 'Spécifie')] }, {}]);
+    await turn(h, await says(h, 'c1', 'ok'), [{ tools: [propose()] }, {}]);
+    const spec = byTarget(h, 'catalyst')!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.resolve(); await h.mentions.save(m);
+    spec.markIdle(); await h.threads.save(spec);
+    const framing = await turn(h, wake(spec.id), [{ tools: [{ name: 'continue_thread', input: { threadId: spec.id, turn: 'précise le format' } }] }, {}]);
+    expect(framing.results[0]).not.toMatch(/^Refusé/);
+    const skill = await turn(h, wake(spec.id), [{ tools: [{ name: 'delegate', input: { targetType: 'skill', name: 'lint', brief: 'lint', turn: 'x' } }] }, {}]);
+    expect(skill.results[0]).toMatch(/^Refusé, rien n'a été lancé : le mandat/);
+    // The same thread becomes a writer once the ticket is in edit mode: continuing it is refused as well.
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    const m2 = h.mentions.saved.at(-1)!; m2.acknowledge(); m2.resolve(); await h.mentions.save(m2);
+    spec.markIdle(); await h.threads.save(spec);
+    const cont = await turn(h, wake(spec.id), [{ tools: [{ name: 'continue_thread', input: { threadId: spec.id, turn: 'écris' } }] }, {}]);
+    expect(cont.results[0]).toMatch(/^Refusé, rien n'a été lancé : le mandat/);
+  });
+
+  it('the « Go » button makes the mandate final in the server, before the model runs — the launch of that very turn is accepted', async () => {
+    const h = await withDraft();
+    const go = await turn(h, await says(h, 'c2', 'Go'), [{ tools: [delegateTo('builder')] }, {}]);
+    expect(mandateOf(h).status).toBe('final');
+    expect(h.deliverables.saved).toHaveLength(1);
+    expect(go.prompt).toContain("VALIDÉ À L'INSTANT");
+    expect(go.results[0]).not.toMatch(/^Refusé/);
+    expect(byTarget(h, 'builder')!.status).toBe('running');
+    expect(h.emitted).toContain('deliverable.updated');
+  });
+
+  it('a wake-up can never validate a mandate: confirm_mandate is refused outside a human message later than the draft', async () => {
+    const h = harness([], team);
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    // In the turn that proposes it: the human message is older than the mandate.
+    const same = await turn(h, await says(h, 'c1', 'Fais l’export CSV'), [{ tools: [propose()] }, { tools: [{ name: 'confirm_mandate', input: {} }] }, {}]);
+    expect(same.results[1]).toMatch(/^Refusé, le mandat reste en brouillon/);
+    for (const trigger of [{ kind: 'ticket_created' as const }, wake('nope'), { kind: 'relaunch_request' as const, threadId: 'nope' }]) {
+      const r = await turn(h, trigger, [{ tools: [{ name: 'confirm_mandate', input: {} }] }, { tools: [delegateTo('builder')] }, {}]);
+      expect(r.results[0]).toMatch(/^Refusé, le mandat reste en brouillon/);
+      expect(r.results[1]).toMatch(/^Refusé/);
+    }
+    expect(mandateOf(h).status).toBe('draft');
+    expect(h.threads.saved.size).toBe(0);
+  });
+
+  it('a Go in the human’s own words: the model confirms, the server accepts because the message is later than the draft', async () => {
+    const h = await withDraft();
+    const r = await turn(h, await says(h, 'c2', 'ok pour moi, vas-y'), [{ tools: [{ name: 'confirm_mandate', input: {} }] }, { tools: [delegateTo('builder')] }, {}]);
+    expect(r.prompt).toContain('BROUILLON, en attente du « Go »');
+    expect(r.results[0]).toContain('validé (final)');
+    expect(r.results[1]).not.toMatch(/^Refusé/);
+    expect(mandateOf(h).status).toBe('final');
+  });
+
+  it('the assistant cannot validate or rewrite its mandate through the CLI', async () => {
+    const updateTool: CliTool = {
+      name: 'fleex_ticket_deliverable_update', commandPath: ['ticket', 'deliverable', 'update'], description: 'Update', mutating: true,
+      workspaceAware: true, jsonAware: true, inputSchema: { type: 'object', properties: {}, required: ['ticketId', 'deliverableId'] },
+      arguments: [{ key: 'ticketId', required: true, variadic: false }, { key: 'deliverableId', required: true, variadic: false }],
+      options: [{ key: 'status', flag: '--status', takesValue: true, description: '' }],
+    };
+    const h = harness([], { ...team, extraCliTools: [updateTool] });
+    await turn(h, await says(h, 'c1', 'Fais l’export CSV'), [{ tools: [propose()] }, {}]);
+    const id = mandateOf(h).id;
+    const r = await turn(h, wake('nope'), [
+      { tools: [{ name: 'fleex_ticket_deliverable_update', input: { ticketId: '1', deliverableId: id, status: 'final' } }] },
+      { tools: [{ name: 'fleex_ticket_deliverable_update', input: { ticketId: '1', deliverableId: 'another', status: 'final' } }] },
+      {},
+    ]);
+    expect(r.results[0]).toMatch(/^Refusé, rien n'a été modifié : ce livrable est le mandat/);
+    // Any other deliverable still goes to the CLI.
+    expect(h.cliCalls).toEqual([['ticket', 'deliverable', 'update', '1', 'another', '--status', 'final', '--workspace', 'qa', '--json']]);
+  });
+
+  it('« Ajuster »: the draft stays a draft and is revised in place — same deliverable, new version, question asked again', async () => {
+    const h = await withDraft();
+    const id = mandateOf(h).id;
+    const asked = await turn(h, await says(h, 'c2', 'Ajuster'), [{ text: 'Que veux-tu changer ?' }]);
+    expect(asked.prompt).toContain('BROUILLON, en attente du « Go »');
+    expect(mandateOf(h).status).toBe('draft');
+    await turn(h, await says(h, 'c3', 'ajoute l’export XLSX'), [{ tools: [propose(`${MANDATE}\n- XLSX aussi`)] }, {}]);
+    expect(h.deliverables.saved).toHaveLength(1);
+    expect(mandateOf(h)).toMatchObject({ id, status: 'draft', version: 2 });
+    expect(mandateOf(h).content).toContain('XLSX aussi');
+    expect(main(h).at(-1)!.questions![0]!.options).toEqual(['Go', 'Ajuster']);
+    // The Go given to v1 does not carry over: the revised draft needs its own.
+    const stale = await turn(h, wake('nope'), [{ tools: [delegateTo('builder')] }, {}]);
+    expect(stale.results[0]).toMatch(/^Refusé/);
+  });
+
+  it('revising a validated mandate puts it back in draft, keeps the decisions noted, and holds the launches again', async () => {
+    const h = await withDraft();
+    await turn(h, await says(h, 'c2', 'Go'), [{ tools: [{ name: 'note_decision', input: { decision: 'Séparateur « ; »', reason: 'Excel FR' } }] }, {}]);
+    await turn(h, await says(h, 'c3', 'finalement ajoute le XLSX'), [{ tools: [propose('## Objectif\nCSV et XLSX.')] }, { tools: [delegateTo('builder')] }, {}]);
+    expect(mandateOf(h).status).toBe('draft');
+    expect(mandateOf(h).content).toMatch(/^## Objectif\nCSV et XLSX\.\n\n## Décisions prises\n- .* — Séparateur « ; » — Raison : Excel FR\n$/);
+    expect(h.threads.saved.size).toBe(0);
+  });
+
+  it('note_decision appends to « Décisions prises » of the validated mandate, and the next turn reads it back in its prompt', async () => {
+    const h = await withDraft();
+    const draft = await turn(h, wake('nope'), [{ tools: [{ name: 'note_decision', input: { decision: 'x', reason: 'y' } }] }, {}]);
+    expect(draft.results[0]).toContain('encore en brouillon');
+    await turn(h, await says(h, 'c2', 'Go'), [
+      { tools: [{ name: 'note_decision', input: { decision: 'Séparateur « ; »', reason: 'Excel FR' } }] },
+      { tools: [{ name: 'note_decision', input: { decision: 'Pas de BOM', reason: 'inutile en UTF-8' } }] },
+      {},
+    ]);
+    const content = mandateOf(h).content;
+    expect(content.startsWith(MANDATE)).toBe(true);
+    expect(content).toMatch(/## Décisions prises\n- \d{4}-\d\d-\d\d \d\d:\d\d UTC — Séparateur « ; » — Raison : Excel FR\n- [^\n]* — Pas de BOM — Raison : inutile en UTF-8\n$/);
+    expect(mandateOf(h).status).toBe('final');
+    const next = await turn(h, wake('nope'), [{}]);
+    expect(next.prompt).toContain('## Mandat\n« Mandat : export CSV » · v3 · validé (final)');
+    expect(next.prompt).toContain('Pas de BOM — Raison : inutile en UTF-8');
+  });
+
+  it('with no mandate (short task) nothing changes: launches go, note_decision and confirm_mandate say there is none', async () => {
+    const h = harness([], team);
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    const r = await turn(h, await says(h, 'c1', 'corrige la typo'), [
+      { tools: [{ name: 'note_decision', input: { decision: 'x', reason: 'y' } }, { name: 'confirm_mandate', input: {} }, delegateTo('builder')] }, {},
+    ]);
+    expect(r.results[0]).toContain('Aucun mandat');
+    expect(r.results[1]).toContain('Aucun mandat');
+    expect(r.results[2]).not.toMatch(/^Refusé/);
+    expect(r.prompt).toContain('## Mandat\n(aucun');
+    expect(h.deliverables.saved).toEqual([]);
+  });
+
+  it('a `plan` deliverable written by someone else is not the mandate: it holds nothing', async () => {
+    const h = harness([], team);
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    await new SubmitDeliverableUseCase(h.deliverables as never, { saveActivity: async () => {} } as never, { get: () => ({}) } as never, logger as never)
+      .execute({ ticketId: 't1', agentName: 'catalyst', type: 'plan', title: 'Plan de Catalyst', content: 'x', status: 'draft' });
+    const r = await turn(h, await says(h, 'c1', 'construis'), [{ tools: [delegateTo('builder')] }, {}]);
+    expect(r.results[0]).not.toMatch(/^Refusé/);
+    expect(r.prompt).toContain('## Mandat\n(aucun');
+  });
+
+  // Acceptance criterion: after « Go », spec → build → review runs with no human message and no question.
+  it('after Go, spec → build → review: each wake-up leads to the next launch in ONE turn, the mandate stays final, nothing is asked', async () => {
+    const h = await withDraft();
+    const settle = async (name: string) => {
+      const t = byTarget(h, name)!;
+      const m = (await h.mentions.getById(t.currentMentionId!))!; m.acknowledge(); m.resolve(); await h.mentions.save(m);
+      t.markIdle(); await h.threads.save(t);
+      return t;
+    };
+    await turn(h, await says(h, 'c2', 'Go'), [{ tools: [delegateTo('catalyst', 'Spécifie')] }, {}]);
+    const humanMessages = h.comments.saved.filter((c) => c.authorType === 'user').length;
+    const questionsBefore = main(h).filter((c) => c.questions?.length).length;
+    const turnsBefore = h.agentEvents.executions.length;
+
+    const spec = await settle('catalyst');
+    const afterSpec = await turn(h, wake(spec.id), [
+      { tools: [{ name: 'conclude_thread', input: { threadId: spec.id, summary: 'Spec livrée.' } }, { name: 'note_decision', input: { decision: 'Colonnes dans l’ordre de l’écran', reason: 'la spec ne le fixe pas' } }, delegateTo('builder', 'Construis')] }, {},
+    ]);
+    const build = await settle('builder');
+    const afterBuild = await turn(h, wake(build.id), [
+      { tools: [{ name: 'conclude_thread', input: { threadId: build.id, summary: 'Build fait, tests verts.' } }, delegateTo('sentinel', 'Relis')] }, {},
+    ]);
+    const review = await settle('sentinel');
+    await turn(h, wake(review.id), [
+      { tools: [{ name: 'conclude_thread', input: { threadId: review.id, summary: 'Revue OK.' } }] },
+      { text: '**Résultat** fait.\n**Décisions prises** : colonnes dans l’ordre de l’écran.' },
+    ]);
+
+    for (const r of [...afterSpec.results, ...afterBuild.results]) expect(r).not.toMatch(/^Refusé/);
+    expect([spec, build, review].map((t) => t.status)).toEqual(['concluded', 'concluded', 'concluded']);
+    // Three wake-ups, three assistant turns: none needed a second pass or a human.
+    expect(h.agentEvents.executions.length - turnsBefore).toBe(3);
+    expect(h.comments.saved.filter((c) => c.authorType === 'user')).toHaveLength(humanMessages);
+    expect(main(h).filter((c) => c.questions?.length)).toHaveLength(questionsBefore);
+    expect(mandateOf(h).status).toBe('final');
+    // The decision taken alone at the first wake-up is in the prompt of the last turn, where the final report is written.
+    expect(h.llmCalls.at(-1)!.messages[0]!.content as string).toContain('Colonnes dans l’ordre de l’écran — Raison : la spec ne le fixe pas');
+  });
+
+  describe('grouped questions (ask_user)', () => {
+    const q = (text: string, options = ['Oui', 'Non']) => ({ text, options });
+    it('up to 4 questions go out in ONE message, declared, after the model’s text — and a launch in the same turn still goes', async () => {
+      const h = harness([], team);
+      const r = await turn(h, await says(h, 'c1', 'avance'), [
+        { text: 'Deux points à trancher.', tools: [{ name: 'ask_user', input: { questions: [q('Format ?', ['CSV', 'XLSX']), q('Avec en-têtes ?')] } }, delegateTo('catalyst')] },
+        { tools: [{ name: 'ask_user', input: { questions: [q('Séparateur ?', [',', ';']), q('BOM ?')] } }] },
+        {},
+      ]);
+      expect(r.results[1]).not.toMatch(/^Refusé/);
+      expect(byTarget(h, 'catalyst')!.status).toBe('running');
+      const posted = main(h);
+      expect(posted).toHaveLength(1);
+      expect(posted[0]!.questions).toEqual([
+        { prompt: 'Format ?', options: ['CSV', 'XLSX'] }, { prompt: 'Avec en-têtes ?', options: ['Oui', 'Non'] },
+        { prompt: 'Séparateur ?', options: [',', ';'] }, { prompt: 'BOM ?', options: ['Oui', 'Non'] },
+      ]);
+      expect(posted[0]!.body).toBe('Deux points à trancher.\n\nFormat ?\n- CSV\n- XLSX\n\nAvec en-têtes ?\n- Oui\n- Non\n\nSéparateur ?\n- ,\n- ;\n\nBOM ?\n- Oui\n- Non');
+      // The question is the last word of the main stream: that is where Tasks, Focus and mobile look for it.
+      expect(h.comments.saved.filter((c) => c.threadId === null).at(-1)!.id).toBe(posted[0]!.id);
+    });
+
+    it('a fifth question is refused, none is dropped in silence; a question the UI could not render is refused too', async () => {
+      const h = harness([], team);
+      const r = await turn(h, await says(h, 'c1', 'avance'), [
+        { tools: [{ name: 'ask_user', input: { questions: [q('1 ?'), q('2 ?'), q('3 ?'), q('4 ?'), q('5 ?')] } }] },
+        { tools: [{ name: 'ask_user', input: { questions: [q('Long ?', ['a'.repeat(81), 'b'])] } }] },
+        { tools: [{ name: 'ask_user', input: { questions: [q('Une seule option ?', ['a'])] } }] },
+        { text: 'Rien à demander finalement.' },
+      ]);
+      expect(r.results[0]).toMatch(/^Refusé, rien n'a été posé : 4 questions au plus par message, tu en déclares 5/);
+      expect(r.results[1]).toMatch(/^Refusé, rien n'a été posé : chaque question a 2 à 5 options/);
+      expect(r.results[2]).toContain('Arguments invalides');
+      expect(main(h).map((c) => [c.body, c.questions])).toEqual([['Rien à demander finalement.', null]]);
+    });
+  });
+
+  describe('the cost of the ticket, for the final report', () => {
+    it('is the sum of the finished executions, assistant turns included, this turn excluded', async () => {
+      const h = harness([], team);
+      h.agentEvents.costs = [{ status: 'completed', costUsd: 1.5 }, { status: 'failed', costUsd: 0.25 }, { status: 'interrupted', costUsd: 0.1 }];
+      const r = await turn(h, user('c0'), [{ text: 'ok' }]);
+      expect(r.prompt).toContain("## Coût du ticket\n1,85 $ sur 3 exécution(s) terminée(s), agents et tours d'assistant compris, hors tour en cours.");
+    });
+
+    it('an unknown cost is said unknown, never counted as 0; a run in flight is not counted yet', async () => {
+      const h = harness([], team);
+      h.agentEvents.costs = [{ status: 'completed', costUsd: 2 }, { status: 'completed', costUsd: null }, { status: 'running', costUsd: null }];
+      const r = await turn(h, user('c0'), [{ text: 'ok' }]);
+      expect(r.prompt).toContain('## Coût du ticket\nau moins 2,00 $ sur 1 exécution(s) terminée(s)');
+      expect(r.prompt).toContain('1 exécution(s) au coût inconnu, non comptée(s) ; 1 en cours, pas encore comptée(s).');
+      h.agentEvents.costs = [{ status: 'completed', costUsd: null }];
+      const none = await turn(h, user('c0'), [{ text: 'ok' }]);
+      expect(none.prompt).toContain('## Coût du ticket\ninconnu (');
+      expect(none.prompt).not.toContain('0,00 $');
+    });
+  });
+
+  it('with the switch off nothing runs: no mandate is read, written or validated', async () => {
+    const h = harness([{ tools: [propose()] }, {}], { workThreadsEnabled: false });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.llmCalls).toEqual([]);
+    expect(h.deliverables.saved).toEqual([]);
+    expect(h.comments.saved).toEqual([]);
   });
 });

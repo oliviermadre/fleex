@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAssistantOutput, renderQuestion, assistantQuestions, buildAssistantSystemPrompt, buildAssistantUserPrompt, renderThreadStop, skillSummary, ACTION_TOOLS, extractRequestedTargets, withOriginalMessage, renderMentionReminder, ORIGINAL_MESSAGE_HEADER } from '../../src/application/assistant/assistant-protocol.js';
+import { parseTurnToolInput, renderQuestions, isGoAnswer, appendDecision, carryDecisions, decisionsOf, computeTicketCost, renderTicketCost, MANDATE_OPTIONS, parseAssistantOutput, renderQuestion, assistantQuestions, buildAssistantSystemPrompt, buildAssistantUserPrompt, renderThreadStop, skillSummary, ACTION_TOOLS, extractRequestedTargets, withOriginalMessage, renderMentionReminder, ORIGINAL_MESSAGE_HEADER } from '../../src/application/assistant/assistant-protocol.js';
 
 describe('parseAssistantOutput', () => {
   it('accepts a structured reply', () => {
@@ -492,5 +492,161 @@ describe('mentions in a message to the assistant', () => {
 
   it('the reminder names the targets and offers both ways out', () => {
     expect(renderMentionReminder([{ type: 'agent', name: 'x' }, { type: 'skill', name: 'y' }])).toMatch(/tu n'as pas traité @agent:x, @skill:y\..*délègue maintenant.*explique pourquoi/);
+  });
+});
+
+describe('mandate and escalation (lot 6) — the prompt', () => {
+  const build = (todoAccess?: boolean) => buildAssistantSystemPrompt({ persona: { soulMd: '', identityMd: '', memoryMd: '' }, personas: [], assistantName: 'Nas', todoAccess });
+  const system = build();
+  const section = (title: string, from = system) => {
+    const start = from.indexOf(`## ${title}`);
+    expect(start).toBeGreaterThan(-1);
+    const end = from.indexOf('\n## ', start + 1);
+    return from.slice(start, end < 0 ? undefined : end);
+  };
+  const rules = section('Mandat et escalade');
+
+  it('a multi-step task ends its framing with a mandate, before any build launch; a short task has none — same threshold as the todo', () => {
+    expect(rules).toMatch(/\*\*Tâche à plusieurs étapes\*\* \(au moins 3 étapes, ou 2 délégations\) : \*\*termine le cadrage par un mandat, avant tout lancement de construction\.\*\*/);
+    expect(rules).toMatch(/\*\*Tâche courte : pas de mandat\*\*/);
+    // One threshold for the todo and the mandate: the two rules cannot drift apart.
+    expect(section('La todo du ticket', build(true))).toContain('(au moins 3 étapes, ou 2 délégations)');
+  });
+
+  it('the mandate has its five parts, in order, and ONE question: Go / Ajuster', () => {
+    const parts = ['**Objectif**', "**Critères d'acceptation**", '**Plan**', '**Ce que je décide seul**', '**Ce que je te remonte**'].map((x) => rules.indexOf(x));
+    expect(parts.every((i) => i >= 0)).toBe(true);
+    expect([...parts].sort((a, b) => a - b)).toEqual(parts);
+    expect(rules).toContain("pose à l'utilisateur LA question « Go » / « Ajuster » à la fin du tour : n'en pose aucune autre dans ce tour");
+    expect(MANDATE_OPTIONS).toEqual(['Go', 'Ajuster']);
+    const tool = ACTION_TOOLS.find((t) => t.name === 'propose_mandate')!;
+    expect(tool.description).toMatch(/livrable de type plan, en brouillon, à ton nom/);
+    expect(tool.input_schema.required).toEqual(['title', 'markdown']);
+  });
+
+  it('only the human validates; « Ajuster » goes back to framing and revises the same deliverable', () => {
+    expect(rules).toMatch(/\*\*Seul l'utilisateur le valide\*\*/);
+    expect(rules).toContain('Un réveil ne valide jamais un mandat');
+    expect(rules).toMatch(/\*\*« Ajuster » : retour au cadrage\.\*\*[^\n]*révise le mandat par `propose_mandate` \(le même livrable, nouvelle version\)/);
+  });
+
+  it('after Go it carries on without validation and interrupts the human for the five cases only — everything else is decided and noted', () => {
+    expect(rules).toMatch(/\*\*Après le Go, tu enchaînes sans autre validation\*\*[^\n]*\*\*Tu n'interromps l'utilisateur que pour\*\* :/);
+    const cases = [
+      /1\. un \*\*choix produit\*\* que le mandat ne couvre pas ;/,
+      /2\. une \*\*action irréversible ou externe\*\* : merge, push sur une branche partagée, suppression, déploiement ;/,
+      /3\. un \*\*blocage\*\* : 3 échecs consécutifs, ou plafond de tours atteint/,
+      /4\. un \*\*changement de mode d'exécution\*\* \(`request_mode`\) ;/,
+      /5\. un \*\*item de todo assigné à l'utilisateur\*\* et qui bloque la suite\./,
+    ];
+    const at = cases.map((re) => rules.search(re));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(rules).not.toMatch(/\n  6\. /);
+    expect(rules).toMatch(/\*\*Tout le reste, tu le décides et tu le notes\*\* : `note_decision`[^\n]*« Décisions prises » du mandat/);
+  });
+
+  it('questions are grouped: one message, 4 at most, declared — and it keeps going on what does not depend on the answer', () => {
+    expect(rules).toMatch(/\*\*Questions groupées\*\*[^\n]*en UN message — `ask_user`, 4 questions au plus/);
+    expect(rules).toMatch(/\*\*Pendant que tu attends, continue ce qui ne dépend pas de la réponse\*\*/);
+    const schema = ACTION_TOOLS.find((t) => t.name === 'ask_user')!.input_schema.properties as { questions: { maxItems: number } };
+    expect(schema.questions.maxItems).toBe(4);
+  });
+
+  // Acceptance criterion: the final report contains « Décisions prises ».
+  it('the final report has its five headings, in order, « Décisions prises » with reasons and the cost as plain information', () => {
+    const report = rules.slice(rules.indexOf('**Compte rendu final**'));
+    const parts = ['**Résultat**', '**Preuves**', '**Décisions prises**', '**Reste pour toi**', '**Coût total du ticket**'].map((x) => report.indexOf(x));
+    expect(parts.every((i) => i >= 0)).toBe(true);
+    expect([...parts].sort((a, b) => a - b)).toEqual(parts);
+    expect(report).toMatch(/\*\*Décisions prises\*\* \(celles notées au mandat, chacune avec sa raison/);
+    expect(report).toMatch(/une information, sans seuil ni jugement ; un coût inconnu se dit inconnu/);
+  });
+
+  it('the older rules agree with it: the short-message rule excepts the final report, and choices go through ask_user', () => {
+    const how = section('Comment tu agis');
+    expect(how).toContain('pas de rapport — sauf le compte rendu final');
+    expect(how).toContain("Pour poser un choix à l'utilisateur, utilise `ask_user`");
+    expect(system).not.toContain('"reply"');
+    // The failure and turn-cap rules are stated once, in « Règles »; the mandate only refers to them.
+    expect(system.match(/Après 3 échecs consécutifs/g)).toHaveLength(1);
+    expect(rules).not.toContain('Continuer');
+  });
+
+  it('the rules are there with or without todo access', () => {
+    expect(build(true)).toContain('## Mandat et escalade');
+    expect(build(false)).toContain('## Mandat et escalade');
+  });
+});
+
+describe('mandate and escalation (lot 6) — the user prompt', () => {
+  const context = { ticket: { displayId: 1, title: 'T', status: 'doing', type: null, priority: 'none', description: '' }, comments: [], deliverables: [] } as never;
+  const base = { context, threads: [], turns: [], trigger: { kind: 'ticket_created' as const } };
+
+  it('carries the mandate in full, with its state; none is said as none', () => {
+    expect(buildAssistantUserPrompt(base)).toContain('## Mandat\n(aucun');
+    const draft = buildAssistantUserPrompt({ ...base, mandate: { title: 'M', status: 'draft', version: 2, content: '## Objectif\nX\n\n## Décisions prises\n- d1 — Raison : r1' } });
+    expect(draft).toContain('## Mandat\n« M » · v2 · BROUILLON, en attente du « Go » de l\'utilisateur : aucune cible qui écrit ne peut être lancée.');
+    expect(draft).toContain('## Décisions prises\n- d1 — Raison : r1');
+    const final = buildAssistantUserPrompt({ ...base, mandate: { title: 'M', status: 'final', version: 2, content: 'x' } });
+    expect(final).toContain("validé (final) : exécute-le sans autre validation ; n'interromps l'utilisateur que pour les 5 cas prévus");
+    expect(buildAssistantUserPrompt({ ...base, mandate: { title: 'M', status: 'final', version: 2, content: 'x', justValidated: true } })).toContain("VALIDÉ À L'INSTANT");
+  });
+
+  it('carries the cost only when the server computed it', () => {
+    expect(buildAssistantUserPrompt(base)).not.toContain('## Coût du ticket');
+    expect(buildAssistantUserPrompt({ ...base, cost: { knownUsd: 1.234, counted: 2, unknown: 0, running: 0 } })).toContain('## Coût du ticket\n1,23 $ sur 2 exécution(s) terminée(s)');
+  });
+});
+
+describe('mandate and escalation (lot 6) — helpers', () => {
+  it('isGoAnswer: the button, or the same word typed — nothing longer', () => {
+    for (const yes of ['Go', 'go', ' GO ! ', 'Go.']) expect(isGoAnswer(yes)).toBe(true);
+    for (const no of ['Ajuster', 'go ahead but drop the XLSX', 'ok', 'Gone', '']) expect(isGoAnswer(no)).toBe(false);
+  });
+
+  it('parseTurnToolInput validates the four tools', () => {
+    expect(parseTurnToolInput('propose_mandate', { title: ' T ', markdown: 'M' })).toEqual({ tool: 'propose_mandate', title: 'T', markdown: 'M' });
+    expect(parseTurnToolInput('propose_mandate', { title: 'T' })).toBeNull();
+    expect(parseTurnToolInput('confirm_mandate', {})).toEqual({ tool: 'confirm_mandate' });
+    expect(parseTurnToolInput('note_decision', { decision: 'd', reason: 'r' })).toEqual({ tool: 'note_decision', decision: 'd', reason: 'r' });
+    expect(parseTurnToolInput('note_decision', { decision: 'd' })).toBeNull();
+    const five = Array.from({ length: 5 }, (_, i) => ({ text: `q${i}`, options: ['a', 'b'] }));
+    // All five are kept: refusing the fifth is the turn's job, so that none disappears in silence.
+    expect(parseTurnToolInput('ask_user', { questions: five })).toEqual({ tool: 'ask_user', questions: five });
+    expect(parseTurnToolInput('ask_user', { questions: [{ text: 'q', options: ['only'] }] })).toBeNull();
+    expect(parseTurnToolInput('ask_user', { questions: [] })).toBeNull();
+    expect(parseTurnToolInput('delegate', {})).toBeNull();
+  });
+
+  it('several questions are declared and restated in order', () => {
+    const qs = [{ text: 'A ?', options: ['1', '2'] }, { text: 'B ?', options: ['3', '4'] }];
+    expect(assistantQuestions(qs)).toEqual([{ prompt: 'A ?', options: ['1', '2'] }, { prompt: 'B ?', options: ['3', '4'] }]);
+    expect(renderQuestions(qs)).toBe('\n\nA ?\n- 1\n- 2\n\nB ?\n- 3\n- 4');
+  });
+
+  it('appendDecision creates the section at the end, then appends inside it — even when another section follows', () => {
+    const at = new Date('2026-11-11T10:05:00Z');
+    const once = appendDecision('## Objectif\nX', 'Séparateur\n« ; »', 'Excel FR', at);
+    expect(once).toBe('## Objectif\nX\n\n## Décisions prises\n- 2026-11-11 10:05 UTC — Séparateur « ; » — Raison : Excel FR\n');
+    const twice = appendDecision(once, 'Pas de BOM', 'UTF-8', at);
+    expect(decisionsOf(twice)).toEqual(['2026-11-11 10:05 UTC — Séparateur « ; » — Raison : Excel FR', '2026-11-11 10:05 UTC — Pas de BOM — Raison : UTF-8']);
+    const middle = appendDecision('## Décisions prises\n- a\n\n## Annexe\nz', 'b', 'r', at);
+    expect(middle).toBe('## Décisions prises\n- a\n- 2026-11-11 10:05 UTC — b — Raison : r\n\n## Annexe\nz');
+  });
+
+  it('carryDecisions keeps what was decided when a revision does not restate it', () => {
+    const previous = '## Objectif\nX\n\n## Décisions prises\n- a\n- b\n';
+    expect(carryDecisions('## Objectif\nY', previous)).toBe('## Objectif\nY\n\n## Décisions prises\n- a\n- b\n');
+    expect(carryDecisions('## Objectif\nY\n\n## Décisions prises\n- a', previous)).toBe('## Objectif\nY\n\n## Décisions prises\n- a');
+    expect(carryDecisions('## Objectif\nY', '## Objectif\nX')).toBe('## Objectif\nY');
+  });
+
+  it('computeTicketCost: unknown is not 0, running is not counted', () => {
+    const cost = computeTicketCost([{ status: 'completed', costUsd: 1 }, { status: 'failed', costUsd: 0 }, { status: 'completed', costUsd: null }, { status: 'interrupted' }, { status: 'running', costUsd: 9 }]);
+    expect(cost).toEqual({ knownUsd: 1, counted: 2, unknown: 2, running: 1 });
+    expect(renderTicketCost(cost)).toMatch(/^au moins 1,00 \$ sur 2 exécution\(s\) terminée\(s\).*2 exécution\(s\) au coût inconnu.*Dis « au moins »/);
+    expect(renderTicketCost({ knownUsd: 0, counted: 0, unknown: 0, running: 0 })).toBe("aucune exécution terminée pour l'instant.");
+    expect(renderTicketCost({ knownUsd: 0, counted: 0, unknown: 3, running: 0 })).toMatch(/^inconnu \(3 exécution/);
   });
 });

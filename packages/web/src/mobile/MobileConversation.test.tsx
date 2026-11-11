@@ -179,6 +179,19 @@ describe('MobileConversation — the phone composer and « Assistant & threads �
       expect((screen.getByRole('button', { name: 'Ajuster' }) as HTMLButtonElement).disabled).toBe(true);
     });
 
+    it('several questions of the assistant (4 at most) are answered together, in one message to the assistant', async () => {
+      vi.mocked(api.fetchTicketComments).mockResolvedValue([
+        comment({ id: 'q', body: 'Deux points.', questions: [{ prompt: 'Format ?', options: ['CSV', 'XLSX'] }, { prompt: 'En-têtes ?', options: ['Oui', 'Non'] }] }),
+      ]);
+      render(<MobileConversation ticket={ticket} />);
+      fireEvent.click(await screen.findByRole('radio', { name: 'XLSX' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'Non' }));
+      expect(api.postAssistantMessage).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Envoyer les 2 réponses' }));
+      await waitFor(() => expect(api.postAssistantMessage).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.postAssistantMessage).mock.calls[0]![1]).toBe('**Format ?** XLSX\n**En-têtes ?** Non');
+    });
+
     it('a question already answered in the main stream offers no buttons', async () => {
       vi.mocked(api.fetchTicketComments).mockResolvedValue([
         comment({ id: 'q', body: 'On y va ?', questions: [{ prompt: 'On y va ?', options: ['Go', 'Ajuster'] }] }),

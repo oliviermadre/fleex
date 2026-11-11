@@ -328,6 +328,30 @@ describe('FocusView', () => {
       expect(api.postTicketComment).toHaveBeenCalledWith('t1', '@agent:dev corrige le hover');
     });
 
+    it("several questions of the assistant show like an agent's: one group each, answered together to the assistant", async () => {
+      const ASKED: FocusItem = {
+        key: 'question:cb', kind: 'question', ticketId: 't1', since: minutesAgo(5),
+        workflow: null, gate: null, error: null, idle: null, costUsd: 0, lastAgentComment: null,
+        question: {
+          source: 'assistant', mentionId: null, runId: null, stepRunId: null, askedBy: 'Nas', text: 'Deux points.',
+          questions: [{ prompt: 'Format ?', options: ['CSV', 'XLSX'] }, { prompt: 'En-têtes ?', options: ['Oui', 'Non'] }],
+        },
+      };
+      useFocusStore.setState({ items: [ASKED] });
+      renderView();
+      fireEvent.click(screen.getByText('Refonte du flux New task'));
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByText(/Nas a 2 questions/)).toBeTruthy();
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'XLSX' }));
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'Non' }));
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer les 2 réponses' }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_MS + 200); });
+      expect(api.postAssistantMessage).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(api.postAssistantMessage).mock.calls[0]![1]).toContain('**Format ?** XLSX');
+      expect(vi.mocked(api.postAssistantMessage).mock.calls[0]![1]).toContain('**En-têtes ?** Non');
+      expect(api.postTicketComment).not.toHaveBeenCalled();
+    });
+
     it("the assistant's question shows like an agent's, with its buttons, and the answer goes back to the assistant", async () => {
       const ASKED: FocusItem = {
         key: 'question:ca', kind: 'question', ticketId: 't1', since: minutesAgo(5),

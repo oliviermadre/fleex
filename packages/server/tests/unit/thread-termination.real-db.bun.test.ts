@@ -183,6 +183,7 @@ describe('Conclude and manual termination, on a real database', () => {
       postComment: new PostCommentUseCase(comments, mentions, { saveActivity: async () => {} } as never, logger as never),
       getTicketContext: { execute: async () => ({ ticket: (await tickets.getTicketById('t1'))!.toDTO(), comments: (await comments.getByTicket('t1')).map((c) => c.toDTO()), mentions: { pending: [], all: [] }, deliverables: [], activity: [], relevantSummaries: [], epics: [] }) } as never,
       agentEventStore: agentEvents, executeAgent: { wakeUp: async (m: TicketMentionEntity) => { woken.push(m.id); } } as never, stopRun,
+      deliverableStore: { getByTicket: async () => [], save: async () => {} },
       config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: true }) } as never,
       eventBus: new EventBus(), logger: logger as never,
       skillStore: { getEnabled: async () => [], getByCommandName: async () => null } as never,

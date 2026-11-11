@@ -171,7 +171,14 @@ export function TaskStream({
   // The pending question is the last agent comment when the task is waiting and
   // the agent declared closed questions on it.
   const questionCommentId = useMemo(() => {
-    if (!showActionCards || activity !== 'waiting') return null;
+    if (!showActionCards) return null;
+    // The assistant's own question (a mandate's « Go », its grouped questions)
+    // waits while it is the last word of the main stream — the rule Focus and
+    // mobile apply. No mention waits behind it, and the assistant keeps other
+    // threads running meanwhile: the task's activity says nothing about it.
+    const lastMain = comments.findLast((c) => !c.threadId);
+    if (lastMain?.authorType === 'assistant' && lastMain.questions?.length) return lastMain.id;
+    if (activity !== 'waiting') return null;
     for (let i = comments.length - 1; i >= 0; i--) {
       const c = comments[i]!;
       // The assistant relays agent questions to the user with the same declared shape.
