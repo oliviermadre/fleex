@@ -8,6 +8,7 @@ vi.mock('../../services/api', async (orig) => ({
   fetchFocus: vi.fn(),
   resolveWorkflowGate: vi.fn().mockResolvedValue(undefined),
   postTicketComment: vi.fn().mockResolvedValue(undefined),
+  postAssistantMessage: vi.fn(),
   fetchTicketDeliverables: vi.fn().mockResolvedValue([]),
   fetchSeenDeliverables: vi.fn().mockResolvedValue([]),
   fetchPersonas: vi.fn().mockResolvedValue([]),
@@ -22,6 +23,7 @@ import { useFocusStore, UNDO_MS } from '../../stores/focusStore';
 import { useWorkStore } from '../../stores/workStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { FocusView } from './FocusView';
 import { Toaster } from '../ui/toast/Toaster';
 import { resetToasts } from '../../stores/toastStore';
@@ -93,6 +95,10 @@ function renderView() {
 beforeEach(() => {
   localStorage.clear();
   resetToasts();
+  // « Assistant & threads » is opt-in: every test below runs with it off unless it turns it on.
+  useSettingsStore.setState((s) => ({ settings: { ...s.settings, workThreadsEnabled: false } }));
+  vi.mocked(api.postTicketComment).mockClear();
+  vi.mocked(api.postAssistantMessage).mockReset().mockResolvedValue({ comment: { id: 'c' }, assistant: { personaId: 'p', displayName: 'Nas' } } as never);
   useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
   useUnreadStore.setState({ loadSeenDeliverables: vi.fn().mockResolvedValue(undefined) } as never);
   useTicketStore.setState({
@@ -283,6 +289,66 @@ describe('FocusView', () => {
     expect(within(screen.getByRole('dialog')).getByText(/Dev a une question/)).toBeTruthy();
     await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_MS); });
     expect(api.postTicketComment).toHaveBeenCalledWith('t1', '@agent:dev corrige le hover');
+    // Switch off: a plain comment, whose mention the server launches directly — the assistant is not involved.
+    expect(api.postAssistantMessage).not.toHaveBeenCalled();
+  });
+
+  describe('with « Assistant & threads » on, the popup composer talks to the assistant', () => {
+    const IDLE: FocusItem = {
+      key: 'idle:t1:doing', kind: 'idle', ticketId: 't1', since: minutesAgo(400),
+      workflow: null, gate: null, question: null, error: null, lastAgentComment: null, costUsd: 0,
+      idle: { lastActivityAt: minutesAgo(400), lastAgentName: 'dev', lastAgentDisplayName: 'Dev' },
+    };
+    const sendFromPopup = async (text: string) => {
+      fireEvent.click(screen.getByText('Refonte du flux New task'));
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Commenter' }));
+      fireEvent.change(within(dialog).getByPlaceholderText(/Ton commentaire/), { target: { value: text } });
+      fireEvent.click(within(dialog).getByRole('button', { name: /Envoyer le commentaire/ }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_MS + 200); });
+    };
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      useSettingsStore.setState((s) => ({ settings: { ...s.settings, workThreadsEnabled: true } }));
+      useFocusStore.setState({ items: [IDLE] });
+    });
+
+    // Acceptance: from the Focus popup, `@agent:x` goes through the assistant route and creates no direct mention.
+    it('a message with @agent:x goes to the assistant route; no direct comment — hence no direct mention — is posted', async () => {
+      renderView();
+      await sendFromPopup('@agent:dev corrige le hover');
+      expect(api.postAssistantMessage).toHaveBeenCalledWith('t1', '@agent:dev corrige le hover');
+      expect(api.postTicketComment).not.toHaveBeenCalled();
+    });
+
+    it('no assistant persona configured: falls back to a plain comment, as in the Tasks view', async () => {
+      vi.mocked(api.postAssistantMessage).mockResolvedValue({ comment: null, assistant: null } as never);
+      renderView();
+      await sendFromPopup('@agent:dev corrige le hover');
+      expect(api.postTicketComment).toHaveBeenCalledWith('t1', '@agent:dev corrige le hover');
+    });
+
+    it("the assistant's question shows like an agent's, with its buttons, and the answer goes back to the assistant", async () => {
+      const ASKED: FocusItem = {
+        key: 'question:ca', kind: 'question', ticketId: 't1', since: minutesAgo(5),
+        workflow: null, gate: null, error: null, idle: null, costUsd: 0, lastAgentComment: null,
+        question: {
+          source: 'assistant', mentionId: null, runId: null, stepRunId: null, askedBy: 'Nas', text: 'Voici le mandat.',
+          questions: [{ prompt: 'On y va ?', options: ['Go', 'Ajuster'] }],
+        },
+      };
+      useFocusStore.setState({ items: [ASKED] });
+      renderView();
+      fireEvent.click(screen.getByText('Refonte du flux New task'));
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByText(/Nas a une question/)).toBeTruthy();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Go' }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_MS + 200); });
+      expect(api.postAssistantMessage).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(api.postAssistantMessage).mock.calls[0]![0]).toBe('t1');
+      expect(vi.mocked(api.postAssistantMessage).mock.calls[0]![1]).toContain('Go');
+      expect(api.postTicketComment).not.toHaveBeenCalled();
+    });
   });
 
   it('remembers the board filter and sort when the user leaves Focus and comes back', () => {

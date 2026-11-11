@@ -7,6 +7,7 @@ vi.mock('../services/api', async (orig) => ({
   fetchFocus: vi.fn(),
   resolveWorkflowGate: vi.fn().mockResolvedValue(undefined),
   postTicketComment: vi.fn().mockResolvedValue(undefined),
+  postAssistantMessage: vi.fn(),
   updateTicketExecutionConfig: vi.fn().mockResolvedValue(undefined),
   fetchPanels: vi.fn().mockResolvedValue([]),
   fetchSkills: vi.fn().mockResolvedValue([]),
@@ -20,6 +21,10 @@ import { useTicketStore } from '../stores/ticketStore';
 import { useFocusStore, UNDO_MS } from '../stores/focusStore';
 import { useMobileNavStore } from './mobileNavStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
+import { usePanelStore } from '../stores/panelStore';
+import { useSkillStore } from '../stores/skillStore';
+import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { MobileFocus } from './MobileFocus';
 import { MemoryRouter } from 'react-router-dom';
 import { Toaster } from '../components/ui/toast/Toaster';
@@ -61,6 +66,10 @@ beforeEach(() => {
   localStorage.clear();
   resetToasts();
   vi.mocked(api.resolveWorkflowGate).mockClear();
+  vi.mocked(api.postTicketComment).mockClear();
+  vi.mocked(api.postAssistantMessage).mockReset().mockResolvedValue({ comment: { id: 'c' }, assistant: { personaId: 'p', displayName: 'Nas' } } as never);
+  // « Assistant & threads » is opt-in: off unless a test turns it on.
+  useSettingsStore.setState((s) => ({ settings: { ...s.settings, workThreadsEnabled: false } }));
   useMobileNavStore.setState({ requestedDetailTab: null });
   useTicketStore.setState({
     tickets: [ticket('t1', 1284, 'Refonte du flux New task')],
@@ -240,6 +249,41 @@ describe('MobileFocus', () => {
         await vi.advanceTimersByTimeAsync(UNDO_MS + 10);
       });
       expect(api.postTicketComment).toHaveBeenCalledWith('t1', 'relance stp');
+      // Switch off: a plain comment, mentions launched directly by the server.
+      expect(api.postAssistantMessage).not.toHaveBeenCalled();
+    });
+
+    // Acceptance: from mobile, `@agent:x` goes through the assistant route and creates no direct mention.
+    it('with « Assistant & threads » on, the comment goes to the assistant: no direct comment, hence no direct mention', async () => {
+      vi.useFakeTimers();
+      useSettingsStore.setState((s) => ({ settings: { ...s.settings, workThreadsEnabled: true } }));
+      localStorage.setItem('comment_draft_t1', '@agent:builder relance stp');
+      renderFocus();
+      fireEvent.click(screen.getByText('Refonte du flux New task'));
+      fireEvent.click(screen.getByRole('button', { name: 'Envoyer le commentaire' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(UNDO_MS + 10);
+      });
+      expect(api.postAssistantMessage).toHaveBeenCalledWith('t1', '@agent:builder relance stp');
+      expect(api.postTicketComment).not.toHaveBeenCalled();
+    });
+
+    it('the @ picker offers the four delegation types: agent, panel, skill, workflow', () => {
+      usePanelStore.setState({ panels: [{ id: 'pa', name: 'archi', displayName: 'Archi panel', enabled: true }] as never, loaded: true });
+      useSkillStore.setState({ skills: [{ id: 's', commandName: 'lint', displayName: 'Lint', enabled: true }] as never, loaded: true });
+      useWorkflowTemplateStore.setState({ templates: [{ id: 'w', slug: 'review', name: 'Review', enabled: true }] as never });
+      renderFocus();
+      fireEvent.click(screen.getByText('Refonte du flux New task'));
+      fireEvent.click(screen.getByRole('button', { name: 'Commenter' }));
+      const input = screen.getByPlaceholderText(/Ton commentaire/) as HTMLTextAreaElement;
+      const inserted: string[] = [];
+      for (const label of ['The Builder', 'Archi panel', 'Lint', 'Review']) {
+        fireEvent.change(input, { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: /Mentionner/ }));
+        fireEvent.mouseDown(screen.getByText(label));
+        inserted.push(input.value);
+      }
+      expect(inserted).toEqual(['@agent:builder ', '@panel:archi ', '@skill:lint ', '@workflow:review ']);
     });
 
     it('has the conversation composer: mode, config, @ mentions', () => {

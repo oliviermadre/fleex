@@ -19,6 +19,15 @@ import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
 import { MobileComposer } from './MobileComposer';
 import { tint } from '../lib/tints';
+import { useSettingsStore } from '../stores/settingsStore';
+import { useTicketThreads } from '../components/work/panel/useTicketThreads';
+import { postHumanMessage } from '../components/work/task/postHumanMessage';
+import { useModeRequestActions } from '../components/work/task/useModeRequestActions';
+import { DelegationCard } from '../components/work/task/DelegationCard';
+import { ModeRequestCard } from '../components/work/task/ModeRequestCard';
+import { QuestionPicker } from '../components/work/task/QuestionPicker';
+import { AssistantLiveReply } from '../components/work/task/AssistantLiveReply';
+import { parseModeRequest, threadTargetLabel, threadTurns } from '../components/work/selectors';
 
 const MENTION_STATUS_LABEL: Record<TicketMention['status'], string> = {
   pending: '⏳ en attente',
@@ -86,6 +95,17 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   const { draft: body, setDraft: setBody, clearDraft } = useCommentDraft(ticketId);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
+
+  // « Assistant & threads »: the composer talks to the assistant, and what it
+  // does shows here — a card per thread (its turns fold under it: there is no
+  // Threads panel on a phone), its mode request, its questions, its live answer.
+  // Switch off: none of this is loaded and the conversation is the flat one of before.
+  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) === true;
+  const threads = useTicketThreads(threadsEnabled ? ticketId : null);
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+  const conversationMode = ticket.conversationMode ?? 'plan';
+  const { grantMode, declineMode } = useModeRequestActions(ticketId, conversationMode);
+  const [answeredQuestionId, setAnsweredQuestionId] = useState<string | null>(null);
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
 
   // Seen-state drives the unread dot on each deliverable chip
@@ -279,6 +299,28 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     const trimmed = body.trim();
     if (!trimmed || submitting) return;
 
+    // Assistant on: the message is the assistant's. Its mentions are orders to
+    // delegate in a thread, so there is no direct re-mention to disambiguate —
+    // a target that is busy or waiting is the assistant's to handle. Without an
+    // assistant persona the server posts nothing and the plain path below runs.
+    if (threadsEnabled) {
+      setSubmitting(true);
+      try {
+        const res = await api.postAssistantMessage(ticketId, trimmed);
+        if (res.assistant !== null && res.comment) {
+          const comment = res.comment;
+          setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
+          markCommentsRead(ticketId, comment.createdAt).catch(() => {});
+          clearDraft();
+          setConflict(null);
+          scrollToBottom();
+          return;
+        }
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
     const mentioned = parseAgentMentions(trimmed);
     const waiting: Conflict['agents'] = [];
     const busy: Conflict['agents'] = [];
@@ -302,7 +344,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
       return;
     }
     await doPost([]);
-  }, [body, submitting, mentions, personas, doPost]);
+  }, [body, submitting, mentions, personas, doPost, threadsEnabled, ticketId, markCommentsRead, clearDraft, scrollToBottom]);
 
   const resolveConflict = useCallback(
     (action: api.MentionConflictAction) => {
@@ -310,6 +352,33 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
       doPost(conflict.agents.map((a) => ({ agent: a.agent, action })));
     },
     [conflict, doPost],
+  );
+
+  const threadById = useMemo(() => new Map(threads.map((t) => [t.id, t])), [threads]);
+  /** Thread id → id of its first turn: where the thread's card stands in the transcript. */
+  const firstTurnOf = useMemo(() => {
+    const first = new Map<string, string>();
+    for (const c of comments) if (c.threadId && !first.has(c.threadId)) first.set(c.threadId, c.id);
+    return first;
+  }, [comments]);
+  // Only the most recent mode request is actionable; earlier ones are history.
+  const latestModeRequestId = useMemo(() => {
+    for (let i = comments.length - 1; i >= 0; i--) {
+      const c = comments[i]!;
+      if (c.threadId || c.authorType !== 'assistant') continue;
+      if (parseModeRequest(c.body)) return c.id;
+    }
+    return null;
+  }, [comments]);
+  // The assistant's question still waits when nothing was said in the main stream since.
+  const pendingQuestion = useMemo(() => {
+    const last = [...comments].reverse().find((c) => !c.threadId);
+    return last && last.authorType === 'assistant' && last.questions?.length ? last : null;
+  }, [comments]);
+  // An assistant turn in flight streams its answer under the transcript.
+  const liveAssistant = useMemo(
+    () => (threadsEnabled ? (executions ?? []).find((e) => e.status === 'running' && e.mentionId.startsWith('assistant:')) ?? null : null),
+    [executions, threadsEnabled],
   );
 
   // The transcript only depends on server data. Keeping it out of the render
@@ -324,6 +393,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
         ) : (
           <div className="flex flex-col gap-3">
             {comments.map((c) => {
+              const card = (c: TicketComment) => {
               const isAgent = c.authorType !== 'user';
               const commentMentions = mentionsByComment[c.id] ?? [];
               return (
@@ -373,6 +443,61 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                   )}
                 </div>
               );
+              };
+              if (!threadsEnabled) return card(c);
+
+              // A thread: one card where its first turn stands, its turns folded under it.
+              const thread = c.threadId ? threadById.get(c.threadId) : undefined;
+              if (thread) {
+                if (firstTurnOf.get(thread.id) !== c.id) return null;
+                const turns = threadTurns(comments, thread.id);
+                const open = openThreadId === thread.id;
+                return (
+                  <div key={`t-${thread.id}`} data-testid="mobile-thread" className="flex flex-col gap-2 [&>div:first-child]:ml-0">
+                    <DelegationCard
+                      thread={thread}
+                      turns={turns}
+                      personaDisplayName={threadTargetLabel(thread, personas.find((p) => p.id === thread.personaId)?.displayName)}
+                      onOpen={(id) => setOpenThreadId((cur) => (cur === id ? null : id))}
+                      onAnswer={(id, text) => api.postThreadMessage(id, text).then(() => undefined, () => undefined)}
+                      onRelaunch={(id) => api.relaunchThread(id).then(() => undefined, (err: unknown) => {
+                        toast.error('Relance impossible', { detail: err instanceof Error ? err.message : 'Erreur inconnue' });
+                      })}
+                    />
+                    {open && <div className="ml-3 flex flex-col gap-2 border-l border-[var(--theme-border)] pl-2">{turns.map(card)}</div>}
+                  </div>
+                );
+              }
+              const modeRequest = c.authorType === 'assistant' ? parseModeRequest(c.body) : null;
+              if (modeRequest) {
+                return (
+                  <ModeRequestCard
+                    key={c.id}
+                    comment={c}
+                    request={modeRequest}
+                    currentMode={conversationMode}
+                    actionable={c.id === latestModeRequestId}
+                    onGrant={grantMode}
+                    onDecline={declineMode}
+                  />
+                );
+              }
+              if (c.id === pendingQuestion?.id) {
+                return (
+                  <div key={c.id} className="flex flex-col gap-2">
+                    {card(c)}
+                    <QuestionPicker
+                      questions={c.questions ?? []}
+                      disabled={answeredQuestionId === c.id}
+                      onSubmit={(text) => {
+                        setAnsweredQuestionId(c.id);
+                        postHumanMessage(ticketId, text).catch(() => setAnsweredQuestionId(null));
+                      }}
+                    />
+                  </div>
+                );
+              }
+              return card(c);
             })}
             {/* Deliverables not linked to any comment stay reachable */}
             {deliverablesByComment.orphans.length > 0 && (
@@ -391,7 +516,9 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
         )
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [comments, mentionsByComment, deliverablesByComment, seenDeliverables, handleOpenDeliverable],
+    [comments, mentionsByComment, deliverablesByComment, seenDeliverables, handleOpenDeliverable,
+      threadsEnabled, threadById, firstTurnOf, openThreadId, latestModeRequestId, pendingQuestion, answeredQuestionId,
+      conversationMode, grantMode, declineMode, personas, ticketId],
   );
 
   return (
@@ -399,6 +526,14 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
       {/* Comments */}
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {transcript}
+        {liveAssistant && (
+          <div className="mt-3">
+            <AssistantLiveReply
+              execution={liveAssistant}
+              name={personas.find((p) => p.id === liveAssistant.personaId)?.displayName ?? 'Assistant'}
+            />
+          </div>
+        )}
       </div>
 
       {/* Conflict banner */}

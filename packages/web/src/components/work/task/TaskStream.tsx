@@ -53,6 +53,12 @@ interface Props {
    * cards). Off when the host already owns those actions, e.g. the Focus popup.
    */
   showActionCards?: boolean;
+  /**
+   * The latest mode request of the assistant carries its two buttons. Follows
+   * `showActionCards` unless set: the Focus popup turns the other cards off (its
+   * action zone owns them) but nothing else there can answer a mode request.
+   */
+  modeRequestActionable?: boolean;
   /** Turns on description editing and comment / deliverable deletion. */
   editable?: boolean;
   /** Called once a comment is deleted server-side, to drop it from the list at once. */
@@ -86,6 +92,7 @@ export function TaskStream({
   onAnswer,
   onOpenExecution,
   showActionCards = true,
+  modeRequestActionable = showActionCards,
   editable = false,
   onCommentDeleted,
   onDeliverableDeleted,
@@ -177,14 +184,14 @@ export function TaskStream({
 
   // Only the most recent mode request is actionable; earlier ones are history.
   const latestModeRequestId = useMemo(() => {
-    if (!showActionCards) return null;
+    if (!modeRequestActionable) return null;
     for (let i = comments.length - 1; i >= 0; i--) {
       const c = comments[i]!;
       if (c.threadId || c.authorType !== 'assistant') continue;
       if (parseModeRequest(c.body)) return c.id;
     }
     return null;
-  }, [comments, showActionCards]);
+  }, [comments, modeRequestActionable]);
 
   // An assistant turn in flight streams its answer live at the bottom of the stream.
   const liveAssistant = useMemo(

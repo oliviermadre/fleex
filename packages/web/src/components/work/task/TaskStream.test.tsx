@@ -67,6 +67,36 @@ describe('TaskStream — inline question card', () => {
   });
 });
 
+describe('TaskStream — the assistant\'s mode request', () => {
+  const request = agentComment({
+    id: 'mr', authorType: 'assistant', authorName: 'Nas',
+    body: 'Builder doit écrire.\n\n<!-- fleex:mode-request {"mode":"edit","threadId":"th1"} -->',
+  });
+  const stream = (props: Partial<Parameters<typeof TaskStream>[0]>) =>
+    render(
+      <TaskStream
+        ticketId="t1" description={null} comments={[request]} events={[]} executions={[]} deliverables={[]}
+        activity="idle" loading={false} error={null} onAnswer={vi.fn()} onOpenExecution={vi.fn()} {...props}
+      />,
+    );
+
+  // Focus popup: the other cards are off (its action zone owns them), the mode request keeps its buttons.
+  it('stays answerable with the action cards off when the host says so', () => {
+    const onGrantMode = vi.fn();
+    const onDeclineMode = vi.fn();
+    stream({ showActionCards: false, modeRequestActionable: true, onGrantMode, onDeclineMode });
+    fireEvent.click(screen.getByRole('button', { name: 'Switch agents to edit and continue' }));
+    expect(onGrantMode).toHaveBeenCalledWith({ mode: 'edit', threadId: 'th1' });
+    expect(onDeclineMode).not.toHaveBeenCalled();
+  });
+
+  it('follows showActionCards otherwise: no buttons in a host that turned the cards off', () => {
+    stream({ showActionCards: false });
+    expect(screen.getByText('Builder doit écrire.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Switch agents to edit/ })).toBeNull();
+  });
+});
+
 describe('TaskStream — deleting a comment', () => {
   beforeEach(() => {
     deleteTicketComment.mockReset();

@@ -12,7 +12,6 @@ import {
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
-import { postTicketComment } from '../../services/api';
 import { FocusIcon } from '../sidebar/icons';
 import { Tooltip } from '../ui/Tooltip';
 import { KindIcon } from './FocusIcons';
@@ -21,6 +20,7 @@ import { FocusDetailModal, Kbd, SNOOZE_CHOICES } from './FocusDetailModal';
 import {
   KIND_META,
   answerQuestion,
+  commentOnTicket,
   focusActions,
   formatWait,
   sortFocusItems,
@@ -171,7 +171,7 @@ export function FocusView() {
     (item: FocusItem, text: string) => {
       const t = ticketById.get(item.ticketId);
       advanceFrom(item.key);
-      commit(item, `#${t?.displayId ?? ''} · commentaire ajouté`, () => postTicketComment(item.ticketId, text));
+      commit(item, `#${t?.displayId ?? ''} · commentaire ajouté`, () => commentOnTicket(item.ticketId, text));
     },
     [advanceFrom, commit, ticketById],
   );

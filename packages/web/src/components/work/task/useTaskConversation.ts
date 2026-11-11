@@ -15,7 +15,7 @@ import type { TicketActivity, TicketComment, TicketWsMessage } from '@fleex/shar
 import * as api from '../../../services/api';
 import { appWs } from '../../../services/websocket';
 import { useUnreadStore } from '../../../stores/unreadStore';
-import { useSettingsStore } from '../../../stores/settingsStore';
+import { postHumanMessage } from './postHumanMessage';
 
 export interface TaskConversation {
   comments: TicketComment[];
@@ -40,7 +40,6 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
   const [error, setError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [assistantMissing, setAssistantMissing] = useState(false);
-  const threadsEnabled = useSettingsStore((s) => s.settings.workThreadsEnabled) === true;
   const reqId = useRef(0);
 
   const load = useCallback(async (id: string) => {
@@ -121,18 +120,9 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
       if (!ticketId || !body.trim()) return;
       setPosting(true);
       try {
-        if (threadsEnabled) {
-          const res = await api.postAssistantMessage(ticketId, body);
-          if (res.assistant === null) {
-            // No assistant persona configured: plain comment, Phase 1 behaviour.
-            await api.postTicketComment(ticketId, body);
-            setAssistantMissing(true);
-          } else {
-            setAssistantMissing(false);
-          }
-        } else {
-          await api.postTicketComment(ticketId, body);
-        }
+        // One rule for every composer (assistant on → the assistant, else a plain comment).
+        const res = await postHumanMessage(ticketId, body);
+        setAssistantMissing(res.assistantMissing);
         await load(ticketId);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to post');
@@ -141,7 +131,7 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
         setPosting(false);
       }
     },
-    [ticketId, load, threadsEnabled],
+    [ticketId, load],
   );
 
   const postToThread = useCallback(
