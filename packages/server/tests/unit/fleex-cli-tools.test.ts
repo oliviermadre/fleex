@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCliTools, cliToolArgv, parseFlags, type CliCommandDoc } from '../../src/application/assistant/fleex-cli-tools.js';
+import { ASSISTANT_CLI_COMMANDS, buildCliTools, cliToolArgv, parseFlags, type CliCommandDoc } from '../../src/application/assistant/fleex-cli-tools.js';
 
 const docs: CliCommandDoc[] = [
   { path: 'fleex ticket', description: 'group', arguments: [], options: [], subcommands: ['show', 'update', 'delete'] },
@@ -21,9 +21,28 @@ const docs: CliCommandDoc[] = [
 ];
 
 describe('buildCliTools', () => {
-  it('exposes leaf commands under the allowed roots, never destructive ones nor groups', () => {
+  it('exposes only allow-listed leaf commands: no group, no delete, no command nobody listed', () => {
     const names = buildCliTools(docs).map((t) => t.name);
-    expect(names).toEqual(['fleex_ticket_show', 'fleex_ticket_update', 'fleex_ticket_tag_add']);
+    expect(names).toEqual(['fleex_ticket_show', 'fleex_ticket_update']);
+  });
+  it('keeps human decisions, thread bypasses and team configuration away from the assistant', () => {
+    // The orchestrator relays a gate or a route to the user, never settles it; launching and
+    // stopping go through thread tools so their author is traced; personas are the user's.
+    const leaf = (path: string): CliCommandDoc => ({ path: `fleex ${path}`, description: path, arguments: [], options: [], subcommands: [] });
+    const withheld = [
+      'workflow gate resolve', 'workflow route', 'workflow run cancel', 'workflow step retry', 'workflow apply',
+      'ticket mention ack', 'ticket mention resolve', 'ticket mention run', 'ticket mention wait',
+      'ticket comment-delete', 'ticket archive', 'ticket delete', 'ticket todo delete',
+      'agent update', 'skill update', 'panel update', 'board update', 'epic update',
+    ];
+    expect(buildCliTools(withheld.map(leaf))).toEqual([]);
+    for (const path of withheld) expect(ASSISTANT_CLI_COMMANDS).not.toContain(path);
+    const kept = ['ticket show', 'ticket update', 'ticket move', 'ticket comment', 'ticket link', 'ticket deliverable add', 'ticket todo done', 'workflow run show'];
+    expect(buildCliTools(kept.map(leaf)).map((t) => t.commandPath.join(' '))).toEqual(kept);
+  });
+  it('does not offer a command the CLI gains later until it is added to the list', () => {
+    const fresh: CliCommandDoc = { path: 'fleex ticket teleport', description: 'new', arguments: [], options: [], subcommands: [] };
+    expect(buildCliTools([fresh])).toEqual([]);
   });
   it('derives the input schema from positionals and options, hiding --json/--workspace', () => {
     const show = buildCliTools(docs).find((t) => t.name === 'fleex_ticket_show')!;
@@ -35,7 +54,7 @@ describe('buildCliTools', () => {
 });
 
 describe('cliToolArgv', () => {
-  const tools = buildCliTools(docs);
+  const tools = buildCliTools(docs, ['ticket show', 'ticket update', 'ticket tag add']);
   it('rebuilds the argv with workspace and json when the command accepts them', () => {
     const show = tools.find((t) => t.name === 'fleex_ticket_show')!;
     expect(cliToolArgv(show, { id: '42', full: true, board: 'Personal' }, 'qa')).toEqual(['ticket', 'show', '42', '--board', 'Personal', '--full', '--workspace', 'qa', '--json']);
@@ -68,7 +87,7 @@ describe('toKey', () => {
       path: 'fleex ticket odd', description: 'x', subcommands: [],
       arguments: [{ name: 'id', description: '', required: true, variadic: false }],
       options: [{ flags: '--id <id>', description: '', required: true, mandatory: false }],
-    }]);
+    }], ['ticket odd']);
     expect(Object.keys(tools[0]!.inputSchema.properties)).toEqual(['id', 'id_2']);
   });
 });

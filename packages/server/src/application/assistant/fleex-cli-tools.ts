@@ -3,9 +3,9 @@
  * can call, and back into an argv for the CLI. No shell, no quoting: every
  * value is its own argv element, so there is no injection surface.
  *
- * The CLI is the assistant's only hand on Fleex. Read commands run freely;
- * mutating ones too, except the destructive leaves (delete, remove, stop…),
- * which stay the user's.
+ * The CLI is the assistant's only hand on Fleex, and that hand is an allow-list
+ * (`ASSISTANT_CLI_COMMANDS`): reads, plus the few writes an orchestrator needs.
+ * A command the CLI gains later is NOT offered until it is added here.
  */
 
 export interface CliCommandDoc {
@@ -31,21 +31,42 @@ export interface CliTool {
   arguments: Array<{ key: string; required: boolean; variadic: boolean }>;
   options: CliToolOption[];
   mutating: boolean;
-  /** Never exposed: the user keeps these. */
-  destructive: boolean;
   workspaceAware: boolean;
   jsonAware: boolean;
 }
 
-/** Command roots the assistant may use — the ticket-work surface, not instance admin. */
-export const ASSISTANT_CLI_ROOTS = ['ticket', 'epic', 'board', 'panel', 'skill', 'routine', 'workflow', 'memory', 'repo', 'session', 'agent'] as const;
+/**
+ * Every CLI command the assistant may call, by exact path. Anything else stays
+ * out, on purpose:
+ * - human decisions: `workflow gate resolve`, `workflow route`;
+ * - what must go through the thread tools so its author is traced:
+ *   `workflow run cancel`, `workflow step retry`, `workflow apply`, `ticket mention *`;
+ * - destructive or out of role: deletes, `ticket archive`, `ticket comment-delete`;
+ * - the team's configuration, which is the user's: `agent|skill|panel|board|epic update`.
+ */
+export const ASSISTANT_CLI_COMMANDS: readonly string[] = [
+  'agent list', 'agent show',
+  'board list',
+  'epic list', 'epic show',
+  'memory ask', 'memory search', 'memory similar', 'memory status',
+  'panel list', 'panel show',
+  'repo list', 'repo show', 'repo branches', 'repo issues', 'repo pr', 'repo worktrees', 'repo actions', 'repo hooks show',
+  'routine list', 'routine show',
+  'session list', 'session show',
+  'skill list', 'skill show',
+  'ticket show', 'ticket list', 'ticket boards', 'ticket comments', 'ticket mentions', 'ticket annotation list',
+  'ticket update', 'ticket move', 'ticket comment', 'ticket link',
+  'ticket deliverable add', 'ticket deliverable update', 'ticket deliverable show', 'ticket deliverable list',
+  'ticket todo list', 'ticket todo history', 'ticket todo add', 'ticket todo edit', 'ticket todo assign',
+  'ticket todo done', 'ticket todo reopen', 'ticket todo cancel', 'ticket todo move',
+  'workflow list', 'workflow show', 'workflow run list', 'workflow run show', 'workflow step deliverable list',
+];
 
 const MUTATING_LEAVES = new Set([
   'create', 'update', 'move', 'comment', 'add', 'set', 'run', 'start', 'link', 'attach', 'detach', 'assign',
   'archive', 'import', 'retry', 'resume', 'pause', 'tag', 'untag', 'favorite', 'unfavorite', 'block', 'unblock',
   'upload', 'rename', 'trigger', 'resolve', 'answer', 'approve', 'reject',
 ]);
-const DESTRUCTIVE_LEAVES = new Set(['delete', 'remove', 'kill', 'stop', 'restart', 'self-update', 'prune', 'reset', 'purge', 'forget', 'unregister', 'bench', 'reindex']);
 const HIDDEN_OPTIONS = new Set(['--help', '--workspace', '--json', '--format', '--version']);
 
 /**
@@ -81,14 +102,14 @@ export function parseFlags(flags: string): { flag: string; takesValue: boolean }
   return { flag, takesValue };
 }
 
-export function buildCliTools(docs: readonly CliCommandDoc[], roots: readonly string[] = ASSISTANT_CLI_ROOTS): CliTool[] {
+export function buildCliTools(docs: readonly CliCommandDoc[], allowed: readonly string[] = ASSISTANT_CLI_COMMANDS): CliTool[] {
+  const allow = new Set(allowed);
   const tools: CliTool[] = [];
   for (const doc of docs) {
     const parts = doc.path.split(/\s+/).slice(1); // drop "fleex"
-    if (parts.length === 0 || !roots.includes(parts[0]!)) continue;
     if (doc.subcommands.length > 0) continue; // groups are not callable
+    if (!allow.has(parts.join(' '))) continue;
     const leaf = parts[parts.length - 1]!;
-    const destructive = DESTRUCTIVE_LEAVES.has(leaf);
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
     const taken = new Set<string>();
@@ -123,12 +144,11 @@ export function buildCliTools(docs: readonly CliCommandDoc[], roots: readonly st
       arguments: args,
       options,
       mutating: MUTATING_LEAVES.has(leaf),
-      destructive,
       workspaceAware,
       jsonAware,
     });
   }
-  return tools.filter((t) => !t.destructive);
+  return tools;
 }
 
 /** @throws when a required positional is missing or a value has the wrong type. */

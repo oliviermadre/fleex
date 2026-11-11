@@ -56,9 +56,14 @@ function persona(name: string) {
 type Round = { text?: string; tools?: Array<{ name: string; input: Record<string, unknown> }> };
 
 const showTool: CliTool = {
-  name: 'fleex_ticket_show', commandPath: ['ticket', 'show'], description: 'Show', mutating: false, destructive: false,
+  name: 'fleex_ticket_show', commandPath: ['ticket', 'show'], description: 'Show', mutating: false,
   workspaceAware: true, jsonAware: true, inputSchema: { type: 'object', properties: {}, required: ['id'] },
   arguments: [{ key: 'id', required: true, variadic: false }], options: [],
+};
+const commentTool: CliTool = {
+  name: 'fleex_ticket_comment', commandPath: ['ticket', 'comment'], description: 'Comment', mutating: true,
+  workspaceAware: true, jsonAware: true, inputSchema: { type: 'object', properties: {}, required: ['id', 'body'] },
+  arguments: [{ key: 'id', required: true, variadic: false }, { key: 'body', required: true, variadic: false }], options: [],
 };
 
 function toolUse(name: string, input: Record<string, unknown>, id = 'tu'): Anthropic.ToolUseBlock {
@@ -77,6 +82,7 @@ function fixed(content: Anthropic.ContentBlock[]): AssistantLlm {
 
 /** Scripts the model: each round returns text and/or tool calls; text is streamed char-by-char. */
 interface Catalogue {
+  extraCliTools?: CliTool[];
   skills?: Array<{ id: string; commandName: string; name: string; displayName: string; markdownContent: string; enabled: boolean }>;
   workflows?: Array<{ id: string; slug: string; name: string; description: string; enabled: boolean }>;
   runs?: Array<{ id: string; ticketId: string; triggeredFrom: string; status: string; isActive(): boolean }>;
@@ -145,7 +151,7 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
     } as never,
     environment: {
       workspace: 'qa', cliBin: '/opt/fleex', hasApiKey: opts.hasApiKey ?? true,
-      cliTools: async () => [showTool],
+      cliTools: async () => [showTool, ...(opts.extraCliTools ?? [])],
       runCli: async (argv: string[]) => { cliCalls.push(argv); return { ok: true, text: '{"id":"t1","title":"e2e rouges"}' }; },
     },
   }, llm);
@@ -203,6 +209,20 @@ describe('RunAssistantTurnUseCase — conversation', () => {
     expect(call.system).toContain('1 outils `fleex_*`');
     expect(call.system.length).toBeLessThan(12000);
     expect(call.tools).toEqual(['delegate', 'continue_thread', 'conclude_thread', 'request_mode', 'fleex_ticket_show']);
+  });
+
+  it('a CLI comment carrying a mention tag is refused: it would launch a target outside any thread', async () => {
+    const h = harness([
+      { tools: [{ name: 'fleex_ticket_comment', input: { id: '1', body: '@agent:builder corrige les e2e' } }] },
+      { tools: [{ name: 'fleex_ticket_comment', input: { id: '1', body: 'Note : e2e à revoir.' } }] },
+      { text: 'Noté.' },
+    ], { extraCliTools: [commentTool] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    // Only the tag-free comment reached the CLI.
+    expect(h.cliCalls).toEqual([['ticket', 'comment', '1', 'Note : e2e à revoir.', '--workspace', 'qa', '--json']]);
+    const refusal = (h.llmCalls[1]!.messages[2]!.content as Anthropic.ToolResultBlockParam[])[0]!;
+    expect(refusal.is_error).toBe(true);
+    expect(refusal.content).toContain('delegate');
   });
 
   it('a fleex_* tool call runs the CLI and feeds the result back before the answer', async () => {

@@ -239,7 +239,7 @@ export interface AssistantEnvContext {
 export function buildAssistantEnvPreamble(env: AssistantEnvContext): string {
   const ws = env.workspace ?? 'inconnu';
   const cli = env.cliToolCount > 0
-    ? `Tu disposes de ${env.cliToolCount} outils \`fleex_*\` : ce sont les commandes de la CLI \`fleex\` de cet ADE (lire un ticket ou un livrable complet, changer le statut ou la priorité, commenter, lister…). Elles ciblent déjà le workspace **${ws}**. Les actions destructives (suppression, arrêt d'instance) ne te sont pas proposées : elles restent à l'utilisateur.`
+    ? `Tu disposes de ${env.cliToolCount} outils \`fleex_*\` : ce sont les commandes de la CLI \`fleex\` de cet ADE (lire un ticket ou un livrable complet, changer le statut ou la priorité, commenter, lister…). Elles ciblent déjà le workspace **${ws}**. C'est une liste fermée : lectures, mise à jour et déplacement du ticket, commentaires, liens, livrables, todo. Ce qui n'y figure pas reste à l'utilisateur (suppressions, validation d'une étape de workflow, choix d'une route, configuration des agents, skills et panels) ou passe par tes actions de thread (lancer, relancer, arrêter une cible). Un commentaire posté par \`fleex_ticket_comment\` ne lance personne : pour faire travailler une cible, utilise \`delegate\`.`
     : `La CLI \`fleex\` n'a pas répondu : aucun outil \`fleex_*\` ce tour-ci, appuie-toi sur le contexte fourni.`;
   return `# Environnement Fleex (injecté par le système)
 

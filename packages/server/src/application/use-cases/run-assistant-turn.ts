@@ -42,6 +42,9 @@ import {
   type AssistantTrigger,
 } from '../assistant/assistant-protocol.js';
 
+/** A tag that would create a mention if posted in a comment. */
+const MENTION_TAG = /@(agent|skill|panel|workflow):\S/;
+
 export const MAX_ASSISTANT_TURNS_PER_THREAD = 8;
 
 /** How a tool result names what was launched. */
@@ -295,6 +298,11 @@ export class RunAssistantTurnUseCase {
               threadActionTaken = true;
               if (action.action === 'conclude_thread') concluded = true;
             }
+          } else if (cli && cli.name === 'fleex_ticket_comment' && MENTION_TAG.test(String(input.body ?? ''))) {
+            // A comment through the CLI is posted as the user: its tags would launch
+            // targets outside any thread, with no author and no wake-up.
+            text = "Refusé, rien n'a été posté : ce commentaire contient une mention (@agent:, @skill:, @panel: ou @workflow:). Pour lancer une cible, utilise `delegate` ou `continue_thread` ; sinon retire le tag.";
+            isError = true;
           } else if (cli) {
             try {
               const argv = cliToolArgv(cli, input, this.deps.environment.workspace);
