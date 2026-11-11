@@ -16,7 +16,7 @@ import type { WorkflowTemplateStorePort } from '../ports/workflow-template-store
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
-import type { ConfigPort } from '../ports/config.port.js';
+import { isTodoAgentAccessEnabled, type ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import { knownFileIds, repairFileReferences } from '../utils/repair-file-references.js';
 import type { EventBus } from '../event-bus.js';
@@ -30,7 +30,8 @@ import { resolveExecutionConfig } from '../utils/resolve-execution-config.js';
 import { priceFor } from '../utils/cli-session-ingest.js';
 import type { AssistantEnvironmentPort } from '../assistant/assistant-environment.js';
 import type { AssistantLlm } from '../assistant/assistant-llm.js';
-import { cliToolArgv, cliToolsToAnthropic, type CliTool } from '../assistant/fleex-cli-tools.js';
+import { cliToolArgv, cliToolsToAnthropic, isTodoCliTool, type CliTool } from '../assistant/fleex-cli-tools.js';
+import { formatTodoContext } from '../utils/format-todo-context.js';
 import {
   ACTION_TOOLS,
   PROMPT_LIMITS,
@@ -200,13 +201,21 @@ export class RunAssistantTurnUseCase {
       return;
     }
 
-    const [context, allThreads, personas, cliTools, capabilities] = await Promise.all([
+    const [context, allThreads, personas, allCliTools, capabilities] = await Promise.all([
       this.deps.getTicketContext.execute({ ticketId, agentName: assistant.name }),
       this.deps.threadStore.getByTicket(ticketId),
       this.deps.personaStore.getAll(),
       this.deps.environment.cliTools(),
       this.loadCapabilities(),
     ]);
+    // The assistant follows the « agents see the todo » setting, like any agent:
+    // off, it gets neither the list nor the tools (the server would refuse them
+    // anyway, now that its CLI calls declare an agent).
+    const todoAccess = isTodoAgentAccessEnabled(this.deps.config.get());
+    const cliTools = todoAccess ? allCliTools : allCliTools.filter((t) => !isTodoCliTool(t));
+    // Its CLI calls are made under its own name, not the user's: the todo history
+    // names it, and the items assigned to the human are protected from it.
+    const cliActor = { name: assistant.displayName || assistant.name, persona: assistant.name };
     const threadId = trigger.kind === 'user_message' || trigger.kind === 'ticket_created' ? null : trigger.threadId;
     const turns = threadId ? context.comments.filter((c) => c.threadId === threadId) : [];
     let threadDeliverables: typeof context.deliverables = [];
@@ -229,8 +238,13 @@ export class RunAssistantTurnUseCase {
         .filter((p) => p.id !== assistant.id)
         .map((p) => ({ name: p.name, displayName: p.displayName, identityMd: p.identityMd })),
       capabilities,
+      todoAccess,
     });
-    const userPrompt = buildAssistantUserPrompt({ context, threads: allThreads.map((t) => t.toDTO()), trigger, turns, threadDeliverables });
+    const userPrompt = buildAssistantUserPrompt({
+      context, threads: allThreads.map((t) => t.toDTO()), trigger, turns, threadDeliverables,
+      // Grouped from the assistant's point of view: « For you » is what is assigned to its slug.
+      todo: todoAccess ? { section: formatTodoContext(ticket.displayId, context.todos ?? [], { persona: assistant.name }) } : null,
+    });
     // The assistant runs on its persona's model. The ticket's model and effort
     // overrides are set for the agents it delegates to, not for it.
     const model = assistant.model;
@@ -357,7 +371,7 @@ export class RunAssistantTurnUseCase {
           } else if (cli) {
             try {
               const argv = cliToolArgv(cli, input, this.deps.environment.workspace);
-              const r = await this.deps.environment.runCli(argv);
+              const r = await this.deps.environment.runCli(argv, cliActor);
               text = r.text;
               isError = !r.ok;
             } catch (err) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ASSISTANT_CLI_COMMANDS, buildCliTools, cliToolArgv, parseFlags, type CliCommandDoc } from '../../src/application/assistant/fleex-cli-tools.js';
+import { ASSISTANT_CLI_COMMANDS, buildCliTools, cliToolArgv, isTodoCliTool, parseFlags, type CliCommandDoc } from '../../src/application/assistant/fleex-cli-tools.js';
 
 const docs: CliCommandDoc[] = [
   { path: 'fleex ticket', description: 'group', arguments: [], options: [], subcommands: ['show', 'update', 'delete'] },
@@ -89,5 +89,36 @@ describe('toKey', () => {
       options: [{ flags: '--id <id>', description: '', required: true, mandatory: false }],
     }], ['ticket odd']);
     expect(Object.keys(tools[0]!.inputSchema.properties)).toEqual(['id', 'id_2']);
+  });
+});
+
+// Lot 4: the assistant acts on the todo under its own name only.
+describe('todo tools of the assistant', () => {
+  // The options the real CLI declares on `todo done` (see packages/cli/src/commands/ticket/todo).
+  const todoDone: CliCommandDoc = {
+    path: 'fleex ticket todo done', description: 'Mark done', subcommands: [],
+    arguments: [{ name: 'ticket', description: 'ticket', required: true, variadic: false }, { name: 'refs', description: 'refs', required: true, variadic: true }],
+    options: [
+      { flags: '--board <board>', description: 'Board', required: true, mandatory: false },
+      { flags: '--as <name>', description: 'Attribute this change to agent <name>', required: true, mandatory: false },
+      { flags: '--json', description: 'json', required: false, mandatory: false },
+    ],
+  };
+  it('hides --as: the assistant cannot attribute a change to someone else', () => {
+    const [tool] = buildCliTools([todoDone]);
+    expect(Object.keys(tool!.inputSchema.properties)).toEqual(['ticket', 'refs', 'board']);
+    expect(tool!.options.map((o) => o.flag)).toEqual(['--board']);
+  });
+  it('an `as` the model passes anyway never reaches the argv', () => {
+    const [tool] = buildCliTools([todoDone]);
+    const argv = cliToolArgv(tool!, { ticket: '42', refs: ['3'], as: 'olivier', '--as': 'olivier' }, null);
+    expect(argv).toEqual(['ticket', 'todo', 'done', '42', '3', '--json']);
+  });
+  it('isTodoCliTool picks every `ticket todo` command of the allow-list and nothing else', () => {
+    const leaf = (path: string): CliCommandDoc => ({ path: `fleex ${path}`, description: path, arguments: [], options: [], subcommands: [] });
+    const tools = buildCliTools(ASSISTANT_CLI_COMMANDS.map(leaf));
+    expect(tools.filter(isTodoCliTool).map((t) => t.commandPath.join(' '))).toEqual(ASSISTANT_CLI_COMMANDS.filter((c) => c.startsWith('ticket todo ')));
+    expect(tools.filter(isTodoCliTool)).toHaveLength(9);
+    expect(isTodoCliTool({ commandPath: ['ticket', 'update'] })).toBe(false);
   });
 });

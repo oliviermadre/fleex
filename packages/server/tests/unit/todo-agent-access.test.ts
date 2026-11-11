@@ -14,8 +14,8 @@ import type { Container } from '../../src/infrastructure/container.js';
  * Why it matters: the human's daily workflows must not start reading and
  * rewriting the todo just because it exists. Off — the default — an agent run
  * is never told about it, and whatever it discovers on its own (`--help`, MCP
- * tool list) is refused by the server. The human and the assistant, which do
- * not declare themselves as agents, keep full use of it.
+ * tool list) is refused by the server. The human keeps full use of it; the
+ * assistant declares itself as an agent on its CLI calls and follows the switch.
  */
 
 const AGENT = { 'x-fleex-actor-type': 'agent', 'x-fleex-actor-name': 'Builder', 'x-fleex-actor-persona': 'builder', 'x-fleex-source': 'cli' };

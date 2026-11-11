@@ -367,3 +367,73 @@ describe('orchestration rules in the prompt', () => {
     expect(prompt).toMatch(/exigeant le livrable ou la preuve qui manque/);
   });
 });
+
+// Lot 4: how the assistant steers the todo. Each rule is pinned by the words that carry it.
+describe('assistant prompt — steering the todo', () => {
+  const base = { persona: { soulMd: '', identityMd: '', memoryMd: '' }, personas: [], assistantName: 'Nas' };
+  const on = buildAssistantSystemPrompt({ ...base, todoAccess: true });
+  const section = on.slice(on.indexOf('## La todo du ticket'), on.indexOf("## Les actions de l'utilisateur priment"));
+
+  it('is in the system prompt only when todo access is on (off by default)', () => {
+    expect(section.length).toBeGreaterThan(200);
+    for (const off of [buildAssistantSystemPrompt(base), buildAssistantSystemPrompt({ ...base, todoAccess: false })]) {
+      expect(off).not.toContain('## La todo du ticket');
+      expect(off).not.toContain('fleex_ticket_todo');
+    }
+  });
+  it('plans in items for a multi-step task, none for a short one', () => {
+    expect(section).toMatch(/au moins 3 étapes, ou 2 délégations.*pose le plan en items/);
+    expect(section).toMatch(/Tâche courte : pas de todo/);
+  });
+  it('gives every item an assignee: the persona slug, or `user` for what only the human can do', () => {
+    expect(section).toMatch(/Chaque item a un destinataire.*slug de la persona.*`user`.*l'utilisateur seul peut faire/);
+  });
+  it('has each delegation turn cite the refs, pointing at the brief frame instead of restating it', () => {
+    expect(section).toMatch(/Chaque `turn` de délégation cite les refs concernées.*point 5 de la trame/);
+    // The frame itself (lot 5) is stated once.
+    expect(on.match(/Refs de todo couvertes/g)).toHaveLength(1);
+  });
+  it('reconciles the todo with the result when a thread comes back', () => {
+    expect(section).toMatch(/Au retour d'un thread.*coche ce que la cible a fait sans le cocher.*rouvre ce qui est coché sans preuve.*ajoute les étapes découvertes/);
+  });
+  it('cancels only with a reason and is not offered deletion', () => {
+    expect(section).toMatch(/Tu n'annules qu'avec une raison/);
+    expect(section).toMatch(/La suppression ne t'est pas proposée/);
+  });
+  it('leaves the human’s items alone', () => {
+    expect(section).toMatch(/items assignés à l'utilisateur sont les siens.*ne les coches pas.*ne les modifies pas.*ne les annules pas.*ne te les réassignes pas sans qu'il te le demande/);
+  });
+  it('never says « terminé » with open non-user items, and lists what is left to the human', () => {
+    expect(section).toMatch(/Tu n'annonces « terminé » que si tous les items hors `user` sont faits ou annulés/);
+    expect(section).toMatch(/message final liste les items qui restent à l'utilisateur/);
+  });
+  it('reads a human change as an instruction at the next turn, without being woken for it', () => {
+    expect(section).toMatch(/Un changement de l'utilisateur dans la todo est une instruction.*à ton prochain tour/);
+    expect(section).toMatch(/Tu n'es pas réveillé par un changement de todo/);
+  });
+  it('the environment preamble lists the todo among the CLI tools only when it is offered', () => {
+    const env = { ticketId: 't1', displayId: 1, workspace: 'qa', cliToolCount: 5 };
+    expect(buildAssistantSystemPrompt({ ...base, env, todoAccess: true })).toContain('livrables, todo.');
+    expect(buildAssistantSystemPrompt({ ...base, env })).toContain('liens, livrables. Ce qui');
+  });
+});
+
+describe('assistant user prompt — the todo section', () => {
+  const context = { ticket: { displayId: 7, title: 'T', status: 'doing', priority: 'none', conversationMode: 'plan', description: '' }, comments: [], deliverables: [] } as never;
+  const build = (todo?: { section: string | null } | null) => buildAssistantUserPrompt({ context, threads: [], turns: [], trigger: { kind: 'ticket_created' }, todo });
+
+  it('inserts the rendered section before the trigger, with how to act on it', () => {
+    const out = build({ section: '\n## Todo list\n\n1 open · 0 done · 0 cancelled\n### For you (nas)\n- [ ] #1 Cadrer — by olivier\n' });
+    expect(out).toContain('### For you (nas)\n- [ ] #1 Cadrer — by olivier\n> Refs par ticket.');
+    expect(out).toContain('`fleex_ticket_todo_*` (`7` comme ticket)');
+    expect(out.indexOf('## Todo list')).toBeLessThan(out.indexOf('## Déclencheur'));
+    expect(out.indexOf('## Todo list')).toBeGreaterThan(out.indexOf('## Autres livrables du ticket'));
+  });
+  it('says the list is empty rather than hiding that it exists', () => {
+    expect(build({ section: null })).toContain('## Todo list\n(vide)\n');
+  });
+  it('says nothing at all when todo access is off: the prompt is the one of before', () => {
+    expect(build(null)).toBe(build());
+    expect(build(null)).not.toMatch(/todo/i);
+  });
+});

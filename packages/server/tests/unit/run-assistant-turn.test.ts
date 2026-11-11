@@ -162,6 +162,12 @@ interface Catalogue {
   deliverables?: Array<Record<string, unknown>>;
   /** Personas besides the assistant (nas) and builder. */
   extraPersonas?: AgentPersonaEntity[];
+  /** The « agents see the todo » setting (absent = off, like the real default). */
+  todoAgentAccess?: boolean;
+  /** The ticket's todo items, as the ticket context carries them. */
+  todos?: Array<Record<string, unknown>>;
+  /** What the CLI answers (default: a ticket, ok). */
+  cliResult?: (argv: string[]) => { ok: boolean; text: string };
 }
 
 function run(id: string, triggeredFrom: string, status: string) {
@@ -186,6 +192,8 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
   const postComment = new PostCommentUseCase(comments as never, mentions as never, { saveActivity: async () => {} } as never, logger as never);
   const llmCalls: Array<{ model: string; thinking: boolean | undefined; system: string; tools: string[]; messages: Anthropic.MessageParam[] }> = [];
   const cliCalls: string[][] = [];
+  /** Who each CLI call was made as (the identity `runCli` received), in call order. */
+  const cliActors: unknown[] = [];
   let n = 0;
   const llm: AssistantLlm = async (params, onText) => {
     llmCalls.push({ model: params.model, thinking: params.thinking, system: params.system, tools: params.tools.map((t) => t.name), messages: params.messages });
@@ -226,10 +234,11 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
       execute: async () => ({
         ticket: ticket.toDTO(), comments: (await comments.getByTicket('t1')).map((c) => c.toDTO()),
         mentions: { pending: [], all: mentions.saved.map((m) => m.toDTO()) }, deliverables: opts.deliverables ?? [], activity: [], relevantSummaries: [], epics: [], memorySnippets: [],
+        ...(opts.todos ? { todos: opts.todos } : {}),
       }),
     } as never,
     agentEventStore: agentEvents as never, executeAgent: executeAgent as never, stopRun,
-    config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: 'workThreadsEnabled' in opts ? opts.workThreadsEnabled : true }) } as never,
+    config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: 'workThreadsEnabled' in opts ? opts.workThreadsEnabled : true, todoAgentAccess: opts.todoAgentAccess }) } as never,
     eventBus, logger: logger as never,
     skillStore: {
       getEnabled: async () => (opts.skills ?? []).filter((x) => x.enabled),
@@ -244,11 +253,14 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
     environment: {
       workspace: 'qa', cliBin: '/opt/fleex', hasApiKey: opts.hasApiKey ?? true,
       cliTools: async () => [showTool, ...(opts.extraCliTools ?? [])],
-      runCli: async (argv: string[]) => { cliCalls.push(argv); return { ok: true, text: '{"id":"t1","title":"e2e rouges"}' }; },
+      runCli: async (argv: string[], actor?: unknown) => {
+        cliCalls.push(argv); cliActors.push(actor);
+        return opts.cliResult?.(argv) ?? { ok: true, text: '{"id":"t1","title":"e2e rouges"}' };
+      },
     },
   }, llm);
   const setLlm = (next: AssistantLlm) => { (uc as unknown as { llm: AssistantLlm }).llm = next; };
-  return { uc, ticket, comments, mentions, threads, agentEvents, executeAgent, eventBus, stopRun, workflowCancels, emitted, llmCalls, cliCalls, setLlm };
+  return { uc, ticket, comments, mentions, threads, agentEvents, executeAgent, eventBus, stopRun, workflowCancels, emitted, llmCalls, cliCalls, cliActors, setLlm };
 }
 
 const user = (commentId: string) => ({ kind: 'user_message' as const, commentId });
@@ -1501,4 +1513,102 @@ describe('RunAssistantTurnUseCase — a round cut by the output cap', () => {
     expect(result).toMatchObject({ tool_use_id: 'cut', is_error: true });
     expect(result.content).toMatch(/tronqué/);
   });
+});
+
+// ── Lot 4: the todo, steered by the assistant under its own name ──
+describe('RunAssistantTurnUseCase — the ticket todo', () => {
+  const todoTool = (leaf: string, args: string[]): CliTool => ({
+    name: `fleex_ticket_todo_${leaf}`, commandPath: ['ticket', 'todo', leaf], description: leaf, mutating: true,
+    workspaceAware: true, jsonAware: true, inputSchema: { type: 'object', properties: {}, required: args },
+    arguments: args.map((key) => ({ key, required: true, variadic: false })), options: [],
+  });
+  const todoTools = [todoTool('list', ['ticket']), todoTool('done', ['ticket', 'ref']), todoTool('add', ['ticket', 'text'])];
+  const item = (ref: number, text: string, assignee: { type: 'user' | 'agent'; name: string | null } | null, state = 'open') => ({
+    id: `i${ref}`, ticketId: 't1', ref, text, note: null, state, position: ref, assignee,
+    createdByType: 'user', createdByName: 'olivier', createdAt: '2026-11-11T10:00:00.000Z',
+    stateChangedByName: state === 'open' ? null : 'The Builder', stateChangedAt: state === 'open' ? null : '2026-11-11T11:00:00.000Z',
+    assignedByName: null, takeoverReason: null, cancelReason: null,
+  });
+  const todos = [
+    item(1, 'Écrire la spec', { type: 'agent', name: 'builder' }, 'done'),
+    item(2, 'Rendre compte', { type: 'agent', name: 'nas' }),
+    item(3, 'Construire', { type: 'agent', name: 'builder' }),
+    item(4, 'QA manuelle', { type: 'user', name: 'olivier' }),
+  ];
+  const userPrompt = (h: ReturnType<typeof harness>) => h.llmCalls[0]!.messages[0]!.content as string;
+
+  it('every CLI call is made as the assistant of THIS ticket: display name + slug, passed with the call', async () => {
+    const h = harness([{ tools: [{ name: 'fleex_ticket_todo_done', input: { ticket: '1', ref: '2' } }] }, { text: 'Coché.' }],
+      { todoAgentAccess: true, extraCliTools: todoTools });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.cliCalls).toEqual([['ticket', 'todo', 'done', '1', '2', '--workspace', 'qa', '--json']]);
+    expect(h.cliActors).toEqual([{ name: 'Nas', persona: 'nas' }]);
+  });
+
+  it('the identity follows the assistant persona of the ticket, not a value kept from a previous turn', async () => {
+    const h = harness([{ tools: [{ name: 'fleex_ticket_show', input: { id: '1' } }] }, { text: 'a' },
+      { tools: [{ name: 'fleex_ticket_show', input: { id: '1' } }] }, { text: 'b' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    h.ticket.updateExecutionConfig({ assistantPersonaId: 'p-builder' });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.cliActors).toEqual([{ name: 'Nas', persona: 'nas' }, { name: 'The Builder', persona: 'builder' }]);
+  });
+
+  it('a refusal by the server (403 on the human’s item) comes back to the model as an error tool result, reason included', async () => {
+    const refusal = '#4 is assigned to olivier — leave it.';
+    const h = harness([{ tools: [{ name: 'fleex_ticket_todo_done', input: { ticket: '1', ref: '4' } }] }, { text: 'La QA te revient.' }],
+      { todoAgentAccess: true, extraCliTools: todoTools, cliResult: () => ({ ok: false, text: `{"results":[],"failures":["#4: ${refusal}"]}` }) });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const [result] = resultBlocks(h, 1);
+    expect(result!.is_error).toBe(true);
+    expect(result!.content).toContain(refusal);
+  });
+
+  it('the prompt carries the todo, grouped from the assistant’s point of view', async () => {
+    const h = harness([{ text: 'ok' }], { todoAgentAccess: true, extraCliTools: todoTools, todos });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const prompt = userPrompt(h);
+    expect(prompt).toContain('## Todo list');
+    const forMe = prompt.indexOf('### For you (nas)');
+    const other = prompt.indexOf('### Assigned to another agent');
+    const human = prompt.indexOf('### Assigned to olivier — do NOT act on these');
+    const done = prompt.indexOf('### Done');
+    expect(forMe).toBeGreaterThan(-1);
+    expect([forMe, other, human, done]).toEqual([forMe, other, human, done].slice().sort((a, b) => a - b));
+    // Its own item is under « For you », the builder's under « another agent », the human's under theirs.
+    expect(prompt.slice(forMe, other)).toContain('#2 Rendre compte');
+    expect(prompt.slice(other, human)).toContain('#3 Construire');
+    expect(prompt.slice(other, human)).toContain('→ builder');
+    expect(prompt.slice(human, done)).toContain('#4 QA manuelle');
+    expect(prompt.slice(done)).toContain('[x] #1 Écrire la spec');
+    // The todo is context, the trigger still closes the prompt.
+    expect(prompt.indexOf('## Déclencheur')).toBeGreaterThan(done);
+    expect(h.llmCalls[0]!.system).toContain('## La todo du ticket');
+    expect(h.llmCalls[0]!.tools).toEqual(expect.arrayContaining(['fleex_ticket_todo_list', 'fleex_ticket_todo_done', 'fleex_ticket_todo_add']));
+  });
+
+  it('an empty todo is still announced (the assistant may start one), without inventing items', async () => {
+    const h = harness([{ text: 'ok' }], { todoAgentAccess: true, extraCliTools: todoTools, todos: [] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(userPrompt(h)).toContain('## Todo list\n(vide)');
+    expect(userPrompt(h)).not.toContain('- [ ]');
+  });
+
+  for (const todoAgentAccess of [false, undefined]) {
+    it(`with todoAgentAccess ${todoAgentAccess === false ? 'off' : 'unset (off by default)'}: no todo section, no steering rules, no fleex_ticket_todo_* tool — even with items on the ticket`, async () => {
+      const h = harness([{ tools: [{ name: 'fleex_ticket_todo_done', input: { ticket: '1', ref: '2' } }] }, { text: 'ok' }],
+        { todoAgentAccess, extraCliTools: todoTools, todos });
+      await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+      expect(userPrompt(h)).not.toMatch(/todo/i);
+      expect(h.llmCalls[0]!.system).not.toContain('## La todo du ticket');
+      expect(h.llmCalls[0]!.system).not.toContain('fleex_ticket_todo');
+      expect(h.llmCalls[0]!.tools.filter((t) => t.startsWith('fleex_ticket_todo'))).toEqual([]);
+      // The other CLI tools stay, and are counted without the todo ones.
+      expect(h.llmCalls[0]!.tools).toContain('fleex_ticket_show');
+      expect(h.llmCalls[0]!.system).toContain('1 outils `fleex_*`');
+      // A todo tool the model calls anyway (from memory) does not reach the CLI.
+      expect(h.cliCalls).toEqual([]);
+      expect(resultBlocks(h, 1)[0]!.is_error).toBe(true);
+    });
+  }
 });

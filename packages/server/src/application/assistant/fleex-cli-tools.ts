@@ -67,7 +67,18 @@ const MUTATING_LEAVES = new Set([
   'archive', 'import', 'retry', 'resume', 'pause', 'tag', 'untag', 'favorite', 'unfavorite', 'block', 'unblock',
   'upload', 'rename', 'trigger', 'resolve', 'answer', 'approve', 'reject',
 ]);
-const HIDDEN_OPTIONS = new Set(['--help', '--workspace', '--json', '--format', '--version']);
+/**
+ * Options never offered to the model. `--as <name>` (todo commands) attributes
+ * a change to any agent by hand and wins over the identity of the run: the
+ * assistant acts under its own name only. Not in the schema, hence never in
+ * the argv either — `cliToolArgv` only emits the options a tool declares.
+ */
+const HIDDEN_OPTIONS = new Set(['--help', '--workspace', '--json', '--format', '--version', '--as']);
+
+/** `fleex ticket todo …`: withheld from the assistant while todo access is off for agents. */
+export function isTodoCliTool(tool: Pick<CliTool, 'commandPath'>): boolean {
+  return tool.commandPath[0] === 'ticket' && tool.commandPath[1] === 'todo';
+}
 
 /**
  * Tool property keys must match `^[a-zA-Z0-9_.-]{1,64}$`. CLI names like

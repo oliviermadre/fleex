@@ -261,13 +261,15 @@ export interface AssistantEnvContext {
   workspace: string | null;
   /** Number of `fleex_*` tools available this turn (0 = CLI unreachable). */
   cliToolCount: number;
+  /** Whether the todo tools are among them (`todoAgentAccess`). */
+  todoAccess?: boolean;
 }
 
 /** Hard-coded head of every assistant system prompt, whatever the persona. */
 export function buildAssistantEnvPreamble(env: AssistantEnvContext): string {
   const ws = env.workspace ?? 'inconnu';
   const cli = env.cliToolCount > 0
-    ? `Tu disposes de ${env.cliToolCount} outils \`fleex_*\` : ce sont les commandes de la CLI \`fleex\` de cet ADE (lire un ticket ou un livrable complet, changer le statut ou la priorité, commenter, lister…). Elles ciblent déjà le workspace **${ws}**. C'est une liste fermée : lectures, mise à jour et déplacement du ticket, commentaires, liens, livrables, todo. Ce qui n'y figure pas reste à l'utilisateur (suppressions, validation d'une étape de workflow, choix d'une route, configuration des agents, skills et panels) ou passe par tes actions de thread (lancer, relancer, arrêter une cible). Un commentaire posté par \`fleex_ticket_comment\` ne lance personne : pour faire travailler une cible, utilise \`delegate\`.`
+    ? `Tu disposes de ${env.cliToolCount} outils \`fleex_*\` : ce sont les commandes de la CLI \`fleex\` de cet ADE (lire un ticket ou un livrable complet, changer le statut ou la priorité, commenter, lister…). Elles ciblent déjà le workspace **${ws}**. C'est une liste fermée : lectures, mise à jour et déplacement du ticket, commentaires, liens, livrables${env.todoAccess ? ', todo' : ''}. Ce qui n'y figure pas reste à l'utilisateur (suppressions, validation d'une étape de workflow, choix d'une route, configuration des agents, skills et panels) ou passe par tes actions de thread (lancer, relancer, arrêter une cible). Un commentaire posté par \`fleex_ticket_comment\` ne lance personne : pour faire travailler une cible, utilise \`delegate\`.`
     : `La CLI \`fleex\` n'a pas répondu : aucun outil \`fleex_*\` ce tour-ci, appuie-toi sur le contexte fourni.`;
   return `# Environnement Fleex (injecté par le système)
 
@@ -343,6 +345,22 @@ const MAX_LAUNCHES = PROMPT_LIMITS.launchesPerTurn;
 const MAX_RUNNING = PROMPT_LIMITS.runningThreadsPerTicket;
 const MAX_TURNS = PROMPT_LIMITS.turnsPerThread;
 
+/**
+ * How the assistant steers the ticket's todo. Only in the prompt when todo
+ * access is on for agents. The brief frame above already asks for the refs a
+ * `turn` covers (item 5): this section says where those refs come from.
+ */
+const TODO_RULES = `## La todo du ticket
+La todo est le plan partagé du ticket, visible de l'utilisateur. Elle t'est donnée à chaque tour sous « Todo list », groupée de ton point de vue ; tu la tiens avec les outils \`fleex_ticket_todo_*\`, sous ton propre nom.
+- **Tâche à plusieurs étapes** (au moins 3 étapes, ou 2 délégations) : **pose le plan en items avant de lancer**, un item par étape. **Tâche courte : pas de todo.**
+- **Chaque item a un destinataire** (\`--to\`) : le slug de la persona pour une étape déléguée ; \`user\` pour ce que l'utilisateur seul peut faire (QA manuelle, décision, accès).
+- **Chaque \`turn\` de délégation cite les refs concernées** (point 5 de la trame) : « tu traites #3 et #4, coche-les ».
+- **Au retour d'un thread, rapproche la todo du résultat** : coche ce que la cible a fait sans le cocher, rouvre ce qui est coché sans preuve, ajoute les étapes découvertes.
+- **Tu n'annules qu'avec une raison** (\`--reason\`). La suppression ne t'est pas proposée.
+- **Les items assignés à l'utilisateur sont les siens** : tu ne les coches pas, ne les modifies pas, ne les annules pas — le serveur le refuse — et tu ne te les réassignes pas sans qu'il te le demande.
+- **Tu n'annonces « terminé » que si tous les items hors \`user\` sont faits ou annulés.** Ton message final liste les items qui restent à l'utilisateur.
+- **Un changement de l'utilisateur dans la todo est une instruction** (item ajouté, rouvert, réassigné, annulé) : tu le lis ici à ton prochain tour et tu t'y conformes. Tu n'es pas réveillé par un changement de todo.`;
+
 export function buildAssistantSystemPrompt(p: {
   persona: { soulMd: string; identityMd: string; memoryMd: string };
   personas: { name: string; displayName: string; identityMd: string }[];
@@ -351,8 +369,10 @@ export function buildAssistantSystemPrompt(p: {
   capabilities?: AssistantCapabilities;
   /** When given, the environment block is the very first thing in the prompt. */
   env?: AssistantEnvContext;
+  /** The « agents see the todo » setting: off (the default), the prompt never mentions steering the todo. */
+  todoAccess?: boolean;
 }): string {
-  const preamble = p.env ? buildAssistantEnvPreamble(p.env) : '';
+  const preamble = p.env ? buildAssistantEnvPreamble({ ...p.env, todoAccess: p.todoAccess === true }) : '';
   const identity = [p.persona.soulMd, p.persona.identityMd, p.persona.memoryMd].filter((s) => s.trim().length > 0).join('\n\n---\n\n');
   const roster = renderPersonaRoster(p.personas);
   const capabilities = renderCapabilities(p.capabilities ?? { skills: [], panels: [], workflows: [] });
@@ -409,7 +429,9 @@ Une relance courte (réponse à sa question, preuve manquante à fournir) garde 
 - **Plafond d'échanges** : après ${MAX_TURNS} tours envoyés dans un même thread, le serveur n'envoie plus rien, met le thread en attente et pose lui-même à l'utilisateur la question « Continuer » / « Conclure », une seule fois. Ne la repose pas et ne conclus pas de toi-même. S'il répond « Continuer », relance (\`continue_thread\`) : le compteur repart de zéro. S'il répond « Conclure », conclus (\`conclude_thread\`).
 - Réponds dans la langue de l'utilisateur. N'affirme rien sur l'état du ticket qui ne soit dans le contexte ou vérifié par un outil.
 
-## Les actions de l'utilisateur priment
+${p.todoAccess === true ? `${TODO_RULES}
+
+` : ''}## Les actions de l'utilisateur priment
 Tu ne défais jamais une action de l'utilisateur sans un nouveau message de sa part. Le serveur refuse ce qui suit ; ne le tente pas.
 - **Run arrêté par l'utilisateur** (la liste des threads le dit : « arrêté par l'utilisateur à 14:02 », blocage utilisateur) : tu ne relances pas cette cible, ni par \`continue_thread\` ni par \`delegate\`. Le blocage tombe quand l'utilisateur écrit dans le thread, clique « Relancer », ou t'envoie un message après l'arrêt — et dans ce dernier cas tu ne relances que si son message le demande. Un réveil (réponse d'un agent, fin d'un workflow) ne lève jamais le blocage.
 - **Ne contourne pas un arrêt** en confiant le même travail à une autre cible (autre persona, skill, panel ou workflow).
@@ -487,8 +509,17 @@ export function buildAssistantUserPrompt(p: {
   turns: TicketComment[];
   /** Deliverables produced inside the thread concerned: shown in full, they ARE the agent's results. */
   threadDeliverables?: TicketDeliverable[];
+  /**
+   * The ticket's todo as `formatTodoContext` renders it for this assistant
+   * (null section = empty list). Absent or null: todo access is off, the
+   * prompt does not mention it at all.
+   */
+  todo?: { section: string | null } | null;
 }): string {
   const t = p.context.ticket;
+  const todo = p.todo
+    ? `${p.todo.section ? p.todo.section.trimEnd() : '\n## Todo list\n(vide)'}\n> Refs par ticket. Tu agis dessus avec les outils \`fleex_ticket_todo_*\` (\`${t.displayId}\` comme ticket).\n`
+    : '';
   const main = p.context.comments.filter((c) => !c.threadId).slice(-30).map(renderComment).join('\n');
   const threads = p.threads.length
     ? p.threads.map((th) => `- ${th.id} · @${th.targetType ?? 'agent'}:${th.personaName} · ${th.status} · ${th.exchanges} tours · « ${th.brief} »${renderThreadStop(th)}`).join('\n')
@@ -544,7 +575,7 @@ ${threadDeliverables}
 
 ## Autres livrables du ticket
 ${deliverables}
-
+${todo}
 ## Déclencheur
 ${trigger}`;
 }
