@@ -50,6 +50,7 @@ import migration048 from './migrations/047_agent_thread_target_type.js';
 import migration049 from './migrations/048_add_run_termination_flags.js';
 import migration050 from './migrations/049_add_thread_title_participants.js';
 import migration051 from './migrations/050_add_stop_author_and_user_hold.js';
+import migration052 from './migrations/051_add_thread_turn_cap.js';
 
 /**
  * Ordered array of all migrations.
@@ -107,4 +108,5 @@ export const allMigrations: Migration[] = [
   migration049,
   migration050,
   migration051,
+  migration052,
 ];

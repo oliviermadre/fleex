@@ -1,5 +1,5 @@
 import type { AgentThreadStatus, AgentThreadTargetType, AgentExecution } from '@fleex/shared';
-import { parseConcludedBy, parseLastStop, parseParticipants } from '../sqlite/sqlite-thread-store.adapter.js';
+import { parseConcludedBy, parseLastStop, parseParticipants, parseTurnCap } from '../sqlite/sqlite-thread-store.adapter.js';
 import { AgentThreadEntity } from '../../../domain/entities/agent-thread.entity.js';
 import type { ThreadStorePort } from '../../../application/ports/thread-store.port.js';
 import type { SupabaseConnection } from './connection.js';
@@ -10,6 +10,7 @@ interface ThreadRow {
   exchanges: number; failures: number | null; summary: string | null; created_at: string; updated_at: string; concluded_at: string | null;
   target_type?: string | null; generated_title?: string | null; participants?: string | null;
   user_hold_at?: string | null; last_stop?: string | null; concluded_by?: string | null;
+  turn_cap?: string | null;
 }
 
 function rowToEntity(r: ThreadRow): AgentThreadEntity {
@@ -20,6 +21,7 @@ function rowToEntity(r: ThreadRow): AgentThreadEntity {
     r.concluded_at ? new Date(r.concluded_at) : null, (r.target_type ?? 'agent') as AgentThreadTargetType,
     r.generated_title ?? null, parseParticipants(r.participants),
     r.user_hold_at ? new Date(r.user_hold_at) : null, parseLastStop(r.last_stop), parseConcludedBy(r.concluded_by),
+    parseTurnCap(r.turn_cap),
   );
 }
 
@@ -65,6 +67,7 @@ export class SupabaseThreadStore implements ThreadStorePort {
       generated_title: t.generatedTitle, participants: JSON.stringify(t.participants),
       user_hold_at: t.userHoldAt?.toISOString() ?? null,
       last_stop: t.lastStop ? JSON.stringify(t.lastStop) : null, concluded_by: t.concludedBy,
+      turn_cap: t.turnCap ? JSON.stringify(t.turnCap) : null,
     });
     if (error) throw new Error(`SupabaseThreadStore.save failed: ${error.message}`);
   }

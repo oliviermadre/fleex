@@ -20,6 +20,17 @@ export interface ThreadStop {
 }
 
 /**
+ * The runaway guard of a thread: the assistant may send it a bounded number of
+ * turns, then must ask the human once whether to go on.
+ */
+export interface ThreadTurnCap {
+  /** Assistant turns already sent when the human last said « Continuer »: the count restarts from there. */
+  readonly base: number;
+  /** When the « Continuer / Conclure » question was asked; null when none is pending. */
+  readonly askedAt: string | null;
+}
+
+/**
  * Participant in a thread: userId, display name, and avatar URL.
  * Used for rendering the participants row in the thread label.
  */
@@ -68,6 +79,8 @@ export interface AgentThread {
   readonly lastStop?: ThreadStop | null;
   /** Who concluded the thread. `user`: the assistant does not reopen the target on its own. */
   readonly concludedBy?: 'user' | 'assistant' | null;
+  /** Turn-cap state; absent until the cap was reached once. */
+  readonly turnCap?: ThreadTurnCap | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly concludedAt: string | null;

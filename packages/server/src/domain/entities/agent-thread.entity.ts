@@ -1,4 +1,4 @@
-import type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParticipant, ThreadStop } from '@fleex/shared';
+import type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParticipant, ThreadStop, ThreadTurnCap } from '@fleex/shared';
 
 /**
  * A delegation the assistant opened with one target (persona, skill, panel or
@@ -34,6 +34,8 @@ export class AgentThreadEntity {
     /** The last wanted stop of the current run; a new run clears it. */
     public lastStop: ThreadStop | null = null,
     public concludedBy: 'user' | 'assistant' | null = null,
+    /** Runaway guard: where the turn count restarts, and whether the human is being asked. */
+    public turnCap: ThreadTurnCap | null = null,
   ) {}
 
   static create(params: {
@@ -138,6 +140,36 @@ export class AgentThreadEntity {
     return true;
   }
 
+  /** Assistant turns counted against the cap restart after this many. */
+  get turnCapBase(): number {
+    return this.turnCap?.base ?? 0;
+  }
+
+  /** When the « Continuer / Conclure » question was asked, while it is unanswered. */
+  get turnCapAskedAt(): Date | null {
+    return this.turnCap?.askedAt ? new Date(this.turnCap.askedAt) : null;
+  }
+
+  /**
+   * The cap is reached: the human is asked, once. The thread waits on them;
+   * it is not concluded. False when the question is already pending.
+   */
+  askTurnCap(): boolean {
+    if (this.isTerminal || this.turnCap?.askedAt) return false;
+    this.turnCap = { base: this.turnCapBase, askedAt: new Date().toISOString() };
+    this.status = 'waiting';
+    this.touch();
+    return true;
+  }
+
+  /** The human said to go on: the count restarts from the `sent` turns already there. */
+  resetTurnCap(sent: number): boolean {
+    if (this.isTerminal) return false;
+    this.turnCap = { base: sent, askedAt: null };
+    this.touch();
+    return true;
+  }
+
   markRunning(): boolean {
     if (this.isTerminal) return false;
     this.status = 'running';
@@ -194,6 +226,7 @@ export class AgentThreadEntity {
       userHoldAt: this.userHoldAt?.toISOString() ?? null,
       lastStop: this.lastStop,
       concludedBy: this.concludedBy,
+      turnCap: this.turnCap,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
       concludedAt: this.concludedAt?.toISOString() ?? null,

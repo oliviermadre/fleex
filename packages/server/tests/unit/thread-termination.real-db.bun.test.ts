@@ -285,3 +285,41 @@ describe('migration 050 — author of a stop, on the real schema', () => {
     expect(await threads.getById(thread.id)).toMatchObject({ userHoldAt: null, lastStop: null, concludedBy: null });
   });
 });
+
+describe('migration 051 — turn cap of a thread, on the real schema', () => {
+  const cols = () => (conn.db.prepare('PRAGMA table_info(agent_threads)').all() as Array<{ name: string }>).map((c) => c.name);
+
+  it('adds the column, and running it twice is harmless', async () => {
+    expect(cols()).toContain('turn_cap');
+    const { default: migration } = await import('../../src/infrastructure/migrations/migrations/051_add_thread_turn_cap.js');
+    await migration.up({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); } } as never);
+    expect(cols().filter((c) => c === 'turn_cap')).toHaveLength(1);
+  });
+
+  it('a thread keeps the pending question, then where the count restarts', async () => {
+    const { thread } = await seedRunningThread();
+    expect((await threads.getById(thread.id))!.turnCap).toBeNull();
+
+    expect(thread.askTurnCap()).toBe(true);
+    await threads.save(thread);
+    const asked = (await threads.getById(thread.id))!;
+    expect(asked.status).toBe('waiting');
+    expect(asked.turnCapAskedAt?.toISOString()).toBe(thread.turnCap!.askedAt);
+    expect(asked.turnCapBase).toBe(0);
+    // Asked once: a second ask changes nothing.
+    expect(asked.askTurnCap()).toBe(false);
+
+    asked.resetTurnCap(20);
+    await threads.save(asked);
+    const back = (await threads.getById(thread.id))!;
+    expect(back.turnCap).toEqual({ base: 20, askedAt: null });
+    expect(back.turnCapAskedAt).toBeNull();
+    expect(back.toDTO().turnCap).toEqual({ base: 20, askedAt: null });
+
+    // A thread from before the migration, or a corrupt value, reads as never capped.
+    conn.db.prepare('UPDATE agent_threads SET turn_cap = NULL WHERE id = ?').run(thread.id);
+    expect((await threads.getById(thread.id))!.turnCap).toBeNull();
+    conn.db.prepare(`UPDATE agent_threads SET turn_cap = 'not json' WHERE id = ?`).run(thread.id);
+    expect((await threads.getById(thread.id))!.turnCap).toBeNull();
+  });
+});

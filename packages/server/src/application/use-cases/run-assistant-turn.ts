@@ -26,12 +26,14 @@ import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { ExecuteAgentUseCase } from './execute-agent.js';
 import type { StopRunUseCase } from './stop-run.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
+import { resolveExecutionConfig } from '../utils/resolve-execution-config.js';
 import { priceFor } from '../utils/cli-session-ingest.js';
 import type { AssistantEnvironmentPort } from '../assistant/assistant-environment.js';
 import type { AssistantLlm } from '../assistant/assistant-llm.js';
 import { cliToolArgv, cliToolsToAnthropic, type CliTool } from '../assistant/fleex-cli-tools.js';
 import {
   ACTION_TOOLS,
+  PROMPT_LIMITS,
   buildAssistantSystemPrompt,
   buildAssistantUserPrompt,
   parseActionToolInput,
@@ -46,7 +48,24 @@ import {
 /** A tag that would create a mention if posted in a comment. */
 const MENTION_TAG = /@(agent|skill|panel|workflow):\S/;
 
-export const MAX_ASSISTANT_TURNS_PER_THREAD = 8;
+/**
+ * Assistant turns one thread may receive before the human is asked whether to
+ * go on. A runaway guard, not a budget: at the cap nothing is concluded, the
+ * thread waits and « Continuer » restarts the count.
+ */
+export const MAX_ASSISTANT_TURNS_PER_THREAD = PROMPT_LIMITS.turnsPerThread;
+/** Launches (a turn sent to a target, in a new or an open thread) one assistant turn may make. */
+export const MAX_LAUNCHES_PER_TURN = PROMPT_LIMITS.launchesPerTurn;
+/** Threads of one ticket that may be `running` at the same time. */
+export const MAX_RUNNING_THREADS_PER_TICKET = PROMPT_LIMITS.runningThreadsPerTicket;
+/** The two answers to the turn-cap question, as buttons. */
+export const TURN_CAP_OPTIONS = ['Continuer', 'Conclure'] as const;
+
+/** What one assistant turn already launched: the per-turn limits are checked against it. */
+interface TurnLedger {
+  /** Ids of the threads that received a turn during this assistant turn. */
+  launched: Set<string>;
+}
 
 /** How a tool result names what was launched. */
 const TARGET_LABEL: Record<AgentThreadTargetType, string> = {
@@ -69,8 +88,8 @@ function stopClock(at: Date): string {
 }
 /** Consecutive agent failures after which the assistant stops relaunching and reports back. */
 export const MAX_THREAD_FAILURES = 3;
-/** Tool rounds one assistant turn may take before it must answer. */
-export const ASSISTANT_MAX_ROUNDS = 8;
+/** Tool rounds one assistant turn may take before it must answer. Todo and CLI calls each take one. */
+export const ASSISTANT_MAX_ROUNDS = 16;
 /** Streamed text is coalesced into agent_events of about this size, or after this delay. */
 export const ASSISTANT_DELTA_CHUNK_CHARS = 60;
 export const ASSISTANT_DELTA_FLUSH_MS = 150;
@@ -212,7 +231,13 @@ export class RunAssistantTurnUseCase {
       capabilities,
     });
     const userPrompt = buildAssistantUserPrompt({ context, threads: allThreads.map((t) => t.toDTO()), trigger, turns, threadDeliverables });
-    const model = ticket.modelOverride ?? assistant.model;
+    // The assistant runs on its persona's model. The ticket's model and effort
+    // overrides are set for the agents it delegates to, not for it.
+    const model = assistant.model;
+    // Decision turns — a thread came back, or the human speaks while threads are
+    // open — are where a wrong move costs a run: the model thinks first.
+    const thinking = trigger.kind === 'thread_reply' || trigger.kind === 'relaunch_request'
+      || (trigger.kind === 'user_message' && allThreads.some((t) => !t.isTerminal));
     const tools = [...ACTION_TOOLS, ...cliToolsToAnthropic(cliTools)] as Anthropic.Tool[];
     const cliByName = new Map(cliTools.map((t) => [t.name, t]));
 
@@ -269,12 +294,13 @@ export class RunAssistantTurnUseCase {
     let concluded = false;
     let threadActionTaken = false;
     let threads = allThreads;
+    const ledger: TurnLedger = { launched: new Set() };
 
     try {
       for (let round = 0; round < ASSISTANT_MAX_ROUNDS; round++) {
         let roundText = '';
         let separator = said.length > 0 ? ROUND_SEPARATOR : '';
-        const res = await this.llm({ model, system, messages, tools }, (delta) => {
+        const res = await this.llm({ model, system, messages, tools, thinking }, (delta) => {
           roundText += delta;
           if (separator && delta.trim()) {
             onTextDelta(separator);
@@ -298,24 +324,31 @@ export class RunAssistantTurnUseCase {
         finalText = said.join(ROUND_SEPARATOR);
         if (toolUses.length === 0) break;
 
+        // The output cap cut the round short: the call being written when it hit
+        // is incomplete, and must not run on half its arguments.
+        const truncated = res.stopReason === 'max_tokens' && res.content.at(-1)?.type === 'tool_use'
+          ? (res.content.at(-1) as Anthropic.ToolUseBlock).id
+          : null;
         const results: Anthropic.ToolResultBlockParam[] = [];
         for (const call of toolUses) {
           const input = (call.input ?? {}) as Record<string, unknown>;
           await emitEvent('content_block_delta', { type: 'assistant', message: { content: [{ type: 'tool_use', id: call.id, name: call.name, input }] } });
           let text: string;
           let isError = false;
-          const action = parseActionToolInput(call.name, input);
+          const action = call.id === truncated ? null : parseActionToolInput(call.name, input);
           const cli = cliByName.get(call.name);
-          if (action) {
-            if (threadActionTaken && action.action !== 'request_mode') {
-              text = 'Refusé : une seule action de thread par tour. Termine ton message.';
-              isError = true;
-            } else {
-              threads = await this.deps.threadStore.getByTicket(ticketId);
-              text = await this.apply(ticket, assistant, action, threads, trigger);
-              threadActionTaken = true;
-              if (action.action === 'conclude_thread') concluded = true;
-            }
+          if (call.id === truncated) {
+            text = "Appel tronqué : ta réponse a atteint la limite de sortie avant la fin de cet appel, il n'a pas été exécuté. Refais-le, plus court.";
+            isError = true;
+          } else if (action) {
+            // Several thread actions may follow each other in one turn (conclude A
+            // then delegate B, stop then relaunch, two delegations): each is
+            // applied on the state the previous one left. The limits on launches
+            // are enforced in `apply`, against the ledger.
+            threads = await this.deps.threadStore.getByTicket(ticketId);
+            text = await this.apply(ticket, assistant, action, threads, trigger, ledger);
+            threadActionTaken = true;
+            if (action.action === 'conclude_thread') concluded = true;
           } else if (cli && cli.name === 'fleex_ticket_comment' && MENTION_TAG.test(String(input.body ?? ''))) {
             // A comment through the CLI is posted as the user: its tags would launch
             // targets outside any thread, with no author and no wake-up.
@@ -350,7 +383,7 @@ export class RunAssistantTurnUseCase {
         await this.apply(ticket, assistant, {
           action: 'conclude_thread', threadId: trigger.threadId, question: null, message: null,
           summary: finalText || "Thread conclu à la demande de l'utilisateur.",
-        }, threads, trigger);
+        }, threads, trigger, ledger);
         finalText = '';
       }
 
@@ -378,6 +411,7 @@ export class RunAssistantTurnUseCase {
     action: AssistantAction,
     threads: AgentThreadEntity[],
     trigger: AssistantTrigger,
+    ledger: TurnLedger,
   ): Promise<string> {
     if (action.action === 'delegate' || action.action === 'continue_thread') {
       // The human closed the ticket. A wake-up (agent answer, workflow end,
@@ -396,7 +430,7 @@ export class RunAssistantTurnUseCase {
 
       case 'delegate': {
         const open = threads.find((t) => t.targetType === action.targetType && t.personaName === action.name && !t.isTerminal);
-        if (open) return this.continueThread(ticket, assistant, open, action.turn, trigger);
+        if (open) return this.continueThread(ticket, assistant, open, action.turn, trigger, ledger);
         const target = await this.resolveTarget(action.targetType, action.name);
         if ('error' in target) return target.error;
         // The human concluded the last thread with this target: reopening one is
@@ -411,6 +445,9 @@ export class RunAssistantTurnUseCase {
           const busy = await this.activeWorkflowRun(ticket.id);
           if (busy) return `Un workflow tourne déjà sur ce ticket (run ${busy.id}, ${busy.status}) : un seul run actif par ticket. Rien n'a été lancé.`;
         }
+        const refused = this.launchRefusal(ledger, null)
+          ?? await this.parallelRefusal(ticket, { id: null, targetType: action.targetType, name: target.name });
+        if (refused) return refused;
         if (action.message) await this.postAssistant(ticket, assistant, null, action.message);
         const thread = AgentThreadEntity.create({
           id: randomUUID(), ticketId: ticket.id, personaId: target.id, personaName: target.name,
@@ -419,7 +456,7 @@ export class RunAssistantTurnUseCase {
         });
         await this.deps.threadStore.save(thread);
         this.emit({ type: 'thread.created', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
-        await this.openTurn(ticket, assistant, thread, action.turn);
+        await this.openTurn(ticket, assistant, thread, action.turn, ledger);
         return `Thread ${thread.id} ouvert avec ${target.displayName} ; ${TARGET_LABEL[action.targetType]} a été lancé. Tu seras rappelé quand il aura fini.`;
       }
 
@@ -427,12 +464,14 @@ export class RunAssistantTurnUseCase {
         const thread = threads.find((t) => t.id === action.threadId);
         if (!thread) return `Thread inconnu : ${action.threadId}.`;
         if (thread.isTerminal) return 'Ce thread est déjà clos.';
-        if (!action.interrupt) return this.continueThread(ticket, assistant, thread, action.turn, trigger);
-        // Stop, THEN the new turn — in that order, in this single call: the
-        // one-thread-action-per-turn guard would refuse a separate `stop_thread`.
+        if (!action.interrupt) return this.continueThread(ticket, assistant, thread, action.turn, trigger, ledger);
+        // Stop, THEN the new turn — in that order, in this single call. A turn
+        // that could not be sent anyway must not cost the run in progress.
+        const refused = this.launchRefusal(ledger, thread.id);
+        if (refused) return refused;
         const stop = await this.stopThreadRun(ticket, assistant, thread, 'remplacé par une nouvelle consigne');
         if (stop.blocked) return stop.text; // could not be stopped: sending a turn would queue behind the live run
-        const sent = await this.continueThread(ticket, assistant, thread, action.turn, trigger);
+        const sent = await this.continueThread(ticket, assistant, thread, action.turn, trigger, ledger);
         return stop.stopped ? `${stop.text}\n${sent}` : sent;
       }
 
@@ -539,7 +578,9 @@ export class RunAssistantTurnUseCase {
   }
 
   /** Assistant turn inside a thread: wake a waiting mention, or open a new one. */
-  private async continueThread(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string, trigger: AssistantTrigger): Promise<string> {
+  private async continueThread(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string, trigger: AssistantTrigger, ledger: TurnLedger): Promise<string> {
+    const refused = this.launchRefusal(ledger, thread.id);
+    if (refused) return refused;
     // The human stopped this target. Only they lift the hold: a message of
     // theirs later than the stop makes this turn free to relaunch; a wake-up
     // never does, whatever the model decided.
@@ -554,16 +595,25 @@ export class RunAssistantTurnUseCase {
         action: 'conclude_thread', threadId: thread.id, question: null,
         message: `Je n'arrive pas à faire aboutir ${thread.personaName} sur ce point après ${thread.failures} tentatives.`,
         summary: `Abandon après ${thread.failures} échecs consécutifs de l'agent. À reprendre autrement.`,
-      }, [thread], trigger);
+      }, [thread], trigger, ledger);
     }
     const assistantTurns = (await this.deps.commentStore.getByTicket(ticket.id))
       // The line that records a stop is not a turn sent to the agent.
       .filter((c) => c.threadId === thread.id && c.authorType === 'assistant' && !c.body.startsWith(STOP_LINE_PREFIX)).length;
-    if (assistantTurns >= MAX_ASSISTANT_TURNS_PER_THREAD) {
-      return this.apply(ticket, assistant, {
-        action: 'conclude_thread', threadId: thread.id, message: null, question: null,
-        summary: `Thread interrompu après ${assistantTurns} échanges sans conclusion.`,
-      }, [thread], trigger);
+    // Runaway guard. At the cap the thread is not concluded: it waits, and the
+    // human is asked once. Only they restart the count — a message of theirs
+    // later than the question (the « Continuer » button posts one), or
+    // « Relancer »; a wake-up never does, and never makes the question be asked again.
+    const askedAt = thread.turnCapAskedAt;
+    if (askedAt) {
+      if (!(await this.humanAskedSince(trigger, askedAt, thread.id))) {
+        return `Refusé, rien n'a été envoyé : ce thread a atteint le plafond de ${MAX_ASSISTANT_TURNS_PER_THREAD} tours et la question « ${TURN_CAP_OPTIONS.join(' » / « ')} » a déjà été posée à l'utilisateur (${stopClock(askedAt)}). Attends sa réponse : ne repose pas la question, n'envoie rien dans ce thread, ne confie pas ce travail à une autre cible.`;
+      }
+      thread.resetTurnCap(assistantTurns);
+      // Saved now: a refusal further down must not leave the question pending.
+      await this.deps.threadStore.save(thread);
+    } else if (assistantTurns - thread.turnCapBase >= MAX_ASSISTANT_TURNS_PER_THREAD) {
+      return this.askTurnCap(ticket, assistant, thread, assistantTurns - thread.turnCapBase);
     }
     if (thread.targetType === 'workflow') {
       const run = await this.workflowRunOf(thread);
@@ -592,7 +642,10 @@ export class RunAssistantTurnUseCase {
     if (current && (current.status === 'pending' || current.status === 'acknowledged')) {
       return `${thread.personaName} travaille encore sur le tour précédent : rien n'a été envoyé. Tu seras rappelé quand il aura répondu ; transmets alors ce qui est nouveau. Dis simplement à l'utilisateur que tu transmettras à la fin du tour.`;
     }
+    const busy = await this.parallelRefusal(ticket, { id: thread.id, targetType: thread.targetType, name: thread.personaName });
+    if (busy) return busy;
     if (current && current.status === 'waiting_for_info') {
+      ledger.launched.add(thread.id);
       await this.postAssistant(ticket, assistant, thread.id, `${thread.mentionTag} ${turn}`, { suppressMentionForAgents: [thread.personaName] });
       thread.recordTurn();
       thread.markRunning();
@@ -606,8 +659,89 @@ export class RunAssistantTurnUseCase {
       this.emit({ type: 'thread.updated', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
       return `Réponse transmise à ${thread.personaName}, qui reprend. Tu seras rappelé quand il aura répondu.`;
     }
-    await this.openTurn(ticket, assistant, thread, turn);
+    await this.openTurn(ticket, assistant, thread, turn, ledger);
     return `Nouveau tour envoyé à ${thread.personaName}, relancé. Tu seras rappelé quand il aura répondu.`;
+  }
+
+  /**
+   * The per-turn limits on launches, as the refusal the model reads — null when
+   * this launch may go: one launch per thread per turn (a second turn would
+   * queue behind the first and go stale), and a bounded fan-out per turn.
+   */
+  private launchRefusal(ledger: TurnLedger, threadId: string | null): string | null {
+    if (threadId && ledger.launched.has(threadId)) {
+      return "Refusé, rien n'a été envoyé : tu as déjà lancé ce thread pendant ce tour (une seule action de lancement par thread et par tour). Tu seras rappelé quand la cible aura répondu ; transmets alors ce qui manque.";
+    }
+    if (ledger.launched.size >= MAX_LAUNCHES_PER_TURN) {
+      return `Refusé, rien n'a été lancé : ${MAX_LAUNCHES_PER_TURN} lancements par tour au plus, et tu les as faits. Lance le reste quand tu seras rappelé par l'un de ces threads.`;
+    }
+    return null;
+  }
+
+  /**
+   * The limits on what runs at the same time on one ticket, as the refusal the
+   * model reads — null when `self` may be launched: a bounded number of
+   * `running` threads, and a single one that writes. The execution mode is the
+   * ticket's, not the thread's, so "one thread in edit mode" means: among the
+   * running threads, at most one whose target writes in the worktree.
+   */
+  private async parallelRefusal(
+    ticket: TicketEntity, self: { id: string | null; targetType: AgentThreadTargetType; name: string },
+  ): Promise<string | null> {
+    const running = (await this.deps.threadStore.getByTicket(ticket.id)).filter((t) => t.status === 'running' && t.id !== self.id);
+    if (running.length >= MAX_RUNNING_THREADS_PER_TICKET) {
+      return `Refusé, rien n'a été lancé : ${running.length} threads tournent déjà sur ce ticket (${running.map((t) => t.mentionTag).join(', ')}), ${MAX_RUNNING_THREADS_PER_TICKET} au plus en parallèle. Attends d'être rappelé par l'un d'eux, ou arrête-en un ("stop_thread").`;
+    }
+    if (!(await this.targetWrites(ticket, self.targetType, self.name, null))) return null;
+    for (const t of running) {
+      if (await this.targetWrites(ticket, t.targetType, t.personaName, t.currentMentionId)) {
+        return `Refusé, rien n'a été lancé : ${t.mentionTag} (thread ${t.id}) tourne déjà en mode edit sur ce ticket, et un seul thread à la fois peut écrire dans le worktree. Attends d'être rappelé à la fin de son tour, ou arrête-le ("stop_thread") si son travail n'a plus lieu d'être.`;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Whether a run of this target writes in the worktree (effective mode
+   * `edit`). A persona runs in the ticket's mode, capped to `talk` for a
+   * message-only persona — and in the mode its run started in, once started.
+   * A skill always runs with edit rights, a panel unless it is message-only;
+   * a workflow's steps are assumed to write.
+   */
+  private async targetWrites(ticket: TicketEntity, type: AgentThreadTargetType, name: string, mentionId: string | null): Promise<boolean> {
+    switch (type) {
+      case 'skill':
+      case 'workflow':
+        return true;
+      case 'panel': {
+        const panel = await this.deps.panelStore?.getByName(name);
+        return !!panel && panel.executionMode !== 'message';
+      }
+      case 'agent': {
+        const mention = mentionId ? await this.deps.mentionStore.getById(mentionId) : null;
+        // Acknowledged = the scheduler resolved the mode this run really has.
+        if (mention && mention.status === 'acknowledged') return mention.executionMode === 'edit';
+        const persona = await this.deps.personaStore.getByName(name);
+        return !!persona && resolveExecutionConfig(persona, ticket).mode === 'edit';
+      }
+    }
+  }
+
+  /**
+   * The turn cap is reached: the thread waits and the human is asked, once,
+   * whether to go on. Nothing is sent to the target and nothing is concluded.
+   */
+  private async askTurnCap(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turns: number): Promise<string> {
+    thread.askTurnCap();
+    await this.deps.threadStore.save(thread);
+    this.emit({ type: 'thread.updated', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
+    const target = await this.resolveTarget(thread.targetType, thread.personaName);
+    const who = 'error' in target ? thread.personaName : target.displayName;
+    const question = { text: `Je continue avec ${who}, ou je conclus ce thread ?`, options: [...TURN_CAP_OPTIONS] };
+    await this.postAssistant(ticket, assistant, null,
+      `Le thread avec ${who} en est à ${turns} échanges sans aboutir.${renderQuestion(question)}`,
+      { questions: assistantQuestions(question) });
+    return `Plafond atteint : ${turns} tours envoyés dans ce thread sans conclusion. Rien n'a été envoyé. Le thread est en attente et la question « ${TURN_CAP_OPTIONS.join(' » / « ')} » vient d'être posée à l'utilisateur : ne la repose pas, n'envoie rien dans ce thread et ne le conclus pas de toi-même. S'il répond « Continuer », le compteur repart de zéro et tu relances ; s'il répond « Conclure », conclus ("conclude_thread").`;
   }
 
   /**
@@ -623,7 +757,8 @@ export class RunAssistantTurnUseCase {
     return !!comment && comment.authorType === 'user' && comment.createdAt.getTime() > since.getTime();
   }
 
-  private async openTurn(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string): Promise<void> {
+  private async openTurn(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string, ledger: TurnLedger): Promise<void> {
+    ledger.launched.add(thread.id);
     const { createdMentions } = await this.postAssistant(ticket, assistant, thread.id, `${thread.mentionTag} ${turn}`);
     const mention = createdMentions.find((m) => m.targetAgent === thread.personaName && m.targetType === thread.targetType);
     if (mention) thread.openTurn(mention.id);

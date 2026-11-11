@@ -10,6 +10,7 @@ import { ConnectorsTab } from './ConnectorsTab';
 import { ActionsTab } from './actions/ActionsTab';
 import { cn } from '../../lib/cn';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { ModelBadge } from '../agents/ModelBadge';
 import type { AgentToken } from '@fleex/shared';
 import {
   DEFAULT_AGENT_MAX_TURNS,
@@ -163,6 +164,7 @@ function GeneralTab({
   setDefaultAssistantPersonaId: (v: string) => void;
 }) {
   const personas = useAgentPersonaStore((s) => s.personas);
+  const assistantPersona = personas.find((p) => p.id === defaultAssistantPersonaId);
   return (
     <div className="flex flex-col gap-5">
       <Input
@@ -221,19 +223,27 @@ function GeneralTab({
         <label htmlFor="defaultAssistantPersonaId" className="mb-1 block text-sm font-medium text-[var(--theme-text-secondary)]">
           Default assistant
         </label>
-        <select
-          id="defaultAssistantPersonaId"
-          value={defaultAssistantPersonaId}
-          onChange={(e) => setDefaultAssistantPersonaId(e.target.value)}
-          className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-        >
-          <option value="">None (Work composer posts plain comments)</option>
-          {personas.map((p) => (
-            <option key={p.id} value={p.id}>{p.displayName}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            id="defaultAssistantPersonaId"
+            value={defaultAssistantPersonaId}
+            onChange={(e) => setDefaultAssistantPersonaId(e.target.value)}
+            className="min-w-0 flex-1 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
+          >
+            <option value="">None (Work composer posts plain comments)</option>
+            {personas.map((p) => (
+              <option key={p.id} value={p.id}>{p.displayName}</option>
+            ))}
+          </select>
+          {assistantPersona && (
+            <span data-testid="assistant-model" className="inline-flex shrink-0 items-center gap-1 text-xs text-[var(--theme-text-muted)]">
+              Model <ModelBadge modelId={assistantPersona.model} size="normal" />
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
           The persona that answers in the Work view and delegates to other agents in threads. A ticket can override it from its composer.
+          The assistant always runs on its persona&apos;s model: a ticket&apos;s model and effort overrides only apply to the agents it delegates to.
         </p>
       </div>
 

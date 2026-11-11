@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAssistantOutput, renderQuestion, assistantQuestions, buildAssistantSystemPrompt, skillSummary, ACTION_TOOLS } from '../../src/application/assistant/assistant-protocol.js';
+import { parseAssistantOutput, renderQuestion, assistantQuestions, buildAssistantSystemPrompt, buildAssistantUserPrompt, renderThreadStop, skillSummary, ACTION_TOOLS } from '../../src/application/assistant/assistant-protocol.js';
 
 describe('parseAssistantOutput', () => {
   it('accepts a structured reply', () => {
@@ -275,7 +275,95 @@ describe('stop_thread and continue_thread(interrupt)', () => {
     expect(system).toContain('un run coupé peut laisser des modifications partielles');
     expect(system).toMatch(/Annonce l'arrêt à l'utilisateur en une phrase\*\*/);
     expect(system).toContain("Ne demande pas de confirmation avant d'arrêter");
-    // One thread action per turn for now: stop + redirect is a single call.
-    expect(system).toContain("pour arrêter ET rediriger, c'est UN appel, `continue_thread` avec `interrupt: true`");
+    // Stop + redirect stays a single call by preference, even now that a turn may chain actions.
+    expect(system).toContain('arrêter puis relancer (de préférence en UN appel, `continue_thread` avec `interrupt: true`)');
+  });
+});
+
+// Lot 5 — an orchestrator, not an executor.
+describe('orchestration rules in the prompt', () => {
+  const system = buildAssistantSystemPrompt({ persona: { soulMd: '', identityMd: '', memoryMd: '' }, personas: [], assistantName: 'Nas' });
+  const section = (title: string) => {
+    const start = system.indexOf(`## ${title}`);
+    expect(start).toBeGreaterThan(-1);
+    const end = system.indexOf('\n## ', start + 1);
+    return system.slice(start, end < 0 ? undefined : end);
+  };
+
+  // Acceptance criterion: the brief frame is in the prompt.
+  it('the delegation brief has its six parts, in order, and says why', () => {
+    const brief = section('Le brief de délégation');
+    expect(brief).toContain('modèle moins capable que toi');
+    expect(brief).toContain('elle ne voit que ton `turn` et le ticket');
+    const parts = [
+      /1\. \*\*Objectif\*\*, en une phrase/,
+      /2\. \*\*Contexte utile\*\*, par référence aux livrables[^\n]*ne les recopie pas/,
+      /3\. \*\*Contraintes et hors périmètre\*\*/,
+      /4\. \*\*Définition de fini\*\*, avec les preuves attendues : tests lancés et leur résultat, lien de PR, livrable/,
+      /5\. \*\*Refs de todo couvertes\*\*/,
+      /6\. \*\*Rappel\*\* : elle te rend compte à toi[^\n]*elle ne mentionne pas l'opérateur humain/,
+    ];
+    const at = parts.map((re) => brief.search(re));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // The tool the model fills carries the same frame.
+    const turn = (ACTION_TOOLS.find((t) => t.name === 'delegate')!.input_schema.properties as Record<string, { description: string }>).turn!.description;
+    expect(turn).toMatch(/objectif.*contexte par référence aux livrables.*hors périmètre.*définition de fini avec les preuves attendues.*refs de todo.*te rend compte à toi/);
+  });
+
+  // Acceptance criterion: the proof rule is in the prompt.
+  it('verify before reporting: compare with the definition of done, and relaunch for a missing proof', () => {
+    const verify = section('Vérifier avant de rapporter');
+    expect(verify).toMatch(/\*\*compare le résultat à la définition de fini\*\*/);
+    expect(verify).toMatch(/\*\*preuve absente, tu relances\*\* \(`continue_thread`\) en demandant précisément cette preuve/);
+  });
+
+  it('the review rule is generic: any persona or skill whose role is review, no name wired in', () => {
+    const verify = section('Vérifier avant de rapporter');
+    expect(verify).toMatch(/\*\*Pour du code\*\* : si une persona ou un skill de ton équipe a pour rôle la revue[^\n]*\*\*délègue-lui la revue avant de rendre compte\*\*/);
+    // No persona, skill or workflow name appears in the rule: the roster below is the only place names come from.
+    const withTeam = buildAssistantSystemPrompt({
+      persona: { soulMd: '', identityMd: '', memoryMd: '' }, assistantName: 'Nas',
+      personas: [{ name: 'sentinel', displayName: 'Sentinel', identityMd: 'Relit le code.' }],
+    });
+    const rule = withTeam.slice(withTeam.indexOf('## Vérifier avant de rapporter'), withTeam.indexOf('## Règles'));
+    expect(rule).not.toMatch(/sentinel|reviewer|@agent:|@skill:/i);
+  });
+
+  it('several thread actions per turn, with the limits the server enforces', () => {
+    expect(system).not.toContain('Une seule intention par tour');
+    expect(system).toMatch(/enchaîner plusieurs actions de thread dans un même tour/);
+    expect(system).toMatch(/conclure un thread puis déléguer l'étape suivante/);
+    expect(system).toContain('**une seule action de lancement par thread et par tour**');
+    expect(system).toContain('**3 lancements par tour au plus**');
+    expect(system).toMatch(/\*\*3 threads `running` au plus par ticket\*\*, un par cible, un seul workflow/);
+    expect(system).toContain('**un seul thread en mode edit à la fois par ticket**');
+    expect(ACTION_TOOLS.find((t) => t.name === 'delegate')!.description).not.toContain('Une seule délégation par tour');
+  });
+
+  it('the turn cap: the server asks « Continuer » / « Conclure », the assistant neither re-asks nor concludes on its own', () => {
+    expect(system).toMatch(/après 20 tours envoyés dans un même thread[^\n]*« Continuer » \/ « Conclure », une seule fois[^\n]*Ne la repose pas et ne conclus pas de toi-même/);
+  });
+
+  it('a pending turn-cap question shows on the thread line; a concluded thread no longer carries it', () => {
+    const th = {
+      id: 'th1', ticketId: 't1', initiator: 'assistant', targetType: 'agent', personaId: 'p', personaName: 'builder', assistantPersonaId: 'a',
+      brief: 'b', forwardedContext: [], status: 'waiting', currentMentionId: null, exchanges: 20, failures: 0, summary: null,
+      createdAt: '2026-11-11T10:00:00.000Z', updatedAt: '2026-11-11T10:00:00.000Z', concludedAt: null,
+      turnCap: { base: 0, askedAt: '2026-11-11T13:02:00.000Z' },
+    } as const;
+    expect(renderThreadStop(th)).toMatch(/plafond de tours atteint, question « Continuer \/ Conclure » posée à l'utilisateur.*\[2026-11-11T13:02:00\.000Z\].*ne la repose pas/);
+    expect(renderThreadStop({ ...th, turnCap: { base: 20, askedAt: null } })).toBe('');
+    expect(renderThreadStop({ ...th, status: 'concluded' })).toBe('');
+  });
+
+  it('a thread wake-up invites to check the definition of done and to chain the next step in the same turn', () => {
+    const prompt = buildAssistantUserPrompt({
+      context: { ticket: { displayId: 1, title: 'T', status: 'doing', priority: 'medium', conversationMode: 'plan' }, comments: [], deliverables: [] } as never,
+      threads: [], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'resolved' },
+    });
+    expect(prompt).toMatch(/Compare sa réponse à la définition de fini de ton brief/);
+    expect(prompt).toMatch(/lance-la dans ce même tour \("delegate"\) sans attendre l'utilisateur/);
+    expect(prompt).toMatch(/exigeant le livrable ou la preuve qui manque/);
   });
 });

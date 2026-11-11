@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
-import { RunAssistantTurnUseCase, assistantTurnCostUsd } from '../../src/application/use-cases/run-assistant-turn.js';
+import { RunAssistantTurnUseCase, assistantTurnCostUsd, ASSISTANT_MAX_ROUNDS, MAX_ASSISTANT_TURNS_PER_THREAD, MAX_LAUNCHES_PER_TURN, MAX_RUNNING_THREADS_PER_TICKET } from '../../src/application/use-cases/run-assistant-turn.js';
 import { StopRunUseCase } from '../../src/application/use-cases/stop-run.js';
-import type { AssistantLlm } from '../../src/application/assistant/assistant-llm.js';
+import type { AssistantLlm, AssistantUsage } from '../../src/application/assistant/assistant-llm.js';
 import { PostCommentUseCase } from '../../src/application/use-cases/post-comment.js';
 import { AssistantThreadListener } from '../../src/application/assistant-thread-listener.js';
 import { EventBus } from '../../src/application/event-bus.js';
@@ -90,11 +90,12 @@ class FakeExecuteAgent {
   async wakeUp(m: TicketMentionEntity) { this.woken.push(m.id); }
 }
 
-function persona(name: string) {
-  return AgentPersonaEntity.create({ id: `p-${name}`, name, displayName: name === 'nas' ? 'Nas' : 'The Builder', model: 'claude-haiku-4-5-20251001' });
+const DISPLAY: Record<string, string> = { nas: 'Nas', builder: 'The Builder' };
+function persona(name: string, executionMode?: 'message') {
+  return AgentPersonaEntity.create({ id: `p-${name}`, name, displayName: DISPLAY[name] ?? name, model: 'claude-haiku-4-5-20251001', ...(executionMode ? { executionMode } : {}) });
 }
 
-type Round = { text?: string; tools?: Array<{ name: string; input: Record<string, unknown> }> };
+type Round = { text?: string; tools?: Array<{ name: string; input: Record<string, unknown> }>; usage?: AssistantUsage };
 
 const showTool: CliTool = {
   name: 'fleex_ticket_show', commandPath: ['ticket', 'show'], description: 'Show', mutating: false,
@@ -121,6 +122,37 @@ function fixed(content: Anthropic.ContentBlock[]): AssistantLlm {
   };
 }
 
+/** Answers once with the given content, then with nothing: one scripted round followed by the end of the turn. */
+function fixedOnce(content: Anthropic.ContentBlock[]): AssistantLlm {
+  let done = false;
+  return async () => {
+    if (done) return { content: [], stopReason: 'end_turn' };
+    done = true;
+    return { content, stopReason: 'tool_use' };
+  };
+}
+/**
+ * The same tool calls at the start of EVERY turn, then the end of the turn —
+ * recorded in `calls` like the harness LLM does, each call with its own id, so
+ * the tool results can be read back.
+ */
+function eachTurn(calls: Array<{ messages: Anthropic.MessageParam[] }>, tools: Array<{ name: string; input: Record<string, unknown> }>): AssistantLlm {
+  let n = 0;
+  return async (p) => {
+    (calls as unknown[]).push({ model: p.model, thinking: p.thinking, system: p.system, tools: [], messages: p.messages });
+    const fresh = p.messages.length === 1;
+    n += 1;
+    return fresh
+      ? { content: tools.map((t, i) => toolUse(t.name, t.input, `et-${n}-${i}`)), stopReason: 'tool_use' }
+      : { content: [], stopReason: 'end_turn' };
+  };
+}
+/** Every tool result of the conversation a model call belongs to, in order (the messages array is shared by the rounds of a turn). */
+function resultBlocks(h: { llmCalls: Array<{ messages: Anthropic.MessageParam[] }> }, call: number): Anthropic.ToolResultBlockParam[] {
+  return h.llmCalls[call]!.messages.flatMap((m) => (m.role === 'user' && Array.isArray(m.content) ? m.content : []))
+    .filter((b): b is Anthropic.ToolResultBlockParam => b.type === 'tool_result');
+}
+
 /** Scripts the model: each round returns text and/or tool calls; text is streamed char-by-char. */
 interface Catalogue {
   extraCliTools?: CliTool[];
@@ -128,6 +160,8 @@ interface Catalogue {
   workflows?: Array<{ id: string; slug: string; name: string; description: string; enabled: boolean }>;
   runs?: Array<{ id: string; ticketId: string; triggeredFrom: string; status: string; startedAt: Date; isActive(): boolean }>;
   deliverables?: Array<Record<string, unknown>>;
+  /** Personas besides the assistant (nas) and builder. */
+  extraPersonas?: AgentPersonaEntity[];
 }
 
 function run(id: string, triggeredFrom: string, status: string) {
@@ -140,7 +174,7 @@ function run(id: string, triggeredFrom: string, status: string) {
 function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnabled?: boolean } & Catalogue = {}) {
   const ticket = TicketEntity.create({ id: 't1', boardId: 'b', displayId: 1, title: 'e2e rouges' });
   ticket.updateExecutionConfig({ assistantPersonaId: 'p-nas' });
-  const personas = [persona('nas'), persona('builder')];
+  const personas = [persona('nas'), persona('builder'), ...(opts.extraPersonas ?? [])];
   const comments = new FakeCommentStore();
   const mentions = new FakeMentionStore();
   const threads = new FakeThreadStore();
@@ -150,17 +184,17 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
   const emitted: string[] = [];
   eventBus.on('*', (e) => { emitted.push(e.type); });
   const postComment = new PostCommentUseCase(comments as never, mentions as never, { saveActivity: async () => {} } as never, logger as never);
-  const llmCalls: Array<{ system: string; tools: string[]; messages: Anthropic.MessageParam[] }> = [];
+  const llmCalls: Array<{ model: string; thinking: boolean | undefined; system: string; tools: string[]; messages: Anthropic.MessageParam[] }> = [];
   const cliCalls: string[][] = [];
   let n = 0;
   const llm: AssistantLlm = async (params, onText) => {
-    llmCalls.push({ system: params.system, tools: params.tools.map((t) => t.name), messages: params.messages });
+    llmCalls.push({ model: params.model, thinking: params.thinking, system: params.system, tools: params.tools.map((t) => t.name), messages: params.messages });
     const r = rounds[n++] ?? { text: '' };
     if (r.text) for (const ch of r.text) onText(ch);
     const content: Anthropic.ContentBlock[] = [];
     if (r.text) content.push(textBlock(r.text));
     for (const [i, t] of (r.tools ?? []).entries()) content.push(toolUse(t.name, t.input, `tu-${n}-${i}`));
-    return { content, stopReason: r.tools?.length ? 'tool_use' : 'end_turn', usage: { inputTokens: 10, outputTokens: 5 } };
+    return { content, stopReason: r.tools?.length ? 'tool_use' : 'end_turn', usage: r.usage ?? { inputTokens: 10, outputTokens: 5 } };
   };
   const runStore = {
     getByTicket: async () => opts.runs ?? [],
@@ -346,12 +380,15 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
     expect(h.emitted).toEqual(expect.arrayContaining(['thread.created', 'mention.created']));
   });
 
-  it('a second thread action in the same turn is refused', async () => {
+  it('a second launch on the same thread in the same turn is refused, and says why', async () => {
     const h = harness([{ tools: [delegateBuilder, { name: 'delegate', input: { targetType: 'agent', name: 'builder', brief: 'B', turn: 'deux' } }] }, { text: '' }]);
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.threads.saved.size).toBe(1);
     expect(h.mentions.saved).toHaveLength(1);
     const results = h.llmCalls[1]!.messages[2]!.content as Anthropic.ToolResultBlockParam[];
-    expect(results[1]!.is_error).toBe(true);
+    // A refusal is a result the model reads (like the human-hold refusals), not a tool error.
+    expect(String(results[0]!.content)).not.toMatch(/^Refusé/);
+    expect(results[1]!.content).toMatch(/^Refusé.*une seule action de lancement par thread et par tour/);
   });
 
   it('delegate on a persona with an open thread becomes a continue', async () => {
@@ -1083,5 +1120,385 @@ describe('RunAssistantTurnUseCase — stop_thread and continue_thread(interrupt)
       expect(h.mentions.saved).toHaveLength(1);
       expect(thread.status).toBe('running');
     });
+  });
+});
+
+// Lot 5 — an orchestrator, not an executor.
+describe('RunAssistantTurnUseCase — the assistant runs on its own model', () => {
+  it("a ticket's model and effort overrides do not reach the assistant turn: it runs on its persona's model", async () => {
+    const h = harness([{ text: 'ok' }]);
+    h.ticket.updateExecutionConfig({ modelOverride: 'claude-opus-4-8', effortOverride: 'max' });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.llmCalls[0]!.model).toBe('claude-haiku-4-5-20251001');
+    expect((h.agentEvents.executions[0] as { model: string }).model).toBe('claude-haiku-4-5-20251001');
+    expect(h.agentEvents.completed.at(-1)!.metrics.model).toBe('claude-haiku-4-5-20251001');
+    // The override is untouched: it still applies to the agents the assistant delegates to.
+    expect(h.ticket.modelOverride).toBe('claude-opus-4-8');
+  });
+
+  it('the cache tokens the model reports on the second round are accounted and priced (Haiku 4.5: read ×0.1, write ×1.25)', async () => {
+    const h = harness([
+      { tools: [{ name: 'fleex_ticket_show', input: { id: 't1' } }], usage: { inputTokens: 100, outputTokens: 20, cacheCreationTokens: 5000 } },
+      { text: 'Fait.', usage: { inputTokens: 50, outputTokens: 10, cacheReadTokens: 5000, cacheCreationTokens: 200 } },
+    ]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const m = h.agentEvents.completed.at(-1)!.metrics;
+    expect(m).toMatchObject({ inputTokens: 150, outputTokens: 30, cacheReadTokens: 5000, cacheCreationTokens: 5200 });
+    expect(m.costUsd as number).toBeCloseTo(150 * 1e-6 + 30 * 5e-6 + 5000 * 0.1e-6 + 5200 * 1.25e-6, 12);
+  });
+});
+
+describe('RunAssistantTurnUseCase — thinking on decision turns', () => {
+  it('a user message with no open thread is not a decision turn', async () => {
+    const h = harness([{ text: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.llmCalls[0]!.thinking).toBe(false);
+  });
+
+  it('a user message received while a thread is open is one, on every round of the turn', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }, { tools: [{ name: 'fleex_ticket_show', input: { id: 't1' } }] }, { text: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
+    expect(h.llmCalls.map((c) => c.thinking)).toEqual([false, false, true, true]);
+  });
+
+  it('a thread wake-up is one; a concluded thread no longer makes a user message one', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    h.setLlm(async (p) => { h.llmCalls.push({ model: p.model, thinking: p.thinking, system: p.system, tools: [], messages: p.messages }); return { content: [toolUse('conclude_thread', { threadId: thread.id, summary: 'ok' })], stopReason: 'tool_use' }; });
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.llmCalls[2]!.thinking).toBe(true);
+    expect(thread.status).toBe('concluded');
+    await h.uc.execute({ ticketId: 't1', trigger: user('c2') });
+    expect(h.llmCalls.at(-1)!.thinking).toBe(false);
+  });
+});
+
+describe('RunAssistantTurnUseCase — several thread actions in one turn', () => {
+  const catalyst = () => persona('catalyst');
+  const delegateTo = (name: string, turn = 'go') => ({ name: 'delegate', input: { targetType: 'agent', name, brief: `brief ${name}`, turn } });
+  const lastResults = resultBlocks;
+  const byTarget = (h: ReturnType<typeof harness>, name: string) => [...h.threads.saved.values()].find((t) => t.personaName === name);
+
+  it('the round and turn caps of the spec', () => {
+    expect(ASSISTANT_MAX_ROUNDS).toBe(16);
+    expect(MAX_ASSISTANT_TURNS_PER_THREAD).toBe(20);
+    expect(MAX_LAUNCHES_PER_TURN).toBe(3);
+    expect(MAX_RUNNING_THREADS_PER_TICKET).toBe(3);
+  });
+
+  // Acceptance criterion « spec puis build ».
+  it('spec then build: on the wake-up of the spec thread, ONE turn concludes it and opens the build thread, with no human message', async () => {
+    const h = harness([{ tools: [delegateTo('catalyst', 'Spécifie X')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const spec = byTarget(h, 'catalyst')!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.resolve(); await h.mentions.save(m);
+    spec.markIdle(); await h.threads.save(spec);
+    const before = h.llmCalls.length;
+    const rounds: Round[] = [
+      { tools: [{ name: 'conclude_thread', input: { threadId: spec.id, summary: 'Spec livrée.' } }] },
+      { tools: [delegateTo('builder', 'Construis X selon la spec')] },
+      { text: '' },
+    ];
+    let n = 0;
+    h.setLlm(async (p) => {
+      h.llmCalls.push({ model: p.model, thinking: p.thinking, system: p.system, tools: [], messages: p.messages });
+      const r = rounds[n++]!;
+      return { content: (r.tools ?? []).map((t, i) => toolUse(t.name, t.input, `w-${n}-${i}`)), stopReason: r.tools ? 'tool_use' : 'end_turn' };
+    });
+    await h.uc.execute({ ticketId: 't1', trigger: wake(spec.id) });
+
+    expect(spec.status).toBe('concluded');
+    const build = byTarget(h, 'builder')!;
+    expect(build.status).toBe('running');
+    expect(h.mentions.saved.at(-1)).toMatchObject({ targetAgent: 'builder', id: build.currentMentionId });
+    expect(h.comments.saved.at(-1)!.body).toBe('@agent:builder Construis X selon la spec');
+    // One assistant turn did both, and no human spoke at any point.
+    expect(h.agentEvents.executions).toHaveLength(2);
+    expect(h.llmCalls.length - before).toBe(3);
+    expect(h.comments.saved.some((c) => c.authorType === 'user')).toBe(false);
+    expect(lastResults(h, before + 2).map((r) => /^Refusé/.test(String(r.content)))).toEqual([false, false]);
+  });
+
+  it('conclude A then delegate B in the same round works too', async () => {
+    const h = harness([{ tools: [delegateTo('catalyst')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const spec = byTarget(h, 'catalyst')!;
+    h.setLlm(fixedOnce([toolUse('conclude_thread', { threadId: spec.id, summary: 'ok' }, 'a'), toolUse('delegate', delegateTo('builder').input, 'b')]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake(spec.id) });
+    expect(spec.status).toBe('concluded');
+    expect(byTarget(h, 'builder')!.status).toBe('running');
+  });
+
+  it('delegating to two targets in one turn opens two running threads', async () => {
+    const h = harness([{ tools: [delegateTo('catalyst'), delegateTo('builder')] }, { text: '' }], { extraPersonas: [catalyst()] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect([...h.threads.saved.values()].map((t) => [t.personaName, t.status]).sort()).toEqual([['builder', 'running'], ['catalyst', 'running']]);
+    expect(h.mentions.saved.map((m) => m.targetAgent).sort()).toEqual(['builder', 'catalyst']);
+    expect(lastResults(h, 1).map((r) => /^Refusé/.test(String(r.content)))).toEqual([false, false]);
+  });
+
+  it('stop then relaunch in one turn: the run is stopped, then a new turn opens in the same thread', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = byTarget(h, 'builder')!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); await h.mentions.save(m);
+    h.executeAgent.running[m.id] = ['exec-1'];
+    h.setLlm(fixedOnce([
+      toolUse('stop_thread', { threadId: thread.id, reason: 'mauvaise piste' }, 'a'),
+      toolUse('continue_thread', { threadId: thread.id, turn: 'repars sans migration' }, 'b'),
+    ]));
+    await h.comments.save(TicketCommentEntity.create({ id: 'c1', ticketId: 't1', authorType: 'user', authorName: 'Olivier', body: 'pas de migration' }));
+    await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
+    expect(h.agentEvents.stopped).toEqual([{ id: 'exec-1', by: 'assistant', reason: 'mauvaise piste' }]);
+    expect(h.mentions.saved).toHaveLength(2);
+    expect(thread.status).toBe('running');
+    expect(thread.currentMentionId).toBe(h.mentions.saved[1]!.id);
+    expect(h.comments.saved.filter((c) => c.threadId === thread.id).map((c) => c.body)).toEqual([
+      '@agent:builder un', 'Run arrêté par Nas : mauvaise piste', '@agent:builder repars sans migration',
+    ]);
+  });
+
+  it('two continue_thread on the same thread in one turn: the second is refused, even across rounds', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = byTarget(h, 'builder')!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.resolve(); await h.mentions.save(m);
+    thread.markIdle(); await h.threads.save(thread);
+    const rounds = [
+      [toolUse('continue_thread', { threadId: thread.id, turn: 'un' }, 'a')],
+      [toolUse('continue_thread', { threadId: thread.id, turn: 'deux', interrupt: true }, 'b')],
+      [],
+    ];
+    let n = 0;
+    h.setLlm(async (p) => {
+      h.llmCalls.push({ model: p.model, thinking: p.thinking, system: p.system, tools: [], messages: p.messages });
+      const content = rounds[n++]!;
+      return { content, stopReason: content.length ? 'tool_use' : 'end_turn' };
+    });
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.mentions.saved).toHaveLength(2);
+    const refusal = lastResults(h, h.llmCalls.length - 1)[1]!;
+    expect(refusal.content).toMatch(/^Refusé.*une seule action de lancement par thread et par tour/);
+    // The refused interrupt did not cost the run it had just launched.
+    expect(h.agentEvents.stopped).toEqual([]);
+    expect(thread.status).toBe('running');
+  });
+
+  it(`at most ${MAX_LAUNCHES_PER_TURN} launches per turn: the next one is refused, and opens no thread`, async () => {
+    const names = ['catalyst', 'reviewer', 'scribe'];
+    const h = harness([{ tools: [delegateTo('builder'), ...names.map((nm) => delegateTo(nm))] }, { text: '' }], { extraPersonas: names.map((nm) => persona(nm)) });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect([...h.threads.saved.values()].map((t) => t.personaName).sort()).toEqual(['builder', 'catalyst', 'reviewer']);
+    expect(h.mentions.saved).toHaveLength(3);
+    const results = lastResults(h, 1);
+    expect(results.map((r) => /^Refusé/.test(String(r.content)))).toEqual([false, false, false, true]);
+    expect(results[3]!.content).toMatch(/3 lancements par tour au plus/);
+  });
+});
+
+describe('RunAssistantTurnUseCase — threads in parallel on one ticket', () => {
+  const delegateTo = (name: string, targetType = 'agent') => ({ name: 'delegate', input: { targetType, name, brief: `brief ${name}`, turn: 'go' } });
+  const results = resultBlocks;
+  const lint = { id: 's-lint', commandName: 'lint', name: 'lint', displayName: 'Lint', markdownContent: 'Lint.', enabled: true };
+  const fmt = { id: 's-fmt', commandName: 'fmt', name: 'fmt', displayName: 'Fmt', markdownContent: 'Format.', enabled: true };
+
+  it(`a ticket never has more than ${MAX_RUNNING_THREADS_PER_TICKET} running threads: a later turn cannot open one more`, async () => {
+    const names = ['catalyst', 'reviewer', 'scribe'];
+    const h = harness([
+      { tools: [delegateTo('builder'), delegateTo('catalyst'), delegateTo('reviewer')] }, { text: '' },
+      { tools: [delegateTo('scribe')] }, { text: 'Trois threads tournent déjà.' },
+    ], { extraPersonas: names.map((nm) => persona(nm)) });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
+    expect(h.threads.saved.size).toBe(3);
+    expect(results(h, 3)[0]!.content).toMatch(/^Refusé.*3 threads tournent déjà sur ce ticket.*3 au plus en parallèle/);
+
+    // One of them settles: there is room again.
+    const done = [...h.threads.saved.values()][0]!; done.markIdle(); await h.threads.save(done);
+    h.setLlm(fixedOnce([toolUse('delegate', delegateTo('scribe').input)]));
+    await h.uc.execute({ ticketId: 't1', trigger: user('c2') });
+    expect(h.threads.saved.size).toBe(4);
+  });
+
+  it('in plan mode two personas run side by side: nobody writes', async () => {
+    const h = harness([{ tools: [delegateTo('builder'), delegateTo('catalyst')] }, { text: '' }], { extraPersonas: [persona('catalyst')] });
+    expect(h.ticket.conversationMode).toBe('plan');
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.threads.saved.size).toBe(2);
+  });
+
+  it('in edit mode only one thread writes at a time: a second writing persona is refused while the first runs', async () => {
+    const h = harness([{ tools: [delegateTo('builder'), delegateTo('catalyst')] }, { text: '' }], { extraPersonas: [persona('catalyst')] });
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect([...h.threads.saved.values()].map((t) => t.personaName)).toEqual(['builder']);
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(results(h, 1)[1]!.content).toMatch(/^Refusé.*@agent:builder .*tourne déjà en mode edit.*un seul thread à la fois peut écrire/);
+
+    // The writer settles: the next one may go.
+    const builder = [...h.threads.saved.values()][0]!; builder.markIdle(); await h.threads.save(builder);
+    h.setLlm(fixedOnce([toolUse('delegate', delegateTo('catalyst').input)]));
+    await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
+    expect(h.threads.saved.size).toBe(2);
+  });
+
+  it('in edit mode a message-only persona does not write: it runs beside the writer', async () => {
+    const h = harness([{ tools: [delegateTo('builder'), delegateTo('advisor')] }, { text: '' }], { extraPersonas: [persona('advisor', 'message')] });
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.threads.saved.size).toBe(2);
+  });
+
+  it('a run that started in plan mode is not a writer, even if the ticket has since moved to edit', async () => {
+    const h = harness([{ tools: [delegateTo('builder')] }, { text: '' }, { tools: [delegateTo('catalyst')] }, { text: '' }], { extraPersonas: [persona('catalyst')] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    // The scheduler acknowledged the mention in the mode of that moment (plan).
+    const m = h.mentions.saved[0]!; m.acknowledge(); await h.mentions.save(m);
+    expect(m.executionMode).toBe('plan');
+    h.ticket.updateExecutionConfig({ conversationMode: 'edit' });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
+    expect(h.threads.saved.size).toBe(2);
+  });
+
+  it('skills always run with edit rights: two of them never run at the same time, whatever the ticket mode', async () => {
+    const h = harness([{ tools: [delegateTo('lint', 'skill'), delegateTo('fmt', 'skill')] }, { text: '' }], { skills: [lint, fmt] });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect([...h.threads.saved.values()].map((t) => t.personaName)).toEqual(['lint']);
+    expect(results(h, 1)[1]!.content).toMatch(/@skill:lint .*tourne déjà en mode edit/);
+  });
+});
+
+describe('RunAssistantTurnUseCase — the turn cap asks, it no longer concludes', () => {
+  /** A builder thread that already received MAX assistant turns, its last run settled. */
+  async function threadAtCap() {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.resolve(); await h.mentions.save(m);
+    thread.markIdle(); await h.threads.save(thread);
+    for (let i = 1; i < MAX_ASSISTANT_TURNS_PER_THREAD; i++) {
+      await h.comments.save(TicketCommentEntity.create({ id: `turn-${i}`, ticketId: 't1', authorType: 'assistant', authorName: 'Nas', body: `relance ${i}`, threadId: thread.id }));
+    }
+    h.setLlm(eachTurn(h.llmCalls, [{ name: 'continue_thread', input: { threadId: thread.id, turn: 'encore' } }]));
+    const questions = () => h.comments.saved.filter((c) => c.threadId === null && c.questions?.length);
+    return { h, thread, questions };
+  }
+  const says = async (h: ReturnType<typeof harness>, id: string, body: string) => {
+    await pause();
+    await h.comments.save(TicketCommentEntity.create({ id, ticketId: 't1', authorType: 'user', authorName: 'Olivier', body }));
+    await pause();
+    return user(id);
+  };
+
+  it('one turn below the cap still goes out', async () => {
+    const { h, thread } = await threadAtCap();
+    h.comments.saved = h.comments.saved.filter((c) => c.id !== 'turn-1');
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.mentions.saved).toHaveLength(2);
+    expect(thread.turnCap).toBeNull();
+  });
+
+  // Acceptance criterion: no launch, one question asked once, no automatic conclusion.
+  it('at the cap: nothing is launched, the thread waits, ONE question with « Continuer » / « Conclure » is asked, nothing is concluded', async () => {
+    const { h, thread, questions } = await threadAtCap();
+    const updates: string[] = [];
+    h.eventBus.on('thread.updated', () => { updates.push(thread.status); });
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(h.comments.saved.filter((c) => c.threadId === thread.id && c.body.includes('encore'))).toEqual([]);
+    expect(thread.status).toBe('waiting');
+    expect(thread.isTerminal).toBe(false);
+    expect(thread.summary).toBeNull();
+    expect(h.emitted).not.toContain('thread.concluded');
+    expect(updates).toEqual(['waiting']);
+    expect(questions()).toHaveLength(1);
+    expect(questions()[0]!.questions![0]!.options.map((o) => (typeof o === 'string' ? o : o.label))).toEqual(['Continuer', 'Conclure']);
+    expect(questions()[0]!.body).toContain('- Continuer\n- Conclure');
+    expect(toolResults(h).at(-1)).toMatch(/Plafond atteint : 20 tours.*ne la repose pas/);
+
+    // Every later attempt without the human: refused, and the question is NOT asked again.
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(questions()).toHaveLength(1);
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(thread.status).toBe('waiting');
+    expect(toolResults(h).at(-1)).toMatch(/^Refusé.*a déjà été posée à l'utilisateur/);
+  });
+
+  it('a user message from BEFORE the question does not restart the count', async () => {
+    const { h, thread, questions } = await threadAtCap();
+    const earlier = await says(h, 'c-early', 'vas-y');
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    await h.uc.execute({ ticketId: 't1', trigger: earlier });
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(questions()).toHaveLength(1);
+  });
+
+  it('« Continuer » restarts the count from zero: the thread relaunches, and runs a full new allowance before asking again', async () => {
+    const { h, thread, questions } = await threadAtCap();
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c-go', 'Continuer') });
+    expect(h.mentions.saved).toHaveLength(2);
+    expect(thread.status).toBe('running');
+    expect(thread.turnCap).toEqual({ base: MAX_ASSISTANT_TURNS_PER_THREAD, askedAt: null });
+
+    // The next wake-ups relaunch freely, without the human…
+    const settle = async () => { const m = h.mentions.saved.at(-1)!; m.acknowledge(); m.resolve(); await h.mentions.save(m); thread.markIdle(); await h.threads.save(thread); };
+    await settle();
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.mentions.saved).toHaveLength(3);
+    expect(questions()).toHaveLength(1);
+
+    // …until a full new allowance is spent: then the question comes back, once.
+    await settle();
+    for (let i = 0; i < MAX_ASSISTANT_TURNS_PER_THREAD - 2; i++) {
+      await h.comments.save(TicketCommentEntity.create({ id: `again-${i}`, ticketId: 't1', authorType: 'assistant', authorName: 'Nas', body: `relance bis ${i}`, threadId: thread.id }));
+    }
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.mentions.saved).toHaveLength(3);
+    expect(questions()).toHaveLength(2);
+    expect(thread.status).toBe('waiting');
+  });
+
+  it('« Conclure » concludes: the model concludes on the human\'s word, the server still launches nothing', async () => {
+    const { h, thread } = await threadAtCap();
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    h.setLlm(fixedOnce([toolUse('conclude_thread', { threadId: thread.id, summary: 'Arrêt demandé.' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: await says(h, 'c-stop', 'Conclure') });
+    expect(thread.status).toBe('concluded');
+    expect(h.mentions.saved).toHaveLength(1);
+  });
+
+  it('three consecutive failures still conclude the thread (rule unchanged)', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.markFailed(); await h.mentions.save(m);
+    thread.fail(); thread.fail(); thread.fail(); await h.threads.save(thread);
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'reprends' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'failed' } });
+    expect(thread.status).toBe('concluded');
+    expect(thread.summary).toMatch(/3 échecs consécutifs/);
+  });
+});
+
+describe('RunAssistantTurnUseCase — a round cut by the output cap', () => {
+  it('the tool call being written when the cap hit is not executed, and the model is told to redo it', async () => {
+    const h = harness([]);
+    let n = 0;
+    h.setLlm(async (p) => {
+      h.llmCalls.push({ model: p.model, thinking: p.thinking, system: p.system, tools: [], messages: p.messages });
+      if (n++ === 0) return { content: [toolUse('delegate', { targetType: 'agent', name: 'builder', brief: 'A', turn: 'un brief coupé en plein mil' }, 'cut')], stopReason: 'max_tokens' };
+      return { content: [textBlock('Je recommence.')], stopReason: 'end_turn' };
+    });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.threads.saved.size).toBe(0);
+    expect(h.mentions.saved).toHaveLength(0);
+    const result = resultBlocks(h, 1)[0]!;
+    expect(result).toMatchObject({ tool_use_id: 'cut', is_error: true });
+    expect(result.content).toMatch(/tronqué/);
   });
 });

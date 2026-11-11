@@ -1,4 +1,4 @@
-import type { AgentThreadStatus, AgentThreadTargetType, AgentExecution, ThreadParticipant, ThreadStop } from '@fleex/shared';
+import type { AgentThreadStatus, AgentThreadTargetType, AgentExecution, ThreadParticipant, ThreadStop, ThreadTurnCap } from '@fleex/shared';
 import { AgentThreadEntity } from '../../../domain/entities/agent-thread.entity.js';
 import type { ThreadStorePort } from '../../../application/ports/thread-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -10,6 +10,7 @@ interface ThreadRow {
   created_at: string; updated_at: string; concluded_at: string | null; target_type: string | null;
   generated_title: string | null; participants: string | null;
   user_hold_at: string | null; last_stop: string | null; concluded_by: string | null;
+  turn_cap: string | null;
 }
 
 /** `last_stop` is a JSON object in a TEXT column; absent before migration 050. */
@@ -19,6 +20,19 @@ export function parseLastStop(raw: string | null | undefined): ThreadStop | null
     const s = JSON.parse(raw) as Partial<ThreadStop> | null;
     if (!s || (s.by !== 'user' && s.by !== 'assistant') || typeof s.at !== 'string') return null;
     return { by: s.by, at: s.at, reason: s.reason ?? null, mentionId: s.mentionId ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/** `turn_cap` is a JSON object in a TEXT column; absent before migration 051. */
+export function parseTurnCap(raw: string | null | undefined): ThreadTurnCap | null {
+  if (!raw) return null;
+  try {
+    const c = JSON.parse(raw) as Partial<ThreadTurnCap> | null;
+    if (!c || typeof c !== 'object') return null;
+    const base = Number(c.base);
+    return { base: Number.isFinite(base) && base > 0 ? Math.floor(base) : 0, askedAt: typeof c.askedAt === 'string' ? c.askedAt : null };
   } catch {
     return null;
   }
@@ -47,6 +61,7 @@ export function threadRowToEntity(r: ThreadRow): AgentThreadEntity {
     r.concluded_at ? new Date(r.concluded_at) : null, (r.target_type ?? 'agent') as AgentThreadTargetType,
     r.generated_title ?? null, parseParticipants(r.participants),
     r.user_hold_at ? new Date(r.user_hold_at) : null, parseLastStop(r.last_stop), parseConcludedBy(r.concluded_by),
+    parseTurnCap(r.turn_cap),
   );
 }
 
@@ -61,6 +76,7 @@ export function threadEntityToRow(t: AgentThreadEntity): ThreadRow {
     generated_title: t.generatedTitle, participants: JSON.stringify(t.participants),
     user_hold_at: t.userHoldAt?.toISOString() ?? null,
     last_stop: t.lastStop ? JSON.stringify(t.lastStop) : null, concluded_by: t.concludedBy,
+    turn_cap: t.turnCap ? JSON.stringify(t.turnCap) : null,
   };
 }
 
@@ -98,11 +114,11 @@ export class SqliteThreadStoreAdapter implements ThreadStorePort {
       INSERT OR REPLACE INTO agent_threads
         (id, ticket_id, initiator, persona_id, persona_name, assistant_persona_id, brief, forwarded_context,
          status, current_mention_id, exchanges, failures, summary, created_at, updated_at, concluded_at, target_type,
-         generated_title, participants, user_hold_at, last_stop, concluded_by)
+         generated_title, participants, user_hold_at, last_stop, concluded_by, turn_cap)
       VALUES
         (@id, @ticket_id, @initiator, @persona_id, @persona_name, @assistant_persona_id, @brief, @forwarded_context,
          @status, @current_mention_id, @exchanges, @failures, @summary, @created_at, @updated_at, @concluded_at, @target_type,
-         @generated_title, @participants, @user_hold_at, @last_stop, @concluded_by)
+         @generated_title, @participants, @user_hold_at, @last_stop, @concluded_by, @turn_cap)
     `).run(threadEntityToRow(thread));
   }
 

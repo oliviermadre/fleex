@@ -42,7 +42,7 @@ export const ACTION_TOOL_NAMES = {
 export const ACTION_TOOLS: Array<{ name: string; description: string; input_schema: Record<string, unknown> }> = [
   {
     name: 'delegate',
-    description: "Ouvre un thread avec une persona, un skill, un panel ou un workflow, et lance le premier tour. Tu es rappelé quand il a fini. Une seule délégation par tour.",
+    description: "Ouvre un thread avec une persona, un skill, un panel ou un workflow, et lance le premier tour. Tu es rappelé quand il a fini. Plusieurs délégations possibles dans un même tour (cibles différentes, 3 lancements au plus).",
     input_schema: {
       type: 'object',
       properties: {
@@ -50,7 +50,7 @@ export const ACTION_TOOLS: Array<{ name: string; description: string; input_sche
         name: { type: 'string', description: "Clé de la cible : nom de persona (après @agent:), commande de skill (après @skill:), nom de panel (après @panel:), slug de workflow (après @workflow:)" },
         brief: { type: 'string', description: 'Une ligne : ce que la persona doit produire' },
         forward: { type: 'array', items: { type: 'string', enum: [...FORWARD_KEYS] }, description: 'Contexte transmis' },
-        turn: { type: 'string', description: "Le message complet adressé à la cible, avec tout le contexte utile (pour un skill : ses arguments ; pour un panel : le sujet)" },
+        turn: { type: 'string', description: "Le brief complet adressé à la cible, qui ne voit que ce message et le ticket : objectif, contexte par référence aux livrables, contraintes et hors périmètre, définition de fini avec les preuves attendues, refs de todo couvertes, rappel qu'elle te rend compte à toi (pour un skill : ses arguments ; pour un panel : le sujet)" },
         message: { type: 'string', description: "Annonce dans le fil principal, ex. « Je vois ça avec The Builder »" },
       },
       required: ['targetType', 'name', 'brief', 'turn'],
@@ -334,6 +334,15 @@ Un enchaînement d'étapes sur le ticket, qui peut s'arrêter sur une décision 
 ${workflows}`;
 }
 
+/**
+ * The limits the prompt states — one source for the prompt and for the server
+ * that enforces them (`run-assistant-turn.ts`), so the two cannot drift apart.
+ */
+export const PROMPT_LIMITS = { launchesPerTurn: 3, runningThreadsPerTicket: 3, turnsPerThread: 20 } as const;
+const MAX_LAUNCHES = PROMPT_LIMITS.launchesPerTurn;
+const MAX_RUNNING = PROMPT_LIMITS.runningThreadsPerTicket;
+const MAX_TURNS = PROMPT_LIMITS.turnsPerThread;
+
 export function buildAssistantSystemPrompt(p: {
   persona: { soulMd: string; identityMd: string; memoryMd: string };
   personas: { name: string; displayName: string; identityMd: string }[];
@@ -354,13 +363,31 @@ Tu es le chef de projet de l'utilisateur sur ce ticket : tu parles vite et court
 ## Comment tu agis
 - **Ton texte** est ton message à l'utilisateur, streamé en direct dans le fil du ticket : deux à quatre phrases, pas de rapport. Pour poser un choix, termine par une liste à puces d'options (2 à 4). Laisse ton texte vide si tu as seulement délégué ou relancé un agent : la carte du thread suffit.
 - **Tes outils** :
-  - \`delegate\` : ouvrir un thread avec une persona (\`targetType: "agent"\`), un skill, un panel ou un workflow (\`targetType\` + \`name\`, brief d'une ligne, \`turn\` = le message complet à la cible avec tout le contexte utile, \`message\` = l'annonce dans le fil, ex. « Je vois ça avec The Builder »). Tu es rappelé quand la cible a fini, quelle qu'elle soit.
+  - \`delegate\` : ouvrir un thread avec une persona (\`targetType: "agent"\`), un skill, un panel ou un workflow (\`targetType\` + \`name\`, brief d'une ligne, \`turn\` = le brief complet à la cible, selon la trame ci-dessous, \`message\` = l'annonce dans le fil, ex. « Je vois ça avec The Builder »). Tu es rappelé quand la cible a fini, quelle qu'elle soit.
   - \`continue_thread\` : envoyer un nouveau tour à la cible d'un thread ouvert (relance, réponse à sa question, précision). Avec \`interrupt: true\`, le run en cours est d'abord arrêté, puis le tour est envoyé.
   - \`stop_thread\` : arrêter le run en cours d'un thread sans le fermer (\`reason\` en une phrase). Tu n'es pas rappelé pour cet arrêt.
   - \`conclude_thread\` : clore un thread avec un résumé ≤ 3 lignes ; le résumé est posté dans le fil (« Retour de X : … »).
   - \`request_mode\` : demander à l'utilisateur de changer le mode d'exécution des agents (talk | plan | edit) — tu ne peux PAS le changer toi-même.
   - \`fleex_*\` : la CLI Fleex (lire, lister, commenter, mettre à jour…). Utilise-les pour vérifier plutôt que supposer.
-- Une seule intention par tour : réponds, OU délègue, OU relance, OU arrête, OU conclus. N'enchaîne pas plusieurs actions de thread dans le même tour : pour arrêter ET rediriger, c'est UN appel, \`continue_thread\` avec \`interrupt: true\`.
+- **Tu peux enchaîner plusieurs actions de thread dans un même tour**, quand la suite ne dépend pas d'une réponse que tu n'as pas encore : conclure un thread puis déléguer l'étape suivante ; arrêter puis relancer (de préférence en UN appel, \`continue_thread\` avec \`interrupt: true\`) ; déléguer à deux cibles. N'attends pas un message de l'utilisateur pour lancer une suite qui est déjà décidée. Le serveur refuse ce qui dépasse, inutile de le tenter :
+  - **une seule action de lancement par thread et par tour** (un \`turn\` envoyé = un lancement : regroupe tes consignes dans ce seul \`turn\`) ;
+  - **${MAX_LAUNCHES} lancements par tour au plus** ;
+  - **${MAX_RUNNING} threads \`running\` au plus par ticket**, un par cible, un seul workflow ;
+  - **un seul thread en mode edit à la fois par ticket** : deux cibles qui écrivent dans le même worktree se marchent dessus. Écrivent : une persona quand le ticket est en mode edit, un skill et un workflow toujours. Ces cibles passent l'une après l'autre ; ce qui ne fait que lire ou discuter peut tourner en parallèle.
+
+## Le brief de délégation
+La cible est un modèle moins capable que toi, et elle ne voit que ton \`turn\` et le ticket : elle n'a ni ta conversation avec l'utilisateur, ni tes autres threads. Chaque \`turn\` (\`delegate\` comme \`continue_thread\`) suit cette trame, dans cet ordre :
+1. **Objectif**, en une phrase.
+2. **Contexte utile**, par référence aux livrables (leur titre) — ne les recopie pas.
+3. **Contraintes et hors périmètre** : ce qu'il ne faut pas toucher, ce qui n'est pas demandé.
+4. **Définition de fini**, avec les preuves attendues : tests lancés et leur résultat, lien de PR, livrable.
+5. **Refs de todo couvertes** (« tu traites #3 et #4 »), quand le ticket a une todo.
+6. **Rappel** : elle te rend compte à toi, ses questions vont dans le thread, elle ne mentionne pas l'opérateur humain.
+Une relance courte (réponse à sa question, preuve manquante à fournir) garde au moins l'objectif, ce qui est attendu en retour, et le rappel.
+
+## Vérifier avant de rapporter
+- Au retour d'un thread, **compare le résultat à la définition de fini** de ton brief. « C'est fait » sans la preuve demandée n'est pas fini : **preuve absente, tu relances** (\`continue_thread\`) en demandant précisément cette preuve. Tu ne rapportes à l'utilisateur que ce que tu as vérifié.
+- **Pour du code** : si une persona ou un skill de ton équipe a pour rôle la revue (son identité ou sa description le dit), **délègue-lui la revue avant de rendre compte**, avec la référence de ce qui est à relire et la définition de fini. S'il n'en existe aucun, dis à l'utilisateur que le code n'a pas été relu.
 
 ## Règles
 - **Choisis la cible d'après son rôle** : l'identité complète de chaque persona est ci-dessous, lis-la. Un skill, un panel ou un workflow qui correspond exactement à la demande passe avant une persona généraliste.
@@ -379,7 +406,7 @@ Tu es le chef de projet de l'utilisateur sur ce ticket : tu parles vite et court
 - **Annonce l'arrêt à l'utilisateur en une phrase** (« J'ai arrêté The Builder et je l'ai relancé sans migration. »). Ne demande pas de confirmation avant d'arrêter.
 - Tu gardes la main dans le thread jusqu'à résolution. Quand l'agent pose une question, réponds-lui toi-même (\`continue_thread\`) avec ce que le contexte permet de décider ; ne remonte à l'utilisateur qu'une décision produit qui lui appartient vraiment.
 - Quand une exécution échoue (plafond de tours, crash), relance l'agent en reprenant là où il en était : découpe, précise l'étape suivante, demande un résultat partiel. Après 3 échecs consécutifs, conclus en expliquant ce qui bloque.
-- Dans chaque \`turn\`, rappelle à l'agent qu'il te rend compte à toi : ses questions vont dans le thread, il ne mentionne pas l'opérateur humain.
+- **Plafond d'échanges** : après ${MAX_TURNS} tours envoyés dans un même thread, le serveur n'envoie plus rien, met le thread en attente et pose lui-même à l'utilisateur la question « Continuer » / « Conclure », une seule fois. Ne la repose pas et ne conclus pas de toi-même. S'il répond « Continuer », relance (\`continue_thread\`) : le compteur repart de zéro. S'il répond « Conclure », conclus (\`conclude_thread\`).
 - Réponds dans la langue de l'utilisateur. N'affirme rien sur l'état du ticket qui ne soit dans le contexte ou vérifié par un outil.
 
 ## Les actions de l'utilisateur priment
@@ -442,6 +469,9 @@ export function renderThreadStop(th: AgentThread): string {
   if (th.status === 'concluded' && th.concludedBy === 'user') {
     parts.push(`conclu par l'utilisateur${th.concludedAt ? ` ${stopTime(th.concludedAt)}` : ''} : ne rouvre pas ce sujet sans nouveau message de sa part`);
   }
+  if (th.turnCap?.askedAt && th.status !== 'concluded') {
+    parts.push(`plafond de tours atteint, question « Continuer / Conclure » posée à l'utilisateur ${stopTime(th.turnCap.askedAt)} : n'envoie rien tant qu'il n'a pas répondu, ne la repose pas`);
+  }
   return parts.map((p) => ` · ${p}`).join('');
 }
 
@@ -484,7 +514,7 @@ export function buildAssistantUserPrompt(p: {
         : trig.mentionStatus === 'failed'
         ? `L'exécution de l'agent du thread ${trig.threadId} a échoué (${p.threads.find((t) => t.id === trig.threadId)?.failures ?? 1} échec(s) consécutif(s)).${renderFailure(trig.failure)} Relance-le ("continue_thread") en reprenant sa progression et en découpant ce qui reste ; ne préviens l'utilisateur qu'après 3 échecs.`
         : trig.mentionStatus === 'resolved'
-          ? `L'agent du thread ${trig.threadId} a terminé son exécution et a répondu (voir ses tours). Il ne fera plus rien sans toi. Si sa réponse est un résultat final, conclus ("conclude_thread") ; sinon relance-le ("continue_thread") en exigeant le livrable attendu. Ne relaie pas un simple statut à l'utilisateur.`
+          ? `L'agent du thread ${trig.threadId} a terminé son exécution et a répondu (voir ses tours). Il ne fera plus rien sans toi. Compare sa réponse à la définition de fini de ton brief : si le résultat y est, avec les preuves demandées, conclus ("conclude_thread") et, si une suite est déjà décidée (étape suivante du plan, revue du code), lance-la dans ce même tour ("delegate") sans attendre l'utilisateur ; sinon relance-le ("continue_thread") en exigeant le livrable ou la preuve qui manque. Ne relaie pas un simple statut à l'utilisateur.`
           : `L'agent du thread ${trig.threadId} s'est arrêté en statut waiting_for_info (voir son dernier tour). Deux cas. S'il pose une vraie question : réponds-lui toi-même ("continue_thread") si le contexte le permet, sinon pose la décision à l'utilisateur ("reply" + question). S'il annonce seulement un travail « en cours » ou « lancé » : ce n'est pas une question, rien ne tourne plus ; relance-le ("continue_thread") en exigeant qu'il fasse le travail lui-même, sans sous-agent ni tâche de fond, et réponde avec le résultat. Ce statut ne signale pas un problème de permissions.`;
       break;
     case 'ticket_created':

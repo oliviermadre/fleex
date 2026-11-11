@@ -11,8 +11,9 @@ export interface ResolvedExecutionConfig {
 
 /**
  * Conversation-scoped execution config: the ticket's mode/model/effort/fast
- * overrides applied over the persona defaults. Shared by agent runs
- * (ExecuteAgent) and assistant turns (RunAssistantTurn).
+ * overrides applied over the persona defaults, for agent runs (ExecuteAgent).
+ * The assistant's own turn does not go through it: it runs on its persona's
+ * model, and only reads the resolved mode of the targets it delegates to.
  */
 export function resolveExecutionConfig(
   persona: { executionMode: ExecutionMode; model: string },
