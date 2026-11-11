@@ -238,3 +238,44 @@ describe("the human's actions in the assistant's prompts", () => {
     expect(prompt).toContain("l'état du worktree");
   });
 });
+
+// Lot 1 — stop a run and redirect it.
+describe('stop_thread and continue_thread(interrupt)', () => {
+  it('parses stop_thread with its reason, and refuses one without', () => {
+    expect(parseAssistantOutput({ action: 'stop_thread', threadId: 'th1', reason: 'plus besoin' }, '')).toEqual({ action: 'stop_thread', threadId: 'th1', reason: 'plus besoin' });
+    expect(parseAssistantOutput({ action: 'stop_thread', threadId: 'th1' }, '')).toBeNull();
+    expect(parseAssistantOutput({ action: 'stop_thread', reason: 'x' }, '')).toBeNull();
+  });
+
+  it('continue_thread interrupts only on a strict true; absent means the current behaviour (wait)', () => {
+    expect(parseAssistantOutput({ action: 'continue_thread', threadId: 'th1', turn: 'go' }, '')).toEqual({ action: 'continue_thread', threadId: 'th1', turn: 'go', interrupt: false });
+    expect(parseAssistantOutput({ action: 'continue_thread', threadId: 'th1', turn: 'go', interrupt: true }, '')).toMatchObject({ interrupt: true });
+    expect(parseAssistantOutput({ action: 'continue_thread', threadId: 'th1', turn: 'go', interrupt: 'yes' }, '')).toMatchObject({ interrupt: false });
+  });
+
+  it('both are offered as tools, with the fields the server needs', () => {
+    const stop = ACTION_TOOLS.find((t) => t.name === 'stop_thread')!;
+    expect(stop.input_schema.required).toEqual(['threadId', 'reason']);
+    const cont = ACTION_TOOLS.find((t) => t.name === 'continue_thread')!;
+    expect((cont.input_schema.properties as Record<string, { type: string }>).interrupt!.type).toBe('boolean');
+    expect(cont.input_schema.required).toEqual(['threadId', 'turn']);
+  });
+
+  // Acceptance criterion: the « contredit / reste valable » rule is in the prompt.
+  it('the prompt tells when to stop a running thread and when to let it finish', () => {
+    const system = buildAssistantSystemPrompt({ persona: { soulMd: '', identityMd: '', memoryMd: '' }, personas: [], assistantName: 'Nas' });
+    expect(system).toContain("Une nouvelle instruction de l'utilisateur contredit un thread en cours");
+    expect(system).toMatch(/\*\*inutile ou nuisible\*\*[^\n]*\*\*arrête\*\* — `continue_thread` avec `interrupt: true`[^\n]*ou `stop_thread`/);
+    expect(system).toMatch(/\*\*reste valable\*\*[^\n]*\*\*laisse finir\*\*[^\n]*transmettras à la fin du tour/);
+  });
+
+  it('the prompt frames the turn sent after a stop, and the announcement to the user', () => {
+    const system = buildAssistantSystemPrompt({ persona: { soulMd: '', identityMd: '', memoryMd: '' }, personas: [], assistantName: 'Nas' });
+    expect(system).toMatch(/Le tour envoyé après un arrêt\*\* dit ce qui est annulé et ce qui reste valable, et demande à l'agent de vérifier l'état du worktree/);
+    expect(system).toContain('un run coupé peut laisser des modifications partielles');
+    expect(system).toMatch(/Annonce l'arrêt à l'utilisateur en une phrase\*\*/);
+    expect(system).toContain("Ne demande pas de confirmation avant d'arrêter");
+    // One thread action per turn for now: stop + redirect is a single call.
+    expect(system).toContain("pour arrêter ET rediriger, c'est UN appel, `continue_thread` avec `interrupt: true`");
+  });
+});

@@ -52,6 +52,17 @@ export const MAX_ASSISTANT_TURNS_PER_THREAD = 8;
 const TARGET_LABEL: Record<AgentThreadTargetType, string> = {
   agent: "l'agent", skill: 'le skill', panel: 'le panel', workflow: 'le workflow',
 };
+/** How the thread records a stop by the assistant: « Run arrêté par <assistant> : <reason> ». */
+export const STOP_LINE_PREFIX = 'Run arrêté par ';
+
+/** « 3 min 05 s » since an ISO instant, for the tool result of a stop. */
+function elapsed(sinceIso: string): string {
+  const s = Math.max(0, Math.round((Date.now() - Date.parse(sinceIso)) / 1000));
+  if (!Number.isFinite(s)) return 'une durée inconnue';
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m} min ${String(s % 60).padStart(2, '0')} s` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+}
 /** « à 14:02 », server time: how a refusal dates the human action it defers to. */
 function stopClock(at: Date): string {
   return `à ${at.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -320,7 +331,7 @@ export class RunAssistantTurnUseCase {
               text = `Arguments invalides : ${err instanceof Error ? err.message : String(err)}`;
               isError = true;
             }
-          } else if (call.name in { delegate: 1, continue_thread: 1, conclude_thread: 1, request_mode: 1 }) {
+          } else if (call.name in { delegate: 1, continue_thread: 1, stop_thread: 1, conclude_thread: 1, request_mode: 1 }) {
             text = 'Arguments invalides pour cette action (champs requis manquants).';
             isError = true;
           } else {
@@ -416,7 +427,20 @@ export class RunAssistantTurnUseCase {
         const thread = threads.find((t) => t.id === action.threadId);
         if (!thread) return `Thread inconnu : ${action.threadId}.`;
         if (thread.isTerminal) return 'Ce thread est déjà clos.';
-        return this.continueThread(ticket, assistant, thread, action.turn, trigger);
+        if (!action.interrupt) return this.continueThread(ticket, assistant, thread, action.turn, trigger);
+        // Stop, THEN the new turn — in that order, in this single call: the
+        // one-thread-action-per-turn guard would refuse a separate `stop_thread`.
+        const stop = await this.stopThreadRun(ticket, assistant, thread, 'remplacé par une nouvelle consigne');
+        if (stop.blocked) return stop.text; // could not be stopped: sending a turn would queue behind the live run
+        const sent = await this.continueThread(ticket, assistant, thread, action.turn, trigger);
+        return stop.stopped ? `${stop.text}\n${sent}` : sent;
+      }
+
+      case 'stop_thread': {
+        const thread = threads.find((t) => t.id === action.threadId);
+        if (!thread) return `Thread inconnu : ${action.threadId}.`;
+        if (thread.isTerminal) return 'Ce thread est déjà clos.';
+        return (await this.stopThreadRun(ticket, assistant, thread, action.reason)).text;
       }
 
       case 'request_mode': {
@@ -480,6 +504,40 @@ export class RunAssistantTurnUseCase {
     return { text };
   }
 
+  /**
+   * The assistant stops the run of a thread and leaves the thread open: the
+   * single stop path with author `assistant`, a line in the thread saying so,
+   * and a tool result that tells the model what was running and for how long.
+   * `blocked`: the target could not be stopped — said explicitly, never a silent no-op.
+   */
+  private async stopThreadRun(
+    ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, reason: string,
+  ): Promise<{ stopped: boolean; blocked: boolean; text: string }> {
+    const target = await this.resolveTarget(thread.targetType, thread.personaName);
+    const who = 'error' in target ? thread.personaName : target.displayName;
+    const what = `${TARGET_LABEL[thread.targetType]} ${who}`;
+    const out = await this.deps.stopRun.stopThread(thread, { by: 'assistant', reason });
+    if (out.unsupported) {
+      return { stopped: false, blocked: true, text: `Impossible d'arrêter ${what} : ${out.unsupported}. Rien n'a été arrêté ni envoyé ; dis-le à l'utilisateur.` };
+    }
+    if (!out.stopped) {
+      return { stopped: false, blocked: false, text: `Rien ne tournait dans ce thread (statut ${thread.status}) : rien n'a été arrêté.` };
+    }
+    const assistantName = assistant.displayName || assistant.name;
+    // No mention may come out of this line, whatever the reason quotes.
+    await this.postAssistant(ticket, assistant, thread.id, `${STOP_LINE_PREFIX}${assistantName} : ${reason}`, { suppressAgentMentions: true });
+    const since = out.startedAt ? ` depuis ${elapsed(out.startedAt)}` : '';
+    const was = out.what === 'workflow_run'
+      ? `le run ${out.workflowRunId} tournait${since} ; il est annulé (cancelled)`
+      : out.what === 'queued'
+        ? "son tour était en file d'attente et n'avait pas démarré ; il est annulé"
+        : `une exécution tournait${since} ; elle est interrompue`;
+    return {
+      stopped: true, blocked: false,
+      text: `Arrêté — ${what} : ${was}. Le thread reste ouvert (idle), aucun échec n'est compté, et tu ne seras pas rappelé pour cet arrêt.`,
+    };
+  }
+
   /** Assistant turn inside a thread: wake a waiting mention, or open a new one. */
   private async continueThread(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string, trigger: AssistantTrigger): Promise<string> {
     // The human stopped this target. Only they lift the hold: a message of
@@ -499,7 +557,8 @@ export class RunAssistantTurnUseCase {
       }, [thread], trigger);
     }
     const assistantTurns = (await this.deps.commentStore.getByTicket(ticket.id))
-      .filter((c) => c.threadId === thread.id && c.authorType === 'assistant').length;
+      // The line that records a stop is not a turn sent to the agent.
+      .filter((c) => c.threadId === thread.id && c.authorType === 'assistant' && !c.body.startsWith(STOP_LINE_PREFIX)).length;
     if (assistantTurns >= MAX_ASSISTANT_TURNS_PER_THREAD) {
       return this.apply(ticket, assistant, {
         action: 'conclude_thread', threadId: thread.id, message: null, question: null,
@@ -634,7 +693,7 @@ export class RunAssistantTurnUseCase {
     assistant: AgentPersonaEntity,
     threadId: string | null,
     body: string,
-    extra: { suppressMentionForAgents?: string[]; questions?: AgentQuestion[] | null } = {},
+    extra: { suppressMentionForAgents?: string[]; suppressAgentMentions?: boolean; questions?: AgentQuestion[] | null } = {},
   ) {
     const authorName = assistant.displayName || assistant.name;
     const result = await this.deps.postComment.execute({ ticketId: ticket.id, authorType: 'assistant', authorName, body, threadId, ...extra });

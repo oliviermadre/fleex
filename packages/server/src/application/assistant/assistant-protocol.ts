@@ -22,7 +22,8 @@ export type AssistantTrigger =
 export type AssistantAction =
   | { action: 'reply'; message: string; question: AssistantQuestion | null }
   | { action: 'delegate'; targetType: AgentThreadTargetType; name: string; brief: string; forward: string[]; turn: string; message: string | null }
-  | { action: 'continue_thread'; threadId: string; turn: string }
+  | { action: 'continue_thread'; threadId: string; turn: string; /** Stop the run in progress first, then send the turn. */ interrupt: boolean }
+  | { action: 'stop_thread'; threadId: string; reason: string }
   | { action: 'request_mode'; threadId: string; mode: ConversationMode; message: string }
   | { action: 'conclude_thread'; threadId: string; summary: string; message: string | null; question: AssistantQuestion | null };
 
@@ -33,6 +34,7 @@ export const TARGET_TYPES: readonly AgentThreadTargetType[] = ['agent', 'skill',
 export const ACTION_TOOL_NAMES = {
   delegate: 'delegate',
   continue_thread: 'continue_thread',
+  stop_thread: 'stop_thread',
   conclude_thread: 'conclude_thread',
   request_mode: 'request_mode',
 } as const;
@@ -56,11 +58,27 @@ export const ACTION_TOOLS: Array<{ name: string; description: string; input_sche
   },
   {
     name: 'continue_thread',
-    description: "Envoie un nouveau tour à l'agent d'un thread ouvert (relance, réponse à sa question, précision).",
+    description: "Envoie un nouveau tour à la cible d'un thread ouvert (relance, réponse à sa question, précision). Si elle tourne encore : sans `interrupt` rien n'est envoyé (attends la fin du tour) ; avec `interrupt: true` son run est arrêté PUIS le nouveau tour est envoyé, en un seul appel.",
     input_schema: {
       type: 'object',
-      properties: { threadId: { type: 'string' }, turn: { type: 'string', description: "Le message adressé à l'agent" } },
+      properties: {
+        threadId: { type: 'string' },
+        turn: { type: 'string', description: "Le message adressé à la cible. Après un arrêt : ce qui est annulé, ce qui reste valable, et la demande de vérifier l'état du worktree avant de reprendre." },
+        interrupt: { type: 'boolean', description: "true = arrêter le run en cours avant d'envoyer ce tour (le travail en cours est devenu inutile ou nuisible). Défaut : false." },
+      },
       required: ['threadId', 'turn'],
+    },
+  },
+  {
+    name: 'stop_thread',
+    description: "Arrête le run en cours d'un thread SANS le fermer (persona, skill, panel ; pour un workflow, annule le run). Le thread reste ouvert, aucun échec n'est compté, tu n'es pas rappelé pour cet arrêt. Pour arrêter ET rediriger, préfère `continue_thread` avec `interrupt: true`.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+        reason: { type: 'string', description: "Pourquoi, en une phrase : elle est postée dans le thread (« Run arrêté par <toi> : … »)" },
+      },
+      required: ['threadId', 'reason'],
     },
   },
   {
@@ -108,7 +126,7 @@ export const ASSISTANT_OUTPUT_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    action: { type: 'string', enum: ['reply', 'delegate', 'continue_thread', 'conclude_thread', 'request_mode'] },
+    action: { type: 'string', enum: ['reply', 'delegate', 'continue_thread', 'stop_thread', 'conclude_thread', 'request_mode'] },
     message: { type: ['string', 'null'] },
     question: {
       type: ['object', 'null'],
@@ -124,6 +142,8 @@ export const ASSISTANT_OUTPUT_SCHEMA: Record<string, unknown> = {
     mode: { type: ['string', 'null'], enum: ['talk', 'plan', 'edit', null] },
     threadId: { type: ['string', 'null'] },
     summary: { type: ['string', 'null'] },
+    interrupt: { type: ['boolean', 'null'] },
+    reason: { type: ['string', 'null'] },
   },
   required: ['action'],
 };
@@ -193,7 +213,13 @@ export function parseAssistantOutput(structured: Record<string, unknown> | null,
     case 'continue_thread': {
       const threadId = str(raw.threadId);
       const turn = str(raw.turn);
-      return threadId && turn ? { action: 'continue_thread', threadId, turn } : null;
+      // Strictly `true`: stopping a run is never inferred from a loose value.
+      return threadId && turn ? { action: 'continue_thread', threadId, turn, interrupt: raw.interrupt === true } : null;
+    }
+    case 'stop_thread': {
+      const threadId = str(raw.threadId);
+      const reason = str(raw.reason);
+      return threadId && reason ? { action: 'stop_thread', threadId, reason } : null;
     }
     case 'request_mode': {
       const threadId = str(raw.threadId);
@@ -329,11 +355,12 @@ Tu es le chef de projet de l'utilisateur sur ce ticket : tu parles vite et court
 - **Ton texte** est ton message à l'utilisateur, streamé en direct dans le fil du ticket : deux à quatre phrases, pas de rapport. Pour poser un choix, termine par une liste à puces d'options (2 à 4). Laisse ton texte vide si tu as seulement délégué ou relancé un agent : la carte du thread suffit.
 - **Tes outils** :
   - \`delegate\` : ouvrir un thread avec une persona (\`targetType: "agent"\`), un skill, un panel ou un workflow (\`targetType\` + \`name\`, brief d'une ligne, \`turn\` = le message complet à la cible avec tout le contexte utile, \`message\` = l'annonce dans le fil, ex. « Je vois ça avec The Builder »). Tu es rappelé quand la cible a fini, quelle qu'elle soit.
-  - \`continue_thread\` : envoyer un nouveau tour à l'agent d'un thread ouvert (relance, réponse à sa question, précision).
+  - \`continue_thread\` : envoyer un nouveau tour à la cible d'un thread ouvert (relance, réponse à sa question, précision). Avec \`interrupt: true\`, le run en cours est d'abord arrêté, puis le tour est envoyé.
+  - \`stop_thread\` : arrêter le run en cours d'un thread sans le fermer (\`reason\` en une phrase). Tu n'es pas rappelé pour cet arrêt.
   - \`conclude_thread\` : clore un thread avec un résumé ≤ 3 lignes ; le résumé est posté dans le fil (« Retour de X : … »).
   - \`request_mode\` : demander à l'utilisateur de changer le mode d'exécution des agents (talk | plan | edit) — tu ne peux PAS le changer toi-même.
   - \`fleex_*\` : la CLI Fleex (lire, lister, commenter, mettre à jour…). Utilise-les pour vérifier plutôt que supposer.
-- Une seule intention par tour : réponds, OU délègue, OU relance, OU conclus. N'enchaîne pas plusieurs actions de thread dans le même tour.
+- Une seule intention par tour : réponds, OU délègue, OU relance, OU arrête, OU conclus. N'enchaîne pas plusieurs actions de thread dans le même tour : pour arrêter ET rediriger, c'est UN appel, \`continue_thread\` avec \`interrupt: true\`.
 
 ## Règles
 - **Choisis la cible d'après son rôle** : l'identité complète de chaque persona est ci-dessous, lis-la. Un skill, un panel ou un workflow qui correspond exactement à la demande passe avant une persona généraliste.
@@ -344,7 +371,12 @@ Tu es le chef de projet de l'utilisateur sur ce ticket : tu parles vite et court
 - Les agents tournent dans le mode d'exécution du ticket : talk (sans outils), plan (lecture seule : Read, Grep, Glob, recherche, exploration du dépôt — tout ce qui n'écrit pas), edit (Write/Edit/Bash). Une enquête, un diagnostic, une analyse de code se font entièrement en plan. \`request_mode\` UNIQUEMENT si la tâche exige d'écrire des fichiers ou si l'agent rapporte explicitement un outil d'écriture refusé. Ne déduis JAMAIS un problème de permissions d'un statut vague, d'un « en cours », d'un plafond de tours ou d'un crash. Ne dis jamais à un agent que des permissions lui sont accordées.
 - Les agents livrent leurs résultats en LIVRABLES, fournis en entier sous « Livrables produits dans ce thread ». Un agent qui dit « le plan est prêt » a en général déjà livré : lis le livrable avant de redemander, et conclus en le citant.
 - Une exécution d'agent est ATOMIQUE : quand il a répondu, il ne fait plus rien tant que tu ne le relances pas ; un sous-agent ou une tâche « lancée en arrière-plan » est morte avec l'exécution. « En cours », « je vais », « investigation lancée », « résultats bientôt » n'est PAS un résultat : relance-le (\`continue_thread\`) en exigeant qu'il fasse la recherche lui-même, de façon synchrone, sans sous-agent ni tâche de fond, et qu'il réponde avec le résultat. Ne relaie JAMAIS un statut d'agent à l'utilisateur.
-- Pendant qu'un agent tourne (thread \`running\`), tu ne peux pas lui parler : \`continue_thread\` te répondra d'attendre. Dis à l'utilisateur que tu transmettras à la fin du tour, et transmets alors.
+- Pendant qu'une cible tourne (thread \`running\`), \`continue_thread\` sans \`interrupt\` n'envoie rien et te répond d'attendre la fin du tour.
+- **Une nouvelle instruction de l'utilisateur contredit un thread en cours** — décide selon ce que vaut encore le travail en cours :
+  - il devient **inutile ou nuisible** (mauvaise direction, périmètre abandonné, risque d'écrire ce qu'il faudra défaire) : **arrête** — \`continue_thread\` avec \`interrupt: true\` et la nouvelle consigne, ou \`stop_thread\` s'il n'y a rien à relancer ;
+  - il **reste valable** (la nouvelle instruction s'ajoute ou ne touche pas ce qui tourne) : **laisse finir**, dis à l'utilisateur que tu transmettras à la fin du tour, et transmets alors.
+- **Le tour envoyé après un arrêt** dit ce qui est annulé et ce qui reste valable, et demande à l'agent de vérifier l'état du worktree avant de reprendre : un run coupé peut laisser des modifications partielles.
+- **Annonce l'arrêt à l'utilisateur en une phrase** (« J'ai arrêté The Builder et je l'ai relancé sans migration. »). Ne demande pas de confirmation avant d'arrêter.
 - Tu gardes la main dans le thread jusqu'à résolution. Quand l'agent pose une question, réponds-lui toi-même (\`continue_thread\`) avec ce que le contexte permet de décider ; ne remonte à l'utilisateur qu'une décision produit qui lui appartient vraiment.
 - Quand une exécution échoue (plafond de tours, crash), relance l'agent en reprenant là où il en était : découpe, précise l'étape suivante, demande un résultat partiel. Après 3 échecs consécutifs, conclus en expliquant ce qui bloque.
 - Dans chaque \`turn\`, rappelle à l'agent qu'il te rend compte à toi : ses questions vont dans le thread, il ne mentionne pas l'opérateur humain.
