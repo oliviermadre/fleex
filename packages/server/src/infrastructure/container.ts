@@ -1,5 +1,7 @@
 import { hostname } from 'node:os';
 import { existsSync, realpathSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { SessionNamingService } from '../domain/services/session-naming.js';
@@ -522,6 +524,24 @@ export async function createContainer() {
     deliverableStore, submitDeliverable,
     environment: assistantEnvironment,
     skillStore, panelStore, workflowTemplateStore, workflowRunStore,
+    // The assistant's own hands: the ticket workspace an agent would get, the
+    // server's filesystem (the one agents write to), and the host shell.
+    workspace: {
+      resolve: (ticketId) => executeAgent.ensureWorkspace(ticketId),
+      readFile: (path) => readFile(path),
+      writeFile: async (path, content) => {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, content);
+      },
+      shell: (command, opts) => shellExecFn(command, { cwd: opts.cwd, timeout: opts.timeoutMs }),
+    },
+    attachments: {
+      load: async (fileId) => {
+        const meta = await fileMetaStore.getById(fileId);
+        const buffer = meta ? await fileStore.getBuffer(fileId) : null;
+        return meta && buffer ? { name: meta.originalName, mimeType: meta.mimeType, buffer } : null;
+      },
+    },
   }, createAnthropicAssistantLlm(new Anthropic({ apiKey: anthropicApiKey || 'missing' })));
 
   // Thread repair: one implementation for the threads route and the periodic

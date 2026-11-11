@@ -13,6 +13,7 @@ import { AgentThreadEntity } from '../../src/domain/entities/agent-thread.entity
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.entity.js';
 import type { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
+import type { AssistantWorkspacePort } from '../../src/application/assistant/workspace-tools.js';
 import type { CliTool } from '../../src/application/assistant/fleex-cli-tools.js';
 import { extractRequestedTargets, ORIGINAL_MESSAGE_HEADER } from '../../src/application/assistant/assistant-protocol.js';
 
@@ -176,6 +177,10 @@ interface Catalogue {
   todoAgentAccess?: boolean;
   /** The ticket's todo items, as the ticket context carries them. */
   todos?: Array<Record<string, unknown>>;
+  /** The assistant's own hands (Read / Write / Edit / Bash); absent, they are not offered. */
+  workspace?: AssistantWorkspacePort;
+  /** Files uploaded in the discussion, by id. */
+  attachments?: Record<string, { name: string; mimeType: string; buffer: Buffer }>;
   /** What the CLI answers (default: a ticket, ok). */
   cliResult?: (argv: string[]) => { ok: boolean; text: string };
 }
@@ -265,6 +270,8 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
       getBySlug: async (n: string) => (opts.workflows ?? []).find((x) => x.slug === n) ?? null,
     } as never,
     workflowRunStore: runStore as never,
+    workspace: opts.workspace,
+    attachments: opts.attachments ? { load: async (id: string) => opts.attachments![id] ?? null } : undefined,
     environment: {
       workspace: 'qa', cliBin: '/opt/fleex', hasApiKey: opts.hasApiKey ?? true,
       cliTools: async () => [showTool, ...(opts.extraCliTools ?? [])],
@@ -2168,5 +2175,93 @@ describe('RunAssistantTurnUseCase — mandate and escalation (lot 6)', () => {
     expect(h.llmCalls).toEqual([]);
     expect(h.deliverables.saved).toEqual([]);
     expect(h.comments.saved).toEqual([]);
+  });
+});
+
+describe('RunAssistantTurnUseCase — its own hands and eyes', () => {
+  const IMG = '11111111-2222-3333-4444-555555555555';
+  const OLD = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  const png = (label: string) => ({ name: `${label}.png`, mimeType: 'image/png', buffer: Buffer.from(`PNG-${label}`) });
+  /** A workspace on fakes: files in a map, shell calls recorded. */
+  function fakeWorkspace() {
+    const files = new Map<string, string>([['/ws/t1/README.md', 'bonjour']]);
+    const shells: Array<{ command: string; cwd: string }> = [];
+    let resolved = 0;
+    const port: AssistantWorkspacePort = {
+      resolve: async () => { resolved += 1; return '/ws/t1'; },
+      readFile: async (path) => { if (!files.has(path)) throw new Error(`ENOENT: ${path}`); return Buffer.from(files.get(path)!); },
+      writeFile: async (path, content) => { files.set(path, content); },
+      shell: async (command, o) => { shells.push({ command, cwd: o.cwd }); return { stdout: 'On branch main', stderr: '', exitCode: 0 }; },
+    };
+    return { port, files, shells, resolved: () => resolved };
+  }
+  const firstMessage = (h: ReturnType<typeof harness>) => h.llmCalls[0]!.messages[0]!.content;
+
+  it('sees the image the user uploads in their message: it reaches the model as an image, not as a dead link', async () => {
+    const h = harness([{ text: 'Je vois le bouton rouge.' }], { attachments: { [IMG]: png('capture') } });
+    await h.comments.save(TicketCommentEntity.create({ id: 'c0', ticketId: 't1', authorType: 'user', authorName: 'Olivier', body: `regarde ![capture.png](/api/files/${IMG})` }));
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const content = firstMessage(h) as Anthropic.ContentBlockParam[];
+    expect(content[0]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: png('capture').buffer.toString('base64') } });
+    // The prompt stays the last block: that is where the cache breakpoint goes.
+    expect(content.at(-1)).toMatchObject({ type: 'text' });
+    // The execution log names the image; it never stores the bytes.
+    expect(JSON.stringify(h.agentEvents.events)).not.toContain(png('capture').buffer.toString('base64'));
+    expect(JSON.stringify(h.agentEvents.events)).toContain('capture.png');
+  });
+
+  it('a message without an image keeps a plain text prompt', async () => {
+    const h = harness([{ text: 'ok' }], { attachments: {} });
+    await h.comments.save(TicketCommentEntity.create({ id: 'c0', ticketId: 't1', authorType: 'user', authorName: 'Olivier', body: 'salut' }));
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(typeof firstMessage(h)).toBe('string');
+  });
+
+  it('reads an older attachment of the discussion on demand, without preparing a workspace for it', async () => {
+    const ws = fakeWorkspace();
+    const h = harness([{ tools: [{ name: 'Read', input: { path: `/api/files/${OLD}` } }] }, { text: 'Vu.' }], { workspace: ws.port, attachments: { [OLD]: png('ancienne') } });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const result = resultBlocks(h, 1)[0]!;
+    expect(result.is_error).toBe(false);
+    expect((result.content as Anthropic.ImageBlockParam[]).some((b) => b.type === 'image')).toBe(true);
+    expect(ws.resolved()).toBe(0);
+  });
+
+  it('has an agent\'s edit-mode hands — Read, Write, Edit, Bash in the ticket workspace — whatever the ticket mode', async () => {
+    const ws = fakeWorkspace();
+    const h = harness([
+      { tools: [{ name: 'Read', input: { path: 'README.md' } }] },
+      { tools: [{ name: 'Edit', input: { path: 'README.md', old_string: 'bonjour', new_string: 'salut' } }, { name: 'Write', input: { path: 'notes/a.txt', content: 'x' } }] },
+      { tools: [{ name: 'Bash', input: { command: 'git status' } }] },
+      { text: 'Fait.' },
+    ], { workspace: ws.port });
+    expect(h.ticket.conversationMode).not.toBe('edit');
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.llmCalls[0]!.tools).toEqual(expect.arrayContaining(['Read', 'Write', 'Edit', 'Bash']));
+    const results = resultBlocks(h, 3);
+    expect(results.map((r) => r.is_error)).toEqual([false, false, false, false]);
+    expect(results[0]!.content).toBe('bonjour');
+    expect(ws.files.get('/ws/t1/README.md')).toBe('salut');
+    expect(ws.files.get('/ws/t1/notes/a.txt')).toBe('x');
+    expect(ws.shells).toEqual([{ command: 'git status', cwd: '/ws/t1' }]);
+    expect(results[3]!.content).toContain('On branch main');
+    // One workspace for the whole turn.
+    expect(ws.resolved()).toBe(1);
+    // The prompt tells it what these hands are for: it still delegates the bulk.
+    expect(h.llmCalls[0]!.system).toContain('Tu délègues toujours le gros du travail');
+  });
+
+  it('a turn that only talks or delegates prepares no workspace', async () => {
+    const ws = fakeWorkspace();
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }], { workspace: ws.port });
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(ws.resolved()).toBe(0);
+  });
+
+  it('without the workspace port the hands are neither offered nor described', async () => {
+    const h = harness([{ text: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.llmCalls[0]!.tools).not.toContain('Bash');
+    expect(h.llmCalls[0]!.system).not.toContain('`Bash`');
   });
 });

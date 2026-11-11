@@ -2751,7 +2751,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * failure). Individual repo / worktree failures are logged and skipped;
    * the workspace path is still returned.
    */
-  private async ensureWorkspace(ticketId: string): Promise<string | null> {
+  async ensureWorkspace(ticketId: string): Promise<string | null> {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) return null;
 

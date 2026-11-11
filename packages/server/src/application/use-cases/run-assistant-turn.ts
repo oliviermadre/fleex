@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
-import type { AgentEventType, AgentQuestion, AgentThreadTargetType } from '@fleex/shared';
+import type { AgentEventType, AgentQuestion, AgentThreadTargetType, TicketContext } from '@fleex/shared';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import { AgentThreadEntity } from '../../domain/entities/agent-thread.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
@@ -34,6 +34,10 @@ import { priceFor } from '../utils/cli-session-ingest.js';
 import type { AssistantEnvironmentPort } from '../assistant/assistant-environment.js';
 import type { AssistantLlm } from '../assistant/assistant-llm.js';
 import { cliToolArgv, cliToolsToAnthropic, isTodoCliTool, type CliTool } from '../assistant/fleex-cli-tools.js';
+import {
+  WORKSPACE_TOOLS, attachmentIds, attachmentImage, isWorkspaceTool, runWorkspaceTool,
+  type AssistantAttachmentsPort, type AssistantWorkspacePort,
+} from '../assistant/workspace-tools.js';
 import { formatTodoContext } from '../utils/format-todo-context.js';
 import {
   ACTION_TOOLS,
@@ -122,6 +126,8 @@ function stopClock(at: Date): string {
 }
 /** Consecutive agent failures after which the assistant stops relaunching and reports back. */
 export const MAX_THREAD_FAILURES = 3;
+/** Images of the triggering message shown to the model without it asking. */
+export const MAX_SHOWN_IMAGES = 8;
 /** Tool rounds one assistant turn may take before it must answer. Todo and CLI calls each take one. */
 export const ASSISTANT_MAX_ROUNDS = 16;
 /** Streamed text is coalesced into agent_events of about this size, or after this delay. */
@@ -165,6 +171,10 @@ export interface RunAssistantTurnDeps {
   getTicketContext: GetTicketContextUseCase;
   agentEventStore: AgentEventStorePort;
   executeAgent: Pick<ExecuteAgentUseCase, 'wakeUp'>;
+  /** Read / Write / Edit / Bash on the ticket workspace — the rights of an agent in edit mode. Absent: not offered. */
+  workspace?: AssistantWorkspacePort | null;
+  /** Files uploaded in the discussion (`/api/files/<uuid>`): the images the user shows the assistant. */
+  attachments?: AssistantAttachmentsPort | null;
   /** The single stop path: every run the assistant stops goes through it, with its author. */
   stopRun: Pick<StopRunUseCase, 'stopThread'>;
   /** The mandate is a deliverable the server writes under the assistant's name. */
@@ -290,6 +300,7 @@ export class RunAssistantTurnUseCase {
         .map((p) => ({ name: p.name, displayName: p.displayName, identityMd: p.identityMd })),
       capabilities,
       todoAccess,
+      workspaceTools: !!this.deps.workspace,
     });
     // The targets the human mentioned in this message: each valid one is an
     // order to delegate, which the end of the turn checks.
@@ -319,7 +330,14 @@ export class RunAssistantTurnUseCase {
     // open — are where a wrong move costs a run: the model thinks first.
     const thinking = trigger.kind === 'thread_reply' || trigger.kind === 'relaunch_request'
       || (trigger.kind === 'user_message' && allThreads.some((t) => !t.isTerminal));
-    const tools = [...ACTION_TOOLS, ...cliToolsToAnthropic(cliTools)] as Anthropic.Tool[];
+    const workspace = this.deps.workspace ?? null;
+    const tools = [...ACTION_TOOLS, ...(workspace ? WORKSPACE_TOOLS : []), ...cliToolsToAnthropic(cliTools)] as Anthropic.Tool[];
+    // The workspace is prepared on the first tool that needs it, once per turn:
+    // a turn that only talks or delegates creates no worktree.
+    let cwd: Promise<string | null> | null = null;
+    const workspaceCwd = () => (cwd ??= workspace!.resolve(ticketId).catch(() => null));
+    // What the user shows in the message this turn answers: the model sees it, as they do.
+    const shown = await this.shownImages(trigger, context);
     const cliByName = new Map(cliTools.map((t) => [t.name, t]));
 
     // ── Execution log (run card + view log), same plumbing as agent runs ──
@@ -361,9 +379,13 @@ export class RunAssistantTurnUseCase {
       userPromptLength: userPrompt.length, ticketTitle: context.ticket.title, ticketStatus: context.ticket.status,
       commentsCount: context.comments.length, deliverablesCount: context.deliverables.length,
     }));
-    await emitEvent('execution_context', { executionId, systemPrompt: system, promptBlocks: [{ type: 'text', text: userPrompt }], model, effectiveMode: 'talk', maxTurns: ASSISTANT_MAX_ROUNDS });
+    await emitEvent('execution_context', { executionId, systemPrompt: system, promptBlocks: [{ type: 'text', text: userPrompt }, ...shown.map((i) => ({ type: 'text', text: `[image « ${i.name} » transmise au modèle]` }))], model, effectiveMode: 'talk', maxTurns: ASSISTANT_MAX_ROUNDS });
 
-    const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
+    // Images first, the prompt last: the cache breakpoint sits on the text block.
+    const messages: Anthropic.MessageParam[] = [{
+      role: 'user',
+      content: shown.length > 0 ? [...shown.map((i) => i.block), { type: 'text', text: userPrompt }] : userPrompt,
+    }];
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
     // Billed even when the turn fails afterwards: the failure path records it too.
     const metrics = () => ({ model, effectiveMode: 'talk', ...usage, costUsd: assistantTurnCostUsd(model, usage) });
@@ -429,6 +451,8 @@ export class RunAssistantTurnUseCase {
           await emitEvent('content_block_delta', { type: 'assistant', message: { content: [{ type: 'tool_use', id: call.id, name: call.name, input }] } });
           let text: string;
           let isError = false;
+          // What the model reads back, when it is more than text (an image it asked to Read).
+          let rich: Anthropic.ToolResultBlockParam['content'] | null = null;
           const action = call.id === truncated ? null : parseActionToolInput(call.name, input);
           const turnTool = call.id === truncated ? null : parseTurnToolInput(call.name, input);
           const cli = cliByName.get(call.name);
@@ -461,6 +485,15 @@ export class RunAssistantTurnUseCase {
             const r = await this.applyTurnTool(ticket, assistant, turnTool, trigger, ask);
             text = r.text;
             isError = !r.ok;
+          } else if (workspace && isWorkspaceTool(call.name)) {
+            const r = await runWorkspaceTool(call.name, input, {
+              // An uploaded attachment needs no workspace: do not prepare one just to look at a screenshot.
+              cwd: call.name === 'Read' && attachmentIds(String(input.path ?? '')).length > 0 ? null : await workspaceCwd(),
+              workspace, attachments: this.deps.attachments,
+            });
+            text = r.summary;
+            isError = !r.ok;
+            if (typeof r.content !== 'string') rich = r.content;
           } else if (cli && cli.name === 'fleex_ticket_comment' && MENTION_TAG.test(String(input.body ?? ''))) {
             // A comment through the CLI is posted as the user: its tags would launch
             // targets outside any thread, with no author and no wake-up.
@@ -493,7 +526,7 @@ export class RunAssistantTurnUseCase {
             isError = true;
           }
           await emitEvent('content_block_delta', { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: call.id, content: text, is_error: isError }] } });
-          results.push({ type: 'tool_result', tool_use_id: call.id, content: text, is_error: isError });
+          results.push({ type: 'tool_result', tool_use_id: call.id, content: rich ?? text, is_error: isError });
         }
         messages.push({ role: 'user', content: results });
       }
@@ -1056,6 +1089,22 @@ export class RunAssistantTurnUseCase {
       });
     }
     return out;
+  }
+
+  /**
+   * The images of the message this turn answers (the user's message, or the
+   * ticket description at creation), as blocks the model sees. Older images
+   * stay one `Read` of their `/api/files/<uuid>` away.
+   */
+  private async shownImages(trigger: AssistantTrigger, context: TicketContext): Promise<Array<{ name: string; block: Anthropic.ImageBlockParam }>> {
+    const attachments = this.deps.attachments;
+    if (!attachments) return [];
+    const text = trigger.kind === 'user_message'
+      ? context.comments.find((c) => c.id === trigger.commentId)?.body
+      : trigger.kind === 'ticket_created' ? context.ticket.description : null;
+    if (!text) return [];
+    const images = await Promise.all(attachmentIds(text).slice(0, MAX_SHOWN_IMAGES).map((id) => attachmentImage(attachments, id)));
+    return images.filter((i): i is NonNullable<typeof i> => i !== null);
   }
 
   /** Enabled skills, panels and workflows, as the system prompt lists them. */
