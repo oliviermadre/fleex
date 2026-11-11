@@ -1,7 +1,7 @@
 /**
  * Real-DB integration tests (bun:sqlite, REAL registered migrations — no hand-made schema).
  *
- * History: migrations 043/044 were written but never added to `migrations/index.ts`, so the
+ * History: migrations 048/049 (run termination flags, thread title/participants) were written but never added to `migrations/index.ts`, so the
  * columns they create did not exist on real databases while every unit test (all on fakes)
  * stayed green. These tests would have failed on that.
  */
