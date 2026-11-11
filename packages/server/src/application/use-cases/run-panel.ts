@@ -79,6 +79,11 @@ export interface PanelResult {
   durationMs: number;
 }
 
+/** A panel run outside any mention gets a synthetic `panel:<id>:<n>` key: not a mention to stop by. */
+function isRealMention(mentionId: string): boolean {
+  return !mentionId.startsWith('panel:');
+}
+
 export class RunPanelUseCase {
   public eventBus: EventBus | null = null;
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
@@ -273,6 +278,16 @@ export class RunPanelUseCase {
       ticketMeta,
     );
 
+    // The run of this mention was stopped (thread stop, Stop button): the
+    // members were aborted. Starting the synthesis now would restart the run
+    // that was just stopped, and post its output after the stop.
+    const stopped = (): boolean => !!params.mentionId && this.executionRegistry?.isStopRequested?.(params.mentionId) === true;
+    const stoppedResult = (): PanelResult => {
+      this.logger.info('Panel stopped before its end', { panelName: panel.name, ticketId: params.ticketId, mentionId: params.mentionId });
+      return { panelName: panel.name, panelDisplayName: panel.displayName, topic, memberResponses, synthesis: '', durationMs: Date.now() - startTime };
+    };
+    if (stopped()) return stoppedResult();
+
     // 8. Generate synthesis
     const { text: synthesis, structuredOutput: synthStructured, executionId: synthExecutionId } = await this.generateSynthesis(
       panel,
@@ -286,6 +301,8 @@ export class RunPanelUseCase {
       params.outputFormatOverride,
       params.workflowContext,
     );
+
+    if (stopped()) return stoppedResult();
 
     const durationMs = Date.now() - startTime;
 
@@ -599,7 +616,7 @@ export class RunPanelUseCase {
     // even though the panel itself keeps running (the orchestrator simply won't
     // get this member's report). Registered before the SDK loop starts.
     const abortController = new AbortController();
-    this.executionRegistry?.registerExecution({ executionId, personaId: persona.id, ticketId: ticketId ?? undefined, abortController });
+    this.executionRegistry?.registerExecution({ executionId, personaId: persona.id, ticketId: ticketId ?? undefined, abortController, ...(isRealMention(mentionId) ? { mentionId } : {}) });
 
     let sequence = 0;
     const emitEvent = async (eventType: AgentEventType, data: unknown) => {
@@ -825,7 +842,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
 
     // Register the orchestrator session so it too can be terminated from the UI.
     const abortController = new AbortController();
-    this.executionRegistry?.registerExecution({ executionId, personaId: orchestratorPersonaId, ticketId: ticketId ?? undefined, abortController });
+    this.executionRegistry?.registerExecution({ executionId, personaId: orchestratorPersonaId, ticketId: ticketId ?? undefined, abortController, ...(isRealMention(mentionId) ? { mentionId } : {}) });
 
     // Single sequence counter spanning start → stream → end so the
     // orchestrator's atomic log streams the same rich content as a persona.

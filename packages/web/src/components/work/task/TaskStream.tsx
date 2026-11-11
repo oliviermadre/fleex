@@ -222,6 +222,9 @@ export function TaskStream({
                   personaDisplayName={threadTargetLabel(entry.thread, personaNames[entry.thread.personaId])}
                   onOpen={(id) => onOpenThread?.(id)}
                   onAnswer={(id, text) => onAnswerThread?.(id, text)}
+                  onRelaunch={(id) => api.relaunchThread(id).then(() => undefined, (err: unknown) => {
+                    toast.error('Relance impossible', { detail: err instanceof Error ? err.message : 'Erreur inconnue' });
+                  })}
                 />
               );
             case 'comment': {

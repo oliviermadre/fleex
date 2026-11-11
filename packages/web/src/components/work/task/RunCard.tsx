@@ -11,6 +11,7 @@ import { toast } from '../../../lib/toast';
 import { cn } from '../../../lib/cn';
 import { tintText } from '../../../lib/tints';
 import * as api from '../../../services/api';
+import { executionStopLabel } from './stopLabel';
 
 type RunState = AgentExecution['status'];
 
@@ -62,8 +63,10 @@ export function RunCard({
     }
   };
 
+  // A run stopped on purpose says who stopped it, in a neutral tone: not an error.
+  const stopLabel = executionStopLabel(execution);
   const stateText =
-    state === 'completed'
+    state === 'completed' || stopLabel
       ? 'text-[var(--theme-text-muted)]'
       : state === 'failed'
         ? tintText('red')
@@ -87,19 +90,12 @@ export function RunCard({
     >
       <span aria-hidden className="text-[12px] text-[var(--tint-purple-text)]">⌬</span>
 
-      {/* Manually-terminated badge */}
-      {execution.manuallyTerminatedByUser && (
-        <span className="shrink-0 text-[11px] font-semibold text-[var(--tint-red-text)]" title="Manually terminated by user">
-          🛑
-        </span>
-      )}
-
       <span className="truncate text-[12px] text-[var(--theme-text-secondary)]">{name}</span>
       <span className={cn('flex items-center gap-1 text-[11px]', stateText)}>
         {state === 'running' && (
           <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--theme-accent)]" />
         )}
-        {STATE_LABEL[state]}
+        <span title={stopLabel && execution.stopReason ? execution.stopReason : undefined}>{stopLabel ?? STATE_LABEL[state]}</span>
       </span>
       {meta.length > 0 && (
         <span className="font-mono text-[10.5px] text-[var(--theme-text-faint)]">{meta.join(' · ')}</span>

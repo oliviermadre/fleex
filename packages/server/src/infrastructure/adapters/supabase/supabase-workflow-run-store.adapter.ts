@@ -1,7 +1,7 @@
 import { WorkflowRunEntity } from '../../../domain/entities/workflow-run.entity.js';
 import type { WorkflowRunStorePort } from '../../../application/ports/workflow-run-store.port.js';
 import type { SupabaseConnection } from './connection.js';
-import type { WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject } from '@fleex/shared';
+import type { WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject, StopAuthor } from '@fleex/shared';
 
 interface WorkflowRunRow {
   id: string;
@@ -20,6 +20,7 @@ interface WorkflowRunRow {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  cancelled_by?: string | null;
 }
 
 /** PostgREST's max-rows cap (Supabase default) — the page size we paginate on. */
@@ -45,6 +46,7 @@ function rowToEntity(r: WorkflowRunRow): WorkflowRunEntity {
     r.subject_snapshot ?? null,
     r.workspace_path ?? null,
     r.parent_run_id ?? null,
+    (r.cancelled_by as StopAuthor | null | undefined) ?? null,
   );
 }
 
@@ -170,6 +172,7 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
       completed_at: run.completedAt?.toISOString() ?? null,
       created_at: run.createdAt.toISOString(),
       updated_at: run.updatedAt.toISOString(),
+      cancelled_by: run.cancelledBy,
     });
     if (error) throw new Error(`SupabaseWorkflowRunStore.save failed: ${error.message}`);
   }

@@ -9,6 +9,16 @@ export type AgentThreadStatus = 'running' | 'idle' | 'waiting' | 'concluded' | '
 /** What the assistant delegated to: a persona, or a skill / panel / workflow it runs. */
 export type AgentThreadTargetType = 'agent' | 'skill' | 'panel' | 'workflow';
 
+/** The last time a run of the thread was stopped on purpose, until a new run starts. */
+export interface ThreadStop {
+  /** `user` or `assistant`: a timeout or a crash is a failure, not a stop. */
+  readonly by: 'user' | 'assistant';
+  readonly at: string;
+  readonly reason: string | null;
+  /** The mention whose run was stopped: its late events no longer move the thread. */
+  readonly mentionId: string | null;
+}
+
 /**
  * Participant in a thread: userId, display name, and avatar URL.
  * Used for rendering the participants row in the thread label.
@@ -48,6 +58,16 @@ export interface AgentThread {
   readonly generatedTitle?: string | null;
   /** Participants who sent messages in this thread. Aggregated serverside. */
   readonly participants?: ThreadParticipant[] | null;
+  /**
+   * Set when a human stopped the thread's run: the assistant may not relaunch
+   * this target until the human lifts it (writes in the thread, clicks
+   * « Relancer », or sends the assistant a message after this instant).
+   */
+  readonly userHoldAt?: string | null;
+  /** Who stopped the current run and when; cleared when a new run starts. */
+  readonly lastStop?: ThreadStop | null;
+  /** Who concluded the thread. `user`: the assistant does not reopen the target on its own. */
+  readonly concludedBy?: 'user' | 'assistant' | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly concludedAt: string | null;

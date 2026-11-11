@@ -2,8 +2,8 @@ import { join } from 'node:path';
 import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import { FLEEX_DIR, resolveStoppedBy } from '@fleex/shared';
+import type { AgentExecution, StopAuthor } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
@@ -39,6 +39,8 @@ interface ExecutionRow {
   deliverable_id: string | null;
   auto_terminated_at_conclusion?: boolean | null;
   manually_terminated_by_user?: boolean | null;
+  stopped_by?: string | null;
+  stop_reason?: string | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -264,12 +266,22 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (mentionIds.length > 0) {
       const { error } = await this.conn.client
         .from('agent_event_executions')
-        .update({ status: 'interrupted', completed_at: new Date().toISOString() })
+        // Nobody chose this stop: the server went away under the run.
+        .update({ status: 'interrupted', completed_at: new Date().toISOString(), stopped_by: 'system', stop_reason: 'server_restart' })
         .eq('status', 'running');
       if (error) throw new Error(`SupabaseAgentEventStore.markInterruptedExecutions update failed: ${error.message}`);
     }
 
     return mentionIds;
+  }
+
+  async markExecutionsStopped(executionIds: string[], stoppedBy: StopAuthor, stopReason?: string | null): Promise<void> {
+    if (executionIds.length === 0) return;
+    const { error } = await this.conn.client
+      .from('agent_event_executions')
+      .update({ stopped_by: stoppedBy, stop_reason: stopReason ?? null })
+      .in('execution_id', executionIds);
+    if (error) throw new Error(`SupabaseAgentEventStore.markExecutionsStopped failed: ${error.message}`);
   }
 
   async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
@@ -326,7 +338,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
         effective_mode, effort, fast_mode, duration_ms, cost_usd,
         input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
         source, comment_id, deliverable_id,
-        auto_terminated_at_conclusion, manually_terminated_by_user
+        auto_terminated_at_conclusion, manually_terminated_by_user, stopped_by, stop_reason
       `)
       .eq('mention_id', mentionId)
       .order('started_at', { ascending: false })
@@ -362,6 +374,12 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       deliverableId: row.deliverable_id ?? null,
       autoTerminatedAtConclusion: row.auto_terminated_at_conclusion ? Boolean(row.auto_terminated_at_conclusion) : null,
       manuallyTerminatedByUser: row.manually_terminated_by_user ? Boolean(row.manually_terminated_by_user) : null,
+      stoppedBy: resolveStoppedBy({
+        stoppedBy: row.stopped_by ?? null,
+        manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+        autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+      }),
+      stopReason: row.stop_reason ?? null,
     };
   }
 }
@@ -393,5 +411,11 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     deliverableId: row.deliverable_id ?? null,
     autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
     manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+    stoppedBy: resolveStoppedBy({
+      stoppedBy: (row.stopped_by as StopAuthor | null | undefined) ?? null,
+      manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+      autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    }),
+    stopReason: row.stop_reason ?? null,
   };
 }

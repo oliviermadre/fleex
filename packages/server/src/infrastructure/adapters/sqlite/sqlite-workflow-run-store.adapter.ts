@@ -1,7 +1,7 @@
 import { WorkflowRunEntity } from '../../../domain/entities/workflow-run.entity.js';
 import type { WorkflowRunStorePort } from '../../../application/ports/workflow-run-store.port.js';
 import type { SqliteConnection } from './connection.js';
-import type { WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject } from '@fleex/shared';
+import type { WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject, StopAuthor } from '@fleex/shared';
 
 const ACTIVE = "('running','needs_review')";
 
@@ -22,6 +22,7 @@ interface Row {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  cancelled_by?: string | null;
 }
 
 export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
@@ -80,11 +81,11 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       INSERT INTO workflow_runs
         (id, ticket_id, routine_id, parent_run_id, subject_snapshot, workspace_path,
          template_id, template_snapshot, status, current_step_id,
-         triggered_by, triggered_from, started_at, completed_at, created_at, updated_at)
+         triggered_by, triggered_from, started_at, completed_at, created_at, updated_at, cancelled_by)
       VALUES
         (@id, @ticket_id, @routine_id, @parent_run_id, @subject_snapshot, @workspace_path,
          @template_id, @template_snapshot, @status, @current_step_id,
-         @triggered_by, @triggered_from, @started_at, @completed_at, @created_at, @updated_at)
+         @triggered_by, @triggered_from, @started_at, @completed_at, @created_at, @updated_at, @cancelled_by)
       ON CONFLICT(id) DO UPDATE SET
         ticket_id = excluded.ticket_id,
         routine_id = excluded.routine_id,
@@ -100,7 +101,8 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
         started_at = excluded.started_at,
         completed_at = excluded.completed_at,
         created_at = excluded.created_at,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        cancelled_by = excluded.cancelled_by
     `).run({
       id: run.id,
       ticket_id: run.ticketId,
@@ -118,6 +120,7 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       completed_at: run.completedAt?.toISOString() ?? null,
       created_at: run.createdAt.toISOString(),
       updated_at: run.updatedAt.toISOString(),
+      cancelled_by: run.cancelledBy,
     });
   }
 
@@ -139,6 +142,7 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
       r.subject_snapshot ? JSON.parse(r.subject_snapshot) as RunSubject : null,
       r.workspace_path ?? null,
       r.parent_run_id ?? null,
+      (r.cancelled_by as StopAuthor | null | undefined) ?? null,
     );
   }
 }

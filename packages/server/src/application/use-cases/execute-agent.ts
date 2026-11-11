@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject, ContextInjectionItem, MemorySnippetRef, TicketLink } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel, parseRepoRef, DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES, MS_IN_MINUTE } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
-import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
+import type { CancelExecutionPort, ExecutionStop } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
@@ -142,6 +142,12 @@ interface ActiveExecution {
   ticketId?: string | null;
   status: 'running' | 'completed' | 'failed';
   abortController: AbortController;
+  /**
+   * The real mention that launched this run, when the entry is keyed by
+   * something else: a skill is keyed `skill:<id>`, a panel member by its
+   * executionId. Lets "stop the run of this mention" reach every target type.
+   */
+  triggerMentionId?: string;
 }
 
 interface QueueItem {
@@ -226,6 +232,8 @@ ${typeLines}
 
 export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegistryPort {
   private activeExecutions = new Map<string, ActiveExecution>();
+  /** Mentions whose run was stopped on purpose (ids only; a few bytes per stop, per process). */
+  private stoppedMentions = new Set<string>();
   private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
   private queue: QueueItem[] = [];
   // `${agentName}:${ticketId}` currently dispatched (parked on the limiter OR
@@ -574,7 +582,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * Immediately marks execution as interrupted in DB and notifies frontend,
    * then aborts the SDK query loop (which may be hung).
    */
-  async cancelExecution(executionId: string): Promise<boolean> {
+  async cancelExecution(executionId: string, stop?: ExecutionStop): Promise<boolean> {
     let found: { mentionId: string; exec: ActiveExecution } | null = null;
     for (const [mentionId, exec] of this.activeExecutions) {
       if (exec.executionId === executionId && exec.status === 'running') {
@@ -586,12 +594,21 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     const { mentionId, exec } = found;
 
+    // 0. Who stops it, before anything a listener could react to.
+    if (stop) {
+      try {
+        await this.agentEventStore.markExecutionsStopped([executionId], stop.by, stop.reason ?? null);
+      } catch {
+        // Best-effort — don't let store errors block cancel
+      }
+    }
+
     // 1. Mark completed in DB immediately (don't wait for the loop to notice)
     try {
       const cancelEvent = AgentEventEntity.create({
         executionId,
         eventType: 'execution_end',
-        data: { status: 'interrupted', reason: 'cancelled', ticketId: found.exec.ticketId },
+        data: { status: 'interrupted', reason: 'cancelled', ticketId: found.exec.ticketId, ...(stop ? { stoppedBy: stop.by } : {}) },
         sequence: 999998,
       });
       await this.agentEventStore.appendEvent(cancelEvent);
@@ -605,12 +622,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     exec.status = 'failed';
     this.onExecutionComplete?.(exec.personaId, 'failed', mentionId);
 
-    // 3. Fail the mention: stopped before the end, it waits for a relaunch
-    try {
-      const mention = await this.mentionStore.getById(mentionId);
-      if (mention) await this.failInterruptedMention(mention, 'cancelled');
-    } catch {
-      // Best-effort
+    // 3. Fail the mention: stopped before the end, it waits for a relaunch.
+    // Not when the caller settles it (`keepMention`): a wanted stop inside a
+    // thread is not a failure, and must not be announced as one.
+    if (!stop?.keepMention) {
+      try {
+        const mention = await this.mentionStore.getById(mentionId);
+        if (mention) await this.failInterruptedMention(mention, 'cancelled');
+      } catch {
+        // Best-effort
+      }
     }
 
     // 4. Abort the SDK loop (may be hung — this is best-effort to free the async generator)
@@ -636,10 +657,48 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * (supersede) flow when a user re-mentions an agent that is mid-execution.
    * Returns false (no-op) if no running execution is tracked for the mention.
    */
-  async cancelExecutionForMention(mentionId: string): Promise<boolean> {
-    const exec = this.activeExecutions.get(mentionId);
-    if (!exec || exec.status !== 'running') return false;
-    return this.cancelExecution(exec.executionId);
+  async cancelExecutionForMention(mentionId: string, stop?: ExecutionStop): Promise<boolean> {
+    if (stop) this.stoppedMentions.add(mentionId);
+    let cancelled = false;
+    for (const executionId of this.runningExecutionIdsForMention(mentionId)) {
+      if (await this.cancelExecution(executionId, stop)) cancelled = true;
+    }
+    return cancelled;
+  }
+
+  /**
+   * Every execution currently running for a mention: the persona run keyed by
+   * it, or the skill run / panel sessions it launched (`triggerMentionId`).
+   */
+  runningExecutionIdsForMention(mentionId: string): string[] {
+    const ids: string[] = [];
+    for (const [key, exec] of this.activeExecutions) {
+      if (exec.status !== 'running') continue;
+      if (key === mentionId || exec.triggerMentionId === mentionId) ids.push(exec.executionId);
+    }
+    return ids;
+  }
+
+  /**
+   * The real mention a running execution works for, `null` when it has none
+   * (workflow step, routine), `undefined` when the execution is not running here.
+   */
+  mentionOfRunningExecution(executionId: string): string | null | undefined {
+    for (const [key, exec] of this.activeExecutions) {
+      if (exec.executionId !== executionId || exec.status !== 'running') continue;
+      if (exec.triggerMentionId) return exec.triggerMentionId;
+      return key === exec.executionId || key.startsWith('skill:') || key.startsWith('workflow:') ? null : key;
+    }
+    return undefined;
+  }
+
+  /**
+   * ExecutionRegistryPort — true once a stop was asked for this mention. A panel
+   * reads it between its sessions: stopping the members must not let the
+   * synthesis start afterwards.
+   */
+  isStopRequested(mentionId: string): boolean {
+    return this.stoppedMentions.has(mentionId);
   }
 
   /**
@@ -656,6 +715,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       ...(entry.ticketId ? { ticketId: entry.ticketId } : {}),
       status: 'running',
       abortController: entry.abortController,
+      ...(entry.mentionId ? { triggerMentionId: entry.mentionId } : {}),
     });
   }
 
@@ -1150,6 +1210,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           ? 'timeout' : 'cancelled';
         await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        // Nobody chose this stop: a failure, relaunchable.
+        await this.agentEventStore.markExecutionsStopped([executionId], 'system', reason).catch(() => {});
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         await this.failInterruptedMention(mention, reason);
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
@@ -1682,6 +1744,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       ticketId,
       status: 'running',
       abortController,
+      ...(opts?.mentionId ? { triggerMentionId: opts.mentionId } : {}),
     });
 
     // 1. Post a comment announcing the skill execution
@@ -1910,8 +1973,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       clearTimeout(timeoutHandle);
 
       if (abortController.signal.aborted) {
+        // Stopped through cancelExecution(): it already ended the execution and
+        // recorded who stopped it. Only a timeout is left to settle here.
+        if (this.activeExecutions.get(skillMentionKey)?.status !== 'running') return;
         await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: persona.model, effectiveMode });
+        await this.agentEventStore.markExecutionsStopped([executionId], 'system', 'timeout').catch(() => {});
         return;
       }
 

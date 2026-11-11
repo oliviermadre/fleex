@@ -11,6 +11,7 @@ import { cn } from '../../../lib/cn';
 import { tint } from '../../../lib/tints';
 import { lastAgentQuestion } from '../selectors';
 import { QuestionPicker } from './QuestionPicker';
+import { isUserHeld, threadStopLabel } from './stopLabel';
 
 const STATUS_LABEL: Record<AgentThreadStatus, string> = {
   running: 'in progress',
@@ -71,6 +72,8 @@ interface Props {
   personaDisplayName: string;
   onOpen: (threadId: string) => void;
   onAnswer: (threadId: string, text: string) => void | Promise<void>;
+  /** « Relancer »: the human lifts the hold of their own stop. Absent: the button is not offered. */
+  onRelaunch?: (threadId: string) => void | Promise<void>;
 }
 
 function lastLine(turns: readonly TicketComment[]): string | null {
@@ -84,8 +87,12 @@ function lastLine(turns: readonly TicketComment[]): string | null {
   return null;
 }
 
-export function DelegationCard({ thread, turns, personaDisplayName, onOpen, onAnswer }: Props) {
+export function DelegationCard({ thread, turns, personaDisplayName, onOpen, onAnswer, onRelaunch }: Props) {
   const [answered, setAnswered] = useState<string | null>(null);
+  const [relaunching, setRelaunching] = useState(false);
+  // A run stopped on purpose: the pill names who stopped it, in the neutral `idle` tint.
+  const stopLabel = threadStopLabel(thread);
+  const held = isUserHeld(thread);
   const question = thread.status === 'waiting' ? lastAgentQuestion(turns) : null;
   const last = lastLine(turns);
 
@@ -97,7 +104,12 @@ export function DelegationCard({ thread, turns, personaDisplayName, onOpen, onAn
         <span className="text-[var(--theme-text-faint)]" aria-hidden>⇄</span>
         <span className="text-[var(--tint-purple-text)]" aria-hidden>⌬</span>
         <span>{personaDisplayName}</span>
-        <ThreadStatusPill status={thread.status} className="ml-auto" />
+        <ThreadStatusPill
+          status={thread.status}
+          className="ml-auto"
+          label={stopLabel ?? undefined}
+          title={stopLabel ? (held ? "Tu as arrêté ce run : l'assistant ne le relancera pas sans toi" : thread.lastStop?.reason ?? stopLabel) : undefined}
+        />
       </div>
 
       <div className="text-[var(--theme-text-secondary)]">{thread.brief}</div>
@@ -154,10 +166,23 @@ export function DelegationCard({ thread, turns, personaDisplayName, onOpen, onAn
             <span className="min-w-0 truncate italic">« {last} »</span>
           </>
         )}
+        {held && onRelaunch && (
+          <button
+            type="button"
+            disabled={relaunching}
+            onClick={() => {
+              setRelaunching(true);
+              void Promise.resolve(onRelaunch(thread.id)).finally(() => setRelaunching(false));
+            }}
+            className="ml-auto whitespace-nowrap rounded-md border border-[var(--theme-border)] px-2 py-0.5 font-semibold text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] disabled:opacity-50"
+          >
+            Relancer
+          </button>
+        )}
         <button
           type="button"
           onClick={() => onOpen(thread.id)}
-          className="ml-auto whitespace-nowrap font-semibold text-[var(--theme-accent)] hover:underline"
+          className={cn('whitespace-nowrap font-semibold text-[var(--theme-accent)] hover:underline', !(held && onRelaunch) && 'ml-auto')}
         >
           Open thread ›
         </button>

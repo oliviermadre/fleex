@@ -192,3 +192,49 @@ describe('buildAssistantEnvPreamble', () => {
     expect(s).toContain('uuid `u`');
   });
 });
+
+// Lot 2 — the human's actions win. The server enforces it; the prompt must still
+// tell the assistant what it will be refused, and show it what it was not woken for.
+describe("the human's actions in the assistant's prompts", () => {
+  const context = { ticket: { displayId: 1, title: 'T', status: 'doing', type: null, priority: 'none', description: '' }, comments: [], deliverables: [] } as never;
+  const base = { id: 'th1', targetType: 'agent', personaName: 'builder', status: 'idle', exchanges: 2, brief: 'Fix', failures: 0 };
+
+  it('the system prompt states the rules: no relaunch of a user stop, no workaround through another target, closed ticket, human conclusion, human answer', () => {
+    const system = buildAssistantSystemPrompt({ persona: { soulMd: '', identityMd: '', memoryMd: '' }, personas: [], assistantName: 'Nas' });
+    expect(system).toContain("## Les actions de l'utilisateur priment");
+    expect(system).toContain('Un réveil (réponse d\'un agent, fin d\'un workflow) ne lève jamais le blocage');
+    expect(system).toContain('tu ne relances que si son message le demande');
+    expect(system).toMatch(/Ne contourne pas un arrêt\*\* en confiant le même travail à une autre cible/);
+    expect(system).toMatch(/Thread conclu par l'utilisateur\*\* : tu ne rouvres pas un thread sur le même sujet/);
+    expect(system).toMatch(/`done` ou `cancelled`\*\* : sur un réveil, tu peux seulement conclure/);
+    expect(system).toMatch(/L'utilisateur a répondu lui-même\*\* à la question d'un agent dans le thread : tu ne réponds pas à sa place/);
+  });
+
+  it('each thread line says who stopped its last run and when, and whether the hold stands', async () => {
+    const { buildAssistantUserPrompt, renderThreadStop } = await import('../../src/application/assistant/assistant-protocol.js');
+    const at = '2026-11-11T13:02:00.000Z';
+    const clock = new Date(at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const held = { ...base, lastStop: { by: 'user', at, reason: 'mauvaise piste', mentionId: 'm1' }, userHoldAt: at } as never;
+    const prompt = buildAssistantUserPrompt({ context, threads: [held], turns: [], trigger: { kind: 'user_message', commentId: 'c' } });
+    expect(prompt).toContain(`dernier run arrêté par l'utilisateur à ${clock} [${at}] (mauvaise piste)`);
+    expect(prompt).toContain('BLOCAGE UTILISATEUR');
+
+    const mine = renderThreadStop({ ...base, lastStop: { by: 'assistant', at, reason: null, mentionId: 'm1' }, userHoldAt: null } as never);
+    expect(mine).toContain(`dernier run arrêté par toi à ${clock}`);
+    expect(mine).not.toContain('BLOCAGE');
+
+    expect(renderThreadStop(base as never)).toBe('');
+    // Hold lifted by the human, stop still on record until the next run.
+    expect(renderThreadStop({ ...base, lastStop: { by: 'user', at, reason: null, mentionId: 'm1' }, userHoldAt: null } as never)).not.toContain('BLOCAGE');
+    expect(renderThreadStop({ ...base, status: 'concluded', concludedBy: 'user', concludedAt: at } as never)).toContain("conclu par l'utilisateur");
+    expect(renderThreadStop({ ...base, status: 'concluded', concludedBy: 'assistant', concludedAt: at } as never)).toBe('');
+  });
+
+  it('« Relancer » reaches the assistant as a request of the user, with the worktree check', async () => {
+    const { buildAssistantUserPrompt } = await import('../../src/application/assistant/assistant-protocol.js');
+    const prompt = buildAssistantUserPrompt({ context, threads: [base as never], turns: [], trigger: { kind: 'relaunch_request', threadId: 'th1' } });
+    expect(prompt).toContain("L'utilisateur a cliqué « Relancer » sur le thread th1");
+    expect(prompt).toContain('continue_thread');
+    expect(prompt).toContain("l'état du worktree");
+  });
+});

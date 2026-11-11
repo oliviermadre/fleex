@@ -2,8 +2,8 @@ import { join } from 'node:path';
 import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import { FLEEX_DIR, resolveStoppedBy } from '@fleex/shared';
+import type { AgentExecution, StopAuthor } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
@@ -180,10 +180,19 @@ export class PgAgentEventStore implements AgentEventStorePort {
       "SELECT mention_id FROM agent_event_executions WHERE status = 'running'",
     );
     await this.db.query(
-      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = $1 WHERE status = 'running'",
+      // Nobody chose this stop: the server went away under the run.
+      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = $1, stopped_by = 'system', stop_reason = 'server_restart' WHERE status = 'running'",
       [new Date().toISOString()],
     );
     return rows.map((r: Record<string, unknown>) => r.mention_id as string);
+  }
+
+  async markExecutionsStopped(executionIds: string[], stoppedBy: StopAuthor, stopReason?: string | null): Promise<void> {
+    if (executionIds.length === 0) return;
+    await this.db.query(
+      'UPDATE agent_event_executions SET stopped_by = $1, stop_reason = $2 WHERE execution_id = ANY($3)',
+      [stoppedBy, stopReason ?? null, executionIds],
+    );
   }
 
   async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
@@ -278,5 +287,11 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     deliverableId: (row.deliverable_id as string) ?? null,
     autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
     manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+    stoppedBy: resolveStoppedBy({
+      stoppedBy: (row.stopped_by as StopAuthor | null | undefined) ?? null,
+      manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+      autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    }),
+    stopReason: (row.stop_reason as string | null | undefined) ?? null,
   };
 }

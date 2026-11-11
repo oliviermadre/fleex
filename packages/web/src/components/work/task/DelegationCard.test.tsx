@@ -65,4 +65,33 @@ describe('DelegationCard', () => {
     );
     expect(screen.queryByRole('button', { name: 'Drop' })).toBeNull();
   });
+
+  // Lot 2: a wanted stop is named, in the neutral idle tint — never the red of a failure.
+  describe('a run stopped on purpose', () => {
+    const at = '2026-09-21T10:05:00.000Z';
+    const stopped = (by: 'user' | 'assistant') => thread({ status: 'idle', lastStop: { by, at, reason: null, mentionId: 'm1' }, userHoldAt: by === 'user' ? at : null });
+
+    it('stopped by the user: « Arrêté par toi », neutral, with « Relancer » that calls back with the thread', () => {
+      const onRelaunch = vi.fn();
+      render(<DelegationCard thread={stopped('user')} turns={[]} personaDisplayName="The Builder" onOpen={() => {}} onAnswer={() => {}} onRelaunch={onRelaunch} />);
+      const pill = screen.getByText('Arrêté par toi');
+      expect(pill.className).toContain('gray');
+      expect(pill.className).not.toContain('red');
+      expect(screen.queryByText('paused')).toBeNull();
+      fireEvent.click(screen.getByText('Relancer'));
+      expect(onRelaunch).toHaveBeenCalledWith('th1');
+    });
+
+    it("stopped by the assistant: « Arrêté par l'assistant », and no « Relancer » — nothing is held", () => {
+      render(<DelegationCard thread={stopped('assistant')} turns={[]} personaDisplayName="The Builder" onOpen={() => {}} onAnswer={() => {}} onRelaunch={() => {}} />);
+      expect(screen.getByText("Arrêté par l'assistant").className).toContain('gray');
+      expect(screen.queryByText('Relancer')).toBeNull();
+    });
+
+    it('once relaunched the label is gone: the thread is simply in progress', () => {
+      render(<DelegationCard thread={thread({ status: 'running', lastStop: null, userHoldAt: null })} turns={[]} personaDisplayName="The Builder" onOpen={() => {}} onAnswer={() => {}} onRelaunch={() => {}} />);
+      expect(screen.getByText('in progress')).toBeTruthy();
+      expect(screen.queryByText('Relancer')).toBeNull();
+    });
+  });
 });

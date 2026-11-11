@@ -153,7 +153,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
         // When execution ends, update the execution record in-place so the UI
         // reflects the final status (badge, timer, cancel button) without reload.
         if (event.eventType === 'execution_end') {
-          const eventData = event.data as { status?: string } | undefined;
+          const eventData = event.data as { status?: string; stoppedBy?: AgentExecution['stoppedBy'] } | undefined;
           const finalStatus = (eventData?.status === 'completed' || eventData?.status === 'failed' || eventData?.status === 'interrupted')
             ? eventData.status
             : 'completed';
@@ -161,7 +161,11 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
 
           const patchExecution = (exec: AgentExecution): AgentExecution =>
             exec.id === event.executionId
-              ? { ...exec, status: finalStatus, completedAt, eventCount: (state.eventsByExecution[event.executionId]?.length ?? exec.eventCount) + 1 }
+              ? {
+                  ...exec, status: finalStatus, completedAt, eventCount: (state.eventsByExecution[event.executionId]?.length ?? exec.eventCount) + 1,
+                  // A stop carries its author, so the card says « Arrêté par … » without a reload.
+                  ...(eventData?.stoppedBy ? { stoppedBy: eventData.stoppedBy } : {}),
+                }
               : exec;
 
           next.executionsByPersona = Object.fromEntries(

@@ -20,7 +20,8 @@ type WorkflowOutcome = 'completed' | 'failed' | 'cancelled' | 'waiting' | 'resum
 
 /**
  * Keeps each assistant thread in step with the mention driving it, and wakes the
- * assistant when its agent has answered. Local bus only: one instance runs a
+ * assistant when its agent has answered. A run stopped on purpose (see
+ * `StopRunUseCase`) is the exception: it moves nothing here and wakes nobody. Local bus only: one instance runs a
  * thread, hub-relayed events must not trigger a second assistant.
  */
 export class AssistantThreadListener {
@@ -45,6 +46,10 @@ export class AssistantThreadListener {
     if (!('mentionId' in e)) return;
     const thread = await this.deps.threadStore.getByCurrentMentionId(e.mentionId);
     if (!thread || thread.isTerminal) return;
+    // This run was stopped on purpose (by the human or by the assistant): the
+    // thread is already parked. Its mention closing — or a session of it ending
+    // late — is the stop itself, not news: no failure counted, nobody woken.
+    if (thread.isStoppedMention(e.mentionId)) return;
     // A workflow mention settles as soon as the run starts; the run's own events
     // drive the thread. Only a failure to start it comes through the mention.
     if (thread.targetType === 'workflow' && status !== 'failed') return;
@@ -84,6 +89,19 @@ export class AssistantThreadListener {
     if (!run || !mentionId) return;
     const thread = await this.deps.threadStore.getByCurrentMentionId(mentionId);
     if (!thread || thread.isTerminal || thread.targetType !== 'workflow') return;
+    // The run (or one of its steps) was stopped on purpose and the thread parked:
+    // however the run ends after that, it is the consequence of that stop.
+    if (outcome !== 'resumed' && thread.isStoppedMention(mentionId)) return;
+    // Cancelled from the workflow screen or the CLI by the human (or by the
+    // assistant through a path that did not park the thread): a decision, not a
+    // failure. The thread is parked — with the hold when the human did it — and
+    // the assistant is not woken: it must not relaunch what was just cancelled.
+    if (outcome === 'cancelled' && (run.cancelledBy === 'user' || run.cancelledBy === 'assistant')) {
+      thread.recordStop(run.cancelledBy, null);
+      await this.deps.threadStore.save(thread);
+      this.deps.eventBus.emit({ type: 'thread.updated', threadId: thread.id, ticketId: thread.ticketId, occurredAt: new Date() });
+      return;
+    }
 
     let wake: 'resolved' | 'waiting_for_info' | 'failed';
     if (outcome === 'resumed') {
@@ -132,10 +150,14 @@ export class AssistantThreadListener {
     if (!comment?.threadId) return;
     const thread = await this.deps.threadStore.getById(comment.threadId);
     if (!thread || thread.isTerminal) return;
+    // The human writing in the thread takes it back in hand: a hold set by an
+    // earlier stop of theirs is lifted.
+    const lifted = thread.liftUserHold();
     // A user re-mention of the thread's persona already counted through the
     // route's `openTurn`; only a plain reply is counted here.
-    if (e.createdMentions.some((m) => m.targetAgent === thread.personaName)) return;
-    thread.recordTurn();
+    const counted = e.createdMentions.some((m) => m.targetAgent === thread.personaName);
+    if (counted && !lifted) return;
+    if (!counted) thread.recordTurn();
     await this.deps.threadStore.save(thread);
     this.deps.eventBus.emit({ type: 'thread.updated', threadId: thread.id, ticketId: thread.ticketId, occurredAt: new Date() });
   }

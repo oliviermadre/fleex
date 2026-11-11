@@ -2268,7 +2268,12 @@ export async function concludeThread(threadId: string): Promise<{ runsAutoTermin
   return { runsAutoTerminated: result.runsAutoTerminated };
 }
 
-/** Manually terminate a running execution. Sets manually_terminated_by_user flag and interrupts the run. */
+/** « Relancer »: lift the hold the user's own stop set on a thread and ask the assistant to put it back to work. */
+export async function relaunchThread(threadId: string): Promise<{ accepted: boolean }> {
+  return request<{ accepted: boolean }>(`/threads/${encodeURIComponent(threadId)}/relaunch`, { method: 'POST' });
+}
+
+/** Manually terminate a running execution: recorded as stopped by the user, and never relaunched by the assistant on its own. */
 export async function terminateExecution(executionId: string): Promise<{ accepted: boolean }> {
   return request<{ accepted: boolean }>(`/executions/${encodeURIComponent(executionId)}/terminate-manual`, {
     method: 'POST',

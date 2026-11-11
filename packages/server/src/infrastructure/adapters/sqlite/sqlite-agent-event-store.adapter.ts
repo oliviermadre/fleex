@@ -2,8 +2,8 @@ import { join } from 'node:path';
 import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import { FLEEX_DIR, resolveStoppedBy } from '@fleex/shared';
+import type { AgentExecution, StopAuthor } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
@@ -36,6 +36,8 @@ interface ExecutionRow {
   deliverable_id: string | null;
   auto_terminated_at_conclusion?: number | null;
   manually_terminated_by_user?: number | null;
+  stopped_by?: string | null;
+  stop_reason?: string | null;
 }
 
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
@@ -244,8 +246,9 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       .prepare("SELECT mention_id FROM agent_event_executions WHERE status = 'running'")
       .all() as { mention_id: string }[];
 
+    // Nobody chose this stop: the server went away under the run.
     this.conn.db.prepare(
-      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = ? WHERE status = 'running'"
+      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = ?, stopped_by = 'system', stop_reason = 'server_restart' WHERE status = 'running'"
     ).run(new Date().toISOString());
 
     return rows.map((r) => r.mention_id);
@@ -303,6 +306,14 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     `).run(...updateValues);
   }
 
+  async markExecutionsStopped(executionIds: string[], stoppedBy: StopAuthor, stopReason?: string | null): Promise<void> {
+    if (executionIds.length === 0) return;
+    this.conn.db.prepare(`
+      UPDATE agent_event_executions SET stopped_by = ?, stop_reason = ?
+      WHERE execution_id IN (${executionIds.map(() => '?').join(',')})
+    `).run(stoppedBy, stopReason ?? null, ...executionIds);
+  }
+
   async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
     const row = this.conn.db
       .prepare('SELECT * FROM agent_event_executions WHERE mention_id = ? ORDER BY started_at DESC LIMIT 1')
@@ -338,5 +349,11 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     deliverableId: row.deliverable_id ?? null,
     autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
     manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+    stoppedBy: resolveStoppedBy({
+      stoppedBy: (row.stopped_by as StopAuthor | null | undefined) ?? null,
+      manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+      autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    }),
+    stopReason: row.stop_reason ?? null,
   };
 }

@@ -1,4 +1,4 @@
-import type { AgentExecution } from '@fleex/shared';
+import type { AgentExecution, StopAuthor } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
 import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../application/utils/sdk-run-usage.js';
@@ -203,7 +203,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     const now = new Date().toISOString();
     for (const [id, exec] of this.executions) {
       if (exec.status === 'running') {
-        this.executions.set(id, { ...exec, status: 'interrupted', completedAt: now });
+        this.executions.set(id, { ...exec, status: 'interrupted', completedAt: now, stoppedBy: 'system', stopReason: 'server_restart' });
         // A restart orphans in-flight runs. Without this the cockpit keeps a
         // "Running for …" badge alive for an execution nothing will ever finish.
         this.onExecutionLifecycle?.({ executionId: id, ticketId: exec.ticketId, status: 'interrupted' });
@@ -220,6 +220,16 @@ export class CachedAgentEventStore implements AgentEventStorePort {
       if (e.mentionId === mentionId && (!latest || e.startedAt > latest.startedAt)) latest = e;
     }
     return latest;
+  }
+
+  /** Write-through: the run card reads the author of the stop from the cache. */
+  async markExecutionsStopped(executionIds: string[], stoppedBy: StopAuthor, stopReason?: string | null): Promise<void> {
+    if (executionIds.length === 0) return;
+    await this.inner.markExecutionsStopped(executionIds, stoppedBy, stopReason);
+    for (const id of executionIds) {
+      const cached = this.executions.get(id);
+      if (cached) this.executions.set(id, { ...cached, stoppedBy, stopReason: stopReason ?? null });
+    }
   }
 
   /** Write-through, so the cockpit and the thread panel see the new status and flags without a reload. */

@@ -15,7 +15,9 @@ export type AssistantTrigger =
       /** Workflow threads: the run the delegation started, and where it stands. */
       workflowRun?: { id: string; status: string };
     }
-  | { kind: 'conclude_request'; threadId: string };
+  | { kind: 'conclude_request'; threadId: string }
+  /** The human clicked « Relancer » on a thread they had stopped: their request, like a message. */
+  | { kind: 'relaunch_request'; threadId: string };
 
 export type AssistantAction =
   | { action: 'reply'; message: string; question: AssistantQuestion | null }
@@ -348,6 +350,15 @@ Tu es le chef de projet de l'utilisateur sur ce ticket : tu parles vite et court
 - Dans chaque \`turn\`, rappelle à l'agent qu'il te rend compte à toi : ses questions vont dans le thread, il ne mentionne pas l'opérateur humain.
 - Réponds dans la langue de l'utilisateur. N'affirme rien sur l'état du ticket qui ne soit dans le contexte ou vérifié par un outil.
 
+## Les actions de l'utilisateur priment
+Tu ne défais jamais une action de l'utilisateur sans un nouveau message de sa part. Le serveur refuse ce qui suit ; ne le tente pas.
+- **Run arrêté par l'utilisateur** (la liste des threads le dit : « arrêté par l'utilisateur à 14:02 », blocage utilisateur) : tu ne relances pas cette cible, ni par \`continue_thread\` ni par \`delegate\`. Le blocage tombe quand l'utilisateur écrit dans le thread, clique « Relancer », ou t'envoie un message après l'arrêt — et dans ce dernier cas tu ne relances que si son message le demande. Un réveil (réponse d'un agent, fin d'un workflow) ne lève jamais le blocage.
+- **Ne contourne pas un arrêt** en confiant le même travail à une autre cible (autre persona, skill, panel ou workflow).
+- **Thread conclu par l'utilisateur** : tu ne rouvres pas un thread sur le même sujet sans un nouveau message de sa part.
+- **Ticket passé en \`done\` ou \`cancelled\`** : sur un réveil, tu peux seulement conclure les threads ouverts ; tu ne lances plus rien.
+- **L'utilisateur a répondu lui-même** à la question d'un agent dans le thread : tu ne réponds pas à sa place ensuite, sa réponse fait foi.
+- Un run que TU as arrêté n'est pas bloqué : tu peux le relancer.
+
 ## Personas disponibles (\`targetType: "agent"\`)
 ${roster || '(aucune persona déléguable)'}
 
@@ -375,6 +386,33 @@ function renderWorkflowWake(threadId: string, runId: string, status: 'resolved' 
   return `Le workflow du thread ${threadId} (run ${runId}) est terminé. Ses livrables sont ci-dessous en entier : conclus ("conclude_thread") en les citant, ou enchaîne sur la suite.`;
 }
 
+/** « à 14:02 [2026-11-11T13:02:00.000Z] »: readable, and comparable with the timestamps of the comments. */
+function stopTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return `le ${iso}`;
+  return `à ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} [${d.toISOString()}]`;
+}
+
+/**
+ * What the human or the assistant did to a thread on purpose, appended to its
+ * line: who stopped its last run and when, whether the human's hold stands,
+ * who concluded it. The assistant reads here what it was not woken for.
+ */
+export function renderThreadStop(th: AgentThread): string {
+  const parts: string[] = [];
+  if (th.lastStop) {
+    const who = th.lastStop.by === 'user' ? "l'utilisateur" : 'toi';
+    parts.push(`dernier run arrêté par ${who} ${stopTime(th.lastStop.at)}${th.lastStop.reason ? ` (${th.lastStop.reason})` : ''}`);
+  }
+  if (th.userHoldAt && th.status !== 'concluded') {
+    parts.push(`BLOCAGE UTILISATEUR depuis ${stopTime(th.userHoldAt).replace(/^à /, '')} : ne relance pas cette cible sans demande de l'utilisateur postérieure à l'arrêt`);
+  }
+  if (th.status === 'concluded' && th.concludedBy === 'user') {
+    parts.push(`conclu par l'utilisateur${th.concludedAt ? ` ${stopTime(th.concludedAt)}` : ''} : ne rouvre pas ce sujet sans nouveau message de sa part`);
+  }
+  return parts.map((p) => ` · ${p}`).join('');
+}
+
 function renderComment(c: TicketComment): string {
   const who = c.authorType === 'user' ? 'Utilisateur' : c.authorType === 'assistant' ? 'Assistant' : c.authorName;
   return `[${c.createdAt}] ${who}${c.threadId ? ` (thread ${c.threadId})` : ''} : ${c.body}`;
@@ -391,7 +429,7 @@ export function buildAssistantUserPrompt(p: {
   const t = p.context.ticket;
   const main = p.context.comments.filter((c) => !c.threadId).slice(-30).map(renderComment).join('\n');
   const threads = p.threads.length
-    ? p.threads.map((th) => `- ${th.id} · @${th.targetType ?? 'agent'}:${th.personaName} · ${th.status} · ${th.exchanges} tours · « ${th.brief} »`).join('\n')
+    ? p.threads.map((th) => `- ${th.id} · @${th.targetType ?? 'agent'}:${th.personaName} · ${th.status} · ${th.exchanges} tours · « ${th.brief} »${renderThreadStop(th)}`).join('\n')
     : '(aucun)';
   const turns = p.turns.length ? p.turns.map(renderComment).join('\n') : '(aucun)';
   const threadDelivIds = new Set((p.threadDeliverables ?? []).map((d) => d.id));
@@ -422,6 +460,9 @@ export function buildAssistantUserPrompt(p: {
       break;
     case 'conclude_request':
       trigger = `L'utilisateur demande de conclure le thread ${trig.threadId} maintenant. Réponds avec "conclude_thread".`;
+      break;
+    case 'relaunch_request':
+      trigger = `L'utilisateur a cliqué « Relancer » sur le thread ${trig.threadId}, dont il avait arrêté le run : il lève son blocage et te demande de remettre la cible au travail. Relance-la ("continue_thread") en reprenant là où elle en était (voir ses tours) ; demande-lui de vérifier d'abord l'état du worktree, un run coupé peut laisser des modifications partielles.`;
       break;
   }
   return `# Ticket #${t.displayId} — ${t.title}

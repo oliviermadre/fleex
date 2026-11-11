@@ -190,6 +190,23 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: 'thw', mentionStatus: 'failed', workflowRun: { id: 'r1', status: 'failed' } } }]);
   });
 
+  // Read-repair must not turn the human's cancel into a failure the assistant would relaunch.
+  it.each(['user', 'assistant'] as const)('repairs a workflow thread whose run was cancelled by the %s as a wanted stop: idle, no failure, nobody woken', async (by) => {
+    const app = Fastify();
+    const t = workflowThread();
+    const turns: unknown[] = [];
+    await app.register(assistantThreadsRoutes({
+      threadStore: { getByTicket: async () => [t], save: async () => {} },
+      commentStore: { getByTicket: async () => [] },
+      mentionStore: { getById: async () => ({ status: 'resolved' }) },
+      runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); }, workflowRunOf: async () => ({ id: 'r1', status: 'cancelled', cancelledBy: by, isActive: () => false }) },
+    } as never));
+    const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
+    expect(res.json()[0]).toMatchObject({ status: 'idle', failures: 0, lastStop: { by } });
+    expect(Boolean(res.json()[0].userHoldAt)).toBe(by === 'user');
+    expect(turns).toEqual([]);
+  });
+
   // A plain reply must not start a second workflow run while the first waits on a gate.
   it('POST /api/threads/:id/messages does not re-tag a workflow thread; the user re-runs it by typing the tag', async () => {
     const app = Fastify();

@@ -1,4 +1,4 @@
-import type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParticipant } from '@fleex/shared';
+import type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParticipant, ThreadStop } from '@fleex/shared';
 
 /**
  * A delegation the assistant opened with one target (persona, skill, panel or
@@ -29,6 +29,11 @@ export class AgentThreadEntity {
     public readonly targetType: AgentThreadTargetType = 'agent',
     public generatedTitle: string | null = null,
     public participants: ThreadParticipant[] = [],
+    /** When a human stopped the run. While set, the assistant may not relaunch the target. */
+    public userHoldAt: Date | null = null,
+    /** The last wanted stop of the current run; a new run clears it. */
+    public lastStop: ThreadStop | null = null,
+    public concludedBy: 'user' | 'assistant' | null = null,
   ) {}
 
   static create(params: {
@@ -71,6 +76,10 @@ export class AgentThreadEntity {
     this.currentMentionId = mentionId;
     this.exchanges += 1;
     this.status = 'running';
+    // A new run: the previous stop is history, and whoever was allowed to
+    // launch it (see `continueThread`) has lifted the hold.
+    this.userHoldAt = null;
+    this.lastStop = null;
     this.touch();
     return true;
   }
@@ -98,6 +107,37 @@ export class AgentThreadEntity {
     return true;
   }
 
+  /**
+   * The current run was stopped on purpose. Not a failure: the thread goes
+   * `idle` and `failures` does not move. A stop by the human also sets the
+   * hold, which only a human action lifts. Events the stopped mention still
+   * emits afterwards are recognised through `lastStop.mentionId` and ignored.
+   */
+  recordStop(by: 'user' | 'assistant', reason: string | null = null): boolean {
+    if (this.isTerminal) return false;
+    const now = new Date();
+    this.status = 'idle';
+    this.lastStop = { by, at: now.toISOString(), reason, mentionId: this.currentMentionId };
+    // A hold already standing keeps its date: a later stop by the assistant
+    // must not look like a newer human decision, nor erase the human's.
+    if (by === 'user') this.userHoldAt = now;
+    this.touch();
+    return true;
+  }
+
+  /** True when `mentionId` is the run that was stopped on purpose: its late events are not news. */
+  isStoppedMention(mentionId: string | null | undefined): boolean {
+    return !!mentionId && this.lastStop?.mentionId === mentionId;
+  }
+
+  /** A human lifted the hold (wrote in the thread, clicked « Relancer »). False when none stood. */
+  liftUserHold(): boolean {
+    if (!this.userHoldAt) return false;
+    this.userHoldAt = null;
+    this.touch();
+    return true;
+  }
+
   markRunning(): boolean {
     if (this.isTerminal) return false;
     this.status = 'running';
@@ -105,10 +145,11 @@ export class AgentThreadEntity {
     return true;
   }
 
-  conclude(summary: string): boolean {
+  conclude(summary: string, by: 'user' | 'assistant' = 'assistant'): boolean {
     if (this.isTerminal) return false;
     this.status = 'concluded';
     this.summary = summary;
+    this.concludedBy = by;
     this.concludedAt = new Date();
     this.touch();
     return true;
@@ -150,6 +191,9 @@ export class AgentThreadEntity {
       summary: this.summary,
       generatedTitle: this.generatedTitle,
       participants: this.participants,
+      userHoldAt: this.userHoldAt?.toISOString() ?? null,
+      lastStop: this.lastStop,
+      concludedBy: this.concludedBy,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
       concludedAt: this.concludedAt?.toISOString() ?? null,

@@ -1,3 +1,28 @@
+/**
+ * Who stopped a run before its end. `user` = a human action (Stop button, cancel,
+ * « stop & redo », concluding the thread) · `assistant` = the ticket assistant
+ * (`stop_thread`, `continue_thread` with `interrupt`, `conclude_thread`) ·
+ * `system` = nobody chose it (timeout, server restart).
+ * Only a `system` stop is a failure; a wanted stop never counts as one.
+ */
+export type StopAuthor = 'user' | 'assistant' | 'system';
+
+/**
+ * The author of a stop, whatever generation of data the row comes from: the
+ * `stoppedBy` column, else the two booleans of migration 048
+ * (`manuallyTerminatedByUser` ⇒ user, `autoTerminatedAtConclusion` ⇒ system).
+ */
+export function resolveStoppedBy(e: {
+  stoppedBy?: StopAuthor | null;
+  manuallyTerminatedByUser?: boolean | null;
+  autoTerminatedAtConclusion?: boolean | null;
+}): StopAuthor | null {
+  if (e.stoppedBy) return e.stoppedBy;
+  if (e.manuallyTerminatedByUser) return 'user';
+  if (e.autoTerminatedAtConclusion) return 'system';
+  return null;
+}
+
 export interface AgentExecution {
   readonly id: string;
   readonly personaId: string;
@@ -53,6 +78,14 @@ export interface AgentExecution {
    * conflicts between user intent and assistant auto-relaunching.
    */
   readonly manuallyTerminatedByUser?: boolean | null;
+  /**
+   * Who stopped this run before its end, null when it ran to its end (or
+   * crashed on its own). Rows from before migration 050 only carry the two
+   * booleans above: read them through `resolveStoppedBy`.
+   */
+  readonly stoppedBy?: StopAuthor | null;
+  /** Why it was stopped: the assistant's reason, `timeout`, `server_restart`… */
+  readonly stopReason?: string | null;
 }
 
 export type AgentEventType =

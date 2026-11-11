@@ -1632,7 +1632,8 @@ export function ticketRoutes(container: Container) {
             (m) => m.targetType === 'agent' && m.targetAgent === conflict.agent && m.status !== 'resolved',
           );
           for (const m of existing) {
-            await container.executeAgent.cancelExecutionForMention(m.id).catch(() => false);
+            // « Stop & redo » is the human stopping the run: same path as the Stop button.
+            await container.stopRun.stopMention(m.id, { by: 'user', reason: 'stop & redo' }).catch(() => null);
             m.resolve();
             await container.mentionStore.save(m);
             emit({

@@ -530,6 +530,8 @@ export interface WorkflowRunCancelledEvent extends DomainEvent {
   /** Null when the run is anchored to a routine instead of a ticket. */
   ticketId: string | null;
   routineId?: string | null;
+  /** Who cancelled it, when known. */
+  cancelledBy?: 'user' | 'assistant' | 'system' | null;
 }
 
 // ── Routine events ──

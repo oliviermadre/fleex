@@ -4,7 +4,7 @@ import { TicketNotFoundError } from '../../domain/errors.js';
 import type { AgentThreadEntity } from '../../domain/entities/agent-thread.entity.js';
 import { computeParticipants } from '../../application/use-cases/thread-label.js';
 
-type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'generateThreadTitle' | 'config' | 'eventBus' | 'agentEventStore'>;
+type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'generateThreadTitle' | 'config' | 'eventBus' | 'stopRun'>;
 
 /**
  * Work view Phase 3: the assistant entry point and the thread read/write routes.
@@ -73,6 +73,13 @@ export function assistantThreadsRoutes(container: Deps) {
           // Its mention settles at run start: the run says where the thread is.
           const run = await container.runAssistantTurn.workflowRunOf(t);
           if (run && !run.isActive()) {
+            // Cancelled by the human or the assistant while the event was missed:
+            // a wanted stop, parked like any other. Not a failure, nobody woken.
+            if (run.status === 'cancelled' && (run.cancelledBy === 'user' || run.cancelledBy === 'assistant')) {
+              t.recordStop(run.cancelledBy, null);
+              await container.threadStore.save(t);
+              continue;
+            }
             const done = run.status === 'completed';
             if (done) t.markIdle(); else t.fail();
             await container.threadStore.save(t);
@@ -203,27 +210,31 @@ export function assistantThreadsRoutes(container: Deps) {
       if (!thread) return reply.code(404).send({ error: 'Thread not found' });
       if (thread.isTerminal) return reply.code(409).send({ error: 'Thread is closed' });
 
-      // Auto-terminate all active runs associated with this thread
-      // Active statuses: running, idle, waiting (exclude already-terminal states)
-      const activeRuns = await container.threadStore.getRunsByThreadAndStatus(
-        thread.id,
-        ['running', 'idle', 'waiting']
-      );
-
-      if (activeRuns.length > 0) {
-        const runIds = activeRuns.map(r => r.id);
-        // Update all active runs with status=completed and flag auto_terminated_at_conclusion=true
-        await container.agentEventStore.updateExecutionsByIds(
-          runIds,
-          'completed',
-          { autoTerminatedAtConclusion: true }
-        );
-        // Flags are set; now really stop the agent processes still running.
-        await Promise.all(runIds.map((id) => container.executeAgent.cancelExecution(id).catch(() => false)));
-      }
+      // The human concluding a thread stops the run still going in it — through
+      // the single stop path, as the human. A workflow thread is left alone, as
+      // before: its run may be parked on a decision only the human can take.
+      const stopped = thread.targetType === 'workflow'
+        ? []
+        : (await container.stopRun.stopThread(thread, { by: 'user', reason: "thread conclu par l'utilisateur" })).executionIds;
 
       void container.runAssistantTurn.execute({ ticketId: thread.ticketId, trigger: { kind: 'conclude_request', threadId: thread.id } });
-      return reply.code(202).send({ accepted: true, runsAutoTerminated: activeRuns.length });
+      return reply.code(202).send({ accepted: true, runsAutoTerminated: stopped.length });
+    });
+
+    // « Relancer »: the human lifts the hold their own stop had set, and asks the
+    // assistant to put the thread back to work. Only this route, a human message
+    // in the thread, or a later human message to the assistant lifts a hold.
+    app.post<{ Params: { id: string } }>('/api/threads/:id/relaunch', async (request, reply) => {
+      const thread = await container.threadStore.getById(request.params.id);
+      if (!thread) return reply.code(404).send({ error: 'Thread not found' });
+      if (thread.isTerminal) return reply.code(409).send({ error: 'Thread is closed' });
+      if (thread.status === 'running') return reply.code(409).send({ error: 'Thread is already running' });
+      if (thread.liftUserHold()) {
+        await container.threadStore.save(thread);
+        container.eventBus.emit({ type: 'thread.updated', threadId: thread.id, ticketId: thread.ticketId, occurredAt: new Date() });
+      }
+      void container.runAssistantTurn.execute({ ticketId: thread.ticketId, trigger: { kind: 'relaunch_request', threadId: thread.id } });
+      return reply.code(202).send({ accepted: true });
     });
   };
 }

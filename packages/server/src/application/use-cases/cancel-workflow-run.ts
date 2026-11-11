@@ -1,3 +1,4 @@
+import type { StopAuthor } from '@fleex/shared';
 import { WorkflowRunNotFoundError } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
@@ -12,7 +13,12 @@ export class CancelWorkflowRunUseCase {
     private readonly eventBus: EventBus,
   ) {}
 
-  async execute(workflowRunId: string): Promise<void> {
+  /**
+   * `stop.by` is who cancels (`user` from the UI or the CLI, `assistant` from
+   * its thread tools). It is stored on the run and on the step execution that
+   * gets aborted, so nothing downstream mistakes a wanted cancel for a failure.
+   */
+  async execute(workflowRunId: string, stop?: { by: StopAuthor; reason?: string | null }): Promise<void> {
     const run = await this.runStore.getById(workflowRunId);
     if (!run) throw new WorkflowRunNotFoundError(workflowRunId);
     // Idempotent only against a run already settled to a terminal state. A
@@ -21,7 +27,7 @@ export class CancelWorkflowRunUseCase {
     // here made a failed run un-cancellable, trapping the user with no way out.
     if (run.status === 'cancelled' || run.status === 'completed') return;
 
-    run.cancel();
+    run.cancel(stop?.by ?? null);
     await this.runStore.save(run);
 
     // Abort the agent execution of whatever step is still running. Without this
@@ -33,7 +39,7 @@ export class CancelWorkflowRunUseCase {
       if (stepRun.status !== 'running') continue;
       if (stepRun.executionId) {
         try {
-          await this.canceller.cancelExecution(stepRun.executionId);
+          await (stop ? this.canceller.cancelExecution(stepRun.executionId, stop) : this.canceller.cancelExecution(stepRun.executionId));
         } catch {
           // swallow — cancelling the run must succeed regardless
         }
@@ -47,6 +53,7 @@ export class CancelWorkflowRunUseCase {
       workflowRunId: run.id,
       ticketId: run.ticketId,
       routineId: run.routineId,
+      cancelledBy: run.cancelledBy,
       occurredAt: new Date(),
     });
   }

@@ -12,6 +12,12 @@ import Fastify from 'fastify';
 import { assistantThreadsRoutes } from '../../src/infrastructure/http/assistant-threads.routes.js';
 import { agentExecutionRoutes } from '../../src/infrastructure/http/agent-execution.routes.js';
 import { AgentThreadEntity } from '../../src/domain/entities/agent-thread.entity.js';
+import { EventBus } from '../../src/application/event-bus.js';
+import { StopRunUseCase } from '../../src/application/use-cases/stop-run.js';
+import { SqliteMentionStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-mention-store.adapter.js';
+import { SqliteWorkflowRunStoreAdapter } from '../../src/infrastructure/adapters/sqlite/sqlite-workflow-run-store.adapter.js';
+import { WorkflowRunEntity } from '../../src/domain/entities/workflow-run.entity.js';
+import { fakeRunRegistry } from '../helpers/fake-run-registry.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 let conn: SqliteConnection;
@@ -95,63 +101,96 @@ describe('getRunsByThreadAndStatus + updateExecutionsByIds on the real schema', 
   });
 });
 
-type ExecRow = { status: string; a: number | null; m: number | null };
+type ExecRow = { status: string; by: string | null; reason: string | null };
 const execRow = (id: string) =>
-  conn.db.prepare('SELECT status, auto_terminated_at_conclusion a, manually_terminated_by_user m FROM agent_event_executions WHERE execution_id = ?').get(id) as ExecRow;
+  conn.db.prepare('SELECT status, stopped_by "by", stop_reason reason FROM agent_event_executions WHERE execution_id = ?').get(id) as ExecRow;
 
-/** executeAgent fake that records what the DB looked like at the moment the process is killed. */
-function fakeExecuteAgent() {
-  const cancelled: Array<{ id: string; row: ExecRow }> = [];
-  return { cancelled, cancelExecution: async (id: string) => { cancelled.push({ id, row: execRow(id) }); return true; } };
+/** The real stop path on the real stores; only the SDK processes are faked. */
+function stopPath() {
+  const mentions = new SqliteMentionStoreAdapter(conn);
+  const registry = fakeRunRegistry(events, mentions);
+  const stopRun = new StopRunUseCase({
+    executeAgent: registry as never, agentEventStore: events, threadStore: threads, mentionStore: mentions,
+    eventBus: new EventBus(), logger: silent as never,
+  });
+  return { registry, stopRun };
 }
 
 describe('POST /api/threads/:id/conclude on a real database', () => {
-  it('terminates the running runs of the thread only, flags them, and kills their processes after flagging', async () => {
+  it('stops every session of the thread\'s current run as the user, and nothing else', async () => {
     const t = AgentThreadEntity.create({ id: 'th1', ticketId: 't1', personaId: 'p', personaName: 'builder', assistantPersonaId: 'pa', brief: 'b', forwardedContext: [] });
-    await threads.save(t);
     const r1 = seedRun('th1', '1', 'running');
-    const r2 = seedRun('th1', '2', 'running');
     const done = seedRun('th1', '3', 'completed');
     const elsewhere = seedRun('other', '4', 'running');
-    const executeAgent = fakeExecuteAgent();
+    t.openTurn('m1');
+    await threads.save(t);
+    const { registry, stopRun } = stopPath();
+    registry.running.set(r1, 'm1');
+    registry.running.set(elsewhere, 'm4');
     const turns: unknown[] = [];
 
     const app = Fastify();
     await app.register(assistantThreadsRoutes({
-      threadStore: threads, agentEventStore: events, executeAgent,
+      threadStore: threads, stopRun,
       runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); } },
     } as never));
     const res = await app.inject({ method: 'POST', url: '/api/threads/th1/conclude' });
 
     expect(res.statusCode).toBe(202);
-    expect(res.json()).toEqual({ accepted: true, runsAutoTerminated: 2 });
-    expect(execRow(r1)).toMatchObject({ status: 'completed', a: 1 });
-    expect(execRow(r2)).toMatchObject({ status: 'completed', a: 1 });
-    expect(execRow(done)).toMatchObject({ status: 'completed', a: 0 });
-    expect(execRow(elsewhere)).toMatchObject({ status: 'running', a: 0 });
-    // Flag before kill: killing fails the mention and wakes the assistant, which must already see the flag.
-    expect(executeAgent.cancelled.map((c) => c.id).sort()).toEqual([r1, r2]);
-    for (const c of executeAgent.cancelled) expect(c.row.a).toBe(1);
+    expect(res.json()).toEqual({ accepted: true, runsAutoTerminated: 1 });
+    expect(execRow(r1)).toEqual({ status: 'interrupted', by: 'user', reason: "thread conclu par l'utilisateur" });
+    expect(execRow(done)).toEqual({ status: 'completed', by: null, reason: null });
+    expect(execRow(elsewhere)).toEqual({ status: 'running', by: null, reason: null });
+    expect(registry.cancelled).toEqual([r1]);
     expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'conclude_request', threadId: 'th1' } }]);
   });
 });
 
 describe('POST /api/executions/:id/terminate-manual on a real database', () => {
-  it('flags the run as stopped by the user before killing it, and the flag is what the assistant reads back', async () => {
+  it('records the user as the author of the stop; a run of another mention is left alone', async () => {
     const run = seedRun('th1', '1', 'running');
     const sibling = seedRun('th1', '2', 'running');
-    const executeAgent = fakeExecuteAgent();
+    const { registry, stopRun } = stopPath();
+    registry.running.set(run, 'm1');
+    registry.running.set(sibling, 'm2');
     const app = Fastify();
-    await app.register(agentExecutionRoutes({ agentEventStore: events, executeAgent } as never));
+    await app.register(agentExecutionRoutes({ stopRun } as never));
 
     const res = await app.inject({ method: 'POST', url: `/api/executions/${run}/terminate-manual`, payload: { reason: 'user_requested' } });
 
     expect(res.statusCode).toBe(200);
-    expect(execRow(run)).toMatchObject({ status: 'interrupted', m: 1 });
-    expect(execRow(sibling)).toMatchObject({ status: 'running', m: 0 });
-    expect(executeAgent.cancelled).toHaveLength(1);
-    expect(executeAgent.cancelled[0]!.row.m).toBe(1); // already flagged when the process was killed
-    // run-assistant-turn's skip-logic reads exactly this to decide not to relaunch (covered in run-assistant-turn.test.ts)
-    expect((await events.getExecutionByMentionId('m1'))?.manuallyTerminatedByUser).toBe(true);
+    expect(execRow(run)).toEqual({ status: 'interrupted', by: 'user', reason: 'user_requested' });
+    expect(execRow(sibling)).toEqual({ status: 'running', by: null, reason: null });
+    expect(registry.cancelled).toEqual([run]);
+    expect((await events.getExecutionByMentionId('m1'))?.stoppedBy).toBe('user');
+  });
+
+  it('a run that already ended is not rewritten as stopped', async () => {
+    const run = seedRun('th1', '1', 'completed');
+    const { stopRun } = stopPath();
+    const app = Fastify();
+    await app.register(agentExecutionRoutes({ stopRun } as never));
+    const res = await app.inject({ method: 'POST', url: `/api/executions/${run}/terminate-manual`, payload: {} });
+    expect(res.json()).toMatchObject({ accepted: true, stopped: false });
+    expect(execRow(run)).toEqual({ status: 'completed', by: null, reason: null });
+  });
+});
+
+describe('workflow_runs.cancelled_by on a real database', () => {
+  it('a cancelled run keeps who cancelled it; a run from before the column reads as unknown', async () => {
+    const runs = new SqliteWorkflowRunStoreAdapter(conn);
+    const run = WorkflowRunEntity.create({
+      id: 'run-1', ticketId: 't1', templateId: null,
+      templateSnapshot: { name: 'W', emoji: 'x', steps: [], edges: [], entryStepId: 'a' } as never,
+      triggeredBy: 'nas', triggeredFrom: 'mention:m1',
+    });
+    await runs.save(run);
+    expect((await runs.getById('run-1'))!.cancelledBy).toBeNull();
+    run.cancel('user');
+    await runs.save(run);
+    const back = (await runs.getById('run-1'))!;
+    expect(back.status).toBe('cancelled');
+    expect(back.cancelledBy).toBe('user');
+    expect(back.toDTO().cancelledBy).toBe('user');
   });
 });

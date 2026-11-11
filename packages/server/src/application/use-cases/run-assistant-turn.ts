@@ -24,6 +24,7 @@ import type { AnyDomainEvent } from '../../domain/events.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { ExecuteAgentUseCase } from './execute-agent.js';
+import type { StopRunUseCase } from './stop-run.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { priceFor } from '../utils/cli-session-ingest.js';
 import type { AssistantEnvironmentPort } from '../assistant/assistant-environment.js';
@@ -51,6 +52,10 @@ export const MAX_ASSISTANT_TURNS_PER_THREAD = 8;
 const TARGET_LABEL: Record<AgentThreadTargetType, string> = {
   agent: "l'agent", skill: 'le skill', panel: 'le panel', workflow: 'le workflow',
 };
+/** « à 14:02 », server time: how a refusal dates the human action it defers to. */
+function stopClock(at: Date): string {
+  return `à ${at.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+}
 /** Consecutive agent failures after which the assistant stops relaunching and reports back. */
 export const MAX_THREAD_FAILURES = 3;
 /** Tool rounds one assistant turn may take before it must answer. */
@@ -95,7 +100,9 @@ export interface RunAssistantTurnDeps {
   postComment: PostCommentUseCase;
   getTicketContext: GetTicketContextUseCase;
   agentEventStore: AgentEventStorePort;
-  executeAgent: Pick<ExecuteAgentUseCase, 'cancelExecutionForMention' | 'wakeUp'>;
+  executeAgent: Pick<ExecuteAgentUseCase, 'wakeUp'>;
+  /** The single stop path: every run the assistant stops goes through it, with its author. */
+  stopRun: Pick<StopRunUseCase, 'stopThread'>;
   config: ConfigPort;
   eventBus: EventBus;
   logger: LoggerPort;
@@ -294,7 +301,7 @@ export class RunAssistantTurnUseCase {
               isError = true;
             } else {
               threads = await this.deps.threadStore.getByTicket(ticketId);
-              text = await this.apply(ticket, assistant, action, threads);
+              text = await this.apply(ticket, assistant, action, threads, trigger);
               threadActionTaken = true;
               if (action.action === 'conclude_thread') concluded = true;
             }
@@ -332,7 +339,7 @@ export class RunAssistantTurnUseCase {
         await this.apply(ticket, assistant, {
           action: 'conclude_thread', threadId: trigger.threadId, question: null, message: null,
           summary: finalText || "Thread conclu à la demande de l'utilisateur.",
-        }, threads);
+        }, threads, trigger);
         finalText = '';
       }
 
@@ -359,8 +366,14 @@ export class RunAssistantTurnUseCase {
     assistant: AgentPersonaEntity,
     action: AssistantAction,
     threads: AgentThreadEntity[],
+    trigger: AssistantTrigger,
   ): Promise<string> {
     if (action.action === 'delegate' || action.action === 'continue_thread') {
+      // The human closed the ticket. A wake-up (agent answer, workflow end,
+      // repair) is not them asking for more work: the assistant may only conclude.
+      if (trigger.kind === 'thread_reply' && (ticket.status === 'done' || ticket.status === 'cancelled')) {
+        return `Refusé, rien n'a été lancé : le ticket est en statut « ${ticket.status} ». Sur un réveil, tu peux seulement conclure les threads ouverts ("conclude_thread") ; ne relance rien tant que l'utilisateur ne le demande pas.`;
+      }
       const relayed = await this.relayAttachments(ticket, action.turn);
       if ('error' in relayed) return relayed.error;
       if (relayed.text !== action.turn) action = { ...action, turn: relayed.text };
@@ -372,9 +385,17 @@ export class RunAssistantTurnUseCase {
 
       case 'delegate': {
         const open = threads.find((t) => t.targetType === action.targetType && t.personaName === action.name && !t.isTerminal);
-        if (open) return this.continueThread(ticket, assistant, open, action.turn);
+        if (open) return this.continueThread(ticket, assistant, open, action.turn, trigger);
         const target = await this.resolveTarget(action.targetType, action.name);
         if ('error' in target) return target.error;
+        // The human concluded the last thread with this target: reopening one is
+        // theirs to ask, not something a wake-up decides.
+        const last = threads
+          .filter((t) => t.targetType === action.targetType && t.personaName === action.name && t.isTerminal && t.concludedAt)
+          .sort((a, b) => b.concludedAt!.getTime() - a.concludedAt!.getTime())[0];
+        if (last?.concludedBy === 'user' && !(await this.humanAskedSince(trigger, last.concludedAt!, last.id))) {
+          return `Refusé, rien n'a été lancé : l'utilisateur a conclu lui-même le thread avec ${target.displayName} (${stopClock(last.concludedAt!)}). Tu ne rouvres pas un thread avec cette cible sans un nouveau message de sa part, et tu ne confies pas ce travail à une autre cible.`;
+        }
         if (action.targetType === 'workflow') {
           const busy = await this.activeWorkflowRun(ticket.id);
           if (busy) return `Un workflow tourne déjà sur ce ticket (run ${busy.id}, ${busy.status}) : un seul run actif par ticket. Rien n'a été lancé.`;
@@ -395,7 +416,7 @@ export class RunAssistantTurnUseCase {
         const thread = threads.find((t) => t.id === action.threadId);
         if (!thread) return `Thread inconnu : ${action.threadId}.`;
         if (thread.isTerminal) return 'Ce thread est déjà clos.';
-        return this.continueThread(ticket, assistant, thread, action.turn);
+        return this.continueThread(ticket, assistant, thread, action.turn, trigger);
       }
 
       case 'request_mode': {
@@ -415,12 +436,17 @@ export class RunAssistantTurnUseCase {
         if (thread.isTerminal) return 'Ce thread est déjà clos.';
         const target = await this.resolveTarget(thread.targetType, thread.personaName);
         const mentionId = thread.currentMentionId;
-        thread.conclude(action.summary);
+        // A conclusion the human asked for (the Conclude button) is theirs.
+        const by = trigger.kind === 'conclude_request' ? 'user' as const : 'assistant' as const;
+        // Whatever still runs in the thread is stopped through the single stop
+        // path, with its author. A workflow run is left alone, as before: it may
+        // be parked on a decision that belongs to the human.
+        if (thread.targetType !== 'workflow') await this.deps.stopRun.stopThread(thread, { by, reason: 'thread conclu' });
+        thread.conclude(action.summary, by);
         await this.deps.threadStore.save(thread);
         if (mentionId) {
           const mention = await this.deps.mentionStore.getById(mentionId);
           if (mention && mention.status !== 'resolved') {
-            await this.deps.executeAgent.cancelExecutionForMention(mentionId);
             mention.resolve();
             await this.deps.mentionStore.save(mention);
             this.emit({ type: 'mention.resolved', mentionId, ticketId: ticket.id, targetAgent: mention.targetAgent, resolvedBy: assistant.name, occurredAt: new Date() });
@@ -455,13 +481,22 @@ export class RunAssistantTurnUseCase {
   }
 
   /** Assistant turn inside a thread: wake a waiting mention, or open a new one. */
-  private async continueThread(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string): Promise<string> {
+  private async continueThread(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string, trigger: AssistantTrigger): Promise<string> {
+    // The human stopped this target. Only they lift the hold: a message of
+    // theirs later than the stop makes this turn free to relaunch; a wake-up
+    // never does, whatever the model decided.
+    if (thread.userHoldAt) {
+      if (!(await this.humanAskedSince(trigger, thread.userHoldAt, thread.id))) {
+        return `Refusé, rien n'a été envoyé : l'utilisateur a arrêté ${thread.personaName} (${stopClock(thread.userHoldAt)}). Tu ne peux pas relancer cette cible tant qu'il ne l'a pas demandé — un message de sa part après l'arrêt, ou le bouton « Relancer ». Ne confie pas ce travail à une autre cible ; dis-lui simplement où en est le thread s'il te le demande.`;
+      }
+      thread.liftUserHold();
+    }
     if (thread.status === 'failed' && thread.failures >= MAX_THREAD_FAILURES) {
       return this.apply(ticket, assistant, {
         action: 'conclude_thread', threadId: thread.id, question: null,
         message: `Je n'arrive pas à faire aboutir ${thread.personaName} sur ce point après ${thread.failures} tentatives.`,
         summary: `Abandon après ${thread.failures} échecs consécutifs de l'agent. À reprendre autrement.`,
-      }, [thread]);
+      }, [thread], trigger);
     }
     const assistantTurns = (await this.deps.commentStore.getByTicket(ticket.id))
       .filter((c) => c.threadId === thread.id && c.authorType === 'assistant').length;
@@ -469,7 +504,7 @@ export class RunAssistantTurnUseCase {
       return this.apply(ticket, assistant, {
         action: 'conclude_thread', threadId: thread.id, message: null, question: null,
         summary: `Thread interrompu après ${assistantTurns} échanges sans conclusion.`,
-      }, [thread]);
+      }, [thread], trigger);
     }
     if (thread.targetType === 'workflow') {
       const run = await this.workflowRunOf(thread);
@@ -481,11 +516,14 @@ export class RunAssistantTurnUseCase {
     }
     const current = thread.currentMentionId ? await this.deps.mentionStore.getById(thread.currentMentionId) : null;
 
-    // Skip re-launching if the execution was manually terminated by user or auto-terminated at conclusion
+    // Rows from before the author of a stop was recorded only carry the two
+    // booleans of migration 048, and no hold on the thread: same rule, read from
+    // the execution — left alone unless the human asked since.
     if (thread.currentMentionId) {
       const execution = await this.deps.agentEventStore.getExecutionByMentionId(thread.currentMentionId);
-      if (execution && (execution.manuallyTerminatedByUser || execution.autoTerminatedAtConclusion)) {
-        return `${thread.personaName} a été arrêté manuellement ou lors de la conclusion du thread : rien n'a été relancé. Consulte le fil pour plus de détails.`;
+      if (execution && (execution.manuallyTerminatedByUser || execution.autoTerminatedAtConclusion)
+        && !(await this.humanAskedSince(trigger, new Date(execution.completedAt ?? execution.startedAt), thread.id))) {
+        return `${thread.personaName} a été arrêté manuellement ou lors de la conclusion du thread : rien n'a été relancé. Tu ne le relances que si l'utilisateur le demande.`;
       }
     }
 
@@ -511,6 +549,19 @@ export class RunAssistantTurnUseCase {
     }
     await this.openTurn(ticket, assistant, thread, turn);
     return `Nouveau tour envoyé à ${thread.personaName}, relancé. Tu seras rappelé quand il aura répondu.`;
+  }
+
+  /**
+   * True when the current turn carries a human request later than `since`: a
+   * message the human sent the assistant after that instant, or their click on
+   * « Relancer » for this very thread. A wake-up, and a conclude request, never do.
+   */
+  private async humanAskedSince(trigger: AssistantTrigger, since: Date, threadId: string): Promise<boolean> {
+    if (trigger.kind === 'relaunch_request') return trigger.threadId === threadId;
+    if (trigger.kind === 'ticket_created') return true;
+    if (trigger.kind !== 'user_message') return false;
+    const comment = await this.deps.commentStore.getById(trigger.commentId);
+    return !!comment && comment.authorType === 'user' && comment.createdAt.getTime() > since.getTime();
   }
 
   private async openTurn(ticket: TicketEntity, assistant: AgentPersonaEntity, thread: AgentThreadEntity, turn: string): Promise<void> {

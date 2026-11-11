@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 import { RunAssistantTurnUseCase, assistantTurnCostUsd } from '../../src/application/use-cases/run-assistant-turn.js';
+import { StopRunUseCase } from '../../src/application/use-cases/stop-run.js';
 import type { AssistantLlm } from '../../src/application/assistant/assistant-llm.js';
 import { PostCommentUseCase } from '../../src/application/use-cases/post-comment.js';
 import { EventBus } from '../../src/application/event-bus.js';
@@ -42,10 +43,49 @@ class FakeAgentEventStore {
   /** Latest execution per mention id; tests seed it to simulate a run the user (or a conclude) stopped. */
   byMention: Record<string, { manuallyTerminatedByUser?: boolean; autoTerminatedAtConclusion?: boolean }> = {};
   async getExecutionByMentionId(mentionId: string) { return this.byMention[mentionId] ?? null; }
+  /** Who stopped which execution, as the single stop path records it. */
+  stopped: Array<{ id: string; by: string; reason: string | null }> = [];
+  async markExecutionsStopped(ids: string[], by: string, reason?: string | null) { for (const id of ids) this.stopped.push({ id, by, reason: reason ?? null }); }
+  startedAt: Record<string, string> = {};
+  async getExecutionsByTicket() { return Object.entries(this.startedAt).map(([id, startedAt]) => ({ id, startedAt })); }
 }
+/**
+ * The process-side of a run: which executions are live for which mention.
+ * `running` is seeded by the tests; cancelling an execution records its author
+ * and, unless told to keep it, fails the mention — like the real scheduler.
+ */
 class FakeExecuteAgent {
   cancelled: string[] = []; woken: string[] = [];
-  async cancelExecutionForMention(id: string) { this.cancelled.push(id); return true; }
+  /** mentionId → live execution ids. */
+  running: Record<string, string[]> = {};
+  stops: Array<{ executionId: string; by?: string; reason?: string | null; keepMention?: boolean }> = [];
+  constructor(private readonly agentEvents: FakeAgentEventStore, private readonly mentions: FakeMentionStore, private readonly bus: EventBus) {}
+  runningExecutionIdsForMention(mentionId: string) { return [...(this.running[mentionId] ?? [])]; }
+  mentionOfRunningExecution(executionId: string) {
+    for (const [m, ids] of Object.entries(this.running)) if (ids.includes(executionId)) return m;
+    return undefined;
+  }
+  async cancelExecution(executionId: string, stop?: { by: string; reason?: string | null; keepMention?: boolean }) {
+    const mentionId = this.mentionOfRunningExecution(executionId);
+    if (mentionId === undefined) return false;
+    if (stop) await this.agentEvents.markExecutionsStopped([executionId], stop.by, stop.reason);
+    this.running[mentionId] = this.running[mentionId]!.filter((id) => id !== executionId);
+    this.stops.push({ executionId, ...stop });
+    if (!stop?.keepMention) {
+      const m = await this.mentions.getById(mentionId);
+      if (m) {
+        m.markFailed(); await this.mentions.save(m);
+        this.bus.emit({ type: 'mention.execution_failed', mentionId, ticketId: m.ticketId, targetAgent: m.targetAgent, reason: 'cancelled', message: 'Run arrêté', occurredAt: new Date() });
+      }
+    }
+    return true;
+  }
+  async cancelExecutionForMention(mentionId: string, stop?: { by: string; reason?: string | null; keepMention?: boolean }) {
+    this.cancelled.push(mentionId);
+    let any = false;
+    for (const id of this.runningExecutionIdsForMention(mentionId)) any = (await this.cancelExecution(id, stop)) || any;
+    return any;
+  }
   async wakeUp(m: TicketMentionEntity) { this.woken.push(m.id); }
 }
 
@@ -85,12 +125,15 @@ interface Catalogue {
   extraCliTools?: CliTool[];
   skills?: Array<{ id: string; commandName: string; name: string; displayName: string; markdownContent: string; enabled: boolean }>;
   workflows?: Array<{ id: string; slug: string; name: string; description: string; enabled: boolean }>;
-  runs?: Array<{ id: string; ticketId: string; triggeredFrom: string; status: string; isActive(): boolean }>;
+  runs?: Array<{ id: string; ticketId: string; triggeredFrom: string; status: string; startedAt: Date; isActive(): boolean }>;
   deliverables?: Array<Record<string, unknown>>;
 }
 
 function run(id: string, triggeredFrom: string, status: string) {
-  return { id, ticketId: 't1', triggeredFrom, status, isActive: () => ['running', 'blocked', 'needs_review'].includes(status) };
+  return {
+    id, ticketId: 't1', triggeredFrom, status, startedAt: new Date(Date.now() - 90_000),
+    isActive(): boolean { return ['running', 'blocked', 'needs_review'].includes(this.status); },
+  };
 }
 
 function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnabled?: boolean } & Catalogue = {}) {
@@ -101,8 +144,8 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
   const mentions = new FakeMentionStore();
   const threads = new FakeThreadStore();
   const agentEvents = new FakeAgentEventStore();
-  const executeAgent = new FakeExecuteAgent();
   const eventBus = new EventBus();
+  const executeAgent = new FakeExecuteAgent(agentEvents, mentions, eventBus);
   const emitted: string[] = [];
   eventBus.on('*', (e) => { emitted.push(e.type); });
   const postComment = new PostCommentUseCase(comments as never, mentions as never, { saveActivity: async () => {} } as never, logger as never);
@@ -118,6 +161,23 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
     for (const [i, t] of (r.tools ?? []).entries()) content.push(toolUse(t.name, t.input, `tu-${n}-${i}`));
     return { content, stopReason: r.tools?.length ? 'tool_use' : 'end_turn', usage: { inputTokens: 10, outputTokens: 5 } };
   };
+  const runStore = {
+    getByTicket: async () => opts.runs ?? [],
+    getActiveByTicket: async () => (opts.runs ?? []).find((r) => r.isActive()) ?? null,
+  };
+  // The real stop path, on the fakes: what the tests assert is what production records.
+  const stopRun = new StopRunUseCase({
+    executeAgent: executeAgent as never, agentEventStore: agentEvents as never, threadStore: threads as never,
+    mentionStore: mentions as never, workflowRunStore: runStore as never, stepRunStore: null, eventBus, logger: logger as never,
+  });
+  const workflowCancels: Array<{ runId: string; by?: string; reason?: string | null }> = [];
+  stopRun.cancelWorkflowRun = {
+    execute: async (runId: string, stop?: { by: string; reason?: string | null }) => {
+      workflowCancels.push({ runId, ...stop });
+      const r = (opts.runs ?? []).find((x) => x.id === runId);
+      if (r) { r.status = 'cancelled'; (r as { cancelledBy?: string }).cancelledBy = stop?.by; }
+    },
+  } as never;
   const uc = new RunAssistantTurnUseCase({
     threadStore: threads as never, commentStore: comments as never, mentionStore: mentions as never,
     ticketStore: { getTicketById: async () => ticket, saveTicket: async () => {} } as never,
@@ -133,7 +193,7 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
         mentions: { pending: [], all: mentions.saved.map((m) => m.toDTO()) }, deliverables: opts.deliverables ?? [], activity: [], relevantSummaries: [], epics: [], memorySnippets: [],
       }),
     } as never,
-    agentEventStore: agentEvents as never, executeAgent: executeAgent as never,
+    agentEventStore: agentEvents as never, executeAgent: executeAgent as never, stopRun,
     config: { get: () => ({ basePath: '', defaultShell: '', repositoryRefreshIntervalMs: 0, workThreadsEnabled: 'workThreadsEnabled' in opts ? opts.workThreadsEnabled : true }) } as never,
     eventBus, logger: logger as never,
     skillStore: {
@@ -145,10 +205,7 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
       getEnabled: async () => (opts.workflows ?? []).filter((x) => x.enabled),
       getBySlug: async (n: string) => (opts.workflows ?? []).find((x) => x.slug === n) ?? null,
     } as never,
-    workflowRunStore: {
-      getByTicket: async () => opts.runs ?? [],
-      getActiveByTicket: async () => (opts.runs ?? []).find((r) => r.isActive()) ?? null,
-    } as never,
+    workflowRunStore: runStore as never,
     environment: {
       workspace: 'qa', cliBin: '/opt/fleex', hasApiKey: opts.hasApiKey ?? true,
       cliTools: async () => [showTool, ...(opts.extraCliTools ?? [])],
@@ -156,7 +213,7 @@ function harness(rounds: Round[], opts: { hasApiKey?: boolean; workThreadsEnable
     },
   }, llm);
   const setLlm = (next: AssistantLlm) => { (uc as unknown as { llm: AssistantLlm }).llm = next; };
-  return { uc, ticket, comments, mentions, threads, agentEvents, executeAgent, emitted, llmCalls, cliCalls, setLlm };
+  return { uc, ticket, comments, mentions, threads, agentEvents, executeAgent, eventBus, stopRun, workflowCancels, emitted, llmCalls, cliCalls, setLlm };
 }
 
 const user = (commentId: string) => ({ kind: 'user_message' as const, commentId });
@@ -345,10 +402,14 @@ describe('RunAssistantTurnUseCase — thread actions as tools', () => {
     await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
     const thread = [...h.threads.saved.values()][0]!;
     const mentionId = thread.currentMentionId!;
+    h.executeAgent.running[mentionId] = ['exec-1'];
     h.setLlm(fixed([toolUse('conclude_thread', { threadId: thread.id, summary: 'Fix livré.', question: { text: 'Push ?', options: ['Push it', 'Hold'] } })]));
     await h.uc.execute({ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: thread.id, mentionStatus: 'resolved' } });
     expect(thread.status).toBe('concluded');
+    expect(thread.concludedBy).toBe('assistant');
     expect(h.executeAgent.cancelled).toEqual([mentionId]);
+    // The assistant's own conclusion stops the run as the assistant.
+    expect(h.agentEvents.stopped).toEqual([{ id: 'exec-1', by: 'assistant', reason: 'thread conclu' }]);
     expect(h.mentions.saved[0]!.status).toBe('resolved');
     expect(h.comments.saved.at(-1)!.body).toBe('Retour de The Builder : Fix livré.\n\nPush ?\n- Push it\n- Hold');
     expect(h.emitted).toContain('thread.concluded');
@@ -609,5 +670,200 @@ describe('RunAssistantTurnUseCase — cost of a turn', () => {
     const u = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 1_000_000, cacheCreationTokens: 1_000_000 };
     expect(assistantTurnCostUsd('claude-haiku-4-5', u)).toBeCloseTo(0.1 + 1.25, 9);
     expect(assistantTurnCostUsd('some-unknown-model', u)).toBeUndefined();
+  });
+});
+
+/** Every tool result the model read back, in order (one entry per tool call). */
+function toolResults(h: ReturnType<typeof harness>): string[] {
+  const byCall = new Map<string, string>();
+  for (const call of h.llmCalls) {
+    for (const m of call.messages) {
+      if (m.role !== 'user' || !Array.isArray(m.content)) continue;
+      for (const b of m.content) if (b.type === 'tool_result') byCall.set(b.tool_use_id, String(b.content));
+    }
+  }
+  return [...byCall.values()];
+}
+const wake = (threadId: string) => ({ kind: 'thread_reply' as const, threadId, mentionStatus: 'resolved' as const });
+const pause = () => new Promise((r) => setTimeout(r, 5));
+
+// Lot 2 — principle 1: a human action is never undone by the assistant without a new human message.
+// The guarantees are in the server: the scripted model below always TRIES to relaunch.
+describe("RunAssistantTurnUseCase — the human's actions win", () => {
+  /** A builder thread whose run was stopped through the real stop path by `by`, then `rounds` for the next turns. */
+  async function stoppedThread(by: 'user' | 'assistant', rounds: Round[]) {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }, ...rounds]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); await h.mentions.save(m);
+    h.executeAgent.running[m.id] = ['exec-1'];
+    await h.stopRun.stopThread(thread, { by, reason: 'stop' });
+    return { h, thread };
+  }
+  const userSays = async (h: ReturnType<typeof harness>, id: string, body: string) => {
+    await pause();
+    await h.comments.save(TicketCommentEntity.create({ id, ticketId: 't1', authorType: 'user', authorName: 'Olivier', body }));
+    await pause();
+    return user(id);
+  };
+  const relaunch = (threadId: string): Round => ({ tools: [{ name: 'continue_thread', input: { threadId, turn: 'reprends' } }] });
+
+  it('on a wake-up, continue_thread to a target the user stopped is refused, and says why', async () => {
+    const { h, thread } = await stoppedThread('user', []);
+    const events: unknown[] = [];
+    h.setLlm(async (p, onText) => {
+      const tr = p.messages.flatMap((m) => (Array.isArray(m.content) ? m.content : [])).find((b) => b.type === 'tool_result');
+      if (tr) { events.push(tr); onText('ok'); return { content: [textBlock('ok')], stopReason: 'end_turn' }; }
+      return { content: [toolUse('continue_thread', { threadId: thread.id, turn: 'reprends' })], stopReason: 'tool_use' };
+    });
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(thread.status).toBe('idle');
+    expect(thread.userHoldAt).toBeInstanceOf(Date);
+    expect(h.executeAgent.woken).toEqual([]);
+    expect(events).toHaveLength(1);
+    const refusal = String((events[0] as { content: string }).content);
+    expect(refusal).toMatch(/^Refusé/);
+    expect(refusal).toContain("l'utilisateur a arrêté builder");
+    expect(refusal).toContain('Relancer');
+    expect((events[0] as { is_error?: boolean }).is_error).toBe(false);
+  });
+
+  it('on a wake-up, delegate to the same target is refused too: no second thread, no mention', async () => {
+    const { h, thread } = await stoppedThread('user', [{ tools: [delegateBuilder] }, { text: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.threads.saved.size).toBe(1);
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(thread.userHoldAt).toBeInstanceOf(Date);
+    expect(toolResults(h).at(-1)).toContain("l'utilisateur a arrêté builder");
+  });
+
+  it('a user message posted after the stop lifts the hold for that turn: the relaunch goes through', async () => {
+    const { h, thread } = await stoppedThread('user', []);
+    const trigger = await userSays(h, 'c-resume', 'reprends');
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'reprends' })]));
+    await h.uc.execute({ ticketId: 't1', trigger });
+    expect(h.mentions.saved).toHaveLength(2);
+    expect(thread.status).toBe('running');
+    expect(thread.userHoldAt).toBeNull();
+    expect(thread.lastStop).toBeNull();
+  });
+
+  it('a user message posted BEFORE the stop does not: a turn that was already queued cannot undo the stop', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const trigger = await (async () => {
+      await h.comments.save(TicketCommentEntity.create({ id: 'c-early', ticketId: 't1', authorType: 'user', authorName: 'Olivier', body: 'et ajoute des tests' }));
+      await pause();
+      return user('c-early');
+    })();
+    const m = h.mentions.saved[0]!; m.acknowledge(); await h.mentions.save(m);
+    h.executeAgent.running[m.id] = ['exec-1'];
+    await h.stopRun.stopThread(thread, { by: 'user' });
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'ajoute des tests' })]));
+    await h.uc.execute({ ticketId: 't1', trigger });
+    expect(h.mentions.saved).toHaveLength(1);
+    expect(thread.userHoldAt).toBeInstanceOf(Date);
+  });
+
+  it('a later user message that does not lead to a relaunch leaves the hold in place for the next wake-up', async () => {
+    const { h, thread } = await stoppedThread('user', [{ text: 'Il est arrêté, je ne touche à rien.' }, relaunch('TH'), { text: 'ok' }]);
+    const trigger = await userSays(h, 'c-ask', 'où en est-on ?');
+    await h.uc.execute({ ticketId: 't1', trigger });
+    expect(thread.userHoldAt).toBeInstanceOf(Date);
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'reprends' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.mentions.saved).toHaveLength(1);
+  });
+
+  it('« Relancer » is a human request for that thread: the relaunch goes through', async () => {
+    const { h, thread } = await stoppedThread('user', []);
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'reprends' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'relaunch_request', threadId: thread.id } });
+    expect(h.mentions.saved).toHaveLength(2);
+    expect(thread.status).toBe('running');
+    expect(thread.userHoldAt).toBeNull();
+  });
+
+  it('a run the assistant stopped itself is not held: it relaunches freely on a wake-up', async () => {
+    const { h, thread } = await stoppedThread('assistant', []);
+    expect(thread.userHoldAt).toBeNull();
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'reprends' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.mentions.saved).toHaveLength(2);
+    expect(thread.status).toBe('running');
+  });
+
+  it('the assistant reads who stopped the last run, and when, in the thread list of its prompt', async () => {
+    const { h, thread } = await stoppedThread('user', [{ text: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    const prompt = String(h.llmCalls.at(-1)!.messages[0]!.content);
+    expect(prompt).toMatch(/dernier run arrêté par l'utilisateur à \d{2}:\d{2} \[\d{4}-\d{2}-\d{2}T/);
+    expect(prompt).toContain('BLOCAGE UTILISATEUR');
+  });
+
+  it.each(['done', 'cancelled'] as const)('ticket moved to %s: on a wake-up the assistant may only conclude — launches are refused', async (status) => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }, relaunch('TH'), { text: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); m.resolve(); await h.mentions.save(m);
+    thread.markIdle();
+    h.ticket.status = status;
+
+    h.setLlm(fixed([toolUse('continue_thread', { threadId: thread.id, turn: 'encore' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.mentions.saved).toHaveLength(1);
+    h.setLlm(fixed([toolUse('delegate', { targetType: 'agent', name: 'nas', brief: 'B', turn: 'autre' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.threads.saved.size).toBe(1);
+
+    // Concluding stays possible…
+    h.setLlm(fixed([toolUse('conclude_thread', { threadId: thread.id, summary: 'Clos avec le ticket.' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(thread.status).toBe('concluded');
+  });
+
+  it('ticket done: a new user message can still ask for work', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    h.ticket.status = 'done';
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.threads.saved.size).toBe(1);
+    expect(h.mentions.saved).toHaveLength(1);
+  });
+
+  it('a thread the human concluded: concluded by the user, its run stopped as the user, and not reopened on a wake-up', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const m = h.mentions.saved[0]!; m.acknowledge(); await h.mentions.save(m);
+    h.executeAgent.running[m.id] = ['exec-1'];
+    h.setLlm(fixed([toolUse('conclude_thread', { threadId: thread.id, summary: 'Stop.' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: { kind: 'conclude_request', threadId: thread.id } });
+    expect(thread.status).toBe('concluded');
+    expect(thread.concludedBy).toBe('user');
+    expect(h.agentEvents.stopped).toEqual([{ id: 'exec-1', by: 'user', reason: 'thread conclu' }]);
+
+    // Another thread wakes the assistant, which tries to hand the same target new work.
+    h.setLlm(fixed([toolUse('delegate', { targetType: 'agent', name: 'builder', brief: 'B', turn: 'recommence' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake('other-thread') });
+    expect(h.threads.saved.size).toBe(1);
+    expect(h.mentions.saved).toHaveLength(1);
+
+    // The human asks again: a new thread opens.
+    const trigger = await userSays(h, 'c-again', 'relance le builder');
+    await h.uc.execute({ ticketId: 't1', trigger });
+    expect(h.threads.saved.size).toBe(2);
+  });
+
+  it('a thread the assistant concluded itself can be reopened on a wake-up', async () => {
+    const h = harness([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    h.setLlm(fixed([toolUse('conclude_thread', { threadId: thread.id, summary: 'Fini.' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    h.setLlm(fixed([toolUse('delegate', { targetType: 'agent', name: 'builder', brief: 'B', turn: 'la suite' })]));
+    await h.uc.execute({ ticketId: 't1', trigger: wake(thread.id) });
+    expect(h.threads.saved.size).toBe(2);
   });
 });

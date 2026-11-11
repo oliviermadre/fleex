@@ -14,6 +14,7 @@ import type { CreateWorkflowRunUseCase } from '../../application/use-cases/creat
 import type { ResolveHumanGateUseCase } from '../../application/use-cases/resolve-human-gate.js';
 import type { ResolveAmbiguousRouteUseCase } from '../../application/use-cases/resolve-ambiguous-route.js';
 import type { RetryStepUseCase } from '../../application/use-cases/retry-step.js';
+import { stopAuthorFromHeaders } from './stop-author.js';
 import type { CancelWorkflowRunUseCase } from '../../application/use-cases/cancel-workflow-run.js';
 import type { SubmitDeliverableUseCase } from '../../application/use-cases/submit-deliverable.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
@@ -166,7 +167,9 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
     // DELETE /api/workflows/runs/:id — cancel a run
     app.delete<{ Params: { id: string } }>('/api/workflows/runs/:id', async (request, reply) => {
       try {
-        await deps.cancelWorkflowRun.execute(request.params.id);
+        // The author travels with the cancel: a run cancelled by the human must
+        // not come back as a failure the assistant would relaunch.
+        await deps.cancelWorkflowRun.execute(request.params.id, { by: stopAuthorFromHeaders(request.headers) });
         return reply.code(204).send();
       } catch (err) {
         if (err instanceof WorkflowRunNotFoundError) {
@@ -325,6 +328,7 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
           await deps.retryStep.execute({
             workflowRunId: request.params.id,
             stepRunId: request.params.stepRunId,
+            stoppedBy: stopAuthorFromHeaders(request.headers),
             ...(humanResponse ? { humanResponse } : {}),
           });
           return reply.code(204).send();

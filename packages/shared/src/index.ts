@@ -342,6 +342,7 @@ export type {
 
 export type {
   AgentExecution,
+  StopAuthor,
   AgentEventType,
   AgentEvent,
   AgentEventWsMessageType,
@@ -359,7 +360,7 @@ export type {
   ExecutionContextData,
 } from './types/agent-event.js';
 
-export { computeInitials } from './types/agent-event.js';
+export { computeInitials, resolveStoppedBy } from './types/agent-event.js';
 
 export type { DomainEventLog } from './types/domain-event-log.js';
 
@@ -817,4 +818,4 @@ export type {
   AgendaRsvp,
 } from './types/agenda.js';
 export { AGENDA_ITEM_TYPES, AGENDA_RSVPS, DEFAULT_AGENDA_PREFS, GOGCLI_SETUP_URL, GOGCLI_INSTALL_COMMAND } from './types/agenda.js';
-export type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParticipant } from './types/agent-thread.js';
+export type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParticipant, ThreadStop } from './types/agent-thread.js';

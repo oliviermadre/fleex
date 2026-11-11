@@ -95,4 +95,57 @@ describe('AgentThreadEntity — target', () => {
       expect(AgentThreadEntity.create({ ...base, targetType }).mentionTag).toBe(`@${targetType}:lint`);
     }
   });
+
+  // A wanted stop is a decision, not a failure (lot 2).
+  describe('a run stopped on purpose', () => {
+    it('by the user: idle, held, failures untouched, and the stopped mention is remembered', () => {
+      const t = thread();
+      t.openTurn('m1');
+      t.fail(); t.markRunning();
+      expect(t.recordStop('user', 'mauvaise piste')).toBe(true);
+      expect(t.status).toBe('idle');
+      expect(t.failures).toBe(1);
+      expect(t.userHoldAt).toBeInstanceOf(Date);
+      expect(t.lastStop).toMatchObject({ by: 'user', reason: 'mauvaise piste', mentionId: 'm1' });
+      expect(t.isStoppedMention('m1')).toBe(true);
+      expect(t.isStoppedMention('m2')).toBe(false);
+      expect(t.isStoppedMention(null)).toBe(false);
+      expect(t.toDTO()).toMatchObject({ userHoldAt: t.userHoldAt!.toISOString(), lastStop: { by: 'user' } });
+    });
+
+    it('by the assistant: idle, no hold', () => {
+      const t = thread();
+      t.openTurn('m1');
+      t.recordStop('assistant', 'consigne changée');
+      expect(t.status).toBe('idle');
+      expect(t.userHoldAt).toBeNull();
+      expect(t.lastStop?.by).toBe('assistant');
+    });
+
+    it('a new run clears the stop and the hold; lifting the hold alone keeps the record of the stop', () => {
+      const t = thread();
+      t.openTurn('m1');
+      t.recordStop('user');
+      expect(t.liftUserHold()).toBe(true);
+      expect(t.liftUserHold()).toBe(false);
+      expect(t.userHoldAt).toBeNull();
+      expect(t.isStoppedMention('m1')).toBe(true);
+      t.recordStop('user');
+      t.openTurn('m2');
+      expect(t.userHoldAt).toBeNull();
+      expect(t.lastStop).toBeNull();
+      expect(t.isStoppedMention('m1')).toBe(false);
+    });
+
+    it('a concluded thread cannot be stopped, and remembers who concluded it', () => {
+      const t = thread();
+      t.conclude('fini', 'user');
+      expect(t.concludedBy).toBe('user');
+      expect(t.recordStop('user')).toBe(false);
+      expect(t.status).toBe('concluded');
+      const mine = thread();
+      mine.conclude('fini');
+      expect(mine.concludedBy).toBe('assistant');
+    });
+  });
 });

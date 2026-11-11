@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
+import { stopAuthorFromHeaders } from './stop-author.js';
 
-type Deps = Pick<Container, 'agentEventStore' | 'executeAgent'>;
+type Deps = Pick<Container, 'stopRun'>;
 
 /**
  * Agent execution management routes: terminate runs manually, manage execution state.
@@ -9,9 +10,11 @@ type Deps = Pick<Container, 'agentEventStore' | 'executeAgent'>;
 export function agentExecutionRoutes(container: Deps) {
   return async function (app: FastifyInstance) {
     /**
-     * Manually terminate a run.
-     * Sets manually_terminated_by_user flag and status to 'interrupted'.
-     * Used when user wants to stop a run that's in progress.
+     * Manually terminate a run (the Stop button of a run card).
+     * Goes through the single stop path with the human as author: the run is
+     * marked `stoppedBy: user`, and when it drives an assistant thread the
+     * thread is parked under the human's hold — the assistant is not woken and
+     * may not relaunch it.
      *
      * POST /api/executions/:executionId/terminate-manual
      * Body: { reason?: string } (optional, for logging)
@@ -22,18 +25,12 @@ export function agentExecutionRoutes(container: Deps) {
       '/api/executions/:executionId/terminate-manual',
       async (request, reply) => {
         const { executionId } = request.params;
-
-        // Flag first: cancelling fails the mention, which wakes the assistant, and it
-        // must already see manually_terminated_by_user to leave the run alone.
-        await container.agentEventStore.updateExecutionsByIds(
-          [executionId],
-          'interrupted',
-          { manuallyTerminatedByUser: true }
-        );
-        // Then actually stop the agent process (no-op if the run already ended).
-        await container.executeAgent.cancelExecution(executionId).catch(() => false);
-
-        return reply.code(200).send({ accepted: true, executionId });
+        // No-op when the run already ended: there is nothing left to stop.
+        const outcome = await container.stopRun.stopExecution(executionId, {
+          by: stopAuthorFromHeaders(request.headers),
+          reason: request.body?.reason ?? null,
+        });
+        return reply.code(200).send({ accepted: true, executionId, stopped: outcome.stopped });
       }
     );
   };

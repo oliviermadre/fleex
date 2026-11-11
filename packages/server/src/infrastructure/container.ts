@@ -71,6 +71,7 @@ import { DeleteSkillUseCase } from '../application/use-cases/delete-skill.js';
 import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
 import { RunAssistantTurnUseCase } from '../application/use-cases/run-assistant-turn.js';
+import { StopRunUseCase } from '../application/use-cases/stop-run.js';
 import { AssistantThreadListener } from '../application/assistant-thread-listener.js';
 import { AssistantEnvironment } from '../application/assistant/assistant-environment.js';
 import { createAnthropicAssistantLlm, parseDotenv } from '../application/assistant/assistant-llm.js';
@@ -509,9 +510,13 @@ export async function createContainer() {
     cliBin: process.env['FLEEX_BIN'] ?? `${hostHomedir}/.fleex/bin/fleex`,
     hasApiKey: anthropicApiKey.length > 0,
   });
+  // Every stop of a run goes through here, with its author (user / assistant / system).
+  const stopRun = new StopRunUseCase({
+    executeAgent, agentEventStore: agentEventStore_, threadStore, mentionStore, workflowRunStore, stepRunStore, eventBus, logger,
+  });
   const runAssistantTurn = new RunAssistantTurnUseCase({
     threadStore, commentStore, mentionStore, ticketStore: ticketStore_, personaStore: personaStore_, postComment,
-    getTicketContext, agentEventStore: agentEventStore_, executeAgent, config, eventBus, logger,
+    getTicketContext, agentEventStore: agentEventStore_, executeAgent, stopRun, config, eventBus, logger,
     environment: assistantEnvironment,
     skillStore, panelStore, workflowTemplateStore, workflowRunStore,
   }, createAnthropicAssistantLlm(new Anthropic({ apiKey: anthropicApiKey || 'missing' })));
@@ -782,6 +787,7 @@ export async function createContainer() {
     resolveAmbiguousRoute = new ResolveAmbiguousRouteUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
     retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, executeAgent);
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
+    stopRun.cancelWorkflowRun = cancelWorkflowRun;
 
     if (routineStore) {
       const targetStores = { templateStore: workflowTemplateStore, personaStore: personaStore_, skillStore, panelStore };
@@ -1015,6 +1021,7 @@ export async function createContainer() {
     executeAgent,
     wakeWaitingAgents,
     runAssistantTurn,
+    stopRun,
     generateThreadTitle,
     generateTicketSummary,
     getRelevantSummaries,

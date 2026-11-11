@@ -1,4 +1,4 @@
-import type { AgentExecution } from '@fleex/shared';
+import type { AgentExecution, StopAuthor } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../utils/sdk-run-usage.js';
 
@@ -90,7 +90,10 @@ export interface AgentEventStorePort {
    */
   upsertCliExecution(params: CliExecutionUpsert): Promise<void>;
 
-  /** Mark all 'running' executions as 'interrupted'. Returns affected mention IDs. */
+  /**
+   * Mark all 'running' executions as 'interrupted', stopped by `system`
+   * (`server_restart`). Returns affected mention IDs.
+   */
   markInterruptedExecutions(): Promise<string[]>;
 
   /** Returns a map of "personaId:ticketId" → sdkSessionId from latest executions. */
@@ -105,6 +108,12 @@ export interface AgentEventStorePort {
   getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null>;
 
   getAllExecutions(): Promise<AgentExecution[]>;
+
+  /**
+   * Record who stopped these runs and why. The single place the author of a
+   * stop is written; it does not change the status (the run's own end does).
+   */
+  markExecutionsStopped(executionIds: string[], stoppedBy: StopAuthor, stopReason?: string | null): Promise<void>;
 
   /**
    * Update multiple executions with a given status and flags (e.g., auto_terminated_at_conclusion).
