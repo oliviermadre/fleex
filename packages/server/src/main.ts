@@ -71,6 +71,7 @@ import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js'
 import { routineRoutes } from './infrastructure/http/routines.routes.js';
 import { isMemoryFeatureEnabled } from './application/ports/config.port.js';
 import { ROUTINE_TICK_INTERVAL_MS } from './domain/services/routine-scheduler.js';
+import { THREAD_REPAIR_INTERVAL_MS } from './application/use-cases/repair-threads.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
 import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
@@ -333,6 +334,17 @@ async function main() {
     }
   }
 
+  // Thread surveillance: repairs stuck assistant threads every minute, with no
+  // interface open. Armed like the routines, for the same reason: instances
+  // sharing one database (the canonical install and a QA worktree) would each
+  // replay the same wake-up, and the worktree would do it with unmerged code.
+  // The `workThreadsEnabled` switch is read on every tick, not here.
+  if (container.schedulerRole.armed) {
+    container.threadRepairScheduler.start(THREAD_REPAIR_INTERVAL_MS);
+  } else {
+    container.logger.info('Thread repair scheduler not armed on this instance', { reason: container.schedulerRole.reason });
+  }
+
   // Start the routine scheduler. Two conditions, for two different reasons:
   // the storage driver must have given us routines at all (sqlite/supabase),
   // and this instance must be the one that schedules them — a QA worktree
@@ -452,6 +464,9 @@ async function main() {
       // Stop the routine scheduler — its interval would otherwise keep the
       // event loop alive and could launch an agent run mid-shutdown.
       container.routineScheduler.stop();
+
+      // Stop the thread surveillance: a tick mid-shutdown could wake an assistant.
+      container.threadRepairScheduler.stop();
 
       // Stop WebSocket heartbeat
       heartbeat.stop();

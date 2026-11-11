@@ -4,6 +4,23 @@ import { assistantThreadsRoutes } from '../../src/infrastructure/http/assistant-
 import { AgentThreadEntity } from '../../src/domain/entities/agent-thread.entity.js';
 import { EventBus } from '../../src/application/event-bus.js';
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+import { RepairThreadsUseCase } from '../../src/application/use-cases/repair-threads.js';
+
+const silent = { info() {}, warn() {}, error() {}, debug() {} };
+
+/**
+ * The route's read-repair is the shared `RepairThreadsUseCase`: these tests run
+ * the real one over the fakes they hand to the route, as the container does.
+ */
+function withRepair(deps: Record<string, any>) {
+  const threadStore = {
+    // The repair reads a thread again just before acting on it.
+    getById: async (id: string) => (await deps.threadStore.getByTicket()).find((t: { id: string }) => t.id === id) ?? null,
+    ...deps.threadStore,
+  };
+  const full = { eventBus: new EventBus(), config: { get: () => ({}) }, logger: silent, ...deps, threadStore };
+  return { ...full, repairThreads: new RepairThreadsUseCase(full as never) } as never;
+}
 
 function thread(id = 'th') {
   return AgentThreadEntity.create({ id, ticketId: 't1', personaId: 'p', personaName: 'b', assistantPersonaId: 'a', brief: 'x', forwardedContext: [] });
@@ -131,12 +148,12 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     t.openTurn('m1');
     const saved: string[] = [];
     const turns: unknown[] = [];
-    await app.register(assistantThreadsRoutes({
+    await app.register(assistantThreadsRoutes(withRepair({
       threadStore: { getByTicket: async () => [t], save: async (x: { status: string }) => { saved.push(x.status); } },
       commentStore: { getByTicket: async () => [] },
       mentionStore: { getById: async () => ({ status: 'resolved' }) },
       runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); } },
-    } as never));
+    })));
     const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
     expect(res.json()[0].status).toBe('idle');
     expect(saved).toEqual(['idle']);
@@ -160,7 +177,7 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const ticket = TicketEntity.create({ id: 't1', boardId: 'b', displayId: 74, title: 'latency' });
     ticket.update({ blocked: true });
     let ticketSaves = 0;
-    await app.register(assistantThreadsRoutes({
+    await app.register(assistantThreadsRoutes(withRepair({
       eventBus: bus,
       ticketStore: { getTicketById: async () => ticket, saveTicket: async () => { ticketSaves++; } },
       threadStore: { getByTicket: async () => [t], save: async () => {} },
@@ -173,7 +190,7 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
       commentStore: { getById: async (id: string) => ({ threadId: id === 'c-old' ? 'th' : 'th-2' }), getByTicket: async () => [] },
       executeAgent: { execute: async (personaId: string) => { kicked.push(personaId); } },
       runAssistantTurn: { execute: async () => {} },
-    } as never));
+    })));
     const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
     expect(res.json()[0].status).toBe('running');
     expect(resolved).toEqual(['m-old']);
@@ -196,12 +213,12 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const app = Fastify();
     const t = workflowThread();
     const turns: unknown[] = [];
-    await app.register(assistantThreadsRoutes({
+    await app.register(assistantThreadsRoutes(withRepair({
       threadStore: { getByTicket: async () => [t], save: async () => {} },
       commentStore: { getByTicket: async () => [] },
       mentionStore: { getById: async () => ({ status: 'resolved' }) },
       runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); }, workflowRunOf: async () => ({ id: 'r1', status: 'running', isActive: () => true }) },
-    } as never));
+    })));
     const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
     expect(res.json()[0].status).toBe('running');
     expect(turns).toHaveLength(0);
@@ -211,12 +228,12 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const app = Fastify();
     const t = workflowThread();
     const turns: unknown[] = [];
-    await app.register(assistantThreadsRoutes({
+    await app.register(assistantThreadsRoutes(withRepair({
       threadStore: { getByTicket: async () => [t], save: async () => {} },
       commentStore: { getByTicket: async () => [] },
       mentionStore: { getById: async () => ({ status: 'resolved' }) },
       runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); }, workflowRunOf: async () => ({ id: 'r1', status: 'failed', isActive: () => false }) },
-    } as never));
+    })));
     const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
     expect(res.json()[0].status).toBe('failed');
     expect(turns).toEqual([{ ticketId: 't1', trigger: { kind: 'thread_reply', threadId: 'thw', mentionStatus: 'failed', workflowRun: { id: 'r1', status: 'failed' } } }]);
@@ -227,12 +244,12 @@ describe('GET /api/tickets/:id/threads — read repair', () => {
     const app = Fastify();
     const t = workflowThread();
     const turns: unknown[] = [];
-    await app.register(assistantThreadsRoutes({
+    await app.register(assistantThreadsRoutes(withRepair({
       threadStore: { getByTicket: async () => [t], save: async () => {} },
       commentStore: { getByTicket: async () => [] },
       mentionStore: { getById: async () => ({ status: 'resolved' }) },
       runAssistantTurn: { execute: async (p: unknown) => { turns.push(p); }, workflowRunOf: async () => ({ id: 'r1', status: 'cancelled', cancelledBy: by, isActive: () => false }) },
-    } as never));
+    })));
     const res = await app.inject({ method: 'GET', url: '/api/tickets/t1/threads' });
     expect(res.json()[0]).toMatchObject({ status: 'idle', failures: 0, lastStop: { by } });
     expect(Boolean(res.json()[0].userHoldAt)).toBe(by === 'user');

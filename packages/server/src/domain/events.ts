@@ -532,6 +532,8 @@ export interface WorkflowRunCancelledEvent extends DomainEvent {
   routineId?: string | null;
   /** Who cancelled it, when known. */
   cancelledBy?: 'user' | 'assistant' | 'system' | null;
+  /** Why, when the author gave a reason (the surveillance's cause of a stalled run). */
+  reason?: string | null;
 }
 
 // ── Routine events ──

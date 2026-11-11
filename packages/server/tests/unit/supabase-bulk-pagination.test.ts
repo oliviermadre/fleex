@@ -6,6 +6,7 @@ import { SupabaseAgentEventStore } from '../../src/infrastructure/adapters/supab
 import { SupabaseStepRunStore } from '../../src/infrastructure/adapters/supabase/supabase-step-run-store.adapter.js';
 import { SupabaseWorkflowRunStore } from '../../src/infrastructure/adapters/supabase/supabase-workflow-run-store.adapter.js';
 import { SupabaseDomainEventLogStore } from '../../src/infrastructure/adapters/supabase/supabase-domain-event-log-store.adapter.js';
+import { SupabaseThreadStore } from '../../src/infrastructure/adapters/supabase/supabase-thread-store.adapter.js';
 import type { SupabaseConnection } from '../../src/infrastructure/adapters/supabase/connection.js';
 
 /**
@@ -336,5 +337,21 @@ describe('SupabaseDomainEventLogStore.list pagination', () => {
 
   it('still honours a small limit', async () => {
     expect(await store().list({ limit: 100, eventType: 'ticket.moved' })).toHaveLength(100);
+  });
+});
+
+describe('SupabaseThreadStore.getOpen pagination', () => {
+  // The surveillance reads the open threads of every ticket each minute: past
+  // the cap, the threads beyond it would never be repaired.
+  it('returns every open thread even past the 1000-row PostgREST cap', async () => {
+    const rows = Array.from({ length: 2300 }, (_, i) => ({
+      id: `th-${i}`, ticket_id: `ticket-${i % 9}`, persona_id: 'p', persona_name: 'builder', assistant_persona_id: 'pa',
+      brief: 'b', forwarded_context: '[]', status: 'running', current_mention_id: `m-${i}`, exchanges: 1, failures: 0, summary: null,
+      created_at: new Date(1700000000000 + i * 1000).toISOString(), updated_at: new Date(1700000000000 + i * 1000).toISOString(), concluded_at: null,
+    }));
+    const store = new SupabaseThreadStore({ client: makeFakeClient({ agent_threads: rows }) } as unknown as SupabaseConnection);
+    const open = await store.getOpen();
+    expect(open).toHaveLength(2300);
+    expect(new Set(open.map((t) => t.id)).size).toBe(2300);
   });
 });

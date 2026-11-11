@@ -5,6 +5,7 @@ import type { LoggerPort } from './ports/logger.port.js';
 import type { WorkflowRunStorePort } from './ports/workflow-run-store.port.js';
 import type { RunAssistantTurnUseCase } from './use-cases/run-assistant-turn.js';
 import type { AnyDomainEvent } from '../domain/events.js';
+import { STALLED_REASON } from './use-cases/stop-run.js';
 
 export interface AssistantThreadListenerDeps {
   eventBus: EventBus;
@@ -103,6 +104,11 @@ export class AssistantThreadListener {
       return;
     }
 
+    // The surveillance cancelled a run that had gone silent: its cause travels
+    // with the wake-up, like the scheduler's verdict on a failed mention.
+    const stalled = outcome === 'cancelled' && run.cancelledBy === 'system' && 'reason' in e && typeof e.reason === 'string' && e.reason
+      ? e.reason : null;
+
     let wake: 'resolved' | 'waiting_for_info' | 'failed';
     if (outcome === 'resumed') {
       if (thread.status !== 'waiting') return;
@@ -130,7 +136,7 @@ export class AssistantThreadListener {
       trigger: {
         kind: 'thread_reply', threadId: thread.id, mentionStatus: wake,
         workflowRun: { id: run.id, status: run.status },
-        ...(wake === 'failed' ? { failure: { reason: `workflow_${outcome}`, message: `Workflow run ${run.status}` } } : {}),
+        ...(wake === 'failed' ? { failure: stalled ? { reason: STALLED_REASON, message: stalled } : { reason: `workflow_${outcome}`, message: `Workflow run ${run.status}` } } : {}),
       },
     });
   }

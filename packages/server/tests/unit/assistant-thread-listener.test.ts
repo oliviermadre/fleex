@@ -142,6 +142,21 @@ describe('AssistantThreadListener — workflow threads follow their run', () => 
     }
   });
 
+  // Only the surveillance's cause is a cause: any other system cancel just reports the status.
+  it('a run cancelled by the system with a reason wakes the assistant with that cause; without one, with the status', async () => {
+    const stalled = setupWorkflow('cancelled');
+    (stalled.run as { cancelledBy?: string }).cancelledBy = 'system';
+    stalled.bus.emit({ type: 'workflow.run_cancelled', workflowRunId: 'r1', ticketId: 't1', cancelledBy: 'system', reason: 'plus aucun événement', occurredAt: new Date() } as never);
+    await tick();
+    expect(stalled.turns[0]!.trigger['failure']).toEqual({ reason: 'stalled', message: 'plus aucun événement' });
+
+    const plain = setupWorkflow('cancelled');
+    (plain.run as { cancelledBy?: string }).cancelledBy = 'system';
+    plain.bus.emit({ type: 'workflow.run_cancelled', workflowRunId: 'r1', ticketId: 't1', cancelledBy: 'system', occurredAt: new Date() } as never);
+    await tick();
+    expect(plain.turns[0]!.trigger['failure']).toEqual({ reason: 'workflow_cancelled', message: 'Workflow run cancelled' });
+  });
+
   it('a human gate parks the thread in waiting and wakes the assistant once; the next step resumes it silently', async () => {
     const s = setupWorkflow('needs_review');
     s.wf('workflow.needs_review');

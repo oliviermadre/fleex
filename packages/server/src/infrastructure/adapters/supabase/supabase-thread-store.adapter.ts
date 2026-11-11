@@ -13,6 +13,9 @@ interface ThreadRow {
   turn_cap?: string | null;
 }
 
+/** PostgREST caps a select at 1000 rows. */
+const PAGE = 1000;
+
 function rowToEntity(r: ThreadRow): AgentThreadEntity {
   return new AgentThreadEntity(
     r.id, r.ticket_id, 'assistant', r.persona_id, r.persona_name, r.assistant_persona_id, r.brief,
@@ -50,10 +53,21 @@ export class SupabaseThreadStore implements ThreadStorePort {
   }
 
   async getOpen(): Promise<AgentThreadEntity[]> {
-    const { data, error } = await this.conn.client.from('agent_threads').select('*')
-      .in('status', ['running', 'waiting']).order('created_at', { ascending: false });
-    if (error) throw new Error(`SupabaseThreadStore.getOpen failed: ${error.message}`);
-    return (data as ThreadRow[]).map(rowToEntity);
+    // Paginated: an unpaginated select is silently truncated at PostgREST's
+    // max-rows (1000), and the surveillance would never see the threads beyond.
+    // Ordering (created_at, id) keeps pages stable and non-overlapping.
+    const rows: ThreadRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client.from('agent_threads').select('*')
+        .in('status', ['running', 'waiting'])
+        .order('created_at', { ascending: false }).order('id', { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseThreadStore.getOpen failed: ${error.message}`);
+      const page = data as ThreadRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(rowToEntity);
   }
 
   async save(t: AgentThreadEntity): Promise<void> {

@@ -680,6 +680,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   }
 
   /**
+   * True while this process still owes the mention a run it has not started:
+   * queued behind its lane, or parked on the SDK limiter. The surveillance reads
+   * it so a turn that merely waits its turn is never taken for a stalled one.
+   */
+  isMentionQueued(mentionId: string): boolean {
+    return this.claimedMentionIds.has(mentionId) && this.activeExecutions.get(mentionId)?.status !== 'running';
+  }
+
+  /**
    * The real mention a running execution works for, `null` when it has none
    * (workflow step, routine), `undefined` when the execution is not running here.
    */

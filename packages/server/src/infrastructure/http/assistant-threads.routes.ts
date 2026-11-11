@@ -5,7 +5,7 @@ import type { AgentThreadEntity } from '../../domain/entities/agent-thread.entit
 import { computeParticipants } from '../../application/use-cases/thread-label.js';
 import { extractRequestedTargets } from '../../application/assistant/assistant-protocol.js';
 
-type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'generateThreadTitle' | 'config' | 'eventBus' | 'stopRun'>;
+type Deps = Pick<Container, 'ticketStore' | 'threadStore' | 'commentStore' | 'mentionStore' | 'postComment' | 'runAssistantTurn' | 'executeAgent' | 'generateThreadTitle' | 'config' | 'eventBus' | 'stopRun' | 'repairThreads'>;
 
 /**
  * Work view Phase 3: the assistant entry point and the thread read/write routes.
@@ -69,74 +69,6 @@ export function assistantThreadsRoutes(container: Deps) {
       return reply.code(202).send({ assistant: { personaId: assistant.id, displayName: assistant.displayName || assistant.name } });
     });
 
-    // Read-repair: a thread still `running` while its mention is already settled
-    // (missed event, older data) is parked idle / failed so the UI stays honest.
-    async function reconcile(threads: Awaited<ReturnType<typeof container.threadStore.getByTicket>>) {
-      for (const t of threads) {
-        if (t.status !== 'running' || !t.currentMentionId) continue;
-        if (t.targetType === 'workflow') {
-          // Its mention settles at run start: the run says where the thread is.
-          const run = await container.runAssistantTurn.workflowRunOf(t);
-          if (run && !run.isActive()) {
-            // Cancelled by the human or the assistant while the event was missed:
-            // a wanted stop, parked like any other. Not a failure, nobody woken.
-            if (run.status === 'cancelled' && (run.cancelledBy === 'user' || run.cancelledBy === 'assistant')) {
-              t.recordStop(run.cancelledBy, null);
-              await container.threadStore.save(t);
-              continue;
-            }
-            const done = run.status === 'completed';
-            if (done) t.markIdle(); else t.fail();
-            await container.threadStore.save(t);
-            void container.runAssistantTurn.execute({
-              ticketId: t.ticketId,
-              trigger: { kind: 'thread_reply', threadId: t.id, mentionStatus: done ? 'resolved' : 'failed', workflowRun: { id: run.id, status: run.status } },
-            });
-          }
-          if (run) continue;
-        }
-        const m = await container.mentionStore.getById(t.currentMentionId);
-        if (!m) continue;
-        if (t.targetType === 'workflow' && m.status !== 'failed') continue;
-        if (m.status === 'pending') {
-          if (t.targetType !== 'agent') continue; // the stale-lane problem is the agent queue's
-          // A new turn queued behind an older turn of the same thread still parked
-          // in waiting_for_info (data from before the busy-agent guard): the older
-          // one holds the (agent, ticket) lane forever. Close it so the new turn runs.
-          const stale = (await container.mentionStore.getByTicket(t.ticketId)).filter((x) =>
-            x.id !== m.id && x.targetAgent === t.personaName && x.status === 'waiting_for_info');
-          let freed = false;
-          for (const s of stale) {
-            if ((await container.commentStore.getById(s.commentId))?.threadId !== t.id) continue;
-            s.resolve();
-            await container.mentionStore.save(s);
-            container.eventBus.emit({ type: 'mention.resolved', mentionId: s.id, ticketId: t.ticketId, targetAgent: s.targetAgent, resolvedBy: 'system', occurredAt: new Date() });
-            freed = true;
-          }
-          if (freed) {
-            // The stale turn had blocked the ticket (waiting_for_info); nothing waits any more.
-            const ticket = await container.ticketStore.getTicketById(t.ticketId);
-            if (ticket?.blocked) {
-              ticket.update({ blocked: false });
-              await container.ticketStore.saveTicket(ticket);
-              container.eventBus.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: { blocked: { from: true, to: false } }, occurredAt: new Date() });
-            }
-            container.executeAgent.execute(t.personaId).catch(() => {});
-          }
-          continue;
-        }
-        let wake: 'resolved' | 'failed' | null = null;
-        if (m.status === 'resolved') { t.markIdle(); wake = 'resolved'; }
-        else if (m.status === 'failed') { t.fail(); wake = 'failed'; }
-        else if (m.status === 'waiting_for_info') t.markWaiting();
-        else continue;
-        await container.threadStore.save(t);
-        // The event that should have woken the assistant was missed: replay it.
-        if (wake) void container.runAssistantTurn.execute({ ticketId: t.ticketId, trigger: { kind: 'thread_reply', threadId: t.id, mentionStatus: wake } });
-      }
-      return threads;
-    }
-
     /** DTOs with participants (authors of the thread's comments) computed at read time. */
     async function withParticipants(threads: AgentThreadEntity[]) {
       const commentsByTicket = new Map<string, Awaited<ReturnType<typeof container.commentStore.getByTicket>>>();
@@ -147,7 +79,9 @@ export function assistantThreadsRoutes(container: Deps) {
     }
 
     app.get<{ Params: { id: string } }>('/api/tickets/:id/threads', async (request) =>
-      withParticipants(await reconcile(await container.threadStore.getByTicket(request.params.id))));
+      // Read-repair, shared with the periodic surveillance (`RepairThreadsUseCase`):
+      // a thread still `running` while its run already settled is put right here too.
+      withParticipants(await container.repairThreads.repair(await container.threadStore.getByTicket(request.params.id))));
 
     app.get('/api/threads/open', async () => withParticipants(await container.threadStore.getOpen()));
 

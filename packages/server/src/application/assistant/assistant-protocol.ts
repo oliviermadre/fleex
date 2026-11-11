@@ -747,16 +747,19 @@ function renderFailure(f: { reason: string; message: string } | undefined): stri
     ? " C'est le plafond de tours de l'ADE, pas un problème de permissions : demande un périmètre plus petit ou un résultat partiel livré tout de suite."
     : f.reason === 'timeout'
       ? " L'exécution a dépassé le temps alloué : réduis le périmètre."
-      : '';
+      : f.reason === 'stalled'
+        ? " Plus rien ne tournait : la surveillance du serveur a clos ce run, elle n'a rien relancé. Avant de relancer, demande à la cible de vérifier l'état du worktree (un run coupé peut laisser des modifications partielles) et de reprendre sa progression."
+        : '';
   return ` Cause : ${f.reason} — ${f.message}.${hint}`;
 }
 
-function renderWorkflowWake(threadId: string, runId: string, status: 'resolved' | 'waiting_for_info' | 'failed', runStatus: string): string {
+function renderWorkflowWake(threadId: string, runId: string, status: 'resolved' | 'waiting_for_info' | 'failed', runStatus: string, failure?: { reason: string; message: string }): string {
   if (status === 'waiting_for_info') {
     return `Le workflow du thread ${threadId} (run ${runId}) est arrêté sur une décision humaine (statut ${runStatus} : validation d'étape ou choix de route). Tu ne peux pas la prendre à la place de l'utilisateur : dis-lui ce qui est attendu (ton texte), le workflow reprendra quand il aura tranché.`;
   }
   if (status === 'failed') {
-    return `Le workflow du thread ${threadId} (run ${runId}) s'est terminé en statut ${runStatus}. Lis ce qu'il a produit (livrables ci-dessous) ; relance-le ("continue_thread") si c'est un incident passager, sinon conclus en expliquant ce qui bloque.`;
+    // Only the surveillance's cause is worth reading: the others just repeat the status.
+    return `Le workflow du thread ${threadId} (run ${runId}) s'est terminé en statut ${runStatus}.${failure?.reason === 'stalled' ? renderFailure(failure) : ''} Lis ce qu'il a produit (livrables ci-dessous) ; relance-le ("continue_thread") si c'est un incident passager, sinon conclus en expliquant ce qui bloque.`;
   }
   return `Le workflow du thread ${threadId} (run ${runId}) est terminé. Ses livrables sont ci-dessous en entier : conclus ("conclude_thread") en les citant, ou enchaîne sur la suite.`;
 }
@@ -852,7 +855,7 @@ export function buildAssistantUserPrompt(p: {
     }
     case 'thread_reply':
       trigger = trig.workflowRun
-        ? renderWorkflowWake(trig.threadId, trig.workflowRun.id, trig.mentionStatus, trig.workflowRun.status)
+        ? renderWorkflowWake(trig.threadId, trig.workflowRun.id, trig.mentionStatus, trig.workflowRun.status, trig.failure)
         : trig.mentionStatus === 'failed'
         ? `L'exécution de l'agent du thread ${trig.threadId} a échoué (${p.threads.find((t) => t.id === trig.threadId)?.failures ?? 1} échec(s) consécutif(s)).${renderFailure(trig.failure)} Relance-le ("continue_thread") en reprenant sa progression et en découpant ce qui reste ; ne préviens l'utilisateur qu'après 3 échecs.`
         : trig.mentionStatus === 'resolved'

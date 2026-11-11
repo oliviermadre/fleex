@@ -135,6 +135,11 @@ describe('buildAssistantUserPrompt — triggers', () => {
     const maxTurns = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed', failure: { reason: 'max_turns', message: 'Reached maximum number of turns (20)' } } });
     expect(maxTurns).toContain('Cause : max_turns — Reached maximum number of turns (20).');
     expect(maxTurns).toContain('pas un problème de permissions');
+    // Lot 7b: the surveillance's wake-up reads its cause, and what to check before relaunching.
+    const stalled = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed', failure: { reason: 'stalled', message: "Aucun événement d'exécution depuis 75 min" } } });
+    expect(stalled).toContain("Cause : stalled — Aucun événement d'exécution depuis 75 min.");
+    expect(stalled).toContain("elle n'a rien relancé");
+    expect(stalled).toContain("vérifier l'état du worktree");
     const waiting = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'waiting_for_info' } });
     expect(waiting).toContain('sans sous-agent ni tâche de fond');
     expect(waiting).not.toContain('request_mode');
@@ -160,6 +165,9 @@ describe('buildAssistantUserPrompt — triggers', () => {
     expect(done).toContain('est terminé');
     const failed = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed', workflowRun: { id: 'r1', status: 'cancelled' } } });
     expect(failed).toContain('statut cancelled');
+    expect(failed).not.toContain('Cause :');
+    const stalledRun = buildAssistantUserPrompt({ context, threads: [thread], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed', workflowRun: { id: 'r1', status: 'cancelled' }, failure: { reason: 'stalled', message: 'le run du workflow ne progressait plus' } } });
+    expect(stalledRun).toContain('Cause : stalled — le run du workflow ne progressait plus.');
   });
 });
 

@@ -36,11 +36,14 @@ export interface StopOutcome {
   unsupported?: string;
 }
 
+/** `stopReason` of an execution, and `reason` of the mention failure, when the surveillance ended a silent run. */
+export const STALLED_REASON = 'stalled';
+
 const NOTHING: StopOutcome = { stopped: false, what: 'nothing', executionIds: [], startedAt: null, thread: null };
 
 export interface StopRunDeps {
   executeAgent: Pick<ExecuteAgentUseCase, 'cancelExecution' | 'cancelExecutionForMention' | 'runningExecutionIdsForMention' | 'mentionOfRunningExecution'>;
-  agentEventStore: Pick<AgentEventStorePort, 'getExecutionsByTicket'>;
+  agentEventStore: Pick<AgentEventStorePort, 'getExecutionsByTicket' | 'markExecutionsStopped' | 'updateExecutionsByIds'>;
   threadStore: ThreadStorePort;
   mentionStore: MentionStorePort;
   workflowRunStore?: WorkflowRunStorePort | null;
@@ -120,6 +123,58 @@ export class StopRunUseCase {
     }
     if (!thread.currentMentionId) return { ...NOTHING, thread };
     return this.stopThreadRun(thread, thread.currentMentionId, stop);
+  }
+
+  /**
+   * The surveillance's stop (author `system`): the run of this thread gave no
+   * sign of life beyond the execution timeout. The opposite of a wanted stop —
+   * the thread is NOT parked. What is left of the run is ended as a failure
+   * carrying `message`, and the usual failure path (`AssistantThreadListener`)
+   * fails the thread and wakes the assistant with that cause: a wake-up like
+   * any other, with no relaunch decided here. False when nothing was ended
+   * (the run settled meanwhile, or this storage cannot cancel a workflow run).
+   */
+  async stopStalled(thread: AgentThreadEntity, message: string): Promise<boolean> {
+    if (thread.isTerminal || !thread.currentMentionId) return false;
+    if (thread.targetType === 'workflow') {
+      const run = await this.workflowRunOf(thread);
+      if (run) {
+        if (!run.isActive() || !this.cancelWorkflowRun) return false;
+        // An active run refuses any relaunch: cancelled, it frees the thread.
+        await this.cancelWorkflowRun.execute(run.id, { by: 'system', reason: message });
+        this.deps.logger.warn('Stalled workflow run cancelled', { threadId: thread.id, workflowRunId: run.id });
+        return true;
+      }
+    }
+    const mentionId = thread.currentMentionId;
+    // Sessions still tracked here (a hung SDK loop). `keepMention`: the mention
+    // is failed below, once, with the real cause instead of `cancelled`.
+    const live = this.deps.executeAgent.runningExecutionIdsForMention(mentionId);
+    await this.deps.executeAgent.cancelExecutionForMention(mentionId, { by: 'system', reason: STALLED_REASON, keepMention: true });
+    // Rows left `running` by a process that is gone: nothing will ever close them.
+    try {
+      const orphans = (await this.deps.agentEventStore.getExecutionsByTicket(thread.ticketId))
+        .filter((e) => e.mentionId === mentionId && e.status === 'running' && !live.includes(e.id)).map((e) => e.id);
+      if (orphans.length > 0) {
+        await this.deps.agentEventStore.markExecutionsStopped(orphans, 'system', STALLED_REASON);
+        await this.deps.agentEventStore.updateExecutionsByIds(orphans, 'interrupted');
+      }
+    } catch (err) {
+      // Bookkeeping of dead rows never blocks freeing the thread.
+      this.deps.logger.warn('Could not close the executions of a stalled mention', { mentionId, error: err instanceof Error ? err.message : String(err) });
+    }
+    // Left `pending` / `acknowledged`, the mention would hold its lane and every
+    // relaunch would be answered « il travaille encore ».
+    const mention = await this.deps.mentionStore.getById(mentionId);
+    if (!mention || (mention.status !== 'pending' && mention.status !== 'acknowledged')) return false;
+    mention.markFailed();
+    await this.deps.mentionStore.save(mention);
+    this.deps.eventBus.emit({
+      type: 'mention.execution_failed', mentionId, ticketId: mention.ticketId, targetAgent: mention.targetAgent,
+      reason: STALLED_REASON, message, occurredAt: new Date(),
+    });
+    this.deps.logger.warn('Stalled thread run ended', { threadId: thread.id, mentionId, executionIds: live });
+    return true;
   }
 
   /** A persona, skill or panel thread: abort every session of the mention, close the mention, park the thread. */

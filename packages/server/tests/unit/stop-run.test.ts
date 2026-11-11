@@ -497,3 +497,49 @@ describe('ExecuteAgentUseCase.cancelExecution with an author', () => {
     expect(w.executeAgent.runningExecutionIdsForMention('m2')).toEqual(['x-skill']);
   });
 });
+
+// Lot 7b — the surveillance's stop. Not a wanted stop: the opposite outcome on the thread.
+describe('StopRunUseCase.stopStalled — a silent run is ended as a failure by the system', () => {
+  it('aborts the hung session as system, fails the mention with the cause (not « cancelled »), and the thread fails and wakes the assistant once', async () => {
+    const w = world();
+    const abort = w.track('m1', 'x1');
+    expect(await w.stopRun.stopStalled(w.thread, 'Aucun événement depuis 70 min.')).toBe(true);
+    await tick();
+
+    expect(abort.signal.aborted).toBe(true);
+    expect(w.execs.get('x1')).toMatchObject({ status: 'interrupted', stoppedBy: 'system', stopReason: 'stalled' });
+    expect(w.mentionRows.get('m1')!.status).toBe('failed');
+    // One failure announced, carrying the real cause.
+    expect(w.events.filter((e) => e.type === 'mention.execution_failed').map((e) => e.reason)).toEqual(['stalled']);
+    // A failure, not a stop: no hold, no lastStop, the failure counted.
+    expect(w.thread).toMatchObject({ status: 'failed', failures: 1, userHoldAt: null, lastStop: null });
+    expect(w.turns).toEqual([{
+      ticketId: 't1',
+      trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'failed', failure: { reason: 'stalled', message: 'Aucun événement depuis 70 min.' } },
+    }]);
+  });
+
+  it('ends nothing when the run settled meanwhile', async () => {
+    const w = world();
+    w.mention.resolve();
+    expect(await w.stopRun.stopStalled(w.thread, 'x')).toBe(false);
+    await tick();
+    expect(w.mentionRows.get('m1')!.status).toBe('resolved');
+    expect(w.events.filter((e) => e.type === 'mention.execution_failed')).toEqual([]);
+    expect(w.turns).toEqual([]);
+  });
+
+  it('workflow: the run is cancelled as system with the cause on the event, its step aborted', async () => {
+    const w = world('workflow');
+    w.mention.resolve();
+    const run = w.seedWorkflowRun('x-step');
+    expect(await w.stopRun.stopStalled(w.thread, 'Le run ne progressait plus.')).toBe(true);
+    await tick();
+    expect(run).toMatchObject({ status: 'cancelled', cancelledBy: 'system' });
+    expect(w.execs.get('x-step')).toMatchObject({ status: 'interrupted', stoppedBy: 'system' });
+    expect((w.events.find((e) => e.type === 'workflow.run_cancelled') as { reason?: string }).reason).toBe('Le run ne progressait plus.');
+    expect(w.thread).toMatchObject({ status: 'failed', failures: 1, userHoldAt: null });
+    expect(w.turns).toHaveLength(1);
+    expect(w.turns[0]!.trigger).toMatchObject({ mentionStatus: 'failed', failure: { reason: 'stalled', message: 'Le run ne progressait plus.' } });
+  });
+});

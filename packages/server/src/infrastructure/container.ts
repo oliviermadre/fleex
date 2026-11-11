@@ -72,6 +72,8 @@ import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
 import { RunAssistantTurnUseCase } from '../application/use-cases/run-assistant-turn.js';
 import { StopRunUseCase } from '../application/use-cases/stop-run.js';
+import { RepairThreadsUseCase } from '../application/use-cases/repair-threads.js';
+import { ThreadRepairScheduler } from '../domain/services/thread-repair-scheduler.js';
 import { AssistantThreadListener } from '../application/assistant-thread-listener.js';
 import { AssistantEnvironment } from '../application/assistant/assistant-environment.js';
 import { createAnthropicAssistantLlm, parseDotenv } from '../application/assistant/assistant-llm.js';
@@ -521,6 +523,14 @@ export async function createContainer() {
     environment: assistantEnvironment,
     skillStore, panelStore, workflowTemplateStore, workflowRunStore,
   }, createAnthropicAssistantLlm(new Anthropic({ apiKey: anthropicApiKey || 'missing' })));
+
+  // Thread repair: one implementation for the threads route and the periodic
+  // surveillance, which main.ts starts on the instance that schedules.
+  const repairThreads = new RepairThreadsUseCase({
+    threadStore, mentionStore, commentStore, ticketStore: ticketStore_, agentEventStore: agentEventStore_,
+    executeAgent, runAssistantTurn, stopRun, stepRunStore, config, eventBus, logger,
+  });
+  const threadRepairScheduler = new ThreadRepairScheduler(repairThreads, () => config.get().workThreadsEnabled === true, logger);
 
   const generateThreadTitle = new GenerateThreadTitleUseCase(threadStore, sdkLimiter, eventBus, logger);
 
@@ -1023,6 +1033,8 @@ export async function createContainer() {
     wakeWaitingAgents,
     runAssistantTurn,
     stopRun,
+    repairThreads,
+    threadRepairScheduler,
     generateThreadTitle,
     generateTicketSummary,
     getRelevantSummaries,
