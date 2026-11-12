@@ -15,7 +15,7 @@ import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
-import type { GetTicketContextUseCase } from './get-ticket-context.js';
+import type { GetTicketContextUseCase, ThreadScope } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { EventBus } from '../event-bus.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
@@ -89,6 +89,8 @@ export class RunPanelUseCase {
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
   public fileMetaStore: FileMetaStorePort | null = null;
   public fileStore: FileStorePort | null = null;
+  /** The assistant thread a mention belongs to (see ExecuteAgentUseCase.threadScope). */
+  public threadScope: ((mentionId: string) => Promise<ThreadScope | null>) | null = null;
   public bareCloneManager: BareCloneManager | null = null;
   public resolver: RepoPathResolver | null = null;
   /**
@@ -173,6 +175,8 @@ export class RunPanelUseCase {
       const context = await this.getTicketContext.execute({
         ticketId: params.ticketId,
         agentName: `panel:${panel.name}`,
+        // A panel launched from an assistant thread only sees that thread.
+        thread: params.mentionId ? ((await this.threadScope?.(params.mentionId)) ?? null) : null,
       });
       topic = params.topic || context.ticket.title;
       ticketContextBlocks = await this.buildTicketContextBlocks(context);

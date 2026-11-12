@@ -42,7 +42,8 @@ export type AssistantTrigger =
 
 export type AssistantAction =
   | { action: 'reply'; message: string; question: AssistantQuestion | null }
-  | { action: 'delegate'; targetType: AgentThreadTargetType; name: string; brief: string; forward: string[]; turn: string; message: string | null }
+  | { action: 'delegate'; targetType: AgentThreadTargetType; name: string; brief: string; /** Ids of the ticket deliverables the thread may read. */ deliverables: string[]; turn: string; message: string | null }
+  | { action: 'share_deliverables'; threadId: string; add: string[]; remove: string[] }
   | { action: 'continue_thread'; threadId: string; turn: string; /** Stop the run in progress first, then send the turn. */ interrupt: boolean }
   | { action: 'stop_thread'; threadId: string; reason: string }
   | { action: 'request_mode'; threadId: string; mode: ConversationMode; message: string }
@@ -210,6 +211,7 @@ export const ACTION_TOOL_NAMES = {
   delegate: 'delegate',
   continue_thread: 'continue_thread',
   stop_thread: 'stop_thread',
+  share_deliverables: 'share_deliverables',
   conclude_thread: 'conclude_thread',
   request_mode: 'request_mode',
 } as const;
@@ -227,8 +229,8 @@ export const ACTION_TOOLS: Array<{ name: string; description: string; input_sche
         targetType: { type: 'string', enum: [...TARGET_TYPES], description: "agent (persona), skill, panel ou workflow" },
         name: { type: 'string', description: "Clé de la cible : nom de persona (après @agent:), commande de skill (après @skill:), nom de panel (après @panel:), slug de workflow (après @workflow:)" },
         brief: { type: 'string', description: 'Une ligne : ce que la persona doit produire' },
-        forward: { type: 'array', items: { type: 'string', enum: [...FORWARD_KEYS] }, description: 'Contexte transmis' },
-        turn: { type: 'string', description: "Le brief complet adressé à la cible, qui ne voit que ce message et le ticket : objectif, contexte par référence aux livrables, contraintes et hors périmètre, définition de fini avec les preuves attendues, refs de todo couvertes, rappel qu'elle te rend compte à toi (pour un skill : ses arguments ; pour un panel : le sujet)" },
+        deliverables: { type: 'array', items: { type: 'string' }, description: "Ids des livrables du ticket que la cible pourra lire (voir « Autres livrables du ticket »). Elle ne voit AUCUN autre livrable, ni le fil principal : n'expose que ce qui sert sa tâche. Modifiable ensuite par share_deliverables." },
+        turn: { type: 'string', description: "Le brief complet adressé à la cible, qui ne voit que ce thread, la description du ticket et les livrables que tu lui exposes : objectif, contexte par référence aux livrables, contraintes et hors périmètre, définition de fini avec les preuves attendues, refs de todo couvertes, rappel qu'elle te rend compte à toi (pour un skill : ses arguments ; pour un panel : le sujet)" },
         message: { type: 'string', description: "Annonce dans le fil principal, ex. « Je vois ça avec The Builder »" },
       },
       required: ['targetType', 'name', 'brief', 'turn'],
@@ -257,6 +259,19 @@ export const ACTION_TOOLS: Array<{ name: string; description: string; input_sche
         reason: { type: 'string', description: "Pourquoi, en une phrase : elle est postée dans le thread (« Run arrêté par <toi> : … »)" },
       },
       required: ['threadId', 'reason'],
+    },
+  },
+  {
+    name: 'share_deliverables',
+    description: "Modifie la liste des livrables du ticket qu'un thread ouvert peut lire (ex. la doc produite par un autre thread). Ne lance rien : la cible les verra à son prochain tour ; pour qu'elle s'en serve maintenant, enchaîne avec continue_thread.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+        add: { type: 'array', items: { type: 'string' }, description: 'Ids des livrables à exposer' },
+        remove: { type: 'array', items: { type: 'string' }, description: 'Ids des livrables à retirer' },
+      },
+      required: ['threadId'],
     },
   },
   {
@@ -342,6 +357,11 @@ export const ACTION_TOOLS: Array<{ name: string; description: string; input_sche
 ];
 
 /** Validates a thread-action tool call into an `AssistantAction`, or null when unusable. */
+/** Deliverable ids as the model gave them: strings, trimmed, without duplicates. */
+function ids(raw: unknown): string[] {
+  return Array.isArray(raw) ? [...new Set(raw.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean))] : [];
+}
+
 export function parseActionToolInput(toolName: string, input: Record<string, unknown>): AssistantAction | null {
   const action = (ACTION_TOOL_NAMES as Record<string, string>)[toolName];
   if (!action) return null;
@@ -460,10 +480,7 @@ export function parseAssistantOutput(structured: Record<string, unknown> | null,
       const brief = str(raw.brief);
       const turn = str(raw.turn);
       if (!target || !brief || !turn) return null;
-      const forward = Array.isArray(raw.forward)
-        ? raw.forward.filter((f): f is string => typeof f === 'string' && (FORWARD_KEYS as readonly string[]).includes(f))
-        : [];
-      return { action: 'delegate', ...target, brief, forward: forward.length > 0 ? forward : ['ticket'], turn, message: str(raw.message) };
+      return { action: 'delegate', ...target, brief, deliverables: ids(raw.deliverables), turn, message: str(raw.message) };
     }
     case 'continue_thread': {
       const threadId = str(raw.threadId);
@@ -475,6 +492,12 @@ export function parseAssistantOutput(structured: Record<string, unknown> | null,
       const threadId = str(raw.threadId);
       const reason = str(raw.reason);
       return threadId && reason ? { action: 'stop_thread', threadId, reason } : null;
+    }
+    case 'share_deliverables': {
+      const threadId = str(raw.threadId);
+      const add = ids(raw.add);
+      const remove = ids(raw.remove);
+      return threadId && add.length + remove.length > 0 ? { action: 'share_deliverables', threadId, add, remove } : null;
     }
     case 'request_mode': {
       const threadId = str(raw.threadId);
@@ -726,6 +749,12 @@ ${p.todoAccess === true ? `${TODO_RULES}
 
 ` : ''}${MANDATE_RULES}
 
+## Ce que voit une cible : chaque thread est cloisonné
+- **Une cible ne voit que son thread** : tes tours et ses réponses, la description du ticket, la todo, et les livrables qu'elle a elle-même produits dans ce thread. Elle ne voit PAS ta discussion avec l'utilisateur, ni les autres threads, ni les autres livrables du ticket.
+- **Ton \`turn\` doit donc se suffire** : ce que l'utilisateur t'a dit et qui compte pour la tâche (décisions, contraintes, préférences), écris-le dans le \`turn\`. « Comme vu plus haut » ne renvoie à rien pour elle.
+- **Tu choisis les livrables qu'elle peut lire**, par leur id : \`deliverables\` à l'ouverture (\`delegate\`), puis \`share_deliverables\` pour en ajouter ou en retirer en cours de route — par exemple la doc produite par un thread, utile à un autre. N'expose que ce qui sert la tâche : chaque livrable exposé est chargé en entier dans le contexte de la cible.
+- **Deux threads successifs avec la même cible ne partagent rien** : le second repart de zéro, sans mémoire du premier. Ce qui doit passer de l'un à l'autre passe par un livrable exposé ou par ton \`turn\`.
+
 ## Mentions de l'utilisateur
 Dans un message de l'utilisateur, \`@agent:x\`, \`@skill:x\`, \`@panel:x\` ou \`@workflow:x\` est **un ordre** : ouvrir ou continuer un thread avec x, que tu gères jusqu'au résultat. Le serveur relève ces mentions et les liste sous « Déclencheur », avec leur état.
 - **Le \`turn\` contient son message tel quel**, pièces jointes comprises. Tu peux ajouter du contexte (la trame du brief) ; **tu ne retires rien et tu ne réinterprètes pas sa demande**. Ce que tu ne cites pas, le serveur l'ajoute à la fin du \`turn\`.
@@ -879,13 +908,18 @@ export function buildAssistantUserPrompt(p: {
       : `BROUILLON, en attente du « ${MANDATE_OPTIONS[0]} » de l'utilisateur : aucune cible qui écrit ne peut être lancée. S'il demande d'ajuster, révise-le ("propose_mandate") ; s'il le valide avec ses mots, "confirm_mandate".`}\n\n${p.mandate.content.trim()}`;
   const cost = p.cost ? `\n## Coût du ticket\n${renderTicketCost(p.cost)}\n` : '';
   const main = p.context.comments.filter((c) => !c.threadId).slice(-30).map(renderComment).join('\n');
+  const titleOf = new Map(p.context.deliverables.map((d) => [d.id, d.title]));
+  const exposed = (th: AgentThread) => {
+    const shared = (th.forwardedContext ?? []).filter((id) => titleOf.has(id));
+    return shared.length > 0 ? ` · livrables exposés : ${shared.map((id) => `« ${titleOf.get(id)} » (${id})`).join(', ')}` : ' · aucun livrable exposé';
+  };
   const threads = p.threads.length
-    ? p.threads.map((th) => `- ${th.id} · @${th.targetType ?? 'agent'}:${th.personaName} · ${th.status} · ${th.exchanges} tours · « ${th.brief} »${renderThreadStop(th)}`).join('\n')
+    ? p.threads.map((th) => `- ${th.id} · @${th.targetType ?? 'agent'}:${th.personaName} · ${th.status} · ${th.exchanges} tours · « ${th.brief} »${exposed(th)}${renderThreadStop(th)}`).join('\n')
     : '(aucun)';
   const turns = p.turns.length ? p.turns.map(renderComment).join('\n') : '(aucun)';
   const threadDelivIds = new Set((p.threadDeliverables ?? []).map((d) => d.id));
-  const deliverables = p.context.deliverables.filter((d) => !threadDelivIds.has(d.id)).slice(-10)
-    .map((d) => `- ${d.title} (${d.status}, par ${d.agentName})`).join('\n') || '(aucun)';
+  const deliverables = p.context.deliverables.filter((d) => !threadDelivIds.has(d.id))
+    .map((d) => `- ${d.id} · ${d.title} (${d.type}, ${d.status}, par ${d.agentName}, ${d.content.length} caractères)`).join('\n') || '(aucun)';
   const threadDeliverables = renderThreadDeliverables(p.threadDeliverables ?? []);
   const trig = p.trigger;
   let trigger: string;
@@ -929,7 +963,7 @@ ${turns}
 ## Livrables produits dans ce thread (contenu complet — ce sont les résultats de l'agent, ne les redemande pas)
 ${threadDeliverables}
 
-## Autres livrables du ticket
+## Autres livrables du ticket (id · titre — à exposer à un thread par leur id)
 ${deliverables}
 
 ## Mandat

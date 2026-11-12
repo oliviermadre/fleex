@@ -195,14 +195,14 @@ export class PgAgentEventStore implements AgentEventStorePort {
     );
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>> {
     const { rows } = await this.db.query(
-      `SELECT persona_id, ticket_id, sdk_session_id
+      `SELECT persona_id, ticket_id, sdk_session_id, mention_id
        FROM agent_event_executions
        WHERE sdk_session_id IS NOT NULL
        ORDER BY started_at DESC`,
     );
-    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
+    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>();
     for (const row of rows as Record<string, unknown>[]) {
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
@@ -210,6 +210,7 @@ export class PgAgentEventStore implements AgentEventStorePort {
           sdkSessionId: row.sdk_session_id as string,
           personaId: row.persona_id as string,
           ticketId: row.ticket_id as string,
+          mentionId: (row.mention_id as string | null) ?? null,
         });
       }
     }

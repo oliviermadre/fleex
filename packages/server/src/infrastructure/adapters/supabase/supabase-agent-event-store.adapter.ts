@@ -284,19 +284,19 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (error) throw new Error(`SupabaseAgentEventStore.markExecutionsStopped failed: ${error.message}`);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>> {
     const { data, error } = await this.conn.client
       .from('agent_event_executions')
-      .select('persona_id, ticket_id, sdk_session_id')
+      .select('persona_id, ticket_id, sdk_session_id, mention_id')
       .not('sdk_session_id', 'is', null)
       .order('started_at', { ascending: false });
     if (error) throw new Error(`SupabaseAgentEventStore.getSessionHistory failed: ${error.message}`);
 
-    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
-    for (const row of data as { persona_id: string; ticket_id: string; sdk_session_id: string }[]) {
+    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>();
+    for (const row of data as { persona_id: string; ticket_id: string; sdk_session_id: string; mention_id: string | null }[]) {
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
-        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });
+        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id, mentionId: row.mention_id });
       }
     }
     return result;

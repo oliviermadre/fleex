@@ -97,7 +97,7 @@ export interface AgentEventStorePort {
   markInterruptedExecutions(): Promise<string[]>;
 
   /** Returns a map of "personaId:ticketId" → sdkSessionId from latest executions. */
-  getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>>;
+  getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>>;
 
   getEventsByExecution(executionId: string): Promise<AgentEventEntity[]>;
 

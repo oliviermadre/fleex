@@ -1,10 +1,11 @@
 /**
  * The delegation card in the task stream (design A): `◆ Assistant ⇄ ⌬ <persona>`,
- * a state pill, the brief, the FORWARDED chips and a footer linking to the
+ * a state pill, the brief, how many deliverables the thread may read and a footer linking to the
  * Threads panel. Turns never render here — they live in the panel. In the
  * `waiting` state the agent's pending question shows with its declared questions so the
  * user can answer without leaving the stream.
  */
+import { sharedDeliverableIds } from './threadContext';
 import { useState } from 'react';
 import type { AgentThread, AgentThreadStatus, TicketComment } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
@@ -88,6 +89,8 @@ function lastLine(turns: readonly TicketComment[]): string | null {
 }
 
 export function DelegationCard({ thread, turns, personaDisplayName, onOpen, onAnswer, onRelaunch }: Props) {
+  // The thread is walled off: besides its own turns, its target reads only these deliverables.
+  const shared = sharedDeliverableIds(thread);
   const [answered, setAnswered] = useState<string | null>(null);
   const [relaunching, setRelaunching] = useState(false);
   // A run stopped on purpose: the pill names who stopped it, in the neutral `idle` tint.
@@ -114,17 +117,9 @@ export function DelegationCard({ thread, turns, personaDisplayName, onOpen, onAn
 
       <div className="text-[var(--theme-text-secondary)]">{thread.brief}</div>
 
-      {thread.forwardedContext.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[10px] font-semibold tracking-[0.06em] text-[var(--theme-text-faint)]">FORWARDED</span>
-          {thread.forwardedContext.map((k) => (
-            <span
-              key={k}
-              className="rounded border border-[var(--theme-border)] px-1.5 py-px font-mono text-[10.5px] text-[var(--theme-text-secondary)]"
-            >
-              {k}
-            </span>
-          ))}
+      {shared.length > 0 && (
+        <div className="text-[10.5px] text-[var(--theme-text-faint)]" data-testid="thread-shared-docs">
+          {shared.length} shared {shared.length === 1 ? 'doc' : 'docs'}
         </div>
       )}
 

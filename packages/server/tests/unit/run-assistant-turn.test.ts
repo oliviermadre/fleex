@@ -3,7 +3,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { RunAssistantTurnUseCase, assistantTurnCostUsd, ASSISTANT_MAX_ROUNDS, MAX_ASSISTANT_TURNS_PER_THREAD, MAX_LAUNCHES_PER_TURN, MAX_RUNNING_THREADS_PER_TICKET } from '../../src/application/use-cases/run-assistant-turn.js';
 import { StopRunUseCase } from '../../src/application/use-cases/stop-run.js';
 import { SubmitDeliverableUseCase } from '../../src/application/use-cases/submit-deliverable.js';
-import type { TicketDeliverableEntity } from '../../src/domain/entities/ticket-deliverable.entity.js';
+import { TicketDeliverableEntity } from '../../src/domain/entities/ticket-deliverable.entity.js';
 import type { AssistantLlm, AssistantUsage } from '../../src/application/assistant/assistant-llm.js';
 import { PostCommentUseCase } from '../../src/application/use-cases/post-comment.js';
 import { AssistantThreadListener } from '../../src/application/assistant-thread-listener.js';
@@ -334,7 +334,7 @@ describe('RunAssistantTurnUseCase — conversation', () => {
     expect(call.system).toContain('Workspace Fleex : **qa**');
     expect(call.system).toContain('1 outils `fleex_*`');
     expect(call.system.length).toBeLessThan(18000); // rules only: no CLI help, no ticket content
-    expect(call.tools).toEqual(['delegate', 'continue_thread', 'stop_thread', 'conclude_thread', 'request_mode', 'propose_mandate', 'confirm_mandate', 'note_decision', 'ask_user', 'fleex_ticket_show']);
+    expect(call.tools).toEqual(['delegate', 'continue_thread', 'stop_thread', 'share_deliverables', 'conclude_thread', 'request_mode', 'propose_mandate', 'confirm_mandate', 'note_decision', 'ask_user', 'fleex_ticket_show']);
   });
 
   it('a CLI comment carrying a mention tag is refused: it would launch a target outside any thread', async () => {
@@ -2265,3 +2265,59 @@ describe('RunAssistantTurnUseCase — its own hands and eyes', () => {
     expect(h.llmCalls[0]!.system).not.toContain('`Bash`');
   });
 });
+
+describe('RunAssistantTurnUseCase — the assistant chooses what a thread reads', () => {
+  const D1 = '11111111-aaaa-4aaa-8aaa-111111111111';
+  const D2 = '22222222-bbbb-4bbb-8bbb-222222222222';
+  const deliv = (id: string, title: string) => TicketDeliverableEntity.create({ id, ticketId: 't1', agentName: 'The Builder', title, content: 'corps', type: 'report', status: 'final' });
+  function seeded(rounds: Round[]) {
+    const h = harness(rounds);
+    h.deliverables.saved.push(deliv(D1, 'Étude'), deliv(D2, 'Doc API'));
+    return h;
+  }
+
+  it('delegate exposes the chosen deliverables to the new thread, and nothing else', async () => {
+    const h = seeded([{ tools: [{ name: 'delegate', input: { ...delegateBuilder.input, deliverables: [D1] } }] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const [thread] = [...h.threads.saved.values()];
+    expect(thread!.sharedDeliverableIds).toEqual([D1]);
+  });
+
+  it('a delegation without deliverables exposes none: the target only sees its thread', async () => {
+    const h = seeded([{ tools: [delegateBuilder] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect([...h.threads.saved.values()][0]!.sharedDeliverableIds).toEqual([]);
+  });
+
+  it('an id that is no deliverable of the ticket opens nothing and gives the list back', async () => {
+    const h = seeded([{ tools: [{ name: 'delegate', input: { ...delegateBuilder.input, deliverables: ['99999999-0000-4000-8000-999999999999'] } }] }, { text: 'Je corrige.' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    expect(h.threads.saved.size).toBe(0);
+    expect(h.mentions.saved).toHaveLength(0);
+    const refusal = resultBlocks(h, 1)[0]!.content as string;
+    expect(refusal).toContain('livrable inconnu');
+    expect(refusal).toContain(`${D2} « Doc API »`);
+  });
+
+  it('share_deliverables adds and removes on an open thread, launches nothing, and tells the panel', async () => {
+    const h = seeded([{ tools: [{ name: 'delegate', input: { ...delegateBuilder.input, deliverables: [D1] } }] }, { text: '' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const thread = [...h.threads.saved.values()][0]!;
+    const mentionsBefore = h.mentions.saved.length;
+    h.emitted.length = 0;
+    h.setLlm(fixedOnce([toolUse('share_deliverables', { threadId: thread.id, add: [D2], remove: [D1] })]));
+    await h.uc.execute({ ticketId: 't1', trigger: user('c1') });
+    expect(thread.sharedDeliverableIds).toEqual([D2]);
+    expect(h.mentions.saved).toHaveLength(mentionsBefore);
+    expect(h.emitted).toContain('thread.updated');
+  });
+
+  it('the ticket deliverables are listed to the assistant with their ids', async () => {
+    const h = seeded([{ text: 'ok' }]);
+    await h.uc.execute({ ticketId: 't1', trigger: user('c0') });
+    const prompt = h.llmCalls[0]!.messages[0]!.content as string;
+    expect(prompt).toContain(`- ${D1} · Étude`);
+    expect(prompt).toContain(`- ${D2} · Doc API`);
+  });
+});
+

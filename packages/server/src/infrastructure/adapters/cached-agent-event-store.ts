@@ -265,7 +265,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     return this.inner.getSdkSessionBaseline(sdkSessionId, executionId);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>> {
     return this.inner.getSessionHistory();
   }
 }

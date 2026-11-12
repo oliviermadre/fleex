@@ -718,6 +718,16 @@ export async function createContainer() {
   // Re-drain the per-(agent,ticket) queue when a thread frees its lane via an
   // external resolve/delete (e.g. manual UI resolve of a waiting_for_info mention).
   executeAgent.subscribeToBus(eventBus);
+  // A run launched from an assistant thread is walled off: it reads that
+  // thread and the deliverables the assistant exposed to it, nothing else.
+  const threadScope = async (mentionId: string) => {
+    const mention = await mentionStore.getById(mentionId);
+    const comment = mention ? await commentStore.getById(mention.commentId) : null;
+    const thread = comment?.threadId ? await threadStore.getById(comment.threadId) : null;
+    return thread ? { id: thread.id, deliverableIds: thread.sharedDeliverableIds } : null;
+  };
+  executeAgent.threadScope = threadScope;
+  runPanel.threadScope = threadScope;
   executeAgent.fileMetaStore = fileMetaStore;
   executeAgent.fileStore = fileStore;
   executeAgent.bareCloneManager = bareCloneManager;

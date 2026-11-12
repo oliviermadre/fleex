@@ -467,7 +467,7 @@ export class RunAssistantTurnUseCase {
             threads = await this.deps.threadStore.getByTicket(ticketId);
             const aimed = action.action === 'delegate'
               ? targetKey(action.targetType, action.name)
-              : action.action !== 'reply'
+              : action.action !== 'reply' && action.action !== 'share_deliverables'
                 ? (() => { const t = threads.find((x) => x.id === action.threadId); return t ? targetKey(t.targetType, t.personaName) : null; })()
                 : null;
             if (aimed && requestedKeys.has(aimed)) {
@@ -518,7 +518,7 @@ export class RunAssistantTurnUseCase {
               text = `Arguments invalides : ${err instanceof Error ? err.message : String(err)}`;
               isError = true;
             }
-          } else if (call.name in { delegate: 1, continue_thread: 1, stop_thread: 1, conclude_thread: 1, request_mode: 1 } || (TURN_TOOL_NAMES as readonly string[]).includes(call.name)) {
+          } else if (call.name in { delegate: 1, continue_thread: 1, stop_thread: 1, share_deliverables: 1, conclude_thread: 1, request_mode: 1 } || (TURN_TOOL_NAMES as readonly string[]).includes(call.name)) {
             text = 'Arguments invalides pour cette action (champs requis manquants).';
             isError = true;
           } else {
@@ -613,8 +613,17 @@ export class RunAssistantTurnUseCase {
         return 'Message posté.';
 
       case 'delegate': {
+        // What the thread may read is checked before anything is opened or sent.
+        const shared = await this.resolveDeliverableIds(ticket.id, action.deliverables);
+        if ('error' in shared) return shared.error;
         const open = threads.find((t) => t.targetType === action.targetType && t.personaName === action.name && !t.isTerminal);
-        if (open) return this.continueThread(ticket, assistant, open, action.turn, trigger, ledger);
+        if (open) {
+          if (shared.ids.length > 0) {
+            open.shareDeliverables(shared.ids);
+            await this.deps.threadStore.save(open);
+          }
+          return this.continueThread(ticket, assistant, open, action.turn, trigger, ledger);
+        }
         const target = await this.resolveTarget(action.targetType, action.name);
         if ('error' in target) return target.error;
         // The human concluded the last thread with this target: reopening one is
@@ -635,7 +644,7 @@ export class RunAssistantTurnUseCase {
         if (action.message) await this.postAssistant(ticket, assistant, null, action.message);
         const thread = AgentThreadEntity.create({
           id: randomUUID(), ticketId: ticket.id, personaId: target.id, personaName: target.name,
-          assistantPersonaId: assistant.id, brief: action.brief, forwardedContext: action.forward,
+          assistantPersonaId: assistant.id, brief: action.brief, forwardedContext: shared.ids,
           targetType: action.targetType,
         });
         await this.deps.threadStore.save(thread);
@@ -657,6 +666,19 @@ export class RunAssistantTurnUseCase {
         if (stop.blocked) return stop.text; // could not be stopped: sending a turn would queue behind the live run
         const sent = await this.continueThread(ticket, assistant, thread, action.turn, trigger, ledger);
         return stop.stopped ? `${stop.text}\n${sent}` : sent;
+      }
+
+      case 'share_deliverables': {
+        const thread = threads.find((t) => t.id === action.threadId);
+        if (!thread) return `Thread inconnu : ${action.threadId}.`;
+        if (thread.isTerminal) return 'Ce thread est déjà clos.';
+        const add = await this.resolveDeliverableIds(ticket.id, action.add);
+        if ('error' in add) return add.error;
+        // An id to remove needs no check beyond being exposed today.
+        const now = thread.shareDeliverables(add.ids, action.remove);
+        await this.deps.threadStore.save(thread);
+        this.emit({ type: 'thread.updated', threadId: thread.id, ticketId: ticket.id, occurredAt: new Date() });
+        return `Livrables exposés à ${thread.personaName} : ${now.length > 0 ? now.join(', ') : 'aucun'}. Rien n'a été lancé : la cible les lira à son prochain tour.`;
       }
 
       case 'stop_thread': {
@@ -1105,6 +1127,26 @@ export class RunAssistantTurnUseCase {
     if (!text) return [];
     const images = await Promise.all(attachmentIds(text).slice(0, MAX_SHOWN_IMAGES).map((id) => attachmentImage(attachments, id)));
     return images.filter((i): i is NonNullable<typeof i> => i !== null);
+  }
+
+  /**
+   * The ticket deliverables the model named, as full ids. An id that matches
+   * nothing is refused with the list of what exists — a thread must never be
+   * opened believing it reads a document it does not.
+   */
+  private async resolveDeliverableIds(ticketId: string, given: readonly string[]): Promise<{ ids: string[] } | { error: string }> {
+    if (given.length === 0) return { ids: [] };
+    const all = await this.deps.deliverableStore.getByTicket(ticketId);
+    const found: string[] = [];
+    const unknown: string[] = [];
+    for (const g of given) {
+      const hits = all.filter((d) => d.id === g || (g.length >= 8 && d.id.startsWith(g)));
+      if (hits.length === 1) found.push(hits[0]!.id); else unknown.push(g);
+    }
+    if (unknown.length > 0) {
+      return { error: `Rien n'a été fait : livrable inconnu sur ce ticket (${unknown.join(', ')}). Livrables du ticket : ${all.map((d) => `${d.id} « ${d.title} »`).join(' ; ') || 'aucun'}.` };
+    }
+    return { ids: [...new Set(found)] };
   }
 
   /** Enabled skills, panels and workflows, as the system prompt lists them. */

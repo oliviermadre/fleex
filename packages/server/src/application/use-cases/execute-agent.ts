@@ -31,7 +31,7 @@ import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
-import type { GetTicketContextUseCase } from './get-ticket-context.js';
+import type { GetTicketContextUseCase, ThreadScope } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import { isTodoAgentAccessEnabled, type ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -230,11 +230,30 @@ ${typeLines}
 `.trim();
 }
 
+/** The SDK session a run may resume: one per agent and ticket, and per thread when it runs in one. */
+export function sessionKeyFor(agentName: string, ticketId: string, thread: ThreadScope | null): string {
+  return thread ? `${agentName}:${ticketId}:thread:${thread.id}` : `${agentName}:${ticketId}`;
+}
+
 export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegistryPort {
   private activeExecutions = new Map<string, ActiveExecution>();
   /** Mentions whose run was stopped on purpose (ids only; a few bytes per stop, per process). */
   private stoppedMentions = new Set<string>();
-  private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
+  private sessionHistory = new Map<string, string>(); // sessionKeyFor(agent, ticket, thread) -> sdkSessionId
+  /**
+   * The assistant thread a mention belongs to, with what the assistant exposed
+   * to it. Wired by the container; null (or absent) for a run outside any thread.
+   */
+  public threadScope: ((mentionId: string) => Promise<ThreadScope | null>) | null = null;
+
+  private async threadOf(mentionId: string): Promise<ThreadScope | null> {
+    try {
+      return (await this.threadScope?.(mentionId)) ?? null;
+    } catch (err) {
+      // Failing open would hand the whole ticket to a walled-off agent: the run must not start.
+      throw new Error(`Could not resolve the thread of mention ${mentionId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   private queue: QueueItem[] = [];
   // `${agentName}:${ticketId}` currently dispatched (parked on the limiter OR
   // actively running). Covers the dispatch→acknowledge window where the DB does
@@ -351,11 +370,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     // 3. Reload SDK session history from DB
     const history = await this.agentEventStore.getSessionHistory();
-    for (const [key, { sdkSessionId, personaId, ticketId }] of history) {
+    for (const [, { sdkSessionId, personaId, ticketId, mentionId }] of history) {
       // Key is "personaId:ticketId" — we need to convert to "personaName:ticketId"
       const persona = await this.personaStore.getById(personaId);
       if (persona) {
-        const sessionKey = `${persona.name}:${ticketId}`;
+        // A session born in a thread goes back under that thread's key: it must
+        // never be resumed by a run outside it.
+        const thread = mentionId ? await this.threadOf(mentionId) : null;
+        const sessionKey = sessionKeyFor(persona.name, ticketId, thread);
         this.sessionHistory.set(sessionKey, sdkSessionId);
       }
     }
@@ -985,13 +1007,18 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount, repoBases);
 
       // 5. Load ticket context
+      // A run inside an assistant thread only sees that thread (see ThreadScope).
+      const thread = await this.threadOf(mention.id);
       const context = await this.getTicketContext.execute({
         ticketId: mention.ticketId,
         agentName: persona.name,
+        thread,
       });
 
       // 6. Build user prompt with ticket context (content blocks for multimodal support)
-      const sessionKey = `${persona.name}:${mention.ticketId}`;
+      // One SDK session per thread: a second thread with the same persona starts
+      // fresh instead of resuming the first one's conversation.
+      const sessionKey = sessionKeyFor(persona.name, mention.ticketId, thread);
       // `isWakeUp` is decided up front from `wokenMentionIds` (a genuine resume
       // from waiting_for_info), NOT from "a session exists" — a fresh queued
       // mention reuses the session but is not a wake-up.
@@ -1808,9 +1835,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       model: persona.model,
     });
 
+    const thread = opts?.mentionId ? await this.threadOf(opts.mentionId) : null;
     const context = await this.getTicketContext.execute({
       ticketId,
       agentName: persona.name,
+      thread,
     });
 
     // 4. Compose prompts (after context so the base-branch section can read the
@@ -1922,7 +1951,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // 8. Call Claude Agent SDK
       const effectiveMode = 'edit' as const;
 
-      const sessionKey = `skill:${skill.commandName}:${ticketId}`;
+      const sessionKey = sessionKeyFor(`skill:${skill.commandName}`, ticketId, thread);
       const previousSessionId = this.sessionHistory.get(sessionKey);
 
       const queryOptions = buildSdkOptions('edit', {

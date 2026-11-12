@@ -56,7 +56,7 @@ export class PgThreadStore implements ThreadStorePort {
          forwarded_context, status, current_mention_id, exchanges, summary, created_at, updated_at, concluded_at, failures, target_type, generated_title, participants,
          user_hold_at, last_stop, concluded_by, turn_cap)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
-       ON CONFLICT (id) DO UPDATE SET status = $9, current_mention_id = $10, exchanges = $11, summary = $12,
+       ON CONFLICT (id) DO UPDATE SET forwarded_context = $8, status = $9, current_mention_id = $10, exchanges = $11, summary = $12,
          updated_at = $14, concluded_at = $15, failures = $16,
          generated_title = $18, participants = $19,
          user_hold_at = $20, last_stop = $21, concluded_by = $22, turn_cap = $23`,

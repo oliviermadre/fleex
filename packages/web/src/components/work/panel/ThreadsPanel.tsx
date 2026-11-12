@@ -5,6 +5,7 @@
  * log of the agent's current run). Footer: step into the thread as You, or ask
  * the assistant to conclude now.
  */
+import { sharedDeliverableIds } from '../task/threadContext';
 import { useEffect, useMemo, useState } from 'react';
 import type { AgentExecution, AgentThread, TicketComment, TicketDeliverable, TicketMention } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
@@ -377,16 +378,18 @@ export function ThreadsPanel({ task, deliverables, onOpenExecution }: { task: Wo
 
           {threadTab === 'conv' ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
-              {thread.forwardedContext.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1">
-                  <span className="mr-0.5 text-[10px] font-semibold tracking-[0.06em] text-[var(--theme-text-faint)]">CONTEXT FORWARDED</span>
-                  {thread.forwardedContext.map((k) => (
-                    <span key={k} className="rounded border border-[var(--theme-border)] px-1.5 py-px font-mono text-[10.5px] text-[var(--theme-text-secondary)]">
-                      {k}
-                    </span>
-                  ))}
-                </div>
-              )}
+              {/* The thread is walled off: besides its own turns, its target reads only these deliverables. */}
+              <div className="flex flex-wrap items-center gap-1" data-testid="thread-shared-docs">
+                <span className="mr-0.5 text-[10px] font-semibold tracking-[0.06em] text-[var(--theme-text-faint)]">SHARED DOCS</span>
+                {sharedDeliverableIds(thread).length === 0 && (
+                  <span className="text-[10.5px] text-[var(--theme-text-faint)]">none — the target only sees this thread</span>
+                )}
+                {sharedDeliverableIds(thread).map((id) => (
+                  <span key={id} className="rounded border border-[var(--theme-border)] px-1.5 py-px text-[10.5px] text-[var(--theme-text-secondary)]">
+                    {deliverables.find((d) => d.id === id)?.title ?? id.slice(0, 8)}
+                  </span>
+                ))}
+              </div>
               {[
                 ...turns.map((t) => ({ at: Date.parse(t.createdAt), key: `c-${t.id}`, node: <Turn key={`c-${t.id}`} turn={t} /> })),
                 // A run sits just before the reply it produced (same convention as the main stream).

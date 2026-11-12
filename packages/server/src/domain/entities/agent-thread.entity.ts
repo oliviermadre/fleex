@@ -8,6 +8,8 @@ import type { AgentThread, AgentThreadStatus, AgentThreadTargetType, ThreadParti
  * are terminal — every transition on a terminal thread is a no-op that
  * returns false, so a late mention event can never resurrect a closed thread.
  */
+const DELIVERABLE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class AgentThreadEntity {
   constructor(
     public readonly id: string,
@@ -17,7 +19,13 @@ export class AgentThreadEntity {
     public readonly personaName: string,
     public readonly assistantPersonaId: string,
     public readonly brief: string,
-    public readonly forwardedContext: string[],
+    /**
+     * What of the ticket the assistant exposes to this thread, beyond the
+     * thread's own turns: ids of the deliverables its target may read. (Threads
+     * opened before this carried decorative keys — `ticket`, `pr`… — which are
+     * ignored.)
+     */
+    public forwardedContext: string[],
     public status: AgentThreadStatus,
     public currentMentionId: string | null,
     public exchanges: number,
@@ -56,6 +64,20 @@ export class AgentThreadEntity {
       null, // generatedTitle
       [],   // participants
     );
+  }
+
+  /** Ids of the ticket deliverables this thread's target may read, besides the ones it produced itself. */
+  get sharedDeliverableIds(): string[] {
+    return this.forwardedContext.filter((x) => DELIVERABLE_ID.test(x));
+  }
+
+  /** The assistant edits what the thread sees, at any time while it is open. Returns the new list. */
+  shareDeliverables(add: readonly string[], remove: readonly string[] = []): string[] {
+    const gone = new Set(remove);
+    const next = [...new Set([...this.sharedDeliverableIds, ...add])].filter((id) => !gone.has(id));
+    this.forwardedContext = next;
+    this.updatedAt = new Date();
+    return next;
   }
 
   /** How a comment addresses this thread's target: `@agent:x`, `@skill:x`, `@panel:x`, `@workflow:x`. */

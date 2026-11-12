@@ -95,3 +95,16 @@ describe('DelegationCard', () => {
     });
   });
 });
+
+describe('DelegationCard — what the thread may read', () => {
+  it('says how many deliverables the assistant exposed to the thread', () => {
+    const ids = ['11111111-aaaa-4aaa-8aaa-111111111111', '22222222-bbbb-4bbb-8bbb-222222222222'];
+    render(<DelegationCard thread={thread({ forwardedContext: ids })} turns={[]} personaDisplayName="The Builder" onOpen={() => {}} onAnswer={() => {}} />);
+    expect(screen.getByTestId('thread-shared-docs').textContent).toBe('2 shared docs');
+  });
+
+  it('shows nothing for a thread that exposes none (older threads carried decorative keys, not ids)', () => {
+    render(<DelegationCard thread={thread({ forwardedContext: ['ticket', 'pr'] })} turns={[]} personaDisplayName="The Builder" onOpen={() => {}} onAnswer={() => {}} />);
+    expect(screen.queryByTestId('thread-shared-docs')).toBeNull();
+  });
+});

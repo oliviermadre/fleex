@@ -254,21 +254,21 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     return rows.map((r) => r.mention_id);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>> {
     const rows = this.conn.db
       .prepare(`
-        SELECT persona_id, ticket_id, sdk_session_id
+        SELECT persona_id, ticket_id, sdk_session_id, mention_id
         FROM agent_event_executions
         WHERE sdk_session_id IS NOT NULL
         ORDER BY started_at DESC
       `)
-      .all() as { persona_id: string; ticket_id: string; sdk_session_id: string }[];
+      .all() as { persona_id: string; ticket_id: string; sdk_session_id: string; mention_id: string | null }[];
 
-    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
+    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>();
     for (const row of rows) {
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
-        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });
+        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id, mentionId: row.mention_id });
       }
     }
     return result;

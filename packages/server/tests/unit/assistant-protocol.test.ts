@@ -7,7 +7,7 @@ describe('parseAssistantOutput', () => {
   });
   it('accepts a delegate with defaults for optional fields (an agent unless told otherwise)', () => {
     const a = parseAssistantOutput({ action: 'delegate', name: 'builder', brief: 'Fix e2e', turn: 'Go' }, '');
-    expect(a).toEqual({ action: 'delegate', targetType: 'agent', name: 'builder', brief: 'Fix e2e', forward: ['ticket'], turn: 'Go', message: null });
+    expect(a).toEqual({ action: 'delegate', targetType: 'agent', name: 'builder', brief: 'Fix e2e', deliverables: [], turn: 'Go', message: null });
   });
   it('delegates to a skill, a panel or a workflow by targetType', () => {
     for (const targetType of ['skill', 'panel', 'workflow'] as const) {
@@ -186,7 +186,8 @@ describe('buildAssistantUserPrompt — thread deliverables', () => {
     const out = buildAssistantUserPrompt({ context, threads: [], turns: [], trigger: { kind: 'thread_reply', threadId: 'th1', mentionStatus: 'resolved' }, threadDeliverables: [d('a', 'Plan', 'FULL PLAN BODY') as never] });
     expect(out).toContain('Livrable « Plan »');
     expect(out).toContain('FULL PLAN BODY');
-    expect(out).toContain('- Autre (final, par The Builder)');
+    // Listed with its id: that is what the assistant exposes to a thread.
+    expect(out).toContain('- b · Autre (plan, final, par The Builder, 1 caractères)');
     expect(out).not.toContain('- Plan (final');
   });
 });
@@ -216,6 +217,39 @@ describe('renderThreadDeliverables — the assistant reads what it delegated, wh
     expect(out).toContain(`caractères sur ${v1.length}`);
     expect(out).toContain("Tu n'as PAS lu la suite de ce livrable (id v1)");
     expect(out.indexOf('Étude »')).toBeLessThan(out.indexOf('Étude v2 »')); // order of delivery kept
+  });
+});
+
+describe('what a thread sees — the assistant chooses', () => {
+  it('delegate carries the ids of the deliverables to expose; share_deliverables edits them later', async () => {
+    const { parseActionToolInput } = await import('../../src/application/assistant/assistant-protocol.js');
+    expect(parseActionToolInput('delegate', { targetType: 'agent', name: 'builder', brief: 'b', turn: 't', deliverables: ['d1', ' d2 ', 'd1'] }))
+      .toMatchObject({ action: 'delegate', deliverables: ['d1', 'd2'] });
+    expect(parseActionToolInput('share_deliverables', { threadId: 'th', add: ['d3'], remove: ['d1'] }))
+      .toEqual({ action: 'share_deliverables', threadId: 'th', add: ['d3'], remove: ['d1'] });
+    // Nothing to add or remove is not an action.
+    expect(parseActionToolInput('share_deliverables', { threadId: 'th' })).toBeNull();
+  });
+
+  it('the prompt tells the assistant a target is walled off, so its turn must stand alone', async () => {
+    const { buildAssistantSystemPrompt } = await import('../../src/application/assistant/assistant-protocol.js');
+    const system = buildAssistantSystemPrompt({ persona: { soulMd: '', identityMd: '', memoryMd: '' }, personas: [], assistantName: 'Nas' });
+    expect(system).toContain('chaque thread est cloisonné');
+    expect(system).toContain('Elle ne voit PAS ta discussion avec l\'utilisateur');
+    expect(system).toContain('share_deliverables');
+    expect(system).toContain('Deux threads successifs avec la même cible ne partagent rien');
+  });
+
+  it('each thread line says which deliverables its target may read', async () => {
+    const { buildAssistantUserPrompt } = await import('../../src/application/assistant/assistant-protocol.js');
+    const ID = '11111111-2222-3333-4444-555555555555';
+    const d = { id: ID, title: 'Doc API', content: 'x', status: 'final', type: 'report', agentName: 'Builder', createdAt: 'now', mentionId: null };
+    const context = { ticket: { displayId: 1, title: 'T', status: 'doing', type: null, priority: 'none', description: '', conversationMode: 'plan' }, comments: [], deliverables: [d] } as never;
+    const th = (id: string, forwardedContext: string[]) => ({ id, targetType: 'agent', personaName: 'builder', status: 'running', exchanges: 1, brief: 'b', forwardedContext }) as never;
+    const out = buildAssistantUserPrompt({ context, threads: [th('th1', [ID]), th('th2', ['ticket'])], turns: [], trigger: { kind: 'user_message', commentId: 'c' } });
+    expect(out).toContain(`livrables exposés : « Doc API » (${ID})`);
+    // A thread opened before the walling-off carried decorative keys: it exposes nothing.
+    expect(out).toMatch(/th2 .* aucun livrable exposé/);
   });
 });
 
