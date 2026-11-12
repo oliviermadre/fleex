@@ -151,6 +151,11 @@ export interface TimelineEvent {
   exchange?: TimelineExchange;
   /** Queued / failed-before-start mention (R4): drawn in compact mode only. */
   compactOnly?: boolean;
+  /**
+   * The assistant ⇄ target thread this event belongs to (a turn of the thread, the
+   * run it launched, what that run produced): drawn on the thread's branch, not on the frieze.
+   */
+  threadId?: string;
 }
 
 export interface TimelineZone {
@@ -1139,6 +1144,29 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
   }
 
   foldExchanges(src, drafts, exchangeRuns, mentionById, commentById, clamp, now);
+
+  // ── Threads: a turn, the run it launched and what that run produced belong to the thread ──
+  {
+    const draftById = new Map(drafts.map((d) => [d.id, d]));
+    const threadOfMention = (mentionId: string | null | undefined) => {
+      const m = mentionId ? mentionById.get(mentionId) : undefined;
+      return (m && commentById.get(m.commentId)?.threadId) || null;
+    };
+    for (const c of src.comments) {
+      const d = c.threadId ? draftById.get(`comment:${c.id}`) : undefined;
+      if (d) d.threadId = c.threadId!;
+    }
+    for (const [id, r] of exchangeRuns) {
+      const t = threadOfMention(r.mention?.id);
+      const d = t ? draftById.get(id) : undefined;
+      if (d) d.threadId = t!;
+    }
+    for (const dv of src.deliverables) {
+      const d = draftById.get(`deliv:${dv.id}`);
+      const t = threadOfMention(dv.mentionId) ?? (d?.parentId ? draftById.get(d.parentId)?.threadId : null);
+      if (d && t) d.threadId = t;
+    }
+  }
 
   // ── Phase metrics: duration and human interventions per status zone ──
   // An intervention is a human action that unblocks or steers the work:

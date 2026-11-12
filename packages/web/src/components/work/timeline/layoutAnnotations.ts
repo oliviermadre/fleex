@@ -98,7 +98,8 @@ export function timeAnchors(layout: TimelineLayout, now: number): TimeAnchor[] {
     const last = out[out.length - 1];
     if (!last || (at > last.at && x > last.x)) out.push({ at, x });
   };
-  for (const it of layout.items) if (!it.attached) push(it.event.at, it.x);
+  const driven = [...layout.items.filter((it) => !it.attached), ...layout.threadItems].sort((a, b) => a.x - b.x || a.event.at - b.event.at);
+  for (const it of driven) push(it.event.at, it.x);
   push(now, layout.nowX);
   return out;
 }

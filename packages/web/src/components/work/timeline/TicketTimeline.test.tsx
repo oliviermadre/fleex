@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { TicketTimeline } from './TicketTimeline';
 import { buildTimeline } from './buildTimeline';
-import { NOW, activity, at, comment, emptySources, exchangesTicket, execution, fixture591, mention } from './timeline.fixture';
+import { NOW, activity, at, comment, deliverable, emptySources, exchangesTicket, execution, fixture591, mention } from './timeline.fixture';
 import type { TimelineAnnotation } from '@fleex/shared';
 import type { TimelineAnnotationsProps } from './TicketTimeline';
 import { BAND, CREATE_STRIP, PILL, PILL_TOP } from './layoutAnnotations';
@@ -521,16 +521,34 @@ describe('TicketTimeline — thread branches', () => {
       { id: `${p.id}-1`, at: T, by: 'assistant', author: 'Jarvis' },
       { id: `${p.id}-2`, at: T + 300_000, by: 'target', author: 'The Builder' },
     ],
+    stop: null,
+    concludedBy: null,
     ...p,
   });
-  const renderWith = (branches: import('./threadBranches').ThreadBranch[], onOpen = vi.fn()) => {
+  // Thread « a »: the assistant's opening turn mentions the builder, whose run answers and delivers.
+  const threaded = () => {
+    const src = fixture591();
+    return {
+      ...src,
+      comments: [
+        ...src.comments,
+        comment({ id: 'th-open', body: '@agent:builder go', createdAt: at(9, 30), authorType: 'assistant', authorName: 'Jarvis', threadId: 'a' }),
+        comment({ id: 'th-reply', body: 'done', createdAt: at(9, 40), authorType: 'agent', authorName: 'The Builder', threadId: 'a' }),
+        comment({ id: 'th-human', body: 'wait', createdAt: at(9, 45), threadId: 'a' }),
+      ],
+      mentions: [...src.mentions, mention({ id: 'th-m', commentId: 'th-open', targetAgent: 'builder' })],
+      executions: [...src.executions, execution({ id: 'th-x', mentionId: 'th-m', startedAt: at(9, 31), completedAt: at(9, 40) })],
+      deliverables: [...src.deliverables, deliverable({ id: 'th-d', createdAt: at(9, 40), mentionId: 'th-m' })],
+    };
+  };
+  const renderWith = (branches: import('./threadBranches').ThreadBranch[], onOpen = vi.fn(), onAction = vi.fn()) => {
     render(
       <TicketTimeline
         header={header}
-        model={buildTimeline(fixture591(), NOW)}
+        model={buildTimeline(threaded(), NOW)}
         filters={ALL}
         onToggleFilter={() => {}}
-        onAction={() => {}}
+        onAction={onAction}
         threads={{ branches, selectedId: null, onOpen }}
       />,
     );
@@ -543,11 +561,50 @@ describe('TicketTimeline — thread branches', () => {
     expect(screen.getByTestId('timeline-content').style.height).toBe(`${GEOMETRY.height}px`);
   });
 
-  it('draws a concluded thread joining the lifeline again, with one mark per exchange', () => {
+  const THREAD_PICTOS = ['comment:th-open', 'run:th-x', 'comment:th-reply', 'deliv:th-d', 'comment:th-human'];
+  const stripNodes = () =>
+    [...screen.getByTestId('thread-strip').querySelectorAll<HTMLElement>('[data-timeline-node]')].map((n) => n.dataset.timelineNode);
+  const allNodes = () => [...document.querySelectorAll<HTMLElement>('[data-timeline-node]')].map((n) => n.dataset.timelineNode);
+
+  it('moves the pictos of a thread from the frieze onto its branch', () => {
+    renderWith([branch({ id: 'a' })]);
+    expect(stripNodes()).toEqual(expect.arrayContaining(THREAD_PICTOS));
+    // Moved, not copied: each one exists once.
+    for (const id of THREAD_PICTOS) expect(allNodes().filter((n) => n === id)).toHaveLength(1);
+    // What is not the thread's stays on the frieze.
+    expect(stripNodes()).not.toContain('created');
+  });
+
+  it('keeps them on the frieze when the thread has no branch', () => {
+    renderWith([]);
+    expect(allNodes()).toEqual(expect.arrayContaining(['comment:th-open', 'comment:th-reply']));
+  });
+
+  it('opens the thread, not the main conversation, from one of its comments', () => {
+    const onAction = vi.fn();
+    const onOpen = renderWith([branch({ id: 'a' })], vi.fn(), onAction);
+    fireEvent.click(document.querySelector<HTMLElement>('[data-timeline-node="comment:th-reply"]')!);
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }));
+    expect(onAction).not.toHaveBeenCalled();
+    // A run still opens its execution log, as on the frieze.
+    fireEvent.click(screen.getByTestId('thread-run'));
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: 'execution', executionId: 'th-x' }), expect.anything());
+  });
+
+  it('draws a concluded thread joining the lifeline again', () => {
     renderWith([branch({ id: 'a' })]);
     expect(screen.getAllByTestId('thread-merge')).toHaveLength(1);
-    expect(screen.getAllByTestId('thread-turn').map((n) => n.dataset.by)).toEqual(['assistant', 'target']);
     expect(screen.queryByTestId('thread-end')).toBeNull();
+  });
+
+  it('gives what only a thread has its own marks: a stop by the human, a wait, a failure', () => {
+    renderWith([
+      branch({ id: 'a', status: 'idle', endAt: null, stop: { by: 'user', at: T + 400_000 } }),
+      branch({ id: 'b', status: 'waiting', endAt: null }),
+      branch({ id: 'c', status: 'failed' }),
+    ]);
+    expect(screen.getByTestId('thread-stop').dataset.by).toBe('user');
+    expect(screen.getAllByTestId('thread-end').map((n) => n.dataset.state)).toEqual(['idle', 'waiting', 'failed']);
   });
 
   it('leaves an open thread unmerged, with a live end at now', () => {

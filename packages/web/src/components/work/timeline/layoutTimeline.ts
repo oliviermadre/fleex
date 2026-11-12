@@ -31,6 +31,8 @@ export const PAD_RIGHT = 80;
 /** A short frieze is stretched to fill the viewport, but never spread more than this. */
 export const MAX_STRETCH = 3;
 export const FORK_WIDTH = 320;
+/** Slot of a picto on a thread's branch (centre to centre). */
+export const THREAD_SLOT = 30;
 export const BREAK_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const MAX_GAP = 180;
 const NOTE_MAX = 150;
@@ -78,6 +80,12 @@ export interface PlacedZone extends TimelineZone {
 
 export interface TimelineLayout {
   items: PlacedEvent[];
+  /**
+   * Events drawn on a thread's branch instead of the frieze. They are placed by the
+   * same sweep (so the frieze makes room for them and time stays monotonic), each
+   * thread being its own lane, but are in neither `items` nor `byId`.
+   */
+  threadItems: PlacedEvent[];
   byId: Map<string, PlacedEvent>;
   zones: PlacedZone[];
   /** Horizontal stretch applied so a short frieze fills the viewport (1 = none). */
@@ -90,6 +98,8 @@ export interface TimelineLayout {
 }
 
 export type TimelineFilters = Record<TimelineFilterKey, boolean>;
+
+const NO_BRANCH: ReadonlySet<string> = new Set();
 
 /** Whether the filters let an event through. The spine is never filterable. */
 export function isVisible(e: TimelineEvent, f: TimelineFilters): boolean {
@@ -150,9 +160,20 @@ function dayLabel(t: number): string {
  * (every x scaled away from the left pad, up to MAX_STRETCH — gaps only grow,
  * so order and non-overlap hold) and the last status zone runs to the edge.
  */
-export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, minWidth = 0, zoom = 1): TimelineLayout {
-  const visible = model.events.filter((e) => isVisible(e, filters));
+export function layoutTimeline(
+  model: TimelineModel,
+  filters: TimelineFilters,
+  minWidth = 0,
+  zoom = 1,
+  /** Threads drawn as branches: their events leave the frieze for their branch. */
+  branchThreads: ReadonlySet<string> = NO_BRANCH,
+): TimelineLayout {
+  const onBranch = (e: TimelineEvent) => !!e.threadId && branchThreads.has(e.threadId);
+  // On a branch every picto stands alone: no capsule folding there.
+  const visible = model.events.filter((e) => (onBranch(e) ? isVisible({ ...e, absorbedBy: undefined, compactOnly: false }, filters) : isVisible(e, filters)));
   const items: PlacedEvent[] = [];
+  const threadItems: PlacedEvent[] = [];
+  const threadRight = new Map<string, number>();
   const byId = new Map<string, PlacedEvent>();
   const breaks: TimelineLayout['breaks'] = [];
 
@@ -166,6 +187,18 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, m
   let lastPrimaryAt = model.now;
 
   for (const e of visible) {
+    if (onBranch(e)) {
+      // Time-driven, in its thread's own lane: the frieze widens for it as for any picto.
+      const right = threadRight.get(e.threadId!) ?? -Infinity;
+      const at = prevAt == null ? x : Math.max(x + gap(e.at - prevAt) * zoom, floor, right + THREAD_SLOT / 2);
+      x = at;
+      prevAt = e.at;
+      lastPrimaryAt = e.at;
+      floor = Math.max(floor, at);
+      threadRight.set(e.threadId!, at + THREAD_SLOT / 2);
+      threadItems.push({ event: e, x: at, width: THREAD_SLOT, attached: false, textWidth: null });
+      continue;
+    }
     const w = slotWidth(e);
     const parent = e.parentId ? byId.get(e.parentId) : undefined;
     const attached = !!parent && (e.lane === 'top' || e.lane === 'bottom');
@@ -194,7 +227,7 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, m
     byId.set(e.id, placed);
   }
 
-  const maxX = items.reduce((m, i) => Math.max(m, i.x), PAD_LEFT);
+  const maxX = [...items, ...threadItems].reduce((m, i) => Math.max(m, i.x), PAD_LEFT);
   let nowX = maxX + Math.max(LANE_WIDTH.spine / 2 + 16, gap(model.now - lastPrimaryAt) * zoom);
   const fork = model.pendingFork && byId.has(model.pendingFork.anchorId) ? model.pendingFork : null;
   const tail = PAD_RIGHT + (fork ? FORK_WIDTH : 0);
@@ -205,6 +238,7 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, m
     stretch = Math.min(MAX_STRETCH, (minWidth - tail - PAD_LEFT) / (nowX - PAD_LEFT));
     const sx = (v: number) => PAD_LEFT + (v - PAD_LEFT) * stretch;
     for (const it of items) it.x = sx(it.x);
+    for (const it of threadItems) it.x = sx(it.x);
     for (const b of breaks) b.x = sx(b.x);
     nowX = sx(nowX);
   }
@@ -257,5 +291,5 @@ export function layoutTimeline(model: TimelineModel, filters: TimelineFilters, m
       : null,
   };
 
-  return { items, byId, zones, stretch, breaks, days, spine, nowX, width };
+  return { items, threadItems, byId, zones, stretch, breaks, days, spine, nowX, width };
 }

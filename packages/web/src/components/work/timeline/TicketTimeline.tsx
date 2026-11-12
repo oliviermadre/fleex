@@ -133,10 +133,13 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const layout = useMemo(() => (model ? layoutTimeline(model, filters, viewportW, zoom) : null), [model, filters, viewportW, zoom]);
+  // Threads drawn as branches take their pictos off the frieze.
+  const branchKey = threads?.branches.map((b) => b.id).join('|') ?? '';
+  const branchIds = useMemo(() => new Set(branchKey ? branchKey.split('|') : []), [branchKey]);
+  const layout = useMemo(() => (model ? layoutTimeline(model, filters, viewportW, zoom, branchIds) : null), [model, filters, viewportW, zoom, branchIds]);
   const anchors = useMemo(() => (layout && model ? timeAnchors(layout, model.now) : []), [layout, model]);
   const lanes = useMemo(
-    () => (layout && threads ? layoutThreadStrip(threads.branches, anchors, layout.nowX) : NO_THREADS),
+    () => (layout && threads ? layoutThreadStrip(threads.branches, anchors, layout.nowX, layout.threadItems) : NO_THREADS),
     [layout, threads, anchors],
   );
   // The lanes take their room from the annotation band's budget, as the todo strip does.
@@ -197,7 +200,10 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     const nodes = layout?.items.map((i) => ({ id: i.event.id, x: i.x })) ?? [];
     for (const c of band.cards) nodes.push({ id: cardNodeId(c), x: c.kind === 'card' ? c.item.x : c.items[0]!.x });
     for (const c of strip.chips) nodes.push({ id: todoChipNodeId(c), x: c.minX });
-    for (const b of lanes.branches) nodes.push({ id: threadNodeId(b), x: b.x0 });
+    for (const b of lanes.branches) {
+      nodes.push({ id: threadNodeId(b), x: b.x0 });
+      for (const it of b.items) nodes.push({ id: it.event.id, x: it.x });
+    }
     return nodes.sort((a, b) => a.x - b.x).map((n) => n.id);
   }, [layout, band, strip, lanes]);
   const onKeyDown = useCallback(
@@ -435,7 +441,7 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
             />
           )}
           {threads && (
-            <TimelineThreadStrip strip={lanes} top={lanesTop} selectedId={threads.selectedId} onOpen={threads.onOpen} />
+            <TimelineThreadStrip strip={lanes} top={lanesTop} selectedId={threads.selectedId} onOpen={threads.onOpen} onAction={onAction} />
           )}
           {todos && (
             <TimelineTodoStrip

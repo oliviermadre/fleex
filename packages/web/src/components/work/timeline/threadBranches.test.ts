@@ -85,13 +85,36 @@ describe('layoutThreadStrip', () => {
     expect(b!.x1 - b!.x0).toBeGreaterThanOrEqual(2 * ELBOW);
   });
 
-  it('keeps every exchange on the straight part of the rail', () => {
-    const { branches: [b] } = layoutThreadStrip(
-      branches([thread({ id: 'a', status: 'concluded', concludedAt: min(30) })], [turn('c1', 'a', 0, 'assistant'), turn('c2', 'a', 30, 'agent')]),
+  const picto = (id: string, threadId: string, x: number) =>
+    ({ event: { id, threadId }, x, width: 30, attached: false, textWidth: null }) as unknown as import('./layoutTimeline').PlacedEvent;
+
+  it('hangs on each branch the pictos of its own thread only', () => {
+    const strip = layoutThreadStrip(
+      branches([thread({ id: 'a', status: 'concluded', concludedAt: min(40) }), thread({ id: 'b', createdAt: min(60) })]),
       anchors,
       NOW_X,
+      [picto('c1', 'a', 150), picto('r1', 'a', 300), picto('c2', 'b', 800)],
     );
-    expect(b!.turns.map((t) => t.x)).toEqual([b!.x0 + ELBOW, b!.x1 - ELBOW]);
+    expect(strip.branches.map((b) => b.items.map((i) => i.event.id))).toEqual([['c1', 'r1'], ['c2']]);
+  });
+
+  it('forks before the first picto and joins back after the last, never under them', () => {
+    // The opening turn is posted as the thread is created, the last answer as it is concluded.
+    const { branches: [b] } = layoutThreadStrip(
+      branches([thread({ id: 'a', createdAt: min(10), status: 'concluded', concludedAt: min(60) })]),
+      anchors,
+      NOW_X,
+      [picto('c1', 'a', 200), picto('c2', 'a', 700)],
+    );
+    expect(b!.x0).toBeLessThan(200 - ELBOW);
+    expect(b!.x1).toBeGreaterThan(700 + ELBOW);
+  });
+
+  it('marks where a run was stopped on purpose, after the last picto', () => {
+    const stopped = thread({ id: 'a', status: 'idle', lastStop: { by: 'user', at: min(20), reason: null, mentionId: null } });
+    const { branches: [b] } = layoutThreadStrip(branches([stopped]), anchors, NOW_X, [picto('r1', 'a', 290)]);
+    expect(b!.stop).toEqual({ by: 'user', at: T0 + 20 * 60_000 });
+    expect(b!.stopX).toBeGreaterThan(290);
   });
 });
 
@@ -101,5 +124,7 @@ describe('branchCaption', () => {
     expect(branchCaption({ turns, status: 'concluded' })).toBe('2 échanges');
     expect(branchCaption({ turns, status: 'waiting' })).toBe("2 échanges · t'attend");
     expect(branchCaption({ turns: [], status: 'running' })).toBe('en cours');
+    // A stop by the human is the human's decision: the branch says so instead of looking idle.
+    expect(branchCaption({ turns, status: 'idle', stop: { by: 'user', at: 0 } })).toBe('2 échanges · arrêté par toi');
   });
 });
