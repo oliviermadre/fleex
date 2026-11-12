@@ -512,3 +512,53 @@ describe('TicketTimeline — exchange capsules', () => {
     expect(screen.getAllByRole('button', { name: /^Exécution @Builder/ })).toHaveLength(3);
   });
 });
+
+describe('TicketTimeline — thread branches', () => {
+  const T = NOW - 3_600_000;
+  const branch = (p: Partial<import('./threadBranches').ThreadBranch> & { id: string }): import('./threadBranches').ThreadBranch => ({
+    label: 'The Builder', title: 'Build the thing', hue: 'purple', status: 'concluded', startAt: T, endAt: T + 600_000,
+    turns: [
+      { id: `${p.id}-1`, at: T, by: 'assistant', author: 'Jarvis' },
+      { id: `${p.id}-2`, at: T + 300_000, by: 'target', author: 'The Builder' },
+    ],
+    ...p,
+  });
+  const renderWith = (branches: import('./threadBranches').ThreadBranch[], onOpen = vi.fn()) => {
+    render(
+      <TicketTimeline
+        header={header}
+        model={buildTimeline(fixture591(), NOW)}
+        filters={ALL}
+        onToggleFilter={() => {}}
+        onAction={() => {}}
+        threads={{ branches, selectedId: null, onOpen }}
+      />,
+    );
+    return onOpen;
+  };
+
+  it('takes no room on a ticket without thread', () => {
+    renderWith([]);
+    expect(screen.queryByTestId('thread-strip')).toBeNull();
+    expect(screen.getByTestId('timeline-content').style.height).toBe(`${GEOMETRY.height}px`);
+  });
+
+  it('draws a concluded thread joining the lifeline again, with one mark per exchange', () => {
+    renderWith([branch({ id: 'a' })]);
+    expect(screen.getAllByTestId('thread-merge')).toHaveLength(1);
+    expect(screen.getAllByTestId('thread-turn').map((n) => n.dataset.by)).toEqual(['assistant', 'target']);
+    expect(screen.queryByTestId('thread-end')).toBeNull();
+  });
+
+  it('leaves an open thread unmerged, with a live end at now', () => {
+    renderWith([branch({ id: 'a', status: 'running', endAt: null })]);
+    expect(screen.queryByTestId('thread-merge')).toBeNull();
+    expect(screen.getByTestId('thread-end')).toBeTruthy();
+  });
+
+  it('opens the thread when its label is clicked', () => {
+    const onOpen = renderWith([branch({ id: 'a' })]);
+    fireEvent.click(screen.getByRole('button', { name: /Thread avec The Builder, 2 échanges, conclu/ }));
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }));
+  });
+});

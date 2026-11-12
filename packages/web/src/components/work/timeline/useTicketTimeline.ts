@@ -63,6 +63,8 @@ export interface TicketTimelineData {
   model: TimelineModel | null;
   /** The todo history as frieze marks — kept out of `model`: they take no slot in the layout. */
   todoMarks: TodoMark[];
+  /** The ticket's comments, as fetched — thread turns are read from them. */
+  comments: TicketComment[];
   loading: boolean;
 }
 
@@ -275,5 +277,5 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
 
   const marks = useMemo(() => todoMarks(todoEvents), [todoEvents]);
 
-  return { model, todoMarks: marks, loading };
+  return { model, todoMarks: marks, comments, loading };
 }

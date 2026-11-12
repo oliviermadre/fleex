@@ -13,7 +13,7 @@ import type { TodoMark } from './todoMarks';
 
 const timeline = vi.hoisted(() => ({ todoMarks: [] as TodoMark[] }));
 vi.mock('./useTicketTimeline', () => ({
-  useTicketTimeline: () => ({ model: buildTimeline(fixture591(), NOW), todoMarks: timeline.todoMarks }),
+  useTicketTimeline: () => ({ model: buildTimeline(fixture591(), NOW), todoMarks: timeline.todoMarks, comments: [] }),
 }));
 
 const task = { id: TICKET_ID, number: 591, title: 'Importer', boardName: 'Fleex', status: 'doing', type: 'build' } as WorkTask;
