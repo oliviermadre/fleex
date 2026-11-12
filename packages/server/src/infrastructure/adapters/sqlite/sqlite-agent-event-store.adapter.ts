@@ -2,8 +2,8 @@ import { join } from 'node:path';
 import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import { FLEEX_DIR, resolveStoppedBy } from '@fleex/shared';
+import type { AgentExecution, StopAuthor } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
@@ -34,6 +34,10 @@ interface ExecutionRow {
   source: string | null;
   comment_id: string | null;
   deliverable_id: string | null;
+  auto_terminated_at_conclusion?: number | null;
+  manually_terminated_by_user?: number | null;
+  stopped_by?: string | null;
+  stop_reason?: string | null;
 }
 
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
@@ -242,31 +246,79 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       .prepare("SELECT mention_id FROM agent_event_executions WHERE status = 'running'")
       .all() as { mention_id: string }[];
 
+    // Nobody chose this stop: the server went away under the run.
     this.conn.db.prepare(
-      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = ? WHERE status = 'running'"
+      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = ?, stopped_by = 'system', stop_reason = 'server_restart' WHERE status = 'running'"
     ).run(new Date().toISOString());
 
     return rows.map((r) => r.mention_id);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>> {
     const rows = this.conn.db
       .prepare(`
-        SELECT persona_id, ticket_id, sdk_session_id
+        SELECT persona_id, ticket_id, sdk_session_id, mention_id
         FROM agent_event_executions
         WHERE sdk_session_id IS NOT NULL
         ORDER BY started_at DESC
       `)
-      .all() as { persona_id: string; ticket_id: string; sdk_session_id: string }[];
+      .all() as { persona_id: string; ticket_id: string; sdk_session_id: string; mention_id: string | null }[];
 
-    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
+    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>();
     for (const row of rows) {
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
-        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });
+        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id, mentionId: row.mention_id });
       }
     }
     return result;
+  }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+    const placeholders = executionIds.map(() => '?').join(',');
+
+    // Build the UPDATE statement dynamically based on which flags are set
+    let updateParts = ['status = ?', 'completed_at = ?'];
+    const updateValues: Array<string | number> = [status, now];
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateParts.push('auto_terminated_at_conclusion = ?');
+      updateValues.push(flags.autoTerminatedAtConclusion ? 1 : 0);
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateParts.push('manually_terminated_by_user = ?');
+      updateValues.push(flags.manuallyTerminatedByUser ? 1 : 0);
+    }
+
+    updateValues.push(...executionIds);
+
+    this.conn.db.prepare(`
+      UPDATE agent_event_executions
+      SET ${updateParts.join(', ')}
+      WHERE execution_id IN (${placeholders})
+    `).run(...updateValues);
+  }
+
+  async markExecutionsStopped(executionIds: string[], stoppedBy: StopAuthor, stopReason?: string | null): Promise<void> {
+    if (executionIds.length === 0) return;
+    this.conn.db.prepare(`
+      UPDATE agent_event_executions SET stopped_by = ?, stop_reason = ?
+      WHERE execution_id IN (${executionIds.map(() => '?').join(',')})
+    `).run(stoppedBy, stopReason ?? null, ...executionIds);
+  }
+
+  async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
+    const row = this.conn.db
+      .prepare('SELECT * FROM agent_event_executions WHERE mention_id = ? ORDER BY started_at DESC LIMIT 1')
+      .get(mentionId) as ExecutionRow | undefined;
+    return row ? rowToExecution(row) : null;
   }
 }
 
@@ -295,5 +347,13 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: row.comment_id ?? null,
     deliverableId: row.deliverable_id ?? null,
+    autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+    stoppedBy: resolveStoppedBy({
+      stoppedBy: (row.stopped_by as StopAuthor | null | undefined) ?? null,
+      manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+      autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    }),
+    stopReason: row.stop_reason ?? null,
   };
 }

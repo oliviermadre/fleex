@@ -3,6 +3,7 @@ import type { AgentExecution } from '@fleex/shared';
 import { useAgentEventStore } from '../stores/agentEventStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { cancelExecution } from '../services/api';
+import { executionStopLabel } from '../components/work/task/stopLabel';
 import { AgentEventStream } from '../components/main-panel/AgentEventStream';
 import { tint, tintClasses, tintSolid } from '../lib/tints';
 
@@ -93,7 +94,7 @@ export function MobileExecutions({ ticketId }: { ticketId: string }) {
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[exec.status]}`}
               >
-                {exec.status === 'running' ? '● live' : exec.status}
+                {exec.status === 'running' ? '● live' : executionStopLabel(exec) ?? exec.status}
               </span>
             </button>
           ))}

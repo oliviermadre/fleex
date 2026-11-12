@@ -5,7 +5,7 @@ import type { Container } from '../container.js';
 
 type FocusDeps = Pick<
   Container,
-  'ticketStore' | 'mentionStore' | 'agentEventStore' | 'commentStore' | 'workflowRunStore' | 'stepRunStore' | 'personaStore'
+  'ticketStore' | 'mentionStore' | 'agentEventStore' | 'commentStore' | 'workflowRunStore' | 'stepRunStore' | 'personaStore' | 'config'
 >;
 
 /**
@@ -78,6 +78,29 @@ export async function computeFocus(deps: FocusDeps): Promise<FocusResponse> {
     if (!prev || dto.createdAt > prev.createdAt) lastAgentCommentByTicket.set(dto.ticketId, dto);
   }
 
+  // The assistant's pending question: its latest main-stream comment declares
+  // questions and the human has not answered in the main stream since. Only
+  // with « Assistant & threads » on — switched off, Focus is what it was.
+  const assistantQuestionByTicket = new Map<string, TicketComment>();
+  if (deps.config.get().workThreadsEnabled === true) {
+    const lastAssistant = new Map<string, TicketComment>();
+    const lastUserAt = new Map<string, string>();
+    for (const c of comments) {
+      if (c.threadId || !c.isVisibleTo('user')) continue;
+      const dto = c.toDTO();
+      if (c.authorType === 'assistant') {
+        const prev = lastAssistant.get(dto.ticketId);
+        if (!prev || dto.createdAt > prev.createdAt) lastAssistant.set(dto.ticketId, dto);
+      } else if (c.authorType === 'user') {
+        const prev = lastUserAt.get(dto.ticketId);
+        if (!prev || dto.createdAt > prev) lastUserAt.set(dto.ticketId, dto.createdAt);
+      }
+    }
+    for (const [ticketId, c] of lastAssistant) {
+      if (c.questions?.length && !((lastUserAt.get(ticketId) ?? '') > c.createdAt)) assistantQuestionByTicket.set(ticketId, c);
+    }
+  }
+
   return deriveFocusItems({
     tickets,
     mentions: mentions.filter((m) => ids.has(m.ticketId)).map((m) => m.toDTO()),
@@ -85,6 +108,7 @@ export async function computeFocus(deps: FocusDeps): Promise<FocusResponse> {
     runsByTicket: new Map([...runsByTicket].map(([k, v]) => [k, [...v.values()]])),
     stepRunsByRun,
     lastAgentCommentByTicket,
+    assistantQuestionByTicket,
     personaDisplayByName: new Map(personas.map((p) => [p.name, p.displayName || p.name])),
   });
 }

@@ -2,8 +2,8 @@ import { join } from 'node:path';
 import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import { FLEEX_DIR, resolveStoppedBy } from '@fleex/shared';
+import type { AgentExecution, StopAuthor } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
@@ -180,20 +180,29 @@ export class PgAgentEventStore implements AgentEventStorePort {
       "SELECT mention_id FROM agent_event_executions WHERE status = 'running'",
     );
     await this.db.query(
-      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = $1 WHERE status = 'running'",
+      // Nobody chose this stop: the server went away under the run.
+      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = $1, stopped_by = 'system', stop_reason = 'server_restart' WHERE status = 'running'",
       [new Date().toISOString()],
     );
     return rows.map((r: Record<string, unknown>) => r.mention_id as string);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async markExecutionsStopped(executionIds: string[], stoppedBy: StopAuthor, stopReason?: string | null): Promise<void> {
+    if (executionIds.length === 0) return;
+    await this.db.query(
+      'UPDATE agent_event_executions SET stopped_by = $1, stop_reason = $2 WHERE execution_id = ANY($3)',
+      [stoppedBy, stopReason ?? null, executionIds],
+    );
+  }
+
+  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>> {
     const { rows } = await this.db.query(
-      `SELECT persona_id, ticket_id, sdk_session_id
+      `SELECT persona_id, ticket_id, sdk_session_id, mention_id
        FROM agent_event_executions
        WHERE sdk_session_id IS NOT NULL
        ORDER BY started_at DESC`,
     );
-    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
+    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>();
     for (const row of rows as Record<string, unknown>[]) {
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
@@ -201,10 +210,54 @@ export class PgAgentEventStore implements AgentEventStorePort {
           sdkSessionId: row.sdk_session_id as string,
           personaId: row.persona_id as string,
           ticketId: row.ticket_id as string,
+          mentionId: (row.mention_id as string | null) ?? null,
         });
       }
     }
     return result;
+  }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+
+    // Build the UPDATE statement dynamically based on which flags are set
+    let updateParts = ['status = $1', 'completed_at = $2'];
+    const updateValues: any[] = [status, now];
+    let paramIdx = 3;
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateParts.push(`auto_terminated_at_conclusion = $${paramIdx}`);
+      updateValues.push(flags.autoTerminatedAtConclusion);
+      paramIdx++;
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateParts.push(`manually_terminated_by_user = $${paramIdx}`);
+      updateValues.push(flags.manuallyTerminatedByUser);
+      paramIdx++;
+    }
+
+    // Build the WHERE IN clause with parameters
+    const inPlaceholders = executionIds.map((_, i) => `$${paramIdx + i}`).join(',');
+    updateValues.push(...executionIds);
+
+    await this.db.query(
+      `UPDATE agent_event_executions SET ${updateParts.join(', ')} WHERE execution_id IN (${inPlaceholders})`,
+      updateValues,
+    );
+  }
+
+  async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
+    const { rows } = await this.db.query(
+      `SELECT * FROM agent_event_executions WHERE mention_id = $1 ORDER BY started_at DESC LIMIT 1`,
+      [mentionId]
+    );
+    return rows.length > 0 ? rowToExecution(rows[0]) : null;
   }
 }
 
@@ -233,5 +286,13 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: (row.comment_id as string) ?? null,
     deliverableId: (row.deliverable_id as string) ?? null,
+    autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+    stoppedBy: resolveStoppedBy({
+      stoppedBy: (row.stopped_by as StopAuthor | null | undefined) ?? null,
+      manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+      autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    }),
+    stopReason: (row.stop_reason as string | null | undefined) ?? null,
   };
 }

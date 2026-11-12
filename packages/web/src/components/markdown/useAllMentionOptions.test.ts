@@ -34,6 +34,13 @@ describe('useAllMentionOptions', () => {
     expect(kinds).toEqual(new Set(['agent', 'panel', 'skill', 'workflow', 'routine', 'scratchpad', 'ticket', 'human']));
   });
 
+  // What the assistant reads as an order to delegate: the four `@type:slug` tags.
+  it('offers the four delegation types with the tag the server parses, `@panel:` included', () => {
+    const { result } = renderHook(() => useAllMentionOptions());
+    const tag = (type: string) => result.current.find((o) => o.type === type)?.insertText;
+    expect(['agent', 'panel', 'skill', 'workflow'].map(tag)).toEqual(['@agent:catalyst', '@panel:squad', '@skill:commit', '@workflow:deploy']);
+  });
+
   it('spells the global note `global`, never its storage key', () => {
     const { result } = renderHook(() => useAllMentionOptions());
     const note = result.current.find((o) => o.type === 'scratchpad');

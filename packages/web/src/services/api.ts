@@ -2226,3 +2226,62 @@ export async function respondToAgendaMeeting(input: { calendarId: string; eventI
 export async function deleteAgendaExternalLink(id: string): Promise<void> {
   await request<void>(`/agenda/external-links/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
+
+// ── Assistant threads (Work view Phase 3) ──
+
+export interface AssistantMessageResult {
+  comment: import('@fleex/shared').TicketComment | null;
+  assistant: { personaId: string; displayName: string } | null;
+}
+
+/**
+ * Work composer entry point: posts the user's comment and starts one assistant
+ * turn. `assistant: null` means no assistant persona is configured — the caller
+ * falls back to `postTicketComment`.
+ */
+export async function postAssistantMessage(ticketId: string, body: string): Promise<AssistantMessageResult> {
+  return request<AssistantMessageResult>(`/tickets/${encodeURIComponent(ticketId)}/assistant/messages`, {
+    method: 'POST', body: JSON.stringify({ body }),
+  });
+}
+
+export async function fetchTicketThreads(ticketId: string): Promise<import('@fleex/shared').AgentThread[]> {
+  return request<import('@fleex/shared').AgentThread[]>(`/tickets/${encodeURIComponent(ticketId)}/threads`);
+}
+
+export async function fetchOpenThreads(): Promise<import('@fleex/shared').AgentThread[]> {
+  return request<import('@fleex/shared').AgentThread[]>('/threads/open');
+}
+
+export async function fetchThread(threadId: string): Promise<{ thread: import('@fleex/shared').AgentThread; turns: import('@fleex/shared').TicketComment[] }> {
+  return request(`/threads/${encodeURIComponent(threadId)}`);
+}
+
+export async function postThreadMessage(threadId: string, body: string): Promise<import('@fleex/shared').TicketComment> {
+  return request<import('@fleex/shared').TicketComment>(`/threads/${encodeURIComponent(threadId)}/messages`, {
+    method: 'POST', body: JSON.stringify({ body }),
+  });
+}
+
+export async function concludeThread(threadId: string): Promise<{ runsAutoTerminated: number }> {
+  const result = await request<{ accepted: boolean; runsAutoTerminated: number }>(`/threads/${encodeURIComponent(threadId)}/conclude`, { method: 'POST' });
+  return { runsAutoTerminated: result.runsAutoTerminated };
+}
+
+/** « Relancer »: lift the hold the user's own stop set on a thread and ask the assistant to put it back to work. */
+export async function relaunchThread(threadId: string): Promise<{ accepted: boolean }> {
+  return request<{ accepted: boolean }>(`/threads/${encodeURIComponent(threadId)}/relaunch`, { method: 'POST' });
+}
+
+/** Manually terminate a running execution: recorded as stopped by the user, and never relaunched by the assistant on its own. */
+export async function terminateExecution(executionId: string): Promise<{ accepted: boolean }> {
+  return request<{ accepted: boolean }>(`/executions/${encodeURIComponent(executionId)}/terminate-manual`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'user_requested' }),
+  });
+}
+
+/** Hand a freshly created ticket to the assistant (one turn primed with its description). */
+export async function startAssistant(ticketId: string): Promise<{ assistant: { personaId: string; displayName: string } | null }> {
+  return request(`/tickets/${encodeURIComponent(ticketId)}/assistant/start`, { method: 'POST' });
+}

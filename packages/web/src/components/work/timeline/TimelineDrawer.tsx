@@ -23,11 +23,18 @@ import { useBottomDrawerResize } from '../useBottomDrawerResize';
 import { openTicketSessionInWork } from '../openInWork';
 import type { WorkTask } from '../types';
 import type { TimelineAction } from './buildTimeline';
-import { TicketTimeline, type TimelineAnnotationsProps, type TimelineTodosProps } from './TicketTimeline';
+import { TicketTimeline, type TimelineAnnotationsProps, type TimelineThreadsProps, type TimelineTodosProps } from './TicketTimeline';
 import { AnnotationComposer, AnnotationStackList, AnnotationViewer, type AnchorRect } from './AnnotationPopovers';
 import type { PlacedCard } from './layoutAnnotations';
 import { cardNodeId } from './TimelineAnnotationBand';
 import { useTicketTimeline } from './useTicketTimeline';
+import { threadBranches } from './threadBranches';
+import { threadTargetLabel } from '../selectors';
+import { useThreadStore } from '../../../stores/threadStore';
+import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
+import type { AgentThread } from '@fleex/shared';
+
+const NO_THREAD_LIST: AgentThread[] = [];
 import { GEOMETRY } from './layoutTimeline';
 import { todoStripHeight, type TodoChip } from './layoutTodoStrip';
 import { TodoMarksPopover } from './TodoMarksPopover';
@@ -78,7 +85,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
   const zoom = useWorkStore((s) => s.timelineZoom);
   const setZoom = useWorkStore((s) => s.setTimelineZoom);
   const onMouseDown = useBottomDrawerResize(setTimelineHeight);
-  const { model, todoMarks } = useTicketTimeline(task, deliverables);
+  const { model, todoMarks, comments } = useTicketTimeline(task, deliverables);
   const ticketCreatedAt = useTicketStore((s) => s.tickets.find((t) => t.id === task.id)?.createdAt ?? null);
 
   // ── Annotations ──
@@ -203,6 +210,23 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
   }), [todoMarks, todoPop, hoverClose]);
   const todoH = todoStripHeight(todoMarks, filters.todos);
 
+  // ── Thread branches ──
+  const threadList = useThreadStore((s) => s.threadsByTicket[task.id] ?? NO_THREAD_LIST);
+  const personas = useAgentPersonaStore((s) => s.personas);
+  const selectedThreadId = useWorkStore((s) => s.selectedThreadId);
+  useEffect(() => {
+    void useThreadStore.getState().loadForTicket(task.id).catch(() => {});
+  }, [task.id]);
+  const threads = useMemo<TimelineThreadsProps>(() => ({
+    branches: threadBranches(threadList, comments, (t) => threadTargetLabel(t, personas.find((p) => p.id === t.personaId)?.displayName)),
+    selectedId: selectedThreadId,
+    onOpen: (branch) => {
+      const work = useWorkStore.getState();
+      work.setSelectedThreadId(branch.id);
+      if (work.rightPanel !== 'thread') work.setRightPanel('thread');
+    },
+  }), [threadList, comments, personas, selectedThreadId]);
+
   const closeComposer = useCallback(() => {
     // Closing a failed draft's retry keeps the red card: "Réessayer / Abandonner" stays on it.
     useAnnotationStore.getState().closeComposer();
@@ -262,6 +286,7 @@ export function TimelineDrawer({ task, deliverables, onOpenExecution }: Props) {
         onAction={onAction}
         annotations={annotations}
         todos={todos}
+        threads={threads}
         onContentHeight={setContentH}
         zoom={zoom}
         onZoom={setZoom}

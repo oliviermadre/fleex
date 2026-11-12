@@ -222,13 +222,16 @@ export const SpineNode = memo(function SpineNode({ item, onAction, segments = nu
   );
 });
 
-/** A top / bottom lane picto (28px top, 26px bottom), or a PR chip. */
-export const LanePicto = memo(function LanePicto({ item, onAction }: NodeProps) {
+/**
+ * A top / bottom lane picto (28px top, 26px bottom), or a PR chip. `at` draws the
+ * same picto elsewhere than in its lane (on a thread's branch): `y` is its top.
+ */
+export const LanePicto = memo(function LanePicto({ item, onAction, at }: NodeProps & { at?: { y: number; size: number } }) {
   const e = item.event;
   const g = e.glyph;
   const top = e.lane === 'top';
-  const size = top ? 28 : 26;
-  const y = top ? GEOMETRY.topY : GEOMETRY.bottomY;
+  const size = at?.size ?? (top ? 28 : 26);
+  const y = at?.y ?? (top ? GEOMETRY.topY : GEOMETRY.bottomY);
   const delivColor = useDeliverableColor(g.type === 'deliverable' ? g.deliverableType : null);
 
   if (g.type === 'pr') {
@@ -282,7 +285,7 @@ export const LanePicto = memo(function LanePicto({ item, onAction }: NodeProps) 
           )}
           style={style}
         >
-          <GlyphIcon glyph={g} size={16} />
+          <GlyphIcon glyph={g} size={at ? 14 : 16} />
           {g.type === 'deliverable' && g.unread && (
             <span aria-label="non lu" className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[var(--tint-pink-solid)] ring-2 ring-[var(--theme-bg-surface)]" />
           )}

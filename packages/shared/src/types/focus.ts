@@ -63,9 +63,10 @@ export interface FocusGate {
 export interface FocusQuestion {
   /**
    * `mention` → answer with a ticket comment (wakes the agent); `step` → comment + retry the step;
-   * `session` → a CLI session waits in its terminal: the answer is given there.
+   * `session` → a CLI session waits in its terminal: the answer is given there;
+   * `assistant` → the ticket's assistant asked in the main stream: answer with a message to it.
    */
-  readonly source: 'mention' | 'step' | 'session';
+  readonly source: 'mention' | 'step' | 'session' | 'assistant';
   readonly mentionId: string | null;
   readonly runId: string | null;
   readonly stepRunId: string | null;

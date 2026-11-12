@@ -15,6 +15,7 @@ export const EMPTY_DRAFT: WorkDraft = {
   type: 'build',
   priority: 'none',
   complexity: null,
+  startWithAssistant: true,
 };
 
 /**

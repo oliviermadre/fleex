@@ -49,6 +49,12 @@ export interface FocusInputs {
   readonly stepRunsByRun: ReadonlyMap<string, readonly StepRun[]>;
   /** Latest agent-authored comment per ticket. */
   readonly lastAgentCommentByTicket: ReadonlyMap<string, TicketComment>;
+  /**
+   * The assistant's question still waiting per ticket (« Assistant & threads »):
+   * its latest main-stream comment, when it declares questions and the human
+   * has not written in the main stream since.
+   */
+  readonly assistantQuestionByTicket?: ReadonlyMap<string, TicketComment>;
   /** persona name (mention.targetAgent) → display name. */
   readonly personaDisplayByName: ReadonlyMap<string, string>;
 }
@@ -280,6 +286,21 @@ export function deriveFocusItems(inputs: FocusInputs): FocusDerivation {
           source: 'mention', mentionId: m.id, runId: null, stepRunId: null,
           askedBy: display(m.targetAgent), text: comment?.body ?? null,
           questions: comment?.questions ?? null,
+        },
+      });
+    }
+
+    // ── The assistant's own question ──
+    // It is the human's interlocutor: what it asks stands for the questions of
+    // the agents it relays, so those are not offered a second time.
+    const asked = inputs.assistantQuestionByTicket?.get(ticket.id);
+    if (asked) {
+      for (let i = found.length - 1; i >= 0; i--) if (found[i]!.question?.source === 'mention') found.splice(i, 1);
+      found.push({
+        kind: 'question', key: `question:${asked.id}`, since: asked.createdAt, workflow: null,
+        question: {
+          source: 'assistant', mentionId: null, runId: null, stepRunId: null,
+          askedBy: asked.authorName, text: asked.body, questions: asked.questions ?? null,
         },
       });
     }

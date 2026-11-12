@@ -118,6 +118,26 @@ describe('ExecuteAgentUseCase — per-(agent,ticket) serialization', () => {
     expect(mentions.get('m1')!.status).toBe('resolved');
   });
 
+  // Lot 7b: the surveillance must not take a turn waiting for its lane for a stalled one.
+  it('isMentionQueued: true while the process still owes the mention its run, false once settled or unknown', async () => {
+    const { useCase, mentions, outcomes, gates } = makeUseCase();
+    mentions.set('m1', makeMention('m1'));
+    mentions.set('m2', makeMention('m2'));
+    outcomes.set('m1', 'resolved');
+    outcomes.set('m2', 'resolved');
+    gates.set('m1', deferred()); // m1 holds the lane, m2 queues behind it
+
+    await useCase.execute('p1');
+    await flush();
+    expect(useCase.isMentionQueued('m2')).toBe(true);
+    expect(useCase.isMentionQueued('never-seen')).toBe(false);
+
+    gates.get('m1')!.resolve();
+    await flush();
+    expect(mentions.get('m2')!.status).toBe('resolved');
+    expect(useCase.isMentionQueued('m2')).toBe(false);
+  });
+
   it('runs independent tickets in parallel (lane is per agent+ticket)', async () => {
     const { useCase, mentions, dispatched, outcomes, gates } = makeUseCase();
     const a = makeMention('a', 'T1');

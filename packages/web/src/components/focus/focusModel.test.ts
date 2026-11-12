@@ -7,10 +7,12 @@ vi.mock('../../services/api', () => ({
   retryWorkflowStep: vi.fn().mockResolvedValue(undefined),
   runMention: vi.fn().mockResolvedValue(undefined),
   postTicketComment: vi.fn().mockResolvedValue(undefined),
+  postAssistantMessage: vi.fn().mockResolvedValue({ comment: { id: 'c' }, assistant: { personaId: 'p', displayName: 'Nas' } }),
 }));
 
 import * as api from '../../services/api';
-import { answerQuestion, focusActions, formatWait, sortFocusItems } from './focusModel';
+import { answerQuestion, commentOnTicket, focusActions, formatWait, sortFocusItems } from './focusModel';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const base: FocusItem = {
   key: 'k', kind: 'gate', ticketId: 'T1', since: null, workflow: null, gate: null, question: null,
@@ -64,6 +66,40 @@ describe('focusActions', () => {
     await answerQuestion(item, 'fleex');
     expect(api.postTicketComment).toHaveBeenCalledWith('T1', 'fleex');
     expect(api.retryWorkflowStep).toHaveBeenCalledWith('r', 's', 'fleex');
+  });
+
+  describe('with « Assistant & threads »', () => {
+    const setSwitch = (workThreadsEnabled: boolean) => useSettingsStore.setState((s) => ({ settings: { ...s.settings, workThreadsEnabled } }));
+    const asked = (source: 'mention' | 'assistant'): FocusItem => ({
+      ...base, kind: 'question',
+      question: { source, mentionId: source === 'mention' ? 'm1' : null, runId: null, stepRunId: null, askedBy: 'Dev', text: 'Global?' },
+    });
+
+    it('on: an answer and a comment typed in Focus go to the assistant, never as a direct comment', async () => {
+      setSwitch(true);
+      await answerQuestion(asked('mention'), 'Global, @agent:dev');
+      await answerQuestion(asked('assistant'), 'Go');
+      await commentOnTicket('T1', '@agent:dev relance');
+      expect(vi.mocked(api.postAssistantMessage).mock.calls).toEqual([['T1', 'Global, @agent:dev'], ['T1', 'Go'], ['T1', '@agent:dev relance']]);
+      expect(api.postTicketComment).not.toHaveBeenCalled();
+    });
+
+    it('on: a paused workflow step keeps its direct path — comment then retry — it is not a conversation', async () => {
+      setSwitch(true);
+      const item: FocusItem = { ...base, kind: 'question', question: { source: 'step', mentionId: null, runId: 'r', stepRunId: 's', askedBy: 'Plan', text: '?' } };
+      await answerQuestion(item, 'fleex');
+      expect(api.postAssistantMessage).not.toHaveBeenCalled();
+      expect(api.postTicketComment).toHaveBeenCalledWith('T1', 'fleex');
+      expect(api.retryWorkflowStep).toHaveBeenCalledWith('r', 's', 'fleex');
+    });
+
+    it('off: both are plain comments and the assistant route is never called', async () => {
+      setSwitch(false);
+      await answerQuestion(asked('mention'), 'Global, @agent:dev');
+      await commentOnTicket('T1', '@agent:dev relance');
+      expect(api.postAssistantMessage).not.toHaveBeenCalled();
+      expect(vi.mocked(api.postTicketComment).mock.calls).toEqual([['T1', 'Global, @agent:dev'], ['T1', '@agent:dev relance']]);
+    });
   });
 
   it('errors retry the step or relaunch the crashed mention', async () => {

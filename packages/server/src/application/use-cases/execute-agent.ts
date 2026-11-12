@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel, RunSubject, ContextInjectionItem, MemorySnippetRef, TicketLink } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel, parseRepoRef, DEFAULT_AGENT_EXECUTION_TIMEOUT_MINUTES, MS_IN_MINUTE } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
-import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
+import type { CancelExecutionPort, ExecutionStop } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, extractRepoPrNumber, resolveBaseRef } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
@@ -18,6 +18,7 @@ import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { questionsToKeep } from '../utils/agent-questions.js';
 import { buildSdkOptions, effectiveMaxTurns } from '../utils/build-sdk-options.js';
+import { resolveExecutionConfig } from '../utils/resolve-execution-config.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult, isEmptyRun } from '../utils/stream-sdk-query.js';
 import { meterSdkRun, type CostBasis, type SdkSessionBaseline, type SdkUsageTotals } from '../utils/sdk-run-usage.js';
 
@@ -30,7 +31,7 @@ import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
-import type { GetTicketContextUseCase } from './get-ticket-context.js';
+import type { GetTicketContextUseCase, ThreadScope } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import { isTodoAgentAccessEnabled, type ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -141,6 +142,12 @@ interface ActiveExecution {
   ticketId?: string | null;
   status: 'running' | 'completed' | 'failed';
   abortController: AbortController;
+  /**
+   * The real mention that launched this run, when the entry is keyed by
+   * something else: a skill is keyed `skill:<id>`, a panel member by its
+   * executionId. Lets "stop the run of this mention" reach every target type.
+   */
+  triggerMentionId?: string;
 }
 
 interface QueueItem {
@@ -192,6 +199,8 @@ ${typeLines}
     "Should the bundle target Apple silicon only?"). Do NOT write a status report about
     having asked (e.g. "I posed a question to @nas", "Awaiting reply from X") — the system
     does not post any separate question; only what you write in \`comment\` reaches the reader.
+    \`"waiting_for_info"\` is ONLY for a question you cannot answer yourself. It never means
+    "work in progress": your execution ENDS the moment you return this output.
     **Rule:** whenever a question in your \`comment\` offers alternatives — "(a) … (b) …",
     "1) … 2) …", "X or Y?", "do you validate?" — you MUST declare them in \`questions\` too,
     so the human gets one button per answer instead of having to type it.
@@ -202,6 +211,10 @@ ${typeLines}
   you are not waiting (\`"resolved"\`) or when every question is open ("what name for…?").
   \`comment\` must stay complete and readable without the buttons — restate the questions in it —
   because the CLI, memory and exports only see the text.
+- **No background work**: never launch a sub-agent or a task in the background (Agent tool with
+  \`run_in_background\`, \`&\` in Bash, "I'll report when it completes"). Everything still running
+  when you return is killed and nobody collects its result. Do the search or the work yourself,
+  synchronously, and return only once you hold the result.
 - Both deliverable and comment can be non-null, or both null (silent completion — only valid with "resolved").
 
 ## CRITICAL — Handoff Rules (ENFORCED BY THE SYSTEM)
@@ -217,9 +230,30 @@ ${typeLines}
 `.trim();
 }
 
+/** The SDK session a run may resume: one per agent and ticket, and per thread when it runs in one. */
+export function sessionKeyFor(agentName: string, ticketId: string, thread: ThreadScope | null): string {
+  return thread ? `${agentName}:${ticketId}:thread:${thread.id}` : `${agentName}:${ticketId}`;
+}
+
 export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegistryPort {
   private activeExecutions = new Map<string, ActiveExecution>();
-  private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
+  /** Mentions whose run was stopped on purpose (ids only; a few bytes per stop, per process). */
+  private stoppedMentions = new Set<string>();
+  private sessionHistory = new Map<string, string>(); // sessionKeyFor(agent, ticket, thread) -> sdkSessionId
+  /**
+   * The assistant thread a mention belongs to, with what the assistant exposed
+   * to it. Wired by the container; null (or absent) for a run outside any thread.
+   */
+  public threadScope: ((mentionId: string) => Promise<ThreadScope | null>) | null = null;
+
+  private async threadOf(mentionId: string): Promise<ThreadScope | null> {
+    try {
+      return (await this.threadScope?.(mentionId)) ?? null;
+    } catch (err) {
+      // Failing open would hand the whole ticket to a walled-off agent: the run must not start.
+      throw new Error(`Could not resolve the thread of mention ${mentionId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   private queue: QueueItem[] = [];
   // `${agentName}:${ticketId}` currently dispatched (parked on the limiter OR
   // actively running). Covers the dispatch→acknowledge window where the DB does
@@ -336,11 +370,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     // 3. Reload SDK session history from DB
     const history = await this.agentEventStore.getSessionHistory();
-    for (const [key, { sdkSessionId, personaId, ticketId }] of history) {
+    for (const [, { sdkSessionId, personaId, ticketId, mentionId }] of history) {
       // Key is "personaId:ticketId" — we need to convert to "personaName:ticketId"
       const persona = await this.personaStore.getById(personaId);
       if (persona) {
-        const sessionKey = `${persona.name}:${ticketId}`;
+        // A session born in a thread goes back under that thread's key: it must
+        // never be resumed by a run outside it.
+        const thread = mentionId ? await this.threadOf(mentionId) : null;
+        const sessionKey = sessionKeyFor(persona.name, ticketId, thread);
         this.sessionHistory.set(sessionKey, sdkSessionId);
       }
     }
@@ -567,7 +604,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * Immediately marks execution as interrupted in DB and notifies frontend,
    * then aborts the SDK query loop (which may be hung).
    */
-  async cancelExecution(executionId: string): Promise<boolean> {
+  async cancelExecution(executionId: string, stop?: ExecutionStop): Promise<boolean> {
     let found: { mentionId: string; exec: ActiveExecution } | null = null;
     for (const [mentionId, exec] of this.activeExecutions) {
       if (exec.executionId === executionId && exec.status === 'running') {
@@ -579,12 +616,21 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     const { mentionId, exec } = found;
 
+    // 0. Who stops it, before anything a listener could react to.
+    if (stop) {
+      try {
+        await this.agentEventStore.markExecutionsStopped([executionId], stop.by, stop.reason ?? null);
+      } catch {
+        // Best-effort — don't let store errors block cancel
+      }
+    }
+
     // 1. Mark completed in DB immediately (don't wait for the loop to notice)
     try {
       const cancelEvent = AgentEventEntity.create({
         executionId,
         eventType: 'execution_end',
-        data: { status: 'interrupted', reason: 'cancelled', ticketId: found.exec.ticketId },
+        data: { status: 'interrupted', reason: 'cancelled', ticketId: found.exec.ticketId, ...(stop ? { stoppedBy: stop.by } : {}) },
         sequence: 999998,
       });
       await this.agentEventStore.appendEvent(cancelEvent);
@@ -598,12 +644,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     exec.status = 'failed';
     this.onExecutionComplete?.(exec.personaId, 'failed', mentionId);
 
-    // 3. Fail the mention: stopped before the end, it waits for a relaunch
-    try {
-      const mention = await this.mentionStore.getById(mentionId);
-      if (mention) await this.failInterruptedMention(mention, 'cancelled');
-    } catch {
-      // Best-effort
+    // 3. Fail the mention: stopped before the end, it waits for a relaunch.
+    // Not when the caller settles it (`keepMention`): a wanted stop inside a
+    // thread is not a failure, and must not be announced as one.
+    if (!stop?.keepMention) {
+      try {
+        const mention = await this.mentionStore.getById(mentionId);
+        if (mention) await this.failInterruptedMention(mention, 'cancelled');
+      } catch {
+        // Best-effort
+      }
     }
 
     // 4. Abort the SDK loop (may be hung — this is best-effort to free the async generator)
@@ -629,10 +679,57 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * (supersede) flow when a user re-mentions an agent that is mid-execution.
    * Returns false (no-op) if no running execution is tracked for the mention.
    */
-  async cancelExecutionForMention(mentionId: string): Promise<boolean> {
-    const exec = this.activeExecutions.get(mentionId);
-    if (!exec || exec.status !== 'running') return false;
-    return this.cancelExecution(exec.executionId);
+  async cancelExecutionForMention(mentionId: string, stop?: ExecutionStop): Promise<boolean> {
+    if (stop) this.stoppedMentions.add(mentionId);
+    let cancelled = false;
+    for (const executionId of this.runningExecutionIdsForMention(mentionId)) {
+      if (await this.cancelExecution(executionId, stop)) cancelled = true;
+    }
+    return cancelled;
+  }
+
+  /**
+   * Every execution currently running for a mention: the persona run keyed by
+   * it, or the skill run / panel sessions it launched (`triggerMentionId`).
+   */
+  runningExecutionIdsForMention(mentionId: string): string[] {
+    const ids: string[] = [];
+    for (const [key, exec] of this.activeExecutions) {
+      if (exec.status !== 'running') continue;
+      if (key === mentionId || exec.triggerMentionId === mentionId) ids.push(exec.executionId);
+    }
+    return ids;
+  }
+
+  /**
+   * True while this process still owes the mention a run it has not started:
+   * queued behind its lane, or parked on the SDK limiter. The surveillance reads
+   * it so a turn that merely waits its turn is never taken for a stalled one.
+   */
+  isMentionQueued(mentionId: string): boolean {
+    return this.claimedMentionIds.has(mentionId) && this.activeExecutions.get(mentionId)?.status !== 'running';
+  }
+
+  /**
+   * The real mention a running execution works for, `null` when it has none
+   * (workflow step, routine), `undefined` when the execution is not running here.
+   */
+  mentionOfRunningExecution(executionId: string): string | null | undefined {
+    for (const [key, exec] of this.activeExecutions) {
+      if (exec.executionId !== executionId || exec.status !== 'running') continue;
+      if (exec.triggerMentionId) return exec.triggerMentionId;
+      return key === exec.executionId || key.startsWith('skill:') || key.startsWith('workflow:') ? null : key;
+    }
+    return undefined;
+  }
+
+  /**
+   * ExecutionRegistryPort — true once a stop was asked for this mention. A panel
+   * reads it between its sessions: stopping the members must not let the
+   * synthesis start afterwards.
+   */
+  isStopRequested(mentionId: string): boolean {
+    return this.stoppedMentions.has(mentionId);
   }
 
   /**
@@ -649,6 +746,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       ...(entry.ticketId ? { ticketId: entry.ticketId } : {}),
       status: 'running',
       abortController: entry.abortController,
+      ...(entry.mentionId ? { triggerMentionId: entry.mentionId } : {}),
     });
   }
 
@@ -805,27 +903,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     persona: AgentPersonaEntity,
     ticket: TicketEntity | null,
   ): { mode: MentionExecutionMode; model: string; effort?: EffortLevel; fast: boolean } {
-    const conversationMode: MentionExecutionMode = ticket?.conversationMode ?? 'plan';
-    const mode: MentionExecutionMode = persona.executionMode === 'message'
-      ? 'talk'
-      : conversationMode;
-
-    const model = ticket?.modelOverride ?? persona.model;
-    const caps = inferModelCapabilities(model);
-
-    const requestedEffort = ticket?.effortOverride ?? null;
-    const effort = resolveEffortLevel(model, requestedEffort);
-    if (requestedEffort && effort !== requestedEffort) {
-      this.logger.warn('Effort override not supported by model — adjusted', {
-        model,
-        requested: requestedEffort,
-        applied: effort ?? 'none',
-        supported: caps.effortLevels,
-      });
-    }
-    const fast = caps.supportsFastMode && (ticket?.fastMode ?? false);
-
-    return { mode, model, effort, fast };
+    return resolveExecutionConfig(persona, ticket, this.logger);
   }
 
   private async executeForMention(
@@ -929,13 +1007,18 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount, repoBases);
 
       // 5. Load ticket context
+      // A run inside an assistant thread only sees that thread (see ThreadScope).
+      const thread = await this.threadOf(mention.id);
       const context = await this.getTicketContext.execute({
         ticketId: mention.ticketId,
         agentName: persona.name,
+        thread,
       });
 
       // 6. Build user prompt with ticket context (content blocks for multimodal support)
-      const sessionKey = `${persona.name}:${mention.ticketId}`;
+      // One SDK session per thread: a second thread with the same persona starts
+      // fresh instead of resuming the first one's conversation.
+      const sessionKey = sessionKeyFor(persona.name, mention.ticketId, thread);
       // `isWakeUp` is decided up front from `wokenMentionIds` (a genuine resume
       // from waiting_for_info), NOT from "a session exists" — a fresh queued
       // mention reuses the session but is not a wake-up.
@@ -1163,6 +1246,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           ? 'timeout' : 'cancelled';
         await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        // Nobody chose this stop: a failure, relaunchable.
+        await this.agentEventStore.markExecutionsStopped([executionId], 'system', reason).catch(() => {});
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         await this.failInterruptedMention(mention, reason);
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
@@ -1695,6 +1780,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       ticketId,
       status: 'running',
       abortController,
+      ...(opts?.mentionId ? { triggerMentionId: opts.mentionId } : {}),
     });
 
     // 1. Post a comment announcing the skill execution
@@ -1704,12 +1790,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const announceAuthor = opts?.workflowContext
       ? `workflow:${opts.workflowContext.workflowName} → ${opts.workflowContext.stepName}`
       : (persona.displayName || persona.name);
+    // Launched from a thread turn: the run (announce, then its replies) stays in that thread.
+    const triggerCommentId = opts?.mentionId ? (await this.mentionStore.getById(opts.mentionId))?.commentId : undefined;
     const { comment: announceComment } = await this.postComment.execute({
       ticketId,
       body: announceBody,
       authorName: announceAuthor,
       authorType: 'agent',
       humanMentionNames: [],
+      ...(triggerCommentId ? { threadOf: triggerCommentId } : {}),
     });
 
     if (this.eventBus) {
@@ -1746,9 +1835,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       model: persona.model,
     });
 
+    const thread = opts?.mentionId ? await this.threadOf(opts.mentionId) : null;
     const context = await this.getTicketContext.execute({
       ticketId,
       agentName: persona.name,
+      thread,
     });
 
     // 4. Compose prompts (after context so the base-branch section can read the
@@ -1860,7 +1951,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // 8. Call Claude Agent SDK
       const effectiveMode = 'edit' as const;
 
-      const sessionKey = `skill:${skill.commandName}:${ticketId}`;
+      const sessionKey = sessionKeyFor(`skill:${skill.commandName}`, ticketId, thread);
       const previousSessionId = this.sessionHistory.get(sessionKey);
 
       const queryOptions = buildSdkOptions('edit', {
@@ -1920,8 +2011,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       clearTimeout(timeoutHandle);
 
       if (abortController.signal.aborted) {
+        // Stopped through cancelExecution(): it already ended the execution and
+        // recorded who stopped it. Only a timeout is left to settle here.
+        if (this.activeExecutions.get(skillMentionKey)?.status !== 'running') return;
         await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: persona.model, effectiveMode });
+        await this.agentEventStore.markExecutionsStopped([executionId], 'system', 'timeout').catch(() => {});
         return;
       }
 
@@ -2039,6 +2134,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
               title: structured.deliverable.title,
               content: structured.deliverable.markdown,
               status: structured.deliverable.status,
+              // Same link as a persona's deliverable: whoever reads the mention (a thread) finds it.
+              ...(opts?.mentionId ? { mentionId: opts.mentionId } : {}),
             });
             resultDeliverableId = deliverable.id;
 
@@ -2683,7 +2780,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * failure). Individual repo / worktree failures are logged and skipped;
    * the workspace path is still returned.
    */
-  private async ensureWorkspace(ticketId: string): Promise<string | null> {
+  async ensureWorkspace(ticketId: string): Promise<string | null> {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) return null;
 
@@ -3049,8 +3146,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       sourceId: mention.commentId,
       ticketId: context.ticket.id,
     };
+    // trackResolved, not track: the request is where a screenshot usually sits, and
+    // as plain text the agent gets a dead `/api/files/<uuid>` link instead of the image.
     if (isWakeUp) {
-      composer.track(
+      await composer.trackResolved(
         taskDescriptor,
         `\n---\n\n**Resuming your task.** You paused waiting for input. Review the latest activity on the ticket: `
         + `if it answers what you were waiting for, finish your task and resolve; if it redirects you, follow the new direction. `
@@ -3059,7 +3158,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         + (ownComment ? `\n\n**Your original request** (from ${mention.sourceAgent}):\n> ${ownComment.replace(/\n/g, '\n> ')}` : ''),
       );
     } else {
-      composer.track(
+      await composer.trackResolved(
         taskDescriptor,
         `\n---\n\n**Your task** — respond to this request from ${mention.sourceAgent}:\n`
         + (ownComment ? `> ${ownComment.replace(/\n/g, '\n> ')}\n\n` : `(comment ${mention.commentId})\n\n`)

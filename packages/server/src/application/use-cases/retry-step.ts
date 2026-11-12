@@ -1,3 +1,4 @@
+import type { StopAuthor } from '@fleex/shared';
 import { WorkflowRunNotFoundError, StepRunNotFoundError } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
@@ -22,6 +23,8 @@ export class RetryStepUseCase {
      * timeline to carry the answer.
      */
     humanResponse?: string;
+    /** Who restarts the step: recorded on the still-running execution it aborts. */
+    stoppedBy?: StopAuthor;
   }): Promise<void> {
     const run = await this.runStore.getById(params.workflowRunId);
     if (!run) throw new WorkflowRunNotFoundError(params.workflowRunId);
@@ -52,7 +55,9 @@ export class RetryStepUseCase {
     if (stepRun.status === 'running') {
       if (stepRun.executionId) {
         try {
-          await this.canceller.cancelExecution(stepRun.executionId);
+          await (params.stoppedBy
+            ? this.canceller.cancelExecution(stepRun.executionId, { by: params.stoppedBy, reason: 'step restarted' })
+            : this.canceller.cancelExecution(stepRun.executionId));
         } catch {
           // swallow — restarting must proceed regardless
         }

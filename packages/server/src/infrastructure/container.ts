@@ -1,5 +1,7 @@
 import { hostname } from 'node:os';
 import { existsSync, realpathSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { SessionNamingService } from '../domain/services/session-naming.js';
@@ -70,11 +72,20 @@ import { UpdateSkillUseCase } from '../application/use-cases/update-skill.js';
 import { DeleteSkillUseCase } from '../application/use-cases/delete-skill.js';
 import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
+import { RunAssistantTurnUseCase } from '../application/use-cases/run-assistant-turn.js';
+import { StopRunUseCase } from '../application/use-cases/stop-run.js';
+import { RepairThreadsUseCase } from '../application/use-cases/repair-threads.js';
+import { ThreadRepairScheduler } from '../domain/services/thread-repair-scheduler.js';
+import { AssistantThreadListener } from '../application/assistant-thread-listener.js';
+import { AssistantEnvironment } from '../application/assistant/assistant-environment.js';
+import { createAnthropicAssistantLlm, parseDotenv } from '../application/assistant/assistant-llm.js';
+import Anthropic from '@anthropic-ai/sdk';
 import { AutoReviewWorkflowUseCase } from '../application/use-cases/auto-review-workflow.js';
 import { CreatePanelUseCase } from '../application/use-cases/create-panel.js';
 import { UpdatePanelUseCase } from '../application/use-cases/update-panel.js';
 import { DeletePanelUseCase } from '../application/use-cases/delete-panel.js';
 import { RunPanelUseCase } from '../application/use-cases/run-panel.js';
+import { GenerateThreadTitleUseCase } from '../application/use-cases/thread-label.js';
 import { GenerateTicketSummaryUseCase } from '../application/use-cases/generate-ticket-summary.js';
 import { GenerateCliSessionSummaryUseCase } from '../application/use-cases/generate-cli-session-summary.js';
 import { AgentStepExecutor } from '../application/services/step-executors/agent-step-executor.js';
@@ -179,6 +190,7 @@ export async function createContainer() {
     commentStore,
     annotationStore,
     todoStore,
+    threadStore,
     mentionStore,
     deliverableStore,
     personaStore,
@@ -412,7 +424,7 @@ export async function createContainer() {
     logger,
   });
 
-  const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
+  const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger, commentStore);
 
   // Domain event bus
   // Two buses to support multi-instance fan-out without duplicating side-effects:
@@ -487,6 +499,60 @@ export async function createContainer() {
   );
 
   executeAgent.claudeCodeSkills = claudeCodeSkills;
+  // The assistant speaks through the Messages API (like the companion). Its key
+  // comes from the server env or, as for the companion, from ~/.fleex/config.
+  let anthropicApiKey = process.env['ANTHROPIC_API_KEY']?.trim() || '';
+  if (!anthropicApiKey) {
+    try {
+      anthropicApiKey = parseDotenv(await hostFs.readFile(`${hostHomedir}/.fleex/config`))['ANTHROPIC_API_KEY'] ?? '';
+    } catch {
+      // No config file: the assistant will say so on its first turn.
+    }
+  }
+  const assistantEnvironment = new AssistantEnvironment(execFn, logger, {
+    workspace: process.env['FLEEX_WORKSPACE'],
+    cliBin: process.env['FLEEX_BIN'] ?? `${hostHomedir}/.fleex/bin/fleex`,
+    hasApiKey: anthropicApiKey.length > 0,
+  });
+  // Every stop of a run goes through here, with its author (user / assistant / system).
+  const stopRun = new StopRunUseCase({
+    executeAgent, agentEventStore: agentEventStore_, threadStore, mentionStore, workflowRunStore, stepRunStore, eventBus, logger,
+  });
+  const runAssistantTurn = new RunAssistantTurnUseCase({
+    threadStore, commentStore, mentionStore, ticketStore: ticketStore_, personaStore: personaStore_, postComment,
+    getTicketContext, agentEventStore: agentEventStore_, executeAgent, stopRun, config, eventBus, logger,
+    deliverableStore, submitDeliverable,
+    environment: assistantEnvironment,
+    skillStore, panelStore, workflowTemplateStore, workflowRunStore,
+    // The assistant's own hands: the ticket workspace an agent would get, the
+    // server's filesystem (the one agents write to), and the host shell.
+    workspace: {
+      resolve: (ticketId) => executeAgent.ensureWorkspace(ticketId),
+      readFile: (path) => readFile(path),
+      writeFile: async (path, content) => {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, content);
+      },
+      shell: (command, opts) => shellExecFn(command, { cwd: opts.cwd, timeout: opts.timeoutMs }),
+    },
+    attachments: {
+      load: async (fileId) => {
+        const meta = await fileMetaStore.getById(fileId);
+        const buffer = meta ? await fileStore.getBuffer(fileId) : null;
+        return meta && buffer ? { name: meta.originalName, mimeType: meta.mimeType, buffer } : null;
+      },
+    },
+  }, createAnthropicAssistantLlm(new Anthropic({ apiKey: anthropicApiKey || 'missing' })));
+
+  // Thread repair: one implementation for the threads route and the periodic
+  // surveillance, which main.ts starts on the instance that schedules.
+  const repairThreads = new RepairThreadsUseCase({
+    threadStore, mentionStore, commentStore, ticketStore: ticketStore_, agentEventStore: agentEventStore_,
+    executeAgent, runAssistantTurn, stopRun, stepRunStore, config, eventBus, logger,
+  });
+  const threadRepairScheduler = new ThreadRepairScheduler(repairThreads, () => config.get().workThreadsEnabled === true, logger);
+
+  const generateThreadTitle = new GenerateThreadTitleUseCase(threadStore, sdkLimiter, eventBus, logger);
 
   const domainEventListener = new DomainEventListener({
     eventBus,
@@ -497,6 +563,7 @@ export async function createContainer() {
     mentionStore,
     commentStore,
     deliverableStore,
+    threadStore,
     autoReviewWorkflow,
     executeAgent,
     wakeWaitingAgents,
@@ -505,6 +572,8 @@ export async function createContainer() {
     logger,
   });
   domainEventListener.register();
+  // Assistant threads follow the mentions that drive them (local bus only).
+  new AssistantThreadListener({ eventBus, threadStore, commentStore, runAssistantTurn, logger, workflowRunStore }).register();
 
   // Keeps the retrieval index current. A sibling of the listener above, on the
   // same local bus: ingestion is a side-effect, so hub-relayed events must not
@@ -649,6 +718,16 @@ export async function createContainer() {
   // Re-drain the per-(agent,ticket) queue when a thread frees its lane via an
   // external resolve/delete (e.g. manual UI resolve of a waiting_for_info mention).
   executeAgent.subscribeToBus(eventBus);
+  // A run launched from an assistant thread is walled off: it reads that
+  // thread and the deliverables the assistant exposed to it, nothing else.
+  const threadScope = async (mentionId: string) => {
+    const mention = await mentionStore.getById(mentionId);
+    const comment = mention ? await commentStore.getById(mention.commentId) : null;
+    const thread = comment?.threadId ? await threadStore.getById(comment.threadId) : null;
+    return thread ? { id: thread.id, deliverableIds: thread.sharedDeliverableIds } : null;
+  };
+  executeAgent.threadScope = threadScope;
+  runPanel.threadScope = threadScope;
   executeAgent.fileMetaStore = fileMetaStore;
   executeAgent.fileStore = fileStore;
   executeAgent.bareCloneManager = bareCloneManager;
@@ -749,6 +828,7 @@ export async function createContainer() {
     resolveAmbiguousRoute = new ResolveAmbiguousRouteUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
     retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, executeAgent);
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
+    stopRun.cancelWorkflowRun = cancelWorkflowRun;
 
     if (routineStore) {
       const targetStores = { templateStore: workflowTemplateStore, personaStore: personaStore_, skillStore, panelStore };
@@ -960,6 +1040,7 @@ export async function createContainer() {
     timelineAnnotations,
     todoStore,
     ticketTodos,
+    threadStore,
     mentionStore,
     deliverableStore,
     postComment,
@@ -980,6 +1061,11 @@ export async function createContainer() {
     deleteSkill,
     executeAgent,
     wakeWaitingAgents,
+    runAssistantTurn,
+    stopRun,
+    repairThreads,
+    threadRepairScheduler,
+    generateThreadTitle,
     generateTicketSummary,
     getRelevantSummaries,
     retrieveContext,

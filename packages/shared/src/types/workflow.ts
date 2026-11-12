@@ -202,6 +202,8 @@ export interface WorkflowRun {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Who cancelled the run (`user` | `assistant` | `system`); null when it was not cancelled, or before migration 050. */
+  cancelledBy?: 'user' | 'assistant' | 'system' | null;
 }
 
 /**

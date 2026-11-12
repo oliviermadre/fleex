@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FocusItem, FocusItemKind, Ticket } from '@fleex/shared';
-import { postTicketComment } from '../services/api';
 import { useTicketStore } from '../stores/ticketStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useNotificationStore } from '../stores/notificationStore';
@@ -21,6 +20,7 @@ import {
   KIND_META,
   STALE_MS,
   answerQuestion,
+  commentOnTicket,
   focusActions,
   focusSummary,
   formatWait,
@@ -116,7 +116,7 @@ export function MobileFocus() {
     (item: FocusItem, text: string) => {
       const ref = `#${ticketById.get(item.ticketId)?.displayId ?? ''}`;
       if (item.kind === 'idle') {
-        commit(item, `${ref} · commentaire ajouté`, () => postTicketComment(item.ticketId, text));
+        commit(item, `${ref} · commentaire ajouté`, () => commentOnTicket(item.ticketId, text));
         return;
       }
       commit(item, `${ref} · réponse envoyée à ${item.question?.askedBy ?? 'l’agent'}`, () => answerQuestion(item, text));

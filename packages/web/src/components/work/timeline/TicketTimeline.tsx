@@ -19,6 +19,10 @@
  * Todo marks (optional `todos` prop) live in a strip UNDER the frieze, laid out
  * the same way (interpolated x, no slot taken): a ticket without todo history
  * has no strip at all, so its timeline does not move by a pixel.
+ *
+ * Threads (optional `threads` prop) are branches of the lifeline, drawn in
+ * lanes between the frieze and the todo strip, laid out the same way: a ticket
+ * without thread has no lane at all.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TicketType } from '@fleex/shared';
@@ -43,6 +47,8 @@ import type { AnchorRect } from './AnnotationPopovers';
 import { layoutTodoStrip, type TodoChip, type TodoStrip } from './layoutTodoStrip';
 import { TimelineTodoStrip, TodoAnchors, todoChipNodeId } from './TimelineTodoStrip';
 import type { TodoMark } from './todoMarks';
+import { NO_THREADS, layoutThreadStrip, type PlacedBranch, type ThreadBranch } from './threadBranches';
+import { ThreadBranchCurves, TimelineThreadStrip, threadNodeId } from './TimelineThreadStrip';
 
 const COLUMN_W = 232;
 const STICK_SLACK = 40;
@@ -76,6 +82,13 @@ export interface TimelineTodosProps {
   onHoverChip?: (chip: TodoChip, anchor: AnchorRect | null) => void;
 }
 
+export interface TimelineThreadsProps {
+  branches: readonly ThreadBranch[];
+  /** The thread open in the Threads panel. */
+  selectedId: string | null;
+  onOpen: (branch: PlacedBranch) => void;
+}
+
 const NO_STRIP: TodoStrip = { chips: [], height: 0 };
 
 export interface TicketTimelineProps {
@@ -88,7 +101,9 @@ export interface TicketTimelineProps {
   annotations?: TimelineAnnotationsProps;
   /** Omitted → no todo strip. */
   todos?: TimelineTodosProps;
-  /** Total content height (band + frieze + todo strip), so the host can make room for it. */
+  /** Omitted → no thread lanes. */
+  threads?: TimelineThreadsProps;
+  /** Total content height (band + frieze + thread lanes + todo strip), so the host can make room for it. */
   onContentHeight?: (height: number) => void;
   /** Horizontal zoom of the frieze (ZOOM_LEVELS); `onZoom` omitted → no zoom control. */
   zoom?: number;
@@ -105,7 +120,7 @@ const rectOf = (el: Element): AnchorRect => {
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 };
 
-export function TicketTimeline({ header, model, filters, onToggleFilter, onAction, annotations, todos, onContentHeight, zoom = 1, onZoom, maxBandHeight }: TicketTimelineProps) {
+export function TicketTimeline({ header, model, filters, onToggleFilter, onAction, annotations, todos, threads, onContentHeight, zoom = 1, onZoom, maxBandHeight }: TicketTimelineProps) {
   const viewport = useRef<HTMLDivElement>(null);
   // Viewport width: a short frieze is stretched to fill it.
   const [viewportW, setViewportW] = useState(0);
@@ -118,21 +133,32 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const layout = useMemo(() => (model ? layoutTimeline(model, filters, viewportW, zoom) : null), [model, filters, viewportW, zoom]);
+  // Threads drawn as branches take their pictos off the frieze.
+  const branchKey = threads?.branches.map((b) => b.id).join('|') ?? '';
+  const branchIds = useMemo(() => new Set(branchKey ? branchKey.split('|') : []), [branchKey]);
+  const layout = useMemo(() => (model ? layoutTimeline(model, filters, viewportW, zoom, branchIds) : null), [model, filters, viewportW, zoom, branchIds]);
   const anchors = useMemo(() => (layout && model ? timeAnchors(layout, model.now) : []), [layout, model]);
+  const lanes = useMemo(
+    () => (layout && threads ? layoutThreadStrip(threads.branches, anchors, layout.nowX, layout.threadItems) : NO_THREADS),
+    [layout, threads, anchors],
+  );
+  // The lanes take their room from the annotation band's budget, as the todo strip does.
+  const bandBudget = maxBandHeight == null ? null : maxBandHeight - lanes.height;
   const band = useMemo(
     () =>
       layout && annotations
-        ? layoutAnnotationBand(annotations.list, anchors, layout.width, filters.annotations, maxBandHeight == null ? 2 : rowsForBudget(maxBandHeight))
+        ? layoutAnnotationBand(annotations.list, anchors, layout.width, filters.annotations, bandBudget == null ? 2 : rowsForBudget(bandBudget))
         : { cards: [], height: 0, mode: 'cards' as const },
-    [layout, annotations, anchors, filters.annotations, maxBandHeight],
+    [layout, annotations, anchors, filters.annotations, bandBudget],
   );
   const bandH = band.height;
   const strip = useMemo(
     () => (layout && todos && filters.todos ? layoutTodoStrip(todos.marks, anchors, layout.width) : NO_STRIP),
     [layout, todos, anchors, filters.todos],
   );
-  const contentH = bandH + GEOMETRY.height + strip.height;
+  const lanesTop = bandH + GEOMETRY.height;
+  const todoTop = lanesTop + lanes.height;
+  const contentH = todoTop + strip.height;
   useEffect(() => onContentHeight?.(contentH), [contentH, onContentHeight]);
   const content = useRef<HTMLDivElement>(null);
   const [ghost, setGhost] = useState<CursorInstant | null>(null);
@@ -174,8 +200,12 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
     const nodes = layout?.items.map((i) => ({ id: i.event.id, x: i.x })) ?? [];
     for (const c of band.cards) nodes.push({ id: cardNodeId(c), x: c.kind === 'card' ? c.item.x : c.items[0]!.x });
     for (const c of strip.chips) nodes.push({ id: todoChipNodeId(c), x: c.minX });
+    for (const b of lanes.branches) {
+      nodes.push({ id: threadNodeId(b), x: b.x0 });
+      for (const it of b.items) nodes.push({ id: it.event.id, x: it.x });
+    }
     return nodes.sort((a, b) => a.x - b.x).map((n) => n.id);
-  }, [layout, band, strip]);
+  }, [layout, band, strip, lanes]);
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const id = (e.target as HTMLElement).dataset?.timelineNode;
@@ -315,12 +345,13 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
           {todos && (
             <TodoAnchors
               strip={strip}
-              top={bandH + GEOMETRY.height}
+              top={todoTop}
               lifelineY={bandH + GEOMETRY.spineY}
               width={layout.width}
               activeKey={todos.activeKey}
             />
           )}
+          <ThreadBranchCurves strip={lanes} top={lanesTop} lifelineY={bandH + GEOMETRY.spineY} width={layout.width} />
           <div className="absolute left-0" style={{ top: bandH, width: layout.width, height: GEOMETRY.height }}>
             <TimelineZoneBands zones={layout.zones} fadeFrom={layout.nowX} />
             <TimelineOutOfLifeBand zones={layout.zones} closedAt={model.summary.closedAt} />
@@ -409,10 +440,13 @@ export function TicketTimeline({ header, model, filters, onToggleFilter, onActio
               onCreate={(at, el) => annotations.onCreateAt(at, rectOf(el))}
             />
           )}
+          {threads && (
+            <TimelineThreadStrip strip={lanes} top={lanesTop} selectedId={threads.selectedId} onOpen={threads.onOpen} onAction={onAction} />
+          )}
           {todos && (
             <TimelineTodoStrip
               strip={strip}
-              top={bandH + GEOMETRY.height}
+              top={todoTop}
               spineY={bandH + GEOMETRY.spineY + 3}
               x0={layout.spine.x0}
               x1={layout.nowX}

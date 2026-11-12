@@ -2,6 +2,7 @@ import type { FocusItem, FocusItemKind, Ticket, TicketStatus } from '@fleex/shar
 import { FOCUS_KIND_ORDER, TICKET_PRIORITY_RANK } from '@fleex/shared';
 import type { TintHue } from '../../lib/tints';
 import * as api from '../../services/api';
+import { postHumanMessage } from '../work/task/postHumanMessage';
 
 /**
  * Pure model of the Focus page: labels, ordering, and — above all — the actions
@@ -108,9 +109,16 @@ const NEXT_STATUS: Partial<Record<TicketStatus, { status: TicketStatus; label: s
 };
 
 /**
- * Answer an agent. A plain comment wakes every agent waiting on the ticket
- * (server auto-wake); a paused workflow step additionally needs its retry, with
- * the answer recorded on the step so the retried attempt reads it.
+ * Answer an agent — or the assistant. With « Assistant & threads » on, the
+ * answer goes to the assistant like any message typed in a composer
+ * (`postHumanMessage`): it relays to the agent waiting in its thread, and a
+ * `@type:slug` in the answer is an order to delegate, not a direct mention.
+ * Switch off: a plain comment, which wakes every agent waiting on the ticket
+ * (server auto-wake).
+ *
+ * A paused workflow step is not a conversation: its answer is recorded on the
+ * step and the step retried, whatever the switch — the same direct path as the
+ * step's card in the Tasks view.
  */
 export function answerQuestion(item: FocusItem, text: string): Promise<unknown> {
   const q = item.question;
@@ -118,7 +126,12 @@ export function answerQuestion(item: FocusItem, text: string): Promise<unknown> 
     const { runId, stepRunId } = q;
     return api.postTicketComment(item.ticketId, text).then(() => api.retryWorkflowStep(runId, stepRunId, text));
   }
-  return api.postTicketComment(item.ticketId, text);
+  return postHumanMessage(item.ticketId, text);
+}
+
+/** A comment typed on a ticket from Focus (idle items): the composer rule, like everywhere. */
+export function commentOnTicket(ticketId: string, text: string): Promise<unknown> {
+  return postHumanMessage(ticketId, text);
 }
 
 /**

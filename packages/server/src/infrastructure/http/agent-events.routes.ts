@@ -5,6 +5,7 @@ import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entit
 import type { StepRunEntity } from '../../domain/entities/step-run.entity.js';
 import type { RoutineEntity } from '../../domain/entities/routine.entity.js';
 import type { Container } from '../container.js';
+import { stopAuthorFromHeaders } from './stop-author.js';
 
 const VALID_STATUSES = new Set<AgentExecution['status']>(['running', 'completed', 'failed', 'interrupted']);
 const VALID_TYPES = new Set<ExecutionLogEntry['type']>(['agent', 'panel', 'skill', 'workflow']);
@@ -622,7 +623,8 @@ export function agentEventsRoutes(container: Container) {
     app.post<{ Params: { id: string } }>(
       '/api/executions/:id/cancel',
       async (request, reply) => {
-        const cancelled = await container.executeAgent.cancelExecution(request.params.id);
+        // Same path as every other stop, with its author (the human, unless an agent calls).
+        const { stopped: cancelled } = await container.stopRun.stopExecution(request.params.id, { by: stopAuthorFromHeaders(request.headers) });
         if (!cancelled) {
           return reply.status(404).send({ error: 'Execution not found or not running' });
         }

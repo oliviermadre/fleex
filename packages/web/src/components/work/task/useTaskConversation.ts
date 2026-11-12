@@ -5,12 +5,17 @@
  * after a post, and layers live updates over the `tickets` WS channel: comment
  * created/updated/deleted apply in place, and a ticket update/move refetches the
  * activity log (no dedicated activity WS event exists) so event lines stay live.
+ *
+ * Phase 3: a message goes to the assistant first (`postAssistantMessage`). When
+ * the server reports no assistant persona, the hook falls back to a plain
+ * comment and flags `assistantMissing` so the composer can say so.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TicketActivity, TicketComment, TicketWsMessage } from '@fleex/shared';
 import * as api from '../../../services/api';
 import { appWs } from '../../../services/websocket';
 import { useUnreadStore } from '../../../stores/unreadStore';
+import { postHumanMessage } from './postHumanMessage';
 
 export interface TaskConversation {
   comments: TicketComment[];
@@ -18,7 +23,11 @@ export interface TaskConversation {
   loading: boolean;
   error: string | null;
   posting: boolean;
+  /** True after a post had to bypass the assistant because none is configured. */
+  assistantMissing: boolean;
   post: (body: string) => Promise<void>;
+  /** "Step into the thread": posts as the user inside a thread. */
+  postToThread: (threadId: string, body: string) => Promise<void>;
   reload: () => void;
   /** Drop a comment locally (after a delete) — the WS `comment:deleted` that follows is a no-op. */
   removeComment: (id: string) => void;
@@ -30,8 +39,7 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
-  // Guards against a slow response for a previously-selected ticket overwriting
-  // the current one.
+  const [assistantMissing, setAssistantMissing] = useState(false);
   const reqId = useRef(0);
 
   const load = useCallback(async (id: string) => {
@@ -54,7 +62,6 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
     }
   }, []);
 
-  // Refetch just the activity log (event lines), used on ticket update/move.
   const reloadActivity = useCallback((id: string) => {
     api.fetchTicketActivity(id).then(setEvents).catch(() => {});
   }, []);
@@ -65,6 +72,7 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
       setEvents([]);
       return;
     }
+    setAssistantMissing(false);
     void load(ticketId);
   }, [ticketId, load]);
 
@@ -112,7 +120,9 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
       if (!ticketId || !body.trim()) return;
       setPosting(true);
       try {
-        await api.postTicketComment(ticketId, body);
+        // One rule for every composer (assistant on → the assistant, else a plain comment).
+        const res = await postHumanMessage(ticketId, body);
+        setAssistantMissing(res.assistantMissing);
         await load(ticketId);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to post');
@@ -120,6 +130,15 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
       } finally {
         setPosting(false);
       }
+    },
+    [ticketId, load],
+  );
+
+  const postToThread = useCallback(
+    async (threadId: string, body: string) => {
+      if (!ticketId || !body.trim()) return;
+      await api.postThreadMessage(threadId, body);
+      await load(ticketId);
     },
     [ticketId, load],
   );
@@ -132,5 +151,5 @@ export function useTaskConversation(ticketId: string | null): TaskConversation {
     setComments((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
-  return { comments, events, loading, error, posting, post, reload, removeComment };
+  return { comments, events, loading, error, posting, assistantMissing, post, postToThread, reload, removeComment };
 }

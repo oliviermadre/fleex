@@ -22,6 +22,8 @@ export interface ExecutionRegistryEntry {
   ticketId?: string;
   /** Abort handle; `cancelExecution` calls `.abort()` to stop the SDK loop. */
   abortController: AbortController;
+  /** The mention this session works for, so "stop the run of this mention" finds it. */
+  mentionId?: string;
 }
 
 export interface ExecutionRegistryPort {
@@ -37,4 +39,10 @@ export interface ExecutionRegistryPort {
    * `finally`.
    */
   finalizeExecution(executionId: string): void;
+
+  /**
+   * True once a stop was asked for the run of this mention. A use case that
+   * chains several sessions for one mention checks it between two of them.
+   */
+  isStopRequested?(mentionId: string): boolean;
 }

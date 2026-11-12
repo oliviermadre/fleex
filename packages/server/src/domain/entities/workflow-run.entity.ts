@@ -1,5 +1,5 @@
 import type {
-  WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject,
+  WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot, RunSubject, StopAuthor,
 } from '@fleex/shared';
 
 const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'needs_review'];
@@ -33,6 +33,8 @@ export class WorkflowRunEntity {
      * depth of a chain of runs — see `CreateWorkflowRunUseCase`.
      */
     public readonly parentRunId: string | null = null,
+    /** Who cancelled the run. Null: not cancelled, or cancelled before the author was recorded. */
+    public cancelledBy: StopAuthor | null = null,
   ) {
     // Exactly one anchor. A run with neither would be unreachable from every
     // screen (kanban, cockpit, routines); a run with both would have two
@@ -118,8 +120,9 @@ export class WorkflowRunEntity {
     this.updatedAt = new Date();
   }
 
-  cancel(): void {
+  cancel(by: StopAuthor | null = null): void {
     this.status = 'cancelled';
+    this.cancelledBy = by;
     this.completedAt = new Date();
     this.updatedAt = new Date();
   }
@@ -154,6 +157,7 @@ export class WorkflowRunEntity {
       completedAt: this.completedAt?.toISOString() ?? null,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
+      cancelledBy: this.cancelledBy,
     };
   }
 }

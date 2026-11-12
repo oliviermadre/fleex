@@ -21,8 +21,8 @@ export const TODO_AGENTS_OFF =
 export function registerTodoRoutes(app: FastifyInstance, container: Container, actorOf: ActorOf, prefix = '') {
   /**
    * The actor of the call — refused (403), reads included, when it is an agent
-   * run and todo access is off for agents. The human and the assistant (no
-   * agent headers) always pass.
+   * run and todo access is off for agents. The human always passes; the
+   * assistant's CLI calls declare it as an agent, so it follows the setting.
    */
   const gate = (request: ActorRequest): TodoActor => {
     const actor = actorOf(request);

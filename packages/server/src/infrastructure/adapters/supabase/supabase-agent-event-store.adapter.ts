@@ -2,8 +2,8 @@ import { join } from 'node:path';
 import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import { FLEEX_DIR, resolveStoppedBy } from '@fleex/shared';
+import type { AgentExecution, StopAuthor } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../../application/utils/sdk-run-usage.js';
@@ -37,6 +37,10 @@ interface ExecutionRow {
   source: string | null;
   comment_id: string | null;
   deliverable_id: string | null;
+  auto_terminated_at_conclusion?: boolean | null;
+  manually_terminated_by_user?: boolean | null;
+  stopped_by?: string | null;
+  stop_reason?: string | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -262,7 +266,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (mentionIds.length > 0) {
       const { error } = await this.conn.client
         .from('agent_event_executions')
-        .update({ status: 'interrupted', completed_at: new Date().toISOString() })
+        // Nobody chose this stop: the server went away under the run.
+        .update({ status: 'interrupted', completed_at: new Date().toISOString(), stopped_by: 'system', stop_reason: 'server_restart' })
         .eq('status', 'running');
       if (error) throw new Error(`SupabaseAgentEventStore.markInterruptedExecutions update failed: ${error.message}`);
     }
@@ -270,22 +275,112 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     return mentionIds;
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async markExecutionsStopped(executionIds: string[], stoppedBy: StopAuthor, stopReason?: string | null): Promise<void> {
+    if (executionIds.length === 0) return;
+    const { error } = await this.conn.client
+      .from('agent_event_executions')
+      .update({ stopped_by: stoppedBy, stop_reason: stopReason ?? null })
+      .in('execution_id', executionIds);
+    if (error) throw new Error(`SupabaseAgentEventStore.markExecutionsStopped failed: ${error.message}`);
+  }
+
+  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>> {
     const { data, error } = await this.conn.client
       .from('agent_event_executions')
-      .select('persona_id, ticket_id, sdk_session_id')
+      .select('persona_id, ticket_id, sdk_session_id, mention_id')
       .not('sdk_session_id', 'is', null)
       .order('started_at', { ascending: false });
     if (error) throw new Error(`SupabaseAgentEventStore.getSessionHistory failed: ${error.message}`);
 
-    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
-    for (const row of data as { persona_id: string; ticket_id: string; sdk_session_id: string }[]) {
+    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string; mentionId?: string | null }>();
+    for (const row of data as { persona_id: string; ticket_id: string; sdk_session_id: string; mention_id: string | null }[]) {
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
-        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });
+        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id, mentionId: row.mention_id });
       }
     }
     return result;
+  }
+
+  async updateExecutionsByIds(
+    executionIds: string[],
+    status: 'completed' | 'failed' | 'interrupted',
+    flags?: { autoTerminatedAtConclusion?: boolean; manuallyTerminatedByUser?: boolean }
+  ): Promise<void> {
+    if (executionIds.length === 0) return;
+
+    const now = new Date().toISOString();
+    const updateData: any = {
+      status,
+      completed_at: now,
+    };
+
+    if (flags?.autoTerminatedAtConclusion !== undefined) {
+      updateData.auto_terminated_at_conclusion = flags.autoTerminatedAtConclusion;
+    }
+    if (flags?.manuallyTerminatedByUser !== undefined) {
+      updateData.manually_terminated_by_user = flags.manuallyTerminatedByUser;
+    }
+
+    const { error } = await this.conn.client
+      .from('agent_event_executions')
+      .update(updateData)
+      .in('execution_id', executionIds);
+    if (error) throw new Error(`SupabaseAgentEventStore.updateExecutionsByIds failed: ${error.message}`);
+  }
+
+  async getExecutionByMentionId(mentionId: string): Promise<AgentExecution | null> {
+    const { data, error } = await this.conn.client
+      .from('agent_event_executions')
+      .select(`
+        execution_id, persona_id, ticket_id, mention_id, event_count, status,
+        started_at, completed_at, last_event_at, sdk_session_id, model,
+        effective_mode, effort, fast_mode, duration_ms, cost_usd,
+        input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+        source, comment_id, deliverable_id,
+        auto_terminated_at_conclusion, manually_terminated_by_user, stopped_by, stop_reason
+      `)
+      .eq('mention_id', mentionId)
+      .order('started_at', { ascending: false })
+      .limit(1);
+
+    if (error) throw new Error(`SupabaseAgentEventStore.getExecutionByMentionId failed: ${error.message}`);
+    if (!data || data.length === 0) return null;
+
+    const row = data[0] as any;
+    return {
+      id: row.execution_id,
+      personaId: row.persona_id,
+      ticketId: row.ticket_id,
+      mentionId: row.mention_id,
+      eventCount: row.event_count,
+      status: row.status,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      lastEventAt: row.last_event_at ?? null,
+      sdkSessionId: row.sdk_session_id,
+      model: row.model ?? null,
+      effectiveMode: row.effective_mode ?? null,
+      effort: row.effort ?? null,
+      fast: row.fast_mode ?? null,
+      durationMs: row.duration_ms ?? null,
+      costUsd: row.cost_usd ?? null,
+      inputTokens: row.input_tokens ?? null,
+      outputTokens: row.output_tokens ?? null,
+      cacheReadTokens: row.cache_read_tokens ?? null,
+      cacheCreationTokens: row.cache_creation_tokens ?? null,
+      source: row.source,
+      commentId: row.comment_id ?? null,
+      deliverableId: row.deliverable_id ?? null,
+      autoTerminatedAtConclusion: row.auto_terminated_at_conclusion ? Boolean(row.auto_terminated_at_conclusion) : null,
+      manuallyTerminatedByUser: row.manually_terminated_by_user ? Boolean(row.manually_terminated_by_user) : null,
+      stoppedBy: resolveStoppedBy({
+        stoppedBy: row.stopped_by ?? null,
+        manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+        autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+      }),
+      stopReason: row.stop_reason ?? null,
+    };
   }
 }
 
@@ -314,5 +409,13 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: row.comment_id ?? null,
     deliverableId: row.deliverable_id ?? null,
+    autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+    stoppedBy: resolveStoppedBy({
+      stoppedBy: (row.stopped_by as StopAuthor | null | undefined) ?? null,
+      manuallyTerminatedByUser: !!row.manually_terminated_by_user,
+      autoTerminatedAtConclusion: !!row.auto_terminated_at_conclusion,
+    }),
+    stopReason: row.stop_reason ?? null,
   };
 }
