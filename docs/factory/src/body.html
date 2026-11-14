@@ -1,0 +1,116 @@
+<div id="app">
+  <canvas id="floor" aria-label="Plan de l’usine : sources, convoyeurs, postes et tickets en circulation"></canvas>
+
+  <header id="hud">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="6" fill="#22c55e"/><path d="M6 18.5V11l4.2 2.8V11l4.2 2.8V7.5h4.6v11z" fill="#052e16"/></svg>
+      <b>Fleex Factory</b>
+      <span class="demo" title="Maquette : toutes les données sont simulées">simulé</span>
+    </div>
+    <div class="clock">
+      <span class="time" id="clock">—</span>
+      <div class="seg speed" role="group" aria-label="Vitesse de simulation">
+        <button data-speed="0" aria-pressed="false" title="Pause (Espace)">❚❚</button>
+        <button data-speed="1" aria-pressed="true">1×</button>
+        <button data-speed="3" aria-pressed="false">3×</button>
+        <button data-speed="8" aria-pressed="false">8×</button>
+        <button data-speed="20" aria-pressed="false">20×</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpis">
+      <button class="kpi" data-kpi="flow" title="Tickets expédiés. Clic : calque Débit"><span class="k-l">Débit</span><span class="k-v" id="k-flow">—</span></button>
+      <button class="kpi" data-kpi="wip" title="Tickets en cours dans l’usine"><span class="k-l">En cours</span><span class="k-v" id="k-wip">—</span></button>
+      <button class="kpi" data-kpi="lead" title="Lead time médian, de l’intake à l’expédition. Clic : calque Temps"><span class="k-l">Lead time</span><span class="k-v" id="k-lead">—</span></button>
+      <button class="kpi" data-kpi="focus" title="Ce qui attend un humain. Clic : onglet Focus"><span class="k-l">Focus</span><span class="k-v" id="k-focus">—</span></button>
+      <button class="kpi" data-kpi="pool" title="agentMaxConcurrency : agents en cours / maximum"><span class="k-l">Slots agents</span><span class="k-v" id="k-pool">—</span><span class="bar"><i id="k-poolbar"></i></span></button>
+      <button class="kpi" data-kpi="cost" title="Dépense agents. Clic : calque Coût"><span class="k-l">Dépense</span><span class="k-v" id="k-cost">—</span></button>
+      <button class="kpi" data-kpi="auto" title="Part des tickets expédiés sans intervention humaine"><span class="k-l">Autonomie</span><span class="k-v" id="k-auto">—</span></button>
+    </div>
+    <div class="hud-r">
+      <button class="btn" id="btn-prod" aria-pressed="false" title="Statistiques de production (P)">Production</button>
+      <button class="btn icon" id="btn-help" title="Légende et raccourcis" aria-label="Légende et raccourcis">?</button>
+    </div>
+  </header>
+
+  <aside id="panel" aria-label="Pilotage">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="bottlenecks" aria-selected="true">Goulots<span class="cnt" id="c-bn">0</span></button>
+      <button role="tab" data-tab="focus" aria-selected="false">Focus<span class="cnt" id="c-focus">0</span></button>
+      <button role="tab" data-tab="inspect" aria-selected="false">Inspecteur</button>
+      <button role="tab" data-tab="goals" aria-selected="false">Objectifs<span class="cnt" id="c-goals">0/7</span></button>
+      <button id="sheet-toggle" class="btn ghost" aria-label="Replier ou déplier le panneau">▾</button>
+    </div>
+    <div id="pbody"></div>
+  </aside>
+
+  <div id="strip">
+    <div class="seg" id="overlays" role="group" aria-label="Calque">
+      <button data-ov="none" aria-pressed="true">Usine</button>
+      <button data-ov="flow" aria-pressed="false">Débit</button>
+      <button data-ov="cost" aria-pressed="false">Coût</button>
+      <button data-ov="time" aria-pressed="false">Temps</button>
+      <button data-ov="human" aria-pressed="false">Humain</button>
+    </div>
+    <div class="toolbar" aria-label="Banc d’essai">
+      <span class="tb-l">Banc d’essai</span>
+      <button class="btn sm" data-sc="incident" title="12 bugs urgents arrivent en rafale">Incident prod</button>
+      <button class="btn sm" data-sc="meeting" title="L’opérateur quitte l’usine pendant 2 h">Réunion 2 h</button>
+      <button class="btn sm" data-sc="prd" title="Un PRD qui se découpe en 8 tickets">Gros PRD</button>
+      <button class="btn sm" data-sc="outage" title="Tous les agents s’arrêtent 30 min">Panne API</button>
+      <button class="btn sm" data-sc="ticket" title="Ajoute un ticket depuis CLI · MCP">+ Ticket</button>
+    </div>
+  </div>
+
+  <div id="bench">
+    <div class="mini" id="mini-box" hidden>
+      <canvas id="mini" aria-label="Mini-carte"></canvas>
+      <div class="zb">
+        <button class="btn sm" id="z-fit" title="Voir toute l’usine (F)">Tout voir</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="seg" role="group" aria-label="Zoom">
+        <button id="z-out" title="Zoom arrière" aria-label="Zoom arrière">−</button>
+        <button id="z-in" title="Zoom avant" aria-label="Zoom avant">+</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+
+  <section id="prod" hidden aria-label="Production">
+    <header>
+      <h2 class="h">Production</h2>
+      <p>Débit, dépense et temps passé, calculés sur la simulation.</p>
+      <span class="spacer"></span>
+      <button class="btn sm" id="prod-close">Fermer</button>
+    </header>
+    <div class="pb" id="prod-body"></div>
+  </section>
+
+  <div id="tip" hidden></div>
+  <div id="toast" hidden role="status"></div>
+
+  <div id="intro" hidden>
+    <div class="modal" role="dialog" aria-labelledby="intro-h">
+      <h1 id="intro-h">Votre pipeline agentique, vu comme une usine</h1>
+      <p>Chaque ticket est une pièce. Elle entre par un quai d’intake, passe au tri, puis descend la ligne de son workflow, poste après poste, jusqu’à l’expédition. Les chiffres de cette maquette sont simulés.</p>
+      <dl class="map">
+        <div><span class="ic" style="background:#44525c"></span><dt>Quais d’intake</dt><dd>Gmail, Slack, Meeting notes, GitHub, Linear, Routines, CLI · MCP.</dd></div>
+        <div><span class="ic" style="background:linear-gradient(90deg,#60a5fa 33%,#f87171 33% 66%,#c084fc 66%)"></span><dt>Pièces</dt><dd>Les tickets, colorés par type : build, fix, think, lead, ops.</dd></div>
+        <div><span class="ic" style="background:#252a2e;border:1px solid #454d55"></span><dt>Postes</dt><dd>Les étapes d’un workflow : agent, skill, panel ou native. Chaque case allumée est un run en cours.</dd></div>
+        <div><span class="ic" style="background:repeating-linear-gradient(45deg,#eab308 0 4px,#15130a 4px 8px)"></span><dt>Postes de contrôle</dt><dd>Les <code>human_gate</code>. La pièce reste sur l’étagère tant qu’un humain n’a pas tranché.</dd></div>
+        <div><span class="ic" style="background:#2a2216;border:1px solid #a8842c"></span><dt>Convoyeurs ambre</dt><dd>Les boucles de reprise : un <code>ko</code> en QA ou un <code>request_changes</code>.</dd></div>
+        <div><span class="ic" style="background:#60a5fa"></span><dt>Slots agents</dt><dd><code>agentMaxConcurrency</code> : la seule file d’attente côté agents, commune à toute l’usine.</dd></div>
+        <div><span class="ic" style="background:#1d4ed8;border-top:6px solid #eab308"></span><dt>Opérateur</dt><dd>Vous. Une seule personne pour toutes les gates, questions et erreurs, et seulement aux heures de bureau.</dd></div>
+        <div><span class="ic" style="background:#facc15;border-radius:50%"></span><dt>Drones</dt><dd>Les tickets créés par un workflow (<code>ticket.create</code>) qui repartent à l’intake.</dd></div>
+      </dl>
+      <ol class="try">
+        <li><b>Goulots</b> classe ce qui freine ou coûte le plus. Appliquez le premier réglage et regardez la ligne se vider.</li>
+        <li><b>Focus</b> liste ce qui vous attend. Approuvez une gate : la pièce repart tout de suite.</li>
+        <li>Lancez <b>Incident prod</b> depuis le banc d’essai et observez les slots agents saturer.</li>
+      </ol>
+      <p class="keys"><kbd>Espace</kbd> pause · <kbd>1</kbd>–<kbd>4</kbd> vitesse · <kbd>F</kbd> toute l’usine · <kbd>O</kbd> calque suivant · <kbd>P</kbd> production · molette ou pincement pour zoomer · glisser pour se déplacer</p>
+      <div class="row end"><button class="btn primary" id="intro-go">Entrer dans l’usine</button></div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,2678 @@
+<title>Fleex Factory</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
+<style>
+/* Layout: one full-screen factory floor (canvas); a glass HUD bar on top, a pilot panel on the right, test bench + minimap bottom-left.
+   Single dark look on purpose (a factory floor at night shift). Tokens mirror packages/web/src/lib/themes.ts (Verdant dark) and lib/tints.ts. */
+:root{
+  color-scheme:dark;
+  --bg-base:#09090b;--bg-surface:#18181b;--bg-overlay:#27272a;--bg-hover:rgba(63,63,70,.45);
+  --border:#2e2e33;--border-input:#3f3f46;
+  --t1:#fafafa;--t2:#a1a1aa;--t3:#82828b;
+  --accent:#22c55e;--accent-hover:#4ade80;--accent-muted:rgba(34,197,94,.15);--on-accent:#052e16;
+  --hazard:#eab308;--glass:rgba(17,18,20,.86);--scrim:rgba(0,0,0,.6);
+  --red-t:#fca5a5;--red-bg:rgba(248,113,113,.15);--red-s:#f87171;
+  --orange-t:#fdba74;--orange-bg:rgba(251,146,60,.15);--orange-s:#fb923c;
+  --yellow-t:#fde047;--yellow-bg:rgba(250,204,21,.14);--yellow-s:#facc15;
+  --green-t:#86efac;--green-bg:rgba(74,222,128,.14);--green-s:#4ade80;
+  --blue-t:#93c5fd;--blue-bg:rgba(96,165,250,.15);--blue-s:#60a5fa;
+  --purple-t:#d8b4fe;--purple-bg:rgba(192,132,252,.15);--purple-s:#c084fc;
+  --teal-t:#5eead4;--teal-bg:rgba(45,212,191,.14);--teal-s:#2dd4bf;
+  --gray-t:#d4d4d8;--gray-bg:rgba(161,161,170,.14);--gray-s:#a1a1aa;
+  /* chart series (validated on --bg-surface) */
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;
+  --display:"Chakra Petch",ui-sans-serif,system-ui,sans-serif;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --hud-h:56px;--panel-w:356px;--gut-l:max(12px,env(safe-area-inset-left,0px));--gut-r:max(12px,env(safe-area-inset-right,0px));
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{margin:0}
+body{background:var(--bg-base);color:var(--t1);font-family:var(--sans);font-size:13px;line-height:1.4;overflow:hidden;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#app{position:relative;height:100%;overflow:hidden;user-select:none;-webkit-user-select:none}
+#floor{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#floor.drag{cursor:grabbing}#floor.hit{cursor:pointer}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;top:0;left:0;right:0;min-height:var(--hud-h);display:flex;align-items:center;gap:10px;
+  padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border);z-index:5}
+.brand{display:flex;align-items:center;gap:9px;flex:none}
+.brand svg{flex:none}
+.brand b{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.02em;white-space:nowrap}
+.brand .demo{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--hazard);border:1px solid rgba(234,179,8,.4);border-radius:4px;padding:1px 5px;white-space:nowrap}
+.clock{display:flex;align-items:center;gap:8px;flex:none}
+.clock .time{font-family:var(--display);font-weight:600;font-size:15px;min-width:92px;white-space:nowrap}
+.clock .time small{color:var(--t2);font-weight:500;font-size:11px;margin-left:4px}
+.seg{display:inline-flex;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;padding:2px;gap:2px}
+.seg button{border:0;background:transparent;color:var(--t2);padding:4px 9px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap;min-height:26px}
+.seg button:hover{background:var(--bg-hover);color:var(--t1)}
+.seg button[aria-pressed="true"]{background:var(--bg-overlay);color:var(--t1);box-shadow:inset 0 0 0 1px var(--border-input)}
+#hud .seg button{padding:4px 7px}
+.seg.speed button[aria-pressed="true"]{background:var(--accent-muted);color:var(--accent-hover);box-shadow:inset 0 0 0 1px rgba(34,197,94,.4)}
+.kpis{display:flex;gap:6px;flex:1 1 auto;min-width:0;overflow-x:auto;scrollbar-width:none}
+.kpis::-webkit-scrollbar{display:none}
+.kpi{flex:none;display:flex;flex-direction:column;gap:1px;padding:4px 8px;border:1px solid transparent;border-radius:8px;background:transparent;text-align:left;min-width:64px}
+.kpi:hover{background:var(--bg-hover);border-color:var(--border)}
+.kpi .k-l{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--t3);white-space:nowrap}
+.kpi .k-v{font-family:var(--display);font-weight:600;font-size:16px;line-height:1.15;white-space:nowrap}
+.kpi .k-v small{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--t2);margin-left:5px}
+.kpi.warn .k-v{color:var(--yellow-t)}.kpi.bad .k-v{color:var(--red-t)}.kpi.good .k-v{color:var(--green-t)}
+.kpi .bar{height:3px;border-radius:2px;background:var(--bg-overlay);overflow:hidden;margin-top:2px}
+.kpi .bar i{display:block;height:100%;background:var(--blue-s);border-radius:2px}
+.hud-r{display:flex;align-items:center;gap:8px;flex:none}
+.btn{border:1px solid var(--border-input);background:var(--bg-surface);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--t1);min-height:30px;white-space:nowrap}
+.btn:hover{background:var(--bg-overlay)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--t2)}
+.btn.ghost:hover{background:var(--bg-hover);color:var(--t1)}
+.btn.sm{padding:3px 8px;min-height:26px;font-size:11.5px}
+.btn.icon{width:30px;padding:0;display:inline-grid;place-items:center}
+.btn[aria-pressed="true"]{background:var(--accent-muted);border-color:rgba(34,197,94,.45);color:var(--accent-hover)}
+.btn.danger{color:var(--red-t)}
+
+/* ---------- pilot panel ---------- */
+#panel{position:absolute;top:calc(var(--hud-top,56px) + 10px);right:var(--gut-r);bottom:12px;width:var(--panel-w);display:flex;flex-direction:column;
+  background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:12px;z-index:4;overflow:hidden;user-select:text;-webkit-user-select:text}
+.tabs{display:flex;border-bottom:1px solid var(--border);flex:none}
+.tabs button{flex:1;border:0;background:transparent;color:var(--t2);padding:10px 4px 9px;font-weight:600;font-size:12px;border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button:hover{color:var(--t1)}
+.tabs button[aria-selected="true"]{color:var(--t1);border-bottom-color:var(--accent)}
+.tabs .cnt{font-family:var(--mono);font-size:10.5px;margin-left:4px;padding:0 5px;border-radius:8px;background:var(--bg-overlay);color:var(--t2)}
+.tabs .cnt.hot{background:var(--yellow-bg);color:var(--yellow-t)}
+#sheet-toggle{display:none}
+#pbody{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;scrollbar-width:thin;scrollbar-color:var(--border-input) transparent}
+.lead{color:var(--t2);font-size:12px;margin:0}
+.h{font-family:var(--display);font-weight:600;font-size:15px;margin:0;line-height:1.25;text-wrap:balance}
+.sub{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin:6px 0 0}
+.card{border:1px solid var(--border);border-radius:10px;background:rgba(24,24,27,.7);padding:10px;display:flex;flex-direction:column;gap:6px}
+.card .top{display:flex;align-items:center;gap:8px}
+.rank{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:12px;color:#111;background:var(--gray-s)}
+.rank.human,.rank.question{background:#f59e0b}.rank.cost{background:var(--orange-s)}.rank.pool{background:var(--blue-s)}.rank.quality{background:var(--red-s)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px;white-space:nowrap;background:var(--gray-bg);color:var(--gray-t)}
+.chip.yellow{background:var(--yellow-bg);color:var(--yellow-t)}.chip.red{background:var(--red-bg);color:var(--red-t)}
+.chip.blue{background:var(--blue-bg);color:var(--blue-t)}.chip.green{background:var(--green-bg);color:var(--green-t)}
+.chip.orange{background:var(--orange-bg);color:var(--orange-t)}.chip.purple{background:var(--purple-bg);color:var(--purple-t)}
+.chip.teal{background:var(--teal-bg);color:var(--teal-t)}
+.chip i{width:7px;height:7px;border-radius:2px;background:currentColor;display:inline-block}
+.card .title{font-weight:600;font-size:13px;min-width:0;overflow-wrap:anywhere}
+.card .metric{font-family:var(--display);font-weight:600;font-size:14px}
+.card .detail{color:var(--t2);font-size:12px}
+.card .hint{color:var(--t3);font-size:11.5px}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.row.end{justify-content:flex-end}
+.spacer{flex:1}
+.empty{color:var(--t2);font-size:12px;border:1px dashed var(--border-input);border-radius:10px;padding:14px;text-align:center}
+
+.fitem{border:1px solid var(--border);border-radius:10px;background:rgba(24,24,27,.7);padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.fitem .l1{display:flex;align-items:center;gap:6px;min-width:0}
+.fitem .l1 .age{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--t2);white-space:nowrap}
+.tlink{border:0;background:transparent;padding:0;text-align:left;color:var(--t1);font-weight:600;font-size:12.5px;min-width:0;overflow-wrap:anywhere}
+.tlink:hover{color:var(--accent-hover);text-decoration:underline}
+.tlink .id{font-family:var(--mono);font-weight:500;font-size:11px;color:var(--t2);margin-right:5px}
+.where{color:var(--t2);font-size:11.5px}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat{border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:rgba(24,24,27,.6);min-width:0}
+.stat .s-l{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .s-v{font-family:var(--display);font-weight:600;font-size:14.5px;white-space:nowrap}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px;margin:0}
+.kv dt{color:var(--t3)}.kv dd{margin:0;text-align:right;overflow-wrap:anywhere}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label,.field .lab{font-size:11px;color:var(--t2);font-weight:600}
+.field select{background:var(--bg-surface);border:1px solid var(--border-input);border-radius:8px;padding:6px 8px;min-height:32px;width:100%}
+.field input[type=range]{width:100%;accent-color:var(--accent)}
+.field .help{color:var(--t3);font-size:11.5px}
+.seg.wide{display:flex}.seg.wide button{flex:1}
+.prog{height:5px;border-radius:3px;background:var(--bg-overlay);overflow:hidden}
+.prog i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.run{display:flex;align-items:center;gap:8px}
+.run .prog{flex:1}
+.run .pct{font-family:var(--mono);font-size:11px;color:var(--t2);width:34px;text-align:right}
+.tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.tl li{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:baseline;padding:4px 0;font-size:12px;border-top:1px solid rgba(46,46,51,.6)}
+.tl li:first-child{border-top:0}
+.tl .dot{width:8px;height:8px;border-radius:50%;background:var(--green-s);align-self:center;justify-self:center}
+.tl .dot.ko{background:var(--red-s)}.tl .dot.hum{background:var(--hazard)}.tl .dot.cur{background:var(--blue-s);box-shadow:0 0 0 3px var(--blue-bg)}
+.tl .m{font-family:var(--mono);font-size:11px;color:var(--t2);white-space:nowrap}
+.tl small{color:var(--t3)}
+.obj{display:flex;flex-direction:column;gap:5px;border:1px solid var(--border);border-radius:10px;padding:9px 10px;background:rgba(24,24,27,.7)}
+.obj.done{border-color:rgba(34,197,94,.45);background:rgba(34,197,94,.07)}
+.obj .o1{display:flex;align-items:center;gap:8px}
+.obj .o1 b{font-size:13px}
+.obj .o1 .v{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--t2);white-space:nowrap}
+.obj .check{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-input);flex:none;display:grid;place-items:center;font-size:10px;color:var(--on-accent)}
+.obj.done .check{background:var(--accent);border-color:var(--accent)}
+.level{border:1px solid rgba(234,179,8,.35);border-radius:10px;padding:10px;background:linear-gradient(135deg,rgba(234,179,8,.10),rgba(24,24,27,.6))}
+.level .n{font-family:var(--display);font-weight:700;font-size:17px}
+.log{list-style:none;margin:0;padding:0;font-size:11.5px;color:var(--t2);display:flex;flex-direction:column;gap:3px}
+.log time{font-family:var(--mono);color:var(--t3);margin-right:6px}
+.switch{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;padding:2px 0;font-size:12px;font-weight:600;color:var(--t1)}
+.switch i{width:30px;height:17px;border-radius:9px;background:var(--bg-overlay);border:1px solid var(--border-input);position:relative;flex:none}
+.switch i::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--t2);transition:transform .15s}
+.switch[aria-checked="true"] i{background:var(--accent-muted);border-color:rgba(34,197,94,.5)}
+.switch[aria-checked="true"] i::after{transform:translateX(13px);background:var(--accent)}
+.bars24{display:flex;align-items:flex-end;gap:2px;height:44px}
+.bars24 i{flex:1;background:var(--blue-s);border-radius:2px 2px 0 0;min-height:1px;opacity:.85}
+.bars24 i.full{background:#f59e0b}
+
+/* ---------- bench + minimap ---------- */
+#strip{position:absolute;top:calc(var(--hud-top,56px) + 10px);left:var(--gut-l);right:calc(var(--panel-w) + var(--gut-r) + 12px);z-index:3;display:flex;gap:8px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;pointer-events:none}
+#strip>*{pointer-events:auto}
+#strip .seg{background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+#bench{position:absolute;left:var(--gut-l);bottom:12px;z-index:3;display:flex;flex-direction:column;gap:8px;align-items:flex-start;max-width:calc(100% - var(--panel-w) - 48px);pointer-events:none}
+#bench>*{pointer-events:auto}
+#bench .seg{background:var(--glass)}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;background:var(--glass);border:1px solid var(--border);border-radius:10px;padding:6px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.toolbar .tb-l{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);align-self:center;padding:0 4px}
+.mini{background:var(--glass);border:1px solid var(--border);border-radius:10px;padding:5px;display:flex;gap:6px;align-items:stretch}
+#mini{width:216px;height:114px;display:block;border-radius:6px;cursor:crosshair;touch-action:none}
+.mini .zb{display:flex;flex-direction:column;gap:4px;justify-content:flex-end}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--t2);background:var(--glass);border:1px solid var(--border);border-radius:10px;padding:5px 9px}
+.legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.legend i.lamp{border-radius:50%}
+
+/* ---------- production drawer ---------- */
+#prod{position:absolute;left:var(--gut-l);right:calc(var(--panel-w) + var(--gut-r) + 12px);bottom:12px;max-height:min(64%,560px);z-index:6;display:flex;flex-direction:column;
+  background:rgba(17,18,20,.96);border:1px solid var(--border-input);border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.6);user-select:text;-webkit-user-select:text}
+#prod header{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);flex:none}
+#prod header p{margin:0;color:var(--t2);font-size:12px}
+#prod .pb{overflow:auto;padding:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.viz{background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:10px;min-width:0;display:flex;flex-direction:column;gap:6px}
+.viz h3{margin:0;font-family:var(--display);font-weight:600;font-size:13.5px}
+.viz .cap{margin:0;color:var(--t3);font-size:11.5px}
+.viz svg{width:100%;height:auto;display:block;overflow:visible}
+.viz svg text{font-family:var(--sans);fill:var(--t2);font-size:11px}
+.viz svg text.v{fill:var(--t1);font-family:var(--mono);font-size:11px}
+.viz .lg{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--t2)}
+.viz .lg span{display:inline-flex;align-items:center;gap:5px}
+.viz .lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.viz.wide{grid-column:1/-1}
+.tw{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:12px}
+table.t th{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--t3);font-weight:600;text-align:right;padding:4px 8px;white-space:nowrap}
+table.t td{padding:6px 8px;text-align:right;border-top:1px solid var(--border);font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+table.t th:first-child,table.t td:first-child{text-align:left;font-family:var(--sans);font-weight:600}
+table.t td i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:7px}
+[data-tip]{cursor:default}
+.hitbar:hover{fill:rgba(255,255,255,.06)}
+
+/* ---------- floating bits ---------- */
+#tip{position:fixed;z-index:20;pointer-events:none;background:rgba(9,9,11,.95);border:1px solid var(--border-input);border-radius:8px;padding:6px 9px;font-size:12px;max-width:280px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#tip b{font-weight:600}#tip .d{color:var(--t2);font-size:11.5px}
+#toast{position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:30;background:rgba(9,9,11,.96);border:1px solid var(--border-input);border-radius:10px;
+  padding:9px 14px;font-size:12.5px;font-weight:600;box-shadow:0 12px 40px rgba(0,0,0,.6);display:flex;gap:8px;align-items:center;max-width:min(92%,460px)}
+#toast.objective{border-color:rgba(234,179,8,.6)}#toast.alert{border-color:rgba(248,113,113,.5)}
+#toast i{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+#toast.objective i{background:var(--hazard)}#toast.alert i{background:var(--red-s)}
+#intro{position:absolute;inset:0;z-index:40;background:var(--scrim);display:grid;place-items:center;padding:16px;overflow:auto;backdrop-filter:blur(3px)}
+.modal{width:min(720px,100%);background:var(--bg-surface);border:1px solid var(--border-input);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 30px 90px rgba(0,0,0,.7);user-select:text;-webkit-user-select:text}
+.modal h1{font-family:var(--display);font-weight:700;font-size:24px;margin:0;letter-spacing:.01em;text-wrap:balance}
+.modal p{margin:0;color:var(--t2);max-width:62ch}
+.map{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px;margin:0}
+.map div{display:grid;grid-template-columns:22px 1fr;gap:9px;align-items:start}
+.map dt{font-weight:600;grid-column:2}
+.map dd{margin:0;color:var(--t2);font-size:12px;grid-column:2}
+.map .ic{grid-row:1/3;width:20px;height:20px;border-radius:5px;margin-top:2px}
+.try{margin:0;padding-left:18px;color:var(--t2);display:flex;flex-direction:column;gap:3px}
+.try b{color:var(--t1);font-weight:600}
+.keys{color:var(--t3);font-size:11.5px}
+kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--border-input);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--bg-base);color:var(--t2)}
+
+@media (max-width:1400px){
+  #hud{flex-wrap:wrap;gap:6px 10px}
+  .kpis{order:5;flex-basis:100%}
+  .hud-r{margin-left:auto}
+}
+/* ---------- narrow screens: the panel becomes a bottom sheet ---------- */
+@media (max-width:860px){
+  :root{--panel-w:0px}
+  #hud{flex-wrap:wrap;gap:6px 10px;padding-block:6px}
+  .brand .demo{display:none}
+  .kpis{order:5;flex-basis:100%}
+  .hud-r{margin-left:auto}
+  #panel{top:auto;left:0;right:0;bottom:0;width:auto;height:var(--sheet-h,46%);border-radius:14px 14px 0 0;border-bottom:0;padding-bottom:env(safe-area-inset-bottom,0px)}
+  #panel.closed{height:auto}
+  #panel.closed #pbody{display:none}
+  #sheet-toggle{display:block;flex:0 0 40px}
+  #strip{right:var(--gut-r);flex-wrap:nowrap;flex-direction:column;gap:6px}
+  #strip .seg,#strip .toolbar{max-width:100%;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+  .toolbar .tb-l{display:none}
+  #bench{display:none}
+  #prod{left:0;right:0;bottom:0;top:var(--hud-top,96px);max-height:none;border-radius:14px 14px 0 0}
+  #prod .pb{grid-template-columns:minmax(0,1fr)}
+  .map{grid-template-columns:minmax(0,1fr)}
+  .modal{padding:16px}
+  .modal h1{font-size:20px}
+  #toast{bottom:auto;top:calc(var(--hud-top,96px) + 8px)}
+}
+@media (prefers-reduced-motion:reduce){.switch i::after{transition:none}}
+</style>
+<div id="app">
+  <canvas id="floor" aria-label="Plan de l’usine : sources, convoyeurs, postes et tickets en circulation"></canvas>
+
+  <header id="hud">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="6" fill="#22c55e"/><path d="M6 18.5V11l4.2 2.8V11l4.2 2.8V7.5h4.6v11z" fill="#052e16"/></svg>
+      <b>Fleex Factory</b>
+      <span class="demo" title="Maquette : toutes les données sont simulées">simulé</span>
+    </div>
+    <div class="clock">
+      <span class="time" id="clock">—</span>
+      <div class="seg speed" role="group" aria-label="Vitesse de simulation">
+        <button data-speed="0" aria-pressed="false" title="Pause (Espace)">❚❚</button>
+        <button data-speed="1" aria-pressed="true">1×</button>
+        <button data-speed="3" aria-pressed="false">3×</button>
+        <button data-speed="8" aria-pressed="false">8×</button>
+        <button data-speed="20" aria-pressed="false">20×</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpis">
+      <button class="kpi" data-kpi="flow" title="Tickets expédiés. Clic : calque Débit"><span class="k-l">Débit</span><span class="k-v" id="k-flow">—</span></button>
+      <button class="kpi" data-kpi="wip" title="Tickets en cours dans l’usine"><span class="k-l">En cours</span><span class="k-v" id="k-wip">—</span></button>
+      <button class="kpi" data-kpi="lead" title="Lead time médian, de l’intake à l’expédition. Clic : calque Temps"><span class="k-l">Lead time</span><span class="k-v" id="k-lead">—</span></button>
+      <button class="kpi" data-kpi="focus" title="Ce qui attend un humain. Clic : onglet Focus"><span class="k-l">Focus</span><span class="k-v" id="k-focus">—</span></button>
+      <button class="kpi" data-kpi="pool" title="agentMaxConcurrency : agents en cours / maximum"><span class="k-l">Slots agents</span><span class="k-v" id="k-pool">—</span><span class="bar"><i id="k-poolbar"></i></span></button>
+      <button class="kpi" data-kpi="cost" title="Dépense agents. Clic : calque Coût"><span class="k-l">Dépense</span><span class="k-v" id="k-cost">—</span></button>
+      <button class="kpi" data-kpi="auto" title="Part des tickets expédiés sans intervention humaine"><span class="k-l">Autonomie</span><span class="k-v" id="k-auto">—</span></button>
+    </div>
+    <div class="hud-r">
+      <button class="btn" id="btn-prod" aria-pressed="false" title="Statistiques de production (P)">Production</button>
+      <button class="btn icon" id="btn-help" title="Légende et raccourcis" aria-label="Légende et raccourcis">?</button>
+    </div>
+  </header>
+
+  <aside id="panel" aria-label="Pilotage">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="bottlenecks" aria-selected="true">Goulots<span class="cnt" id="c-bn">0</span></button>
+      <button role="tab" data-tab="focus" aria-selected="false">Focus<span class="cnt" id="c-focus">0</span></button>
+      <button role="tab" data-tab="inspect" aria-selected="false">Inspecteur</button>
+      <button role="tab" data-tab="goals" aria-selected="false">Objectifs<span class="cnt" id="c-goals">0/7</span></button>
+      <button id="sheet-toggle" class="btn ghost" aria-label="Replier ou déplier le panneau">▾</button>
+    </div>
+    <div id="pbody"></div>
+  </aside>
+
+  <div id="strip">
+    <div class="seg" id="overlays" role="group" aria-label="Calque">
+      <button data-ov="none" aria-pressed="true">Usine</button>
+      <button data-ov="flow" aria-pressed="false">Débit</button>
+      <button data-ov="cost" aria-pressed="false">Coût</button>
+      <button data-ov="time" aria-pressed="false">Temps</button>
+      <button data-ov="human" aria-pressed="false">Humain</button>
+    </div>
+    <div class="toolbar" aria-label="Banc d’essai">
+      <span class="tb-l">Banc d’essai</span>
+      <button class="btn sm" data-sc="incident" title="12 bugs urgents arrivent en rafale">Incident prod</button>
+      <button class="btn sm" data-sc="meeting" title="L’opérateur quitte l’usine pendant 2 h">Réunion 2 h</button>
+      <button class="btn sm" data-sc="prd" title="Un PRD qui se découpe en 8 tickets">Gros PRD</button>
+      <button class="btn sm" data-sc="outage" title="Tous les agents s’arrêtent 30 min">Panne API</button>
+      <button class="btn sm" data-sc="ticket" title="Ajoute un ticket depuis CLI · MCP">+ Ticket</button>
+    </div>
+  </div>
+
+  <div id="bench">
+    <div class="mini" id="mini-box" hidden>
+      <canvas id="mini" aria-label="Mini-carte"></canvas>
+      <div class="zb">
+        <button class="btn sm" id="z-fit" title="Voir toute l’usine (F)">Tout voir</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="seg" role="group" aria-label="Zoom">
+        <button id="z-out" title="Zoom arrière" aria-label="Zoom arrière">−</button>
+        <button id="z-in" title="Zoom avant" aria-label="Zoom avant">+</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+
+  <section id="prod" hidden aria-label="Production">
+    <header>
+      <h2 class="h">Production</h2>
+      <p>Débit, dépense et temps passé, calculés sur la simulation.</p>
+      <span class="spacer"></span>
+      <button class="btn sm" id="prod-close">Fermer</button>
+    </header>
+    <div class="pb" id="prod-body"></div>
+  </section>
+
+  <div id="tip" hidden></div>
+  <div id="toast" hidden role="status"></div>
+
+  <div id="intro" hidden>
+    <div class="modal" role="dialog" aria-labelledby="intro-h">
+      <h1 id="intro-h">Votre pipeline agentique, vu comme une usine</h1>
+      <p>Chaque ticket est une pièce. Elle entre par un quai d’intake, passe au tri, puis descend la ligne de son workflow, poste après poste, jusqu’à l’expédition. Les chiffres de cette maquette sont simulés.</p>
+      <dl class="map">
+        <div><span class="ic" style="background:#44525c"></span><dt>Quais d’intake</dt><dd>Gmail, Slack, Meeting notes, GitHub, Linear, Routines, CLI · MCP.</dd></div>
+        <div><span class="ic" style="background:linear-gradient(90deg,#60a5fa 33%,#f87171 33% 66%,#c084fc 66%)"></span><dt>Pièces</dt><dd>Les tickets, colorés par type : build, fix, think, lead, ops.</dd></div>
+        <div><span class="ic" style="background:#252a2e;border:1px solid #454d55"></span><dt>Postes</dt><dd>Les étapes d’un workflow : agent, skill, panel ou native. Chaque case allumée est un run en cours.</dd></div>
+        <div><span class="ic" style="background:repeating-linear-gradient(45deg,#eab308 0 4px,#15130a 4px 8px)"></span><dt>Postes de contrôle</dt><dd>Les <code>human_gate</code>. La pièce reste sur l’étagère tant qu’un humain n’a pas tranché.</dd></div>
+        <div><span class="ic" style="background:#2a2216;border:1px solid #a8842c"></span><dt>Convoyeurs ambre</dt><dd>Les boucles de reprise : un <code>ko</code> en QA ou un <code>request_changes</code>.</dd></div>
+        <div><span class="ic" style="background:#60a5fa"></span><dt>Slots agents</dt><dd><code>agentMaxConcurrency</code> : la seule file d’attente côté agents, commune à toute l’usine.</dd></div>
+        <div><span class="ic" style="background:#1d4ed8;border-top:6px solid #eab308"></span><dt>Opérateur</dt><dd>Vous. Une seule personne pour toutes les gates, questions et erreurs, et seulement aux heures de bureau.</dd></div>
+        <div><span class="ic" style="background:#facc15;border-radius:50%"></span><dt>Drones</dt><dd>Les tickets créés par un workflow (<code>ticket.create</code>) qui repartent à l’intake.</dd></div>
+      </dl>
+      <ol class="try">
+        <li><b>Goulots</b> classe ce qui freine ou coûte le plus. Appliquez le premier réglage et regardez la ligne se vider.</li>
+        <li><b>Focus</b> liste ce qui vous attend. Approuvez une gate : la pièce repart tout de suite.</li>
+        <li>Lancez <b>Incident prod</b> depuis le banc d’essai et observez les slots agents saturer.</li>
+      </ol>
+      <p class="keys"><kbd>Espace</kbd> pause · <kbd>1</kbd>–<kbd>4</kbd> vitesse · <kbd>F</kbd> toute l’usine · <kbd>O</kbd> calque suivant · <kbd>P</kbd> production · molette ou pincement pour zoomer · glisser pour se déplacer</p>
+      <div class="row end"><button class="btn primary" id="intro-go">Entrer dans l’usine</button></div>
+    </div>
+  </div>
+</div>
+<script>
+/* Fleex Factory — simulation engine (no DOM).
+   Mock data, real Fleex vocabulary: WorkflowExecutorType, StepRunStatus, FocusItemKind, agentMaxConcurrency.
+   Time unit: one simulated minute. Space unit: one floor tile. */
+(function (root) {
+'use strict';
+
+var RING = 72;                 // hourly buckets kept per metric
+var GAP = 0.62;                // minimum spacing between two items on a belt
+var BELT_V = 1.7;              // tiles per simulated minute
+var SWING = 0.26;              // inserter half-cycle, simulated minutes
+var DAY = 1440;
+
+var MODELS = {
+  'claude-haiku-5-5':  { label: 'Haiku 5.5',  short: 'haiku',  speed: 0.55, cost: 0.05, defect: 0.42, tier: 1 },
+  'claude-sonnet-5-5': { label: 'Sonnet 5.5', short: 'sonnet', speed: 0.80, cost: 0.45, defect: 0.26, tier: 2 },
+  'claude-opus-5-5':   { label: 'Opus 5.5',   short: 'opus',   speed: 1.00, cost: 1.00, defect: 0.16, tier: 3 },
+  'claude-fable-5-2':  { label: 'Fable 5.2',  short: 'fable',  speed: 1.10, cost: 1.60, defect: 0.08, tier: 4 }
+};
+var MODEL_ORDER = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-2'];
+
+var TYPES = {
+  build: { label: 'build', color: '#60a5fa', letter: 'B' },
+  fix:   { label: 'fix',   color: '#f87171', letter: 'F' },
+  think: { label: 'think', color: '#c084fc', letter: 'T' },
+  lead:  { label: 'lead',  color: '#facc15', letter: 'L' },
+  ops:   { label: 'ops',   color: '#2dd4bf', letter: 'O' }
+};
+
+var TITLES = {
+  fix: ['Export CSV tronqué au-delà de 10 000 lignes', 'Boucle de redirection SSO sur Safari', 'Crash du drag & drop dans le Kanban',
+    'Webhook Slack reçu en double', 'Timeout sur /api/statistics', 'Fuite mémoire dans le terminal', 'Tri des tickets cassé après un filtre',
+    'Notification push envoyée deux fois', 'Agenda : fuseau décalé d’une heure', 'CostBadge affiche NaN sans exécution',
+    'Worktree non nettoyé après merge', 'Session CLI marquée interrompue à tort', 'Mention @agent ignorée dans un commentaire',
+    'Deliverable vide après un retry', 'Focus : gate résolue encore affichée'],
+  build: ['Filtres sauvegardés dans Tasks', 'Vue Agenda hebdomadaire', 'Import des issues Linear', 'Raccourcis clavier dans Focus',
+    'Mode compact pour la timeline', 'Export PDF d’un deliverable', 'Recherche plein texte dans Documents', 'Webhook entrant générique',
+    'Tags colorés sur le Kanban', 'Résumé quotidien par e-mail', 'Budget par workflow', 'Reprise d’un run depuis une étape',
+    'Duplication d’un workflow', 'Vue liste dans Routines', 'Pièces jointes dans les commentaires'],
+  think: ['Faut-il un mode multi-utilisateur ?', 'Pricing : par siège ou à l’usage ?', 'Explorer une app mobile native',
+    'Une marketplace de workflows ?', 'Positionnement face aux IDE agentiques', 'Onboarding en moins de 5 minutes',
+    'Quel rôle pour la voix dans l’intake ?'],
+  lead: ['PRD : Fleex Intake', 'PRD : Budgets et alertes de coût', 'PRD : Vue Factory', 'PRD : Permissions par board',
+    'PRD : Connecteur Gmail', 'PRD : Routines partagées', 'PRD : Revue de code par panel'],
+  ops: ['Mettre à jour les dépendances', 'Rotation des clés API', 'Nettoyer les worktrees orphelins', 'Rapport hebdo des coûts',
+    'Audit des migrations', 'Purger les sessions expirées', 'Bump du Claude Agent SDK', 'Vérifier les policies RLS']
+};
+
+var SOURCES = [
+  { id: 'gmail',   name: 'Gmail',         perDay: 9,  mix: { fix: 0.3, build: 0.3, lead: 0.2, think: 0.2 } },
+  { id: 'slack',   name: 'Slack',         perDay: 14, mix: { fix: 0.5, build: 0.2, ops: 0.2, think: 0.1 } },
+  { id: 'meet',    name: 'Meeting notes', perDay: 6,  mix: { think: 0.35, lead: 0.35, build: 0.3 } },
+  { id: 'github',  name: 'GitHub',        perDay: 12, mix: { fix: 0.55, build: 0.35, ops: 0.1 } },
+  { id: 'linear',  name: 'Linear',        perDay: 10, mix: { build: 0.6, fix: 0.25, lead: 0.15 } },
+  { id: 'routine', name: 'Routines',      perDay: 5,  mix: { ops: 0.8, fix: 0.2 }, flat: true },
+  { id: 'cli',     name: 'CLI · MCP',     perDay: 4,  mix: { build: 0.5, think: 0.3, ops: 0.2 } },
+  { id: 'fleex',   name: 'Sous-tickets',  perDay: 0,  mix: { build: 1 }, internal: true }
+];
+
+/* dur: minutes on Opus · cost: USD on Opus · check: share of the ticket's defect risk this step catches
+   produces: the step (re)writes the artefact, so it sets the defect risk from its model. */
+var WORKFLOWS = [
+  { slug: 'ideation', name: 'Ideation', emoji: '💡', color: '#c084fc', hitl: true, output: 'prd',
+    desc: 'Explorer une idée, la challenger en panel, rédiger un PR-FAQ, puis choisir une direction.', steps: [
+    { name: 'Explore',        exec: 'agent', ref: 'the-explorer', mode: 'plan', model: 'claude-opus-5-5', dur: 16, cost: 1.3, pQuestion: 0.08 },
+    { name: 'Challenge',      exec: 'panel', ref: 'les-big-tech', mode: 'talk', model: 'claude-opus-5-5', dur: 14, cost: 2.6 },
+    { name: 'PR-FAQ',         exec: 'skill', ref: 'pr-faq',       mode: 'edit', model: 'claude-sonnet-5-5', dur: 10, cost: 2.0, produces: true },
+    { name: 'Pick direction', exec: 'human_gate', outcomes: ['approve', 'request_changes', 'reject'], pReject: 0.14, review: [5, 11] }
+  ], rework: [{ from: 3, to: 2, side: 'top', level: 1 }] },
+
+  { slug: 'specification', name: 'Specification', emoji: '📐', color: '#facc15', hitl: true, output: 'spec',
+    desc: 'Structurer un PRD, écrire la spec, la faire relire, la valider, puis créer les tickets.', steps: [
+    { name: 'Structure PRD',  exec: 'skill', ref: 'structure-prd', mode: 'edit', model: 'claude-sonnet-5-5', dur: 8, cost: 1.1 },
+    { name: 'Spec',           exec: 'agent', ref: 'the-architect', mode: 'edit', model: 'claude-opus-5-5', dur: 20, cost: 1.9, pQuestion: 0.1, produces: true },
+    { name: 'Review spec',    exec: 'panel', ref: 'les-big-tech',  mode: 'talk', model: 'claude-opus-5-5', dur: 12, cost: 2.2, check: 0.9 },
+    { name: 'Validate spec',  exec: 'human_gate', outcomes: ['approve', 'request_changes', 'reject'], pReject: 0.04, review: [6, 12] },
+    { name: 'Create tickets', exec: 'native', ref: 'ticket.create · forEach', dur: 1, cost: 0, fanout: [2, 3] }
+  ], rework: [{ from: 2, to: 1, side: 'top', level: 1 }, { from: 3, to: 1, side: 'bottom', level: 1 }] },
+
+  { slug: 'feature-delivery', name: 'Feature Delivery', emoji: '🏭', color: '#60a5fa', hitl: true, output: 'code',
+    desc: 'Plan, développement, revue et QA, avec deux validations humaines.', steps: [
+    { name: 'Plan',           exec: 'agent', ref: 'the-architect', mode: 'plan', model: 'claude-opus-5-5', dur: 12, cost: 1.0, pQuestion: 0.08, produces: true },
+    { name: 'Plan review',    exec: 'human_gate', outcomes: ['approve', 'request_changes'], pReject: 0, review: [3, 7] },
+    { name: 'Development',    exec: 'agent', ref: 'jeff-bezos',    mode: 'edit', model: 'claude-opus-5-5', dur: 40, cost: 5.5, pQuestion: 0.05, pFail: 0.03, produces: true },
+    { name: 'Code Review',    exec: 'panel', ref: 'les-big-tech',  mode: 'plan', model: 'claude-opus-5-5', dur: 12, cost: 2.0, check: 0.75 },
+    { name: 'QA',             exec: 'agent', ref: 'the-tester',    mode: 'edit', model: 'claude-sonnet-5-5', dur: 14, cost: 2.4, check: 0.75, pFail: 0.02 },
+    { name: 'PR review',      exec: 'human_gate', outcomes: ['approve', 'request_changes'], pReject: 0, review: [5, 11] },
+    { name: 'Merge',          exec: 'native', ref: 'ticket.set_status → done', dur: 1, cost: 0 }
+  ], rework: [{ from: 1, to: 0, side: 'top', level: 1 }, { from: 3, to: 2, side: 'top', level: 1 },
+              { from: 4, to: 2, side: 'top', level: 2 }, { from: 5, to: 2, side: 'bottom', level: 1 }] },
+
+  { slug: 'feature-autopilot', name: 'Feature Autopilot', emoji: '🤖', color: '#4ade80', hitl: false, output: 'code',
+    desc: 'La même chaîne sans validation humaine : tout repose sur la revue et la QA automatiques.', steps: [
+    { name: 'Plan',           exec: 'agent', ref: 'the-architect', mode: 'plan', model: 'claude-sonnet-5-5', dur: 11, cost: 1.1, produces: true },
+    { name: 'Development',    exec: 'agent', ref: 'jeff-bezos',    mode: 'edit', model: 'claude-opus-5-5', dur: 30, cost: 4.0, pFail: 0.03, produces: true },
+    { name: 'Code Review',    exec: 'agent', ref: 'the-reviewer',  mode: 'plan', model: 'claude-sonnet-5-5', dur: 11, cost: 1.8, check: 0.7 },
+    { name: 'QA',             exec: 'agent', ref: 'the-tester',    mode: 'edit', model: 'claude-sonnet-5-5', dur: 14, cost: 2.2, check: 0.75, pFail: 0.02 },
+    { name: 'Merge',          exec: 'native', ref: 'ticket.set_status → done', dur: 1, cost: 0 }
+  ], rework: [{ from: 2, to: 1, side: 'top', level: 1 }, { from: 3, to: 1, side: 'top', level: 2 }] },
+
+  { slug: 'bugfix', name: 'Bugfix', emoji: '🐛', color: '#f87171', hitl: false, output: 'code',
+    desc: 'Reproduire, corriger, vérifier, merger. Aucune validation humaine.', steps: [
+    { name: 'Reproduce',      exec: 'agent', ref: 'the-sentinel', mode: 'plan', model: 'claude-sonnet-5-5', dur: 12, cost: 1.6, pQuestion: 0.07, pFail: 0.03 },
+    { name: 'Fix',            exec: 'agent', ref: 'jeff-bezos',   mode: 'edit', model: 'claude-opus-5-5', dur: 18, cost: 2.2, produces: true },
+    { name: 'QA',             exec: 'agent', ref: 'the-tester',   mode: 'edit', model: 'claude-sonnet-5-5', dur: 14, cost: 2.2, check: 0.8 },
+    { name: 'Merge',          exec: 'native', ref: 'ticket.set_status → done', dur: 1, cost: 0 }
+  ], rework: [{ from: 2, to: 1, side: 'top', level: 1 }] }
+];
+
+var LAY = { W: 69, H: 42, srcX: 1, srcW: 3, srcH: 2.4, collX: 5.5, triX: 7.5, busX: 13.5, st0: 16.5, pitch: 7, sw: 4, sh: 3,
+  dockX: 64.5, dockW: 3.5, laneY: [4.5, 12.5, 20.5, 28.5, 36.5], srcY: [2.5, 7, 11.5, 16, 25, 29.5, 34, 38.5], reach: 0.7 };
+
+/* ---------- helpers ---------- */
+function rng32(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function dayCurve(h) {
+  if (h < 7) return 0.25; if (h < 9) return 0.8; if (h < 12.5) return 1.9; if (h < 14) return 1.2;
+  if (h < 19) return 1.8; if (h < 22) return 0.7; return 0.35;
+}
+function median(a) {
+  if (!a.length) return 0;
+  var s = a.slice().sort(function (x, y) { return x - y; }), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/* ---------- belt segment ---------- */
+function Seg(pts, kind) {
+  this.pts = pts; this.kind = kind || 'main';
+  this.cum = [0];
+  for (var i = 1; i < pts.length; i++) {
+    this.cum.push(this.cum[i - 1] + Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]));
+  }
+  this.len = this.cum[this.cum.length - 1];
+  this.items = [];             // items[0] is the head (closest to the end)
+  this.sink = null;            // {kind:'seg', pick} | {kind:'port', port} | {kind:'dock', lane}
+  this.flow = null;            // hourly ring, set by the sim
+  this.station = null;         // downstream station, for overlays
+}
+Seg.prototype.canEnter = function () {
+  var n = this.items.length;
+  return n === 0 || this.items[n - 1].d >= GAP;
+};
+Seg.prototype.push = function (t) { this.items.push({ t: t, d: 0 }); t.loc = this; };
+Seg.prototype.head = function () {
+  var h = this.items[0];
+  return h && h.d >= this.len - 1e-6 ? h : null;
+};
+Seg.prototype.at = function (d, out) {
+  var c = this.cum, p = this.pts, i = 1;
+  d = clamp(d, 0, this.len);
+  while (i < c.length - 1 && c[i] < d) i++;
+  var l = c[i] - c[i - 1], f = l ? (d - c[i - 1]) / l : 0;
+  out.x = p[i - 1][0] + (p[i][0] - p[i - 1][0]) * f;
+  out.y = p[i - 1][1] + (p[i][1] - p[i - 1][1]) * f;
+  return out;
+};
+
+/* ---------- simulation ---------- */
+function Sim(seed) {
+  this.rnd = rng32(seed || 20261114);
+  this.now = 0;                // minutes since Monday 00:00
+  this.hourIdx = 0;
+  this.rings = [];
+  this.segs = []; this.stations = []; this.lanes = []; this.sources = []; this.inserters = []; this.ports = [];
+  this.tickets = new Map();    // active tickets
+  this.recent = [];            // last shipped / cancelled
+  this.drones = []; this.fx = []; this.events = []; this.log = [];
+  this.seq = 1040;
+  this.pool = { max: 10, used: 0, fullMin: this.ring(), usedMin: this.ring(), x: 8, y: 25.6, w: 3, h: 2.6 };
+  this.g = { inn: this.ring(), out: this.ring(), cost: this.ring(), escapes: this.ring(), scrapped: this.ring(), human: this.ring(), wip: this.ring() };
+  this.op = { x: 9.5, y: 17.2, hx: 9.5, hy: 17.2, state: 'home', item: null, left: 0, total: 1, enabled: true, awayUntil: 0, handled: this.ring(),
+    hut: { x: 8, y: 14.3, w: 3, h: 2.2 } };
+  this.outageUntil = 0;
+  this.ships = [];             // last shipped summaries, newest last
+  this.session = { t0: 0, shipped: 0, zeroFocusSince: -1, ldStreak: 0, noEscapeSince: 0 };
+  this.objectives = [];
+  this.build();
+  this.initObjectives();
+}
+
+Sim.prototype.ring = function () { var r = new Float64Array(RING); this.rings.push(r); return r; };
+Sim.prototype.add = function (r, v) { r[this.hourIdx % RING] += v; };
+Sim.prototype.sum = function (r, hours) {
+  var s = 0, n = Math.min(hours, RING, this.hourIdx + 1);
+  for (var i = 0; i < n; i++) s += r[(this.hourIdx - i + RING * 4) % RING];
+  return s;
+};
+/* elapsed span, in hours, actually covered by the last `hours` buckets */
+Sim.prototype.span = function (hours) {
+  var frac = (this.now % 60) / 60;
+  return Math.max(0.25, Math.min(hours - 1 + frac, this.now / 60));
+};
+Sim.prototype.series = function (r, hours) {
+  var out = [];
+  for (var i = hours - 1; i >= 0; i--) { var k = this.hourIdx - i; out.push(k < 0 ? 0 : r[(k + RING * 4) % RING]); }
+  return out;
+};
+Sim.prototype.hourOfDay = function () { return (this.now % DAY) / 60; };
+Sim.prototype.clock = function () {
+  var d = Math.floor(this.now / DAY), m = Math.floor(this.now % DAY);
+  var names = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+  return { day: d + 1, dow: names[d % 7], hh: Math.floor(m / 60), mm: m % 60 };
+};
+
+/* ---------- layout ---------- */
+Sim.prototype.seg = function (pts, kind) {
+  var s = new Seg(pts, kind); s.flow = this.ring(); s.id = this.segs.length; this.segs.push(s); return s;
+};
+Sim.prototype.newStation = function (def, x, y, lane, idx) {
+  var st = { id: this.stations.length, def: def, name: def.name, exec: def.exec, x: x, y: y, w: LAY.sw, h: LAY.sh, lane: lane, idx: idx,
+    model: def.model || null, policy: def.exec === 'human_gate' ? 'human' : null,
+    cells: [], rack: [], outMain: [], links: [], inPorts: [], outSeg: null, inSeg: null, starved: 0,
+    h_: { done: this.ring(), inn: this.ring(), cost: this.ring(), busy: this.ring(), slotWait: this.ring(), humanWait: this.ring(),
+      ko: this.ring(), touches: this.ring(), auto: this.ring() } };
+  st.cx = x + st.w / 2; st.cy = y + st.h / 2;
+  this.stations.push(st);
+  return st;
+};
+Sim.prototype.armPort = function (st, seg) {
+  var R = LAY.reach;
+  seg.station = st;
+  var ins = { kind: 'in', st: st, seg: seg, bx: st.x - R / 2, by: st.cy - 0.85, ax: st.x - R, ay: st.cy, zx: st.x + 0.4, zy: st.cy, p: 0, state: 'rest', t: null };
+  var port = { st: st, seg: seg, ins: ins };
+  seg.sink = { kind: 'port', port: port };
+  st.inPorts.push(port); st.inSeg = seg; this.ports.push(port); this.inserters.push(ins);
+};
+Sim.prototype.armOut = function (st, seg) {
+  var R = LAY.reach;
+  var ins = { kind: 'out', st: st, seg: seg, bx: st.x + st.w + R / 2, by: st.cy + 0.85, ax: st.x + st.w - 0.4, ay: st.cy, zx: st.x + st.w + R, zy: st.cy, p: 0, state: 'rest', t: null };
+  st.outSeg = seg; st.outIns = ins; this.inserters.push(ins);
+};
+
+Sim.prototype.build = function () {
+  var self = this, L = LAY, mid = L.laneY[2], R = L.reach;
+
+  /* triage */
+  var tri = this.newStation({ name: 'Triage', exec: 'agent', ref: 'the-sentinel', mode: 'plan', model: 'claude-haiku-5-5', dur: 2.2, cost: 0.9, router: true },
+    L.triX, mid - 1.5, null, -1);
+  this.triage = tri;
+  var feed = this.seg([[L.collX, mid], [tri.x - R, mid]]);
+  this.armPort(tri, feed);
+  var triOut = this.seg([[tri.x + tri.w + R, mid], [L.busX, mid]]);
+  this.armOut(tri, triOut);
+
+  /* intake dock: sources feed two collector chains that meet in front of the triage */
+  var ys = L.srcY, chainTop = [], chainBot = [];
+  SOURCES.forEach(function (def, i) {
+    var src = { id: def.id, def: def, name: def.name, x: L.srcX, y: ys[i] - L.srcH / 2, w: L.srcW, h: L.srcH, cy: ys[i],
+      perDay: def.perDay, on: true, buffer: [], acc: 0, emitted: self.ring(), internal: !!def.internal, seg: null };
+    self.sources.push(src);
+  });
+  function chain(idxs) {
+    var prev = null;
+    idxs.forEach(function (i, k) {
+      var src = self.sources[i], nextY = k < idxs.length - 1 ? ys[idxs[k + 1]] : mid;
+      var side, trunk;
+      if (k === 0) {
+        side = self.seg([[L.srcX + L.srcW, ys[i]], [L.collX, ys[i]], [L.collX, nextY]]);
+        trunk = side;
+      } else {
+        side = self.seg([[L.srcX + L.srcW, ys[i]], [L.collX, ys[i]]]);
+        trunk = self.seg([[L.collX, ys[i]], [L.collX, nextY]]);
+        (function (tr) { side.sink = { kind: 'seg', pick: function () { return tr; } }; prev.sink = { kind: 'seg', pick: function () { return tr; } }; })(trunk);
+      }
+      src.seg = side; prev = trunk;
+    });
+    prev.sink = { kind: 'seg', pick: function () { return feed; } };
+  }
+  chain([0, 1, 2, 3]); chain([7, 6, 5, 4]);
+
+  /* distribution bus */
+  var entry = [];
+  WORKFLOWS.forEach(function (wf, l) {
+    entry[l] = self.seg([[L.busX, L.laneY[l]], [L.st0 - R, L.laneY[l]]]);
+  });
+  var up1 = this.seg([[L.busX, mid], [L.busX, L.laneY[1]]]);
+  var up2 = this.seg([[L.busX, L.laneY[1]], [L.busX, L.laneY[0]]]);
+  var dn1 = this.seg([[L.busX, mid], [L.busX, L.laneY[3]]]);
+  var dn2 = this.seg([[L.busX, L.laneY[3]], [L.busX, L.laneY[4]]]);
+  triOut.sink = { kind: 'seg', pick: function (t) { return t.lane === 2 ? entry[2] : t.lane < 2 ? up1 : dn1; } };
+  up1.sink = { kind: 'seg', pick: function (t) { return t.lane === 1 ? entry[1] : up2; } };
+  up2.sink = { kind: 'seg', pick: function () { return entry[0]; } };
+  dn1.sink = { kind: 'seg', pick: function (t) { return t.lane === 3 ? entry[3] : dn2; } };
+  dn2.sink = { kind: 'seg', pick: function () { return entry[4]; } };
+  this.bus = [up1, up2, dn1, dn2, triOut, feed];
+
+  /* lanes */
+  WORKFLOWS.forEach(function (wf, l) {
+    var y = L.laneY[l];
+    var lane = { idx: l, wf: wf, y: y, x: L.st0 - 1.6, w: L.dockX - 0.6 - (L.st0 - 1.6), top: y - 3.85, h: 7.5, stations: [], shipped: self.ring(), cost: self.ring(), leads: [], scrapped: 0, entry: entry[l] };
+    self.lanes.push(lane);
+    var inSeg = entry[l];
+    wf.steps.forEach(function (def, k) {
+      var st = self.newStation(def, L.st0 + k * L.pitch, y - L.sh / 2, lane, k);
+      lane.stations.push(st);
+      self.armPort(st, inSeg);
+      var endX = k < wf.steps.length - 1 ? L.st0 + (k + 1) * L.pitch - R : L.dockX;
+      var out = self.seg([[st.x + st.w + R, y], [endX, y]]);
+      self.armOut(st, out);
+      inSeg = out;
+    });
+    inSeg.sink = { kind: 'dock', lane: lane };
+    lane.outSeg = inSeg;
+    /* rework belts plug straight into the stations (no arm) */
+    (wf.rework || []).forEach(function (rw) {
+      var F = lane.stations[rw.from], T = lane.stations[rw.to];
+      var top = rw.side === 'top', lift = 0.75 + 0.62 * rw.level;
+      var yF = top ? F.y : F.y + F.h, yT = top ? T.y : T.y + T.h, yy = top ? F.y - lift : F.y + F.h + lift;
+      var xF = F.cx + (rw.level === 2 ? 0.5 : -0.5), xT = T.cx + (rw.level === 2 ? -0.7 : 0.7);
+      var seg = self.seg([[xF, yF], [xF, yy], [xT, yy], [xT, yT]], 'rework');
+      seg.station = T;
+      var port = { st: T, seg: seg, ins: null };
+      seg.sink = { kind: 'port', port: port };
+      T.inPorts.push(port); self.ports.push(port);
+      F.links.push({ seg: seg, to: T, q: [], side: rw.side });
+    });
+  });
+  this.dock = { x: L.dockX, y: 1.6, w: L.dockW, h: L.H - 3.2 };
+};
+
+/* ---------- tickets ---------- */
+Sim.prototype.pickType = function (mix) {
+  var r = this.rnd(), acc = 0;
+  for (var k in mix) { acc += mix[k]; if (r < acc) return k; }
+  return Object.keys(mix)[0];
+};
+Sim.prototype.makeTicket = function (src, type, title) {
+  var r = this.rnd;
+  type = type || this.pickType(src.def.mix);
+  var list = TITLES[type], cx = [1, 2, 3, 5, 8, 13];
+  var t = { id: ++this.seq, displayId: 'FLX-' + this.seq, type: type, title: title || list[Math.floor(r() * list.length)],
+    source: src.id, sourceName: src.name, priority: r() < 0.08 ? 'urgent' : r() < 0.3 ? 'high' : r() < 0.75 ? 'medium' : 'low',
+    complexity: cx[Math.floor(r() * r() * cx.length)], born: this.now, doneAt: 0, state: 'intake', triaged: false,
+    lane: -1, wf: null, forceLane: -1, step: null, cost: 0, defect: 0.15, humanWait: 0, slotWait: 0, agentMin: 0, touches: 0, reworks: 0,
+    att: {}, history: [], readyAt: this.now, blocked: 0, loc: null, x: src.x, y: src.cy };
+  this.tickets.set(t.id, t);
+  this.add(this.g.inn, 1);
+  return t;
+};
+Sim.prototype.route = function (t) {
+  if (t.forceLane >= 0) return t.forceLane;
+  switch (t.type) {
+    case 'think': return 0;
+    case 'lead': return 1;
+    case 'fix': return 4;
+    case 'ops': return 3;
+    default: return t.complexity >= 3 ? 2 : (this.rnd() < 0.3 ? 2 : 3);
+  }
+};
+
+/* ---------- stations ---------- */
+Sim.prototype.weight = function (st) { return st.exec === 'panel' ? 3 : 1; };
+Sim.prototype.needsSlot = function (st) {
+  if (st.exec === 'agent' || st.exec === 'skill' || st.exec === 'panel') return this.weight(st);
+  if (st.exec === 'human_gate' && st.policy === 'sampled') return 1;
+  return 0;
+};
+Sim.prototype.canAccept = function (st) {
+  var w = this.needsSlot(st);
+  if (!w) return true;
+  if (this.now < this.outageUntil) return false;
+  return this.pool.used + w <= this.pool.max;
+};
+Sim.prototype.reserve = function (st, t) { var w = this.needsSlot(st); t._res = w; this.pool.used += w; };
+
+Sim.prototype.receive = function (st, t) {
+  var r = this.rnd, def = st.def;
+  var wait = t.blocked || 0;
+  t.blocked = 0;
+  if (this.needsSlot(st) && wait > 0.7) { this.add(st.h_.slotWait, wait); t.slotWait += wait; } else wait = 0;
+  t.step = st; t.loc = st; t.state = st === this.triage ? 'triage' : 'flow';
+  t.att[st.id] = (t.att[st.id] || 0) + 1;
+  this.add(st.h_.inn, 1);
+  var w = t._res || 0; t._res = 0;
+  var cell = { t: t, p: 0, dur: 1, cost: 0, state: 'running', w: w, since: this.now, started: this.now, wait: wait, spent: 0, qAt: 0, fAt: 0, attempt: t.att[st.id] };
+  if (def.exec === 'human_gate') {
+    if (st.policy === 'human') { st.rack.push({ t: t, since: this.now, kind: 'gate', wait: wait }); return; }
+    if (st.policy === 'sampled') { cell.state = 'judge'; cell.dur = 1.6; cell.cost = 0.12; }
+    else { cell.state = 'stamp'; cell.dur = 0.35; }
+    st.cells.push(cell); return;
+  }
+  if (def.exec === 'native') { cell.dur = def.dur; st.cells.push(cell); return; }
+  var m = MODELS[st.model], again = cell.attempt > 1 ? 0.6 : 1, size = 0.75 + Math.min(t.complexity, 13) / 16;
+  var noise = Math.exp((r() + r() + r() - 1.5) * 0.45);
+  cell.dur = def.dur * m.speed * again * noise * (def.router ? 1 : size);
+  cell.cost = def.cost * m.cost * again * noise * (def.router ? 1 : size) * (0.85 + 0.3 * r());
+  if (def.pQuestion && r() < def.pQuestion) cell.qAt = 0.25 + r() * 0.5;
+  if (def.pFail && r() < def.pFail) cell.fAt = 0.3 + r() * 0.6;
+  st.cells.push(cell);
+};
+
+Sim.prototype.record = function (st, t, cell, result, humanWait) {
+  t.history.push({ step: st.name, exec: st.exec, model: st.model, attempt: t.att[st.id] || 1, start: cell ? cell.started : this.now,
+    dur: cell ? this.now - cell.started : 0, cost: cell ? cell.spent : 0, wait: cell ? cell.wait : 0, human: humanWait || 0, result: result });
+  if (t.history.length > 40) t.history.shift();
+};
+
+/* a step run ended: 'ok' moves on, 'ko' takes the rework belt, 'cancelled' leaves the floor */
+Sim.prototype.finish = function (st, t, result, cell, humanWait) {
+  var def = st.def;
+  this.record(st, t, cell, result, humanWait);
+  t.readyAt = this.now;
+  if (result === 'cancelled') {
+    t.state = 'cancelled'; t.doneAt = this.now; this.tickets.delete(t.id);
+    this.add(this.g.scrapped, 1); if (st.lane) st.lane.scrapped++;
+    this.fx.push({ kind: 'scrap', x: st.x + st.w - 0.5, y: st.y + st.h + 0.5, t0: this.now, c: TYPES[t.type].color });
+    this.recent.push(t); if (this.recent.length > 60) this.recent.shift();
+    return;
+  }
+  this.add(st.h_.done, 1);
+  if (result === 'ko' && st.links.length) {
+    var link = st.links[0];
+    this.add(st.h_.ko, 1); t.reworks++;
+    link.q.push(t);
+    return;
+  }
+  if (def.produces) {
+    var m = MODELS[st.model];
+    t.defect = m.defect * (0.6 + 0.8 * this.rnd()) * Math.pow(0.5, (t.att[st.id] || 1) - 1);
+  }
+  if (def.router) {
+    t.triaged = true;
+    t.lane = this.route(t); t.wf = WORKFLOWS[t.lane];
+  }
+  if (def.fanout) this.fanout(st, t);
+  st.outMain.push(t);
+};
+
+Sim.prototype.fanout = function (st, t) {
+  var n = t.bigFan ? 8 : def_rand(this.rnd, st.def.fanout), base = t.title.replace(/^PRD : /, ''), self = this, pad = this.sources[7];
+  base = base.charAt(0).toUpperCase() + base.slice(1);
+  for (var i = 0; i < n; i++) {
+    (function (i) {
+      self.drone(st.cx, st.y, pad.x + pad.w / 2, pad.cy, i * 0.8, '#60a5fa', function () {
+        var nt = self.makeTicket(pad, 'build', base + ' · lot ' + (i + 1) + '/' + n);
+        nt.forceLane = self.rnd() < 0.5 ? 2 : 3; nt.parent = t.displayId; nt.complexity = [2, 3, 5][Math.floor(self.rnd() * 3)];
+        pad.buffer.push(nt);
+      });
+    })(i);
+  }
+  this.say('spawn', t.displayId + ' → ' + n + ' tickets créés (ticket.create)');
+};
+function def_rand(r, range) { return range[0] + Math.floor(r() * (range[1] - range[0] + 1)); }
+
+Sim.prototype.drone = function (x0, y0, x1, y1, delay, color, cb) {
+  var dist = Math.hypot(x1 - x0, y1 - y0);
+  this.drones.push({ x0: x0, y0: y0, x1: x1, y1: y1, t: -delay, dur: Math.max(1.5, dist / 9), color: color, cb: cb, x: x0, y: y0 });
+};
+
+Sim.prototype.updateStation = function (st, dt) {
+  var cells = st.cells, out = this.now < this.outageUntil;
+  for (var i = cells.length - 1; i >= 0; i--) {
+    var c = cells[i];
+    if (c.state === 'question' || c.state === 'failed') continue;
+    if (c.state === 'queued') {
+      /* answered or retried: the run takes the next free slot */
+      if (!this.canAccept(st)) continue;
+      c.w = this.needsSlot(st); this.pool.used += c.w; c.state = 'running';
+    }
+    if (out && c.w) continue;
+    var dp = Math.min(dt / c.dur, 1 - c.p);
+    c.p += dp;
+    if (c.cost) {
+      var $ = c.cost * dp; c.spent += $; c.t.cost += $;
+      this.add(st.h_.cost, $); this.add(this.g.cost, $); if (st.lane) this.add(st.lane.cost, $);
+    }
+    if (c.w) { this.add(st.h_.busy, dt * c.w); c.t.agentMin += dt; }
+    if (c.qAt && c.p >= c.qAt) { c.qAt = 0; c.state = 'question'; c.since = this.now; this.pool.used -= c.w; c.w = 0; continue; }
+    if (c.fAt && c.p >= c.fAt) { c.fAt = 0; c.state = 'failed'; c.since = this.now; this.pool.used -= c.w; c.w = 0; continue; }
+    if (c.p >= 1 - 1e-9) {
+      cells.splice(i, 1);
+      this.pool.used -= c.w;
+      var t = c.t, def = st.def;
+      if (c.state === 'judge') {
+        if (this.rnd() < clamp(1 - t.defect * 2.2, 0.15, 0.92)) { this.add(st.h_.auto, 1); this.finish(st, t, 'ok', c); }
+        else st.rack.push({ t: t, since: this.now, kind: 'gate', wait: 0 });
+      } else if (c.state === 'stamp') {
+        this.add(st.h_.auto, 1); this.finish(st, t, 'ok', c);
+      } else if (def.router && this.rnd() < 0.06) {
+        t.lane = this.route(t);
+        var alt = t.lane === 2 ? 3 : t.lane === 3 ? 2 : t.lane === 0 ? 1 : t.lane === 1 ? 0 : 3;
+        this.record(st, t, c, 'awaiting_routing');
+        st.rack.push({ t: t, since: this.now, kind: 'route', wait: 0, options: [t.lane, alt] });
+      } else if (def.check && (t.att[st.id] || 1) <= 3 && this.rnd() < t.defect * def.check * 2.1) {
+        this.finish(st, t, 'ko', c);
+      } else {
+        if (def.check) t.defect *= 0.45;
+        this.finish(st, t, 'ok', c);
+      }
+    }
+  }
+};
+
+/* ---------- human interventions (the Focus queue) ---------- */
+Sim.prototype.focus = function () {
+  var out = [], now = this.now;
+  for (var i = 0; i < this.stations.length; i++) {
+    var st = this.stations[i];
+    for (var j = 0; j < st.rack.length; j++) {
+      var e = st.rack[j];
+      out.push({ key: e.t.id + ':' + st.id, kind: e.kind === 'route' ? 'route' : 'gate', st: st, t: e.t, since: e.since, age: now - e.since, entry: e });
+    }
+    for (var k = 0; k < st.cells.length; k++) {
+      var c = st.cells[k];
+      if (c.state === 'question' || c.state === 'failed') {
+        out.push({ key: c.t.id + ':' + st.id, kind: c.state === 'failed' ? 'error' : 'question', st: st, t: c.t, since: c.since, age: now - c.since, cell: c });
+      }
+    }
+  }
+  out.sort(function (a, b) { return a.since - b.since; });
+  return out;
+};
+Sim.prototype.focusValid = function (it) {
+  if (!it) return false;
+  if (it.entry) return it.st.rack.indexOf(it.entry) >= 0;
+  return it.st.cells.indexOf(it.cell) >= 0 && (it.cell.state === 'question' || it.cell.state === 'failed');
+};
+/* action: approve | request_changes | reject | answer | retry | route:<lane> */
+Sim.prototype.resolve = function (it, action, byOperator) {
+  if (!this.focusValid(it)) return false;
+  var st = it.st, t = it.t, wait = this.now - it.since;
+  this.add(st.h_.humanWait, wait); this.add(st.h_.touches, 1); this.add(this.g.human, wait);
+  t.humanWait += wait; t.touches++;
+  if (!byOperator && this.op.item && this.op.item.key === it.key) { this.op.item = null; this.op.state = 'idle'; }
+  if (it.entry) {
+    st.rack.splice(st.rack.indexOf(it.entry), 1);
+    if (it.kind === 'route') {
+      var lane = action.indexOf('route:') === 0 ? +action.slice(6) : it.entry.options[0];
+      t.forceLane = lane;
+      this.finish(st, t, 'ok', null, wait);
+      return true;
+    }
+    if (action === 'reject') { this.finish(st, t, 'cancelled', null, wait); return true; }
+    if (action === 'request_changes' && st.links.length) { this.finish(st, t, 'ko', null, wait); return true; }
+    t.defect *= 0.35;
+    this.finish(st, t, 'ok', null, wait);
+    return true;
+  }
+  var c = it.cell;
+  if (c.state === 'failed') { c.p = 0; c.attempt++; t.att[st.id]++; }
+  c.state = 'queued';
+  return true;
+};
+
+Sim.prototype.opAvailable = function () {
+  var h = this.hourOfDay();
+  return this.op.enabled && this.now >= this.op.awayUntil && ((h >= 9 && h < 12.5) || (h >= 13.5 && h < 18.5));
+};
+Sim.prototype.updateOperator = function (dt) {
+  var op = this.op, avail = this.opAvailable();
+  if (!avail) {
+    op.item = null;
+    var d0 = Math.hypot(op.hx - op.x, op.hy - op.y);
+    if (d0 > 0.05) { var s0 = Math.min(1, 10 * dt / d0); op.x += (op.hx - op.x) * s0; op.y += (op.hy - op.y) * s0; op.state = 'walk'; }
+    else op.state = 'away';
+    return;
+  }
+  if (op.state === 'away' || op.state === 'home') op.state = 'idle';
+  if (op.item && !this.focusValid(op.item)) { op.item = null; op.state = 'idle'; }
+  if (op.state === 'idle') {
+    var list = this.focus();
+    if (!list.length) {
+      var dh = Math.hypot(op.hx - op.x, op.hy - op.y);
+      if (dh > 0.05) { var sh = Math.min(1, 10 * dt / dh); op.x += (op.hx - op.x) * sh; op.y += (op.hy - op.y) * sh; }
+      return;
+    }
+    /* questions and errors first: they hold an agent back; then the oldest gate */
+    var pick = null;
+    for (var i = 0; i < list.length; i++) { if (list[i].kind === 'question' || list[i].kind === 'error') { pick = list[i]; break; } }
+    op.item = pick || list[0]; op.state = 'walk';
+  }
+  var it = op.item, tx = it.st.cx, ty = it.st.y + it.st.h + 0.75;
+  if (op.state === 'walk') {
+    var d = Math.hypot(tx - op.x, ty - op.y);
+    if (d > 0.05) { var s = Math.min(1, 10 * dt / d); op.x += (tx - op.x) * s; op.y += (ty - op.y) * s; return; }
+    var r = this.rnd, rv = it.st.def.review || [3, 6];
+    op.total = it.kind === 'gate' ? rv[0] + r() * (rv[1] - rv[0]) : it.kind === 'question' ? 2 + r() * 3 : it.kind === 'route' ? 1 : 1.5;
+    op.left = op.total; op.state = 'work';
+    return;
+  }
+  if (op.state === 'work') {
+    op.left -= dt;
+    if (op.left > 0) return;
+    var action = 'approve', def = it.st.def, rr = this.rnd();
+    if (it.kind === 'gate') {
+      if (rr < (def.pReject || 0)) action = 'reject';
+      else if (it.st.links.length && rr < (def.pReject || 0) + 0.05 + it.t.defect * 0.9) action = 'request_changes';
+    } else if (it.kind === 'question') action = 'answer';
+    else if (it.kind === 'error') action = 'retry';
+    else action = 'route:' + it.entry.options[0];
+    this.resolve(it, action, true);
+    this.add(op.handled, 1);
+    op.item = null; op.state = 'idle';
+  }
+};
+
+/* ---------- shipping ---------- */
+Sim.prototype.ship = function (lane, t) {
+  t.state = 'done'; t.doneAt = this.now; t.loc = null;
+  this.tickets.delete(t.id);
+  this.add(lane.shipped, 1); this.add(this.g.out, 1);
+  var s = { lane: lane.idx, lead: this.now - t.born, human: t.humanWait, slot: t.slotWait, agent: t.agentMin, touches: t.touches, cost: t.cost, reworks: t.reworks, at: this.now };
+  lane.leads.push(s); if (lane.leads.length > 80) lane.leads.shift();
+  this.ships.push(s); if (this.ships.length > 160) this.ships.shift();
+  this.recent.push(t); if (this.recent.length > 60) this.recent.shift();
+  this.session.shipped++;
+  if (lane.idx === 2) this.session.ldStreak = t.touches === 0 ? this.session.ldStreak + 1 : 0;
+  this.fx.push({ kind: 'ship', x: LAY.dockX + 0.6, y: lane.y, t0: this.now, c: lane.wf.color });
+  var self = this, r = this.rnd;
+  if (lane.wf.slug === 'ideation' && r() < 0.4) {
+    var pad = this.sources[7], title = 'PRD : ' + t.title.replace(/ \?$/, '').replace(/^(Faut-il|Explorer|Une|Quel rôle pour) /, '');
+    this.drone(LAY.dockX + 1, lane.y, pad.x + pad.w / 2, pad.cy, 0, '#facc15', function () {
+      var nt = self.makeTicket(pad, 'lead', title.charAt(0).toUpperCase() + title.slice(1)); nt.parent = t.displayId; pad.buffer.push(nt);
+    });
+  }
+  /* a defect that slipped through comes back later as a bug */
+  if (lane.wf.output === 'code' && r() < t.defect * 0.55) {
+    this.events.push({ at: this.now + 60 + r() * 240, fn: function () {
+      var src = self.sources[r() < 0.6 ? 1 : 3];
+      var nt = self.makeTicket(src, 'fix', 'Régression : ' + t.title.replace(/^Régression : /, ''));
+      nt.parent = t.displayId; nt.priority = 'high'; src.buffer.push(nt);
+      self.add(self.g.escapes, 1); self.session.noEscapeSince = self.now;
+      self.say('escape', 'Défaut échappé sur ' + t.displayId + ' → ' + nt.displayId);
+    } });
+  }
+};
+
+Sim.prototype.say = function (kind, text) {
+  this.log.push({ at: this.now, kind: kind, text: text });
+  if (this.log.length > 60) this.log.shift();
+};
+
+/* ---------- main step ---------- */
+Sim.prototype.step = function (dt) {
+  var i, j, self = this;
+  this.now += dt;
+  var hi = Math.floor(this.now / 60);
+  while (hi > this.hourIdx) {
+    this.hourIdx++;
+    var b = this.hourIdx % RING;
+    for (i = 0; i < this.rings.length; i++) this.rings[i][b] = 0;
+  }
+
+  /* intake */
+  var curve = dayCurve(this.hourOfDay());
+  for (i = 0; i < this.sources.length; i++) {
+    var src = this.sources[i];
+    if (src.on && src.perDay > 0) {
+      src.acc += dt * src.perDay / DAY * (src.def.flat ? 1 : curve);
+      if (src.acc > 0 && this.rnd() < src.acc) { src.acc -= 1; src.buffer.push(this.makeTicket(src)); if (src.acc < -1) src.acc = -1; }
+    }
+    if (src.buffer.length && src.seg.canEnter()) {
+      var nt = src.buffer.shift(); nt.readyAt = this.now; src.seg.push(nt); this.add(src.emitted, 1);
+    }
+  }
+  /* scheduled events */
+  for (i = this.events.length - 1; i >= 0; i--) {
+    if (this.events[i].at <= this.now) { var ev = this.events[i]; this.events.splice(i, 1); ev.fn(); }
+  }
+
+  /* belts */
+  var adv = BELT_V * dt;
+  for (i = 0; i < this.segs.length; i++) {
+    var sg = this.segs[i], items = sg.items, lim = sg.len;
+    for (j = 0; j < items.length; j++) {
+      var it = items[j];
+      var nd = Math.min(it.d + adv, lim);
+      if (nd - it.d < adv * 0.5) it.t.blocked += dt;
+      it.d = nd;
+      lim = nd - GAP;
+    }
+    var hd = items[0];
+    if (hd && hd.d >= sg.len - 1e-6 && sg.sink) {
+      var sk = sg.sink;
+      if (sk.kind === 'seg') {
+        var tg = sk.pick(hd.t);
+        if (tg.canEnter()) { items.shift(); tg.push(hd.t); this.add(sg.flow, 1); }
+      } else if (sk.kind === 'dock') {
+        items.shift(); this.add(sg.flow, 1); this.ship(sk.lane, hd.t);
+      }
+    }
+  }
+
+  /* input ports: first come, first served across the whole floor (the SDK concurrency limiter) */
+  var waiting = [];
+  for (i = 0; i < this.ports.length; i++) {
+    var p = this.ports[i], h = p.seg.head();
+    p.st.starved = 0;
+    if (h && (!p.ins || p.ins.state === 'rest')) waiting.push(p);
+  }
+  waiting.sort(function (a, b) { return a.seg.items[0].t.readyAt - b.seg.items[0].t.readyAt; });
+  for (i = 0; i < waiting.length; i++) {
+    var pt = waiting[i], st = pt.st, tk = pt.seg.items[0].t;
+    if (!this.canAccept(st)) { st.starved++; continue; }
+    pt.seg.items.shift(); this.add(pt.seg.flow, 1);
+    this.reserve(st, tk);
+    if (pt.ins) { pt.ins.t = tk; pt.ins.state = 'carry'; tk.loc = pt.ins; }
+    else this.receive(st, tk);
+  }
+  /* count every waiting ticket behind a starved head as queued for a slot */
+  for (i = 0; i < this.ports.length; i++) {
+    var pp = this.ports[i];
+    if (pp.st.starved) {
+      var its = pp.seg.items;
+      for (j = 1; j < its.length; j++) { if (its[j].d >= its[j - 1].d - GAP - 0.02) pp.st.starved++; else break; }
+    }
+  }
+
+  /* arms */
+  var dp = dt / SWING;
+  for (i = 0; i < this.inserters.length; i++) {
+    var a = this.inserters[i];
+    if (a.state === 'carry') {
+      a.p += dp;
+      if (a.p >= 1) {
+        a.p = 1;
+        if (a.kind === 'in') { this.receive(a.st, a.t); a.t = null; a.state = 'back'; }
+        else if (a.seg.canEnter()) { a.seg.push(a.t); a.t = null; a.state = 'back'; }
+      }
+    } else if (a.state === 'back') {
+      a.p -= dp; if (a.p <= 0) { a.p = 0; a.state = 'rest'; }
+    } else if (a.kind === 'out' && a.st.outMain.length && a.seg.canEnter()) {
+      a.t = a.st.outMain.shift(); a.t.loc = a; a.state = 'carry';
+    }
+  }
+
+  /* stations */
+  for (i = 0; i < this.stations.length; i++) {
+    var s = this.stations[i];
+    this.updateStation(s, dt);
+    for (j = 1; j < s.outMain.length; j++) s.outMain[j].blocked += dt;
+    for (j = 0; j < s.links.length; j++) {
+      var lk = s.links[j];
+      if (lk.q.length && lk.seg.canEnter()) lk.seg.push(lk.q.shift());
+    }
+  }
+
+  this.updateOperator(dt);
+
+  /* drones */
+  for (i = this.drones.length - 1; i >= 0; i--) {
+    var d = this.drones[i];
+    d.t += dt;
+    var f = clamp(d.t / d.dur, 0, 1), e = f * f * (3 - 2 * f);
+    d.x = d.x0 + (d.x1 - d.x0) * e; d.y = d.y0 + (d.y1 - d.y0) * e; d.f = f;
+    if (d.t >= d.dur) { this.drones.splice(i, 1); d.cb(); }
+  }
+  while (this.fx.length && this.now - this.fx[0].t0 > 3) this.fx.shift();
+
+  /* accumulators */
+  this.add(this.pool.usedMin, dt * this.pool.used);
+  if (this.pool.used >= this.pool.max) this.add(this.pool.fullMin, dt);
+  this.add(this.g.wip, dt * this.tickets.size);
+  this.tickObjectives(dt);
+};
+
+/* ---------- player levers ---------- */
+Sim.prototype.setModel = function (st, model) { if (MODELS[model]) st.model = model; };
+Sim.prototype.setPolicy = function (st, policy) {
+  if (st.exec !== 'human_gate') return;
+  st.policy = policy;
+  if (policy === 'human') return;
+  /* re-run what is already on the rack through the new policy */
+  var rack = st.rack.filter(function (e) { return e.kind === 'gate'; });
+  for (var i = 0; i < rack.length; i++) {
+    var e = rack[i];
+    if (policy === 'auto' || this.rnd() < clamp(1 - e.t.defect * 2.2, 0.15, 0.92)) {
+      st.rack.splice(st.rack.indexOf(e), 1);
+      var w = this.now - e.since; this.add(st.h_.humanWait, w); e.t.humanWait += w; this.add(st.h_.auto, 1);
+      this.finish(st, e.t, 'ok', null, w);
+    }
+  }
+};
+Sim.prototype.setConcurrency = function (n) { this.pool.max = clamp(Math.round(n), 2, 32); };
+Sim.prototype.inject = function (sourceId, type, title) {
+  var src = this.sources.filter(function (s) { return s.id === sourceId; })[0] || this.sources[6];
+  var t = this.makeTicket(src, type, title);
+  src.buffer.push(t);
+  return t;
+};
+Sim.prototype.scenario = function (name) {
+  var self = this, r = this.rnd, i;
+  if (name === 'incident') {
+    for (i = 0; i < 12; i++) {
+      (function (i) { self.events.push({ at: self.now + i * 1.6 + r(), fn: function () {
+        var t = self.inject(i % 3 === 0 ? 'github' : 'slack', 'fix'); t.priority = 'urgent';
+      } }); })(i);
+    }
+    this.say('alert', 'Incident prod : 12 bugs arrivent de Slack et GitHub');
+  } else if (name === 'meeting') {
+    this.op.awayUntil = this.now + 120;
+    this.say('alert', 'Opérateur en réunion pendant 2 h');
+  } else if (name === 'prd') {
+    var t = this.inject('meet', 'lead', 'PRD : Refonte de l’onboarding'); t.bigFan = true;
+    this.say('info', 'Gros PRD injecté depuis Meeting notes');
+  } else if (name === 'outage') {
+    this.outageUntil = this.now + 30;
+    this.say('alert', 'Panne API : les agents sont à l’arrêt pendant 30 min');
+  }
+};
+
+/* ---------- read models ---------- */
+Sim.prototype.kpis = function () {
+  var self = this, W = 6, sp = this.span(W), f = this.focus();
+  var out6 = this.sum(this.g.out, W), ships = this.ships.slice(-60);
+  var frac = (this.now % 60) / 60, cur = this.g.cost[this.hourIdx % RING], prev = this.hourIdx > 0 ? this.g.cost[(this.hourIdx - 1) % RING] : 0;
+  var hod = Math.floor(this.hourOfDay());
+  var k = {
+    shipped24: this.sum(this.g.out, 24), perHour: out6 / sp, in6: this.sum(this.g.inn, W) / sp,
+    wip: this.tickets.size,
+    lead: median(ships.map(function (s) { return s.lead; })),
+    autonomy: ships.length ? ships.filter(function (s) { return s.touches === 0; }).length / ships.length : 0,
+    costPerTicket: ships.length ? ships.reduce(function (a, s) { return a + s.cost; }, 0) / ships.length : 0,
+    burn: cur + prev * (1 - frac), costToday: this.sum(this.g.cost, hod + 1),
+    focus: f.length, oldest: f.length ? f[0].age : 0,
+    poolUsed: this.pool.used, poolMax: this.pool.max, saturation: this.sum(this.pool.fullMin, W) / (sp * 60),
+    escapes24: this.sum(this.g.escapes, 24), scrapped24: this.sum(this.g.scrapped, 24),
+    opState: this.op.state, opAvailable: this.opAvailable(), outage: this.now < this.outageUntil
+  };
+  var done = 0, ko = 0;
+  this.stations.forEach(function (st) { if (st.def.check) { done += self.sum(st.h_.done, 12); ko += self.sum(st.h_.ko, 12); } });
+  k.fpy = done ? 1 - ko / done : 1;
+  return k;
+};
+Sim.prototype.stationStats = function (st, W) {
+  W = W || 12;
+  var sp = this.span(W), done = this.sum(st.h_.done, W), cost = this.sum(st.h_.cost, W), now = this.now;
+  var hw = this.sum(st.h_.humanWait, W), waitingNow = 0, oldest = 0;
+  st.rack.forEach(function (e) { waitingNow++; hw += now - e.since; oldest = Math.max(oldest, now - e.since); });
+  st.cells.forEach(function (c) { if (c.state === 'question' || c.state === 'failed') { waitingNow++; hw += now - c.since; oldest = Math.max(oldest, now - c.since); } });
+  var touches = this.sum(st.h_.touches, W);
+  return { done: done, perHour: done / sp, cost: cost, costPer: done ? cost / done : 0, busy: this.sum(st.h_.busy, W),
+    avgRun: done ? this.sum(st.h_.busy, W) / this.weight(st) / done : 0,
+    slotWait: this.sum(st.h_.slotWait, W), humanWait: hw, waitingNow: waitingNow, oldest: oldest,
+    avgHuman: touches + waitingNow ? hw / (touches + waitingNow) : 0,
+    ko: this.sum(st.h_.ko, W), koRate: done ? this.sum(st.h_.ko, W) / done : 0, auto: this.sum(st.h_.auto, W), touches: touches,
+    running: st.cells.filter(function (c) { return c.state === 'running' || c.state === 'judge'; }).length, starved: st.starved };
+};
+Sim.prototype.laneStats = function (lane) {
+  var l = lane.leads.slice(-40), n = l.length || 1;
+  function avg(k) { return l.reduce(function (a, s) { return a + s[k]; }, 0) / n; }
+  return { shipped24: this.sum(lane.shipped, 24), lead: median(l.map(function (s) { return s.lead; })), cost: avg('cost'),
+    autonomy: l.length ? l.filter(function (s) { return s.touches === 0; }).length / l.length : 0,
+    agent: avg('agent'), human: avg('human'), slot: avg('slot'), reworks: avg('reworks'), n: l.length,
+    wip: Array.from(this.tickets.values()).filter(function (t) { return t.lane === lane.idx; }).length };
+};
+
+/* ranked list of what slows the floor down or costs the most, each with a one-click lever */
+Sim.prototype.bottlenecks = function () {
+  var self = this, W = 12, cards = [], totalCost = 0, stats = [];
+  this.stations.forEach(function (st) { var s = self.stationStats(st, W); stats.push(s); totalCost += s.cost; });
+  var label = function (st) { return st.lane ? st.lane.wf.name + ' · ' + st.name : st.name; };
+
+  var humans = this.stations.map(function (st, i) { return { st: st, s: stats[i] }; })
+    .filter(function (o) { return o.s.humanWait > 45; })
+    .sort(function (a, b) { return b.s.humanWait - a.s.humanWait; }).slice(0, 3);
+  humans.forEach(function (o) {
+    var st = o.st, s = o.s, card = { kind: 'human', st: st, title: label(st), score: s.humanWait,
+      metric: s.waitingNow + ' en attente · ' + fmtDur(s.avgHuman) + ' d’attente en moyenne',
+      detail: (s.waitingNow ? 'Le plus ancien attend depuis ' + fmtDur(s.oldest) + ' · ' : '') + fmtDur(s.humanWait) + ' d’attente cumulée sur 12 h' };
+    if (st.exec === 'human_gate' && st.policy === 'human') {
+      card.fix = { label: 'Passer en contrôle échantillonné', hint: 'Un agent juge valide les tickets à faible risque, le reste vous attend.',
+        apply: function () { self.setPolicy(st, 'sampled'); } };
+    } else if (st.exec === 'human_gate' && st.policy === 'sampled') {
+      card.fix = { label: 'Passer en automatique', hint: 'Plus aucun contrôle humain : le débit monte, les défauts échappés aussi.',
+        apply: function () { self.setPolicy(st, 'auto'); } };
+    } else {
+      card.kind = 'question';
+      card.metric = fmtDur(s.humanWait) + ' d’arrêt sur questions et erreurs, 12 h';
+      card.detail = s.waitingNow + ' run' + (s.waitingNow > 1 ? 's' : '') + ' à l’arrêt · ' + fmtDur(s.avgHuman) + ' d’attente en moyenne';
+      var up = nextModel(st.model, 1);
+      if (up) card.fix = { label: 'Monter sur ' + MODELS[up].label, hint: 'Un modèle plus solide pose moins de questions bloquantes.',
+        apply: function () { self.setModel(st, up); st.def.pQuestion = (st.def.pQuestion || 0) * 0.5; st.def.pFail = (st.def.pFail || 0) * 0.5; } };
+    }
+    cards.push(card);
+  });
+
+  var slotWait = stats.reduce(function (a, s) { return a + s.slotWait; }, 0), sat = this.sum(this.pool.fullMin, W) / (this.span(W) * 60);
+  if (slotWait > 40 || sat > 0.12) {
+    cards.push({ kind: 'pool', st: null, title: 'Slots agents saturés', score: slotWait * 1.5,
+      metric: fmtDur(slotWait) + ' de file d’attente sur 12 h',
+      detail: 'agentMaxConcurrency = ' + this.pool.max + ' · plein ' + Math.round(sat * 100) + ' % du temps',
+      fix: { label: 'Passer à ' + (this.pool.max + 4) + ' slots', hint: 'Plus d’agents en parallèle : la file se vide, la dépense horaire monte.',
+        apply: function () { self.setConcurrency(self.pool.max + 4); } } });
+  }
+
+  var top = -1;
+  stats.forEach(function (s, i) { if (top < 0 || s.cost > stats[top].cost) top = i; });
+  if (top >= 0 && totalCost > 5) {
+    var cst = this.stations[top], share = stats[top].cost / totalCost, down = nextModel(cst.model, -1), c2 = { kind: 'cost', st: cst, title: label(cst), score: share * 400,
+      metric: '$' + stats[top].cost.toFixed(0) + ' sur 12 h · ' + Math.round(share * 100) + ' % de la dépense',
+      detail: '$' + stats[top].costPer.toFixed(2) + ' par ticket · ' + MODELS[cst.model].label };
+    if (down && MODELS[cst.model].tier > 2) c2.fix = { label: 'Passer sur ' + MODELS[down].label,
+      hint: 'Environ −' + Math.round((1 - MODELS[down].cost / MODELS[cst.model].cost) * 100) + ' % de coût, mais plus de reprises en aval.',
+      apply: function () { self.setModel(cst, down); } };
+    cards.push(c2);
+  }
+
+  var worst = null;
+  this.stations.forEach(function (st, i) {
+    if (st.def.check && stats[i].done >= 6 && stats[i].koRate > 0.22 && (!worst || stats[i].ko > worst.s.ko)) worst = { st: st, s: stats[i] };
+  });
+  if (worst) {
+    var prod = worst.st.links[0].to, upm = nextModel(prod.model, 1), c3 = { kind: 'quality', st: worst.st, title: label(worst.st), score: worst.s.ko * 25,
+      metric: Math.round(worst.s.koRate * 100) + ' % des tickets renvoyés vers ' + prod.name,
+      detail: worst.s.ko + ' reprises sur 12 h · ' + prod.name + ' tourne sur ' + MODELS[prod.model].label };
+    if (upm) c3.fix = { label: prod.name + ' sur ' + MODELS[upm].label, hint: 'Moins de défauts à la source, donc moins de boucles de reprise.',
+      apply: function () { self.setModel(prod, upm); } };
+    cards.push(c3);
+  }
+  cards.sort(function (a, b) { return b.score - a.score; });
+  return cards;
+};
+function nextModel(model, dir) { var i = MODEL_ORDER.indexOf(model) + dir; return i >= 0 && i < MODEL_ORDER.length ? MODEL_ORDER[i] : null; }
+function fmtDur(min) {
+  if (min < 1) return '< 1 min';
+  if (min < 60) return Math.round(min) + ' min';
+  var h = Math.floor(min / 60), m = Math.round(min % 60);
+  if (h >= 48) return Math.round(min / DAY) + ' j';
+  return h + ' h ' + (m < 10 ? '0' : '') + m;
+}
+
+/* ---------- objectives ---------- */
+Sim.prototype.initObjectives = function () {
+  var self = this;
+  this.objectives = [
+    { id: 'start', name: 'Mise en route', desc: 'Expédier 25 tickets', done: false,
+      eval: function () { return [self.session.shipped, 25]; }, fmt: function (v) { return Math.floor(v[0]) + ' / 25'; } },
+    { id: 'pace', name: 'Cadence', desc: 'Tenir 5 tickets expédiés par heure sur 6 h', done: false,
+      eval: function () { return [self.sum(self.g.out, 6) / self.span(6), 5]; }, fmt: function (v) { return v[0].toFixed(1) + ' / 5 par h'; } },
+    { id: 'focus0', name: 'File vide', desc: 'Garder Focus vide pendant 1 h', done: false,
+      eval: function () { return [self.session.zeroFocusSince < 0 ? 0 : self.now - self.session.zeroFocusSince, 60]; }, fmt: function (v) { return Math.floor(v[0]) + ' / 60 min'; } },
+    { id: 'frugal', name: 'Sobriété', desc: 'Coût moyen sous $5 par ticket sur les 30 derniers', done: false, lower: true,
+      eval: function () { var s = self.ships.slice(-30).filter(function (x) { return x.at > self.session.t0; });
+        if (s.length < 30) return [s.length, 30, true];
+        return [s.reduce(function (a, x) { return a + x.cost; }, 0) / 30, 5]; },
+      fmt: function (v) { return v[2] ? v[0] + ' / 30 tickets mesurés' : '$' + v[0].toFixed(2) + ' / $5.00'; } },
+    { id: 'auto80', name: 'Autonomie 80 %', desc: '80 % des 60 derniers tickets sans intervention humaine', done: false,
+      eval: function () { return [self.kpis().autonomy * 100, 80]; }, fmt: function (v) { return Math.round(v[0]) + ' % / 80 %'; } },
+    { id: 'lightsout', name: 'Lights-out', desc: '10 tickets d’affilée sur Feature Delivery sans toucher humain', done: false,
+      eval: function () { return [self.session.ldStreak, 10]; }, fmt: function (v) { return v[0] + ' / 10'; } },
+    { id: 'clean', name: 'Zéro défaut', desc: 'Aucun défaut échappé pendant 24 h', done: false,
+      eval: function () { return [(self.now - self.session.noEscapeSince) / 60, 24]; }, fmt: function (v) { return v[0].toFixed(1) + ' / 24 h'; } }
+  ];
+};
+Sim.prototype.tickObjectives = function () {
+  var f = 0;
+  for (var i = 0; i < this.stations.length && !f; i++) {
+    var st = this.stations[i];
+    if (st.rack.length) f = 1;
+    for (var j = 0; j < st.cells.length && !f; j++) if (st.cells[j].state === 'question' || st.cells[j].state === 'failed') f = 1;
+  }
+  if (f) this.session.zeroFocusSince = -1; else if (this.session.zeroFocusSince < 0) this.session.zeroFocusSince = this.now;
+  if (Math.floor(this.now / 5) === Math.floor((this.now - 0.2) / 5)) return;
+  for (var k = 0; k < this.objectives.length; k++) {
+    var o = this.objectives[k];
+    if (o.done) continue;
+    var v = o.eval();
+    o.value = v;
+    if (v[2]) continue;
+    if (o.lower ? v[0] <= v[1] : v[0] >= v[1]) {
+      o.done = true; o.doneAt = this.now;
+      if (this.now > this.session.t0) this.say('objective', 'Objectif atteint : ' + o.name);
+    }
+  }
+};
+
+/* fast-forward without rendering, so the floor opens mid-shift with history behind it */
+Sim.prototype.prewarm = function (minutes) {
+  var n = Math.round(minutes / 0.1);
+  for (var i = 0; i < n; i++) this.step(0.1);
+  this.session.t0 = this.now; this.session.shipped = 0; this.session.ldStreak = 0; this.session.noEscapeSince = this.now;
+  this.session.zeroFocusSince = -1;
+  this.objectives.forEach(function (o) { o.done = false; });
+  this.log.length = 0;
+};
+
+root.FleexFactory = { Sim: Sim, MODELS: MODELS, MODEL_ORDER: MODEL_ORDER, TYPES: TYPES, WORKFLOWS: WORKFLOWS, SOURCES: SOURCES, LAY: LAY,
+  BELT_V: BELT_V, GAP: GAP, RING: RING, fmtDur: fmtDur, clamp: clamp };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+/* Fleex Factory — canvas renderer. World units are floor tiles; text is drawn in screen space so it stays crisp. */
+(function (root) {
+'use strict';
+var F = root.FleexFactory, LAY = F.LAY, TYPES = F.TYPES, MODELS = F.MODELS, clamp = F.clamp;
+var SANS = '"Chakra Petch", ui-sans-serif, system-ui, sans-serif';
+var MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+var C = {
+  void: '#060807', floor: '#0d100f', grid: 'rgba(255,255,255,0.026)', grid4: 'rgba(255,255,255,0.05)',
+  belt: '#1a1e21', beltEdge: '#363d43', chev: '#515a62', rework: '#2a2216', reworkEdge: '#6b5521', reworkChev: '#a8842c',
+  body: '#252a2e', body2: '#171a1c', edge: '#454d55', plate: 'rgba(9,9,11,0.82)',
+  text: '#f4f4f5', text2: '#a1a1aa', text3: '#71717a',
+  green: '#22c55e', amber: '#f59e0b', red: '#ef4444', blue: '#60a5fa', hazard: '#eab308', steel: '#9aa3ab', idle: '#52525b'
+};
+var HEAT = { cost: ['#3a2410', '#fb923c'], time: ['#14263f', '#60a5fa'], human: ['#3a3208', '#facc15'], flow: ['#12301f', '#4ade80'] };
+
+function mix(a, b, f) {
+  var pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  var r = Math.round(((pa >> 16) & 255) + (((pb >> 16) & 255) - ((pa >> 16) & 255)) * f),
+      g = Math.round(((pa >> 8) & 255) + (((pb >> 8) & 255) - ((pa >> 8) & 255)) * f),
+      bl = Math.round((pa & 255) + ((pb & 255) - (pa & 255)) * f);
+  return 'rgb(' + r + ',' + g + ',' + bl + ')';
+}
+function alpha(hex, a) {
+  var p = parseInt(hex.slice(1), 16);
+  return 'rgba(' + ((p >> 16) & 255) + ',' + ((p >> 8) & 255) + ',' + (p & 255) + ',' + a + ')';
+}
+function rr(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
+}
+
+function stationState(sim, st) {
+  var i, c, q = false, run = false, wq = false;
+  for (i = 0; i < st.cells.length; i++) {
+    c = st.cells[i];
+    if (c.state === 'failed') return 'failed';
+    if (c.state === 'question') q = true; else if (c.state === 'queued') wq = true; else run = true;
+  }
+  if (q || st.rack.length) return 'human';
+  if (st.starved || wq) return 'starved';
+  if (run) return sim.now < sim.outageUntil && sim.needsSlot(st) ? 'starved' : 'running';
+  return 'idle';
+}
+var LAMP = { failed: C.red, human: C.amber, starved: C.blue, running: C.green, idle: C.idle };
+
+function View(canvas, sim) {
+  this.cv = canvas; this.ctx = canvas.getContext('2d'); this.sim = sim;
+  this.cam = { x: LAY.W / 2, y: LAY.H / 2, z: 14 }; this.goal = null;
+  this.inset = { l: 0, t: 0, r: 0, b: 0 };
+  this.overlay = 'none'; this.heat = null; this.beacons = []; this.shown = null;
+  this.sel = null; this.hover = null; this.follow = null;
+  this.w = 0; this.h = 0; this.dpr = 1; this.clock = 0; this.labels = []; this.reduced = false;
+  this.tmp = { x: 0, y: 0 };
+}
+
+View.prototype.resize = function () {
+  var d = Math.min(root.devicePixelRatio || 1, 2), w = this.cv.clientWidth, h = this.cv.clientHeight;
+  if (w === this.w && h === this.h && d === this.dpr) return;
+  this.w = w; this.h = h; this.dpr = d;
+  this.cv.width = Math.max(1, Math.round(w * d)); this.cv.height = Math.max(1, Math.round(h * d));
+};
+View.prototype.toWorld = function (sx, sy) {
+  return { x: (sx - this.w / 2) / this.cam.z + this.cam.x, y: (sy - this.h / 2) / this.cam.z + this.cam.y };
+};
+View.prototype.toScreen = function (wx, wy) {
+  return { x: (wx - this.cam.x) * this.cam.z + this.w / 2, y: (wy - this.cam.y) * this.cam.z + this.h / 2 };
+};
+/* frame a world rectangle inside the area not covered by the HUD and panels */
+View.prototype.frame = function (x, y, w, h, instant, maxZ) {
+  var I = this.inset, aw = Math.max(80, this.w - I.l - I.r), ah = Math.max(80, this.h - I.t - I.b);
+  var z = Math.min(aw / w, ah / h); if (maxZ) z = Math.min(z, maxZ);
+  z = clamp(z, 5, 72);
+  var g = { z: z, x: x + w / 2 + ((I.r - I.l) / 2) / z, y: y + h / 2 + ((I.b - I.t) / 2) / z };
+  if (instant) { this.cam.x = g.x; this.cam.y = g.y; this.cam.z = g.z; this.goal = null; } else this.goal = g;
+};
+View.prototype.fit = function (instant) { this.follow = null; this.frame(-0.5, -0.5, LAY.W + 1, LAY.H + 1, instant); };
+View.prototype.lookAt = function (x, y, z) {
+  var I = this.inset; z = z || Math.max(this.cam.z, 26);
+  this.goal = { z: z, x: x + ((I.r - I.l) / 2) / z, y: y + ((I.b - I.t) / 2) / z };
+};
+View.prototype.zoomAt = function (sx, sy, factor) {
+  var before = this.toWorld(sx, sy);
+  this.cam.z = clamp(this.cam.z * factor, 5, 72);
+  var after = this.toWorld(sx, sy);
+  this.cam.x += before.x - after.x; this.cam.y += before.y - after.y;
+  this.goal = null;
+};
+
+View.prototype.label = function (str, wx, wy, size, color, o) {
+  this.labels.push([str, wx, wy, size, color, o || null]);
+};
+View.prototype.flushLabels = function () {
+  var ctx = this.ctx, d = this.dpr, z = this.cam.z, L = this.labels;
+  ctx.save(); ctx.setTransform(d, 0, 0, d, 0, 0);
+  for (var i = 0; i < L.length; i++) {
+    var l = L[i], o = l[5] || {}, px = l[3] * z;
+    if (px < (o.hide || 0)) continue;
+    if (o.min) px = Math.max(px, o.min);
+    if (o.max) px = Math.min(px, o.max);
+    var sx = (l[1] - this.cam.x) * z + this.w / 2 + (o.dx || 0), sy = (l[2] - this.cam.y) * z + this.h / 2 + (o.dy || 0);
+    if (sx < -200 || sx > this.w + 200 || sy < -40 || sy > this.h + 40) continue;
+    ctx.font = (o.weight || 500) + ' ' + px.toFixed(1) + 'px ' + (o.mono ? MONO : SANS);
+    ctx.textAlign = o.align || 'left'; ctx.textBaseline = 'middle';
+    if (o.plate) {
+      var tw = ctx.measureText(l[0]).width, padX = px * 0.45, ph = px * 1.5;
+      var x0 = o.align === 'center' ? sx - tw / 2 - padX : o.align === 'right' ? sx - tw - padX : sx - padX;
+      ctx.fillStyle = o.plate === true ? C.plate : o.plate;
+      rr(ctx, x0, sy - ph / 2, tw + padX * 2, ph, Math.min(4, ph / 3)); ctx.fill();
+      if (o.stroke) { ctx.strokeStyle = o.stroke; ctx.lineWidth = 1; ctx.stroke(); }
+    }
+    ctx.fillStyle = l[4]; ctx.fillText(l[0], sx, sy);
+  }
+  ctx.restore(); L.length = 0;
+};
+
+/* ---------- drawing primitives ---------- */
+View.prototype.ticket = function (t, x, y, s, dim) {
+  var ctx = this.ctx, col = t.triaged ? TYPES[t.type].color : '#8b949e';
+  t.x = x; t.y = y;
+  if (this.shown && !this.shown.has(t.id)) dim = true;
+  ctx.globalAlpha = dim ? 0.25 : 1;
+  if (!t.triaged) {
+    ctx.fillStyle = '#6e7781'; ctx.strokeStyle = '#c9d1d9';
+    ctx.beginPath();
+    for (var i = 0; i < 6; i++) {
+      var a = Math.PI / 3 * i + (t.id % 5) * 0.3, r = s * (0.5 + ((t.id * (i + 3)) % 7) / 40);
+      ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    ctx.closePath(); ctx.fill(); ctx.lineWidth = 0.035; ctx.stroke();
+  } else {
+    rr(ctx, x - s / 2, y - s / 2, s, s, s * 0.22);
+    ctx.fillStyle = col; ctx.fill();
+    ctx.lineWidth = 0.045; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(x - s / 2 + s * 0.16, y - s / 2 + s * 0.14, s * 0.68, s * 0.14);
+    if (t.reworks) { ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(x + s * 0.2, y + s * 0.2, s * 0.13, 0, 6.3); ctx.fill(); }
+    if (t.priority === 'urgent') { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - s * 0.36, y - s * 0.36, s * 0.16, 0, 6.3); ctx.fill();
+      ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(x - s * 0.36, y - s * 0.36, s * 0.1, 0, 6.3); ctx.fill(); }
+  }
+  ctx.globalAlpha = 1;
+  if (this.sel && this.sel.type === 'ticket' && this.sel.t === t) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(x, y, s * 0.95, 0, 6.3); ctx.stroke();
+  }
+};
+
+View.prototype.belt = function (sg) {
+  var ctx = this.ctx, p = sg.pts, rework = sg.kind === 'rework', i;
+  var wOut = rework ? 0.5 : 0.84, wIn = rework ? 0.4 : 0.7, inner = rework ? C.rework : C.belt;
+  if (this.overlay === 'flow' && this.heat) {
+    var h = this.heat.get('s' + sg.id);
+    if (h) inner = mix(HEAT.flow[0], HEAT.flow[1], h.v);
+  }
+  ctx.lineJoin = 'round'; ctx.lineCap = 'butt';
+  ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]);
+  for (i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
+  ctx.strokeStyle = rework ? C.reworkEdge : C.beltEdge; ctx.lineWidth = wOut; ctx.stroke();
+  ctx.strokeStyle = inner; ctx.lineWidth = wIn; ctx.stroke();
+  if (this.cam.z < 9) return;
+  /* moving chevrons */
+  var step = 0.6, off = this.reduced ? 0.3 : (this.sim.now * F.BELT_V) % step, s = rework ? 0.09 : 0.14, o = this.tmp;
+  ctx.beginPath();
+  for (var d = off; d < sg.len; d += step) {
+    sg.at(d, o);
+    var x = o.x, y = o.y; sg.at(Math.min(sg.len, d + 0.05), o);
+    var dx = o.x - x, dy = o.y - y, n = Math.hypot(dx, dy) || 1; dx /= n; dy /= n;
+    ctx.moveTo(x - dx * s - dy * s, y - dy * s + dx * s); ctx.lineTo(x, y); ctx.lineTo(x - dx * s + dy * s, y - dy * s - dx * s);
+  }
+  ctx.strokeStyle = rework ? C.reworkChev : C.chev; ctx.lineWidth = 0.05; ctx.lineCap = 'round'; ctx.stroke();
+};
+
+View.prototype.gear = function (x, y, r, ang, col) {
+  var ctx = this.ctx, n = 8;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  ctx.beginPath();
+  for (var i = 0; i < n; i++) {
+    var a = i / n * Math.PI * 2, b = a + Math.PI / n;
+    ctx.lineTo(Math.cos(a - 0.12) * r, Math.sin(a - 0.12) * r); ctx.lineTo(Math.cos(a + 0.12) * r, Math.sin(a + 0.12) * r);
+    ctx.lineTo(Math.cos(b - 0.14) * r * 0.76, Math.sin(b - 0.14) * r * 0.76); ctx.lineTo(Math.cos(b + 0.14) * r * 0.76, Math.sin(b + 0.14) * r * 0.76);
+  }
+  ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, 6.3); ctx.fillStyle = C.body2; ctx.fill();
+  ctx.restore();
+};
+
+View.prototype.hazard = function (x, y, w, h, t, c1, c2) {
+  var ctx = this.ctx;
+  ctx.save();
+  rr(ctx, x, y, w, h, 0.28); ctx.clip();
+  ctx.fillStyle = c2; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = c1; ctx.lineWidth = 0.2; ctx.beginPath();
+  for (var k = -h; k < w + h; k += 0.56) { ctx.moveTo(x + k, y + h); ctx.lineTo(x + k + h, y); }
+  ctx.stroke();
+  ctx.restore();
+  rr(ctx, x + t, y + t, w - 2 * t, h - 2 * t, 0.2);
+};
+
+View.prototype.glyph = function (kind, x, y, r, col) {
+  var ctx = this.ctx; ctx.save(); ctx.translate(x, y); ctx.scale(r, r);
+  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 0.16; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
+  switch (kind) {
+    case 'gmail': ctx.rect(-0.9, -0.6, 1.8, 1.2); ctx.moveTo(-0.9, -0.6); ctx.lineTo(0, 0.15); ctx.lineTo(0.9, -0.6); ctx.stroke(); break;
+    case 'slack': ctx.moveTo(-0.35, -0.9); ctx.lineTo(-0.35, 0.9); ctx.moveTo(0.35, -0.9); ctx.lineTo(0.35, 0.9);
+      ctx.moveTo(-0.9, -0.35); ctx.lineTo(0.9, -0.35); ctx.moveTo(-0.9, 0.35); ctx.lineTo(0.9, 0.35); ctx.stroke(); break;
+    case 'meet': ctx.rect(-0.7, -0.9, 1.4, 1.8); ctx.moveTo(-0.35, -0.4); ctx.lineTo(0.35, -0.4); ctx.moveTo(-0.35, 0); ctx.lineTo(0.35, 0);
+      ctx.moveTo(-0.35, 0.4); ctx.lineTo(0.1, 0.4); ctx.stroke(); break;
+    case 'github': ctx.moveTo(-0.45, -0.55); ctx.lineTo(-0.45, 0.55); ctx.moveTo(0.45, -0.55); ctx.quadraticCurveTo(0.45, 0.1, -0.45, 0.2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(-0.45, -0.72, 0.2, 0, 6.3); ctx.arc(-0.45, 0.72, 0.2, 0, 6.3); ctx.arc(0.45, -0.72, 0.2, 0, 6.3); ctx.fill(); break;
+    case 'linear': ctx.moveTo(-0.8, 0.1); ctx.lineTo(-0.1, 0.8); ctx.moveTo(-0.8, -0.5); ctx.lineTo(0.5, 0.8); ctx.moveTo(-0.5, -0.8); ctx.lineTo(0.8, 0.5);
+      ctx.moveTo(0.1, -0.8); ctx.lineTo(0.8, -0.1); ctx.stroke(); break;
+    case 'routine': ctx.arc(0, 0, 0.85, 0, 6.3); ctx.moveTo(0, -0.45); ctx.lineTo(0, 0); ctx.lineTo(0.35, 0.25); ctx.stroke(); break;
+    case 'cli': ctx.moveTo(-0.8, -0.5); ctx.lineTo(-0.2, 0); ctx.lineTo(-0.8, 0.5); ctx.moveTo(0.05, 0.55); ctx.lineTo(0.8, 0.55); ctx.stroke(); break;
+    case 'fleex': ctx.arc(0, 0, 0.9, 0, 6.3); ctx.moveTo(-0.35, -0.45); ctx.lineTo(-0.35, 0.45); ctx.moveTo(0.35, -0.45); ctx.lineTo(0.35, 0.45);
+      ctx.moveTo(-0.35, 0); ctx.lineTo(0.35, 0); ctx.stroke(); break;
+    case 'native': ctx.moveTo(0.2, -0.9); ctx.lineTo(-0.5, 0.1); ctx.lineTo(0, 0.1); ctx.lineTo(-0.2, 0.9); ctx.lineTo(0.5, -0.1); ctx.lineTo(0, -0.1); ctx.closePath(); ctx.fill(); break;
+    case 'person': ctx.arc(0, -0.45, 0.33, 0, 6.3); ctx.fill(); ctx.beginPath(); ctx.moveTo(-0.65, 0.85); ctx.quadraticCurveTo(-0.6, 0.05, 0, 0.05);
+      ctx.quadraticCurveTo(0.6, 0.05, 0.65, 0.85); ctx.closePath(); ctx.fill(); break;
+    case 'skill': ctx.rect(-0.75, 0.35, 1.5, 0.4); ctx.fill(); ctx.beginPath(); ctx.rect(-0.22, -0.9, 0.44, 1.0); ctx.fill();
+      ctx.beginPath(); ctx.rect(-0.55, 0.0, 1.1, 0.24); ctx.fill(); break;
+  }
+  ctx.restore();
+};
+
+View.prototype.cells = function (st, x0, y0, cols, rows, size, gap) {
+  var ctx = this.ctx, list = st.cells, n = cols * rows, i;
+  for (i = 0; i < n; i++) {
+    var cx = x0 + (i % cols) * (size + gap), cy = y0 + Math.floor(i / cols) * (size + gap), c = list[i];
+    rr(ctx, cx, cy, size, size, 0.08);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill();
+    if (!c) continue;
+    var col = TYPES[c.t.type].color;
+    c.t.x = st.cx; c.t.y = st.cy;
+    var dim = this.shown && !this.shown.has(c.t.id);
+    ctx.save(); rr(ctx, cx, cy, size, size, 0.08); ctx.clip();
+    ctx.globalAlpha = dim ? 0.2 : 0.3; ctx.fillStyle = col; ctx.fillRect(cx, cy, size, size);
+    ctx.globalAlpha = dim ? 0.3 : 1; ctx.fillRect(cx, cy + size * (1 - c.p), size, size * c.p);
+    ctx.restore();
+    if (c.state === 'question' || c.state === 'failed') {
+      var blink = this.reduced || Math.floor(this.clock * 2.5) % 2 === 0;
+      ctx.strokeStyle = c.state === 'failed' ? C.red : C.amber; ctx.lineWidth = blink ? 0.09 : 0.04;
+      rr(ctx, cx, cy, size, size, 0.08); ctx.stroke();
+    }
+    if (this.sel && this.sel.type === 'ticket' && this.sel.t === c.t) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.07; rr(ctx, cx - 0.05, cy - 0.05, size + 0.1, size + 0.1, 0.1); ctx.stroke(); }
+  }
+  if (list.length > n) this.label('+' + (list.length - n), x0 + cols * (size + gap), y0 + rows * (size + gap) - size / 2, 0.34, C.text2, { hide: 7, mono: true });
+};
+
+View.prototype.station = function (st) {
+  var ctx = this.ctx, sim = this.sim, x = st.x, y = st.y, w = st.w, h = st.h, state = stationState(sim, st), lamp = LAMP[state];
+  var gate = st.exec === 'human_gate', nat = st.exec === 'native', color = st.lane ? st.lane.wf.color : '#94a3b8';
+  var dimAll = this.overlay !== 'none' && this.overlay !== 'flow', i;
+  var blink = this.reduced || Math.floor(this.clock * 2.2) % 2 === 0;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(ctx, x + 0.12, y + 0.18, w, h, 0.28); ctx.fill();
+  if (gate) {
+    var manual = st.policy === 'human', samp = st.policy === 'sampled';
+    this.hazard(x, y, w, h, 0.2, manual ? '#15130a' : samp ? '#14171a' : '#131615', manual ? C.hazard : samp ? '#a3a3a3' : '#3f3f46');
+    ctx.fillStyle = '#1b1c18'; ctx.fill();
+  } else {
+    var g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, nat ? '#1e2225' : C.body); g.addColorStop(1, C.body2);
+    rr(ctx, x, y, w, h, 0.28); ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = 0.06; ctx.strokeStyle = C.edge; ctx.stroke();
+    ctx.fillStyle = alpha(color, 0.55); ctx.fillRect(x + 0.28, y + h - 0.1, w - 0.56, 0.1);
+  }
+  /* lamp */
+  var lx = x + 0.48, ly = y + 0.52, on = state !== 'idle' && (state === 'running' || blink);
+  if (on && this.cam.z > 9) { ctx.fillStyle = alpha(lamp, 0.25); ctx.beginPath(); ctx.arc(lx, ly, 0.3, 0, 6.3); ctx.fill(); }
+  ctx.fillStyle = on ? lamp : '#3f3f46'; ctx.beginPath(); ctx.arc(lx, ly, 0.15, 0, 6.3); ctx.fill();
+  this.label(st.name, x + 0.8, ly, 0.42, C.text, { weight: 600, min: 9.5, max: 17, plate: this.cam.z < 22 ? C.plate : null });
+
+  if (gate) {
+    /* rack of tickets waiting for a human, then the barrier */
+    var rack = st.rack, cols = 5, s = 0.5, gp = 0.12;
+    for (i = 0; i < 10; i++) {
+      var rx = x + 0.42 + (i % cols) * (s + gp), ry = y + 1.0 + Math.floor(i / cols) * (s + gp);
+      rr(ctx, rx, ry, s, s, 0.08); ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fill();
+      if (rack[i]) this.ticket(rack[i].t, rx + s / 2, ry + s / 2, s * 0.86);
+    }
+    for (i = 10; i < rack.length; i++) { rack[i].t.x = st.cx; rack[i].t.y = st.cy; }
+    if (rack.length > 10) this.label('+' + (rack.length - 10), x + w - 0.3, y + h - 0.45, 0.36, C.amber, { align: 'right', weight: 700, hide: 6, mono: true });
+    for (i = 0; i < st.cells.length; i++) { st.cells[i].t.x = st.cx; st.cells[i].t.y = st.cy; }
+    if (st.cells.length) { ctx.fillStyle = alpha(C.blue, 0.8); ctx.beginPath(); ctx.arc(x + w - 0.5, y + 0.52, 0.14 + 0.04 * Math.sin(this.clock * 8), 0, 6.3); ctx.fill(); }
+    this.label(st.policy === 'human' ? 'human_gate · humain' : st.policy === 'sampled' ? 'human_gate · échantillonné' : 'human_gate · auto',
+      x + 0.3, y + h - 0.36, 0.28, st.policy === 'human' ? C.hazard : C.text2, { hide: 8, mono: true });
+  } else {
+    var act = 0; for (i = 0; i < st.cells.length; i++) if (st.cells[i].state === 'running') act++;
+    var spin = this.reduced ? 0.4 : sim.now * 1.3, gx = x + 0.95, gy = y + 1.85, gc = act ? alpha(color, 0.95) : '#4b5563';
+    if (st.def.router) {
+      ctx.strokeStyle = gc; ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(gx - 0.55, gy - 0.5); ctx.lineTo(gx + 0.55, gy - 0.5); ctx.lineTo(gx + 0.12, gy);
+      ctx.lineTo(gx + 0.12, gy + 0.55); ctx.lineTo(gx - 0.12, gy + 0.4); ctx.lineTo(gx - 0.12, gy); ctx.closePath(); ctx.stroke();
+      if (act) { var sw = (this.clock * 1.4) % 1; ctx.strokeStyle = alpha(C.green, 0.7); ctx.beginPath(); ctx.moveTo(x + 1.75, y + 1 + sw * 1.6); ctx.lineTo(x + w - 0.25, y + 1 + sw * 1.6); ctx.stroke(); }
+    } else if (nat) this.glyph('native', gx, gy, 0.55, gc);
+    else if (st.exec === 'skill') { var pz = act ? Math.abs(Math.sin(sim.now * 2.2)) * 0.18 : 0; this.glyph('skill', gx, gy - 0.15 + pz, 0.55, gc); ctx.fillStyle = gc; ctx.fillRect(gx - 0.5, gy + 0.5, 1, 0.1); }
+    else if (st.exec === 'panel') {
+      this.gear(gx - 0.28, gy - 0.3, 0.36, act ? spin : 0, gc); this.gear(gx + 0.34, gy - 0.02, 0.36, act ? -spin + 0.4 : 0.4, gc); this.gear(gx - 0.2, gy + 0.42, 0.36, act ? spin + 0.2 : 0.2, gc);
+    } else this.gear(gx, gy, 0.62, act ? spin : 0, gc);
+    this.cells(st, x + 1.86, y + 1.0, 3, 2, 0.56, 0.1);
+    if (act && !nat && this.cam.z >= 13 && !this.reduced && sim.now >= sim.outageUntil) {
+      /* tokens burning: a few sparks rise from the running machine */
+      for (i = 0; i < 3; i++) {
+        var ph = (sim.now * 0.55 + i / 3 + st.id * 0.37) % 1;
+        ctx.fillStyle = alpha(color, (1 - ph) * 0.9);
+        ctx.fillRect(x + w - 0.62 + Math.sin(ph * 7 + i * 2) * 0.14, y - 0.12 - ph * 0.95, 0.1, 0.1);
+      }
+    }
+    var m = st.model ? MODELS[st.model].short : '';
+    this.label(st.exec + (m ? ' · ' + m : ''), x + 0.3, y + h - 0.36, 0.28, C.text3, { hide: 8, mono: true });
+    if (st.starved) this.label('file ' + st.starved, x + w - 0.25, y + 0.52, 0.3, C.blue, { align: 'right', hide: 7.5, mono: true, weight: 700 });
+    for (i = 0; i < st.outMain.length; i++) { st.outMain[i].x = st.cx; st.outMain[i].y = st.cy; }
+  }
+  /* rework ports */
+  for (i = 0; i < st.links.length; i++) {
+    var p0 = st.links[i].seg.pts[0];
+    ctx.fillStyle = C.reworkEdge; ctx.fillRect(p0[0] - 0.3, p0[1] - 0.09, 0.6, 0.18);
+    for (var q = 0; q < st.links[i].q.length; q++) { st.links[i].q[q].x = st.cx; st.links[i].q[q].y = st.cy; }
+  }
+  if (dimAll) { ctx.fillStyle = 'rgba(6,8,7,0.55)'; rr(ctx, x - 0.05, y - 0.05, w + 0.1, h + 0.1, 0.28); ctx.fill(); }
+  st._state = state;
+};
+
+View.prototype.arm = function (a) {
+  var ctx = this.ctx, e = a.p * a.p * (3 - 2 * a.p), tx = a.ax + (a.zx - a.ax) * e, ty = a.ay + (a.zy - a.ay) * e;
+  var dx = tx - a.bx, dy = ty - a.by, d = Math.min(Math.hypot(dx, dy), 1.3), l = 0.68;
+  var base = Math.atan2(dy, dx), bend = Math.acos(clamp(d / (2 * l), -1, 1)) * (a.kind === 'in' ? -1 : 1);
+  var ex = a.bx + Math.cos(base + bend) * l, ey = a.by + Math.sin(base + bend) * l;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#5b646c'; ctx.lineWidth = 0.17; ctx.beginPath(); ctx.moveTo(a.bx, a.by); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.strokeStyle = C.steel; ctx.lineWidth = 0.11; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(tx, ty); ctx.stroke();
+  ctx.fillStyle = '#2b3136'; ctx.beginPath(); ctx.arc(a.bx, a.by, 0.24, 0, 6.3); ctx.fill();
+  ctx.strokeStyle = C.hazard; ctx.lineWidth = 0.05; ctx.beginPath(); ctx.arc(a.bx, a.by, 0.24, 0, 6.3); ctx.stroke();
+  ctx.fillStyle = C.steel; ctx.beginPath(); ctx.arc(ex, ey, 0.09, 0, 6.3); ctx.fill();
+  if (a.t) this.ticket(a.t, tx, ty, 0.44);
+  var ga = Math.atan2(ty - ey, tx - ex), op = a.t ? 0.5 : 0.95;
+  ctx.strokeStyle = '#d4d4d8'; ctx.lineWidth = 0.06; ctx.beginPath();
+  ctx.moveTo(tx + Math.cos(ga + op) * 0.2, ty + Math.sin(ga + op) * 0.2); ctx.lineTo(tx, ty); ctx.lineTo(tx + Math.cos(ga - op) * 0.2, ty + Math.sin(ga - op) * 0.2); ctx.stroke();
+};
+
+View.prototype.source = function (src) {
+  var ctx = this.ctx, x = src.x, y = src.y, w = src.w, h = src.h, on = src.on;
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(ctx, x + 0.12, y + 0.16, w, h, 0.3); ctx.fill();
+  var g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#263038'); g.addColorStop(1, '#161b1f');
+  rr(ctx, x, y, w, h, 0.3); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = src.internal ? '#5b6b3a' : '#44525c'; ctx.lineWidth = 0.06; ctx.stroke();
+  /* chute */
+  ctx.fillStyle = '#0c0f11'; ctx.fillRect(x + w - 0.5, src.cy - 0.38, 0.5, 0.76);
+  this.glyph(src.id, x + 0.95, src.cy, 0.5, on ? '#d4d4d8' : '#52525b');
+  this.label(src.name, x + 0.05, y - 0.42, 0.44, on ? C.text : C.text3, { weight: 600, min: 9.5, max: 16 });
+  this.label(src.internal ? 'ticket.create' : on ? Math.round(src.perDay) + ' / jour' : 'à l’arrêt', x + 1.75, src.cy - 0.3, 0.3, C.text2, { hide: 7.5, mono: true });
+  if (src.buffer.length) this.label(src.buffer.length + ' en stock', x + 1.75, src.cy + 0.32, 0.28, C.amber, { hide: 7.5, mono: true });
+  for (var i = 0; i < src.buffer.length; i++) { src.buffer[i].x = x + w / 2; src.buffer[i].y = src.cy; }
+};
+
+View.prototype.buildings = function () {
+  var ctx = this.ctx, sim = this.sim, op = sim.op, hut = op.hut, pool = sim.pool, dock = sim.dock, i;
+  /* operator post */
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(ctx, hut.x + 0.12, hut.y + 0.16, hut.w, hut.h, 0.3); ctx.fill();
+  this.hazard(hut.x, hut.y, hut.w, hut.h, 0.14, '#15130a', C.hazard); ctx.fillStyle = '#1d2022'; ctx.fill();
+  var avail = sim.opAvailable();
+  this.glyph('person', hut.x + 0.75, hut.y + hut.h / 2, 0.45, avail ? C.hazard : '#52525b');
+  this.label('Poste opérateur', hut.x + 0.05, hut.y - 0.42, 0.44, C.text, { weight: 600, min: 9.5, max: 16 });
+  this.label(!op.enabled ? 'manuel' : avail ? 'en poste' : sim.now < op.awayUntil ? 'en réunion' : 'hors horaires', hut.x + 1.35, hut.y + hut.h / 2, 0.3,
+    avail ? C.green : C.text2, { hide: 7.5, mono: true });
+  /* agent slots: one cell per SDK concurrency slot */
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(ctx, pool.x + 0.12, pool.y + 0.16, pool.w, pool.h, 0.3); ctx.fill();
+  rr(ctx, pool.x, pool.y, pool.w, pool.h, 0.3); ctx.fillStyle = '#16191c'; ctx.fill(); ctx.strokeStyle = '#3b4d63'; ctx.lineWidth = 0.06; ctx.stroke();
+  var cols = pool.max <= 12 ? 4 : pool.max <= 20 ? 5 : 8, rows = Math.ceil(pool.max / cols), cw = (pool.w - 0.5) / cols, ch = (pool.h - 0.5) / rows;
+  var outage = sim.now < sim.outageUntil;
+  for (i = 0; i < pool.max; i++) {
+    var cx = pool.x + 0.25 + (i % cols) * cw, cy = pool.y + 0.25 + Math.floor(i / cols) * ch;
+    rr(ctx, cx + 0.05, cy + 0.05, cw - 0.1, ch - 0.1, 0.08);
+    ctx.fillStyle = outage ? alpha(C.red, 0.5) : i < pool.used ? (pool.used >= pool.max ? C.amber : C.blue) : '#23282d'; ctx.fill();
+  }
+  this.label('Slots agents', pool.x + 0.05, pool.y - 0.42, 0.44, C.text, { weight: 600, min: 9.5, max: 16 });
+  this.label(outage ? 'panne API' : pool.used + ' / ' + pool.max, pool.x + pool.w + 0.25, pool.y + pool.h / 2, 0.34, outage ? C.red : pool.used >= pool.max ? C.amber : C.text2, { hide: 7, mono: true, weight: 700 });
+  /* shipping dock */
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(ctx, dock.x + 0.14, dock.y + 0.2, dock.w, dock.h, 0.35); ctx.fill();
+  var g = ctx.createLinearGradient(dock.x, 0, dock.x + dock.w, 0); g.addColorStop(0, '#20262b'); g.addColorStop(1, '#14181b');
+  rr(ctx, dock.x, dock.y, dock.w, dock.h, 0.35); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = C.edge; ctx.lineWidth = 0.06; ctx.stroke();
+  for (i = 0; i < sim.lanes.length; i++) {
+    var ln = sim.lanes[i];
+    ctx.fillStyle = '#090b0c'; rr(ctx, dock.x - 0.02, ln.y - 0.55, 1.1, 1.1, 0.12); ctx.fill();
+    ctx.fillStyle = alpha(ln.wf.color, 0.85); ctx.fillRect(dock.x + 1.3, ln.y - 0.5, 0.12, 1);
+    this.label(String(sim.sum(ln.shipped, 24)), dock.x + 1.65, ln.y - 0.18, 0.62, C.text, { weight: 700, min: 10, max: 22, mono: true });
+    this.label(ln.wf.output === 'code' ? 'PR / 24 h' : ln.wf.output + ' / 24 h', dock.x + 1.65, ln.y + 0.45, 0.28, C.text2, { hide: 7.5, mono: true });
+  }
+  this.label('Expédition', dock.x + 0.05, dock.y - 0.5, 0.5, C.text, { weight: 700, min: 9.5, max: 18 });
+};
+
+View.prototype.operator = function () {
+  var ctx = this.ctx, op = this.sim.op;
+  if (op.state === 'away' || op.state === 'home') return;
+  var x = op.x, y = op.y, bob = op.state === 'walk' && !this.reduced ? Math.sin(this.clock * 14) * 0.04 : 0;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.ellipse(x + 0.06, y + 0.3, 0.3, 0.13, 0, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#1d4ed8'; ctx.beginPath(); ctx.arc(x, y + 0.08 + bob, 0.27, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.arc(x, y - 0.14 + bob, 0.17, 0, 6.3); ctx.fill();
+  ctx.fillStyle = C.hazard; ctx.beginPath(); ctx.arc(x, y - 0.18 + bob, 0.2, Math.PI, 0); ctx.fill(); ctx.fillRect(x - 0.26, y - 0.2 + bob, 0.52, 0.06);
+  if (op.state === 'work') {
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.arc(x, y, 0.5, 0, 6.3); ctx.stroke();
+    ctx.strokeStyle = C.hazard; ctx.beginPath(); ctx.arc(x, y, 0.5, -Math.PI / 2, -Math.PI / 2 + (1 - op.left / op.total) * 6.283); ctx.stroke();
+  }
+};
+
+View.prototype.drone = function (d) {
+  if (d.t < 0) return;
+  var ctx = this.ctx, lift = Math.sin(Math.PI * d.f) * 1.4 + 0.3, x = d.x, y = d.y - lift * 0.5;
+  ctx.fillStyle = 'rgba(0,0,0,' + (0.4 - lift * 0.12) + ')'; ctx.beginPath(); ctx.ellipse(d.x + lift * 0.3, d.y + lift * 0.35, 0.35, 0.18, 0, 0, 6.3); ctx.fill();
+  ctx.strokeStyle = '#a1a1aa'; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.moveTo(x - 0.34, y - 0.34); ctx.lineTo(x + 0.34, y + 0.34); ctx.moveTo(x + 0.34, y - 0.34); ctx.lineTo(x - 0.34, y + 0.34); ctx.stroke();
+  var sp = this.clock * 30;
+  for (var i = 0; i < 4; i++) {
+    var rx = x + (i % 2 ? 0.34 : -0.34), ry = y + (i < 2 ? -0.34 : 0.34);
+    ctx.strokeStyle = 'rgba(228,228,231,0.55)'; ctx.lineWidth = 0.04; ctx.beginPath();
+    ctx.moveTo(rx + Math.cos(sp + i) * 0.2, ry + Math.sin(sp + i) * 0.2); ctx.lineTo(rx - Math.cos(sp + i) * 0.2, ry - Math.sin(sp + i) * 0.2); ctx.stroke();
+  }
+  rr(ctx, x - 0.2, y - 0.2, 0.4, 0.4, 0.08); ctx.fillStyle = d.color; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 0.04; ctx.stroke();
+};
+
+View.prototype.floor = function (x0, y0, x1, y1) {
+  var ctx = this.ctx, sim = this.sim, z = this.cam.z, i;
+  ctx.fillStyle = C.floor; ctx.fillRect(0, 0, LAY.W, LAY.H);
+  if (z >= 9) {
+    ctx.lineWidth = 1 / z; ctx.beginPath();
+    for (i = Math.max(0, Math.floor(x0)); i <= Math.min(LAY.W, x1); i++) { if (i % 4) { ctx.moveTo(i, Math.max(0, y0)); ctx.lineTo(i, Math.min(LAY.H, y1)); } }
+    for (i = Math.max(0, Math.floor(y0)); i <= Math.min(LAY.H, y1); i++) { if (i % 4) { ctx.moveTo(Math.max(0, x0), i); ctx.lineTo(Math.min(LAY.W, x1), i); } }
+    ctx.strokeStyle = C.grid; ctx.stroke();
+  }
+  ctx.lineWidth = 1 / z; ctx.beginPath();
+  for (i = 0; i <= LAY.W; i += 4) { ctx.moveTo(i, 0); ctx.lineTo(i, LAY.H); }
+  for (i = 0; i <= LAY.H; i += 4) { ctx.moveTo(0, i); ctx.lineTo(LAY.W, i); }
+  ctx.strokeStyle = C.grid4; ctx.stroke();
+  ctx.strokeStyle = '#2a3035'; ctx.lineWidth = 0.1; ctx.strokeRect(0, 0, LAY.W, LAY.H);
+  /* painted zones */
+  ctx.fillStyle = 'rgba(148,163,184,0.045)'; rr(ctx, 0.4, 0.5, LAY.collX + 0.9, LAY.H - 1, 0.4); ctx.fill();
+  this.label('INTAKE', 0.9, LAY.H - 1.0, 0.52, 'rgba(203,213,225,0.6)', { weight: 700, min: 10, max: 20 });
+  for (i = 0; i < sim.lanes.length; i++) {
+    var ln = sim.lanes[i], yy = ln.top, hh = ln.h, xs = ln.x, ws = ln.w;
+    ctx.fillStyle = alpha(ln.wf.color, 0.035); rr(ctx, xs, yy, ws, hh, 0.4); ctx.fill();
+    ctx.fillStyle = alpha(ln.wf.color, 0.7); ctx.fillRect(xs, yy + 0.4, 0.14, hh - 0.8);
+    this.label(ln.wf.name.toUpperCase(), xs + 0.5, yy + hh - 0.6, 0.52, alpha(ln.wf.color, 0.85), { weight: 700, min: 10, max: 20 });
+    this.label(ln.wf.hitl ? '@workflow:' + ln.wf.slug + ' · HITL' : '@workflow:' + ln.wf.slug + ' · sans HITL', xs + 0.5, yy + 0.4, 0.3, alpha(ln.wf.color, 0.6), { hide: 7.5, mono: true });
+  }
+};
+
+View.prototype.draw = function (dtReal) {
+  var ctx = this.ctx, sim = this.sim, cam = this.cam, d = this.dpr, i, j;
+  this.resize();
+  this.clock += dtReal;
+  if (this.follow) {
+    var ft = this.follow;
+    if (ft.state === 'done' || ft.state === 'cancelled') this.follow = null;
+    else this.goal = { x: ft.x + ((this.inset.r - this.inset.l) / 2) / cam.z, y: ft.y + ((this.inset.b - this.inset.t) / 2) / cam.z, z: cam.z };
+  }
+  if (this.goal) {
+    var k = 1 - Math.pow(0.002, dtReal), g = this.goal;
+    cam.x += (g.x - cam.x) * k; cam.y += (g.y - cam.y) * k; cam.z += (g.z - cam.z) * k;
+    if (!this.follow && Math.abs(g.x - cam.x) < 0.01 && Math.abs(g.y - cam.y) < 0.01 && Math.abs(g.z - cam.z) < 0.02) this.goal = null;
+  }
+  var z = cam.z, hw = this.w / 2 / z, hh = this.h / 2 / z, x0 = cam.x - hw, x1 = cam.x + hw, y0 = cam.y - hh, y1 = cam.y + hh;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.fillStyle = C.void; ctx.fillRect(0, 0, this.w, this.h);
+  ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - cam.x * z) * d, (this.h / 2 - cam.y * z) * d);
+
+  this.floor(x0, y0, x1, y1);
+  var segs = sim.segs;
+  for (i = 0; i < segs.length; i++) this.belt(segs[i]);
+  var o = this.tmp, dimItems = this.overlay === 'cost' || this.overlay === 'time';
+  for (i = 0; i < segs.length; i++) {
+    var its = segs[i].items;
+    for (j = 0; j < its.length; j++) { segs[i].at(its[j].d, o); this.ticket(its[j].t, o.x, o.y, segs[i].kind === 'rework' ? 0.38 : 0.46, dimItems); }
+  }
+  for (i = 0; i < sim.sources.length; i++) this.source(sim.sources[i]);
+  for (i = 0; i < sim.stations.length; i++) this.station(sim.stations[i]);
+  this.buildings();
+  for (i = 0; i < sim.inserters.length; i++) this.arm(sim.inserters[i]);
+  this.overlays();
+  this.operator();
+  for (i = 0; i < sim.drones.length; i++) this.drone(sim.drones[i]);
+  this.effects();
+  this.selection();
+
+  /* night shift: the floor dims, running stations keep their glow */
+  var hod = sim.hourOfDay(), dark = hod < 5.5 ? 1 : hod < 7.5 ? (7.5 - hod) / 2 : hod < 18.5 ? 0 : hod < 21 ? (hod - 18.5) / 2.5 : 1;
+  this.dark = dark;
+  if (dark > 0.01) {
+    ctx.fillStyle = 'rgba(3,6,20,' + (dark * 0.46) + ')'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.globalCompositeOperation = 'lighter';
+    for (i = 0; i < sim.stations.length; i++) {
+      var st = sim.stations[i];
+      if (st._state === 'idle' || st.cx < x0 - 4 || st.cx > x1 + 4 || st.cy < y0 - 4 || st.cy > y1 + 4) continue;
+      var col = LAMP[st._state], gr = ctx.createRadialGradient(st.cx, st.cy, 0.2, st.cx, st.cy, 3.6);
+      gr.addColorStop(0, alpha(col, 0.16 * dark)); gr.addColorStop(1, alpha(col, 0));
+      ctx.fillStyle = gr; ctx.fillRect(st.cx - 3.6, st.cy - 3.6, 7.2, 7.2);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  this.flushLabels();
+  this.drawBeacons();
+  this.flushLabels();
+};
+
+View.prototype.overlays = function () {
+  var ctx = this.ctx, sim = this.sim, i, ov = this.overlay, heat = this.heat;
+  if (heat && ov !== 'none') {
+    if (ov === 'flow') {
+      for (i = 0; i < sim.segs.length; i++) {
+        var sg = sim.segs[i], hs = heat.get('s' + sg.id);
+        if (!hs || !hs.label || sg.kind === 'rework' || sg.len < 2) continue;
+        sg.at(sg.len / 2, this.tmp);
+        this.label(hs.label, this.tmp.x, this.tmp.y - 0.75, 0.32, '#bbf7d0', { align: 'center', mono: true, min: 9, max: 13, plate: 'rgba(5,20,12,0.85)' });
+      }
+    } else {
+      var ramp = HEAT[ov];
+      for (i = 0; i < sim.stations.length; i++) {
+        var st = sim.stations[i], h = heat.get(st.id);
+        if (!h || h.v <= 0) continue;
+        var col = mix(ramp[0], ramp[1], h.v);
+        ctx.fillStyle = col; ctx.globalAlpha = 0.25 + 0.6 * h.v; rr(ctx, st.x, st.y, st.w, st.h, 0.28); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = ramp[1]; ctx.lineWidth = 0.05 + 0.1 * h.v; rr(ctx, st.x, st.y, st.w, st.h, 0.28); ctx.stroke();
+        this.label(h.label, st.cx, st.cy + 0.35, 0.44, '#fff', { align: 'center', weight: 700, mono: true, min: 9.5, max: 15, plate: 'rgba(9,9,11,0.8)' });
+      }
+    }
+  }
+};
+View.prototype.drawBeacons = function () {
+  var ctx = this.ctx, sim = this.sim, i;
+  var pulse = this.reduced ? 0.5 : (this.clock * 0.9) % 1;
+  for (i = 0; i < this.beacons.length; i++) {
+    var b = this.beacons[i], bx = b.st ? b.st.x + b.st.w + 0.05 : sim.pool.x + sim.pool.w + 0.05, by = b.st ? b.st.y - 0.05 : sim.pool.y - 0.05;
+    var bc = b.kind === 'human' || b.kind === 'question' ? C.amber : b.kind === 'cost' ? '#fb923c' : b.kind === 'pool' ? C.blue : C.red;
+    ctx.strokeStyle = alpha(bc, 1 - pulse); ctx.lineWidth = 0.08; ctx.beginPath(); ctx.arc(bx, by, 0.4 + pulse * 0.9, 0, 6.3); ctx.stroke();
+    ctx.fillStyle = bc; ctx.beginPath(); ctx.arc(bx, by, 0.4, 0, 6.3); ctx.fill();
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 0.06; ctx.stroke();
+    this.label(String(i + 1), bx, by + 0.02, 0.5, '#111', { align: 'center', weight: 700, min: 8, max: 15 });
+  }
+};
+
+View.prototype.effects = function () {
+  var ctx = this.ctx, sim = this.sim;
+  for (var i = 0; i < sim.fx.length; i++) {
+    var f = sim.fx[i], a = (sim.now - f.t0) / 3;
+    if (a < 0 || a > 1) continue;
+    if (f.kind === 'ship') {
+      ctx.strokeStyle = alpha(f.c, 1 - a); ctx.lineWidth = 0.09; ctx.beginPath(); ctx.arc(f.x, f.y, 0.3 + a * 1.1, 0, 6.3); ctx.stroke();
+    } else {
+      ctx.strokeStyle = alpha('#a1a1aa', 1 - a); ctx.lineWidth = 0.07; ctx.beginPath();
+      ctx.moveTo(f.x - 0.25, f.y - 0.25 + a * 0.3); ctx.lineTo(f.x + 0.25, f.y + 0.25 + a * 0.3); ctx.moveTo(f.x + 0.25, f.y - 0.25 + a * 0.3); ctx.lineTo(f.x - 0.25, f.y + 0.25 + a * 0.3); ctx.stroke();
+    }
+  }
+};
+
+View.prototype.selection = function () {
+  var ctx = this.ctx, s = this.sel, hv = this.hover, box = null;
+  function rect(o) { return o ? { x: o.x, y: o.top != null ? o.top : o.y, w: o.w, h: o.h } : null; }
+  if (hv && hv.type !== 'ticket' && hv.type !== 'lane' && !(s && s.type === hv.type && s.ref === hv.ref)) {
+    var hb = rect(hv.ref);
+    if (hb) { ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 0.05; rr(ctx, hb.x - 0.14, hb.y - 0.14, hb.w + 0.28, hb.h + 0.28, 0.36); ctx.stroke(); }
+  }
+  if (!s || s.type === 'ticket') return;
+  box = rect(s.ref);
+  if (!box) return;
+  ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.08; ctx.setLineDash([0.4, 0.25]); ctx.lineDashOffset = this.reduced ? 0 : -this.clock * 0.8;
+  rr(ctx, box.x - 0.2, box.y - 0.2, box.w + 0.4, box.h + 0.4, 0.4); ctx.stroke(); ctx.restore();
+};
+
+/* what is under a screen point: ticket first, then buildings */
+View.prototype.pick = function (sx, sy) {
+  var p = this.toWorld(sx, sy), sim = this.sim, i, j, o = this.tmp, tol = Math.max(0.42, 9 / this.cam.z);
+  for (i = 0; i < sim.inserters.length; i++) {
+    var a = sim.inserters[i];
+    if (a.t && Math.hypot(a.t.x - p.x, a.t.y - p.y) < tol) return { type: 'ticket', t: a.t, ref: a.t };
+  }
+  for (i = 0; i < sim.segs.length; i++) {
+    var its = sim.segs[i].items;
+    for (j = 0; j < its.length; j++) { sim.segs[i].at(its[j].d, o); if (Math.hypot(o.x - p.x, o.y - p.y) < tol) return { type: 'ticket', t: its[j].t, ref: its[j].t }; }
+  }
+  function inside(b, m) { return p.x >= b.x - m && p.x <= b.x + b.w + m && p.y >= b.y - m && p.y <= b.y + b.h + m; }
+  for (i = 0; i < sim.stations.length; i++) if (inside(sim.stations[i], 0.1)) return { type: 'station', ref: sim.stations[i] };
+  for (i = 0; i < sim.sources.length; i++) if (inside(sim.sources[i], 0.1)) return { type: 'source', ref: sim.sources[i] };
+  if (inside(sim.op.hut, 0.1) || Math.hypot(sim.op.x - p.x, sim.op.y - p.y) < 0.6) return { type: 'operator', ref: sim.op.hut };
+  if (inside(sim.pool, 0.1)) return { type: 'pool', ref: sim.pool };
+  if (inside(sim.dock, 0.1)) return { type: 'dock', ref: sim.dock };
+  for (i = 0; i < sim.lanes.length; i++) { var ln = sim.lanes[i]; if (p.x >= ln.x && p.x <= ln.x + ln.w && p.y >= ln.top && p.y <= ln.top + ln.h) return { type: 'lane', ref: ln }; }
+  return null;
+};
+
+View.prototype.minimap = function (cv) {
+  var ctx = cv.getContext('2d'), d = this.dpr, w = cv.clientWidth, h = cv.clientHeight, sim = this.sim, i, j, o = this.tmp;
+  if (cv.width !== Math.round(w * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
+  var s = Math.min(w / LAY.W, h / LAY.H), ox = (w - LAY.W * s) / 2, oy = (h - LAY.H * s) / 2;
+  ctx.setTransform(d, 0, 0, d, 0, 0); ctx.clearRect(0, 0, w, h);
+  ctx.setTransform(s * d, 0, 0, s * d, ox * d, oy * d);
+  ctx.fillStyle = '#0d100f'; ctx.fillRect(0, 0, LAY.W, LAY.H);
+  ctx.strokeStyle = '#3a4148'; ctx.lineWidth = 0.5;
+  for (i = 0; i < sim.segs.length; i++) {
+    var p = sim.segs[i].pts; ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]);
+    for (j = 1; j < p.length; j++) ctx.lineTo(p[j][0], p[j][1]);
+    ctx.stroke();
+  }
+  for (i = 0; i < sim.stations.length; i++) { var st = sim.stations[i]; ctx.fillStyle = LAMP[st._state || 'idle']; ctx.fillRect(st.x, st.y, st.w, st.h); }
+  ctx.fillStyle = '#64748b';
+  for (i = 0; i < sim.sources.length; i++) { var sc = sim.sources[i]; ctx.fillRect(sc.x, sc.y, sc.w, sc.h); }
+  ctx.fillRect(sim.dock.x, sim.dock.y, sim.dock.w, sim.dock.h);
+  for (i = 0; i < sim.segs.length; i++) {
+    var its = sim.segs[i].items;
+    for (j = 0; j < its.length; j++) { sim.segs[i].at(its[j].d, o); ctx.fillStyle = its[j].t.triaged ? TYPES[its[j].t.type].color : '#c9d1d9'; ctx.fillRect(o.x - 0.5, o.y - 0.5, 1, 1); }
+  }
+  var hw = this.w / 2 / this.cam.z, hh = this.h / 2 / this.cam.z;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1 / s; ctx.strokeRect(this.cam.x - hw, this.cam.y - hh, hw * 2, hh * 2);
+  this._mini = { s: s, ox: ox, oy: oy };
+};
+View.prototype.miniToWorld = function (mx, my) { var m = this._mini; return m ? { x: (mx - m.ox) / m.s, y: (my - m.oy) / m.s } : null; };
+
+F.View = View; F.stationState = stationState; F.LAMP = LAMP;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+/* Fleex Factory — HUD, pilot panel, production drawer and input. */
+(function () {
+'use strict';
+var F = window.FleexFactory, MODELS = F.MODELS, TYPES = F.TYPES, WORKFLOWS = F.WORKFLOWS, dur = F.fmtDur, clamp = F.clamp;
+var sim, view;
+var ui = { tab: 'bottlenecks', speed: 1, lastSpeed: 1, sel: null, prod: false, cards: [], applied: [], logSeen: 0, hold: false, narrow: false, lastHtml: '' };
+var TYPE_CHIP = { build: 'blue', fix: 'red', think: 'purple', lead: 'yellow', ops: 'teal' };
+var KIND = { gate: ['Gate', 'yellow'], route: ['Routage', 'purple'], question: ['Question', 'blue'], error: ['Erreur', 'red'] };
+var BN = { human: 'Attente humaine', question: 'Questions et erreurs', pool: 'Capacité', cost: 'Coût', quality: 'Qualité' };
+var OVERLAYS = ['none', 'flow', 'cost', 'time', 'human'];
+var EXEC = { agent: 'Persona qui exécute l’étape dans une session Claude.', skill: 'Skill lancée telle quelle sur le ticket.',
+  panel: 'Plusieurs personas répondent, un orchestrateur synthétise. Compte pour 3 slots.', native: 'Action déterministe, sans agent ni coût.',
+  human_gate: 'Étape qui attend une décision humaine.' };
+
+function $(s) { return document.querySelector(s); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function money(v) { return '$' + (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2)); }
+function pct(v) { return Math.round(v * 100) + ' %'; }
+function hhmm(min) { var m = Math.floor(min % 1440); return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2); }
+function stLabel(st) { return st.lane ? st.lane.wf.name + ' · ' + st.name : st.name; }
+function typeChip(t) { return '<span class="chip ' + TYPE_CHIP[t.type] + '"><i></i>' + t.type + '</span>'; }
+function ticketLink(t) { return '<button class="tlink" data-act="ticket" data-id="' + t.id + '"><span class="id">' + t.displayId + '</span>' + esc(t.title) + '</button>'; }
+function stat(l, v) { return '<div class="stat"><div class="s-l">' + l + '</div><div class="s-v">' + v + '</div></div>'; }
+
+/* ---------- toast (one at a time, like Fleex) ---------- */
+var toastTimer = 0;
+function toast(text, kind) {
+  var el = $('#toast');
+  el.className = kind || ''; el.innerHTML = '<i></i><span>' + esc(text) + '</span>'; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.hidden = true; }, 4200);
+}
+
+/* ---------- HUD ---------- */
+function setText(id, html) { var el = document.getElementById(id); if (el._h !== html) { el._h = html; el.innerHTML = html; } }
+function hud() {
+  var k = sim.kpis(), c = sim.clock(), hod = sim.hourOfDay(), night = hod < 7 || hod >= 20;
+  setText('clock', (night ? '☾ ' : '☀ ') + c.dow + ' ' + ('0' + c.hh).slice(-2) + ':' + ('0' + c.mm).slice(-2) + '<small>jour ' + c.day + '</small>');
+  setText('k-flow', k.perHour.toFixed(1) + '<small>/h · ' + k.shipped24 + ' / 24 h</small>');
+  setText('k-wip', String(k.wip));
+  setText('k-lead', dur(k.lead));
+  setText('k-focus', k.focus + (k.focus ? '<small>' + dur(k.oldest) + '</small>' : ''));
+  setText('k-pool', k.outage ? 'panne API' : k.poolUsed + ' / ' + k.poolMax);
+  $('#k-poolbar').style.width = Math.min(100, k.poolUsed / k.poolMax * 100) + '%';
+  $('#k-poolbar').style.background = k.poolUsed >= k.poolMax ? '#f59e0b' : '';
+  setText('k-cost', money(k.burn) + '<small>/h · ' + money(k.costToday) + ' auj.</small>');
+  setText('k-auto', pct(k.autonomy));
+  cls('[data-kpi="focus"]', k.focus >= 12 ? 'bad' : k.focus >= 5 ? 'warn' : k.focus === 0 ? 'good' : '');
+  cls('[data-kpi="pool"]', k.outage ? 'bad' : k.poolUsed >= k.poolMax ? 'warn' : '');
+  cls('[data-kpi="auto"]', k.autonomy >= 0.8 ? 'good' : '');
+  var done = sim.objectives.filter(function (o) { return o.done; }).length;
+  setText('c-focus', String(k.focus)); $('#c-focus').className = 'cnt' + (k.focus ? ' hot' : '');
+  setText('c-goals', done + '/' + sim.objectives.length);
+  ui.k = k;
+}
+function cls(sel, c) { var el = $(sel); var base = 'kpi' + (c ? ' ' + c : ''); if (el.className !== base) el.className = base; }
+
+/* ---------- overlays ---------- */
+function heat() {
+  var m = new Map(), ov = view.overlay, max = 0, vals = [], W = 12;
+  if (ov === 'flow') {
+    var sp = sim.span(6);
+    sim.segs.forEach(function (sg) { var v = sim.sum(sg.flow, 6) / sp; vals.push([sg, v]); if (v > max) max = v; });
+    vals.forEach(function (p) { m.set('s' + p[0].id, { v: max ? Math.sqrt(p[1] / max) : 0, label: p[0].station && p[1] >= 0.05 ? p[1].toFixed(1) + '/h' : '' }); });
+  } else if (ov !== 'none') {
+    sim.stations.forEach(function (st) {
+      var s = sim.stationStats(st, W), v = 0, label = '';
+      if (ov === 'cost') { v = s.cost; label = v >= 0.5 ? money(v) : ''; }
+      else if (ov === 'time') { v = s.done ? (s.busy / sim.weight(st) + s.slotWait + s.humanWait) / s.done : 0; label = v >= 1 ? dur(v) : ''; }
+      else { v = s.humanWait; label = s.waitingNow ? s.waitingNow + ' · ' + dur(s.oldest) : v > 1 ? '⌀ ' + dur(s.avgHuman) : ''; }
+      vals.push([st, v, label]); if (v > max) max = v;
+    });
+    vals.forEach(function (p) { m.set(p[0].id, { v: max && p[2] ? clamp(Math.sqrt(p[1] / max), 0.08, 1) : 0, label: p[2] }); });
+  }
+  view.heat = m;
+  ui.cards = sim.bottlenecks();
+  view.beacons = ui.cards.slice(0, 3);
+  setText('c-bn', String(ui.cards.length));
+  /* in the Human layer, only the tickets waiting for someone stay bright */
+  if (ov === 'human') { var s2 = new Set(); sim.focus().forEach(function (f) { s2.add(f.t.id); }); view.shown = s2; } else view.shown = null;
+}
+function setOverlay(ov) {
+  view.overlay = ov;
+  document.querySelectorAll('#overlays button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.ov === ov ? 'true' : 'false'); });
+  heat(); legend();
+}
+function legend() {
+  var ov = view.overlay, h;
+  if (ov === 'none') {
+    h = Object.keys(TYPES).map(function (k) { return '<span><i style="background:' + TYPES[k].color + '"></i>' + k + '</span>'; }).join('') +
+      '<span><i class="lamp" style="background:#22c55e"></i>en cours</span><span><i class="lamp" style="background:#f59e0b"></i>attend un humain</span>' +
+      '<span><i class="lamp" style="background:#60a5fa"></i>attend un slot</span><span><i class="lamp" style="background:#ef4444"></i>en erreur</span>';
+  } else {
+    var txt = { flow: ['#4ade80', 'Débit par convoyeur, tickets par heure sur 6 h'], cost: ['#fb923c', 'Dépense par poste sur 12 h'],
+      time: ['#60a5fa', 'Temps moyen passé par ticket à chaque poste (run + files d’attente)'], human: ['#facc15', 'Attente humaine : tickets en attente et ancienneté'] }[ov];
+    h = '<span><i style="background:' + txt[0] + '"></i>' + txt[1] + '</span><span>plus c’est clair, plus c’est élevé</span>';
+  }
+  $('#legend').innerHTML = h;
+}
+
+/* ---------- selection ---------- */
+function select(sel, look) {
+  ui.sel = sel; view.sel = sel;
+  if (sel) {
+    setTab('inspect');
+    if (look && sel.type !== 'ticket' && sel.type !== 'lane') view.lookAt(sel.ref.x + sel.ref.w / 2, sel.ref.y + sel.ref.h / 2, Math.max(view.cam.z, 24));
+    if (look && sel.type === 'ticket' && sel.t.state !== 'done' && sel.t.state !== 'cancelled') view.lookAt(sel.t.x, sel.t.y, Math.max(view.cam.z, 24));
+    if (ui.narrow) $('#panel').classList.remove('closed');
+  } else view.follow = null;
+  panel(true); layout();
+}
+function findTicket(id) {
+  var t = sim.tickets.get(id);
+  if (t) return t;
+  for (var i = sim.recent.length - 1; i >= 0; i--) if (sim.recent[i].id === id) return sim.recent[i];
+  return null;
+}
+function setTab(tab) {
+  ui.tab = tab;
+  document.querySelectorAll('.tabs [role=tab]').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.tab === tab ? 'true' : 'false'); });
+}
+
+/* ---------- panel: bottlenecks ---------- */
+function bnHTML() {
+  var h = '<p class="lead">Ce qui freine la ligne ou coûte le plus, sur les 12 dernières heures. Les pastilles numérotées sont reportées sur le plan.</p>';
+  if (!ui.cards.length) h += '<div class="empty">Aucun goulot détecté. L’usine tourne sans attente notable.</div>';
+  ui.cards.forEach(function (c, i) {
+    h += '<div class="card"><div class="top"><span class="rank ' + c.kind + '">' + (i + 1) + '</span><span class="chip ' +
+      ({ human: 'yellow', question: 'blue', pool: 'blue', cost: 'orange', quality: 'red' }[c.kind]) + '">' + BN[c.kind] + '</span></div>' +
+      '<div class="title">' + esc(c.title) + '</div><div class="metric">' + esc(c.metric) + '</div><div class="detail">' + esc(c.detail) + '</div>' +
+      (c.fix ? '<div class="hint">' + esc(c.fix.hint) + '</div>' : '') +
+      '<div class="row"><button class="btn sm" data-act="bn-see" data-i="' + i + '">Voir sur le plan</button>' +
+      (c.fix ? '<button class="btn sm primary" data-act="bn-fix" data-i="' + i + '">' + esc(c.fix.label) + '</button>' : '') + '</div></div>';
+  });
+  if (ui.applied.length) {
+    h += '<p class="sub">Réglages appliqués</p><ul class="log">';
+    var k = ui.k || sim.kpis();
+    ui.applied.slice(-5).reverse().forEach(function (a) {
+      h += '<li><time>' + hhmm(a.at) + '</time>' + esc(a.text);
+      if (sim.now - a.at >= 90) {
+        var d = [signed(k.perHour - a.k.perHour, 1) + ' /h', 'Focus ' + signed(k.focus - a.k.focus, 0), 'autonomie ' + signed((k.autonomy - a.k.autonomy) * 100, 0) + ' pts',
+          'coût/ticket ' + (k.costPerTicket >= a.k.costPerTicket ? '+' : '−') + '$' + Math.abs(k.costPerTicket - a.k.costPerTicket).toFixed(2)];
+        h += '<br><span style="color:var(--t3)">Depuis : débit ' + d.join(' · ') + '</span>';
+      } else h += '<br><span style="color:var(--t3)">Effet mesuré dans ' + dur(90 - (sim.now - a.at)) + '</span>';
+      h += '</li>';
+    });
+    h += '</ul>';
+  }
+  return h;
+}
+
+/* ---------- panel: focus ---------- */
+function actionsFor(it) {
+  var k = 'data-key="' + it.key + '"', h = '';
+  if (it.kind === 'gate') {
+    var out = it.st.def.outcomes || ['approve'];
+    h += '<button class="btn sm primary" data-act="resolve" data-do="approve" ' + k + '>Approuver</button>';
+    if (out.indexOf('request_changes') >= 0) h += '<button class="btn sm" data-act="resolve" data-do="request_changes" ' + k + '>Demander des changements</button>';
+    if (out.indexOf('reject') >= 0) h += '<button class="btn sm danger" data-act="resolve" data-do="reject" ' + k + '>Rejeter</button>';
+  } else if (it.kind === 'route') {
+    it.entry.options.forEach(function (l, i) {
+      h += '<button class="btn sm' + (i ? '' : ' primary') + '" data-act="resolve" data-do="route:' + l + '" ' + k + '>→ ' + WORKFLOWS[l].name + '</button>';
+    });
+  } else if (it.kind === 'question') h += '<button class="btn sm primary" data-act="resolve" data-do="answer" ' + k + '>Répondre</button>';
+  else h += '<button class="btn sm primary" data-act="resolve" data-do="retry" ' + k + '>Relancer l’étape</button>';
+  return h;
+}
+function focusItem(it) {
+  var kd = KIND[it.kind];
+  return '<div class="fitem"><div class="l1"><span class="chip ' + kd[1] + '">' + kd[0] + '</span>' + typeChip(it.t) + '<span class="age">' + dur(it.age) + '</span></div>' +
+    ticketLink(it.t) + '<div class="where">' + esc(stLabel(it.st)) + (it.kind === 'question' ? ' · waiting_for_info' : it.kind === 'error' ? ' · failed' : it.kind === 'route' ? ' · awaiting_routing' : ' · needs_review') + '</div>' +
+    '<div class="row">' + actionsFor(it) + '</div></div>';
+}
+function focusHTML() {
+  var list = sim.focus(), op = sim.op, av = sim.opAvailable();
+  var h = '<p class="lead">Tout ce qui attend un humain, le plus ancien d’abord. Votre action part tout de suite ; l’opérateur simulé traite le reste à son rythme.</p>' +
+    '<div class="row"><button class="switch" role="switch" data-act="op-toggle" aria-checked="' + op.enabled + '"><i></i>Opérateur simulé</button><span class="spacer"></span>' +
+    '<span class="chip ' + (av ? 'green' : 'gray') + '">' + (!op.enabled ? 'désactivé' : av ? (op.state === 'work' ? 'traite un élément' : 'en poste') : sim.now < op.awayUntil ? 'en réunion' : 'hors horaires') + '</span></div>';
+  if (!list.length) return h + '<div class="empty">Rien en attente. Les agents avancent seuls.</div>';
+  var gates = list.filter(function (i) { return i.kind === 'gate'; }).length;
+  if (gates > 1) h += '<div class="row"><button class="btn sm" data-act="approve-all">Approuver les ' + gates + ' gates</button></div>';
+  list.slice(0, 30).forEach(function (it) { h += focusItem(it); });
+  if (list.length > 30) h += '<p class="lead">+ ' + (list.length - 30) + ' autres éléments.</p>';
+  return h;
+}
+
+/* ---------- panel: inspector ---------- */
+function whereIs(t) {
+  if (t.state === 'done') return 'Expédié à ' + hhmm(t.doneAt);
+  if (t.state === 'cancelled') return 'Rejeté (cancelled)';
+  var loc = t.loc;
+  if (!loc) return 'En stock au quai ' + t.sourceName;
+  if (loc.pts) return loc.kind === 'rework' ? 'Reprise, retour vers ' + loc.station.name : loc.station ? 'Sur le convoyeur vers ' + loc.station.name : t.triaged ? 'Sur le bus de distribution' : 'Sur le convoyeur d’intake';
+  if (loc.seg) return 'Dans le bras du poste ' + loc.st.name;
+  var st = loc, i;
+  for (i = 0; i < st.rack.length; i++) if (st.rack[i].t === t) return st.name + ' · ' + (st.rack[i].kind === 'route' ? 'awaiting_routing' : 'needs_review');
+  for (i = 0; i < st.cells.length; i++) if (st.cells[i].t === t) {
+    var c = st.cells[i];
+    return st.name + ' · ' + (c.state === 'question' ? 'waiting_for_info' : c.state === 'failed' ? 'failed' : c.state === 'queued' ? 'queued, attend un slot' : 'running ' + Math.round(c.p * 100) + ' %');
+  }
+  return st.name + ' · completed, attend le convoyeur';
+}
+function ticketHTML(t) {
+  var live = t.state !== 'done' && t.state !== 'cancelled', it = null;
+  if (live) sim.focus().forEach(function (f) { if (f.t === t) it = f; });
+  var h = '<div class="row">' + typeChip(t) + '<span class="chip">' + t.priority + '</span>' + (t.reworks ? '<span class="chip orange">' + t.reworks + ' reprise' + (t.reworks > 1 ? 's' : '') + '</span>' : '') + '</div>' +
+    '<h2 class="h"><span class="num" style="color:var(--t2);font-size:12px">' + t.displayId + '</span><br>' + esc(t.title) + '</h2>' +
+    '<p class="lead">' + esc(whereIs(t)) + '</p>';
+  if (it) h += '<div class="row">' + actionsFor(it) + '</div>';
+  if (live) h += '<div class="row"><button class="btn sm" data-act="follow" aria-pressed="' + (view.follow === t) + '">' + (view.follow === t ? 'Suivi en cours' : 'Suivre sur le plan') + '</button></div>';
+  h += '<dl class="kv"><dt>Source</dt><dd>' + esc(t.sourceName) + (t.parent ? ' · issu de ' + t.parent : '') + '</dd>' +
+    '<dt>Workflow</dt><dd>' + (t.wf ? esc(t.wf.name) + ' <span class="num" style="color:var(--t3)">@workflow:' + t.wf.slug + '</span>' : 'pas encore trié') + '</dd>' +
+    '<dt>Complexité</dt><dd class="num">' + t.complexity + '</dd>' +
+    '<dt>Coût cumulé</dt><dd class="num">' + money(t.cost) + '</dd>' +
+    '<dt>' + (live ? 'Âge' : 'Lead time') + '</dt><dd class="num">' + dur((live ? sim.now : t.doneAt) - t.born) + '</dd>' +
+    '<dt>Attente humaine</dt><dd class="num">' + dur(t.humanWait) + ' · ' + t.touches + ' intervention' + (t.touches > 1 ? 's' : '') + '</dd>' +
+    '<dt>File de slots</dt><dd class="num">' + dur(t.slotWait) + '</dd></dl>';
+  h += '<p class="sub">Runs d’étapes</p>';
+  if (!t.history.length) h += '<p class="lead">Aucune étape terminée pour l’instant.</p>';
+  else {
+    h += '<ul class="tl">';
+    t.history.forEach(function (r) {
+      var c = r.result === 'ko' || r.result === 'cancelled' ? 'ko' : r.exec === 'human_gate' && r.human ? 'hum' : '';
+      h += '<li><span class="dot ' + c + '"></span><span>' + esc(r.step) + (r.attempt > 1 ? ' <small>essai ' + r.attempt + '</small>' : '') + ' <small>' +
+        (r.result === 'ko' ? (r.exec === 'human_gate' ? 'request_changes' : 'ko') : r.result) + '</small></span>' +
+        '<span class="m">' + (r.human ? 'attente ' + dur(r.human) : dur(r.dur) + (r.cost ? ' · ' + money(r.cost) : '')) + '</span></li>';
+    });
+    h += '</ul>';
+  }
+  return h;
+}
+function runsHTML(st) {
+  var h = '', n = 0;
+  st.cells.forEach(function (c) {
+    if (n++ >= 8) return;
+    h += '<div class="fitem"><div class="l1">' + typeChip(c.t) + (c.state === 'question' ? '<span class="chip blue">waiting_for_info</span>' : c.state === 'failed' ? '<span class="chip red">failed</span>' : c.state === 'judge' ? '<span class="chip">agent juge</span>' : c.state === 'queued' ? '<span class="chip blue">queued</span>' : '') +
+      '<span class="age">' + money(c.spent) + '</span></div>' + ticketLink(c.t) +
+      '<div class="run"><div class="prog"><i style="width:' + Math.round(c.p * 100) + '%"></i></div><span class="pct">' + Math.round(c.p * 100) + ' %</span></div>' +
+      (c.state === 'question' || c.state === 'failed' ? '<div class="row">' + actionsFor({ key: c.t.id + ':' + st.id, kind: c.state === 'failed' ? 'error' : 'question', st: st, t: c.t, cell: c }) + '</div>' : '') + '</div>';
+  });
+  return h;
+}
+function stationHTML(st) {
+  var s = sim.stationStats(st, 12), d = st.def, gate = st.exec === 'human_gate', h = '';
+  h += '<div class="row">' + (st.lane ? '<span class="chip" style="color:' + st.lane.wf.color + '"><i></i>' + esc(st.lane.wf.name) + '</span>' : '<span class="chip">Intake</span>') +
+    '<span class="chip">' + st.exec + '</span>' + (d.mode ? '<span class="chip">mode ' + d.mode + '</span>' : '') + '</div>' +
+    '<h2 class="h">' + esc(st.name) + '</h2><p class="lead">' + (d.router ? 'Qualifie chaque demande entrante, lui donne un type et choisit son workflow.' : EXEC[st.exec]) +
+    (d.ref ? ' <span class="num" style="color:var(--t3)">' + esc(d.ref) + '</span>' : '') + '</p>';
+  if (gate) {
+    h += '<div class="field"><span class="lab">Politique de contrôle</span><div class="seg wide" role="group">' +
+      [['human', 'Humain'], ['sampled', 'Échantillonné'], ['auto', 'Automatique']].map(function (p) {
+        return '<button data-act="policy" data-v="' + p[0] + '" aria-pressed="' + (st.policy === p[0]) + '">' + p[1] + '</button>'; }).join('') + '</div>' +
+      '<span class="help">' + ({ human: 'Chaque ticket attend votre décision.', sampled: 'Un agent juge laisse passer les tickets à faible risque ; les autres vous attendent.',
+        auto: 'Aucun contrôle : tout passe. Surveillez les défauts échappés.' }[st.policy]) + '</span></div>';
+    h += '<div class="stats">' + stat('En attente', s.waitingNow) + stat('Attente moy.', dur(s.avgHuman)) + stat('Plus ancien', s.waitingNow ? dur(s.oldest) : '—') +
+      stat('Décisions 12 h', s.touches) + stat('Passés seuls', s.auto) + stat('Renvoyés', pct(s.koRate)) + '</div>';
+    if (st.rack.length) {
+      h += '<p class="sub">Sur l’étagère</p>';
+      if (st.rack.length > 1) h += '<div class="row"><button class="btn sm" data-act="approve-st">Tout approuver (' + st.rack.length + ')</button></div>';
+      st.rack.slice(0, 12).forEach(function (e) { h += focusItem({ key: e.t.id + ':' + st.id, kind: 'gate', st: st, t: e.t, since: e.since, age: sim.now - e.since, entry: e }); });
+    }
+    h += runsHTML(st);
+    return h;
+  }
+  if (st.model) {
+    h += '<div class="field"><label for="sel-model">Modèle</label><select id="sel-model" data-act="model">' +
+      F.MODEL_ORDER.map(function (m) { var o = MODELS[m]; return '<option value="' + m + '"' + (m === st.model ? ' selected' : '') + '>' + o.label + ' · coût ×' + o.cost + ' · durée ×' + o.speed + '</option>'; }).join('') +
+      '</select><span class="help">Un modèle plus léger coûte moins et va plus vite, mais laisse plus de défauts aux contrôles en aval.</span></div>';
+  }
+  h += '<div class="stats">' + stat('Traités 12 h', s.done) + stat('Durée moy.', s.done ? dur(s.avgRun) : '—') + stat('En cours', s.running) +
+    stat('Dépense 12 h', money(s.cost)) + stat('Par ticket', s.done ? money(s.costPer) : '—') + stat('File slots', dur(s.slotWait)) +
+    (d.check ? stat('Renvoyés (ko)', pct(s.koRate)) : '') + (s.humanWait > 1 ? stat('Attente hum.', dur(s.humanWait)) : '') + '</div>';
+  if (st.rack.length) {
+    h += '<p class="sub">Routage ambigu</p>';
+    st.rack.forEach(function (e) { h += focusItem({ key: e.t.id + ':' + st.id, kind: 'route', st: st, t: e.t, since: e.since, age: sim.now - e.since, entry: e }); });
+  }
+  if (st.cells.length) { h += '<p class="sub">Runs en cours</p>' + runsHTML(st); }
+  else h += '<p class="lead">Aucun run en cours sur ce poste.</p>';
+  return h;
+}
+function sourceHTML(src) {
+  var h = '<div class="row"><span class="chip">Quai d’intake</span></div><h2 class="h">' + esc(src.name) + '</h2>';
+  if (src.internal) {
+    return h + '<p class="lead">Piste d’atterrissage des tickets créés par un workflow (<span class="num">ticket.create</span>). Les drones viennent de Specification et d’Ideation.</p>' +
+      '<div class="stats">' + stat('Reçus 24 h', sim.sum(src.emitted, 24)) + stat('En stock', src.buffer.length) + '</div>';
+  }
+  h += '<p class="lead">Les demandes captées ici deviennent des tickets bruts, puis passent au tri.</p>' +
+    '<div class="row"><button class="switch" role="switch" data-act="src-toggle" aria-checked="' + src.on + '"><i></i>Source active</button></div>' +
+    '<div class="field"><label for="src-rate">Volume : <span class="num">' + Math.round(src.perDay) + '</span> tickets par jour</label>' +
+    '<input type="range" id="src-rate" data-act="src-rate" min="0" max="60" step="1" value="' + Math.round(src.perDay) + '"></div>' +
+    '<div class="stats">' + stat('Émis 24 h', sim.sum(src.emitted, 24)) + stat('En stock', src.buffer.length) + '</div><p class="sub">Injecter un ticket</p><div class="row">';
+  Object.keys(src.def.mix).forEach(function (k) { h += '<button class="btn sm" data-act="inject" data-type="' + k + '">+ ' + k + '</button>'; });
+  return h + '</div>';
+}
+function poolHTML() {
+  var p = sim.pool, used = sim.series(p.usedMin, 24), full = sim.series(p.fullMin, 24), W = 6, h;
+  h = '<div class="row"><span class="chip blue">Capacité</span></div><h2 class="h">Slots agents</h2>' +
+    '<p class="lead">Fleex lance tout en parallèle, dans la limite de <span class="num">agentMaxConcurrency</span>. Au-delà, les runs attendent leur tour, premier arrivé, premier servi. C’est la seule file d’attente côté agents, et elle est commune à toute l’usine.</p>' +
+    '<div class="field"><label for="pool-max">agentMaxConcurrency : <span class="num">' + p.max + '</span></label><input type="range" id="pool-max" data-act="pool-max" min="2" max="32" step="1" value="' + p.max + '"></div>' +
+    '<div class="stats">' + stat('Occupés', p.used + ' / ' + p.max) + stat('Saturé 6 h', pct(sim.sum(p.fullMin, W) / (sim.span(W) * 60))) + stat('Moyenne 24 h', (sim.sum(p.usedMin, 24) / (sim.span(24) * 60)).toFixed(1)) + '</div>' +
+    '<p class="sub">Occupation moyenne par heure, 24 h</p><div class="bars24" role="img" aria-label="Occupation des slots sur 24 heures">';
+  used.forEach(function (v, i) { h += '<i class="' + (full[i] > 6 ? 'full' : '') + '" style="height:' + Math.min(100, v / 60 / p.max * 100) + '%" data-tip="' + (v / 60).toFixed(1) + ' slots occupés en moyenne' + (full[i] > 6 ? ' · saturé ' + Math.round(full[i]) + ' min' : '') + '"></i>'; });
+  return h + '</div><p class="lead">En ambre : les heures où la limite a été atteinte.</p>';
+}
+function operatorHTML() {
+  var op = sim.op, av = sim.opAvailable(), f = sim.focus();
+  return '<div class="row"><span class="chip yellow">Humain</span></div><h2 class="h">Poste opérateur</h2>' +
+    '<p class="lead">Une seule personne traite les gates, les questions et les erreurs, une à la fois, de 9:00 à 12:30 puis de 13:30 à 18:30. La nuit, les agents continuent et les gates se remplissent.</p>' +
+    '<div class="row"><button class="switch" role="switch" data-act="op-toggle" aria-checked="' + op.enabled + '"><i></i>Opérateur simulé</button></div>' +
+    '<div class="stats">' + stat('État', !op.enabled ? 'manuel' : av ? 'en poste' : 'absent') + stat('Traités 24 h', sim.sum(op.handled, 24)) + stat('En attente', f.length) + '</div>' +
+    '<div class="row"><button class="btn sm" data-act="scenario" data-sc="meeting">Envoyer en réunion 2 h</button><button class="btn sm" data-act="tab" data-tab="focus">Ouvrir Focus</button></div>';
+}
+function dockHTML() {
+  var h = '<div class="row"><span class="chip green">Done</span></div><h2 class="h">Expédition</h2><p class="lead">Ce qui sort de l’usine : PR mergées, PRD et specs.</p><div class="tw"><table class="t"><tr><th>Workflow</th><th>24 h</th><th>Lead</th><th>$/ticket</th></tr>';
+  sim.lanes.forEach(function (l) { var s = sim.laneStats(l); h += '<tr><td><i style="background:' + l.wf.color + '"></i>' + esc(l.wf.name) + '</td><td>' + s.shipped24 + '</td><td>' + (s.n ? dur(s.lead) : '—') + '</td><td>' + (s.n ? money(s.cost) : '—') + '</td></tr>'; });
+  h += '</table></div><p class="sub">Derniers tickets sortis</p>';
+  sim.recent.slice(-8).reverse().forEach(function (t) {
+    h += '<div class="fitem"><div class="l1">' + typeChip(t) + (t.state === 'cancelled' ? '<span class="chip red">rejeté</span>' : '') + '<span class="age">' + hhmm(t.doneAt) + ' · ' + money(t.cost) + '</span></div>' + ticketLink(t) + '</div>';
+  });
+  return h;
+}
+function laneHTML(ln) {
+  var s = sim.laneStats(ln), wf = ln.wf, gates = ln.stations.filter(function (st) { return st.exec === 'human_gate'; });
+  var h = '<div class="row"><span class="chip" style="color:' + wf.color + '"><i></i>Ligne</span><span class="chip">' + (gates.length ? gates.length + ' human_gate' : 'sans HITL') + '</span></div>' +
+    '<h2 class="h">' + esc(wf.name) + '</h2><p class="lead">' + esc(wf.desc) + ' <span class="num" style="color:var(--t3)">@workflow:' + wf.slug + '</span></p>' +
+    '<div class="stats">' + stat('Expédiés 24 h', s.shipped24) + stat('En cours', s.wip) + stat('Lead médian', s.n ? dur(s.lead) : '—') +
+    stat('Coût / ticket', s.n ? money(s.cost) : '—') + stat('Sans humain', s.n ? pct(s.autonomy) : '—') + stat('Reprises', s.n ? s.reworks.toFixed(2) : '—') + '</div>';
+  if (gates.length) {
+    var pol = gates.every(function (g) { return g.policy === gates[0].policy; }) ? gates[0].policy : '';
+    h += '<div class="field"><span class="lab">Contrôles humains de la ligne</span><div class="seg wide" role="group">' +
+      [['human', 'Humain'], ['sampled', 'Échantillonné'], ['auto', 'Automatique']].map(function (p) {
+        return '<button data-act="lane-policy" data-v="' + p[0] + '" aria-pressed="' + (pol === p[0]) + '">' + p[1] + '</button>'; }).join('') + '</div>' +
+      '<span class="help">Règle d’un coup les ' + gates.length + ' postes de contrôle de la ligne.</span></div>';
+  }
+  h += '<p class="sub">Chaîne de valeur, 12 h</p><div class="tw"><table class="t"><tr><th>Poste</th><th>Traités</th><th>Dépense</th><th>Attente</th></tr>';
+  ln.stations.forEach(function (st) {
+    var x = sim.stationStats(st, 12), wait = x.humanWait + x.slotWait;
+    h += '<tr><td><button class="tlink" data-act="station" data-id="' + st.id + '">' + esc(st.name) + '</button></td><td>' + x.done + '</td><td>' + (x.cost > 0.005 ? money(x.cost) : '—') + '</td><td>' + (wait > 1 ? dur(wait) : '—') + '</td></tr>';
+  });
+  return h + '</table></div><p class="lead">Attente : file de slots et attente humaine cumulées. Cliquez un poste pour le régler.</p>';
+}
+function inspectHTML() {
+  var s = ui.sel;
+  if (!s) return '<div class="empty">Cliquez un poste, une ligne, un quai, un ticket, le poste opérateur ou les slots agents sur le plan pour l’inspecter et le régler.</div>' +
+    '<p class="sub">Raccourcis</p><p class="lead"><kbd>Espace</kbd> pause · <kbd>1</kbd>–<kbd>4</kbd> vitesse · <kbd>F</kbd> toute l’usine · <kbd>O</kbd> calque · <kbd>P</kbd> production · <kbd>Échap</kbd> désélectionner</p>';
+  if (s.type === 'ticket') return ticketHTML(s.t);
+  if (s.type === 'station') return stationHTML(s.ref);
+  if (s.type === 'source') return sourceHTML(s.ref);
+  if (s.type === 'pool') return poolHTML();
+  if (s.type === 'operator') return operatorHTML();
+  if (s.type === 'lane') return laneHTML(s.ref);
+  return dockHTML();
+}
+
+/* ---------- panel: objectives ---------- */
+function goalsHTML() {
+  var done = sim.objectives.filter(function (o) { return o.done; }).length, k = ui.k || sim.kpis();
+  var levels = ['Atelier', 'Manufacture', 'Usine', 'Usine autonome'], lv = done >= 6 ? 3 : done >= 4 ? 2 : done >= 2 ? 1 : 0;
+  var h = '<div class="level"><div class="row"><span class="n">Niveau ' + (lv + 1) + ' · ' + levels[lv] + '</span><span class="spacer"></span><span class="num">' + done + ' / ' + sim.objectives.length + '</span></div>' +
+    '<div class="prog" style="margin-top:8px"><i style="width:' + (done / sim.objectives.length * 100) + '%;background:var(--hazard)"></i></div>' +
+    '<p class="lead" style="margin-top:8px">Autonomie ' + pct(k.autonomy) + ' · ' + k.escapes24 + ' défaut' + (k.escapes24 > 1 ? 's' : '') + ' échappé' + (k.escapes24 > 1 ? 's' : '') + ' en 24 h · contrôles passés du premier coup ' + pct(k.fpy) + '</p></div>';
+  sim.objectives.forEach(function (o) {
+    var v = o.value || o.eval(), p = o.done ? 1 : v[2] ? v[0] / v[1] : o.lower ? clamp(v[1] / Math.max(v[0], 0.01), 0, 1) : clamp(v[0] / v[1], 0, 1);
+    h += '<div class="obj' + (o.done ? ' done' : '') + '"><div class="o1"><span class="check">' + (o.done ? '✓' : '') + '</span><b>' + esc(o.name) + '</b><span class="v">' + (o.done ? 'atteint' : o.fmt(v)) + '</span></div>' +
+      '<div class="detail" style="color:var(--t2);font-size:12px">' + esc(o.desc) + '</div><div class="prog"><i style="width:' + Math.round(p * 100) + '%"></i></div></div>';
+  });
+  var log = sim.log.slice(-7).reverse();
+  if (log.length) { h += '<p class="sub">Journal de l’usine</p><ul class="log">'; log.forEach(function (l) { h += '<li><time>' + hhmm(l.at) + '</time>' + esc(l.text) + '</li>'; }); h += '</ul>'; }
+  return h;
+}
+
+function panel(force) {
+  if (ui.hold && !force) return;
+  var body = $('#pbody'), ae = document.activeElement;
+  if (!force && ae && ae.tagName === 'SELECT' && body.contains(ae)) return;
+  var html = ui.tab === 'bottlenecks' ? bnHTML() : ui.tab === 'focus' ? focusHTML() : ui.tab === 'goals' ? goalsHTML() : inspectHTML();
+  if (html === ui.lastHtml) return;
+  var fid = ae && body.contains(ae) ? ae.id : '';
+  ui.lastHtml = html; body.innerHTML = html;
+  if (fid) { var el = document.getElementById(fid); if (el) el.focus(); }
+}
+
+function applied(text) { ui.applied.push({ at: sim.now, text: text, k: ui.k || sim.kpis() }); toast('Réglage appliqué : ' + text); }
+function signed(v, digits) { return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(digits); }
+function onPanel(e) {
+  var b = e.target.closest('[data-act]'); if (!b) return;
+  var act = b.dataset.act, s = ui.sel, list, it;
+  if (e.type === 'click' && (b.tagName === 'SELECT' || b.tagName === 'INPUT')) return;
+  if (act === 'ticket') { var t = findTicket(+b.dataset.id); if (t) select({ type: 'ticket', t: t, ref: t }, true); return; }
+  if (act === 'station') { select({ type: 'station', ref: sim.stations[+b.dataset.id] }, true); return; }
+  if (act === 'lane-policy' && s) {
+    s.ref.stations.forEach(function (st) { if (st.exec === 'human_gate') sim.setPolicy(st, b.dataset.v); });
+    applied(s.ref.wf.name + ' → tous les contrôles en ' + ({ human: 'humain', sampled: 'échantillonné', auto: 'automatique' }[b.dataset.v]));
+  } else if (act === 'tab') { setTab(b.dataset.tab); }
+  else if (act === 'bn-see') {
+    var c = ui.cards[+b.dataset.i]; if (!c) return;
+    if (c.st) { view.sel = ui.sel = { type: 'station', ref: c.st }; view.lookAt(c.st.cx, c.st.cy, Math.max(view.cam.z, 26)); }
+    else { view.sel = ui.sel = { type: 'pool', ref: sim.pool }; view.lookAt(sim.pool.x + 1.5, sim.pool.y + 1.3, Math.max(view.cam.z, 26)); }
+    if (ui.narrow) $('#panel').classList.add('closed');
+  } else if (act === 'bn-fix') {
+    var cf = ui.cards[+b.dataset.i]; if (!cf || !cf.fix) return;
+    cf.fix.apply(); applied(cf.title + ' → ' + cf.fix.label); heat();
+  } else if (act === 'resolve') {
+    list = sim.focus(); it = list.filter(function (f) { return f.key === b.dataset.key; })[0];
+    if (it && sim.resolve(it, b.dataset.do)) {
+      var d = b.dataset.do;
+      toast(it.t.displayId + ' : ' + (d === 'approve' ? 'approuvé, la pièce repart' : d === 'request_changes' ? 'renvoyé en reprise' : d === 'reject' ? 'rejeté' : d === 'answer' ? 'réponse envoyée, l’agent reprend' : d === 'retry' ? 'étape relancée' : 'routé vers ' + WORKFLOWS[+d.slice(6)].name));
+    }
+  } else if (act === 'approve-all' || act === 'approve-st') {
+    list = sim.focus().filter(function (f) { return f.kind === 'gate' && (act === 'approve-all' || (s && f.st === s.ref)); });
+    list.forEach(function (f) { sim.resolve(f, 'approve'); });
+    toast(list.length + ' gates approuvées');
+  } else if (act === 'op-toggle') { sim.op.enabled = !sim.op.enabled; toast(sim.op.enabled ? 'Opérateur simulé activé' : 'Opérateur simulé désactivé : à vous de traiter Focus'); }
+  else if (act === 'follow' && s && s.type === 'ticket') { view.follow = view.follow === s.t ? null : s.t; if (view.follow) { view.goal = null; if (view.cam.z < 22) view.cam.z = 22; } }
+  else if (act === 'policy' && s) { sim.setPolicy(s.ref, b.dataset.v); applied(stLabel(s.ref) + ' → contrôle ' + ({ human: 'humain', sampled: 'échantillonné', auto: 'automatique' }[b.dataset.v])); }
+  else if (act === 'model' && s) { sim.setModel(s.ref, b.value); applied(stLabel(s.ref) + ' → ' + MODELS[b.value].label); b.blur(); }
+  else if (act === 'src-toggle' && s) { s.ref.on = !s.ref.on; }
+  else if (act === 'src-rate' && s) { s.ref.perDay = +b.value; var lb = b.parentNode.querySelector('.num'); if (lb) lb.textContent = b.value; return; }
+  else if (act === 'pool-max') { sim.setConcurrency(+b.value); var lp = b.parentNode.querySelector('.num'); if (lp) lp.textContent = b.value; return; }
+  else if (act === 'inject' && s) { var nt = sim.inject(s.ref.id, b.dataset.type); toast(nt.displayId + ' ajouté au quai ' + s.ref.name); }
+  else if (act === 'scenario') scenario(b.dataset.sc);
+  panel(true); hud();
+}
+function scenario(name) {
+  if (name === 'ticket') { var t = sim.inject('cli'); toast(t.displayId + ' ajouté depuis CLI · MCP'); select({ type: 'ticket', t: t, ref: t }, false); return; }
+  sim.scenario(name);
+}
+
+/* ---------- production drawer ---------- */
+function lineChart() {
+  var n = 24, a = sim.series(sim.g.inn, n + 1).slice(0, n), b = sim.series(sim.g.out, n + 1).slice(0, n);
+  var W = 330, H = 178, l = 24, r = 62, t = 10, bt = 22, pw = W - l - r, ph = H - t - bt, max = Math.max(4, Math.max.apply(null, a.concat(b)));
+  max = Math.ceil(max / 2) * 2;
+  function X(i) { return l + pw * i / (n - 1); } function Y(v) { return t + ph * (1 - v / max); }
+  function path(s) { return s.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); }).join(''); }
+  function hour(i) { return ('0' + ((hr - n + i) % 24 + 24) % 24).slice(-2) + ' h'; }
+  var g = '', i, hr = Math.floor(sim.now / 60);
+  for (i = 0; i <= 2; i++) { var v = max * i / 2; g += '<line x1="' + l + '" x2="' + (W - r) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="#2e2e33" stroke-width="1"/><text x="' + (l - 6) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + v + '</text>'; }
+  for (i = 0; i < n; i += 6) g += '<text x="' + X(i) + '" y="' + (H - 5) + '" text-anchor="middle">' + hour(i) + '</text>';
+  g += '<text x="' + X(n - 1) + '" y="' + (H - 5) + '" text-anchor="middle">' + hour(n - 1) + '</text>';
+  g += '<path d="' + path(a) + '" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/><path d="' + path(b) + '" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>';
+  var ya = Y(a[n - 1]), yb = Y(b[n - 1]); if (Math.abs(ya - yb) < 14) { if (ya <= yb) { ya -= 7; yb += 7; } else { ya += 7; yb -= 7; } }
+  g += '<circle cx="' + X(n - 1) + '" cy="' + Y(a[n - 1]) + '" r="4" fill="var(--s1)" stroke="#18181b" stroke-width="2"/><circle cx="' + X(n - 1) + '" cy="' + Y(b[n - 1]) + '" r="4" fill="var(--s2)" stroke="#18181b" stroke-width="2"/>' +
+    '<text class="v" x="' + (X(n - 1) + 10) + '" y="' + (ya + 4) + '">' + a[n - 1] + ' entrés</text><text class="v" x="' + (X(n - 1) + 10) + '" y="' + (yb + 4) + '">' + b[n - 1] + ' sortis</text>';
+  for (i = 0; i < n; i++) g += '<rect class="hitbar" x="' + (X(i) - pw / n / 2) + '" y="' + t + '" width="' + (pw / n) + '" height="' + ph + '" fill="transparent" data-tip="' +
+    hour(i) + ' · ' + a[i] + ' entrés · ' + b[i] + ' expédiés"/>';
+  return '<div class="viz"><h3>Entrées et sorties par heure</h3><p class="cap">Tickets arrivés à l’intake et tickets expédiés, 24 dernières heures pleines.</p>' +
+    '<div class="lg"><span><i style="background:var(--s1)"></i>Entrés</span><span><i style="background:var(--s2)"></i>Expédiés</span></div>' +
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Entrées et sorties par heure">' + g + '</svg></div>';
+}
+function costChart() {
+  var rows = sim.stations.map(function (st) { var s = sim.stationStats(st, 12); return { st: st, v: s.cost, per: s.costPer, done: s.done }; })
+    .filter(function (r) { return r.v > 0.3; }).sort(function (a, b) { return b.v - a.v; });
+  var total = rows.reduce(function (a, r) { return a + r.v; }, 0), top = rows.slice(0, 7), max = top.length ? top[0].v : 1;
+  var W = 330, rh = 29, H = top.length * rh + 2, g = '';
+  top.forEach(function (o, i) {
+    var y = i * rh + 2, w = Math.max(3, W * o.v / max);
+    g += '<text x="0" y="' + (y + 11) + '">' + esc(stLabel(o.st)) + '</text><text class="v" x="' + W + '" y="' + (y + 11) + '" text-anchor="end">' + money(o.v) + '</text>' +
+      '<rect x="0" y="' + (y + 16) + '" width="' + W + '" height="8" rx="4" fill="#27272a"/>' +
+      '<rect x="0" y="' + (y + 16) + '" width="' + w.toFixed(1) + '" height="8" rx="4" fill="var(--s1)"/>' +
+      '<rect class="hitbar" x="0" y="' + y + '" width="' + W + '" height="' + (rh - 2) + '" fill="transparent" data-tip="' + esc(stLabel(o.st)) + ' · ' + money(o.v) + ' · ' + pct(o.v / total) + ' de la dépense · ' + money(o.per) + ' par ticket"/>';
+  });
+  return '<div class="viz"><h3>Dépense par poste</h3><p class="cap">Les 7 postes les plus coûteux sur 12 h. Total, tous postes : ' + money(total) + '.</p>' +
+    '<svg viewBox="0 0 ' + W + ' ' + Math.max(H, 40) + '" role="img" aria-label="Dépense par poste">' + g + '</svg></div>';
+}
+function timeChart() {
+  var rows = sim.lanes.map(function (ln) { var s = sim.laneStats(ln); return { ln: ln, a: s.agent, q: s.slot, h: s.human, n: s.n }; });
+  var max = Math.max.apply(null, rows.map(function (r) { return r.a + r.q + r.h; }).concat([1]));
+  var W = 330, rh = 34, H = rows.length * rh + 2, g = '', cols = ['var(--s1)', 'var(--s2)', 'var(--s3)'], names = ['Agents au travail', 'File de slots', 'Attente humaine'];
+  rows.forEach(function (o, i) {
+    var y = i * rh + 2, x = 0, tot = o.a + o.q + o.h;
+    g += '<text x="0" y="' + (y + 11) + '">' + esc(o.ln.wf.name) + '</text><text class="v" x="' + W + '" y="' + (y + 11) + '" text-anchor="end">' + (o.n ? dur(tot) : '—') + '</text>';
+    [o.a, o.q, o.h].forEach(function (v, k) {
+      var w = W * v / max; if (w < 0.8) return;
+      g += '<rect x="' + x.toFixed(1) + '" y="' + (y + 16) + '" width="' + Math.max(1.5, w - 2).toFixed(1) + '" height="11" rx="3" fill="' + cols[k] + '" data-tip="' + esc(o.ln.wf.name) + ' · ' + names[k] + ' : ' + dur(v) + ' par ticket (' + pct(v / (tot || 1)) + ')"/>';
+      x += w;
+    });
+  });
+  return '<div class="viz"><h3>Où passe le temps d’un ticket</h3><p class="cap">Moyenne par ticket expédié, par workflow (40 derniers).</p>' +
+    '<div class="lg">' + names.map(function (n, k) { return '<span><i style="background:' + cols[k] + '"></i>' + n + '</span>'; }).join('') + '</div>' +
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Répartition du temps par workflow">' + g + '</svg></div>';
+}
+function prodTable() {
+  var h = '<div class="viz wide"><h3>Par workflow</h3><div class="tw"><table class="t"><tr><th>Workflow</th><th>Expédiés 24 h</th><th>En cours</th><th>Lead médian</th><th>Coût / ticket</th><th>Sans humain</th><th>Reprises / ticket</th><th>Rejetés</th></tr>';
+  sim.lanes.forEach(function (l) {
+    var s = sim.laneStats(l);
+    h += '<tr><td><i style="background:' + l.wf.color + '"></i>' + esc(l.wf.name) + '</td><td>' + s.shipped24 + '</td><td>' + s.wip + '</td><td>' + (s.n ? dur(s.lead) : '—') + '</td><td>' + (s.n ? money(s.cost) : '—') +
+      '</td><td>' + (s.n ? pct(s.autonomy) : '—') + '</td><td>' + (s.n ? s.reworks.toFixed(2) : '—') + '</td><td>' + l.scrapped + '</td></tr>';
+  });
+  return h + '</table></div></div>';
+}
+function production() {
+  if (!ui.prod || ui.holdProd) return;
+  var html = lineChart() + costChart() + timeChart() + prodTable();
+  if (html !== ui.prodHtml) { ui.prodHtml = html; $('#prod-body').innerHTML = html; }
+}
+function toggleProd(on) {
+  ui.prod = on == null ? !ui.prod : on;
+  $('#prod').hidden = !ui.prod; $('#btn-prod').setAttribute('aria-pressed', ui.prod ? 'true' : 'false');
+  ui.prodHtml = ''; production();
+}
+
+/* ---------- tooltip ---------- */
+function tipShow(html, x, y) {
+  var el = $('#tip'); el.innerHTML = html; el.hidden = false;
+  var w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = clamp(x + 14, 6, window.innerWidth - w - 6) + 'px';
+  el.style.top = clamp(y + 16 + h > window.innerHeight ? y - h - 10 : y + 16, 6, window.innerHeight - h - 6) + 'px';
+}
+function tipHide() { $('#tip').hidden = true; }
+function hoverTip(p) {
+  if (p.type === 'ticket') return '<b>' + p.t.displayId + '</b> ' + esc(p.t.title) + '<div class="d">' + (p.t.triaged ? p.t.type + ' · ' : 'brut · ') + esc(whereIs(p.t)) + ' · ' + money(p.t.cost) + '</div>';
+  if (p.type === 'station') {
+    var st = p.ref, s = sim.stationStats(st, 12);
+    return '<b>' + esc(stLabel(st)) + '</b><div class="d">' + st.exec + (st.model ? ' · ' + MODELS[st.model].label : '') + '<br>' +
+      (st.exec === 'human_gate' ? s.waitingNow + ' en attente' + (s.waitingNow ? ' · plus ancien ' + dur(s.oldest) : '') : s.running + ' en cours · ' + s.done + ' traités en 12 h · ' + money(s.cost)) + '</div>';
+  }
+  if (p.type === 'source') return '<b>' + esc(p.ref.name) + '</b><div class="d">' + (p.ref.internal ? 'tickets créés par un workflow' : Math.round(p.ref.perDay) + ' tickets par jour') + '</div>';
+  if (p.type === 'pool') return '<b>Slots agents</b><div class="d">' + sim.pool.used + ' occupés sur ' + sim.pool.max + ' (agentMaxConcurrency)</div>';
+  if (p.type === 'operator') return '<b>Poste opérateur</b><div class="d">' + (sim.opAvailable() ? 'en poste' : 'absent') + ' · ' + sim.focus().length + ' éléments en attente</div>';
+  return '<b>Expédition</b><div class="d">' + sim.sum(sim.g.out, 24) + ' tickets sortis en 24 h</div>';
+}
+
+/* ---------- canvas input ---------- */
+function bindCanvas() {
+  var cv = $('#floor'), pts = new Map(), moved = 0, pinch = 0, start = null;
+  function pos(e) { var r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  cv.addEventListener('pointerdown', function (e) {
+    cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, pos(e)); moved = 0; start = pos(e);
+    if (pts.size === 2) { var a = Array.from(pts.values()); pinch = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); }
+    tipHide();
+  });
+  cv.addEventListener('pointermove', function (e) {
+    var p = pos(e), prev = pts.get(e.pointerId);
+    if (!prev) {
+      if (e.pointerType !== 'mouse') return;
+      var hit = view.pick(p.x, p.y); view.hover = hit; cv.classList.toggle('hit', !!hit && hit.type !== 'lane');
+      if (hit && hit.type !== 'lane') tipShow(hoverTip(hit), e.clientX, e.clientY); else tipHide();
+      return;
+    }
+    if (pts.size === 1) {
+      var dx = p.x - prev.x, dy = p.y - prev.y; moved += Math.abs(dx) + Math.abs(dy);
+      if (moved > 5) { view.cam.x -= dx / view.cam.z; view.cam.y -= dy / view.cam.z; view.goal = null; view.follow = null; cv.classList.add('drag'); }
+      pts.set(e.pointerId, p);
+    } else if (pts.size === 2) {
+      pts.set(e.pointerId, p);
+      var a = Array.from(pts.values()), d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y);
+      if (pinch) view.zoomAt((a[0].x + a[1].x) / 2, (a[0].y + a[1].y) / 2, d / pinch);
+      pinch = d; moved = 99;
+    }
+  });
+  function up(e) {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId); cv.classList.remove('drag');
+    if (pts.size < 2) pinch = 0;
+    if (moved <= 5 && pts.size === 0 && e.type === 'pointerup') {
+      var p = pos(e), hit = view.pick(p.x, p.y);
+      select(hit, false);
+      if (!hit && ui.tab === 'inspect') panel(true);
+    }
+  }
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('pointerleave', function () { view.hover = null; tipHide(); });
+  cv.addEventListener('wheel', function (e) {
+    e.preventDefault(); var p = pos(e); view.follow = null;
+    view.zoomAt(p.x, p.y, Math.exp(-clamp(e.deltaY, -120, 120) * (e.ctrlKey ? 0.012 : 0.0022)));
+  }, { passive: false });
+  cv.addEventListener('dblclick', function (e) { var p = pos(e); view.zoomAt(p.x, p.y, 1.6); });
+
+  var mini = $('#mini'), mdown = false;
+  function mgo(e) { var r = mini.getBoundingClientRect(), w = view.miniToWorld(e.clientX - r.left, e.clientY - r.top); if (w) { view.cam.x = clamp(w.x, 0, F.LAY.W); view.cam.y = clamp(w.y, 0, F.LAY.H); view.goal = null; view.follow = null; } }
+  mini.addEventListener('pointerdown', function (e) { mdown = true; mini.setPointerCapture(e.pointerId); mgo(e); });
+  mini.addEventListener('pointermove', function (e) { if (mdown) mgo(e); });
+  mini.addEventListener('pointerup', function () { mdown = false; });
+}
+
+function setSpeed(v) {
+  if (v > 0) ui.lastSpeed = v;
+  ui.speed = v;
+  document.querySelectorAll('.speed button').forEach(function (b) { b.setAttribute('aria-pressed', +b.dataset.speed === v ? 'true' : 'false'); });
+}
+
+/* ---------- layout ---------- */
+function layout() {
+  var hudH = $('#hud').offsetHeight, root = document.documentElement, pn = $('#panel');
+  ui.narrow = window.innerWidth <= 860;
+  root.style.setProperty('--hud-top', hudH + 'px');
+  root.style.setProperty('--sheet-px', pn.offsetHeight + 'px');
+  view.inset = ui.narrow ? { l: 4, t: hudH + $('#strip').offsetHeight + 14, r: 4, b: pn.offsetHeight + 6 } : { l: 14, t: hudH + $('#strip').offsetHeight + 22, r: pn.offsetWidth + 28, b: 54 };
+}
+
+function fitZoom() { var I = view.inset; return Math.min((view.w - I.l - I.r) / (F.LAY.W + 1), (view.h - I.t - I.b) / (F.LAY.H + 1)); }
+
+/* ---------- boot ---------- */
+function boot() {
+  sim = new F.Sim(20261114);
+  sim.prewarm(34.25 * 60);            /* opens on Tuesday 10:15, with a night's backlog on the gates */
+  view = new F.View($('#floor'), sim);
+  view.reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  view.shown = null;
+  window.__factory = { sim: sim, view: view, ui: ui };
+
+  view.resize(); layout();
+  if (ui.narrow) { $('#panel').classList.add('closed'); layout(); view.frame(4, 11, 30, 19, true); } else view.fit(true);
+  ui.fitZ = fitZoom();
+  hud(); heat(); legend(); panel(true);
+
+  bindCanvas();
+  var pn = $('#panel');
+  pn.addEventListener('click', function (e) {
+    var tb = e.target.closest('[role=tab]');
+    if (tb) { setTab(tb.dataset.tab); pn.classList.remove('closed'); panel(true); layout(); return; }
+    if (e.target.closest('#sheet-toggle')) { pn.classList.toggle('closed'); layout(); return; }
+    onPanel(e);
+  });
+  pn.addEventListener('change', onPanel);
+  pn.addEventListener('input', function (e) { if (e.target.type === 'range') onPanel(e); });
+  pn.addEventListener('pointerdown', function () { ui.hold = true; });
+  window.addEventListener('pointerup', function () { setTimeout(function () { ui.hold = false; ui.holdProd = false; }, 60); });
+  window.addEventListener('pointercancel', function () { ui.hold = false; ui.holdProd = false; });
+
+  $('#hud').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.speed != null) setSpeed(+b.dataset.speed);
+    else if (b.dataset.kpi) {
+      var k = b.dataset.kpi;
+      if (k === 'flow') setOverlay(view.overlay === 'flow' ? 'none' : 'flow');
+      else if (k === 'cost') setOverlay(view.overlay === 'cost' ? 'none' : 'cost');
+      else if (k === 'lead') setOverlay(view.overlay === 'time' ? 'none' : 'time');
+      else if (k === 'focus') { setTab('focus'); pn.classList.remove('closed'); panel(true); layout(); }
+      else if (k === 'pool') select({ type: 'pool', ref: sim.pool }, true);
+      else if (k === 'auto') { setTab('goals'); pn.classList.remove('closed'); panel(true); layout(); }
+      else if (k === 'wip') toggleProd(true);
+    }
+  });
+  $('#overlays').addEventListener('click', function (e) { var b = e.target.closest('[data-ov]'); if (b) setOverlay(b.dataset.ov); });
+  $('#btn-prod').addEventListener('click', function () { toggleProd(); });
+  $('#prod-close').addEventListener('click', function () { toggleProd(false); });
+  $('#prod').addEventListener('pointerdown', function () { ui.holdProd = true; });
+  $('#btn-help').addEventListener('click', function () { $('#intro').hidden = false; });
+  $('#intro-go').addEventListener('click', function () { $('#intro').hidden = true; try { localStorage.setItem('fleex-factory-intro', '1'); } catch (err) {} });
+  $('#intro').addEventListener('click', function (e) { if (e.target.id === 'intro') $('#intro').hidden = true; });
+  document.querySelector('.toolbar').addEventListener('click', function (e) { var b = e.target.closest('[data-sc]'); if (b) scenario(b.dataset.sc); });
+  $('#z-in').addEventListener('click', function () { view.zoomAt(view.w / 2, view.h / 2, 1.4); });
+  $('#z-out').addEventListener('click', function () { view.zoomAt(view.w / 2, view.h / 2, 1 / 1.4); });
+  $('#z-fit').addEventListener('click', function () { view.fit(); });
+
+  /* chart and bar tooltips */
+  document.addEventListener('mousemove', function (e) {
+    var t = e.target.closest && e.target.closest('[data-tip]');
+    if (t) tipShow(esc(t.dataset.tip), e.clientX, e.clientY); else if (e.target.id !== 'floor') tipHide();
+  });
+  document.addEventListener('click', function (e) { var t = e.target.closest && e.target.closest('[data-tip]'); if (t) tipShow(esc(t.dataset.tip), e.clientX, e.clientY); });
+
+  window.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.metaKey || e.ctrlKey) return;
+    var k = e.key;
+    if (k === ' ') { e.preventDefault(); setSpeed(ui.speed ? 0 : ui.lastSpeed); }
+    else if (k >= '1' && k <= '4') setSpeed([1, 3, 8, 20][+k - 1]);
+    else if (k === 'f' || k === 'F') view.fit();
+    else if (k === 'o' || k === 'O') setOverlay(OVERLAYS[(OVERLAYS.indexOf(view.overlay) + 1) % OVERLAYS.length]);
+    else if (k === 'p' || k === 'P') toggleProd();
+    else if (k === 'Escape') { if (!$('#intro').hidden) $('#intro').hidden = true; else if (ui.prod) toggleProd(false); else select(null); }
+  });
+  window.addEventListener('resize', function () { view.resize(); layout(); ui.fitZ = fitZoom(); });
+
+  var seen = false; try { seen = localStorage.getItem('fleex-factory-intro') === '1'; } catch (err) {}
+  if (!seen) $('#intro').hidden = false;
+
+  var last = performance.now(), tHud = 0, tPanel = 0, tHeat = 0, tMini = 0, tProd = 0;
+  function frame(ts) {
+    var dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
+    if (ui.speed > 0 && $('#intro').hidden) {
+      var sd = dt * ui.speed * 2, n = Math.max(1, Math.ceil(sd / 0.1));
+      for (var i = 0; i < n; i++) sim.step(sd / n);
+    }
+    view.draw(dt);
+    if (ts - tHud > 250) { tHud = ts; hud(); }
+    if (ts - tPanel > 400) { tPanel = ts; panel(); }
+    if (ts - tHeat > 900) { tHeat = ts; heat(); }
+    if (ts - tMini > 120 && !ui.narrow) {
+      tMini = ts;
+      var zoomed = view.cam.z > ui.fitZ * 1.3, mb = $('#mini-box');
+      if (mb.hidden === zoomed) mb.hidden = !zoomed;
+      if (zoomed) view.minimap($('#mini'));
+    }
+    if (ts - tProd > 1500) { tProd = ts; production(); }
+    while (ui.logSeen < sim.log.length) {
+      var l = sim.log[ui.logSeen++];
+      if (l.kind === 'objective') toast('★ ' + l.text, 'objective'); else if (l.kind === 'alert') toast(l.text, 'alert'); else if (l.kind === 'escape') toast(l.text);
+    }
+    if (sim.log.length >= 60) ui.logSeen = Math.min(ui.logSeen, sim.log.length);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
