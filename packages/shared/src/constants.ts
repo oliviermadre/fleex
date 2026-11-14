@@ -173,3 +173,6 @@ export const AUTO_REVIEW_ACTIVITY_ACTIONS = [
   'moved_to_qa_review_auto',
   'auto_blocked_waiting_for_info', // legacy — no longer emitted (agents never set blocked)
 ] as const;
+
+/** A ticket title is 1..200 characters once trimmed (enforced by the server on every write of `title`). */
+export const TICKET_TITLE_MAX_LENGTH = 200;

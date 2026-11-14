@@ -24,6 +24,11 @@ export interface TicketStorePort {
   getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]>;
   getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]>;
   /**
+   * Tickets whose slug is not stored yet (rows created before slugs were), archived
+   * ones included — the boot naming backfill's work list. Read from the source of truth.
+   */
+  getTicketsWithoutSlug(): Promise<TicketEntity[]>;
+  /**
    * Insert a brand-new ticket and assign a globally-unique display_id.
    * Mutates `ticket.displayId` in place with the DB-assigned value.
    * Use `saveTicket` for updates of existing tickets.

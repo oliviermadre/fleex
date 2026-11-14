@@ -89,6 +89,16 @@ export interface Ticket {
   readonly boardId: string;
   readonly displayId: number;
   readonly title: string;
+  /**
+   * The title at creation, slugified, then locked: a rename never changes it.
+   * With `displayId`, names the workspace folder and the git branch
+   * (`ticketWorkspaceId`, `ticketBranchName`). Read-only: no write path takes it.
+   */
+  readonly slug: string;
+  /** The workspace folder a ticket already had under the former naming (`<id6>-<slug>`); `null` for every other ticket. Read-only. */
+  readonly workspaceDir: string | null;
+  /** The git branch a ticket already had under the former naming (`ticket/…`, `agent/…`); `null` for every other ticket. Read-only. */
+  readonly branchName: string | null;
   readonly description: string;
   readonly status: TicketStatus;
   readonly priority: TicketPriority;

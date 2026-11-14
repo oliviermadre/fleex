@@ -37,7 +37,8 @@ export {
 } from './ticket-complexity.js';
 export type { ComplexitySum } from './ticket-complexity.js';
 
-export { buildTicketWorkspaceId } from './utils/workspace.js';
+export { slugifyTicketTitle, ticketWorkspaceId, ticketBranchName } from './utils/workspace.js';
+export type { TicketNaming } from './utils/workspace.js';
 
 export {
   sanitizeForStorage,
@@ -610,6 +611,7 @@ export {
   MS_IN_MINUTE,
   MINUTES_IN_HOUR,
   HOURS_IN_DAY,
+  TICKET_TITLE_MAX_LENGTH,
 } from './constants.js';
 
 export type { EmbeddingModelSpec } from './types/embedding-model.js';

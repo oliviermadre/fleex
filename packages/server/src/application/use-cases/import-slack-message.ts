@@ -131,7 +131,7 @@ export class ImportSlackMessageUseCase {
     }
 
     const diff = ticket.update({
-      title: result.title,
+      title: TicketEntity.fitTitle(result.title),
       description: this.buildDescription(result.synthesis, parsed.url),
       tags: this.stripImportTags(ticket.tags),
     });

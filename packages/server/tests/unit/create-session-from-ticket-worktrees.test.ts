@@ -16,7 +16,7 @@ import { FakeLoggerPort } from '../helpers/fakes.js';
  */
 
 const TICKET_ID = 'd1df20f8-fe14-44cb-ae24-76f1b0389274';
-const BRANCH = 'ticket/d1df20-test';
+const BRANCH = 'fleex/584-test';
 
 let root: string;
 
@@ -46,7 +46,7 @@ function harness(repos: string[], withWorktree: string[]) {
   for (const name of repos) {
     ticket.addLink('repository', `odys-travel/${name}`, `odys-travel/${name}`, null, randomUUID());
   }
-  const workspaceId = 'd1df20-test';
+  const workspaceId = '584-test';
   for (const name of withWorktree) {
     const wtPath = join(root, 'workspaces', workspaceId, name);
     mkdirSync(wtPath, { recursive: true });
@@ -170,14 +170,14 @@ describe('CreateSessionFromTicketUseCase — worktrees already on disk', () => {
 
   it('links a worktree that exists on disk but was never linked', async () => {
     const h = harness(['agentic-dmc'], []);
-    mkdirSync(join(root, 'workspaces', 'd1df20-test', 'agentic-dmc'), { recursive: true });
+    mkdirSync(join(root, 'workspaces', '584-test', 'agentic-dmc'), { recursive: true });
 
     await h.uc.execute(TICKET_ID);
 
     expect(h.calls).toEqual([]);
     const wt = h.ticket.links.filter((l) => l.type === 'worktree');
     expect(wt).toHaveLength(1);
-    expect(wt[0]!.ref).toBe(join(root, 'workspaces', 'd1df20-test', 'agentic-dmc'));
+    expect(wt[0]!.ref).toBe(join(root, 'workspaces', '584-test', 'agentic-dmc'));
   });
 });
 

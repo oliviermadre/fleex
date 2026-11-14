@@ -1,5 +1,6 @@
 import type { Ticket, TicketStatus, TicketPriority, TicketComplexity, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
-import { DEFAULT_CONVERSATION_MODE, isEffortLevel, normalizeTicketComplexity, sanitizeForStorage } from '@fleex/shared';
+import { DEFAULT_CONVERSATION_MODE, isEffortLevel, normalizeTicketComplexity, sanitizeForStorage, slugifyTicketTitle, TICKET_TITLE_MAX_LENGTH } from '@fleex/shared';
+import { InvalidTicketTitleError } from '../errors.js';
 
 export class TicketEntity {
   constructor(
@@ -33,7 +34,55 @@ export class TicketEntity {
     public fastMode: boolean = false,
     /** Fibonacci estimate; `null` = not estimated. Appended for the same reason as above. */
     public complexity: TicketComplexity | null = null,
+    /**
+     * The slug as stored; `null` only for a row created before slugs were
+     * stored, until it is locked (see `slug`). Appended for the same reason as above.
+     */
+    public lockedSlug: string | null = null,
+    /**
+     * The folder / branch a ticket already had under the former naming
+     * (`<id6>-<slug>`, `ticket/…` or `agent/…`), kept so nothing on disk or in
+     * git is ever renamed. Set only by the boot backfill (`BackfillTicketNamingUseCase`);
+     * `null` for every ticket named `<displayId>-<slug>`. Appended for the same reason as above.
+     */
+    public workspaceDir: string | null = null,
+    public branchName: string | null = null,
   ) {}
+
+  /**
+   * The title at creation, slugified, then locked: a rename never changes it.
+   * The workspace folder and the git branch derive from it, so they never move.
+   *
+   * A legacy row (`lockedSlug` null) still derives it from its title until the
+   * boot backfill locks it (from its folder if it was renamed), and locks it
+   * before its first rename — see `update()`. Stores persist `lockedSlug`, not
+   * this derived value: an unrelated save never locks a slug the backfill has
+   * yet to read from disk.
+   */
+  get slug(): string {
+    return this.lockedSlug ?? slugifyTicketTitle(this.title);
+  }
+
+  /**
+   * A title as stored: sanitized, trimmed, 1..TICKET_TITLE_MAX_LENGTH characters.
+   * Throws (→ 400) otherwise — for every writer: API, CLI, MCP, workflows.
+   */
+  static validTitle(raw: string): string {
+    const title = typeof raw === 'string' ? sanitizeForStorage(raw).trim() : '';
+    if (title.length === 0 || title.length > TICKET_TITLE_MAX_LENGTH) {
+      throw new InvalidTicketTitleError(TICKET_TITLE_MAX_LENGTH);
+    }
+    return title;
+  }
+
+  /**
+   * A machine-produced title (PR title, AI synthesis, imported issue) made to fit
+   * the limit instead of failing the import: trimmed, cut with an ellipsis.
+   */
+  static fitTitle(raw: string, fallback = 'Untitled'): string {
+    const title = sanitizeForStorage(raw).trim() || fallback;
+    return title.length <= TICKET_TITLE_MAX_LENGTH ? title : `${title.slice(0, TICKET_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
+  }
 
   static create(params: {
     id: string;
@@ -55,7 +104,7 @@ export class TicketEntity {
       params.id,
       params.boardId,
       params.displayId,
-      sanitizeForStorage(params.title),
+      TicketEntity.validTitle(params.title),
       sanitizeForStorage(params.description ?? ''),
       params.status ?? 'backlog',
       params.priority ?? 'none',
@@ -76,6 +125,7 @@ export class TicketEntity {
       now,
     );
     ticket.complexity = normalizeTicketComplexity(params.complexity);
+    ticket.lockedSlug = slugifyTicketTitle(ticket.title);
     return ticket;
   }
 
@@ -103,12 +153,16 @@ export class TicketEntity {
     // Sanitized before comparison, so an unchanged resubmission produces no
     // diff — and so the diff itself (which feeds `ticket_activities.changes`,
     // another jsonb column) can never carry an unstorable character.
+    // Only a write of `title` is validated: a legacy title over the limit must
+    // never make an unrelated update (status, tags…) fail.
     const nextTitle =
-      changes.title === undefined ? undefined : sanitizeForStorage(changes.title);
+      changes.title === undefined ? undefined : TicketEntity.validTitle(changes.title);
     const nextDescription =
       changes.description === undefined ? undefined : sanitizeForStorage(changes.description);
 
     if (nextTitle !== undefined && nextTitle !== this.title) {
+      // Lock a legacy row's slug from the title it was named after, before it goes.
+      this.lockedSlug ??= slugifyTicketTitle(this.title);
       diff['title'] = { from: this.title, to: nextTitle };
       this.title = nextTitle;
     }
@@ -396,6 +450,9 @@ export class TicketEntity {
       description: this.description,
       status: this.status,
       priority: this.priority,
+      slug: this.slug,
+      workspaceDir: this.workspaceDir,
+      branchName: this.branchName,
       complexity: this.complexity,
       type: this.type,
       position: this.position,

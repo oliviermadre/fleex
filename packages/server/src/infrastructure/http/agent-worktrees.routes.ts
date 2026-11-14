@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, resolveWorktreeTarget } from '../../domain/services/branch-utils.js';
+import { ticketBranchName, ticketWorkspaceId, resolveWorktreeTarget } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
 
 export function agentWorktreesRoutes(container: Container) {
@@ -65,8 +65,8 @@ export function agentWorktreesRoutes(container: Container) {
           throw new WorktreeError('No repository found on ticket');
         }
 
-        const ticketBranch = buildTicketBranchName(ticket.title, ticket.id);
-        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const ticketBranch = ticketBranchName(ticket);
+        const workspaceId = ticketWorkspaceId(ticket);
         const wtPath = container.resolver.workspaceRepoPath(workspaceId, repoName);
 
         // An explicit body baseBranch still wins (an operator override); otherwise

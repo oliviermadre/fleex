@@ -12,7 +12,7 @@ export function repositoryRoutes(container: Container) {
   /**
    * Resolve each non-bare/non-main worktree to its Fleex ticket. Authoritative
    * source is the worktree's `.fleex.json` manifest; falls back to the
-   * branch-name convention (ticket/<hex> or agent/<displayId>). Both id lookups
+   * branch-name convention (fleex/<displayId>, or the former ticket/<hex> and agent/<displayId>). Both id lookups
    * span archived tickets, so done/cancelled worktrees still resolve after the
    * session ends. Worktrees with no resolvable ticket are simply omitted.
    */

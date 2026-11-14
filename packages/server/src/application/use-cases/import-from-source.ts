@@ -88,7 +88,7 @@ export class ImportFromSourceUseCase {
       id: ticketId,
       boardId,
       displayId: 0, // assigned by createTicket() below
-      title: resolved.title,
+      title: TicketEntity.fitTitle(resolved.title),
       description: resolved.description,
       status: opts?.status ?? 'backlog',
       type: opts?.type ?? resolved.suggested?.type ?? null,
