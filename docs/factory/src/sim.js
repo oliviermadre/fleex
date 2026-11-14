@@ -358,6 +358,7 @@ Sim.prototype.route = function (t) {
 /* ---------- stations ---------- */
 Sim.prototype.weight = function (st) { return st.exec === 'panel' ? 3 : 1; };
 Sim.prototype.needsSlot = function (st) {
+  if (st.skip) return 0;
   if (st.exec === 'agent' || st.exec === 'skill' || st.exec === 'panel') return this.weight(st);
   if (st.exec === 'human_gate' && st.policy === 'sampled') return 1;
   return 0;
@@ -380,6 +381,7 @@ Sim.prototype.receive = function (st, t) {
   this.add(st.h_.inn, 1);
   var w = t._res || 0; t._res = 0;
   var cell = { t: t, p: 0, dur: 1, cost: 0, state: 'running', w: w, since: this.now, started: this.now, wait: wait, spent: 0, qAt: 0, fAt: 0, attempt: t.att[st.id] };
+  if (st.skip) { cell.state = 'stamp'; cell.dur = 0.3; cell.skipped = true; st.cells.push(cell); return; }
   if (def.exec === 'human_gate') {
     if (st.policy === 'human') { st.rack.push({ t: t, since: this.now, kind: 'gate', wait: wait }); return; }
     if (st.policy === 'sampled') { cell.state = 'judge'; cell.dur = 1.6; cell.cost = 0.12; }
@@ -398,7 +400,8 @@ Sim.prototype.receive = function (st, t) {
 
 Sim.prototype.record = function (st, t, cell, result, humanWait) {
   t.history.push({ step: st.name, exec: st.exec, model: st.model, attempt: t.att[st.id] || 1, start: cell ? cell.started : this.now,
-    dur: cell ? this.now - cell.started : 0, cost: cell ? cell.spent : 0, wait: cell ? cell.wait : 0, human: humanWait || 0, result: result });
+    dur: cell ? this.now - cell.started : 0, cost: cell ? cell.spent : 0, wait: cell ? cell.wait : 0, human: humanWait || 0,
+    result: cell && cell.skipped ? 'skipped' : result });
   if (t.history.length > 40) t.history.shift();
 };
 
@@ -778,6 +781,7 @@ Sim.prototype.setPolicy = function (st, policy) {
     }
   }
 };
+Sim.prototype.canSkip = function (st) { var d = st.def; return !d.produces && !d.router && d.exec !== 'native' && d.exec !== 'human_gate'; };
 Sim.prototype.setConcurrency = function (n) { this.pool.max = clamp(Math.round(n), 2, 32); };
 Sim.prototype.inject = function (sourceId, type, title) {
   var src = this.sources.filter(function (s) { return s.id === sourceId; })[0] || this.sources[6];

@@ -38,6 +38,8 @@ de la maquette : la ressource rare n'est presque jamais la machine, c'est l'opé
 - **Objectifs** : sept paliers qui poussent vers une usine plus autonome sans laisser filer la qualité.
 - **Production** (`P`) : entrées et sorties par heure, dépense par poste, répartition du temps d'un ticket, tableau par workflow.
 - **Banc d'essai** : incident prod, opérateur en réunion, gros PRD, panne API.
+- **Visite guidée** : sept étapes, proposée à l'ouverture et depuis le bouton `?`.
+- **Poste actif** : un contrôle ou un panel peut être désactivé (`skipped`) pour mesurer ce que donne la ligne sans lui.
 
 Raccourcis : `Espace` pause, `1`–`4` vitesse, `F` toute l'usine, `Échap` désélectionner.
 

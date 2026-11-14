@@ -306,8 +306,8 @@ View.prototype.station = function (st) {
       }
     }
     var m = st.model ? MODELS[st.model].short : '';
-    this.label(st.exec + (m ? ' · ' + m : ''), x + 0.3, y + h - 0.36, 0.28, C.text3, { hide: 8, mono: true });
-    if (st.starved) this.label('file ' + st.starved, x + w - 0.25, y + 0.52, 0.3, C.blue, { align: 'right', hide: 7.5, mono: true, weight: 700 });
+    this.label(st.skip ? 'skipped' : st.exec + (m ? ' · ' + m : ''), x + 0.3, y + h - 0.36, 0.28, st.skip ? C.amber : C.text3, { hide: 8, mono: true });
+    if (st.starved) this.label('file ' + st.starved, x + w - 0.25, y + h - 0.36, 0.3, C.blue, { align: 'right', hide: 7.5, mono: true, weight: 700 });
     for (i = 0; i < st.outMain.length; i++) { st.outMain[i].x = st.cx; st.outMain[i].y = st.cy; }
   }
   /* rework ports */
@@ -316,6 +316,7 @@ View.prototype.station = function (st) {
     ctx.fillStyle = C.reworkEdge; ctx.fillRect(p0[0] - 0.3, p0[1] - 0.09, 0.6, 0.18);
     for (var q = 0; q < st.links[i].q.length; q++) { st.links[i].q[q].x = st.cx; st.links[i].q[q].y = st.cy; }
   }
+  if (st.skip) { ctx.fillStyle = 'rgba(6,8,7,0.6)'; rr(ctx, x, y, w, h, 0.28); ctx.fill(); ctx.strokeStyle = alpha(C.amber, 0.6); ctx.lineWidth = 0.05; ctx.setLineDash([0.25, 0.2]); ctx.stroke(); ctx.setLineDash([]); }
   if (dimAll) { ctx.fillStyle = 'rgba(6,8,7,0.55)'; rr(ctx, x - 0.05, y - 0.05, w + 0.1, h + 0.1, 0.28); ctx.fill(); }
   st._state = state;
 };
@@ -504,8 +505,9 @@ View.prototype.overlays = function () {
     if (ov === 'flow') {
       for (i = 0; i < sim.segs.length; i++) {
         var sg = sim.segs[i], hs = heat.get('s' + sg.id);
-        if (!hs || !hs.label || sg.kind === 'rework' || sg.len < 2) continue;
-        sg.at(sg.len / 2, this.tmp);
+        var toDock = sg.sink && sg.sink.kind === 'dock';
+        if (!hs || !hs.label || sg.kind === 'rework' || (!toDock && sg.len < 2)) continue;
+        sg.at(toDock ? Math.max(sg.len - 2.2, sg.len / 2) : sg.len / 2, this.tmp);
         this.label(hs.label, this.tmp.x, this.tmp.y - 0.75, 0.32, '#bbf7d0', { align: 'center', mono: true, min: 9, max: 13, plate: 'rgba(5,20,12,0.85)' });
       }
     } else {

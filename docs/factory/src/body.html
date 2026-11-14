@@ -28,7 +28,7 @@
     </div>
     <div class="hud-r">
       <button class="btn" id="btn-prod" aria-pressed="false" title="Statistiques de production (P)">Production</button>
-      <button class="btn icon" id="btn-help" title="Légende et raccourcis" aria-label="Légende et raccourcis">?</button>
+      <button class="btn icon" id="btn-help" title="Légende, raccourcis et visite guidée" aria-label="Légende, raccourcis et visite guidée">?</button>
     </div>
   </header>
 
@@ -87,6 +87,7 @@
     <div class="pb" id="prod-body"></div>
   </section>
 
+  <div id="tour" hidden role="dialog" aria-label="Visite guidée"></div>
   <div id="tip" hidden></div>
   <div id="toast" hidden role="status"></div>
 
@@ -110,7 +111,7 @@
         <li>Lancez <b>Incident prod</b> depuis le banc d’essai et observez les slots agents saturer.</li>
       </ol>
       <p class="keys"><kbd>Espace</kbd> pause · <kbd>1</kbd>–<kbd>4</kbd> vitesse · <kbd>F</kbd> toute l’usine · <kbd>O</kbd> calque suivant · <kbd>P</kbd> production · molette ou pincement pour zoomer · glisser pour se déplacer</p>
-      <div class="row end"><button class="btn primary" id="intro-go">Entrer dans l’usine</button></div>
+      <div class="row end"><button class="btn" id="intro-go">Explorer librement</button><button class="btn primary" id="intro-tour">Visite guidée</button></div>
     </div>
   </div>
 </div>

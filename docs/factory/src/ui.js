@@ -3,7 +3,7 @@
 'use strict';
 var F = window.FleexFactory, MODELS = F.MODELS, TYPES = F.TYPES, WORKFLOWS = F.WORKFLOWS, dur = F.fmtDur, clamp = F.clamp;
 var sim, view;
-var ui = { tab: 'bottlenecks', speed: 1, lastSpeed: 1, sel: null, prod: false, cards: [], applied: [], logSeen: 0, hold: false, narrow: false, lastHtml: '' };
+var ui = { tour: -1, tab: 'bottlenecks', speed: 1, lastSpeed: 1, sel: null, prod: false, cards: [], applied: [], logSeen: 0, hold: false, narrow: false, lastHtml: '' };
 var TYPE_CHIP = { build: 'blue', fix: 'red', think: 'purple', lead: 'yellow', ops: 'teal' };
 var KIND = { gate: ['Gate', 'yellow'], route: ['Routage', 'purple'], question: ['Question', 'blue'], error: ['Erreur', 'red'] };
 var BN = { human: 'Attente humaine', question: 'Questions et erreurs', pool: 'Capacité', cost: 'Coût', quality: 'Qualité' };
@@ -60,7 +60,7 @@ function heat() {
   if (ov === 'flow') {
     var sp = sim.span(6);
     sim.segs.forEach(function (sg) { var v = sim.sum(sg.flow, 6) / sp; vals.push([sg, v]); if (v > max) max = v; });
-    vals.forEach(function (p) { m.set('s' + p[0].id, { v: max ? Math.sqrt(p[1] / max) : 0, label: p[0].station && p[1] >= 0.05 ? p[1].toFixed(1) + '/h' : '' }); });
+    vals.forEach(function (p) { m.set('s' + p[0].id, { v: max ? Math.sqrt(p[1] / max) : 0, label: (p[0].station || (p[0].sink && p[0].sink.kind === 'dock')) && p[1] >= 0.05 ? p[1].toFixed(1) + '/h' : '' }); });
   } else if (ov !== 'none') {
     sim.stations.forEach(function (st) {
       var s = sim.stationStats(st, W), v = 0, label = '';
@@ -261,6 +261,10 @@ function stationHTML(st) {
     h += runsHTML(st);
     return h;
   }
+  if (sim.canSkip(st)) {
+    h += '<div class="field"><button class="switch" role="switch" data-act="st-skip" aria-checked="' + !st.skip + '"><i></i>Poste actif</button>' +
+      '<span class="help">' + (st.skip ? 'Poste sauté (skipped) : les pièces le traversent sans run. Plus de coût ni d’attente ici, mais plus de contrôle non plus.' : 'Désactivez-le pour mesurer ce que la ligne donne sans cette étape.') + '</span></div>';
+  }
   if (st.model) {
     h += '<div class="field"><label for="sel-model">Modèle</label><select id="sel-model" data-act="model">' +
       F.MODEL_ORDER.map(function (m) { var o = MODELS[m]; return '<option value="' + m + '"' + (m === st.model ? ' selected' : '') + '>' + o.label + ' · coût ×' + o.cost + ' · durée ×' + o.speed + '</option>'; }).join('') +
@@ -413,6 +417,7 @@ function onPanel(e) {
   else if (act === 'follow' && s && s.type === 'ticket') { view.follow = view.follow === s.t ? null : s.t; if (view.follow) { view.goal = null; if (view.cam.z < 22) view.cam.z = 22; } }
   else if (act === 'policy' && s) { sim.setPolicy(s.ref, b.dataset.v); applied(stLabel(s.ref) + ' → contrôle ' + ({ human: 'humain', sampled: 'échantillonné', auto: 'automatique' }[b.dataset.v])); }
   else if (act === 'model' && s) { sim.setModel(s.ref, b.value); applied(stLabel(s.ref) + ' → ' + MODELS[b.value].label); b.blur(); }
+  else if (act === 'st-skip' && s) { s.ref.skip = !s.ref.skip; applied(stLabel(s.ref) + (s.ref.skip ? ' → poste désactivé (skipped)' : ' → poste réactivé')); }
   else if (act === 'src-toggle' && s) { s.ref.on = !s.ref.on; }
   else if (act === 'src-rate' && s) { s.ref.perDay = +b.value; var lb = b.parentNode.querySelector('.num'); if (lb) lb.textContent = b.value; return; }
   else if (act === 'pool-max') { sim.setConcurrency(+b.value); var lp = b.parentNode.querySelector('.num'); if (lp) lp.textContent = b.value; return; }
@@ -498,6 +503,42 @@ function toggleProd(on) {
   $('#prod').hidden = !ui.prod; $('#btn-prod').setAttribute('aria-pressed', ui.prod ? 'true' : 'false');
   ui.prodHtml = ''; production();
 }
+
+/* ---------- guided tour ---------- */
+var TOUR = [
+  { t: 'Les quais d’intake', d: 'Chaque source dépose ses demandes sur le convoyeur : Gmail, Slack, Meeting notes, GitHub, Linear, Routines, CLI · MCP. À ce stade ce sont des pièces brutes, grises, sans type ni workflow.',
+    go: function () { setOverlay('none'); view.frame(0, 0.5, 14, 41); } },
+  { t: 'Le tri', d: 'Un agent léger qualifie chaque demande, lui donne un type (sa couleur) et choisit son workflow. Le bus de distribution l’envoie sur la bonne ligne. Juste à côté : le poste opérateur, c’est vous, et les slots agents (agentMaxConcurrency).',
+    go: function () { view.frame(3, 12.5, 15, 17, false, 30); } },
+  { t: 'Une ligne par workflow', d: 'Chaque poste est une étape : agent, skill, panel ou native. Les bras chargent et déchargent les pièces, chaque case allumée est un run en cours. Fleex lance tout en parallèle : la seule file côté agents, ce sont les slots.',
+    go: function () { var l = sim.lanes[3]; view.frame(l.x - 1, l.top, 34, l.h); } },
+  { t: 'Les postes de contrôle', d: 'Les human_gate sont rayés de jaune. La pièce reste sur l’étagère tant que personne n’a tranché, et l’opérateur ne traite qu’un élément à la fois. Les convoyeurs ambre ramènent en arrière les pièces refusées.',
+    go: function () { var st = sim.lanes[2].stations[1]; view.frame(st.x - 5, st.y - 3, 22, 9.5, false, 34); } },
+  { t: 'Voir où ça coince', d: 'Le calque Humain éclaire les postes où des pièces attendent quelqu’un. L’onglet Goulots classe ce qui freine ou coûte le plus, et les pastilles numérotées reprennent ce classement sur le plan.',
+    go: function () { setOverlay('human'); setTab('bottlenecks'); panel(true); view.fit(); } },
+  { t: 'Régler, puis mesurer', d: 'Cliquez un poste pour changer son modèle ou la politique d’une gate. Ici, la gate la plus chargée : passez-la en « Échantillonné » et la ligne se vide. Chaque réglage est journalisé dans Goulots avec son effet sur le débit, Focus et le coût.',
+    go: function () {
+      setOverlay('none');
+      var g = null; ui.cards.forEach(function (c) { if (!g && c.st && c.st.exec === 'human_gate') g = c.st; });
+      g = g || sim.lanes[2].stations[5];
+      select({ type: 'station', ref: g }, false); view.frame(g.x - 7, g.y - 3.5, 18, 10, false, 34);
+    } },
+  { t: 'À vous de piloter', d: 'Le banc d’essai en haut du plan déclenche un incident, une réunion ou une panne. Production (P) donne les chiffres, Objectifs la progression vers une usine autonome. Vitesse : touches 1 à 4, Espace pour la pause.',
+    go: function () { select(null); setTab('goals'); panel(true); view.fit(); } }
+];
+function tourShow(i) {
+  ui.tour = i; layout();
+  var s = TOUR[i], el = $('#tour'), dots = '';
+  for (var k = 0; k < TOUR.length; k++) dots += '<i class="' + (k <= i ? 'on' : '') + '"></i>';
+  el.innerHTML = '<div class="row"><span class="step">Visite ' + (i + 1) + ' / ' + TOUR.length + '</span><span class="spacer"></span><span class="dots">' + dots + '</span></div>' +
+    '<h2 class="h">' + s.t + '</h2><p>' + s.d + '</p><div class="row end"><button class="btn sm ghost" data-tour="end">Quitter</button>' +
+    (i ? '<button class="btn sm" data-tour="prev">Précédent</button>' : '') +
+    '<button class="btn sm primary" data-tour="next">' + (i === TOUR.length - 1 ? 'Terminer' : 'Suivant') + '</button></div>';
+  el.hidden = false;
+  if (ui.narrow) $('#panel').classList.add('closed');
+  layout(); s.go();
+}
+function tourEnd() { ui.tour = -1; $('#tour').hidden = true; layout(); if (view.overlay !== 'none') setOverlay('none'); }
 
 /* ---------- tooltip ---------- */
 function tipShow(html, x, y) {
@@ -585,7 +626,8 @@ function layout() {
   ui.narrow = window.innerWidth <= 860;
   root.style.setProperty('--hud-top', hudH + 'px');
   root.style.setProperty('--sheet-px', pn.offsetHeight + 'px');
-  view.inset = ui.narrow ? { l: 4, t: hudH + $('#strip').offsetHeight + 14, r: 4, b: pn.offsetHeight + 6 } : { l: 14, t: hudH + $('#strip').offsetHeight + 22, r: pn.offsetWidth + 28, b: 54 };
+  var tourH = ui.tour >= 0 ? $('#tour').offsetHeight + 16 : 0;
+  view.inset = ui.narrow ? { l: 4, t: hudH + $('#strip').offsetHeight + 14, r: 4, b: pn.offsetHeight + 6 + tourH } : { l: 14, t: hudH + $('#strip').offsetHeight + 22, r: pn.offsetWidth + 28, b: 54 + tourH };
 }
 
 function fitZoom() { var I = view.inset; return Math.min((view.w - I.l - I.r) / (F.LAY.W + 1), (view.h - I.t - I.b) / (F.LAY.H + 1)); }
@@ -636,8 +678,16 @@ function boot() {
   $('#btn-prod').addEventListener('click', function () { toggleProd(); });
   $('#prod-close').addEventListener('click', function () { toggleProd(false); });
   $('#prod').addEventListener('pointerdown', function () { ui.holdProd = true; });
-  $('#btn-help').addEventListener('click', function () { $('#intro').hidden = false; });
-  $('#intro-go').addEventListener('click', function () { $('#intro').hidden = true; try { localStorage.setItem('fleex-factory-intro', '1'); } catch (err) {} });
+  $('#btn-help').addEventListener('click', function () { if (ui.tour >= 0) tourEnd(); $('#intro').hidden = false; });
+  function closeIntro() { $('#intro').hidden = true; try { localStorage.setItem('fleex-factory-intro', '1'); } catch (err) {} }
+  $('#intro-go').addEventListener('click', function () { closeIntro(); });
+  $('#intro-tour').addEventListener('click', function () { closeIntro(); tourShow(0); });
+  $('#tour').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tour]'); if (!b) return;
+    if (b.dataset.tour === 'end') tourEnd();
+    else if (b.dataset.tour === 'prev') tourShow(ui.tour - 1);
+    else if (ui.tour >= TOUR.length - 1) tourEnd(); else tourShow(ui.tour + 1);
+  });
   $('#intro').addEventListener('click', function (e) { if (e.target.id === 'intro') $('#intro').hidden = true; });
   document.querySelector('.toolbar').addEventListener('click', function (e) { var b = e.target.closest('[data-sc]'); if (b) scenario(b.dataset.sc); });
   $('#z-in').addEventListener('click', function () { view.zoomAt(view.w / 2, view.h / 2, 1.4); });
@@ -659,7 +709,9 @@ function boot() {
     else if (k === 'f' || k === 'F') view.fit();
     else if (k === 'o' || k === 'O') setOverlay(OVERLAYS[(OVERLAYS.indexOf(view.overlay) + 1) % OVERLAYS.length]);
     else if (k === 'p' || k === 'P') toggleProd();
-    else if (k === 'Escape') { if (!$('#intro').hidden) $('#intro').hidden = true; else if (ui.prod) toggleProd(false); else select(null); }
+    else if (k === 'Escape') { if (!$('#intro').hidden) $('#intro').hidden = true; else if (ui.tour >= 0) tourEnd(); else if (ui.prod) toggleProd(false); else select(null); }
+    else if (k === 'ArrowRight' && ui.tour >= 0) { if (ui.tour >= TOUR.length - 1) tourEnd(); else tourShow(ui.tour + 1); }
+    else if (k === 'ArrowLeft' && ui.tour > 0) tourShow(ui.tour - 1);
   });
   window.addEventListener('resize', function () { view.resize(); layout(); ui.fitZ = fitZoom(); });
 
@@ -679,7 +731,7 @@ function boot() {
     if (ts - tHeat > 900) { tHeat = ts; heat(); }
     if (ts - tMini > 120 && !ui.narrow) {
       tMini = ts;
-      var zoomed = view.cam.z > ui.fitZ * 1.3, mb = $('#mini-box');
+      var zoomed = view.cam.z > ui.fitZ * 1.3 && ui.tour < 0, mb = $('#mini-box');
       if (mb.hidden === zoomed) mb.hidden = !zoomed;
       if (zoomed) view.minimap($('#mini'));
     }
