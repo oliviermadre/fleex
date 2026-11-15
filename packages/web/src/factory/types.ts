@@ -19,7 +19,7 @@ export interface StationSpec extends MachineBase {
   kind: 'station'; exec: StationExec; ref?: string; mode?: 'talk' | 'plan' | 'edit'; prompt?: string;
   outcomes: string[]; cap: number; sets?: TicketStatus;
 }
-export interface ZoneSpec extends MachineBase { kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number }
+export interface ZoneSpec extends MachineBase { kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean }
 export interface ExitSpec extends MachineBase { kind: 'exit' }
 export interface LabelSpec extends MachineBase { kind: 'label'; text: string; color?: string }
 export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec;

@@ -5,6 +5,9 @@ priority, tag or station outcome), stations (an agent, a skill, a panel, a human
 and exits. Nothing is routed in advance: a ticket reacts to what it stands on. The concept and its interactive
 mock-up are in `docs/factory/`.
 
+A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
+demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
+
 Off unless `factoryEnabled` is `true` in the workspace config (Settings › General). While off the engine does not
 tick, no `factory_*` table is read or written, the routes answer 403 and the nav entry is hidden.
 

@@ -11,9 +11,12 @@ import { toast, useToastOffset } from '../lib/toast';
 import { cn } from '../lib/cn';
 import { useFactoryStore } from './factoryStore';
 import { FactoryInspector, type Selection } from './FactoryInspector';
-import { FactoryView, isBox, type DragState, type Ghost, type ViewState } from './renderer';
+import { FactoryConsole, type Command } from './FactoryConsole';
+import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
 import { canPlace, erase, machineAt, move, paintBelts, place, rotate, specFor, update, type Tool } from './layoutOps';
 import { needsHuman, type Dir, type FactoryLayout, type MachineSpec, type Target } from './types';
+
+const MINIMAP_EVERY_MS = 150;
 
 const POLL_MS = 600;
 const ARROW = ['→', '↓', '←', '↑'];
@@ -65,7 +68,7 @@ function TransferModal({ open, onClose, onPick }: { open: boolean; onClose: () =
       <div className="flex max-h-[70vh] flex-col gap-3 p-4">
         <div>
           <div className="text-sm font-semibold text-[var(--theme-text-primary)]">Hand tickets over to the Factory</div>
-          <p className="mt-1 text-xs text-[var(--theme-text-muted)]">A ticket you hand over lands in the zone that matches its status. From then on the floor drives it: stations start real agent runs on it.</p>
+          <p className="mt-1 text-xs text-[var(--theme-text-muted)]">A ticket you hand over lands in the Inbound zone and waits there. Drag it onto a belt or a machine to start it: from then on the floor drives it, and stations start real agent runs on it.</p>
         </div>
         <Input id="factory-transfer-search" placeholder="Search by title or number" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="flex min-h-0 flex-col gap-1 overflow-y-auto">
@@ -102,10 +105,13 @@ function Floor() {
   const [dir, setDir] = useState<Dir>(0);
   const [selection, setSelection] = useState<Selection>(null);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [groups, setGroups] = useState<Selection[]>([null, null, null, null, null, null]);
+  const groupsRef = useRef(groups); groupsRef.current = groups;
+  const miniRef = useRef<HTMLCanvasElement>(null);
   const live = useRef({ building, tool, dir, selection, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null });
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection;
   const fitted = useRef(false);
-  useToastOffset(56);   // keep toasts clear of the command bar
+  useToastOffset(184);   // keep toasts clear of the command bar
 
   // Personas, skills and panels feed the station pickers.
   useEffect(() => {
@@ -135,11 +141,15 @@ function Floor() {
   useEffect(() => {
     const cv = canvasRef.current; if (!cv) return;
     const v = new FactoryView(cv); viewRef.current = v; setView(v);
-    let raf = 0, last = performance.now();
+    let raf = 0, last = performance.now(), miniAt = 0;
     const frame = (ts: number) => {
       const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
       const st = viewState();
-      if (st) { if (!fitted.current) { v.fit(st.layout, st.layout.machines.length === 0); fitted.current = true; } v.draw(st, dt); }
+      if (st) {
+        if (!fitted.current) { v.fit(st.layout, st.layout.machines.length <= 1); fitted.current = true; }
+        v.draw(st, dt);
+        if (ts - miniAt > MINIMAP_EVERY_MS && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
+      }
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -155,7 +165,9 @@ function Floor() {
     const l = useFactoryStore.getState().layout; if (!l) return;
     const m = l.machines.find((q) => q.id === id); if (!m) return;
     if (('w' in patch || 'h' in patch) && !canPlace(l, { x: m.x, y: m.y, w: patch.w ?? m.w, h: patch.h ?? m.h }, id)) { toast.warning('No room to resize here'); return; }
-    commit(update(l, id, patch));
+    // One Inbound zone per floor: ticking it on a zone takes it off the others.
+    const base = 'inbound' in patch && patch.inbound ? { ...l, machines: l.machines.map((q) => (q.kind === 'zone' && q.id !== id && q.inbound ? { ...q, inbound: false } : q)) } : l;
+    commit(update(base, id, patch));
   }, [commit]);
 
   const dropTarget = (v: FactoryView, wx: number, wy: number): { target: Target; ok: boolean; can: boolean; text: string } => {
@@ -256,45 +268,60 @@ function Floor() {
   // ---------- commands and their keys ----------
   const selMachine = selection && 'machine' in selection && layout ? layout.machines.find((m) => m.id === selection.machine) ?? null : null;
   const selTicket = selection && 'ticket' in selection && snapshot ? snapshot.tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
-  const transferTo = useCallback((ticketId: string) => {
-    const s = useFactoryStore.getState(), t = useTicketStore.getState().tickets.find((q) => q.id === ticketId), zones = (s.layout?.machines ?? []).filter((m) => m.kind === 'zone');
-    const zone = zones.find((z) => z.kind === 'zone' && z.status === t?.status) ?? zones[0];
-    void s.transfer(ticketId, zone ? { machineId: zone.id } : { x: 1, y: 1 });
-    if (!zone) toast.info('No zone on the floor yet: the ticket was put down at the top-left corner');
-  }, []);
+  const transferTo = useCallback((ticketId: string) => { void useFactoryStore.getState().transfer(ticketId, {}); }, []);
 
-  interface Cmd { key: string; label: string; run: () => void; primary?: boolean; active?: boolean; title?: string; danger?: boolean }
-  const commands: Cmd[] = useMemo(() => {
-    const out: Cmd[] = [];
-    const fit = () => { const l = useFactoryStore.getState().layout; if (l && viewRef.current) viewRef.current.fit(l, building || l.machines.length === 0); };
+  const commands: Command[] = useMemo(() => {
+    const out: Command[] = [];
+    const fit = () => { const l = useFactoryStore.getState().layout; if (l && viewRef.current) viewRef.current.fit(l, building || l.machines.length <= 1); };
     if (selTicket) {
       const m = layout?.machines.find((q) => q.id === selTicket.machineId);
-      if (selTicket.phase === 'review' && m?.kind === 'station') m.outcomes.slice(0, 4).forEach((o, i) => out.push({ key: 'QWER'[i]!, label: o, primary: i === 0, run: () => void store.resolve(selTicket.ticketId, o) }));
-      if (selTicket.phase === 'zone' && !selTicket.released) out.push({ key: 'Q', label: 'Release', primary: true, run: () => void store.release(selTicket.ticketId) });
-      if (selTicket.phase === 'failed' || selTicket.phase === 'question') out.push({ key: 'Q', label: 'Run again', primary: true, run: () => void store.retry(selTicket.ticketId) });
-      out.push({ key: 'V', label: 'Open ticket', run: () => openTicketInWork(selTicket.ticketId) });
-      out.push({ key: 'X', label: 'Give back', title: 'Take this ticket out of the Factory', run: () => { void store.giveBack(selTicket.ticketId); setSelection(null); } });
+      if (selTicket.phase === 'review' && m?.kind === 'station') m.outcomes.slice(0, 4).forEach((o, i) => out.push({ key: 'QWER'[i]!, label: o, icon: i ? 'loop' : 'check', primary: i === 0, title: `Decide: ${o}`, run: () => void store.resolve(selTicket.ticketId, o) }));
+      if (selTicket.phase === 'zone' && !selTicket.released) out.push({ key: 'Q', label: 'Release', icon: 'play', primary: true, title: 'Let an arm take this ticket out of its zone', run: () => void store.release(selTicket.ticketId) });
+      if (selTicket.phase === 'failed' || selTicket.phase === 'question') out.push({ key: 'Q', label: 'Run again', icon: 'loop', primary: true, title: 'Run the station again on this ticket', run: () => void store.retry(selTicket.ticketId) });
+      out.push({ key: 'V', label: 'Open', icon: 'open', title: 'Open the ticket in Work, with its thread', run: () => openTicketInWork(selTicket.ticketId) });
+      out.push({ key: 'X', label: 'Give back', icon: 'give', title: 'Take this ticket out of the Factory', run: () => { void store.giveBack(selTicket.ticketId); setSelection(null); } });
     } else if (selMachine && (!building || tool === 'select')) {
-      if (selMachine.kind === 'belt' || selMachine.kind === 'arm') out.push({ key: 'R', label: 'Turn', run: () => { const l = useFactoryStore.getState().layout; if (l) commit(rotate(l, selMachine.id)); } });
-      if (selMachine.kind === 'zone') out.push({ key: 'L', label: 'Release next', primary: true, run: () => { const next = snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0]; if (next) void store.release(next.ticketId); } });
-      out.push({ key: 'Delete', label: 'Remove', danger: true, run: () => removeMachine(selMachine.id) });
+      if (selMachine.kind === 'belt' || selMachine.kind === 'arm') out.push({ key: 'R', label: 'Turn', icon: 'rotate', title: 'Quarter turn', run: () => { const l = useFactoryStore.getState().layout; if (l) commit(rotate(l, selMachine.id)); } });
+      if (selMachine.kind === 'zone') {
+        const next = snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0];
+        out.push({ key: 'L', label: 'Release 1', icon: 'play', primary: true, disabled: !next, title: 'Release the ticket that has waited longest', run: () => { if (next) void store.release(next.ticketId); } });
+      }
+      out.push({ key: 'Delete', label: 'Remove', icon: 'trash', danger: true, title: 'Remove this machine from the floor', run: () => removeMachine(selMachine.id) });
     } else if (building) {
-      for (const [t, key, label, title] of TOOLS) out.push({ key, label, title, active: tool === t, run: () => setTool((cur) => (cur === t ? 'select' : t)) });
-      out.push({ key: 'R', label: `Facing ${ARROW[dir]}`, title: 'Direction of the belts and arms you place', run: () => setDir((d) => ((d + 1) % 4) as Dir) });
+      for (const [t, key, label, title] of TOOLS) out.push({ key, label, icon: t === 'erase' ? 'erase' : t, title, active: tool === t, run: () => setTool((cur) => (cur === t ? 'select' : t)) });
+      out.push({ key: 'R', label: `Face ${ARROW[dir]}`, icon: 'rotate', title: 'Direction of the belts and arms you place', run: () => setDir((d) => ((d + 1) % 4) as Dir) });
     } else {
-      out.push({ key: 'B', label: 'Build', primary: true, title: 'Lay belts, arms, stations and zones', run: () => { setBuilding(true); setSelection(null); } });
-      out.push({ key: 'T', label: 'Hand tickets over', run: () => setTransferOpen(true) });
+      out.push({ key: 'B', label: 'Build', icon: 'build', primary: true, title: 'Lay belts, arms, stations and zones', run: () => { setBuilding(true); setSelection(null); } });
+      out.push({ key: 'T', label: 'Hand over', icon: 'inbound', title: 'Hand tickets over to the Factory: they land in Inbound', run: () => setTransferOpen(true) });
     }
-    out.push({ key: 'F', label: 'Fit', run: fit });
-    if (building) out.push({ key: 'Escape', label: tool !== 'select' ? 'Drop tool' : selection ? 'Deselect' : 'Done', run: () => { if (tool !== 'select') setTool('select'); else if (selection) setSelection(null); else setBuilding(false); } });
+    out.push({ key: 'F', label: 'Fit', icon: 'fit', title: 'Frame the floor', run: fit });
+    if (building) out.push({ key: 'Escape', label: tool !== 'select' ? 'Drop tool' : selection ? 'Menu' : 'Done', icon: 'back', title: tool !== 'select' ? 'Put the tool down' : selection ? 'Back to the build menu' : 'Leave build mode',
+      run: () => { if (tool !== 'select') setTool('select'); else if (selection) setSelection(null); else setBuilding(false); } });
     return out;
   }, [selTicket, selMachine, building, tool, dir, selection, layout, snapshot, store, commit, removeMachine]);
+
+  // Saved selections, RTS style: Shift+1…6 saves, 1…6 recalls and centres the view on it.
+  const onGroup = useCallback((i: number, save: boolean) => {
+    if (save) {
+      const cur = live.current.selection;
+      if (!cur) { toast.info('Select a machine or a ticket first'); return; }
+      setGroups((g) => g.map((x, k) => (k === i ? cur : x)));
+      return;
+    }
+    const g = groupsRef.current[i], s = useFactoryStore.getState(), v = viewRef.current;
+    if (!g || !v) return;
+    setSelection(g);
+    if ('ticket' in g) { const p = v.ticketPos(g.ticket); if (p) { v.cam.x = p.x; v.cam.y = p.y; } }
+    else { const m = s.layout?.machines.find((q) => q.id === g.machine); if (m) { v.cam.x = m.x + m.w / 2; v.cam.y = m.y + m.h / 2; } }
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey || transferOpen) return;
+      const digit = /^Digit([1-6])$/.exec(e.code);
+      if (digit) { e.preventDefault(); onGroup(Number(digit[1]) - 1, e.shiftKey); return; }
       const key = e.key === 'Backspace' ? 'Delete' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
       const cmd = commands.find((c) => c.key === key);
       if (cmd) { e.preventDefault(); cmd.run(); }
@@ -302,7 +329,7 @@ function Floor() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [commands, selection, transferOpen]);
+  }, [commands, selection, transferOpen, onGroup]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
@@ -322,11 +349,11 @@ function Floor() {
             aria-label="Factory floor" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
             onPointerLeave={() => { live.current.hover = null; live.current.ghost = null; }} onWheel={onWheel} onDoubleClick={onDoubleClick}
           />
-          {layout && layout.machines.length === 0 && !building && (
+          {layout && layout.machines.length <= 1 && !building && snapshot && snapshot.tickets.length === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="pointer-events-auto max-w-sm rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4 text-center">
                 <div className="text-sm font-semibold text-[var(--theme-text-primary)]">The floor is empty</div>
-                <p className="mt-1 text-xs text-[var(--theme-text-muted)]">Start with a zone for incoming tickets, an arm against it, a belt, then a station. Nothing moves until you hand a ticket over.</p>
+                <p className="mt-1 text-xs text-[var(--theme-text-muted)]">Build belts, arms and stations, then hand tickets over: they land in the Inbound zone, and you drag them onto the floor to start them.</p>
                 <div className="mt-3"><Button variant="primary" size="sm" onClick={() => setBuilding(true)}>Build</Button></div>
               </div>
             </div>
@@ -334,21 +361,9 @@ function Floor() {
         </div>
         <FactoryInspector selection={selection} view={view} onSelect={setSelection} onPatch={patchMachine} onRemove={removeMachine} onTransfer={() => setTransferOpen(true)} building={building} />
       </div>
-      <div className="flex min-h-[52px] items-center gap-3 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2">
-        <div className="min-w-0 flex-1 truncate text-xs text-[var(--theme-text-secondary)]">
-          {selTicket ? <>#{selTicket.info?.displayId ?? '?'} {selTicket.info?.title}</>
-            : selMachine ? <>{selMachine.name || selMachine.kind}{isBox(selMachine) && snapshot ? ` · ${snapshot.tickets.filter((t) => t.machineId === selMachine.id).length} inside` : ''}</>
-            : toolHint ?? (building ? 'Pick a machine to place, or click one to set it up.' : 'Click to select, drag a ticket to move it, double-click a ticket to open it.')}
-        </div>
-        <div className="flex flex-wrap justify-end gap-1.5" role="toolbar" aria-label="Factory commands">
-          {commands.map((c) => (
-            <Button key={c.key + c.label} size="sm" variant={c.primary ? 'primary' : c.danger ? 'danger' : c.active ? 'secondary' : 'ghost'} title={c.title} onClick={c.run} aria-pressed={c.active}
-              className={cn(c.active && 'ring-1 ring-[var(--theme-accent)]')}>
-              <kbd className="mr-1.5 font-mono text-[10px] opacity-70">{c.key === 'Escape' ? 'Esc' : c.key === 'Delete' ? 'Del' : c.key}</kbd>{c.label}
-            </Button>
-          ))}
-        </div>
-      </div>
+      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} commands={commands} groups={groups} onGroup={onGroup} miniRef={miniRef}
+        title={building ? 'Build' : 'Factory floor'}
+        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up, move it or remove it.' : 'Click to select, drag a ticket to move it, double-click a ticket to open it. Tickets you hand over wait in Inbound.')} />
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
     </div>
   );

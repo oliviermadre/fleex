@@ -1,0 +1,38 @@
+import type { ReactNode } from 'react';
+
+/** Line icons of the Factory console, 24×24, drawn with the current colour. */
+const PATHS: Record<string, ReactNode> = {
+  belt: <path d="M4 8l4 4-4 4M10.5 8l4 4-4 4M17 8l3.5 4-3.5 4" />,
+  arm: <><circle cx="7" cy="17" r="3" /><path d="M9.2 14.8L16 8" /><path d="M13.5 6.5H18V11" /></>,
+  agent: <><rect x="5" y="8" width="14" height="10" rx="2.5" /><path d="M12 4v4M9.5 13h.01M14.5 13h.01" /></>,
+  skill: <path d="M13 3L5 14h6l-1 7 8-11h-6z" />,
+  panel: <><circle cx="12" cy="8" r="2.6" /><circle cx="5.5" cy="11" r="2" /><circle cx="18.5" cy="11" r="2" /><path d="M7.5 20c0-3.2 2-5.4 4.5-5.4s4.5 2.2 4.5 5.4M2.5 19c0-2.4 1.3-4 3-4M21.5 19c0-2.4-1.3-4-3-4" /></>,
+  gate: <><path d="M12 3l8 3.5V12c0 4.7-3.3 7.8-8 9-4.7-1.2-8-4.3-8-9V6.5z" /><path d="M8.7 12l2.3 2.3 4.3-4.6" /></>,
+  native: <><path d="M4 12V5h7l9 9-7 7z" /><circle cx="8.5" cy="9.5" r="1.1" /></>,
+  zone: <><path d="M4 8l8-4 8 4v8l-8 4-8-4z" /><path d="M4 8l8 4 8-4M12 12v8" /></>,
+  exit: <><path d="M4 12h11M11 7l5 5-5 5" /><path d="M20 4v16" /></>,
+  label: <path d="M5 6h14M12 6v13" />,
+  erase: <><path d="M4 16l9-9 6 6-7 7H8z" /><path d="M9.5 10.5l6 6" /></>,
+  rotate: <><path d="M20 12a8 8 0 1 1-3-6.2" /><path d="M20 4v5h-5" /></>,
+  back: <path d="M15 6l-6 6 6 6" />,
+  build: <path d="M4 20h16M7 20V9l6-5v16M13 8h6v4" />,
+  fit: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
+  open: <><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M4 9.5h16" /></>,
+  trash: <path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13" />,
+  play: <path d="M7 5l12 7-12 7z" />,
+  check: <path d="M5 12l5 5 9-10" />,
+  loop: <><path d="M4 12a8 8 0 1 0 3-6.2" /><path d="M4 4v5h5" /></>,
+  give: <><path d="M20 12H8M12 7l-5 5 5 5" /><path d="M4 4v16" /></>,
+  inbound: <><path d="M12 3v11M7 10l5 5 5-5" /><path d="M4 20h16" /></>,
+  ticket: <rect x="5" y="5" width="14" height="14" rx="3.5" />,
+  floor: <path d="M3 20V10l5 3.2V10l5 3.2V6h6v14zM3 20h18" />,
+};
+export type FactoryIconName = keyof typeof PATHS;
+
+export function FIcon({ name, size = 18, className }: { name: string; size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      {PATHS[name] ?? null}
+    </svg>
+  );
+}

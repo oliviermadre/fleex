@@ -55,6 +55,11 @@ export interface FactoryEngineDeps {
 
 export class FactoryError extends Error {}
 
+/** The zone a handed-over ticket lands in: it sets no status and keeps tickets until they are moved or released. */
+function inboundZone(x: number, y: number): ZoneSpec {
+  return { id: randomUUID(), kind: 'zone', x, y, w: 4, h: 6, name: 'Inbound', status: '', release: 'manual', inbound: true };
+}
+
 function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'exit'); }
 
 /** Reject a layout that cannot be built: out of bounds, overlapping, or with malformed machines. Returns it normalised. */
@@ -77,6 +82,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     } else if (m.kind === 'zone') {
       m.w = Math.max(2, Math.min(30, Math.floor(m.w || 4))); m.h = Math.max(2, Math.min(30, Math.floor(m.h || 4)));
       m.release = m.release === 'auto' ? 'auto' : 'manual';
+      m.inbound = m.inbound === true && !machines.some((o) => o.kind === 'zone' && o.inbound);
     } else if (m.kind === 'exit') { m.w = Math.max(1, Math.min(60, Math.floor(m.w || 3))); m.h = Math.max(1, Math.min(60, Math.floor(m.h || 3))); }
     else throw new FactoryError(`unknown machine kind "${String((m as { kind?: string }).kind)}"`);
     if ((m.kind === 'belt' || m.kind === 'arm') && ![0, 1, 2, 3].includes(m.dir)) throw new FactoryError('belts and arms need a direction 0..3');
@@ -97,7 +103,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
  * is the only writer of the three `factory_*` tables.
  */
 export class FactoryEngine {
-  private floor: FactoryFloorRow = { id: DEFAULT_FLOOR_ID, name: 'Factory', layout: { w: 48, h: 30, machines: [] }, settings: { ...DEFAULT_SETTINGS }, createdAt: '', updatedAt: '' };
+  private floor: FactoryFloorRow = { id: DEFAULT_FLOOR_ID, name: 'Factory', layout: { w: 48, h: 30, machines: [inboundZone(1, 1)] }, settings: { ...DEFAULT_SETTINGS }, createdAt: '', updatedAt: '' };
   private machines: Machine[] = [];
   private byId = new Map<string, Machine>();
   private grid: (Machine | null)[] = [];
@@ -459,11 +465,31 @@ export class FactoryEngine {
   managedIds(): Set<string> { return new Set(this.tickets.keys()); }
   isManaged(ticketId: string): boolean { return this.tickets.has(ticketId); }
 
-  /** Hand a ticket over to the Factory: it lands on a machine, or on a tile of the floor. */
-  async transfer(ticketId: string, target: { machineId?: string; x?: number; y?: number }): Promise<void> {
+  /** The Inbound zone, created on the first free spot when the floor has none (it was removed, or the floor predates it). */
+  private async ensureInbound(): Promise<string> {
+    const existing = this.machines.find((m) => m.spec.kind === 'zone' && m.spec.inbound);
+    if (existing) return existing.spec.id;
+    const { w, h } = this.floor.layout;
+    for (let y = 1; y + 6 <= h; y++) for (let x = 1; x + 4 <= w; x++) {
+      let free = true;
+      for (let j = y; j < y + 6 && free; j++) for (let i = x; i < x + 4; i++) if (this.at(i, j)) { free = false; break; }
+      if (!free) continue;
+      const zone = inboundZone(x, y);
+      await this.setLayout({ ...this.floor.layout, machines: [...this.floor.layout.machines, zone] });
+      return zone.id;
+    }
+    throw new FactoryError('No room left on the floor for an Inbound zone');
+  }
+
+  /**
+   * Hand a ticket over to the Factory. With no target it lands in the Inbound zone, where it waits
+   * to be dragged onto the floor; otherwise on the machine or the tile that was asked for.
+   */
+  async transfer(ticketId: string, target: { machineId?: string; x?: number; y?: number } = {}): Promise<void> {
     if (this.tickets.has(ticketId)) throw new FactoryError('This ticket is already on the factory floor');
     const info = await this.deps.loadTicket(ticketId);
     if (!info) throw new FactoryError('Ticket not found, or archived');
+    if (!target.machineId && (target.x == null || target.y == null)) target = { machineId: await this.ensureInbound() };
     const nowIso = new Date(this.now()).toISOString();
     const t: Ticket = {
       ticketId, machineId: null, createdAt: nowIso, info,

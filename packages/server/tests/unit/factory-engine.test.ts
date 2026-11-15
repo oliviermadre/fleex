@@ -82,6 +82,34 @@ describe('FactoryEngine', () => {
     expect(statuses).toEqual([['b', 'todo']]);
   });
 
+  it('a ticket handed over without a target lands in the Inbound zone, created if the floor has none', async () => {
+    await boot([belt('b1', 1, 1)]);
+    await engine.transfer('a');
+    const inbound = engine.snapshot().floor.layout.machines.find((m) => m.kind === 'zone' && m.inbound);
+    expect(inbound).toMatchObject({ name: 'Inbound', status: '', release: 'manual' });
+    expect(where('a')).toBe(`${inbound!.id}:zone`);
+    expect(statuses).toEqual([]);                       // Inbound sets no status
+    await engine.transfer('b');
+    expect(engine.snapshot().floor.layout.machines.filter((m) => m.kind === 'zone' && m.inbound)).toHaveLength(1);
+    expect(where('b')).toBe(`${inbound!.id}:zone`);
+    expect(store.floor!.layout.machines).toHaveLength(2);   // the new zone was saved with the floor
+    await run(2);
+    expect(where('a')).toBe(`${inbound!.id}:zone`);     // it waits there until someone moves it
+    await engine.move('a', { machineId: 'b1' });
+    expect(where('a')).toBe('b1:belt');
+  });
+
+  it('a new floor starts with an Inbound zone, and a layout keeps at most one', async () => {
+    engine = new FactoryEngine({
+      store, now: () => clock, logger: { warn: () => {}, info: () => {} }, loadTicket: async (id) => infos.get(id) ?? null,
+      setStatus: async () => {}, runner: { run: () => new Promise<StationRunResult>(() => {}) },
+    });
+    await engine.init();
+    expect(engine.snapshot().floor.layout.machines).toMatchObject([{ kind: 'zone', name: 'Inbound', inbound: true }]);
+    const two = normaliseLayout({ w: 20, h: 20, machines: [{ ...zone('z1', 1, 1), inbound: true } as MachineSpec, { ...zone('z2', 6, 1), inbound: true } as MachineSpec] });
+    expect(two.machines.map((m) => (m.kind === 'zone' ? m.inbound : null))).toEqual([true, false]);
+  });
+
   it('a belt tile holds one ticket: a full one makes the tile behind it wait', async () => {
     await boot([belt('b1', 1, 1), belt('b2', 2, 1), belt('b3', 3, 1)]);   // b3 leads nowhere
     await engine.transfer('a', { machineId: 'b3' });

@@ -21,7 +21,7 @@ export interface ViewState {
 }
 export type Hit = { ticketId: string } | { machineId: string } | null;
 
-const TYPE_COLORS: Record<string, string> = { build: '#60a5fa', fix: '#f87171', think: '#c084fc', lead: '#facc15', ops: '#2dd4bf', review: '#2dd4bf' };
+export const TYPE_COLORS: Record<string, string> = { build: '#60a5fa', fix: '#f87171', think: '#c084fc', lead: '#facc15', ops: '#2dd4bf', review: '#2dd4bf' };
 const STATUS_COLORS: Record<string, string> = { backlog: '#71717a', todo: '#fb923c', doing: '#60a5fa', reviewing: '#c084fc', done: '#22c55e' };
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
@@ -321,8 +321,10 @@ export class FactoryView {
 
   private zone(m: ZoneSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
     const ctx = this.ctx, { x, y, w, h } = m;
-    rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.22); ctx.fillStyle = pal.bg; ctx.fill(); ctx.strokeStyle = pal.edge; ctx.lineWidth = 0.08; ctx.stroke();
-    ctx.fillStyle = STATUS_COLORS[m.status ?? ''] ?? pal.text3; rr(ctx, x + 0.3, y + 0.24, 0.14, 0.4, 0.05); ctx.fill();
+    rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.22); ctx.fillStyle = pal.bg; ctx.fill(); ctx.strokeStyle = m.inbound ? pal.accent : pal.edge; ctx.lineWidth = 0.08;
+    if (m.inbound) ctx.setLineDash([0.35, 0.18]);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = m.inbound ? pal.accent : STATUS_COLORS[m.status ?? ''] ?? pal.text3; rr(ctx, x + 0.3, y + 0.24, 0.14, 0.4, 0.05); ctx.fill();
     this.label(`${m.name || 'Zone'} · ${tickets.filter((t) => !t.released).length}`, x + 0.58, y + 0.45, 0.34, pal.text, { weight: 600, min: 9, max: 15, fit: w - 0.8 });
     if (m.release === 'auto' && w >= 4) this.label('auto', x + w - 0.3, y + 0.45, 0.24, pal.ok, { align: 'right', mono: true });
     const pitch = 0.5, cols = Math.max(1, Math.floor((w - 0.5) / pitch)), rows = Math.max(1, Math.floor((h - 1.05) / pitch)), n = cols * rows;
@@ -382,6 +384,33 @@ export class FactoryView {
       this.label(dr.text, dr.x, dr.y - 0.75, 0.3, pal.text, { align: 'center', plate: dr.ok ? 'rgba(20,83,45,0.95)' : 'rgba(120,53,15,0.95)', min: 10, max: 13 });
     }
   }
+
+  // ---------- minimap ----------
+  private mini: { s: number; ox: number; oy: number } | null = null;
+  minimap(cv: HTMLCanvasElement, st: ViewState): void {
+    const d = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight, L = st.layout, pal = this.palette();
+    if (!w || !h) return;
+    if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
+    const c = cv.getContext('2d'); if (!c) return;
+    const s = Math.min(w / (L.w + 2), h / (L.h + 2)), ox = (w - L.w * s) / 2, oy = (h - L.h * s) / 2;
+    this.mini = { s, ox, oy };
+    c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h);
+    c.fillStyle = pal.floor; c.fillRect(ox, oy, L.w * s, L.h * s);
+    for (const m of L.machines) {
+      if (m.kind === 'label') continue;
+      c.fillStyle = m.kind === 'belt' ? pal.edge : m.kind === 'arm' ? pal.text2 : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.exec === 'human_gate' ? pal.warn : pal.text2;
+      c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
+    }
+    for (const t of st.tickets) {
+      const q = this.shown.get(t.ticketId); if (!q) continue;
+      const hot = t.phase === 'review' || t.phase === 'question' || t.phase === 'failed' || t.phase === 'loose';
+      c.fillStyle = hot ? pal.warn : TYPE_COLORS[t.info?.type ?? ''] ?? '#8b949e';
+      c.fillRect(ox + q.x * s - (hot ? 2 : 1), oy + q.y * s - (hot ? 2 : 1), hot ? 4 : 2, hot ? 4 : 2);
+    }
+    const hw = this.w / 2 / this.cam.z, hh = this.h / 2 / this.cam.z;
+    c.strokeStyle = pal.text; c.lineWidth = 1; c.strokeRect(ox + (this.cam.x - hw) * s, oy + (this.cam.y - hh) * s, hw * 2 * s, hh * 2 * s);
+  }
+  miniToWorld(mx: number, my: number): { x: number; y: number } | null { const m = this.mini; return m ? { x: (mx - m.ox) / m.s, y: (my - m.oy) / m.s } : null; }
 
   pick(sx: number, sy: number, st: ViewState, withTickets: boolean): Hit {
     const p = this.toWorld(sx, sy);

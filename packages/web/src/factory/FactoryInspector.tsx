@@ -153,7 +153,11 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, building 
 
       {m.kind === 'zone' && (
         <>
-          <Hint>Tickets wait here. An arm only takes a ticket that has been released.</Hint>
+          <Hint>{m.inbound ? 'Inbound: every ticket you hand over lands here and waits. Drag it onto a belt or a machine to start it.' : 'Tickets wait here. An arm only takes a ticket that has been released.'}</Hint>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--theme-text-primary)]">
+            <input type="checkbox" checked={m.inbound === true} onChange={(e) => onPatch({ inbound: e.target.checked })} className="accent-[var(--theme-accent)]" />
+            Tickets handed over land here (Inbound)
+          </label>
           <Select id="f-status" label="Sets the ticket status to" value={m.status ?? ''} onChange={(e) => onPatch({ status: e.target.value as TicketStatus | '' })} options={STATUS_OPTIONS} />
           <Select id="f-release" label="Tickets leave" value={m.release} onChange={(e) => onPatch({ release: e.target.value as 'manual' | 'auto' })}
             options={[{ value: 'manual', label: 'when you release them' }, { value: 'auto', label: 'automatically, one at a time' }]} />
@@ -171,7 +175,9 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, building 
       {(m.kind === 'station' || m.kind === 'zone') && (
         <>
           <Section title={`Leaves through ${takers.length} arm${takers.length === 1 ? '' : 's'}`}>
-            {takers.length === 0 && <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: tickets will pile up. Put an arm against one of its sides.</div>}
+            {takers.length === 0 && (m.kind === 'zone' && m.inbound
+              ? <Hint>No arm here, and none is needed: drag tickets out by hand. Put an arm against a side to let released tickets leave on their own.</Hint>
+              : <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: tickets will pile up. Put an arm against one of its sides.</div>)}
             {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" onClick={() => onSelect({ machine: a.id })}>arm · {armTag(a, takers) || 'anything'}</button>)}
           </Section>
           <Section title={`${inside.length} ticket${inside.length === 1 ? '' : 's'} inside`}>
