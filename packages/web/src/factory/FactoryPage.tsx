@@ -13,7 +13,8 @@ import { useFactoryStore } from './factoryStore';
 import { FactoryInspector, type Selection } from './FactoryInspector';
 import { FactoryConsole, type Command } from './FactoryConsole';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
-import { canPlace, erase, machineAt, move, paintBelts, place, rotate, specFor, update, type Tool } from './layoutOps';
+import { canPlace, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, place, rotate, specFor, update, type Tool } from './layoutOps';
+import { FactoryTicketModal } from './FactoryTicketModal';
 import { needsHuman, type Dir, type FactoryLayout, type MachineSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
@@ -23,6 +24,7 @@ const ARROW = ['→', '↓', '←', '↑'];
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
   ['belt', 'C', 'Belt', 'Drag to lay belts: each tile points the way you drag'],
+  ['bridge', 'H', 'Bridge', 'Where two belts cross: each ticket goes straight across, the lines do not mix'],
   ['arm', 'B', 'Arm', 'Takes from the tile behind it, drops on the tile in front. R turns it'],
   ['agent', 'A', 'Agent', 'A station that runs a persona on the ticket'],
   ['skill', 'S', 'Skill', 'A station that runs a skill'],
@@ -38,7 +40,9 @@ const TOOLS: [Tool, string, string, string][] = [
 type Press =
   | { kind: 'paint'; last: { x: number; y: number }; did: boolean; draft: FactoryLayout }
   | { kind: 'erase'; draft: FactoryLayout }
-  | { kind: 'machine'; id: string; ox: number; oy: number; dragging: boolean }
+  | { kind: 'machine'; id: string; sx: number; sy: number; dragging: boolean; group: string[] }
+  | { kind: 'marquee'; x0: number; y0: number }
+  | { kind: 'pan' }
   | { kind: 'place' }
   | { kind: 'ticket'; id: string; dragging: boolean }
   | null;
@@ -108,7 +112,8 @@ function Floor() {
   const [groups, setGroups] = useState<Selection[]>([null, null, null, null, null, null]);
   const groupsRef = useRef(groups); groupsRef.current = groups;
   const miniRef = useRef<HTMLCanvasElement>(null);
-  const live = useRef({ building, tool, dir, selection, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null });
+  const [openTicket, setOpenTicket] = useState<string | null>(null);
+  const live = useRef({ building, tool, dir, selection, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false });
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection;
   const fitted = useRef(false);
   useToastOffset(184);   // keep toasts clear of the command bar
@@ -132,7 +137,7 @@ function Floor() {
     if (!s.snapshot || !s.layout) return null;
     return {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, a.p])),
-      selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
+      selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       hoverMachine: l.hover, edit: l.building, ghost: l.ghost, drag: l.drag,
     };
   }, []);
@@ -197,12 +202,17 @@ function Floor() {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y);
     moved.current = 0; lastPt.current = p; press.current = null;
+    /* right or middle button, or Space held: move the view, whatever the tool */
+    if (e.button !== 0 || live.current.space) { press.current = { kind: 'pan' }; return; }
     if (live.current.building) {
       const t = live.current.tool;
       if (t === 'belt') { store.beginEdit(); press.current = { kind: 'paint', last: { x: tx, y: ty }, did: false, draft: st.layout }; }
       else if (t === 'erase') { store.beginEdit(); const m = machineAt(st.layout, tx, ty); const draft = m ? erase(st.layout, m.id) : st.layout; store.previewLayout(draft); press.current = { kind: 'erase', draft }; }
-      else if (t === 'select') { const hit = v.pick(p.x, p.y, st, false); if (hit && 'machineId' in hit) { const m = v.machine(hit.machineId); if (m) press.current = { kind: 'machine', id: m.id, ox: tx - m.x, oy: ty - m.y, dragging: false }; } }
-      else press.current = { kind: 'place' };
+      else if (t === 'select') {
+        const hit = v.pick(p.x, p.y, st, false), m = hit && 'machineId' in hit ? v.machine(hit.machineId) : null;
+        if (m) { const sel = live.current.selection, group = sel && 'machines' in sel && sel.machines.includes(m.id) ? sel.machines : [m.id]; press.current = { kind: 'machine', id: m.id, sx: tx, sy: ty, dragging: false, group }; }
+        else press.current = { kind: 'marquee', x0: w.x, y0: w.y };
+      } else press.current = { kind: 'place' };
     } else {
       const hit = v.pick(p.x, p.y, st, true);
       if (hit && 'ticketId' in hit) press.current = { kind: 'ticket', id: hit.ticketId, dragging: false };
@@ -224,7 +234,13 @@ function Floor() {
     } else if (pr?.kind === 'erase') {
       const m = machineAt(pr.draft, tx, ty); if (m) { pr.draft = erase(pr.draft, m.id); store.previewLayout(pr.draft); }
     } else if (pr?.kind === 'machine') {
-      if (moved.current > 5) { pr.dragging = true; const m = v.machine(pr.id); if (m) { const gx = tx - pr.ox, gy = ty - pr.oy; live.current.ghost = { cells: [{ x: gx, y: gy, w: m.w, h: m.h }], ok: canPlace(st.layout, { x: gx, y: gy, w: m.w, h: m.h }, m.id), text: 'Move' }; } }
+      if (moved.current > 5) {
+        pr.dragging = true;
+        const ids = new Set(pr.group), ox = tx - pr.sx, oy = ty - pr.sy, cells = st.layout.machines.filter((m) => ids.has(m.id)).map((m) => ({ x: m.x + ox, y: m.y + oy, w: m.w, h: m.h, label: m.kind === 'label' }));
+        live.current.ghost = { cells, ok: cells.every((c) => c.label || canPlace(st.layout, c, ids)), text: pr.group.length > 1 ? `Move ${pr.group.length} machines` : 'Move' };
+      }
+    } else if (pr?.kind === 'marquee') {
+      live.current.marquee = { x0: pr.x0, y0: pr.y0, x1: w.x, y1: w.y };
     } else if (pr?.kind === 'ticket') {
       if (moved.current > 5) { pr.dragging = true; const d = dropTarget(v, w.x, w.y); live.current.drag = { ticketId: pr.id, x: w.x, y: w.y, ok: d.ok, text: d.text }; }
     } else if (moved.current > 5) { v.cam.x -= dx / v.cam.z; v.cam.y -= dy / v.cam.z; }
@@ -234,19 +250,24 @@ function Floor() {
     const v = viewRef.current, st = viewState(), pr = press.current; press.current = null;
     if (!v || !st) return;
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y), click = moved.current <= 5;
+    if (pr?.kind === 'pan') return;
     if (pr?.kind === 'paint') {
       const final = !pr.did && click ? place(pr.draft, specFor('belt', tx, ty, live.current.dir)!) ?? paintBelts(pr.draft, { x: tx, y: ty }, { x: tx, y: ty }).layout : pr.draft;
       void store.setLayout(final).finally(() => store.endEdit());
     } else if (pr?.kind === 'erase') { void store.setLayout(pr.draft).finally(() => store.endEdit()); }
     else if (pr?.kind === 'machine') {
       const g = live.current.ghost; live.current.ghost = null;
-      if (pr.dragging && g?.cells[0]) { if (g.ok) commit(move(st.layout, pr.id, g.cells[0].x, g.cells[0].y)); else toast.warning('No room here'); }
-      setSelection({ machine: pr.id });
+      if (pr.dragging && g) { if (g.ok) commit(moveMany(st.layout, new Set(pr.group), tx - pr.sx, ty - pr.sy)); else toast.warning('No room here'); }
+      if (!pr.dragging || pr.group.length === 1) setSelection({ machine: pr.id });
+    } else if (pr?.kind === 'marquee') {
+      const q = live.current.marquee; live.current.marquee = null;
+      const ids = q && !click ? machinesIn(st.layout, q.x0, q.y0, q.x1, q.y1) : [];
+      setSelection(ids.length > 1 ? { machines: ids } : ids.length === 1 ? { machine: ids[0]! } : null);
     } else if (pr?.kind === 'place') {
       if (click) {
         const spec = specFor(live.current.tool, tx, ty, live.current.dir), next = spec ? place(st.layout, spec) : null;
         commit(next);
-        if (next && spec && spec.kind !== 'arm') { setTool('select'); setSelection({ machine: spec.id }); }
+        if (next && spec && spec.kind !== 'arm' && spec.kind !== 'bridge') { setTool('select'); setSelection({ machine: spec.id }); }
       }
     } else if (pr?.kind === 'ticket') {
       const dr = live.current.drag; live.current.drag = null;
@@ -262,11 +283,12 @@ function Floor() {
   const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     const p = local(e), hit = v.pick(p.x, p.y, st, true);
-    if (hit && 'ticketId' in hit) openTicketInWork(hit.ticketId);
+    if (hit && 'ticketId' in hit) setOpenTicket(hit.ticketId);
   };
 
   // ---------- commands and their keys ----------
   const selMachine = selection && 'machine' in selection && layout ? layout.machines.find((m) => m.id === selection.machine) ?? null : null;
+  const selMany = useMemo(() => (selection && 'machines' in selection ? selection.machines : []), [selection]);
   const selTicket = selection && 'ticket' in selection && snapshot ? snapshot.tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
   const transferTo = useCallback((ticketId: string) => { void useFactoryStore.getState().transfer(ticketId, {}); }, []);
 
@@ -278,8 +300,10 @@ function Floor() {
       if (selTicket.phase === 'review' && m?.kind === 'station') m.outcomes.slice(0, 4).forEach((o, i) => out.push({ key: 'QWER'[i]!, label: o, icon: i ? 'loop' : 'check', primary: i === 0, title: `Decide: ${o}`, run: () => void store.resolve(selTicket.ticketId, o) }));
       if (selTicket.phase === 'zone' && !selTicket.released) out.push({ key: 'Q', label: 'Release', icon: 'play', primary: true, title: 'Let an arm take this ticket out of its zone', run: () => void store.release(selTicket.ticketId) });
       if (selTicket.phase === 'failed' || selTicket.phase === 'question') out.push({ key: 'Q', label: 'Run again', icon: 'loop', primary: true, title: 'Run the station again on this ticket', run: () => void store.retry(selTicket.ticketId) });
-      out.push({ key: 'V', label: 'Open', icon: 'open', title: 'Open the ticket in Work, with its thread', run: () => openTicketInWork(selTicket.ticketId) });
+      out.push({ key: 'V', label: 'Open', icon: 'open', title: 'The ticket, its thread and its actions, without leaving the floor', run: () => setOpenTicket(selTicket.ticketId) });
       out.push({ key: 'X', label: 'Give back', icon: 'give', title: 'Take this ticket out of the Factory', run: () => { void store.giveBack(selTicket.ticketId); setSelection(null); } });
+    } else if (selMany.length && building && tool === 'select') {
+      out.push({ key: 'Delete', label: 'Remove', icon: 'trash', danger: true, title: `Remove the ${selMany.length} selected machines`, run: () => { const l = useFactoryStore.getState().layout; if (l) commit(eraseMany(l, new Set(selMany))); setSelection(null); } });
     } else if (selMachine && (!building || tool === 'select')) {
       if (selMachine.kind === 'belt' || selMachine.kind === 'arm') out.push({ key: 'R', label: 'Turn', icon: 'rotate', title: 'Quarter turn', run: () => { const l = useFactoryStore.getState().layout; if (l) commit(rotate(l, selMachine.id)); } });
       if (selMachine.kind === 'zone') {
@@ -298,7 +322,7 @@ function Floor() {
     if (building) out.push({ key: 'Escape', label: tool !== 'select' ? 'Drop tool' : selection ? 'Menu' : 'Done', icon: 'back', title: tool !== 'select' ? 'Put the tool down' : selection ? 'Back to the build menu' : 'Leave build mode',
       run: () => { if (tool !== 'select') setTool('select'); else if (selection) setSelection(null); else setBuilding(false); } });
     return out;
-  }, [selTicket, selMachine, building, tool, dir, selection, layout, snapshot, store, commit, removeMachine]);
+  }, [selTicket, selMachine, selMany, building, tool, dir, selection, layout, snapshot, store, commit, removeMachine]);
 
   // Saved selections, RTS style: Shift+1…6 saves, 1…6 recalls and centres the view on it.
   const onGroup = useCallback((i: number, save: boolean) => {
@@ -312,14 +336,17 @@ function Floor() {
     if (!g || !v) return;
     setSelection(g);
     if ('ticket' in g) { const p = v.ticketPos(g.ticket); if (p) { v.cam.x = p.x; v.cam.y = p.y; } }
-    else { const m = s.layout?.machines.find((q) => q.id === g.machine); if (m) { v.cam.x = m.x + m.w / 2; v.cam.y = m.y + m.h / 2; } }
+    else { const id = 'machines' in g ? g.machines[0] : g.machine, m = s.layout?.machines.find((q) => q.id === id); if (m) { v.cam.x = m.x + m.w / 2; v.cam.y = m.y + m.h / 2; } }
   }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-      if (e.metaKey || e.ctrlKey || e.altKey || transferOpen) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || transferOpen || openTicket) return;
+      if (e.code === 'Space') { e.preventDefault(); live.current.space = true; return; }
+      const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (arrow && viewRef.current) { e.preventDefault(); viewRef.current.cam.x += arrow[0]! * 3; viewRef.current.cam.y += arrow[1]! * 3; return; }
       const digit = /^Digit([1-6])$/.exec(e.code);
       if (digit) { e.preventDefault(); onGroup(Number(digit[1]) - 1, e.shiftKey); return; }
       const key = e.key === 'Backspace' ? 'Delete' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
@@ -327,9 +354,10 @@ function Floor() {
       if (cmd) { e.preventDefault(); cmd.run(); }
       else if (key === 'Escape' && selection) setSelection(null);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [commands, selection, transferOpen, onGroup]);
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; };
+    window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); };
+  }, [commands, selection, transferOpen, openTicket, onGroup]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
@@ -347,7 +375,7 @@ function Floor() {
           <canvas
             ref={canvasRef} className={cn('absolute inset-0 h-full w-full touch-none', building && tool !== 'select' ? 'cursor-crosshair' : 'cursor-grab')}
             aria-label="Factory floor" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-            onPointerLeave={() => { live.current.hover = null; live.current.ghost = null; }} onWheel={onWheel} onDoubleClick={onDoubleClick}
+            onPointerLeave={() => { live.current.hover = null; live.current.ghost = null; }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
           {layout && layout.machines.length <= 1 && !building && snapshot && snapshot.tickets.length === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -363,7 +391,8 @@ function Floor() {
       </div>
       <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} commands={commands} groups={groups} onGroup={onGroup} miniRef={miniRef}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up, move it or remove it.' : 'Click to select, drag a ticket to move it, double-click a ticket to open it. Tickets you hand over wait in Inbound.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket to open it. Tickets you hand over wait in Inbound.')} />
+      {openTicket && <FactoryTicketModal ticketId={openTicket} onClose={() => setOpenTicket(null)} />}
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
     </div>
   );

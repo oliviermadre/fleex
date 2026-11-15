@@ -110,6 +110,41 @@ describe('FactoryEngine', () => {
     expect(two.machines.map((m) => (m.kind === 'zone' ? m.inbound : null))).toEqual([true, false]);
   });
 
+  it('a bridge lets two lines cross: each ticket goes straight across', async () => {
+    const bridge: MachineSpec = { id: 'x', kind: 'bridge', x: 3, y: 3, w: 1, h: 1 };
+    await boot([
+      belt('w1', 1, 3), belt('w2', 2, 3), bridge, belt('e1', 4, 3), zone('east', 5, 3),
+      belt('n1', 3, 1, 1), belt('n2', 3, 2, 1), belt('s1', 3, 4, 1), zone('south', 3, 5),
+    ]);
+    await engine.transfer('a', { machineId: 'w1' });
+    await engine.transfer('b', { machineId: 'n1' });
+    await run(6);
+    expect(where('a')).toBe('east:zone');
+    expect(where('b')).toBe('south:zone');
+    await expect(engine.transfer('c', { machineId: 'x' })).rejects.toBeInstanceOf(FactoryError);
+  });
+
+  it('a bridge lane waits when the tile after it is taken, without blocking the other lane', async () => {
+    const bridge: MachineSpec = { id: 'x', kind: 'bridge', x: 3, y: 3, w: 1, h: 1 };
+    await boot([belt('w2', 2, 3), bridge, belt('e1', 4, 3), belt('n2', 3, 2, 1), belt('s1', 3, 4, 1), zone('south', 3, 5)]);   // e1 leads nowhere
+    await engine.transfer('c', { machineId: 'e1' });
+    await engine.transfer('a', { machineId: 'w2' });
+    await engine.transfer('b', { machineId: 'n2' });
+    await run(4);
+    expect(where('c')).toBe('e1:belt');
+    expect(where('a')).toBe('x:belt');                  // held on the bridge, east-west lane
+    expect(where('b')).toBe('south:zone');              // the north-south lane kept moving
+  });
+
+  it('the floor has no edge: machines can sit at negative coordinates', async () => {
+    await boot([belt('b1', -3, -2), belt('b2', -2, -2), zone('z', -1, -3)]);
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(3);
+    expect(where('a')).toBe('z:zone');
+    await engine.move('a', { x: -40, y: 12 });
+    expect(engine.snapshot().tickets[0]).toMatchObject({ phase: 'loose', x: -40, y: 12 });
+  });
+
   it('a belt tile holds one ticket: a full one makes the tile behind it wait', async () => {
     await boot([belt('b1', 1, 1), belt('b2', 2, 1), belt('b3', 3, 1)]);   // b3 leads nowhere
     await engine.transfer('a', { machineId: 'b3' });
@@ -319,9 +354,9 @@ describe('FactoryEngine', () => {
 });
 
 describe('normaliseLayout', () => {
-  it('refuses overlaps, out-of-floor machines and duplicate ids', () => {
+  it('refuses overlaps and duplicate ids, and records how far the floor extends', () => {
     expect(() => normaliseLayout({ w: 10, h: 10, machines: [belt('a', 1, 1), belt('b', 1, 1)] })).toThrow(/overlap/);
-    expect(() => normaliseLayout({ w: 10, h: 10, machines: [station('s', 8, 8)] })).toThrow(/out of the floor/);
+    expect(normaliseLayout({ w: 0, h: 0, machines: [station('s', -8, 8), belt('a', 30, 2)] })).toMatchObject({ w: 39, h: 9 });
     expect(() => normaliseLayout({ w: 10, h: 10, machines: [belt('a', 1, 1), belt('a', 2, 1)] })).toThrow(/unique id/);
   });
 

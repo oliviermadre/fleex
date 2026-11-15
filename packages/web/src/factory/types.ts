@@ -22,7 +22,9 @@ export interface StationSpec extends MachineBase {
 export interface ZoneSpec extends MachineBase { kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean }
 export interface ExitSpec extends MachineBase { kind: 'exit' }
 export interface LabelSpec extends MachineBase { kind: 'label'; text: string; color?: string }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec;
+/** Where two belts cross: a ticket that enters keeps going straight. */
+export interface BridgeSpec extends MachineBase { kind: 'bridge' }
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec;
 export type MachineKind = MachineSpec['kind'];
 
 export interface FactoryLayout { w: number; h: number; machines: MachineSpec[] }

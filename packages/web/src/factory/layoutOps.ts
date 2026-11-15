@@ -1,7 +1,7 @@
 /** Pure edits of a Factory layout: every function returns a new layout, or null when the edit cannot be done. */
 import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec } from './types';
 
-export type Tool = 'select' | 'belt' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'erase';
+export type Tool = 'select' | 'belt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'erase';
 
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -16,6 +16,7 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
   switch (tool) {
     case 'belt': return { id, kind: 'belt', x, y, w: 1, h: 1, dir };
     case 'arm': return { id, kind: 'arm', x, y, w: 1, h: 1, dir, filter: null };
+    case 'bridge': return { id, kind: 'bridge', x, y, w: 1, h: 1 };
     case 'agent': case 'skill': case 'panel':
       return { id, kind: 'station', x: x - 1, y: y - 1, w: 3, h: 3, name: tool === 'agent' ? 'Agent' : tool === 'skill' ? 'Skill' : 'Panel', exec: tool as StationExec, ref: '', mode: 'edit', outcomes: ['ok'], cap: 8 };
     case 'gate': return { id, kind: 'station', x: x - 1, y: y - 1, w: 3, h: 3, name: 'Gate', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
@@ -27,11 +28,11 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
   }
 }
 
-/** A machine may land on belt tiles (it takes their place), on nothing else. `ignore` is the machine being moved. */
-export function canPlace(layout: FactoryLayout, spec: Pick<MachineSpec, 'x' | 'y' | 'w' | 'h'>, ignore?: string): boolean {
-  if (spec.x < 0 || spec.y < 0 || spec.x + spec.w > layout.w || spec.y + spec.h > layout.h) return false;
+/** A machine may land on belt tiles (it takes their place), on nothing else. The floor has no edge. `ignore`: machines being moved. */
+export function canPlace(layout: FactoryLayout, spec: Pick<MachineSpec, 'x' | 'y' | 'w' | 'h'>, ignore?: string | ReadonlySet<string>): boolean {
+  const skip = (id: string) => (typeof ignore === 'string' ? ignore === id : !!ignore && ignore.has(id));
   for (const m of layout.machines) {
-    if (m.id === ignore || m.kind === 'belt' || m.kind === 'label') continue;
+    if (skip(m.id) || m.kind === 'belt' || m.kind === 'label') continue;
     if (m.x < spec.x + spec.w && spec.x < m.x + m.w && m.y < spec.y + spec.h && spec.y < m.y + m.h) return false;
   }
   return true;
@@ -47,7 +48,6 @@ export function place(layout: FactoryLayout, spec: MachineSpec): FactoryLayout |
 
 /** Lay or re-aim one belt tile; leaves any other machine alone. */
 export function setBelt(layout: FactoryLayout, x: number, y: number, dir: Dir): FactoryLayout {
-  if (x < 0 || y < 0 || x >= layout.w || y >= layout.h) return layout;
   const there = layout.machines.find((m) => m.kind !== 'label' && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
   if (there && there.kind !== 'belt') return layout;
   if (there) return there.dir === dir ? layout : { ...layout, machines: layout.machines.map((m) => (m === there ? { ...there, dir } : m)) };
@@ -73,6 +73,22 @@ export function move(layout: FactoryLayout, id: string, x: number, y: number): F
   if (!m || !canPlace(layout, { x, y, w: m.w, h: m.h }, id)) return null;
   const target = { x, y, w: m.w, h: m.h };
   return { ...layout, machines: layout.machines.filter((q) => q.id === id || q.kind !== 'belt' || m.kind === 'label' || !overlaps(q, target)).map((q) => (q.id === id ? ({ ...q, x, y } as MachineSpec) : q)) };
+}
+
+/** Move several machines by the same offset, all or none. Belts under where they land give way; the moved ones keep their tickets. */
+export function moveMany(layout: FactoryLayout, ids: ReadonlySet<string>, dx: number, dy: number): FactoryLayout | null {
+  if (!dx && !dy) return layout;
+  const moved = layout.machines.filter((m) => ids.has(m.id)).map((m) => ({ ...m, x: m.x + dx, y: m.y + dy }) as MachineSpec);
+  for (const m of moved) if (m.kind !== 'label' && !canPlace(layout, m, ids)) return null;
+  const solid = moved.filter((m) => m.kind !== 'label');
+  const rest = layout.machines.filter((m) => !ids.has(m.id) && !(m.kind === 'belt' && solid.some((q) => overlaps(m, q))));
+  return { ...layout, machines: [...rest, ...moved] };
+}
+export const eraseMany = (layout: FactoryLayout, ids: ReadonlySet<string>): FactoryLayout => ({ ...layout, machines: layout.machines.filter((m) => !ids.has(m.id)) });
+/** Ids of the machines that touch a rectangle given in world units. */
+export function machinesIn(layout: FactoryLayout, x0: number, y0: number, x1: number, y1: number): string[] {
+  const ax = Math.min(x0, x1), ay = Math.min(y0, y1), bx = Math.max(x0, x1), by = Math.max(y0, y1);
+  return layout.machines.filter((m) => m.x < bx && ax < m.x + m.w && m.y < by && ay < m.y + m.h).map((m) => m.id);
 }
 
 export function rotate(layout: FactoryLayout, id: string): FactoryLayout {

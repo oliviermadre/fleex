@@ -14,7 +14,10 @@ import { useFactoryStore } from './factoryStore';
 import { armTag, type FactoryView } from './renderer';
 import { needsHuman, QUESTION_OUTCOME, type ArmFilterField, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
 
-export type Selection = { machine: string } | { ticket: string } | null;
+export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | null;
+
+/** Colours a label can take on the floor. */
+export const LABEL_COLORS = ['#a1a1aa', '#c084fc', '#60a5fa', '#2dd4bf', '#4ade80', '#facc15', '#fb923c', '#f87171'];
 
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
 const PHASE_LABEL: Record<FactoryTicket['phase'], string> = {
@@ -110,7 +113,21 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, building 
       </div>
       {!building && <Hint>Press B to build: machines can then be dragged.</Hint>}
       {m.kind === 'belt' && <Hint>One tile, one ticket. It pushes it to the tile it points at when that tile is free. Leads to: {view.leadsTo(m)?.name ?? 'nowhere'}.</Hint>}
-      {m.kind === 'label' && <CommitInput id="f-text" label="Text" value={m.text} onCommit={(v) => onPatch({ text: v || 'Zone' })} />}
+      {m.kind === 'label' && (
+        <>
+          <CommitInput id="f-text" label="Text" value={m.text} onCommit={(v) => onPatch({ text: v || 'Zone' })} />
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Colour</span>
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Label colour">
+              {LABEL_COLORS.map((c) => (
+                <button key={c} type="button" role="radio" aria-checked={(m.color ?? LABEL_COLORS[0]) === c} aria-label={`Colour ${c}`} onClick={() => onPatch({ color: c })}
+                  className={cn('h-6 w-6 rounded-full border-2', (m.color ?? LABEL_COLORS[0]) === c ? 'border-[var(--theme-text-primary)]' : 'border-transparent')} style={{ background: c }} />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      {m.kind === 'bridge' && <Hint>Where two belts cross. A ticket that enters keeps going straight, so an east-west line and a north-south line pass over each other without mixing.</Hint>}
       {(m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit') && <CommitInput id="f-name" label="Name" value={m.name ?? ''} onCommit={(v) => onPatch({ name: v })} />}
 
       {m.kind === 'arm' && (
@@ -203,9 +220,15 @@ export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove,
   const machine = selection && 'machine' in selection ? layout.machines.find((m) => m.id === selection.machine) ?? null : null;
   const ticket = selection && 'ticket' in selection ? tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
   const waiting = tickets.filter((t) => needsHuman(t));
+  const many = selection && 'machines' in selection ? selection.machines : null;
   return (
     <aside className="flex w-80 flex-shrink-0 flex-col gap-3 overflow-y-auto border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3" aria-label="Factory inspector">
-      {ticket ? <TicketPanel t={ticket} view={view} />
+      {many ? (
+        <>
+          <div className="text-sm font-semibold text-[var(--theme-text-primary)]">{many.length} machines selected</div>
+          <Hint>Drag any of them to move them all together: belts, arms and stations keep their tickets. Delete removes them. Escape clears the selection.</Hint>
+        </>
+      ) : ticket ? <TicketPanel t={ticket} view={view} />
         : machine ? <MachinePanel m={machine} view={view} tickets={tickets} onPatch={(p) => onPatch(machine.id, p)} onRemove={() => onRemove(machine.id)} onSelect={onSelect} building={building} />
         : (
           <>

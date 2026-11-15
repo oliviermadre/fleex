@@ -36,8 +36,14 @@ export interface ZoneSpec extends MachineBase {
 /** Sets the ticket to `done` and hands it back to plain Fleex. */
 export interface ExitSpec extends MachineBase { kind: 'exit' }
 export interface LabelSpec extends MachineBase { kind: 'label'; text: string; color?: string }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec;
+/**
+ * Where two belts cross: one tile, two lanes. A ticket that enters keeps going straight, so a line
+ * running east-west and a line running north-south pass over each other without mixing.
+ */
+export interface BridgeSpec extends MachineBase { kind: 'bridge' }
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec;
 
+/** `w` and `h` are the extent of what is built, kept for reference: the floor itself has no edge. */
 export interface FactoryLayout { w: number; h: number; machines: MachineSpec[] }
 export interface FactorySettings {
   /** Station runs the Factory may start per rolling hour. A runaway floor stops here. */

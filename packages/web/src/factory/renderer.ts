@@ -13,6 +13,10 @@ export interface ViewState {
   /** Arm id → swing progress 0..1. */
   arms: Map<string, number>;
   selMachine: string | null;
+  /** Build mode: several machines selected at once. */
+  selMany: string[];
+  /** Build mode: the rectangle being dragged to select, in world units. */
+  marquee: { x0: number; y0: number; x1: number; y1: number } | null;
   selTicket: string | null;
   hoverMachine: string | null;
   edit: boolean;
@@ -38,6 +42,17 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
   ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
 }
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
+/** Empty tiles kept around what is built, so there is always room to extend it. */
+export const FLOOR_MARGIN = 8;
+/** The rectangle of floor that is drawn: what is built plus the margin, never smaller than a starting floor. */
+export function floorRect(layout: FactoryLayout): { x: number; y: number; w: number; h: number } {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const m of layout.machines) { x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h); }
+  if (!layout.machines.length) { x0 = 0; y0 = 0; x1 = 0; y1 = 0; }
+  x0 -= FLOOR_MARGIN; y0 -= FLOOR_MARGIN; x1 += FLOOR_MARGIN; y1 += FLOOR_MARGIN;
+  const growX = Math.max(0, 40 - (x1 - x0)), growY = Math.max(0, 24 - (y1 - y0));
+  return { x: x0 - Math.floor(growX / 2), y: y0 - Math.floor(growY / 2), w: x1 - x0 + growX, h: y1 - y0 + growY };
+}
 export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
 
 /** What an arm lets through, in a few words. */
@@ -79,10 +94,9 @@ export class FactoryView {
   /** Frame what is built, or the whole floor when it is empty or being edited. */
   fit(layout: FactoryLayout, whole: boolean): void {
     this.resize();
-    let x0 = layout.w, y0 = layout.h, x1 = 0, y1 = 0;
-    if (!whole) for (const m of layout.machines) { x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h); }
-    if (whole || x1 <= x0) { x0 = 0; y0 = 0; x1 = layout.w; y1 = layout.h; }
-    const bw = x1 - x0 + 3, bh = y1 - y0 + 3;
+    const f = floorRect(layout), pad = whole || layout.machines.length === 0 ? 0 : FLOOR_MARGIN - 1.5;
+    const x0 = f.x + pad, y0 = f.y + pad, x1 = f.x + f.w - pad, y1 = f.y + f.h - pad;
+    const bw = x1 - x0, bh = y1 - y0;
     this.cam.z = clamp(Math.min(this.w / bw, this.h / bh), 5, 60);
     this.cam.x = (x0 + x1) / 2; this.cam.y = (y0 + y1) / 2;
   }
@@ -112,7 +126,14 @@ export class FactoryView {
   }
   at(x: number, y: number): MachineSpec | null { return this.grid.get(`${x},${y}`) ?? null; }
   machine(id: string | null): MachineSpec | null { return id ? this.byId.get(id) ?? null : null; }
-  private feeds(n: MachineSpec | null, x: number, y: number): boolean { return !!n && n.kind === 'belt' && n.x + DX[n.dir] === x && n.y + DY[n.dir] === y; }
+  /** Does this neighbour push tickets onto the tile at (x, y)? A bridge does, unless that tile is a belt pointing back at it. */
+  private feeds(n: MachineSpec | null, x: number, y: number): boolean {
+    if (!n) return false;
+    if (n.kind === 'belt') return n.x + DX[n.dir] === x && n.y + DY[n.dir] === y;
+    if (n.kind !== 'bridge') return false;
+    const me = this.at(x, y);
+    return !(me && me.kind === 'belt' && me.x + DX[me.dir] === n.x && me.y + DY[me.dir] === n.y);
+  }
   /** A belt fed from one side only, and not from behind, is a bend: the direction its feeder travels in, or -1. */
   private bendOf(b: BeltSpec): number {
     let f = -1, n = 0;
@@ -128,10 +149,13 @@ export class FactoryView {
     return out;
   }
   /** The first machine a belt leads to, following the belts as they point. */
-  leadsTo(m: MachineSpec | null): MachineSpec | null {
+  leadsTo(m: MachineSpec | null, dir = 0): MachineSpec | null {
     let guard = 0;
-    while (m && m.kind === 'belt' && guard++ < 2000) m = this.at(m.x + DX[m.dir], m.y + DY[m.dir]);
-    return m && m.kind !== 'belt' ? m : null;
+    while (m && (m.kind === 'belt' || m.kind === 'bridge') && guard++ < 5000) {
+      if (m.kind === 'belt') dir = m.dir;
+      m = this.at(m.x + DX[dir as 0], m.y + DY[dir as 0]);
+    }
+    return m && m.kind !== 'belt' && m.kind !== 'bridge' ? m : null;
   }
 
   private label(text: string, wx: number, wy: number, size: number, color: string, opts: Label[5] = {}): void { this.labels.push([text, wx, wy, size, color, opts]); }
@@ -196,12 +220,14 @@ export class FactoryView {
     ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, this.w, this.h);
     ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - cam.x * z) * d, (this.h / 2 - cam.y * z) * d);
 
-    rr(ctx, -0.5, -0.5, L.w + 1, L.h + 1, 0.7); ctx.fillStyle = pal.floor; ctx.fill();
+    /* the floor has no edge: it is drawn as far as what is built, plus room to build further */
+    const F = floorRect(L);
+    rr(ctx, F.x - 0.5, F.y - 0.5, F.w + 1, F.h + 1, 0.7); ctx.fillStyle = pal.floor; ctx.fill();
     ctx.strokeStyle = st.edit ? pal.accent : pal.grid; ctx.lineWidth = st.edit ? 0.08 : 0.05; ctx.stroke();
     if (z >= (st.edit ? 6 : 12)) {
       ctx.strokeStyle = pal.grid; ctx.globalAlpha = st.edit ? 0.9 : 0.5; ctx.lineWidth = 1 / z; ctx.beginPath();
-      for (let i = 0; i <= L.w; i++) { ctx.moveTo(i, 0); ctx.lineTo(i, L.h); }
-      for (let i = 0; i <= L.h; i++) { ctx.moveTo(0, i); ctx.lineTo(L.w, i); }
+      for (let i = 0; i <= F.w; i++) { ctx.moveTo(F.x + i, F.y); ctx.lineTo(F.x + i, F.y + F.h); }
+      for (let i = 0; i <= F.h; i++) { ctx.moveTo(F.x, F.y + i); ctx.lineTo(F.x + F.w, F.y + i); }
       ctx.stroke(); ctx.globalAlpha = 1;
     }
 
@@ -216,6 +242,7 @@ export class FactoryView {
     for (const b of belts) { const f = this.bendOf(b); bends.set(b.id, f); this.beltBase(b, f, pal); }
     if (z >= 8) { ctx.strokeStyle = pal.chev; ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const b of belts) this.beltChevrons(b, bends.get(b.id) ?? -1); ctx.lineCap = 'butt'; }
 
+    for (const m of L.machines) if (m.kind === 'bridge') this.bridge(m, inside.get(m.id) ?? [], st, pal, dtReal);
     for (const m of L.machines) {
       if (m.kind === 'label') this.label(m.text, m.x + 0.12, m.y + 0.5, 0.62, m.color || pal.text2, { weight: 700, min: 10, max: 24 });
       else if (m.kind === 'zone') this.zone(m, inside.get(m.id) ?? [], st, pal, dtReal);
@@ -257,7 +284,7 @@ export class FactoryView {
       ctx.beginPath();
       for (let s = 0; s < 4; s++) {
         const n = this.at(x + DX[s as 0], y + DY[s as 0]);
-        if (s === b.dir ? !!n && (n.kind === 'belt' || isBox(n)) : this.feeds(n, x, y)) continue;
+        if (s === b.dir ? !!n && (n.kind === 'belt' || n.kind === 'bridge' || isBox(n)) : this.feeds(n, x, y)) continue;
         if (s === 0) { ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); } else if (s === 2) { ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); }
         else if (s === 1) { ctx.moveTo(x, y + 0.955); ctx.lineTo(x + 1, y + 0.955); } else { ctx.moveTo(x, y + 0.045); ctx.lineTo(x + 1, y + 0.045); }
       }
@@ -265,7 +292,7 @@ export class FactoryView {
     }
     /* a belt that leads nowhere says so */
     const n = this.at(x + dx, y + dy);
-    if (!(n && (n.kind === 'belt' || isBox(n))) && !this.takersOf(b).length) {
+    if (!(n && (n.kind === 'belt' || n.kind === 'bridge' || isBox(n))) && !this.takersOf(b).length) {
       ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.12; ctx.beginPath();
       ctx.moveTo(x + 0.5 + dx * 0.42 - dy * 0.4, y + 0.5 + dy * 0.42 - dx * 0.4); ctx.lineTo(x + 0.5 + dx * 0.42 + dy * 0.4, y + 0.5 + dy * 0.42 + dx * 0.4); ctx.stroke();
     }
@@ -281,6 +308,34 @@ export class FactoryView {
       else { cx = b.x + 0.5 + dx * (u - 0.5); cy = b.y + 0.5 + dy * (u - 0.5); }
       ctx.beginPath(); ctx.moveTo(cx - tx * 0.09 + ty * 0.19, cy - ty * 0.09 - tx * 0.19); ctx.lineTo(cx + tx * 0.09, cy + ty * 0.09); ctx.lineTo(cx - tx * 0.09 - ty * 0.19, cy - ty * 0.09 + tx * 0.19); ctx.stroke();
     }
+  }
+
+  /** Two belts crossing: the north-south one passes under, the east-west one over it. */
+  private bridge(m: MachineSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
+    const ctx = this.ctx, { x, y } = m, off = (this.clock * 0.6) % 0.5;
+    ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y - 0.01, 1.02, 1.02);
+    const lane = (horizontal: boolean) => {
+      ctx.strokeStyle = pal.chev; ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (let k = 0; k < 2; k++) {
+        const u = off + k * 0.5 - 0.5, cx = x + 0.5 + (horizontal ? u : 0), cy = y + 0.5 + (horizontal ? 0 : u);
+        ctx.beginPath();
+        if (horizontal) { ctx.moveTo(cx - 0.09, cy - 0.19); ctx.lineTo(cx + 0.09, cy); ctx.lineTo(cx - 0.09, cy + 0.19); }
+        else { ctx.moveTo(cx - 0.19, cy - 0.09); ctx.lineTo(cx, cy + 0.09); ctx.lineTo(cx + 0.19, cy - 0.09); }
+        ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+    };
+    const draw = (t: FactoryTicket) => this.ticket(t, x + 0.5 + t.fx * (t.p - 0.5), y + 0.5 + t.fy * (t.p - 0.5), 0.46, st, '', dt);
+    /* under: the north-south lane, between its two rails */
+    ctx.strokeStyle = pal.edge; ctx.lineWidth = 0.09; ctx.beginPath(); ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); ctx.stroke();
+    if (this.cam.z >= 8) lane(false);
+    for (const t of tickets) if (t.fx === 0) draw(t);
+    /* over: the deck of the east-west lane, with a shadow on the lane below */
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x, y + 0.1, 1, 0.8);
+    ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y + 0.16, 1.02, 0.68);
+    ctx.strokeStyle = pal.text3; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(x, y + 0.16); ctx.lineTo(x + 1, y + 0.16); ctx.moveTo(x, y + 0.84); ctx.lineTo(x + 1, y + 0.84); ctx.stroke();
+    if (this.cam.z >= 8) lane(true);
+    for (const t of tickets) if (t.fx !== 0) draw(t);
   }
 
   private arm(a: ArmSpec, carried: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
@@ -357,6 +412,12 @@ export class FactoryView {
     const ctx = this.ctx, outline = (m: MachineSpec, color: string, lw: number) => { ctx.strokeStyle = color; ctx.lineWidth = lw; rr(ctx, m.x - 0.04, m.y - 0.04, m.w + 0.08, m.h + 0.08, m.w > 1 ? 0.32 : 0.2); ctx.stroke(); };
     const hov = this.machine(st.hoverMachine), sel = this.machine(st.selMachine);
     if (hov && hov !== sel) outline(hov, pal.text3, 0.05);
+    for (const id of st.selMany) { const m = this.machine(id); if (m) outline(m, pal.accent, 0.08); }
+    if (st.marquee) {
+      const q = st.marquee, mx = Math.min(q.x0, q.x1), my = Math.min(q.y0, q.y1);
+      ctx.fillStyle = 'rgba(96,165,250,0.12)'; ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 0.05; ctx.setLineDash([0.2, 0.14]);
+      ctx.fillRect(mx, my, Math.abs(q.x1 - q.x0), Math.abs(q.y1 - q.y0)); ctx.strokeRect(mx, my, Math.abs(q.x1 - q.x0), Math.abs(q.y1 - q.y0)); ctx.setLineDash([]);
+    }
     if (sel) {
       outline(sel, pal.text, 0.08);
       /* what feeds the selected machine, and what empties it */
@@ -402,13 +463,13 @@ export class FactoryView {
     if (!w || !h) return;
     if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
     const c = cv.getContext('2d'); if (!c) return;
-    const s = Math.min(w / (L.w + 2), h / (L.h + 2)), ox = (w - L.w * s) / 2, oy = (h - L.h * s) / 2;
+    const F = floorRect(L), s = Math.min(w / (F.w + 2), h / (F.h + 2)), ox = (w - F.w * s) / 2 - F.x * s, oy = (h - F.h * s) / 2 - F.y * s;
     this.mini = { s, ox, oy };
     c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h);
-    c.fillStyle = pal.floor; c.fillRect(ox, oy, L.w * s, L.h * s);
+    c.fillStyle = pal.floor; c.fillRect(ox + F.x * s, oy + F.y * s, F.w * s, F.h * s);
     for (const m of L.machines) {
       if (m.kind === 'label') continue;
-      c.fillStyle = m.kind === 'belt' ? pal.edge : m.kind === 'arm' ? pal.text2 : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.exec === 'human_gate' ? pal.warn : pal.text2;
+      c.fillStyle = m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? pal.text2 : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.exec === 'human_gate' ? pal.warn : pal.text2;
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     for (const t of st.tickets) {

@@ -25,6 +25,7 @@ function machineSub(m: MachineSpec, view: FactoryView): string {
   if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
   if (m.kind === 'zone') return m.inbound ? 'Inbound · tickets handed over land here' : `Zone${m.status ? ` · ${m.status}` : ''} · leaves ${m.release === 'auto' ? 'automatically' : 'when released'}`;
   if (m.kind === 'exit') return 'Exit · sets done and hands the ticket back to Fleex';
+  if (m.kind === 'bridge') return 'Bridge · two belts cross here without mixing';
   return 'Label';
 }
 const Stat = ({ label, value }: { label: string; value: string | number }) => <span className="text-[11px] text-[var(--theme-text-muted)]">{label} <b className="font-mono font-medium text-[var(--theme-text-primary)]">{value}</b></span>;
@@ -60,8 +61,10 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, co
   const ticket = selection && 'ticket' in selection ? tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
   const inside = machine ? tickets.filter((t) => t.machineId === machine.id).sort((a, b) => a.since.localeCompare(b.since)) : [];
   const waiting = tickets.filter((t) => needsHuman(t));
+  const many = selection && 'machines' in selection ? selection.machines.length : 0;
   const groupName = (g: Selection): string => {
     if (!g) return '';
+    if ('machines' in g) return `${g.machines.length} machines`;
     if ('ticket' in g) { const t = tickets.find((q) => q.ticketId === g.ticket); return t ? `#${t.info?.displayId ?? '?'}` : 'gone'; }
     const m = layout?.machines.find((q) => q.id === g.machine); return m ? m.name || m.kind : 'gone';
   };
@@ -113,8 +116,8 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, co
               </>
             ) : (
               <>
-                <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{title}</div>
-                <div className="line-clamp-2 text-xs text-[var(--theme-text-secondary)]">{hint}</div>
+                <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{many ? `${many} machines selected` : title}</div>
+                <div className="line-clamp-2 text-xs text-[var(--theme-text-secondary)]">{many ? 'Drag one of them to move them all. Delete removes them.' : hint}</div>
                 <div className="flex flex-wrap gap-x-3"><Stat label="tickets" value={tickets.length} /><Stat label="running" value={snapshot?.running ?? 0} /><Stat label="runs this hour" value={`${snapshot?.runsLastHour ?? 0}/${snapshot?.floor.settings.maxRunsPerHour ?? 0}`} /><Stat label="waiting for you" value={waiting.length} /></div>
                 <Wire tickets={waiting} onSelect={onSelect} />
               </>
@@ -125,7 +128,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, co
 
       {/* command card */}
       <div className={cn(box, 'flex flex-none flex-col gap-1 p-1.5')}>
-        <div className="max-w-[366px] truncate text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">{ticket ? `#${ticket.info?.displayId ?? '?'}` : machine ? machine.name || machine.kind : title}</div>
+        <div className="max-w-[366px] truncate text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">{many ? `${many} machines` : ticket ? `#${ticket.info?.displayId ?? '?'}` : machine ? machine.name || machine.kind : title}</div>
         <div className="grid grid-cols-6 gap-1" role="toolbar" aria-label="Factory commands">
           {Array.from({ length: SLOTS }, (_, i) => {
             const c = commands[i];

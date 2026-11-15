@@ -21,8 +21,10 @@ interface Machine {
   takers: Machine[];
   src: Machine | null;
   dst: Machine | null;
-  /** Belts: the ticket on the tile. Arms: the ticket in the gripper. */
+  /** Belts: the ticket on the tile. Arms: the ticket in the gripper. Bridges: the ticket travelling east-west. */
   item: Ticket | null;
+  /** Bridges: the ticket travelling north-south. */
+  item2: Ticket | null;
   armState: 'rest' | 'carry' | 'back';
   armP: number;
 }
@@ -72,15 +74,17 @@ function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'sta
 
 /** Reject a layout that cannot be built: out of bounds, overlapping, or with malformed machines. Returns it normalised. */
 export function normaliseLayout(input: FactoryLayout): FactoryLayout {
-  const w = Math.max(8, Math.min(120, Math.floor(input?.w ?? 0))), h = Math.max(8, Math.min(120, Math.floor(input?.h ?? 0)));
   if (!Array.isArray(input?.machines)) throw new FactoryError('layout.machines must be an array');
+  if (input.machines.length > 20_000) throw new FactoryError('too many machines');
   const taken = new Set<string>(), ids = new Set<string>(), machines: MachineSpec[] = [];
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const raw of input.machines) {
     const m = { ...raw } as MachineSpec;
     if (!m || typeof m.id !== 'string' || !m.id || ids.has(m.id)) throw new FactoryError('every machine needs a unique id');
     ids.add(m.id);
     m.x = Math.floor(m.x); m.y = Math.floor(m.y);
-    if (m.kind === 'belt' || m.kind === 'arm' || m.kind === 'label') { m.w = 1; m.h = 1; }
+    if (!Number.isFinite(m.x) || !Number.isFinite(m.y) || Math.abs(m.x) > 100_000 || Math.abs(m.y) > 100_000) throw new FactoryError(`machine ${m.id} has no usable position`);
+    if (m.kind === 'belt' || m.kind === 'arm' || m.kind === 'label' || m.kind === 'bridge') { m.w = 1; m.h = 1; }
     else if (m.kind === 'station') {
       const side = m.exec === 'native' ? 2 : 3; m.w = side; m.h = side;
       m.outcomes = Array.isArray(m.outcomes) && m.outcomes.length ? m.outcomes.map(String).filter(Boolean) : ['ok'];
@@ -94,15 +98,16 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     } else if (m.kind === 'exit') { m.w = Math.max(1, Math.min(60, Math.floor(m.w || 3))); m.h = Math.max(1, Math.min(60, Math.floor(m.h || 3))); }
     else throw new FactoryError(`unknown machine kind "${String((m as { kind?: string }).kind)}"`);
     if ((m.kind === 'belt' || m.kind === 'arm') && ![0, 1, 2, 3].includes(m.dir)) throw new FactoryError('belts and arms need a direction 0..3');
-    if (m.x < 0 || m.y < 0 || m.x + m.w > w || m.y + m.h > h) throw new FactoryError(`machine ${m.id} is out of the floor`);
-    for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) {
+    if (m.kind !== 'label') for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) {
       const k = `${i},${j}`;
       if (taken.has(k)) throw new FactoryError(`two machines overlap at ${k}`);
       taken.add(k);
     }
+    x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h);
     machines.push(m);
   }
-  return { w, h, machines };
+  /* the floor has no edge: `w` and `h` only record how far what is built extends */
+  return { w: machines.length ? x1 - x0 : 0, h: machines.length ? y1 - y0 : 0, machines };
 }
 
 /**
@@ -114,7 +119,7 @@ export class FactoryEngine {
   private floor: FactoryFloorRow = { id: DEFAULT_FLOOR_ID, name: 'Factory', layout: { w: 48, h: 30, machines: [inboundZone(1, 1)] }, settings: { ...DEFAULT_SETTINGS }, createdAt: '', updatedAt: '' };
   private machines: Machine[] = [];
   private byId = new Map<string, Machine>();
-  private grid: (Machine | null)[] = [];
+  private grid = new Map<string, Machine>();
   private tickets = new Map<string, Ticket>();
   private dirty = new Set<string>();
   private runStarts: number[] = [];
@@ -169,18 +174,15 @@ export class FactoryEngine {
 
   // ---------- floor ----------
 
-  private at(x: number, y: number): Machine | null {
-    const { w, h } = this.floor.layout;
-    return x < 0 || y < 0 || x >= w || y >= h ? null : this.grid[y * w + x] ?? null;
-  }
+  private at(x: number, y: number): Machine | null { return this.grid.get(`${x},${y}`) ?? null; }
 
   private build(layout: FactoryLayout): void {
-    this.machines = layout.machines.map((spec) => ({ spec, takers: [], src: null, dst: null, item: null, armState: 'rest' as const, armP: 0 }));
+    this.machines = layout.machines.map((spec) => ({ spec, takers: [], src: null, dst: null, item: null, item2: null, armState: 'rest' as const, armP: 0 }));
     this.byId = new Map(this.machines.map((m) => [m.spec.id, m]));
-    this.grid = new Array<Machine | null>(layout.w * layout.h).fill(null);
+    this.grid = new Map();
     for (const m of this.machines) {
       if (m.spec.kind === 'label') continue;
-      for (let j = m.spec.y; j < m.spec.y + m.spec.h; j++) for (let i = m.spec.x; i < m.spec.x + m.spec.w; i++) this.grid[j * layout.w + i] = m;
+      for (let j = m.spec.y; j < m.spec.y + m.spec.h; j++) for (let i = m.spec.x; i < m.spec.x + m.spec.w; i++) this.grid.set(`${i},${j}`, m);
     }
     for (const m of this.machines) {
       if (m.spec.kind !== 'arm') continue;
@@ -195,6 +197,7 @@ export class FactoryEngine {
     const m = t.machineId ? this.byId.get(t.machineId) ?? null : null;
     if (!m) { if (t.machineId || t.s.phase !== 'loose') { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } return; }
     if (m.spec.kind === 'belt') { if (m.item) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else m.item = t; }
+    else if (m.spec.kind === 'bridge') { const lane = t.s.fx !== 0 ? 'item' : 'item2'; if (m[lane]) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else m[lane] = t; }
     else if (m.spec.kind === 'arm') { if (m.item) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else { m.item = t; m.armState = 'carry'; m.armP = t.s.p; } }
   }
 
@@ -240,6 +243,7 @@ export class FactoryEngine {
   private detach(t: Ticket): void {
     const m = t.machineId ? this.byId.get(t.machineId) : null;
     if (m && m.item === t) { m.item = null; if (m.spec.kind === 'arm') m.armState = 'back'; }
+    if (m && m.item2 === t) m.item2 = null;
     t.machineId = null;
   }
 
@@ -249,6 +253,7 @@ export class FactoryEngine {
     t.machineId = spec.id; t.s.since = new Date(this.now()).toISOString(); t.s.released = false; t.s.runId = null; t.s.note = ''; t.s.x = spec.x; t.s.y = spec.y;
     this.dirty.add(t.ticketId);
     if (spec.kind === 'belt') { m.item = t; t.s.phase = 'belt'; t.s.p = p ?? 0.5; t.s.fx = fx ?? DX[spec.dir]; t.s.fy = fy ?? DY[spec.dir]; }
+    else if (spec.kind === 'bridge') { t.s.phase = 'belt'; t.s.p = p ?? 0; t.s.fx = fx ?? 1; t.s.fy = fy ?? 0; if (t.s.fx !== 0) m.item = t; else m.item2 = t; }
     else if (spec.kind === 'station') {
       t.s.outcome = '';
       if (spec.exec === 'human_gate') { t.s.phase = 'review'; this.openRun(spec, t, 'needs_review'); }
@@ -351,8 +356,29 @@ export class FactoryEngine {
     t.s.p = Math.min(t.s.p + BELT_SPEED * dt, held && t.s.p <= 0.5 ? 0.5 : 1);
     if (t.s.p < 1) return;
     const n = this.at(spec.x + DX[spec.dir], spec.y + DY[spec.dir]);
-    if (n && n.spec.kind === 'belt') { if (!n.item) { b.item = null; this.accept(n, t, DX[spec.dir], DY[spec.dir], 0); } }
-    else if (isBox(n) && this.canTake(n)) { b.item = null; this.accept(n!, t); }
+    if (this.hand(n, t, DX[spec.dir], DY[spec.dir])) b.item = null;
+  }
+
+  /** Pass a ticket travelling in a direction to the next tile, if that tile can take it now. */
+  private hand(n: Machine | null, t: Ticket, fx: number, fy: number): boolean {
+    if (!n) return false;
+    if (n.spec.kind === 'belt') { if (n.item) return false; this.accept(n, t, fx, fy, 0); return true; }
+    if (n.spec.kind === 'bridge') { if (fx !== 0 ? n.item : n.item2) return false; this.accept(n, t, fx, fy, 0); return true; }
+    if (isBox(n) && this.canTake(n)) { this.accept(n, t); return true; }
+    return false;
+  }
+
+  /** A bridge carries each of its two tickets straight across, whatever the other lane does. */
+  private updateBridge(m: Machine, dt: number): void {
+    for (const lane of ['item', 'item2'] as const) {
+      const t = m[lane];
+      if (!t) continue;
+      t.s.p = Math.min(1, t.s.p + BELT_SPEED * dt);
+      if (t.s.p < 1) continue;
+      const { fx, fy } = t.s;
+      m[lane] = null;
+      if (!this.hand(this.at(m.spec.x + fx, m.spec.y + fy), t, fx, fy)) m[lane] = t;
+    }
   }
 
   // ---------- stations and zones ----------
@@ -387,7 +413,7 @@ export class FactoryEngine {
     const targets: Record<string, string> = {};
     for (const o of spec.outcomes) {
       const arm = m.takers.find((a) => { const f = (a.spec as ArmSpec).filter; return f && f.field === 'outcome' && f.values.includes(o); }) ?? m.takers.find((a) => !(a.spec as ArmSpec).filter?.values.length);
-      const dest = arm ? this.leadsTo(arm.dst) : null;
+      const dest = arm ? this.leadsTo(arm.dst, (arm.spec as ArmSpec).dir) : null;
       targets[o] = dest?.spec.name || (dest ? dest.spec.kind : 'nowhere yet');
     }
     void this.deps.runner.run(spec, t.ticketId, run.id, targets, (executionId) => { run.executionId = executionId; this.saveRun(run); })
@@ -407,10 +433,13 @@ export class FactoryEngine {
   }
 
   /** The first machine a belt leads to, following the belts as they point. */
-  private leadsTo(m: Machine | null): Machine | null {
+  private leadsTo(m: Machine | null, dir: number = 0): Machine | null {
     let guard = 0;
-    while (m && m.spec.kind === 'belt' && guard++ < 2000) m = this.at(m.spec.x + DX[m.spec.dir], m.spec.y + DY[m.spec.dir]);
-    return m && m.spec.kind !== 'belt' ? m : null;
+    while (m && (m.spec.kind === 'belt' || m.spec.kind === 'bridge') && guard++ < 5000) {
+      if (m.spec.kind === 'belt') dir = m.spec.dir;
+      m = this.at(m.spec.x + DX[dir as 0], m.spec.y + DY[dir as 0]);
+    }
+    return m && m.spec.kind !== 'belt' && m.spec.kind !== 'bridge' ? m : null;
   }
 
   private updateZone(m: Machine): void {
@@ -434,6 +463,7 @@ export class FactoryEngine {
     for (const m of this.machines) {
       const k = m.spec.kind;
       if (k === 'belt') this.updateBelt(m, dt);
+      else if (k === 'bridge') this.updateBridge(m, dt);
       else if (k === 'arm') this.updateArm(m, dt);
       else if (k === 'station') this.updateStation(m);
       else if (k === 'zone') this.updateZone(m);
@@ -477,16 +507,12 @@ export class FactoryEngine {
   private async ensureInbound(): Promise<string> {
     const existing = this.machines.find((m) => m.spec.kind === 'zone' && m.spec.inbound);
     if (existing) return existing.spec.id;
-    const { w, h } = this.floor.layout;
-    for (let y = 1; y + 6 <= h; y++) for (let x = 1; x + 4 <= w; x++) {
-      let free = true;
-      for (let j = y; j < y + 6 && free; j++) for (let i = x; i < x + 4; i++) if (this.at(i, j)) { free = false; break; }
-      if (!free) continue;
-      const zone = inboundZone(x, y);
-      await this.setLayout({ ...this.floor.layout, machines: [...this.floor.layout.machines, zone] });
-      return zone.id;
-    }
-    throw new FactoryError('No room left on the floor for an Inbound zone');
+    /* to the left of what is built, where nothing can be in the way */
+    let x = 1, y = 1;
+    for (const m of this.machines) { x = Math.min(x, m.spec.x - 6); y = Math.min(y, m.spec.y); }
+    const zone = inboundZone(x, y);
+    await this.setLayout({ ...this.floor.layout, machines: [...this.floor.layout.machines, zone] });
+    return zone.id;
   }
 
   /**
@@ -511,11 +537,10 @@ export class FactoryEngine {
   private place(t: Ticket, target: { machineId?: string; x?: number; y?: number }): void {
     const m = target.machineId ? this.byId.get(target.machineId) ?? null : target.x != null && target.y != null ? this.at(Math.floor(target.x), Math.floor(target.y)) : null;
     if (target.machineId && !m) throw new FactoryError('Unknown machine');
-    if (m && !this.canTake(m)) throw new FactoryError(m.spec.kind === 'belt' ? 'This belt tile is taken' : m.spec.kind === 'station' ? `${m.spec.name || 'This station'} is full` : 'A ticket cannot be dropped on this machine');
+    if (m && !this.canTake(m)) throw new FactoryError(m.spec.kind === 'belt' ? 'This belt tile is taken' : m.spec.kind === 'station' ? `${m.spec.name || 'This station'} is full` : m.spec.kind === 'bridge' ? 'A ticket cannot be dropped on a bridge: put it on the belt before it' : 'A ticket cannot be dropped on this machine');
     this.detach(t);
     if (m) { this.accept(m, t); return; }
-    const { w, h } = this.floor.layout;
-    t.s.phase = 'loose'; t.s.x = Math.max(0, Math.min(w - 1, Math.floor(target.x ?? 0))); t.s.y = Math.max(0, Math.min(h - 1, Math.floor(target.y ?? 0)));
+    t.s.phase = 'loose'; t.s.x = Math.floor(target.x ?? 0); t.s.y = Math.floor(target.y ?? 0);
     t.s.since = new Date(this.now()).toISOString(); t.s.runId = null; t.s.note = ''; t.s.released = false;
     this.dirty.add(t.ticketId);
   }

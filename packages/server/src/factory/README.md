@@ -11,6 +11,9 @@ unanswered ticket never carries on down the normal path). A Factory run creates 
 so the ticket view's usual cards never see it: the Factory banner on the ticket says it waits for you and carries the
 action (Run again, the gate's outcomes). Replying in the thread alone restarts nothing.
 
+The floor has no edge: machines can be placed anywhere, and the page draws it as far as what is built plus a margin.
+Where two belts must cross, a **bridge** tile carries each ticket straight across.
+
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
 
