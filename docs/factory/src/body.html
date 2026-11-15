@@ -1,0 +1,123 @@
+<div id="app">
+  <canvas id="floor" aria-label="Plan de l’usine : intakes, convoyeurs, bras, postes, zones et sortie"></canvas>
+
+  <header id="hud">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="6" fill="#22c55e"/><path d="M6 18.5V11l4.2 2.8V11l4.2 2.8V7.5h4.6v11z" fill="#052e16"/></svg>
+      <b>Fleex Factory</b>
+      <span class="demo" title="Maquette : toutes les données sont simulées">simulé</span>
+    </div>
+    <div class="clock">
+      <span class="time" id="clock">—</span>
+      <div class="seg speed" role="group" aria-label="Vitesse de simulation">
+        <button data-speed="0" aria-pressed="false" title="Pause (Espace)">❚❚</button>
+        <button data-speed="1" aria-pressed="true">1×</button>
+        <button data-speed="3" aria-pressed="false">3×</button>
+        <button data-speed="8" aria-pressed="false">8×</button>
+        <button data-speed="20" aria-pressed="false">20×</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpis">
+      <button class="kpi" data-kpi="flow" title="Tickets passés en done sur 24 h. Clic : calque Débit"><span class="k-l">Expédiés</span><span class="k-v" id="k-flow">—</span></button>
+      <button class="kpi" data-kpi="back" title="Tickets en backlog. Clic : le dépôt"><span class="k-l">Backlog</span><span class="k-v" id="k-back">—</span></button>
+      <button class="kpi" data-kpi="todo" title="Tickets en todo et ancienneté du plus vieux. Clic : le dépôt"><span class="k-l">Todo</span><span class="k-v" id="k-todo">—</span></button>
+      <button class="kpi" data-kpi="wip" title="Tickets doing ou reviewing, et cycle médian du lancement au done. Clic : Production"><span class="k-l">En cours</span><span class="k-v" id="k-wip">—</span></button>
+      <button class="kpi" data-kpi="focus" title="Ce qui attend un humain. Clic : onglet Focus"><span class="k-l">Focus</span><span class="k-v" id="k-focus">—</span></button>
+      <button class="kpi" data-kpi="pool" title="agentMaxConcurrency : agents en cours / maximum"><span class="k-l">Slots agents</span><span class="k-v" id="k-pool">—</span><span class="bar"><i id="k-poolbar"></i></span></button>
+      <button class="kpi" data-kpi="cost" title="Dépense agents sur la dernière heure. Clic : calque Coût"><span class="k-l">Dépense</span><span class="k-v" id="k-cost">—</span></button>
+      <button class="kpi" data-kpi="bench" title="Part du temps d’un ticket passée sur un établi, à la main. Clic : la finition"><span class="k-l">Hors workflow</span><span class="k-v" id="k-bench">—</span></button>
+    </div>
+    <div class="hud-r">
+      <button class="btn" id="btn-prod" aria-pressed="false" title="Statistiques de production (P)">Production</button>
+      <button class="btn icon" id="btn-help" title="Légende, raccourcis et visite guidée" aria-label="Légende, raccourcis et visite guidée">?</button>
+    </div>
+  </header>
+
+  <aside id="panel" aria-label="Pilotage">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="bottlenecks" aria-selected="true">Goulots<span class="cnt" id="c-bn">0</span></button>
+      <button role="tab" data-tab="focus" aria-selected="false">Focus<span class="cnt" id="c-focus">0</span></button>
+      <button role="tab" data-tab="inspect" aria-selected="false">Inspecteur</button>
+      <button role="tab" data-tab="goals" aria-selected="false">Objectifs<span class="cnt" id="c-goals">0/7</span></button>
+      <button id="sheet-toggle" class="btn ghost" aria-label="Replier ou déplier le panneau">▾</button>
+    </div>
+    <div id="pbody"></div>
+  </aside>
+
+  <div id="buildflag" hidden><b>Construction</b><span>la simulation continue · <kbd>Échap</kbd> pour revenir</span></div>
+  <div class="legend" id="legend"></div>
+
+  <div id="console" aria-label="Console">
+    <div class="c-mini">
+      <canvas id="mini" aria-label="Mini-carte : cliquer pour s’y rendre"></canvas>
+      <div class="c-side">
+        <div class="seg vert" id="overlays" role="group" aria-label="Calque">
+          <button data-ov="none" aria-pressed="true">Usine</button>
+          <button data-ov="flow" aria-pressed="false">Débit</button>
+          <button data-ov="cost" aria-pressed="false">Coût</button>
+          <button data-ov="time" aria-pressed="false">Temps</button>
+          <button data-ov="human" aria-pressed="false">Humain</button>
+        </div>
+        <div class="seg" role="group" aria-label="Zoom">
+          <button id="z-out" title="Zoom arrière" aria-label="Zoom arrière">−</button>
+          <button id="z-fit" title="Tout voir (F)" aria-label="Tout voir">⤢</button>
+          <button id="z-in" title="Zoom avant" aria-label="Zoom avant">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="c-sel">
+      <div id="groups" aria-label="Sélections enregistrées"></div>
+      <div id="selinfo" aria-live="off"></div>
+    </div>
+    <div class="c-cmd">
+      <div class="c-title" id="cmd-title">Commandes</div>
+      <div id="cmd" role="toolbar" aria-label="Commandes"></div>
+    </div>
+  </div>
+
+  <div id="modal" hidden>
+    <section class="sheet" role="dialog" aria-label="Contenu de la machine">
+      <header id="modal-head"></header>
+      <div id="modal-body"></div>
+    </section>
+  </div>
+
+  <section id="prod" hidden aria-label="Production">
+    <header>
+      <h2 class="h">Production</h2>
+      <p>Débit, dépense et temps passé, calculés sur la simulation.</p>
+      <span class="spacer"></span>
+      <button class="btn sm" id="prod-close">Fermer</button>
+    </header>
+    <div class="pb" id="prod-body"></div>
+  </section>
+
+  <div id="bubble" hidden></div>
+  <div id="tour" hidden role="dialog" aria-label="Visite guidée"></div>
+  <div id="tip" hidden></div>
+  <div id="toast" hidden role="status"></div>
+
+  <div id="intro" hidden>
+    <div class="modal" role="dialog" aria-labelledby="intro-h">
+      <h1 id="intro-h">Votre flux de tickets, vu comme une usine</h1>
+      <p>Le plan est une grille. Rien n’est routé d’avance : un ticket avance selon ce sur quoi il se trouve. Vous pouvez le déplacer à la main, et réaménager le plan à tout moment. Les chiffres de cette maquette sont simulés.</p>
+      <dl class="map">
+        <div><span class="ic" style="background:#1b2023;border:1px solid #3d454c"></span><dt>Convoyeur</dt><dd>Une case, un ticket. Elle le pousse vers la case qu’elle vise, si celle-ci est libre.</dd></div>
+        <div><span class="ic" style="background:#101314;border:2px solid #eab308;border-radius:50%"></span><dt>Bras</dt><dd>Prend derrière lui, dépose devant. Jaune : il ne prend que ce qui passe son filtre (type, priorité, issue).</dd></div>
+        <div><span class="ic" style="background:#252a2e;border:1px solid #454d55"></span><dt>Poste</dt><dd>Fait tourner une étape (agent, skill, panel), puis range le ticket dans son bac de sortie.</dd></div>
+        <div><span class="ic" style="background:repeating-linear-gradient(45deg,#eab308 0 4px,#15130a 4px 8px)"></span><dt>Gate</dt><dd>Attend votre décision. Chaque issue sort par son propre bras.</dd></div>
+        <div><span class="ic" style="background:#12161a;border:2px solid #8a6d0a"></span><dt>Zone</dt><dd>Backlog, todo, doing, reviewing : les tickets y attendent. On peut les commenter, leur lancer <code>@agent</code> ou <code>@skill</code>, puis les libérer.</dd></div>
+        <div><span class="ic" style="background:#263038;border:1px solid #4b5a66"></span><dt>Intake et sortie</dt><dd>Un intake reçoit les tickets transférés à la Factory ; un bras le vide, comme un poste. La sortie les passe en done.</dd></div>
+        <div><span class="ic" style="background:#60a5fa"></span><dt>Slots agents</dt><dd><code>agentMaxConcurrency</code> : la seule file d’attente côté agents, commune à tout.</dd></div>
+      </dl>
+      <ol class="try">
+        <li>Glissez un ticket et déposez-le ailleurs, sur un convoyeur par exemple : il suit le chemin sur lequel il se trouve.</li>
+        <li>Cliquez une gate : ses issues, et le bras par lequel chacune sort.</li>
+        <li><b>Double-cliquez</b> un ticket pour lire son fil de discussion et sa timeline ; un poste ou une zone pour voir tout ce qu’il contient.</li>
+        <li>Appuyez sur <kbd>B</kbd> (<b>Construire</b>) : tracez un convoyeur, posez un bras, importez un workflow.</li>
+      </ol>
+      <p class="keys"><kbd>Espace</kbd> pause · <kbd>+</kbd> <kbd>−</kbd> vitesse · <kbd>B</kbd> construire · <kbd>V</kbd> ouvrir · <kbd>R</kbd> pivoter · <kbd>Suppr</kbd> retirer · <kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler · <kbd>Maj</kbd>+<kbd>1</kbd>…<kbd>6</kbd> enregistrer une sélection · <kbd>1</kbd>…<kbd>6</kbd> la rappeler · <kbd>F</kbd> tout voir · <kbd>O</kbd> calque · <kbd>P</kbd> production · molette ou pincement pour zoomer</p>
+      <div class="row end"><button class="btn" id="intro-go">Explorer librement</button><button class="btn primary" id="intro-tour">Visite guidée</button></div>
+    </div>
+  </div>
+</div>
