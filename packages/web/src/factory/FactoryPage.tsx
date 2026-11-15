@@ -289,7 +289,7 @@ function Floor() {
       if (click) {
         const spec = specFor(live.current.tool, tx, ty, live.current.dir), next = spec ? place(st.layout, spec) : null;
         commit(next);
-        if (next && spec && spec.kind !== 'arm' && spec.kind !== 'bridge') { setTool('select'); setSelection({ machine: spec.id }); }
+        if (next && spec && spec.kind !== 'arm' && spec.kind !== 'bridge') { setTool('select'); setSelection({ machine: spec.id }); live.current.ghost = null; }
       }
     } else if (pr?.kind === 'ticket') {
       const dr = live.current.drag; live.current.drag = null;
@@ -341,6 +341,8 @@ function Floor() {
     } else if (building) {
       for (const [t, key, label, title] of TOOLS) out.push({ key, label, icon: t === 'erase' ? 'erase' : t, title, active: tool === t, run: () => setTool((cur) => (cur === t ? 'select' : t)) });
       out.push({ key: 'R', label: `Face ${ARROW[dir]}`, icon: 'rotate', title: 'Direction of the belts and arms you place', run: () => setDir((d) => ((d + 1) % 4) as Dir) });
+      out.push({ key: 'Z', label: 'Undo', icon: 'undo', disabled: !store.undoable, title: 'Take back the last change to the floor (also Ctrl+Z)', run: () => void store.undo() });
+      out.push({ key: 'Y', label: 'Redo', icon: 'redo', disabled: !store.redoable, title: 'Put back the change you took back (also Ctrl+Shift+Z)', run: () => void store.redo() });
     } else {
       out.push({ key: 'B', label: 'Build', icon: 'build', primary: true, title: 'Lay belts, arms, stations and zones', run: () => { setBuilding(true); setSelection(null); } });
       out.push({ key: 'T', label: 'Hand over', icon: 'inbound', title: 'Hand tickets over to the Factory: they land in Inbound', run: () => setTransferOpen(true) });
@@ -371,7 +373,14 @@ function Floor() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-      if (e.metaKey || e.ctrlKey || e.altKey || transferOpen || openTicket || openMachine) return;
+      if (transferOpen || openTicket || openMachine) return;
+      /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z' && live.current.building) {
+        e.preventDefault(); setSelection(null);
+        void (e.shiftKey ? useFactoryStore.getState().redo() : useFactoryStore.getState().undo());
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.code === 'Space') { e.preventDefault(); live.current.space = true; return; }
       const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (arrow && viewRef.current) { e.preventDefault(); viewRef.current.cam.x += arrow[0]! * 3; viewRef.current.cam.y += arrow[1]! * 3; return; }

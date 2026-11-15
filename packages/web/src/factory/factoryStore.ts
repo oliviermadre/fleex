@@ -23,6 +23,11 @@ interface FactoryState {
   beginEdit: () => void;
   endEdit: () => void;
   setLayout: (layout: FactoryLayout) => Promise<void>;
+  /** How many layout edits can be taken back, and put back. */
+  undoable: number;
+  redoable: number;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
   setSettings: (patch: Partial<FactorySettings>) => Promise<void>;
   transfer: (ticketId: string, target: Target) => Promise<void>;
   move: (ticketId: string, target: Target) => Promise<void>;
@@ -34,12 +39,32 @@ interface FactoryState {
 
 /** Edits in flight: while one is, a poll must not put the older server layout back. */
 let pendingLayoutSaves = 0;
+/**
+ * Layout history, for undo in build mode. `committed` is the last layout that was saved or received,
+ * as opposed to a drag in progress. It lives for the page session only: a reload starts afresh.
+ */
+const HISTORY = 60;
+let committed: FactoryLayout | null = null;
+let past: FactoryLayout[] = [];
+let future: FactoryLayout[] = [];
+/** Test hook: forget the history. */
+export function resetFactoryHistory(): void { committed = null; past = []; future = []; pendingLayoutSaves = 0; }
 
 export const useFactoryStore = create<FactoryState>((set, get) => {
-  const apply = (snapshot: FactorySnapshot) => set((s) => ({
+  const apply = (snapshot: FactorySnapshot) => set((s) => {
+    if (pendingLayoutSaves === 0) committed = snapshot.floor.layout;
+    return {
     snapshot, layout: pendingLayoutSaves > 0 && s.layout ? s.layout : snapshot.floor.layout,
     managed: new Set(snapshot.tickets.map((t) => t.ticketId)),
-  }));
+    };
+  });
+  const save = async (layout: FactoryLayout) => {
+    committed = layout;
+    set({ layout, undoable: past.length, redoable: future.length });
+    pendingLayoutSaves++;
+    try { const snapshot = await factoryApi.setLayout(layout); pendingLayoutSaves--; apply(snapshot); }
+    catch { pendingLayoutSaves--; const s = get().snapshot; if (s && pendingLayoutSaves === 0) { committed = s.floor.layout; set({ layout: s.floor.layout }); } }
+  };
   const act = async (fn: () => Promise<FactorySnapshot>) => { try { apply(await fn()); } catch { /* the API call already raised a toast */ } };
   return {
     supported: false, enabled: false, snapshot: null, layout: null, managed: new Set<string>(), stats: null, statsDays: 7,
@@ -61,11 +86,22 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     previewLayout: (layout) => set({ layout }),
     beginEdit: () => { pendingLayoutSaves++; },
     endEdit: () => { pendingLayoutSaves = Math.max(0, pendingLayoutSaves - 1); },
+    undoable: 0, redoable: 0,
     setLayout: async (layout) => {
-      set({ layout });
-      pendingLayoutSaves++;
-      try { const snapshot = await factoryApi.setLayout(layout); pendingLayoutSaves--; apply(snapshot); }
-      catch { pendingLayoutSaves--; const s = get().snapshot; if (s && pendingLayoutSaves === 0) set({ layout: s.floor.layout }); }
+      if (committed && committed !== layout) { past.push(committed); if (past.length > HISTORY) past.shift(); future = []; }
+      await save(layout);
+    },
+    undo: async () => {
+      const prev = past.pop();
+      if (!prev) return;
+      if (committed) future.push(committed);
+      await save(prev);
+    },
+    redo: async () => {
+      const next = future.pop();
+      if (!next) return;
+      if (committed) past.push(committed);
+      await save(next);
     },
     setSettings: (patch) => act(() => factoryApi.setSettings(patch)),
     transfer: (ticketId, target) => act(() => factoryApi.transfer(ticketId, target)),

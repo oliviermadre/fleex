@@ -5,6 +5,9 @@ import { Modal } from '../components/ui/Modal';
 import { Spinner } from '../components/ui/Spinner';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { openTicketInWork } from '../components/work/openInWork';
+import { DeliverableCard } from '../components/work/task/DeliverableCard';
+import { useTicketDeliverables } from '../components/work/panel/useTicketDeliverables';
+import { useUIStore } from '../stores/uiStore';
 import * as api from '../services/api';
 import { tint } from '../lib/tints';
 import { cn } from '../lib/cn';
@@ -29,6 +32,9 @@ export function FactoryTicketModal({ ticketId, onClose }: { ticketId: string; on
   const [runs, setRuns] = useState<FactoryRun[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const { deliverables } = useTicketDeliverables(ticketId);
+  /* a deliverable opens in Fleex's own reader; the sheet steps aside while it is read and keeps what was typed */
+  const reading = useUIStore((s) => s.deliverableOverlay) != null;
   const threadEnd = useRef<HTMLDivElement>(null);
   const seen = useRef(0);
 
@@ -54,7 +60,7 @@ export function FactoryTicketModal({ ticketId, onClose }: { ticketId: string; on
   const where = ft ? `${machine ? machine.name || machine.kind : 'on the floor'}${ft.outcome ? ` · outcome “${ft.outcome}”` : ''}` : 'Not on the factory floor';
 
   return (
-    <Modal open onClose={onClose} maxWidth="max-w-5xl">
+    <Modal open={!reading} onClose={onClose} maxWidth="max-w-5xl">
       <div className="flex h-[82vh] flex-col">
         <div className="flex flex-none items-start gap-3 border-b border-[var(--theme-border)] p-4">
           <div className="min-w-0 flex-1">
@@ -120,6 +126,14 @@ export function FactoryTicketModal({ ticketId, onClose }: { ticketId: string; on
             <section>
               <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Description</h3>
               {ticket?.description ? <div className="text-sm text-[var(--theme-text-secondary)]"><MarkdownRenderer content={ticket.description} onToggleCheckbox={noop} /></div> : <p className="text-xs text-[var(--theme-text-muted)]">No description.</p>}
+            </section>
+            <section>
+              <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Deliverables{deliverables.length ? ` · ${deliverables.length}` : ''}</h3>
+              {deliverables.length === 0 ? <p className="text-xs text-[var(--theme-text-muted)]">Nothing produced on this ticket yet.</p> : (
+                <div className="flex flex-col gap-1.5">
+                  {[...deliverables].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((d) => <DeliverableCard key={d.id} deliverable={d} />)}
+                </div>
+              )}
             </section>
             <section>
               <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Timeline on the floor</h3>

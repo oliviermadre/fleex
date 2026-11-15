@@ -12,7 +12,8 @@ so the ticket view's usual cards never see it: the Factory banner on the ticket 
 action (Run again, the gate's outcomes). Replying in the thread alone restarts nothing.
 
 The floor has no edge: machines can be placed anywhere, and the page draws it as far as what is built plus a margin.
-Where two belts must cross, a **bridge** tile carries each ticket straight across.
+Where two belts must cross, a **bridge** tile carries each ticket straight across. In build mode every change to the
+floor can be taken back and put back (Ctrl+Z, Ctrl+Shift+Z); that history lives in the page and is gone on reload.
 
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.

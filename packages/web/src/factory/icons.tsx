@@ -26,6 +26,8 @@ const PATHS: Record<string, ReactNode> = {
   give: <><path d="M20 12H8M12 7l-5 5 5 5" /><path d="M4 4v16" /></>,
   inbound: <><path d="M12 3v11M7 10l5 5 5-5" /><path d="M4 20h16" /></>,
   ticket: <rect x="5" y="5" width="14" height="14" rx="3.5" />,
+  undo: <><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></>,
+  redo: <><path d="M15 14l5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></>,
   coin: <><circle cx="12" cy="12" r="8" /><path d="M14.6 9.3c-.5-.8-1.4-1.3-2.6-1.3-1.6 0-2.7.8-2.7 2s1 1.7 2.7 2 2.8.8 2.8 2.1-1.2 2-2.8 2c-1.3 0-2.3-.5-2.8-1.4M12 6.3V8M12 16.1v1.6" /></>,
   clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7.5V12l3 2" /></>,
   person: <><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20c0-3.8 2.8-6.3 6.5-6.3s6.5 2.5 6.5 6.3" /></>,
