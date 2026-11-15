@@ -60,6 +60,14 @@ function inboundZone(x: number, y: number): ZoneSpec {
   return { id: randomUUID(), kind: 'zone', x, y, w: 4, h: 6, name: 'Inbound', status: '', release: 'manual', inbound: true };
 }
 
+/**
+ * The outcome a run gets when the agent asks a question instead of answering.
+ * Only an arm filtered on it takes such a ticket out of its station: an
+ * unfiltered arm leaves it there, so an unanswered ticket never carries on
+ * down the normal path.
+ */
+export const QUESTION_OUTCOME = 'question';
+function takesQuestions(arm: ArmSpec): boolean { return arm.filter?.field === 'outcome' && arm.filter.values.includes(QUESTION_OUTCOME); }
 function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'exit'); }
 
 /** Reject a layout that cannot be built: out of bounds, overlapping, or with malformed machines. Returns it normalised. */
@@ -307,7 +315,7 @@ export class FactoryEngine {
       return null;
     }
     if (s.spec.kind === 'belt') return s.item && this.wants(arm, s.item) ? s.item : null;
-    if (s.spec.kind === 'station') return this.inside(s).find((t) => t.s.phase === 'out' && this.wants(arm, t)) ?? null;
+    if (s.spec.kind === 'station') return this.inside(s).find((t) => (t.s.phase === 'out' || (t.s.phase === 'question' && takesQuestions(spec))) && this.wants(arm, t)) ?? null;
     if (s.spec.kind === 'zone') return this.inside(s).find((t) => t.s.released && this.wants(arm, t)) ?? null;
     return null;
   }
@@ -388,7 +396,7 @@ export class FactoryEngine {
         const still = this.tickets.get(t.ticketId) === t && t.machineId === spec.id && t.s.runId === run.id;
         if (!still) { run.status = res.status === 'failed' ? 'failed' : 'interrupted'; this.saveRun(run); return; }
         if (res.status === 'completed') { run.status = 'completed'; run.outcome = res.outcome; t.s.phase = 'out'; t.s.outcome = res.outcome; t.s.since = run.finishedAt; }
-        else if (res.status === 'question') { run.status = 'question'; t.s.phase = 'question'; t.s.note = 'The agent asked a question in the ticket thread'; }
+        else if (res.status === 'question') { run.status = 'question'; t.s.phase = 'question'; t.s.outcome = QUESTION_OUTCOME; t.s.note = 'The agent asked a question in the ticket thread'; }
         else { run.status = 'failed'; t.s.phase = 'failed'; t.s.note = res.error ?? 'The run failed'; }
         this.saveRun(run); this.dirty.add(t.ticketId);
       })
@@ -547,7 +555,7 @@ export class FactoryEngine {
   async retry(ticketId: string): Promise<void> {
     const t = this.get(ticketId);
     if (t.s.phase !== 'failed' && t.s.phase !== 'question') throw new FactoryError('Nothing to run again on this ticket');
-    t.s.phase = 'wait'; t.s.note = ''; t.s.runId = null; this.dirty.add(ticketId);
+    t.s.phase = 'wait'; t.s.outcome = ''; t.s.note = ''; t.s.runId = null; this.dirty.add(ticketId);
     await this.flush();
   }
 

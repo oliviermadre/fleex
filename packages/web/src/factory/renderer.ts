@@ -3,7 +3,7 @@
  * drawn in screen space so it stays crisp. Surfaces take their colours from the
  * `--theme-*` variables, so the floor follows the active theme.
  */
-import { DX, DY, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
+import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number }[]; ok: boolean; erase?: boolean; text?: string }
 export interface DragState { ticketId: string; x: number; y: number; ok: boolean; text: string }
@@ -172,8 +172,18 @@ export class FactoryView {
     ctx.globalAlpha = 1;
     const blink = Math.floor(this.clock * 2.4) % 2 === 0;
     if (mark === 'run' && s * this.cam.z > 6) { const a0 = this.clock * 4 + t.ticketId.length; ctx.strokeStyle = 'rgba(0,0,0,0.62)'; ctx.lineWidth = s * 0.15; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(px, py, s * 0.24, a0, a0 + 4.2); ctx.stroke(); ctx.lineCap = 'butt'; }
-    else if (mark === 'human' || mark === 'fail') { ctx.strokeStyle = mark === 'fail' ? pal.danger : pal.warn; ctx.lineWidth = blink ? 0.1 : 0.05; rr(ctx, px - s / 2 - 0.06, py - s / 2 - 0.06, s + 0.12, s + 0.12, 0.13); ctx.stroke(); }
+    else if ((mark === 'human' || mark === 'fail') && !humanCall(t)) { ctx.strokeStyle = mark === 'fail' ? pal.danger : pal.warn; ctx.lineWidth = blink ? 0.1 : 0.05; rr(ctx, px - s / 2 - 0.06, py - s / 2 - 0.06, s + 0.12, s + 0.12, 0.13); ctx.stroke(); }
     else if (mark === 'out') { ctx.strokeStyle = pal.text2; ctx.lineWidth = 0.04; rr(ctx, px - s / 2 - 0.04, py - s / 2 - 0.04, s + 0.08, s + 0.08, 0.1); ctx.stroke(); }
+    /* a ticket waiting for a human calls for attention wherever it is: a pulsing halo and a "?" (or "!" when the run failed) */
+    const call = dragging ? null : humanCall(t);
+    if (call) {
+      const col = call === 'failed' ? pal.danger : pal.warn, ph = (this.clock * 0.9 + (t.ticketId.charCodeAt(0) % 10) / 10) % 1, grow = s * 0.7 * ph;
+      ctx.globalAlpha = 0.85 * (1 - ph); ctx.strokeStyle = col; ctx.lineWidth = 0.07;
+      rr(ctx, px - s / 2 - 0.05 - grow / 2, py - s / 2 - 0.05 - grow / 2, s + 0.1 + grow, s + 0.1 + grow, s * 0.3); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 0.06 + 0.04 * Math.sin(this.clock * 6) ** 2;
+      rr(ctx, px - s / 2 - 0.05, py - s / 2 - 0.05, s + 0.1, s + 0.1, s * 0.26); ctx.stroke();
+      this.label(call === 'failed' ? '!' : '?', px, py + s * 0.04, s * 0.74, 'rgba(0,0,0,0.82)', { align: 'center', weight: 800, min: 8, max: 30 });
+    }
     if (st.selTicket === t.ticketId) { ctx.strokeStyle = pal.text; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(px, py, Math.max(s * 0.95, 0.3), 0, 6.3); ctx.stroke(); }
   }
 
@@ -403,7 +413,7 @@ export class FactoryView {
     }
     for (const t of st.tickets) {
       const q = this.shown.get(t.ticketId); if (!q) continue;
-      const hot = t.phase === 'review' || t.phase === 'question' || t.phase === 'failed' || t.phase === 'loose';
+      const hot = !!humanCall(t) || t.phase === 'loose';
       c.fillStyle = hot ? pal.warn : TYPE_COLORS[t.info?.type ?? ''] ?? '#8b949e';
       c.fillRect(ox + q.x * s - (hot ? 2 : 1), oy + q.y * s - (hot ? 2 : 1), hot ? 4 : 2, hot ? 4 : 2);
     }

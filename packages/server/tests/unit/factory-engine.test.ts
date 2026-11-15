@@ -179,6 +179,35 @@ describe('FactoryEngine', () => {
     await expect(engine.release('a')).rejects.toBeInstanceOf(FactoryError);
   });
 
+  it('an unanswered question leaves only by an arm filtered on outcome "question", never by the unfiltered one', async () => {
+    // Why: a ticket the agent could not handle must not carry on down the normal path as if it had been triaged.
+    await boot([
+      station('triage', 1, 3, { outcomes: ['bug', 'feature'] }),
+      arm('else', 4, 4, 0), zone('next', 5, 4),
+      arm('ask', 2, 6, 1, 'outcome', ['question']), zone('awaiting', 1, 7),
+    ]);
+    await engine.transfer('a', { machineId: 'triage' });
+    await engine.transfer('b', { machineId: 'triage' });
+    await run(0.3);
+    pending[0]!.resolve({ status: 'question', outcome: '', executionId: 'e1', error: null });
+    pending[1]!.resolve({ status: 'completed', outcome: 'bug', executionId: 'e2', error: null });
+    await run(3);
+    expect(where('a')).toBe('awaiting:zone');
+    expect(engine.snapshot().tickets.find((t) => t.ticketId === 'a')?.outcome).toBe('question');
+    expect(where('b')).toBe('next:zone');
+  });
+
+  it('without an arm for questions, an unanswered ticket stays in its station, even next to an unfiltered arm', async () => {
+    await boot([station('triage', 1, 3, { outcomes: ['bug', 'feature'] }), arm('else', 4, 4, 0), zone('next', 5, 4)]);
+    await engine.transfer('a', { machineId: 'triage' });
+    await run(0.3);
+    pending[0]!.resolve({ status: 'question', outcome: '', executionId: 'e1', error: null });
+    await run(3);
+    expect(where('a')).toBe('triage:question');
+    await engine.retry('a');
+    expect(engine.snapshot().tickets[0]?.outcome).toBe('');
+  });
+
   it('a gate waits for a decision, and only accepts one of its outcomes', async () => {
     await boot([
       station('gate', 1, 3, { exec: 'human_gate', outcomes: ['approve', 'reject'] }),

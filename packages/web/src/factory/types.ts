@@ -50,11 +50,25 @@ export interface FactoryRun {
 }
 export type Target = { machineId?: string; x?: number; y?: number };
 
+/** Mirrors `QUESTION_OUTCOME` in the engine: the outcome of a run where the agent asked instead of answering. */
+export const QUESTION_OUTCOME = 'question';
+
+/** What a human is expected to do on a ticket: answer, decide, or look at a failure. Drives the "?" on the floor and the ticket banner. */
+export type HumanCall = 'question' | 'decision' | 'failed';
+export function humanCall(t: FactoryTicket): HumanCall | null {
+  if (t.phase === 'review') return 'decision';
+  if (t.phase === 'failed') return 'failed';
+  /* a question stays unanswered while the ticket travels (an arm filtered on "question"), until a station takes it again */
+  if (t.phase === 'question' || t.outcome === QUESTION_OUTCOME) return 'question';
+  return null;
+}
+
 /** A ticket that waits for a human, and why. */
 export function needsHuman(t: FactoryTicket): string | null {
-  if (t.phase === 'review') return 'Waiting for your decision';
-  if (t.phase === 'question') return 'The agent asked a question';
-  if (t.phase === 'failed') return 'The run failed';
+  const call = humanCall(t);
+  if (call === 'decision') return 'Waiting for your decision';
+  if (call === 'question') return 'The agent asked a question';
+  if (call === 'failed') return 'The run failed';
   if (t.phase === 'loose') return 'Lying on the floor';
   return null;
 }

@@ -5,6 +5,12 @@ priority, tag or station outcome), stations (an agent, a skill, a panel, a human
 and exits. Nothing is routed in advance: a ticket reacts to what it stands on. The concept and its interactive
 mock-up are in `docs/factory/`.
 
+When a station's agent asks a question instead of answering, the ticket waits in the station, pulsing with a "?".
+It leaves only by an arm filtered on the reserved outcome `question` (an unfiltered arm leaves it alone, so an
+unanswered ticket never carries on down the normal path). A Factory run creates no mention and no workflow step run,
+so the ticket view's usual cards never see it: the Factory banner on the ticket says it waits for you and carries the
+action (Run again, the gate's outcomes). Replying in the thread alone restarts nothing.
+
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
 

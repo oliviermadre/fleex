@@ -12,7 +12,7 @@ import { cn } from '../lib/cn';
 import { factoryApi } from './factoryApi';
 import { useFactoryStore } from './factoryStore';
 import { armTag, type FactoryView } from './renderer';
-import { needsHuman, type ArmFilterField, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
+import { needsHuman, QUESTION_OUTCOME, type ArmFilterField, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
 
 export type Selection = { machine: string } | { ticket: string } | null;
 
@@ -118,7 +118,7 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, building 
           <Hint>Takes a ticket from the tile behind it and drops it on the tile in front, if that one is free. Leads to: {view.leadsTo(view.at(m.x + [1, 0, -1, 0][m.dir]!, m.y + [0, 1, 0, -1][m.dir]!))?.name ?? 'the next tile'}.</Hint>
           <Select id="f-field" label="Only takes" value={m.filter?.field ?? ''} onChange={(e) => onPatch({ filter: e.target.value ? { field: e.target.value as ArmFilterField, values: m.filter?.values ?? [] } : null })}
             options={[{ value: '', label: 'anything (or what filtered arms leave)' }, { value: 'type', label: 'some ticket types' }, { value: 'priority', label: 'some priorities' }, { value: 'tag', label: 'some tags' }, { value: 'outcome', label: 'some outcomes of the station' }]} />
-          {m.filter && <CommitInput id="f-values" label="Values, comma separated" value={m.filter.values.join(', ')} placeholder={m.filter.field === 'type' ? 'fix, build' : m.filter.field === 'outcome' ? 'reject' : ''}
+          {m.filter && <CommitInput id="f-values" label="Values, comma separated" value={m.filter.values.join(', ')} placeholder={m.filter.field === 'type' ? 'fix, build' : m.filter.field === 'outcome' ? `reject, ${QUESTION_OUTCOME}` : ''}
             onCommit={(v) => onPatch({ filter: { field: m.filter!.field, values: list(v) } })} />}
         </>
       )}
@@ -146,7 +146,12 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, building 
               const dest = arm ? view.leadsTo(view.at(arm.x + [1, 0, -1, 0][arm.dir]!, arm.y + [0, 1, 0, -1][arm.dir]!)) : null;
               return <div key={o} className="flex justify-between gap-2 text-xs"><span className="font-mono text-[var(--theme-text-primary)]">{o}</span><span className={arm ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-danger)]'}>{arm ? `→ ${dest?.name ?? dest?.kind ?? 'the next tile'}` : 'no arm takes it'}</span></div>;
             })}
-            <Hint>An outcome leaves through the arm whose “outcome” filter holds it; an arm with no filter takes the rest.</Hint>
+            {m.exec !== 'human_gate' && (() => {
+              const arm = takers.find((a) => a.filter?.field === 'outcome' && a.filter.values.includes(QUESTION_OUTCOME));
+              const dest = arm ? view.leadsTo(view.at(arm.x + [1, 0, -1, 0][arm.dir]!, arm.y + [0, 1, 0, -1][arm.dir]!)) : null;
+              return <div className="flex justify-between gap-2 text-xs"><span className="font-mono text-[var(--theme-warning)]">{QUESTION_OUTCOME}</span><span className="text-[var(--theme-text-secondary)]">{arm ? `→ ${dest?.name ?? dest?.kind ?? 'the next tile'}` : 'stays here until answered'}</span></div>;
+            })()}
+            <Hint>An outcome leaves through the arm whose “outcome” filter holds it; an arm with no filter takes the rest. When the agent asks a question instead, only an arm filtered on “{QUESTION_OUTCOME}” takes the ticket.</Hint>
           </Section>
         </>
       )}
