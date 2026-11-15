@@ -24,7 +24,7 @@ import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
-type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'agenda' | 'work' | 'focus';
+type ActivePanel = 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant' | 'routines' | 'agenda' | 'work' | 'focus' | 'factory';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -209,6 +209,11 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // before the list has loaded.
   if (pathname === '/routines') {
     return { ...base, panel: 'routines' };
+  }
+
+  // Experimental Factory (src/factory). The page itself shows a notice when the feature is off.
+  if (pathname === '/factory') {
+    return { ...base, panel: 'factory' };
   }
 
   // Agenda. Which period is shown is not in the URL: it reopens on today.
@@ -433,6 +438,8 @@ export function storeToUrl({
       return { pathname: '/execution-log', search: '' };
     case 'routines':
       return { pathname: '/routines', search: '' };
+    case 'factory':
+      return { pathname: '/factory', search: '' };
     case 'agenda':
       return { pathname: '/agenda', search: '' };
     case 'cluster':

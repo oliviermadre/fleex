@@ -6,7 +6,7 @@ import type { Container } from '../container.js';
 type FocusDeps = Pick<
   Container,
   'ticketStore' | 'mentionStore' | 'agentEventStore' | 'commentStore' | 'workflowRunStore' | 'stepRunStore' | 'personaStore'
->;
+> & Partial<Pick<Container, 'factory'>>;
 
 /**
  * Gathers what `deriveFocusItems` needs for every Doing/Reviewing ticket, in a
@@ -91,5 +91,12 @@ export async function computeFocus(deps: FocusDeps): Promise<FocusResponse> {
 
 /** GET /api/focus — the human-attention queue (Focus view + nav badge). */
 export function registerFocusRoutes(app: FastifyInstance, deps: FocusDeps): void {
-  app.get('/api/focus', () => computeFocus(deps));
+  app.get('/api/focus', async () => {
+    const focus = await computeFocus(deps);
+    // A ticket handed over to the Factory is driven from its floor: nothing running on it
+    // is expected, so it is not "idle". Gates, questions and errors still show.
+    const managed = deps.factory?.managedTicketIds();
+    if (!managed || managed.size === 0) return focus;
+    return { ...focus, items: focus.items.filter((i) => !(i.kind === 'idle' && managed.has(i.ticketId))) };
+  });
 }

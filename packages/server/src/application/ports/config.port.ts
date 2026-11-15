@@ -92,6 +92,12 @@ export interface AppConfig {
    */
   todoAgentAccess?: boolean;
   /**
+   * Experimental Factory (`src/factory`): a floor of machines that tickets handed
+   * over to it travel through. Unset → off: its engine does not tick, its routes
+   * answer 403 and nothing else in Fleex behaves differently.
+   */
+  factoryEnabled?: boolean;
+  /**
    * Local hour (0-23) after which the nightly memory consolidation becomes due.
    * Unset → 3. The pass runs on the first tick past this hour, so a laptop that
    * was closed at that time catches up when it wakes.
@@ -209,4 +215,9 @@ export interface ConfigPort {
  */
 export function isTodoAgentAccessEnabled(config: Pick<AppConfig, 'todoAgentAccess'>): boolean {
   return config.todoAgentAccess === true;
+}
+
+/** Whether the experimental Factory (`src/factory`) is switched on. Off unless set. */
+export function isFactoryEnabled(config: Pick<AppConfig, 'factoryEnabled'>): boolean {
+  return config.factoryEnabled === true;
 }

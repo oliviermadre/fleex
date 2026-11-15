@@ -1,0 +1,30 @@
+import { API_URL } from '../lib/constants';
+import { toast } from '../lib/toast';
+import type { FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, Target } from './types';
+
+async function call<T>(path: string, init?: RequestInit, quiet = false): Promise<T> {
+  const res = await fetch(`${API_URL}/factory${path}`, { ...init, headers: init?.body ? { 'Content-Type': 'application/json' } : undefined });
+  if (!res.ok) {
+    let message = res.statusText;
+    try { message = ((await res.json()) as { message?: string }).message ?? message; } catch { /* not JSON */ }
+    if (!quiet) toast.error(message);
+    throw new Error(message);
+  }
+  return res.json() as Promise<T>;
+}
+const post = <T,>(path: string, body?: unknown) => call<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
+
+export const factoryApi = {
+  status: () => call<{ supported: boolean; enabled: boolean }>('/status', undefined, true),
+  state: () => call<FactorySnapshot>('/state', undefined, true),
+  managed: () => call<{ ticketIds: string[] }>('/managed', undefined, true),
+  setLayout: (layout: FactoryLayout) => call<FactorySnapshot>('/layout', { method: 'PUT', body: JSON.stringify({ layout }) }),
+  setSettings: (settings: Partial<FactorySettings>) => call<FactorySnapshot>('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+  transfer: (ticketId: string, target: Target) => post<FactorySnapshot>(`/tickets/${ticketId}/transfer`, target),
+  move: (ticketId: string, target: Target) => post<FactorySnapshot>(`/tickets/${ticketId}/move`, target),
+  release: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/release`),
+  resolve: (ticketId: string, outcome: string) => post<FactorySnapshot>(`/tickets/${ticketId}/resolve`, { outcome }),
+  retry: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/retry`),
+  giveBack: (ticketId: string) => call<FactorySnapshot>(`/tickets/${ticketId}`, { method: 'DELETE' }),
+  runs: (ticketId: string) => call<FactoryRun[]>(`/tickets/${ticketId}/runs`, undefined, true),
+};

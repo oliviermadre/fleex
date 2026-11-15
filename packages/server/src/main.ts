@@ -38,6 +38,7 @@ import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
 import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
 import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
 import { agentAnnotationsRoutes } from './infrastructure/http/agent-annotations.routes.js';
+import { factoryRoutes } from './factory/factory.routes.js';
 import { agentTodosRoutes } from './infrastructure/http/agent-todos.routes.js';
 import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
 import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
@@ -261,6 +262,9 @@ async function main() {
     container.logger.warn('routineStore or use cases not available — /api/routines routes skipped');
   }
 
+  // Experimental Factory (src/factory): 403 while `factoryEnabled` is off.
+  await app.register(factoryRoutes(container.factory));
+
   // Agent API with auth
   const authHook = createAgentAuthHook(container);
   await app.register(async function (v1) {
@@ -414,6 +418,9 @@ async function main() {
   await app.listen({ port, host: '0.0.0.0' });
   container.logger.info(`Fleex server started on port ${port}`);
 
+  // The Factory engine ticks only while its flag is on; it loads its floor on the first enabled tick.
+  container.factory?.start();
+
   // Verify gateway connectivity
   try {
     const gwRes = await fetch(`${container.gatewayUrl}/health`);
@@ -432,6 +439,7 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     container.logger.info('Shutting down server...', { signal });
+    await container.factory?.stop().catch(() => undefined);
 
     // Watchdog: if a clean shutdown stalls, force the process out so we never
     // leave an orphaned worker reconnecting to the hub forever.

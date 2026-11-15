@@ -4,6 +4,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useRoutineStore } from '../../stores/routineStore';
 import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
+import { useFactoryStore } from '../../factory/factoryStore';
+import { FactoryIcon } from '../../factory/FactoryIcon';
 import { cn } from '../../lib/cn';
 import { RoutineIcon } from '../../lib/primitives';
 import { TasksIcon } from './icons';
@@ -47,6 +49,10 @@ export function NavSidebar() {
   // …and what keeps it live. A gate opening on a scheduled run must light the
   // badge up wherever the user happens to be, not on their next page reload.
   useRoutineLiveUpdates();
+  // The experimental Factory shows in the nav only while it is switched on.
+  const factoryEnabled = useFactoryStore((st) => st.enabled);
+  const loadFactoryStatus = useFactoryStore((st) => st.loadStatus);
+  useEffect(() => { void loadFactoryStatus(); }, [loadFactoryStatus]);
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
@@ -165,6 +171,18 @@ export function NavSidebar() {
             badge={routinesAwaiting > 0 ? String(routinesAwaiting) : undefined}
             onClick={() => navigate('/routines')}
           />
+
+          {/* Factory — experimental, only listed while its flag is on. */}
+          {factoryEnabled && (
+            <NavItem
+              icon={<FactoryIcon size={20} />}
+              label="Factory"
+              shortLabel="Factory"
+              active={activePanel === 'factory'}
+              collapsed={navCollapsed}
+              onClick={() => navigate('/factory')}
+            />
+          )}
 
           {/* === Content === */}
           <div className="my-1 border-t border-[var(--theme-border-subtle)]" />

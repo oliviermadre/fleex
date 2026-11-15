@@ -50,6 +50,8 @@ export interface AppSettings {
   agentExecutionTimeout?: number;
   /** Agent runs see and use the ticket todo list. Unset → off (server default). */
   todoAgentAccess?: boolean;
+  /** The experimental Factory (src/factory) is switched on. Unset → off. */
+  factoryEnabled?: boolean;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**

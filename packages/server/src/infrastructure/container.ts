@@ -1,3 +1,4 @@
+import { createFactoryModule } from '../factory/factory.module.js';
 import { hostname } from 'node:os';
 import { existsSync, realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -178,6 +179,7 @@ export async function createContainer() {
     agentTokenStore,
     commentStore,
     annotationStore,
+    factoryStore,
     todoStore,
     mentionStore,
     deliverableStore,
@@ -471,6 +473,12 @@ export async function createContainer() {
   // and the native workflow steps, so the two can never drift apart.
   const createTicket = new CreateTicketUseCase(ticketStore_, eventBus);
   const applyTicketMutation = new ApplyTicketMutationUseCase(ticketStore_, eventBus);
+
+  // Experimental Factory (src/factory), behind `factoryEnabled`. Null where the storage driver has no factory tables.
+  const factory = createFactoryModule({
+    store: factoryStore, config, ticketStore: ticketStore_, skillStore, personaStore: personaStore_, agentEventStore: agentEventStore_,
+    executeAgent, runPanel, applyTicketMutation, submitDeliverable, postComment, eventBus, logger,
+  });
 
   // Unique per-process server identifier — used to filter our own events on the hub fan-out.
   const serverId = process.env['FLEEX_INSTANCE_ID'] ?? randomUUID();
@@ -968,6 +976,7 @@ export async function createContainer() {
     manageDeliverableTypes,
     createTicket,
     applyTicketMutation,
+    factory,
     getTicketContext,
     personaStore: personaStore_,
     createPersona,
