@@ -25,16 +25,25 @@ export interface ViewState {
   drag: DragState | null;
   /** A reading of the floor painted over stations and zones (cost, time, human wait, what stands there). */
   lens?: LensLayer | null;
+  /** Tickets a filter leaves out: drawn faded, never hidden. */
+  dim?: ReadonlySet<string> | null;
+  /** Tickets a filter keeps: ringed, and named when `named` says so. */
+  found?: ReadonlySet<string> | null;
+  /** Tickets that carry their name on the floor, on top of favourites and the selected one. */
+  named?: ReadonlySet<string> | null;
 }
 export type Hit = { ticketId: string } | { machineId: string } | null;
 
-export const TYPE_COLORS: Record<string, string> = { build: '#60a5fa', fix: '#f87171', think: '#c084fc', lead: '#facc15', ops: '#2dd4bf', review: '#2dd4bf' };
+/** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). */
+export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa' };
+const STAR = '#facc15';
+const PRIORITY_PIP: Record<string, string> = { urgent: '#ef4444', high: '#fb923c' };
 const STATUS_COLORS: Record<string, string> = { backlog: '#71717a', todo: '#fb923c', doing: '#60a5fa', reviewing: '#c084fc', done: '#22c55e' };
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string }
-type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number }];
+type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Drawn however far the view is zoomed out. */ always?: boolean; /** Least room, in pixels, before the text is cut. */ minFit?: number }];
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   r = Math.min(r, w / 2, h / 2);
@@ -167,7 +176,7 @@ export class FactoryView {
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     for (const [raw, wx, wy, size, color, o] of this.labels) {
       let px = size * z;
-      if (px < 3.6) continue;
+      if (px < 3.6 && !o.always) continue;
       if (o.min) px = Math.max(px, o.min);
       if (o.max) px = Math.min(px, o.max);
       const sx = (wx - this.cam.x) * z + this.w / 2, sy = (wy - this.cam.y) * z + this.h / 2;
@@ -175,7 +184,7 @@ export class FactoryView {
       ctx.font = `${o.weight ?? 500} ${px.toFixed(1)}px ${o.mono ? MONO : SANS}`;
       ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
       let text = raw;
-      if (o.fit) { const room = o.fit * z; if (ctx.measureText(text).width > room) { while (text.length > 3 && ctx.measureText(`${text}…`).width > room) text = text.slice(0, -1); text += '…'; } }
+      if (o.fit) { const room = Math.max(o.fit * z, o.minFit ?? 0); if (ctx.measureText(text).width > room) { while (text.length > 3 && ctx.measureText(`${text}…`).width > room) text = text.slice(0, -1); text += '…'; } }
       if (o.plate) {
         const tw = ctx.measureText(text).width, pad = px * 0.45, ph = px * 1.5;
         const x0 = o.align === 'center' ? sx - tw / 2 - pad : o.align === 'right' ? sx - tw - pad : sx - pad;
@@ -191,6 +200,12 @@ export class FactoryView {
     /* ease towards where the server last said the ticket is, so a poll does not make it jump */
     const k = cur ? 1 - Math.pow(0.0005, dt) : 1, px = cur ? cur.x + (x - cur.x) * k : x, py = cur ? cur.y + (y - cur.y) * k : y;
     this.shown.set(t.ticketId, { x: px, y: py });
+    const selected = st.selTicket === t.ticketId, dim = !!st.dim?.has(t.ticketId) && !selected && !dragging;
+    if (dim) {
+      /* left out by the filter: still there, but faded and without any of its marks */
+      ctx.globalAlpha = 0.28; rr(ctx, px - s / 2, py - s / 2, s, s, s * 0.22); ctx.fillStyle = pal.text3; ctx.fill(); ctx.globalAlpha = 1;
+      return;
+    }
     ctx.globalAlpha = dragging ? 0.25 : mark === 'wait' ? 0.5 : 1;
     rr(ctx, px - s / 2, py - s / 2, s, s, s * 0.22);
     ctx.fillStyle = TYPE_COLORS[t.info?.type ?? ''] ?? '#8b949e'; ctx.fill();
@@ -211,7 +226,27 @@ export class FactoryView {
       rr(ctx, px - s / 2 - 0.05, py - s / 2 - 0.05, s + 0.1, s + 0.1, s * 0.26); ctx.stroke();
       this.label(call === 'failed' ? '!' : '?', px, py + s * 0.04, s * 0.74, 'rgba(0,0,0,0.82)', { align: 'center', weight: 800, min: 8, max: 30 });
     }
-    if (st.selTicket === t.ticketId) { ctx.strokeStyle = pal.text; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(px, py, Math.max(s * 0.95, 0.3), 0, 6.3); ctx.stroke(); }
+    const z = this.cam.z, info = t.info, found = !!st.found?.has(t.ticketId);
+    if (info && !dragging) {
+      /* its number, once the square is big enough to hold it */
+      if (!call && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
+      /* priority: a pip in the top-left corner for what is urgent or high */
+      const pip = PRIORITY_PIP[info.priority];
+      if (pip && s * z >= 7) { ctx.beginPath(); ctx.arc(px - s / 2 + s * 0.06, py - s / 2 + s * 0.06, s * 0.17, 0, 6.3); ctx.fillStyle = pip; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.stroke(); }
+      /* favourite: a star on the top-right corner */
+      if (info.favorite && s * z >= 7) {
+        const cx = px + s / 2 - s * 0.04, cy = py - s / 2 + s * 0.04, r = s * 0.3;
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rad = i % 2 ? r * 0.45 : r; ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad); }
+        ctx.closePath(); ctx.fillStyle = STAR; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.stroke();
+      }
+    }
+    if (found) { ctx.strokeStyle = pal.accent; ctx.lineWidth = 0.07; rr(ctx, px - s / 2 - 0.09, py - s / 2 - 0.09, s + 0.18, s + 0.18, s * 0.3); ctx.stroke(); }
+    if (selected) { ctx.strokeStyle = pal.text; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(px, py, Math.max(s * 0.95, 0.3), 0, 6.3); ctx.stroke(); }
+    /* the tickets you follow carry their name wherever they are, at any zoom */
+    if (info && !dragging && (info.favorite || selected || st.named?.has(t.ticketId))) {
+      this.label(`#${info.displayId} ${info.title}`, px, py - s / 2 - 0.3, 0.24, pal.text, { align: 'center', plate: found ? 'rgba(88,44,26,0.95)' : 'rgba(9,9,11,0.88)', min: 10, max: 12, fit: 5.5, always: true, minFit: 150 });
+    }
   }
 
   ticketPos(ticketId: string): { x: number; y: number } | null { return this.shown.get(ticketId) ?? null; }
@@ -495,9 +530,11 @@ export class FactoryView {
     }
     for (const t of st.tickets) {
       const q = this.shown.get(t.ticketId); if (!q) continue;
-      const hot = !!humanCall(t) || t.phase === 'loose';
+      if (st.dim?.has(t.ticketId)) { c.fillStyle = pal.text3; c.fillRect(ox + q.x * s - 0.5, oy + q.y * s - 0.5, 1.5, 1.5); continue; }
+      const hot = !!humanCall(t) || t.phase === 'loose', big = hot || !!st.found?.has(t.ticketId) || t.info?.favorite === true;
       c.fillStyle = hot ? pal.warn : TYPE_COLORS[t.info?.type ?? ''] ?? '#8b949e';
-      c.fillRect(ox + q.x * s - (hot ? 2 : 1), oy + q.y * s - (hot ? 2 : 1), hot ? 4 : 2, hot ? 4 : 2);
+      c.fillRect(ox + q.x * s - (big ? 2 : 1), oy + q.y * s - (big ? 2 : 1), big ? 4 : 2, big ? 4 : 2);
+      if (st.found?.has(t.ticketId)) { c.strokeStyle = pal.text; c.lineWidth = 1; c.strokeRect(ox + q.x * s - 3.5, oy + q.y * s - 3.5, 7, 7); }
     }
     const hw = this.w / 2 / this.cam.z, hh = this.h / 2 / this.cam.z;
     c.strokeStyle = pal.text; c.lineWidth = 1; c.strokeRect(ox + (this.cam.x - hw) * s, oy + (this.cam.y - hh) * s, hw * 2 * s, hh * 2 * s);

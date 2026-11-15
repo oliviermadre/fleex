@@ -1,7 +1,7 @@
 /** Pure edits of a Factory layout: every function returns a new layout, or null when the edit cannot be done. */
 import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec } from './types';
 
-export type Tool = 'select' | 'belt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'erase';
+export type Tool = 'select' | 'belt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'erase' | 'paste';
 
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -89,6 +89,39 @@ export const eraseMany = (layout: FactoryLayout, ids: ReadonlySet<string>): Fact
 export function machinesIn(layout: FactoryLayout, x0: number, y0: number, x1: number, y1: number): string[] {
   const ax = Math.min(x0, x1), ay = Math.min(y0, y1), bx = Math.max(x0, x1), by = Math.max(y0, y1);
   return layout.machines.filter((m) => m.x < bx && ax < m.x + m.w && m.y < by && ay < m.y + m.h).map((m) => m.id);
+}
+
+/** Machines lifted off the floor to be put down elsewhere: positions are relative to the group's top-left corner. */
+export interface Clip { w: number; h: number; machines: MachineSpec[] }
+
+/** Copy machines, settings included, tickets not. Null when none of the ids is on the floor. */
+export function copyOf(layout: FactoryLayout, ids: ReadonlySet<string>): Clip | null {
+  const picked = layout.machines.filter((m) => ids.has(m.id));
+  if (!picked.length) return null;
+  const x0 = Math.min(...picked.map((m) => m.x)), y0 = Math.min(...picked.map((m) => m.y));
+  return {
+    w: Math.max(...picked.map((m) => m.x + m.w)) - x0, h: Math.max(...picked.map((m) => m.y + m.h)) - y0,
+    machines: picked.map((m) => ({ ...structuredClone(m), x: m.x - x0, y: m.y - y0 }) as MachineSpec),
+  };
+}
+
+/** Where each machine of a clip lands when the group is centred on a tile. */
+export function clipAt(clip: Clip, x: number, y: number): MachineSpec[] {
+  const ox = x - Math.floor(clip.w / 2), oy = y - Math.floor(clip.h / 2);
+  return clip.machines.map((m) => ({ ...m, x: m.x + ox, y: m.y + oy }) as MachineSpec);
+}
+export const canPaste = (layout: FactoryLayout, clip: Clip, x: number, y: number): boolean => clipAt(clip, x, y).every((m) => m.kind === 'label' || canPlace(layout, m));
+
+/**
+ * Put a clip down centred on a tile, all or none. The copies get new ids (returned, to select them);
+ * belts under where they land give way; a copied Inbound zone is an ordinary zone, since a floor has one.
+ */
+export function pasteAt(layout: FactoryLayout, clip: Clip, x: number, y: number): { layout: FactoryLayout; ids: string[] } | null {
+  if (!canPaste(layout, clip, x, y)) return null;
+  const copies = clipAt(clip, x, y).map((m) => ({ ...structuredClone(m), id: newId(), ...(m.kind === 'zone' ? { inbound: false } : {}) }) as MachineSpec);
+  const solid = copies.filter((m) => m.kind !== 'label');
+  const rest = layout.machines.filter((m) => !(m.kind === 'belt' && solid.some((q) => overlaps(m, q))));
+  return { layout: { ...layout, machines: [...rest, ...copies] }, ids: copies.map((m) => m.id) };
 }
 
 export function rotate(layout: FactoryLayout, id: string): FactoryLayout {

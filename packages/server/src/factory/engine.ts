@@ -38,7 +38,7 @@ interface Ticket {
 
 export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };
-  tickets: (FactoryTicketState & { ticketId: string; machineId: string | null; info: FactoryTicketInfo | null })[];
+  tickets: (FactoryTicketState & { ticketId: string; machineId: string | null; info: FactoryTicketInfo | null; /** When it was handed over to the Factory (ISO). */ handedAt: string })[];
   arms: { id: string; p: number; carrying: string | null }[];
   runsLastHour: number;
   running: number;
@@ -497,6 +497,12 @@ export class FactoryEngine {
     }
   }
 
+  /** Re-read one ticket now, after it was changed from the Factory page (a favourite toggled), without waiting for the next sweep. */
+  async refreshInfo(ticketId: string): Promise<void> {
+    const t = this.get(ticketId), info = await this.deps.loadTicket(ticketId);
+    if (info) t.info = info;
+  }
+
   // ---------- what a human does ----------
 
   private get(ticketId: string): Ticket {
@@ -592,7 +598,7 @@ export class FactoryEngine {
   snapshot(): FactorySnapshot {
     return {
       floor: { id: this.floor.id, name: this.floor.name, layout: this.floor.layout, settings: this.floor.settings },
-      tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, ...t.s })),
+      tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, handedAt: t.createdAt, ...t.s })),
       arms: this.machines.filter((m) => m.spec.kind === 'arm').map((m) => ({ id: m.spec.id, p: m.armP, carrying: m.item ? m.item.ticketId : null })),
       runsLastHour: this.runsLastHour(), running: this.runningCount(), serverTime: new Date(this.now()).toISOString(),
     };

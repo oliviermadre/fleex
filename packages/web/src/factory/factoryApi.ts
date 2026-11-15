@@ -25,6 +25,7 @@ export const factoryApi = {
   release: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/release`),
   resolve: (ticketId: string, outcome: string) => post<FactorySnapshot>(`/tickets/${ticketId}/resolve`, { outcome }),
   retry: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/retry`),
+  refreshTicket: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/refresh`),
   giveBack: (ticketId: string) => call<FactorySnapshot>(`/tickets/${ticketId}`, { method: 'DELETE' }),
   runs: (ticketId: string) => call<FactoryRun[]>(`/tickets/${ticketId}/runs`, undefined, true),
   machineRuns: (machineId: string, limit = 60) => call<FactoryRun[]>(`/runs?machineId=${encodeURIComponent(machineId)}&limit=${limit}`, undefined, true),

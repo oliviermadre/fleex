@@ -9,7 +9,7 @@ import { useFactoryStore } from './factoryStore';
 import { MachineFigures, PeriodSelect } from './FactoryStatsBits';
 import { since, span } from './format';
 import { FIcon } from './icons';
-import { TYPE_COLORS } from './renderer';
+import { TicketGlyphs, TicketSquare } from './FactoryTicketMeta';
 import { needsHuman, type FactoryRun, type FactoryTicket, type MachineSpec } from './types';
 
 const REFRESH_MS = 4000;
@@ -87,13 +87,14 @@ export function FactoryMachineModal({ machineId, onClose, onOpenTicket }: { mach
                   const why = needsHuman(t), age = since(t.since, now);
                   return (
                     <li key={t.ticketId} className="flex items-center gap-2 rounded-md border border-[var(--theme-border)] px-2 py-1.5">
-                      <span className="h-3.5 w-3.5 flex-none rounded-[4px]" style={{ background: TYPE_COLORS[t.info?.type ?? ''] ?? '#8b949e' }} title={t.info?.type || 'no type'} />
+                      <TicketSquare info={t.info} size={22} />
                       <button type="button" onClick={() => onOpenTicket(t.ticketId)} className="min-w-0 flex-1 text-left" title="Open the ticket">
                         <div className="truncate text-xs font-medium text-[var(--theme-text-primary)] hover:underline"><span className="mr-1.5 font-mono text-[var(--theme-text-muted)]">#{t.info?.displayId ?? '?'}</span>{t.info?.title ?? t.ticketId}</div>
                         <div className={cn('truncate text-[11px]', why ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>
                           {t.phase === 'zone' && t.released ? 'released, waiting for an arm' : PHASE[t.phase]}{t.outcome ? ` · ${t.outcome}` : ''}{t.info?.priority ? ` · ${t.info.priority}` : ''}{t.note ? ` · ${t.note}` : ''}
                         </div>
                       </button>
+                      <TicketGlyphs info={t.info ? { ...t.info, favorite: false } : null} />
                       <span className="flex-none font-mono text-[11px] text-[var(--theme-text-secondary)]" title={`Here since ${when(t.since)}`}>{span(age)}</span>
                       <span className="flex flex-none gap-1">
                         {t.phase === 'review' && isStation && machine.outcomes.map((o, i) => <Button key={o} size="sm" variant={i === 0 ? 'primary' : 'secondary'} onClick={() => store.resolve(t.ticketId, o)}>{o}</Button>)}

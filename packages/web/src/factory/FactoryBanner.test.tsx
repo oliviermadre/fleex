@@ -15,7 +15,7 @@ const gate: MachineSpec = { id: 'qa', kind: 'station', x: 6, y: 1, w: 3, h: 3, n
 const zone: MachineSpec = { id: 'awaiting', kind: 'zone', x: 1, y: 6, w: 2, h: 2, name: 'Awaiting answer', release: 'manual' };
 
 function ticket(machineId: string, phase: TicketPhase, over: Partial<FactoryTicket> = {}): FactoryTicket {
-  return { ticketId: 't1', machineId, info: null, x: 0, y: 0, phase, p: 0, fx: 1, fy: 0, outcome: '', released: false, since: '', runId: null, note: '', ...over };
+  return { ticketId: 't1', machineId, info: null, x: 0, y: 0, phase, p: 0, fx: 1, fy: 0, outcome: '', released: false, since: '', runId: null, note: '', handedAt: '', ...over };
 }
 function seed(t: FactoryTicket): { retry: ReturnType<typeof vi.fn>; resolve: ReturnType<typeof vi.fn> } {
   const snapshot: FactorySnapshot = {

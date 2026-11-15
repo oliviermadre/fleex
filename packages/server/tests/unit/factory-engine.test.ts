@@ -46,7 +46,7 @@ let pending: { station: string; ticketId: string; resolve: (r: StationRunResult)
 let clock: number;
 let engine: FactoryEngine;
 
-const info = (id: string, over: Partial<FactoryTicketInfo> = {}): FactoryTicketInfo => ({ id, displayId: 1, title: id, type: 'build', priority: 'medium', status: 'todo', tags: [], ...over });
+const info = (id: string, over: Partial<FactoryTicketInfo> = {}): FactoryTicketInfo => ({ id, displayId: 1, title: id, type: 'build', priority: 'medium', status: 'todo', tags: [], boardId: 'b1', complexity: null, favorite: false, ...over });
 const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 /** Advance the floor by `seconds`, in small ticks, letting async work land in between. */
 const run = async (seconds: number) => { for (let i = 0; i < seconds * 10; i++) { clock += 100; engine.tick(0.1); await settle(); } };
@@ -277,6 +277,19 @@ describe('FactoryEngine', () => {
     expect(statuses).toEqual([['a', 'done']]);
     expect(store.tickets.has('a')).toBe(false);
     expect(engine.isManaged('a')).toBe(false);
+  });
+
+  it('shows what the page needs to tell tickets apart, and re-reads one on demand', async () => {
+    await boot([zone('in', 1, 1)]);
+    infos.set('a', info('a', { boardId: 'b7', complexity: '5', favorite: false }));
+    await engine.transfer('a', { machineId: 'in' });
+    const seen = () => engine.snapshot().tickets[0]!;
+    expect(seen().info).toMatchObject({ boardId: 'b7', complexity: '5', favorite: false });
+    expect(seen().handedAt).toBe(new Date(clock).toISOString());
+    infos.set('a', info('a', { boardId: 'b7', complexity: '5', favorite: true }));
+    await engine.refreshInfo('a');
+    expect(seen().info?.favorite).toBe(true);
+    await expect(engine.refreshInfo('nope')).rejects.toBeInstanceOf(FactoryError);
   });
 
   it('a shipment leaves a run row that spans hand-over to exit', async () => {

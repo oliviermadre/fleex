@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { useTicketStore } from '../stores/ticketStore';
+import { toast } from '../lib/toast';
 import { factoryApi } from './factoryApi';
 import type { FactoryLayout, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
@@ -35,6 +37,8 @@ interface FactoryState {
   resolve: (ticketId: string, outcome: string) => Promise<void>;
   retry: (ticketId: string) => Promise<void>;
   giveBack: (ticketId: string) => Promise<void>;
+  /** Make a ticket a favourite, or not: a favourite carries its name on the floor. Changes the ticket itself, as the star does everywhere in Fleex. */
+  star: (ticketId: string, on: boolean) => Promise<void>;
 }
 
 /** Edits in flight: while one is, a poll must not put the older server layout back. */
@@ -110,5 +114,9 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     resolve: (ticketId, outcome) => act(() => factoryApi.resolve(ticketId, outcome)),
     retry: (ticketId) => act(() => factoryApi.retry(ticketId)),
     giveBack: (ticketId) => act(() => factoryApi.giveBack(ticketId)),
+    star: async (ticketId, on) => {
+      try { await useTicketStore.getState().updateTicket(ticketId, { favorite: on }); } catch { toast.error('Could not change the favourite'); return; }
+      await act(() => factoryApi.refreshTicket(ticketId));
+    },
   };
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canPlace, erase, machinesIn, move, moveMany, paintBelts, place, rotate, setBelt, specFor } from './layoutOps';
+import { canPaste, canPlace, copyOf, erase, machinesIn, move, moveMany, paintBelts, pasteAt, place, rotate, setBelt, specFor } from './layoutOps';
 import type { FactoryLayout } from './types';
 
 const empty: FactoryLayout = { w: 20, h: 10, machines: [] };
@@ -46,5 +46,38 @@ describe('factory layout edits', () => {
     expect(l.machines[0]).toMatchObject({ x: 5, y: 5 });
     expect(move(l, arm.id, -1, 0)!.machines[0]).toMatchObject({ x: -1, y: 0 });
     expect(erase(l, arm.id).machines).toEqual([]);
+  });
+  it('copies a group with its settings and pastes it elsewhere under new ids', () => {
+    const station = { ...specFor('agent', 5, 5, 0)!, name: 'Spec', ref: 'catalyst', outcomes: ['ok', 'rework'] };
+    const arm = { ...specFor('arm', 7, 5, 0)!, filter: { field: 'outcome' as const, values: ['rework'] } };
+    const inbound = { ...specFor('zone', 12, 2, 0)!, inbound: true };
+    const floor: FactoryLayout = { ...empty, machines: [station, arm, inbound, specFor('belt', 15, 9, 0)!] };
+    const clip = copyOf(floor, new Set([station.id, arm.id, inbound.id]))!;
+    expect([clip.w, clip.h]).toEqual([11, 6]);
+    expect(copyOf(floor, new Set(['nope']))).toBeNull();
+
+    const pasted = pasteAt(floor, clip, 30, 20)!;
+    expect(pasted.ids).toHaveLength(3);
+    expect(pasted.ids.some((id) => [station.id, arm.id, inbound.id].includes(id))).toBe(false);
+    const copies = pasted.layout.machines.filter((m) => pasted.ids.includes(m.id));
+    expect(copies.find((m) => m.kind === 'station')).toMatchObject({ name: 'Spec', ref: 'catalyst', outcomes: ['ok', 'rework'], x: 25, y: 20 });
+    expect(copies.find((m) => m.kind === 'arm')).toMatchObject({ filter: { field: 'outcome', values: ['rework'] }, x: 28, y: 21 });
+    expect(copies.find((m) => m.kind === 'zone')).toMatchObject({ inbound: false });
+    expect(pasted.layout.machines).toHaveLength(7);
+    /* the originals are untouched, and a later change to a copy does not reach the clip */
+    expect(floor.machines).toHaveLength(4);
+    (copies.find((m) => m.kind === 'station') as { outcomes: string[] }).outcomes.push('x');
+    expect((clip.machines.find((m) => m.kind === 'station') as { outcomes: string[] }).outcomes).toEqual(['ok', 'rework']);
+  });
+
+  it('refuses to paste onto a machine, and lets belts give way', () => {
+    const station = specFor('agent', 5, 5, 0)!;
+    const floor: FactoryLayout = { ...empty, machines: [station, specFor('belt', 20, 5, 0)!, specFor('belt', 21, 5, 0)!] };
+    const clip = copyOf(floor, new Set([station.id]))!;
+    expect(canPaste(floor, clip, 6, 6)).toBe(false);
+    expect(pasteAt(floor, clip, 6, 6)).toBeNull();
+    const over = pasteAt(floor, clip, 20, 5)!;
+    expect(over.layout.machines.filter((m) => m.kind === 'belt')).toHaveLength(0);
+    expect(over.layout.machines.filter((m) => m.kind === 'station')).toHaveLength(2);
   });
 });

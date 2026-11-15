@@ -13,23 +13,26 @@ import { useFactoryStore } from './factoryStore';
 import { FactoryInspector, type Selection } from './FactoryInspector';
 import { FactoryConsole, type Command } from './FactoryConsole';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
-import { canPlace, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, place, rotate, specFor, update, type Tool } from './layoutOps';
+import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, pasteAt, place, rotate, specFor, update, type Clip, type Tool } from './layoutOps';
+import { find, NO_FINDER, type Finder } from './finder';
+import { FactoryFinder } from './FactoryFinder';
+import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryTicketModal } from './FactoryTicketModal';
 import { FactoryMachineModal } from './FactoryMachineModal';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { needsHuman, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
+import { humanCall, needsHuman, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 
 const POLL_MS = 600;
 const STATS_EVERY_MS = 30_000;
-/** The lenses, with their key in the idle menu and their icon. */
-const LENS_KEYS: [Exclude<Lens, 'none'>, string, string, string][] = [
-  ['load', 'L', 'stack', 'Where tickets stand right now, and for how long'],
-  ['cost', 'C', 'coin', 'What each station spent on agent runs'],
-  ['time', 'D', 'clock', 'How long a run takes in each station'],
-  ['human', 'H', 'person', 'Where tickets wait for a human, and for how long'],
-];
+/** Saved selections: keys 1 to 9, then 0. */
+const GROUPS = 10;
+/** Above this many, the tickets a filter keeps are ringed but not all named: the floor would be covered in text. */
+const NAMED_MAX = 30;
+const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
+/** What was copied or cut in build mode. Kept for the session, so it survives leaving the page and coming back. */
+let clipboard: Clip | null = null;
 const ARROW = ['→', '↓', '←', '↑'];
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
@@ -119,7 +122,12 @@ function Floor() {
   const [dir, setDir] = useState<Dir>(0);
   const [selection, setSelection] = useState<Selection>(null);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [groups, setGroups] = useState<Selection[]>([null, null, null, null, null, null]);
+  const [groups, setGroups] = useState<Selection[]>(() => Array.from({ length: GROUPS }, () => null));
+  const [finder, setFinder] = useState<Finder>(NO_FINDER);
+  const [hasClip, setHasClip] = useState(clipboard !== null);
+  const tipRef = useRef<TicketTipHandle>(null);
+  const findRef = useRef<HTMLInputElement>(null);
+  const jumpAt = useRef(0);
   const groupsRef = useRef(groups); groupsRef.current = groups;
   const miniRef = useRef<HTMLCanvasElement>(null);
   const [openTicket, setOpenTicket] = useState<string | null>(null);
@@ -128,8 +136,15 @@ function Floor() {
   const stats = useFactoryStore((s) => s.stats);
   /* the lens is worked out when its inputs change, not at every frame */
   const layer = useMemo<LensLayer | null>(() => (snapshot && layout ? lensLayer(lens, layout, snapshot.tickets, stats, snapshot.serverTime) : null), [lens, layout, snapshot, stats]);
-  const live = useRef({ building, tool, dir, selection, lens: layer, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false });
-  live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer;
+  /* what the filter keeps; the rest is faded on the floor, never hidden */
+  const found = useMemo(() => (snapshot ? find(snapshot.tickets, finder, (t) => humanCall(t) !== null) : null), [snapshot, finder]);
+  const marks = useMemo(() => {
+    if (!found || !snapshot) return { dim: null, found: null, named: null };
+    const keep = new Set(found.map((t) => t.ticketId));
+    return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
+  }, [found, snapshot]);
+  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false });
+  live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks;
   const fitted = useRef(false);
   useToastOffset(184);   // keep toasts clear of the command bar
 
@@ -161,6 +176,7 @@ function Floor() {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, a.p])),
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       hoverMachine: l.hover, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
+      dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
     };
   }, []);
 
@@ -215,6 +231,11 @@ function Floor() {
     if (!live.current.building || t === 'select' || !l) return null;
     const x = Math.floor(wx), y = Math.floor(wy);
     if (t === 'erase') { const m = machineAt(l, x, y); return { cells: [m ?? { x, y, w: 1, h: 1 }], ok: true, erase: true }; }
+    if (t === 'paste') {
+      if (!clipboard) return null;
+      const cells = clipAt(clipboard, x, y).map((m) => ({ x: m.x, y: m.y, w: m.w, h: m.h, dir: m.kind === 'belt' || m.kind === 'arm' ? m.dir : undefined }));
+      return { cells, ok: canPaste(l, clipboard, x, y), text: cells.length > 1 ? `Paste ${cells.length} machines` : 'Paste' };
+    }
     const spec = specFor(t, x, y, live.current.dir); if (!spec) return null;
     return { cells: [{ x: spec.x, y: spec.y, w: spec.w, h: spec.h, dir: spec.kind === 'belt' || spec.kind === 'arm' ? spec.dir : undefined }], ok: canPlace(l, spec) };
   };
@@ -223,7 +244,7 @@ function Floor() {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y);
-    moved.current = 0; lastPt.current = p; press.current = null;
+    moved.current = 0; lastPt.current = p; press.current = null; tipRef.current?.hide();
     /* right or middle button, or Space held: move the view, whatever the tool */
     if (e.button !== 0 || live.current.space) { press.current = { kind: 'pan' }; return; }
     if (live.current.building) {
@@ -248,6 +269,8 @@ function Floor() {
       const hit = v.pick(p.x, p.y, st, !live.current.building);
       live.current.hover = hit && 'machineId' in hit ? hit.machineId : null;
       live.current.ghost = ghostAt(v, w.x, w.y);
+      /* a ticket says what it is as soon as the pointer is over it */
+      if (hit && 'ticketId' in hit) tipRef.current?.show(hit.ticketId, p.x, p.y); else tipRef.current?.hide();
       return;
     }
     const dx = p.x - lastPt.current.x, dy = p.y - lastPt.current.y; moved.current += Math.abs(dx) + Math.abs(dy); lastPt.current = p;
@@ -286,7 +309,11 @@ function Floor() {
       const ids = q && !click ? machinesIn(st.layout, q.x0, q.y0, q.x1, q.y1) : [];
       setSelection(ids.length > 1 ? { machines: ids } : ids.length === 1 ? { machine: ids[0]! } : null);
     } else if (pr?.kind === 'place') {
-      if (click) {
+      if (click && live.current.tool === 'paste') {
+        const done = clipboard ? pasteAt(st.layout, clipboard, tx, ty) : null;
+        if (done) { commit(done.layout); setTool('select'); setSelection(done.ids.length > 1 ? { machines: done.ids } : { machine: done.ids[0]! }); live.current.ghost = null; }
+        else toast.warning('No room to paste here');
+      } else if (click) {
         const spec = specFor(live.current.tool, tx, ty, live.current.dir), next = spec ? place(st.layout, spec) : null;
         commit(next);
         if (next && spec && spec.kind !== 'arm' && spec.kind !== 'bridge') { setTool('select'); setSelection({ machine: spec.id }); live.current.ghost = null; }
@@ -318,17 +345,49 @@ function Floor() {
   const closeMachine = useCallback(() => setOpenMachine(null), []);
   const transferTo = useCallback((ticketId: string) => { void useFactoryStore.getState().transfer(ticketId, {}); }, []);
 
+  const fit = useCallback(() => { const l = useFactoryStore.getState().layout; if (l && viewRef.current) viewRef.current.fit(l, live.current.building || l.machines.length <= 1); }, []);
+  /** Centre the view on a ticket and select it. */
+  const goTo = useCallback((ticketId: string) => {
+    const v = viewRef.current, p = v?.ticketPos(ticketId);
+    if (v && p) { v.cam.x = p.x; v.cam.y = p.y; if (v.cam.z < 22) v.cam.z = 22; }
+    setSelection({ ticket: ticketId });
+  }, []);
+  /** Enter in the search box: the next ticket found, round and round. */
+  const jump = useCallback(() => {
+    if (!found?.length) return;
+    const t = found[jumpAt.current % found.length]!; jumpAt.current = (jumpAt.current + 1) % found.length;
+    goTo(t.ticketId);
+  }, [found, goTo]);
+  useEffect(() => { jumpAt.current = 0; }, [finder]);
+
+  // ---------- copy, cut, paste (build mode) ----------
+  const copy = useCallback((cut: boolean) => {
+    const sel = live.current.selection, l = useFactoryStore.getState().layout;
+    const ids = sel && 'machines' in sel ? sel.machines : sel && 'machine' in sel ? [sel.machine] : [];
+    const clip = l && ids.length ? copyOf(l, new Set(ids)) : null;
+    if (!l || !clip) { toast.info('Select one or several machines first'); return; }
+    clipboard = clip; setHasClip(true);
+    if (cut) { commit(eraseMany(l, new Set(ids))); setSelection(null); }
+    toast.info(`${clip.machines.length} machine${clip.machines.length === 1 ? '' : 's'} ${cut ? 'cut' : 'copied'}: ${MOD}V, then click where to put ${clip.machines.length === 1 ? 'it' : 'them'}`);
+  }, [commit]);
+  const paste = useCallback(() => {
+    if (!clipboard) { toast.info('Nothing to paste: copy or cut machines first'); return; }
+    setSelection(null); setTool('paste');
+  }, []);
+
   const commands: Command[] = useMemo(() => {
     const out: Command[] = [];
-    const fit = () => { const l = useFactoryStore.getState().layout; if (l && viewRef.current) viewRef.current.fit(l, building || l.machines.length <= 1); };
     if (selTicket) {
       const m = layout?.machines.find((q) => q.id === selTicket.machineId);
       if (selTicket.phase === 'review' && m?.kind === 'station') m.outcomes.slice(0, 4).forEach((o, i) => out.push({ key: 'QWER'[i]!, label: o, icon: i ? 'loop' : 'check', primary: i === 0, title: `Decide: ${o}`, run: () => void store.resolve(selTicket.ticketId, o) }));
       if (selTicket.phase === 'zone' && !selTicket.released) out.push({ key: 'Q', label: 'Release', icon: 'play', primary: true, title: 'Let an arm take this ticket out of its zone', run: () => void store.release(selTicket.ticketId) });
       if (selTicket.phase === 'failed' || selTicket.phase === 'question') out.push({ key: 'Q', label: 'Run again', icon: 'loop', primary: true, title: 'Run the station again on this ticket', run: () => void store.retry(selTicket.ticketId) });
       out.push({ key: 'V', label: 'Open', icon: 'open', title: 'The ticket, its thread and its actions, without leaving the floor', run: () => setOpenTicket(selTicket.ticketId) });
+      if (selTicket.info) { const on = selTicket.info.favorite; out.push({ key: 'S', label: on ? 'Unstar' : 'Star', icon: 'star', active: on, title: on ? 'Remove from your favourites' : 'Make it a favourite: it then carries its name on the floor', run: () => void store.star(selTicket.ticketId, !on) }); }
       out.push({ key: 'X', label: 'Give back', icon: 'give', title: 'Take this ticket out of the Factory', run: () => { void store.giveBack(selTicket.ticketId); setSelection(null); } });
     } else if (selMany.length && building && tool === 'select') {
+      out.push({ key: '', keyText: `${MOD}C`, label: 'Copy', icon: 'copy', title: `Copy the ${selMany.length} selected machines`, run: () => copy(false) });
+      out.push({ key: '', keyText: `${MOD}X`, label: 'Cut', icon: 'cut', title: `Cut the ${selMany.length} selected machines`, run: () => copy(true) });
       out.push({ key: 'Delete', label: 'Remove', icon: 'trash', danger: true, title: `Remove the ${selMany.length} selected machines`, run: () => { const l = useFactoryStore.getState().layout; if (l) commit(eraseMany(l, new Set(selMany))); setSelection(null); } });
     } else if (selMachine && (!building || tool === 'select')) {
       if (selMachine.kind === 'belt' || selMachine.kind === 'arm') out.push({ key: 'R', label: 'Turn', icon: 'rotate', title: 'Quarter turn', run: () => { const l = useFactoryStore.getState().layout; if (l) commit(rotate(l, selMachine.id)); } });
@@ -337,24 +396,28 @@ function Floor() {
         const next = snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0];
         out.push({ key: 'L', label: 'Release 1', icon: 'play', primary: true, disabled: !next, title: 'Release the ticket that has waited longest', run: () => { if (next) void store.release(next.ticketId); } });
       }
+      if (building) {
+        out.push({ key: '', keyText: `${MOD}C`, label: 'Copy', icon: 'copy', title: 'Copy this machine, with its settings', run: () => copy(false) });
+        out.push({ key: '', keyText: `${MOD}X`, label: 'Cut', icon: 'cut', title: 'Cut this machine', run: () => copy(true) });
+      }
       out.push({ key: 'Delete', label: 'Remove', icon: 'trash', danger: true, title: 'Remove this machine from the floor', run: () => removeMachine(selMachine.id) });
     } else if (building) {
       for (const [t, key, label, title] of TOOLS) out.push({ key, label, icon: t === 'erase' ? 'erase' : t, title, active: tool === t, run: () => setTool((cur) => (cur === t ? 'select' : t)) });
       out.push({ key: 'R', label: `Face ${ARROW[dir]}`, icon: 'rotate', title: 'Direction of the belts and arms you place', run: () => setDir((d) => ((d + 1) % 4) as Dir) });
       out.push({ key: 'Z', label: 'Undo', icon: 'undo', disabled: !store.undoable, title: 'Take back the last change to the floor (also Ctrl+Z)', run: () => void store.undo() });
       out.push({ key: 'Y', label: 'Redo', icon: 'redo', disabled: !store.redoable, title: 'Put back the change you took back (also Ctrl+Shift+Z)', run: () => void store.redo() });
+      out.push({ key: '', keyText: `${MOD}V`, label: 'Paste', icon: 'paste', disabled: !hasClip, active: tool === 'paste', title: hasClip ? 'Put down what you copied or cut: click where' : 'Nothing copied yet', run: paste });
     } else {
       out.push({ key: 'B', label: 'Build', icon: 'build', primary: true, title: 'Lay belts, arms, stations and zones', run: () => { setBuilding(true); setSelection(null); } });
       out.push({ key: 'T', label: 'Hand over', icon: 'inbound', title: 'Hand tickets over to the Factory: they land in Inbound', run: () => setTransferOpen(true) });
-      for (const [l, key, icon, title] of LENS_KEYS) out.push({ key, label: LENS_LABEL[l], icon, title: `Lens: ${title}`, active: lens === l, run: () => setLens((cur) => (cur === l ? 'none' : l)) });
     }
     out.push({ key: 'F', label: 'Fit', icon: 'fit', title: 'Frame the floor', run: fit });
     if (building) out.push({ key: 'Escape', label: tool !== 'select' ? 'Drop tool' : selection ? 'Menu' : 'Done', icon: 'back', title: tool !== 'select' ? 'Put the tool down' : selection ? 'Back to the build menu' : 'Leave build mode',
       run: () => { if (tool !== 'select') setTool('select'); else if (selection) setSelection(null); else setBuilding(false); } });
     return out;
-  }, [selTicket, selMachine, selMany, building, tool, dir, selection, layout, snapshot, store, commit, removeMachine, lens]);
+  }, [selTicket, selMachine, selMany, building, tool, dir, selection, layout, snapshot, store, commit, removeMachine, fit, copy, paste, hasClip]);
 
-  // Saved selections, RTS style: Shift+1…6 saves, 1…6 recalls and centres the view on it.
+  // Saved selections, RTS style: Shift+1…9 and Shift+0 save, the digit alone recalls and centres the view on it.
   const onGroup = useCallback((i: number, save: boolean) => {
     if (save) {
       const cur = live.current.selection;
@@ -375,6 +438,13 @@ function Floor() {
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       if (transferOpen || openTicket || openMachine) return;
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
+      const chord = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey ? e.key.toLowerCase() : '';
+      if (live.current.building && (chord === 'c' || chord === 'x' || chord === 'v')) {
+        e.preventDefault();
+        if (chord === 'v') paste(); else copy(chord === 'x');
+        return;
+      }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); findRef.current?.focus(); findRef.current?.select(); return; }
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z' && live.current.building) {
         e.preventDefault(); setSelection(null);
         void (e.shiftKey ? useFactoryStore.getState().redo() : useFactoryStore.getState().undo());
@@ -384,8 +454,8 @@ function Floor() {
       if (e.code === 'Space') { e.preventDefault(); live.current.space = true; return; }
       const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (arrow && viewRef.current) { e.preventDefault(); viewRef.current.cam.x += arrow[0]! * 3; viewRef.current.cam.y += arrow[1]! * 3; return; }
-      const digit = /^Digit([1-6])$/.exec(e.code);
-      if (digit) { e.preventDefault(); onGroup(Number(digit[1]) - 1, e.shiftKey); return; }
+      const digit = /^Digit([0-9])$/.exec(e.code);
+      if (digit) { e.preventDefault(); onGroup((Number(digit[1]) + GROUPS - 1) % GROUPS, e.shiftKey); return; }
       const key = e.key === 'Backspace' ? 'Delete' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
       const cmd = commands.find((c) => c.key === key);
       if (cmd) { e.preventDefault(); cmd.run(); }
@@ -394,7 +464,7 @@ function Floor() {
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); };
-  }, [commands, selection, transferOpen, openTicket, openMachine, onGroup]);
+  }, [commands, selection, transferOpen, openTicket, openMachine, onGroup, copy, paste]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
@@ -404,16 +474,18 @@ function Floor() {
         <span className="text-sm text-[var(--theme-text-primary)]">Factory</span>
         <span className="rounded border border-[var(--theme-border-input)] px-1.5 text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">experimental</span>
         {building && <span className="text-xs text-[var(--theme-accent)]">Building — the floor keeps running</span>}
+        {snapshot && <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} />}
         <span className="flex-1" />
-        {snapshot && <span className="font-mono text-xs text-[var(--theme-text-muted)]">{snapshot.tickets.length} tickets · {snapshot.running} running · {snapshot.runsLastHour}/{snapshot.floor.settings.maxRunsPerHour} runs this hour{waiting ? ` · ${waiting} waiting for you` : ''}</span>}
+        {snapshot && <span className="hidden min-w-0 truncate font-mono text-xs text-[var(--theme-text-muted)] 2xl:inline">{snapshot.tickets.length} tickets · {snapshot.running} running · {snapshot.runsLastHour}/{snapshot.floor.settings.maxRunsPerHour} runs this hour{waiting ? ` · ${waiting} waiting for you` : ''}</span>}
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">
           <canvas
             ref={canvasRef} className={cn('absolute inset-0 h-full w-full touch-none', building && tool !== 'select' ? 'cursor-crosshair' : 'cursor-grab')}
             aria-label="Factory floor" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-            onPointerLeave={() => { live.current.hover = null; live.current.ghost = null; }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
+            onPointerLeave={() => { live.current.hover = null; live.current.ghost = null; tipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
+          <FactoryTicketTip ref={tipRef} />
           {layer && !building && (
             <div className="absolute left-3 top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg" role="status">
               <span className="flex-none text-xs font-semibold text-[var(--theme-text-primary)]">{LENS_LABEL[layer.kind]}</span>
@@ -431,11 +503,11 @@ function Floor() {
             </div>
           )}
         </div>
-        <FactoryInspector selection={selection} view={view} onSelect={setSelection} onPatch={patchMachine} onRemove={removeMachine} onTransfer={() => setTransferOpen(true)} onOpenMachine={setOpenMachine} lens={lens} onLens={setLens} building={building} />
+        <FactoryInspector selection={selection} view={view} onSelect={setSelection} onPatch={patchMachine} onRemove={removeMachine} onTransfer={() => setTransferOpen(true)} onOpenMachine={setOpenMachine} found={found} onGoTo={goTo} building={building} />
       </div>
-      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} commands={commands} groups={groups} onGroup={onGroup} miniRef={miniRef}
+      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} commands={commands} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Tickets you hand over wait in Inbound.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Hover a ticket to see what it is; / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && <FactoryMachineModal machineId={openMachine} onClose={closeMachine} onOpenTicket={setOpenTicket} />}
       {openTicket && <FactoryTicketModal ticketId={openTicket} onClose={() => setOpenTicket(null)} />}

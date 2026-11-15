@@ -14,8 +14,9 @@ import { useFactoryStore } from './factoryStore';
 import { armTag, type FactoryView } from './renderer';
 import { MachineFigures, PeriodSelect, Tile } from './FactoryStatsBits';
 import { money, span } from './format';
-import { LENS_LABEL, standing } from './lens';
-import { byRunAt, needsHuman, QUESTION_OUTCOME, type ArmFilterField, type Lens, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
+import { standing } from './lens';
+import { TicketGlyphs } from './FactoryTicketMeta';
+import { byRunAt, needsHuman, QUESTION_OUTCOME, type ArmFilterField, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
 
 export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | null;
 
@@ -51,7 +52,7 @@ function TicketRow({ t, onSelect }: { t: FactoryTicket; onSelect: () => void }) 
   return (
     <button type="button" onClick={onSelect} className="flex w-full flex-col rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-left hover:bg-[var(--theme-bg-overlay)]">
       <span className="truncate text-xs font-medium text-[var(--theme-text-primary)]"><span className="mr-1.5 font-mono text-[var(--theme-text-muted)]">#{t.info?.displayId ?? '?'}</span>{t.info?.title ?? t.ticketId}</span>
-      <span className={cn('text-[11px]', why ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>{PHASE_LABEL[t.phase]}{t.outcome ? ` · ${t.outcome}` : ''}</span>
+      <span className="flex items-center gap-2"><TicketGlyphs info={t.info} /><span className={cn('min-w-0 truncate text-[11px]', why ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>{PHASE_LABEL[t.phase]}{t.outcome ? ` · ${t.outcome}` : ''}</span></span>
     </button>
   );
 }
@@ -78,8 +79,9 @@ function TicketPanel({ t, view }: { t: FactoryTicket; view: FactoryView }) {
   return (
     <>
       <div>
-        <div className="font-mono text-xs text-[var(--theme-text-muted)]">#{t.info?.displayId ?? '?'} · {t.info?.status ?? ''} · {t.info?.type || 'no type'} · {t.info?.priority || 'no priority'}</div>
+        <div className="font-mono text-xs text-[var(--theme-text-muted)]">#{t.info?.displayId ?? '?'} · {t.info?.status ?? ''}</div>
         <div className="text-sm font-semibold text-[var(--theme-text-primary)]">{t.info?.title ?? t.ticketId}</div>
+        <TicketGlyphs info={t.info} words className="mt-1 text-[11px] text-[var(--theme-text-secondary)]" />
         <div className="mt-1 text-xs text-[var(--theme-text-secondary)]">{machine ? `${machine.name || machine.kind} · ` : ''}{PHASE_LABEL[t.phase]}{t.outcome ? ` · outcome “${t.outcome}”` : ''}</div>
         {t.note && <div className="mt-1 text-xs text-[var(--theme-warning)]">{t.note}</div>}
       </div>
@@ -223,11 +225,11 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
   );
 }
 
-const LENSES: Exclude<Lens, 'none'>[] = ['load', 'cost', 'time', 'human'];
-
-export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove, onTransfer, onOpenMachine, lens, onLens, building }: {
+export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove, onTransfer, onOpenMachine, found, onGoTo, building }: {
   selection: Selection; view: FactoryView | null; onSelect: (s: Selection) => void; onPatch: (id: string, patch: Partial<MachineSpec>) => void; onRemove: (id: string) => void; onTransfer: () => void;
-  onOpenMachine: (id: string) => void; lens: Lens; onLens: (lens: Lens) => void; building: boolean;
+  onOpenMachine: (id: string) => void;
+  /** What the search and filters keep, or null when none is on. */
+  found: FactoryTicket[] | null; onGoTo: (ticketId: string) => void; building: boolean;
 }) {
   const snapshot = useFactoryStore((s) => s.snapshot), layout = useFactoryStore((s) => s.layout), setSettings = useFactoryStore((s) => s.setSettings), stats = useFactoryStore((s) => s.stats);
   if (!snapshot || !layout || !view) return null;
@@ -258,6 +260,13 @@ export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove,
               ))}
             </div>
             <Button variant="primary" size="sm" onClick={onTransfer}>Hand tickets over…</Button>
+            {found && (
+              <Section title={`Found · ${found.length}`}>
+                {found.length === 0 && <Hint>No ticket on the floor matches. The others are only faded: clear the search to bring them back.</Hint>}
+                {found.slice(0, 40).map((t) => <TicketRow key={t.ticketId} t={t} onSelect={() => onGoTo(t.ticketId)} />)}
+                {found.length > 40 && <Hint>and {found.length - 40} more: narrow the search.</Hint>}
+              </Section>
+            )}
             <Section title={`Waiting for you · ${waiting.length}`}>
               {waiting.length === 0 && <Hint>Nothing waits for a human.</Hint>}
               {waiting.map((t) => <TicketRow key={t.ticketId} t={t} onSelect={() => onSelect({ ticket: t.ticketId })} />)}
@@ -271,12 +280,6 @@ export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove,
                 </button>
               ))}
               {jams.length > 0 && <Hint>Count, and how long the oldest has been there. The worst first.</Hint>}
-            </Section>
-            <Section title="Read the floor">
-              <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Lens">
-                {LENSES.map((l) => <Button key={l} size="sm" variant={lens === l ? 'primary' : 'secondary'} aria-pressed={lens === l} onClick={() => onLens(lens === l ? 'none' : l)}>{LENS_LABEL[l]}</Button>)}
-              </div>
-              <Hint>A lens tints every station and zone: yellow is little, red is the most on the floor.</Hint>
             </Section>
             <Section title="What the floor did">
               <PeriodSelect id="f-period" />

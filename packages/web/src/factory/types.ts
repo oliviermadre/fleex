@@ -31,11 +31,16 @@ export interface FactoryLayout { w: number; h: number; machines: MachineSpec[] }
 export interface FactorySettings { maxRunsPerHour: number; maxConcurrentRuns: number }
 
 export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'out' | 'zone';
-export interface FactoryTicketInfo { id: string; displayId: number; title: string; type: string; priority: string; status: TicketStatus; tags: string[] }
+export interface FactoryTicketInfo {
+  id: string; displayId: number; title: string; type: string; priority: string; status: TicketStatus; tags: string[];
+  boardId: string; complexity: string | null; favorite: boolean;
+}
 export interface FactoryTicket {
   ticketId: string; machineId: string | null; info: FactoryTicketInfo | null;
   x: number; y: number; phase: TicketPhase; p: number; fx: number; fy: number;
   outcome: string; released: boolean; since: string; runId: string | null; note: string;
+  /** When it was handed over to the Factory (ISO). */
+  handedAt: string;
 }
 export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };

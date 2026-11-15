@@ -68,7 +68,7 @@ export class FactoryModule {
         if (!entity) return null;
         const t = entity.toDTO();
         if (t.archivedAt) return null;
-        return { id: t.id, displayId: t.displayId, title: t.title, type: t.type ?? '', priority: t.priority ?? '', status: t.status, tags: t.tags ?? [] };
+        return { id: t.id, displayId: t.displayId, title: t.title, type: t.type ?? '', priority: t.priority ?? '', status: t.status, tags: t.tags ?? [], boardId: t.boardId, complexity: t.complexity ?? null, favorite: t.favorite === true };
       },
       setStatus: async (ticketId: string, status: TicketStatus) => {
         await deps.applyTicketMutation.execute({ ticketId, move: { status }, actor: { actorType: 'agent', actorName: 'Factory' } });

@@ -13,7 +13,9 @@ action (Run again, the gate's outcomes). Replying in the thread alone restarts n
 
 The floor has no edge: machines can be placed anywhere, and the page draws it as far as what is built plus a margin.
 Where two belts must cross, a **bridge** tile carries each ticket straight across. In build mode every change to the
-floor can be taken back and put back (Ctrl+Z, Ctrl+Shift+Z); that history lives in the page and is gone on reload.
+floor can be taken back and put back (Ctrl+Z, Ctrl+Shift+Z); that history lives in the page and is gone on reload. A selection of
+machines can be copied, cut and pasted (Ctrl+C, Ctrl+X, Ctrl+V, then a click): the copies keep their settings and get
+new ids.
 
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
@@ -27,9 +29,19 @@ hand-over to exit, which is the lead time). `GET /api/factory/stats?days=7` turn
 started; a panel starts one execution per persona and links only its synthesis, so a panel run also takes the
 ticket's other executions started while it ran. The route only reads, and its result is kept 20 seconds.
 
-On the page, four lenses tint stations and zones (what stands there now, cost, run time, human wait), the side panel
-lists where tickets stand and what the floor did over the period, and a station or a zone opens on everything it
-holds (double-click, or V).
+On the page, four layers tint stations and zones (what stands there now, cost, run time, human wait; chosen next to
+the minimap), the side panel lists where tickets stand and what the floor did over the period, and a station or a zone
+opens on everything it holds (double-click, or V).
+
+## Finding a ticket
+
+The snapshot carries what tells tickets apart: board, type, priority, complexity, favourite. They are shown with
+Fleex's own icons, and a ticket's square takes its type's usual colour, with a star when it is a favourite and a pip
+when it is urgent or high. Hovering a ticket shows a card; favourites and the selected ticket carry their name on the
+floor. The header has a search (title, number, tag) and filters (boards, types, priorities, favourites, waiting for a
+human): what a filter leaves out is faded, never hidden. Starring a ticket from the Factory changes the ticket itself
+(`PATCH /api/tickets/:id`), then `POST /api/factory/tickets/:id/refresh` re-reads it without waiting for the
+engine's ten-second sweep.
 
 Off unless `factoryEnabled` is `true` in the workspace config (Settings › General). While off the engine does not
 tick, no `factory_*` table is read or written, the routes answer 403 and the nav entry is hidden.
