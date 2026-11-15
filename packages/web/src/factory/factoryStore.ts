@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { factoryApi } from './factoryApi';
-import type { FactoryLayout, FactorySettings, FactorySnapshot, Target } from './types';
+import type { FactoryLayout, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
 interface FactoryState {
   /** False on a storage driver without Factory tables, or before the first status call. */
@@ -11,6 +11,10 @@ interface FactoryState {
   layout: FactoryLayout | null;
   /** Tickets handed over to the Factory, for the banner shown on a ticket elsewhere in Fleex. */
   managed: ReadonlySet<string>;
+  /** What the floor did over the last `statsDays` days; null until first loaded. */
+  stats: FactoryStats | null;
+  statsDays: number;
+  loadStats: (days?: number) => Promise<void>;
   loadStatus: () => Promise<void>;
   loadManaged: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -38,7 +42,12 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
   }));
   const act = async (fn: () => Promise<FactorySnapshot>) => { try { apply(await fn()); } catch { /* the API call already raised a toast */ } };
   return {
-    supported: false, enabled: false, snapshot: null, layout: null, managed: new Set<string>(),
+    supported: false, enabled: false, snapshot: null, layout: null, managed: new Set<string>(), stats: null, statsDays: 7,
+    loadStats: async (days) => {
+      const span = days ?? get().statsDays;
+      if (span !== get().statsDays) set({ statsDays: span, stats: null });
+      try { const stats = await factoryApi.stats(span); if (get().statsDays === span) set({ stats }); } catch { /* keep what we had */ }
+    },
     loadStatus: async () => {
       try { set(await factoryApi.status()); } catch { set({ supported: false, enabled: false }); }
     },

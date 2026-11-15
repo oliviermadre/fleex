@@ -1,6 +1,6 @@
 import { API_URL } from '../lib/constants';
 import { toast } from '../lib/toast';
-import type { FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, Target } from './types';
+import type { FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
 async function call<T>(path: string, init?: RequestInit, quiet = false): Promise<T> {
   const res = await fetch(`${API_URL}/factory${path}`, { ...init, headers: init?.body ? { 'Content-Type': 'application/json' } : undefined });
@@ -27,4 +27,6 @@ export const factoryApi = {
   retry: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/retry`),
   giveBack: (ticketId: string) => call<FactorySnapshot>(`/tickets/${ticketId}`, { method: 'DELETE' }),
   runs: (ticketId: string) => call<FactoryRun[]>(`/tickets/${ticketId}/runs`, undefined, true),
+  machineRuns: (machineId: string, limit = 60) => call<FactoryRun[]>(`/runs?machineId=${encodeURIComponent(machineId)}&limit=${limit}`, undefined, true),
+  stats: (days: number) => call<FactoryStats>(`/stats?days=${days}`, undefined, true),
 };

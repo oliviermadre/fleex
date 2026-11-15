@@ -22,6 +22,7 @@ class MemoryStore implements FactoryStorePort {
   async saveRun(r: FactoryRunRow) { this.runs.set(r.id, structuredClone(r)); }
   async listRunsByTicket(id: string) { return [...this.runs.values()].filter((r) => r.ticketId === id); }
   async listRecentRuns() { return [...this.runs.values()]; }
+  async listRunsSince() { return [...this.runs.values()]; }
   async countRunsSince() { return 0; }
   async interruptRunningRuns(nowIso: string) {
     const out: FactoryRunRow[] = [];
@@ -276,6 +277,17 @@ describe('FactoryEngine', () => {
     expect(statuses).toEqual([['a', 'done']]);
     expect(store.tickets.has('a')).toBe(false);
     expect(engine.isManaged('a')).toBe(false);
+  });
+
+  it('a shipment leaves a run row that spans hand-over to exit', async () => {
+    await boot([belt('b1', 1, 1), exit('out', 2, 1)]);
+    const handedOver = new Date(clock).toISOString();
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(1);
+    const rows = [...store.runs.values()];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ ticketId: 'a', machineId: 'out', executor: 'exit', status: 'completed', outcome: 'shipped', startedAt: handedOver });
+    expect(new Date(rows[0]!.finishedAt!).getTime()).toBeGreaterThan(new Date(handedOver).getTime());
   });
 
   it('a full station takes nothing more', async () => {

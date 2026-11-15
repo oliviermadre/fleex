@@ -264,6 +264,11 @@ export class FactoryEngine {
     } else if (spec.kind === 'zone') { t.s.phase = 'zone'; if (spec.status) this.applyStatus(t, spec.status); }
     else if (spec.kind === 'exit') {
       this.applyStatus(t, 'done');
+      /* a row for the shipment: from hand-over to exit, which is the lead time the stats report */
+      this.saveRun({
+        id: randomUUID(), ticketId: t.ticketId, floorId: this.floor.id, machineId: spec.id, machineName: spec.name || 'Exit', executor: 'exit',
+        status: 'completed', outcome: 'shipped', executionId: null, error: null, startedAt: t.createdAt, finishedAt: t.s.since,
+      });
       this.tickets.delete(t.ticketId); this.dirty.delete(t.ticketId);
       void this.deps.store.removeTicket(t.ticketId).catch((err) => this.deps.logger.warn('Factory: could not release a shipped ticket', { ticketId: t.ticketId, error: String(err) }));
     }

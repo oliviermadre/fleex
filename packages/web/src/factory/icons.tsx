@@ -26,6 +26,10 @@ const PATHS: Record<string, ReactNode> = {
   give: <><path d="M20 12H8M12 7l-5 5 5 5" /><path d="M4 4v16" /></>,
   inbound: <><path d="M12 3v11M7 10l5 5 5-5" /><path d="M4 20h16" /></>,
   ticket: <rect x="5" y="5" width="14" height="14" rx="3.5" />,
+  coin: <><circle cx="12" cy="12" r="8" /><path d="M14.6 9.3c-.5-.8-1.4-1.3-2.6-1.3-1.6 0-2.7.8-2.7 2s1 1.7 2.7 2 2.8.8 2.8 2.1-1.2 2-2.8 2c-1.3 0-2.3-.5-2.8-1.4M12 6.3V8M12 16.1v1.6" /></>,
+  clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7.5V12l3 2" /></>,
+  person: <><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20c0-3.8 2.8-6.3 6.5-6.3s6.5 2.5 6.5 6.3" /></>,
+  stack: <><rect x="4" y="13" width="6" height="6" rx="1.5" /><rect x="14" y="13" width="6" height="6" rx="1.5" /><rect x="9" y="5" width="6" height="6" rx="1.5" /></>,
   floor: <path d="M3 20V10l5 3.2V10l5 3.2V6h6v14zM3 20h18" />,
 };
 export type FactoryIconName = keyof typeof PATHS;

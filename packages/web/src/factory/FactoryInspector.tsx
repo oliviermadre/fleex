@@ -12,7 +12,10 @@ import { cn } from '../lib/cn';
 import { factoryApi } from './factoryApi';
 import { useFactoryStore } from './factoryStore';
 import { armTag, type FactoryView } from './renderer';
-import { needsHuman, QUESTION_OUTCOME, type ArmFilterField, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
+import { MachineFigures, PeriodSelect, Tile } from './FactoryStatsBits';
+import { money, span } from './format';
+import { LENS_LABEL, standing } from './lens';
+import { byRunAt, needsHuman, QUESTION_OUTCOME, type ArmFilterField, type Lens, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
 
 export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | null;
 
@@ -70,7 +73,7 @@ function TicketActions({ t, machine }: { t: FactoryTicket; machine: MachineSpec 
 
 function TicketPanel({ t, view }: { t: FactoryTicket; view: FactoryView }) {
   const [runs, setRuns] = useState<FactoryRun[]>([]);
-  useEffect(() => { let live = true; factoryApi.runs(t.ticketId).then((r) => { if (live) setRuns(r); }).catch(() => {}); return () => { live = false; }; }, [t.ticketId, t.phase, t.machineId]);
+  useEffect(() => { let live = true; factoryApi.runs(t.ticketId).then((r) => { if (live) setRuns([...r].sort(byRunAt)); }).catch(() => {}); return () => { live = false; }; }, [t.ticketId, t.phase, t.machineId]);
   const machine = view.machine(t.machineId);
   return (
     <>
@@ -84,7 +87,7 @@ function TicketPanel({ t, view }: { t: FactoryTicket; view: FactoryView }) {
         <b>Managed by the Factory.</b> Its status and agent runs are driven from this floor. Give it back to handle it the usual way.
       </div>
       <TicketActions t={t} machine={machine} />
-      {t.phase === 'question' && <Hint>Answer in the ticket thread (Open ticket), then run the station again.</Hint>}
+      {t.phase === 'question' && <Hint>Open the ticket (V, or double-click it) to answer: the station runs again with your answer.</Hint>}
       <Section title="Station runs">
         {runs.length === 0 && <Hint>No station has run on this ticket yet.</Hint>}
         {runs.map((r) => (
@@ -98,9 +101,10 @@ function TicketPanel({ t, view }: { t: FactoryTicket; view: FactoryView }) {
   );
 }
 
-function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, building }: {
-  m: MachineSpec; view: FactoryView; tickets: FactoryTicket[]; onPatch: (patch: Partial<MachineSpec>) => void; onRemove: () => void; onSelect: (s: Selection) => void; building: boolean;
+function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, building }: {
+  m: MachineSpec; view: FactoryView; tickets: FactoryTicket[]; onPatch: (patch: Partial<MachineSpec>) => void; onRemove: () => void; onSelect: (s: Selection) => void; onOpen: () => void; building: boolean;
 }) {
+  const stats = useFactoryStore((s) => s.stats);
   const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
   const inside = tickets.filter((t) => t.machineId === m.id);
   const takers = view.takersOf(m);
@@ -203,24 +207,36 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, building 
             {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" onClick={() => onSelect({ machine: a.id })}>arm · {armTag(a, takers) || 'anything'}</button>)}
           </Section>
           <Section title={`${inside.length} ticket${inside.length === 1 ? '' : 's'} inside`}>
-            {inside.slice(0, 30).map((t) => <TicketRow key={t.ticketId} t={t} onSelect={() => onSelect({ ticket: t.ticketId })} />)}
+            <Button size="sm" onClick={onOpen} title="Everything inside, with what each ticket waits for (V, or double-click the machine)">Open {m.name || (m.kind === 'zone' ? 'the zone' : 'the station')}…</Button>
+            {inside.slice(0, 8).map((t) => <TicketRow key={t.ticketId} t={t} onSelect={() => onSelect({ ticket: t.ticketId })} />)}
+            {inside.length > 8 && <Hint>and {inside.length - 8} more: open it to see them all.</Hint>}
           </Section>
+          {m.kind === 'station' && m.exec !== 'native' && (
+            <Section title="What it did">
+              <PeriodSelect id="f-period-machine" />
+              {stats ? <MachineFigures m={stats.machines.find((q) => q.machineId === m.id) ?? null} gate={m.exec === 'human_gate'} /> : <Hint>Loading…</Hint>}
+            </Section>
+          )}
         </>
       )}
     </>
   );
 }
 
-export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove, onTransfer, building }: {
-  selection: Selection; view: FactoryView | null; onSelect: (s: Selection) => void; onPatch: (id: string, patch: Partial<MachineSpec>) => void; onRemove: (id: string) => void; onTransfer: () => void; building: boolean;
+const LENSES: Exclude<Lens, 'none'>[] = ['load', 'cost', 'time', 'human'];
+
+export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove, onTransfer, onOpenMachine, lens, onLens, building }: {
+  selection: Selection; view: FactoryView | null; onSelect: (s: Selection) => void; onPatch: (id: string, patch: Partial<MachineSpec>) => void; onRemove: (id: string) => void; onTransfer: () => void;
+  onOpenMachine: (id: string) => void; lens: Lens; onLens: (lens: Lens) => void; building: boolean;
 }) {
-  const snapshot = useFactoryStore((s) => s.snapshot), layout = useFactoryStore((s) => s.layout), setSettings = useFactoryStore((s) => s.setSettings);
+  const snapshot = useFactoryStore((s) => s.snapshot), layout = useFactoryStore((s) => s.layout), setSettings = useFactoryStore((s) => s.setSettings), stats = useFactoryStore((s) => s.stats);
   if (!snapshot || !layout || !view) return null;
   const tickets = snapshot.tickets;
   const machine = selection && 'machine' in selection ? layout.machines.find((m) => m.id === selection.machine) ?? null : null;
   const ticket = selection && 'ticket' in selection ? tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
   const waiting = tickets.filter((t) => needsHuman(t));
   const many = selection && 'machines' in selection ? selection.machines : null;
+  const jams = standing(layout, tickets, snapshot.serverTime);
   return (
     <aside className="flex w-80 flex-shrink-0 flex-col gap-3 overflow-y-auto border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3" aria-label="Factory inspector">
       {many ? (
@@ -229,7 +245,7 @@ export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove,
           <Hint>Drag any of them to move them all together: belts, arms and stations keep their tickets. Delete removes them. Escape clears the selection.</Hint>
         </>
       ) : ticket ? <TicketPanel t={ticket} view={view} />
-        : machine ? <MachinePanel m={machine} view={view} tickets={tickets} onPatch={(p) => onPatch(machine.id, p)} onRemove={() => onRemove(machine.id)} onSelect={onSelect} building={building} />
+        : machine ? <MachinePanel m={machine} view={view} tickets={tickets} onPatch={(p) => onPatch(machine.id, p)} onRemove={() => onRemove(machine.id)} onSelect={onSelect} onOpen={() => onOpenMachine(machine.id)} building={building} />
         : (
           <>
             <div>
@@ -245,6 +261,45 @@ export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove,
             <Section title={`Waiting for you · ${waiting.length}`}>
               {waiting.length === 0 && <Hint>Nothing waits for a human.</Hint>}
               {waiting.map((t) => <TicketRow key={t.ticketId} t={t} onSelect={() => onSelect({ ticket: t.ticketId })} />)}
+            </Section>
+            <Section title="Where tickets stand">
+              {jams.length === 0 && <Hint>Nothing stands in a station or a zone.</Hint>}
+              {jams.slice(0, 5).map((j) => (
+                <button key={j.machineId} type="button" onClick={() => onSelect({ machine: j.machineId })} className="flex w-full flex-col rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-left hover:bg-[var(--theme-bg-overlay)]">
+                  <span className="flex items-baseline justify-between gap-2 text-xs"><span className="min-w-0 truncate font-medium text-[var(--theme-text-primary)]">{j.name}</span><span className="flex-none font-mono text-[var(--theme-text-secondary)]">{j.count} · {span(j.oldestMs)}</span></span>
+                  <span className={cn('text-[11px]', j.human ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>{j.why}</span>
+                </button>
+              ))}
+              {jams.length > 0 && <Hint>Count, and how long the oldest has been there. The worst first.</Hint>}
+            </Section>
+            <Section title="Read the floor">
+              <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Lens">
+                {LENSES.map((l) => <Button key={l} size="sm" variant={lens === l ? 'primary' : 'secondary'} aria-pressed={lens === l} onClick={() => onLens(lens === l ? 'none' : l)}>{LENS_LABEL[l]}</Button>)}
+              </div>
+              <Hint>A lens tints every station and zone: yellow is little, red is the most on the floor.</Hint>
+            </Section>
+            <Section title="What the floor did">
+              <PeriodSelect id="f-period" />
+              {!stats ? <Hint>Loading…</Hint> : (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Tile label="Shipped" value={stats.totals.shipped} />
+                    <Tile label="Lead time" value={span(stats.totals.avgLeadMs)} />
+                    <Tile label="Cost" value={money(stats.totals.costUsd)} />
+                    <Tile label="Runs" value={stats.totals.runs} />
+                    <Tile label="Failed" value={stats.totals.failed} tone={stats.totals.failed ? 'danger' : undefined} />
+                    <Tile label="Human wait" value={span(stats.totals.humanMs)} />
+                  </div>
+                  {stats.totals.shipped > 0 && stats.totals.costUsd > 0 && <Hint>{money(stats.totals.costUsd / stats.totals.shipped)} per ticket shipped.</Hint>}
+                  {stats.machines.filter((q) => q.costUsd > 0).slice(0, 4).map((q) => (
+                    <button key={q.machineId} type="button" disabled={!q.onFloor} onClick={() => onSelect({ machine: q.machineId })} className="flex items-baseline justify-between gap-2 text-left text-xs enabled:hover:underline">
+                      <span className="min-w-0 truncate text-[var(--theme-text-primary)]">{q.name}{q.onFloor ? '' : ' (removed)'}</span>
+                      <span className="flex-none font-mono text-[var(--theme-text-secondary)]">{money(q.costUsd)} · {q.runs} run{q.runs === 1 ? '' : 's'}</span>
+                    </button>
+                  ))}
+                  {stats.totals.runs === 0 && stats.totals.shipped === 0 && <Hint>Nothing ran over this period.</Hint>}
+                </>
+              )}
             </Section>
             <Section title="Safety limits">
               <CommitInput id="f-rph" label="Station runs the Factory may start per hour" value={String(snapshot.floor.settings.maxRunsPerHour)} onCommit={(v) => setSettings({ maxRunsPerHour: Number(v) })} />

@@ -17,7 +17,11 @@ import { PanelStepExecutor } from '../application/services/step-executors/panel-
 import type { FactoryStorePort } from './factory-store.port.js';
 import { FactoryEngine } from './engine.js';
 import { StationRunner } from './station-runner.js';
+import { computeStats, type ExecutionCost, type FactoryStats } from './stats.js';
 import type { FactoryTicketInfo } from './types.js';
+
+const DAY_MS = 86_400_000;
+const STATS_TTL_MS = 20_000;
 
 export interface FactoryModuleDeps {
   /** Null on a storage driver the Factory does not support: the module is then absent. */
@@ -45,6 +49,7 @@ export class FactoryModule {
   readonly engine: FactoryEngine;
   readonly store: FactoryStorePort;
   private initPromise: Promise<void> | null = null;
+  private statsCache = new Map<number, { at: number; value: Promise<FactoryStats> }>();
 
   constructor(private readonly deps: FactoryModuleDeps & { store: FactoryStorePort }) {
     const runner = new StationRunner({
@@ -82,6 +87,33 @@ export class FactoryModule {
   /** Tickets the rest of Fleex should leave alone, or null when the Factory is off or not loaded yet. */
   managedTicketIds(): Set<string> | null {
     return this.enabled() && this.initPromise ? this.engine.managedIds() : null;
+  }
+
+  /**
+   * What the floor did over the last `days` days, machine by machine. Read-only,
+   * and kept for a few seconds: pricing the runs reads the executions of every
+   * ticket that ran in the period.
+   */
+  stats(days: number): Promise<FactoryStats> {
+    const span = Math.max(1, Math.min(90, Math.floor(days) || 7));
+    const hit = this.statsCache.get(span);
+    if (hit && Date.now() - hit.at < STATS_TTL_MS) return hit.value;
+    const value = this.computeStats(span).catch((err) => { this.statsCache.delete(span); throw err; });
+    this.statsCache.set(span, { at: Date.now(), value });
+    return value;
+  }
+
+  private async computeStats(days: number): Promise<FactoryStats> {
+    const now = Date.now(), since = new Date(now - days * DAY_MS).toISOString(), until = new Date(now).toISOString();
+    const floor = this.engine.snapshot().floor;
+    const runs = await this.store.listRunsSince(floor.id, since);
+    const ticketIds = [...new Set(runs.filter((r) => r.executionId || r.executor === 'panel').map((r) => r.ticketId))];
+    const executions: ExecutionCost[] = [];
+    for (let i = 0; i < ticketIds.length; i += 8) {
+      const batch = await Promise.all(ticketIds.slice(i, i + 8).map((id) => this.deps.agentEventStore.getExecutionsByTicket(id).catch(() => [])));
+      for (const list of batch) for (const e of list) executions.push({ id: e.id, ticketId: e.ticketId, startedAt: e.startedAt, costUsd: e.costUsd ?? null });
+    }
+    return computeStats({ runs, executions, layout: floor.layout, since, until, days });
   }
 
   start(): void {

@@ -17,6 +17,19 @@ Where two belts must cross, a **bridge** tile carries each ticket straight acros
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
 
+## Reading the floor
+
+Every station visit is a row in `factory_runs`; a ticket reaching an exit leaves one too (executor `exit`, from
+hand-over to exit, which is the lead time). `GET /api/factory/stats?days=7` turns those rows into figures per machine
+(`stats.ts`, a pure function): runs, failures, questions, outcomes, average run time, time spent waiting for a human
+(a gate's decision; a question until the ticket's next run) and cost. A run is priced by the agent execution it
+started; a panel starts one execution per persona and links only its synthesis, so a panel run also takes the
+ticket's other executions started while it ran. The route only reads, and its result is kept 20 seconds.
+
+On the page, four lenses tint stations and zones (what stands there now, cost, run time, human wait), the side panel
+lists where tickets stand and what the floor did over the period, and a station or a zone opens on everything it
+holds (double-click, or V).
+
 Off unless `factoryEnabled` is `true` in the workspace config (Settings › General). While off the engine does not
 tick, no `factory_*` table is read or written, the routes answer 403 and the nav entry is hidden.
 
@@ -55,11 +68,12 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 ## Removing it
 
 1. Switch the flag off, then run the migration's `down()` (`cli-migrate.ts rollback`), or drop the three tables.
-2. Delete this folder, `packages/web/src/factory/`, the migration file and the two test files
+2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`.
 
 ## Not covered by tests
 
-The engine and the SQLite store are tested (`factory-engine.test.ts`, `factory-store-sqlite.bun.test.ts`). The
-Supabase store and a real agent run through a station are not: they need a live database and an API key.
+The engine, the stats and the SQLite store are tested (`factory-engine.test.ts`, `factory-stats.test.ts`,
+`factory-store-sqlite.bun.test.ts`). The Supabase store and a real agent run through a station are not: they need a
+live database and an API key. So the cost figures have only been checked against made-up executions.

@@ -53,9 +53,13 @@ export function factoryRoutes(factory: FactoryModule | null) {
       await ready();
       return factory.store.listRunsByTicket(request.params.ticketId);
     });
-    app.get<{ Querystring: { limit?: string } }>('/api/factory/runs', async (request) => {
-      const f = await ready();
-      return f.store.listRecentRuns(f.engine.snapshot().floor.id, Math.max(1, Math.min(200, Number(request.query.limit) || 50)));
+    /** The latest runs of the floor, or of one machine with `machineId`. */
+    app.get<{ Querystring: { limit?: string; machineId?: string } }>('/api/factory/runs', async (request) => {
+      const f = await ready(), limit = Math.max(1, Math.min(200, Number(request.query.limit) || 50)), machineId = request.query.machineId;
+      const rows = await f.store.listRecentRuns(f.engine.snapshot().floor.id, machineId ? 2000 : limit);
+      return machineId ? rows.filter((r) => r.machineId === machineId).slice(0, limit) : rows;
     });
+    /** Runs, failures, time and cost per machine over the last `days` days (7 by default, 90 at most). */
+    app.get<{ Querystring: { days?: string } }>('/api/factory/stats', async (request) => (await ready()).stats(Number(request.query.days) || 7));
   };
 }

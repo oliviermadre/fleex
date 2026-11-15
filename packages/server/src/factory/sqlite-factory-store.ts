@@ -1,6 +1,6 @@
 import type { SqliteConnection } from '../infrastructure/adapters/sqlite/connection.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import type { FactoryFloorRow, FactoryRunRow, FactoryTicketRow, StationExec, FactoryRunStatus } from './types.js';
+import type { FactoryFloorRow, FactoryRunRow, FactoryTicketRow, RunExecutor, FactoryRunStatus } from './types.js';
 
 interface FloorRow { id: string; name: string; layout: string; settings: string; created_at: string; updated_at: string }
 interface TicketRow { ticket_id: string; floor_id: string; machine_id: string | null; state: string; created_at: string; updated_at: string }
@@ -12,7 +12,7 @@ interface RunRow {
 export function runFromRow(r: RunRow): FactoryRunRow {
   return {
     id: r.id, ticketId: r.ticket_id, floorId: r.floor_id, machineId: r.machine_id, machineName: r.machine_name,
-    executor: r.executor as StationExec, status: r.status as FactoryRunStatus, outcome: r.outcome, executionId: r.execution_id,
+    executor: r.executor as RunExecutor, status: r.status as FactoryRunStatus, outcome: r.outcome, executionId: r.execution_id,
     error: r.error, startedAt: new Date(r.started_at).toISOString(), finishedAt: r.finished_at ? new Date(r.finished_at).toISOString() : null,
   };
 }
@@ -73,8 +73,12 @@ export class SqliteFactoryStore implements FactoryStorePort {
     return (this.conn.db.prepare('SELECT * FROM factory_runs WHERE floor_id = ? ORDER BY started_at DESC LIMIT ?').all(floorId, limit) as RunRow[]).map(runFromRow);
   }
 
+  async listRunsSince(floorId: string, sinceIso: string): Promise<FactoryRunRow[]> {
+    return (this.conn.db.prepare('SELECT * FROM factory_runs WHERE floor_id = ? AND (started_at >= ? OR finished_at >= ?) ORDER BY started_at ASC LIMIT 10000').all(floorId, sinceIso, sinceIso) as RunRow[]).map(runFromRow);
+  }
+
   async countRunsSince(floorId: string, sinceIso: string): Promise<number> {
-    const r = this.conn.db.prepare("SELECT COUNT(*) AS n FROM factory_runs WHERE floor_id = ? AND started_at >= ? AND executor NOT IN ('human_gate', 'native')").get(floorId, sinceIso) as { n: number };
+    const r = this.conn.db.prepare("SELECT COUNT(*) AS n FROM factory_runs WHERE floor_id = ? AND started_at >= ? AND executor IN ('agent', 'skill', 'panel')").get(floorId, sinceIso) as { n: number };
     return r.n;
   }
 

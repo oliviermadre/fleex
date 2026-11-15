@@ -81,9 +81,11 @@ export interface FactoryTicketState {
 
 export interface FactoryFloorRow { id: string; name: string; layout: FactoryLayout; settings: FactorySettings; createdAt: string; updatedAt: string }
 export interface FactoryTicketRow { ticketId: string; floorId: string; machineId: string | null; state: FactoryTicketState; createdAt: string; updatedAt: string }
+/** What a run row records: a station visit, or a ticket reaching an exit (`startedAt` is then when it was handed over). */
+export type RunExecutor = StationExec | 'exit';
 export type FactoryRunStatus = 'running' | 'completed' | 'failed' | 'needs_review' | 'question' | 'interrupted';
 export interface FactoryRunRow {
-  id: string; ticketId: string; floorId: string; machineId: string; machineName: string; executor: StationExec;
+  id: string; ticketId: string; floorId: string; machineId: string; machineName: string; executor: RunExecutor;
   status: FactoryRunStatus; outcome: string | null; executionId: string | null; error: string | null;
   startedAt: string; finishedAt: string | null;
 }

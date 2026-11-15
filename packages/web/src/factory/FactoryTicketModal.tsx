@@ -10,7 +10,7 @@ import { tint } from '../lib/tints';
 import { cn } from '../lib/cn';
 import { factoryApi } from './factoryApi';
 import { useFactoryStore } from './factoryStore';
-import { humanCall, type FactoryRun } from './types';
+import { byRunAt, humanCall, runAt, type FactoryRun } from './types';
 
 const REFRESH_MS = 3000;
 const noop = () => {};
@@ -35,7 +35,7 @@ export function FactoryTicketModal({ ticketId, onClose }: { ticketId: string; on
   const load = useCallback(async () => {
     try {
       const [t, c, r] = await Promise.all([api.fetchTicket(ticketId), api.fetchTicketComments(ticketId), factoryApi.runs(ticketId).catch(() => [])]);
-      setTicket(t); setComments(c); setRuns(r);
+      setTicket(t); setComments(c); setRuns([...r].sort(byRunAt));
     } catch { /* the API helper already raised a toast */ }
   }, [ticketId]);
   useEffect(() => { void load(); const id = window.setInterval(() => { if (!document.hidden) void load(); }, REFRESH_MS); return () => window.clearInterval(id); }, [load]);
@@ -130,7 +130,7 @@ export function FactoryTicketModal({ ticketId, onClose }: { ticketId: string; on
                     <span className={cn('h-2 w-2 flex-none rounded-full', r.status === 'failed' || r.status === 'interrupted' ? 'bg-[var(--theme-danger)]' : r.status === 'running' ? 'bg-[var(--theme-success)]' : r.status === 'completed' ? 'bg-[var(--theme-text-muted)]' : 'bg-[var(--theme-warning)]')} />
                     <span className="min-w-0 flex-1 truncate text-[var(--theme-text-primary)]">{r.machineName} <span className="text-[var(--theme-text-muted)]">{r.executor}</span></span>
                     <span className="flex-none font-mono text-[var(--theme-text-secondary)]">{r.outcome ?? r.status}</span>
-                    <span className="flex-none font-mono text-[var(--theme-text-muted)]">{when(r.startedAt)}</span>
+                    <span className="flex-none font-mono text-[var(--theme-text-muted)]">{when(runAt(r))}</span>
                   </li>
                 ))}
               </ol>

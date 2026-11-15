@@ -81,6 +81,17 @@ describe('SqliteFactoryStore', () => {
     expect((await store.listRecentRuns('default', 1))[0]?.id).toMatch(/r[12]/);
   });
 
+  it('lists what started or ended in a period, oldest first, for the stats', async () => {
+    await store.saveRun(runRow('old', { startedAt: '2026-11-01T08:00:00.000Z', status: 'completed', finishedAt: '2026-11-01T08:05:00.000Z' }));
+    await store.saveRun(runRow('recent', { startedAt: '2026-11-15T09:00:00.000Z', status: 'completed', outcome: 'ok', finishedAt: '2026-11-15T09:05:00.000Z' }));
+    /* an exit row starts when the ticket was handed over: it counts for the period it ended in */
+    await store.saveRun(runRow('shipped', { executor: 'exit', machineId: 'out', startedAt: '2026-11-02T08:00:00.000Z', status: 'completed', outcome: 'shipped', finishedAt: '2026-11-15T09:30:00.000Z' }));
+    const rows = await store.listRunsSince('default', '2026-11-10T00:00:00.000Z');
+    expect(rows.map((r) => [r.id, r.executor])).toEqual([['shipped', 'exit'], ['recent', 'agent']]);
+    expect(await store.countRunsSince('default', '2026-11-01T00:00:00.000Z')).toBe(2);
+    expect(await store.listRunsSince('other-floor', '2026-11-01T00:00:00.000Z')).toEqual([]);
+  });
+
   it('drops a ticket’s Factory rows when the ticket is deleted', async () => {
     await store.saveTicket(ticketRow('t-1'));
     await store.saveRun(runRow('r1'));

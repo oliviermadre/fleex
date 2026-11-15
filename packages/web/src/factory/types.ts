@@ -45,11 +45,29 @@ export interface FactorySnapshot {
   running: number;
   serverTime: string;
 }
+/** A station visit, or a ticket reaching an exit (`startedAt` is then when it was handed over). */
+export type RunExecutor = StationExec | 'exit';
 export interface FactoryRun {
-  id: string; ticketId: string; machineId: string; machineName: string; executor: StationExec;
+  id: string; ticketId: string; machineId: string; machineName: string; executor: RunExecutor;
   status: 'running' | 'completed' | 'failed' | 'needs_review' | 'question' | 'interrupted';
   outcome: string | null; executionId: string | null; error: string | null; startedAt: string; finishedAt: string | null;
 }
+/** What one machine did over the period. Mirrors `MachineStats` in the server's `factory/stats.ts`. */
+export interface MachineStats {
+  machineId: string; name: string; executor: RunExecutor; onFloor: boolean;
+  runs: number; completed: number; failed: number; questions: number;
+  avgRunMs: number | null; avgHumanMs: number | null; humanWaits: number; humanMs: number;
+  costUsd: number; outcomes: Record<string, number>;
+}
+export interface FactoryStats {
+  since: string; until: string; days: number; machines: MachineStats[];
+  totals: { runs: number; failed: number; questions: number; costUsd: number; shipped: number; avgLeadMs: number | null; humanMs: number };
+}
+/** What the floor is tinted by: nothing, money spent, run time, time waiting for a human, or what stands there now. */
+export type Lens = 'none' | 'cost' | 'time' | 'human' | 'load';
+/** When a run row belongs on a ticket's timeline: a shipment is dated by its arrival at the exit, not by the hand-over it starts from. */
+export const runAt = (r: FactoryRun): string => (r.executor === 'exit' ? r.finishedAt ?? r.startedAt : r.startedAt);
+export const byRunAt = (a: FactoryRun, b: FactoryRun): number => runAt(a).localeCompare(runAt(b));
 export type Target = { machineId?: string; x?: number; y?: number };
 
 /** Mirrors `QUESTION_OUTCOME` in the engine: the outcome of a run where the agent asked instead of answering. */

@@ -3,6 +3,7 @@
  * drawn in screen space so it stays crisp. Surfaces take their colours from the
  * `--theme-*` variables, so the floor follows the active theme.
  */
+import type { LensLayer } from './lens';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number }[]; ok: boolean; erase?: boolean; text?: string }
@@ -22,6 +23,8 @@ export interface ViewState {
   edit: boolean;
   ghost: Ghost | null;
   drag: DragState | null;
+  /** A reading of the floor painted over stations and zones (cost, time, human wait, what stands there). */
+  lens?: LensLayer | null;
 }
 export type Hit = { ticketId: string } | { machineId: string } | null;
 
@@ -266,8 +269,26 @@ export class FactoryView {
     }
     for (const m of L.machines) if (m.kind === 'arm') this.arm(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
 
+    if (st.lens) this.lens(st.lens, L, pal);
     this.overlay(st, pal);
     this.flushLabels();
+  }
+
+  /** Veil every station and zone, then heat the ones the lens has a value for: yellow is little, red is the most on the floor. */
+  private lens(layer: LensLayer, L: FactoryLayout, pal: Palette): void {
+    const ctx = this.ctx;
+    for (const m of L.machines) {
+      if (m.kind !== 'station' && m.kind !== 'zone') continue;
+      const v = layer.values.get(m.id) ?? 0, k = layer.max > 0 && v > 0 ? Math.sqrt(v / layer.max) : 0, hue = Math.round(52 - 52 * k);
+      rr(ctx, m.x + 0.07, m.y + 0.07, m.w - 0.14, m.h - 0.14, 0.28);
+      ctx.fillStyle = 'rgba(9,9,11,0.66)'; ctx.fill();
+      if (k > 0) {
+        ctx.fillStyle = `hsla(${hue}, 95%, 55%, ${(0.16 + 0.5 * k).toFixed(2)})`; ctx.fill();
+        ctx.strokeStyle = `hsl(${hue}, 95%, 60%)`; ctx.lineWidth = 0.05 + 0.08 * k; ctx.stroke();
+      }
+      const text = layer.text.get(m.id);
+      this.label(text ?? '–', m.x + m.w / 2, m.y + m.h / 2 + 0.2, 0.44, text ? '#ffffff' : pal.text3, { align: 'center', weight: 700, mono: true, min: 9, max: 22, fit: m.w - 0.2 });
+    }
   }
 
   private beltBase(b: BeltSpec, f: number, pal: Palette): void {

@@ -15,11 +15,21 @@ import { FactoryConsole, type Command } from './FactoryConsole';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
 import { canPlace, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, place, rotate, specFor, update, type Tool } from './layoutOps';
 import { FactoryTicketModal } from './FactoryTicketModal';
-import { needsHuman, type Dir, type FactoryLayout, type MachineSpec, type Target } from './types';
+import { FactoryMachineModal } from './FactoryMachineModal';
+import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
+import { needsHuman, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 
 const POLL_MS = 600;
+const STATS_EVERY_MS = 30_000;
+/** The lenses, with their key in the idle menu and their icon. */
+const LENS_KEYS: [Exclude<Lens, 'none'>, string, string, string][] = [
+  ['load', 'L', 'stack', 'Where tickets stand right now, and for how long'],
+  ['cost', 'C', 'coin', 'What each station spent on agent runs'],
+  ['time', 'D', 'clock', 'How long a run takes in each station'],
+  ['human', 'H', 'person', 'Where tickets wait for a human, and for how long'],
+];
 const ARROW = ['→', '↓', '←', '↑'];
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
@@ -113,8 +123,13 @@ function Floor() {
   const groupsRef = useRef(groups); groupsRef.current = groups;
   const miniRef = useRef<HTMLCanvasElement>(null);
   const [openTicket, setOpenTicket] = useState<string | null>(null);
-  const live = useRef({ building, tool, dir, selection, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false });
-  live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection;
+  const [openMachine, setOpenMachine] = useState<string | null>(null);
+  const [lens, setLens] = useState<Lens>('none');
+  const stats = useFactoryStore((s) => s.stats);
+  /* the lens is worked out when its inputs change, not at every frame */
+  const layer = useMemo<LensLayer | null>(() => (snapshot && layout ? lensLayer(lens, layout, snapshot.tickets, stats, snapshot.serverTime) : null), [lens, layout, snapshot, stats]);
+  const live = useRef({ building, tool, dir, selection, lens: layer, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false });
+  live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer;
   const fitted = useRef(false);
   useToastOffset(184);   // keep toasts clear of the command bar
 
@@ -132,13 +147,20 @@ function Floor() {
     return () => window.clearInterval(id);
   }, []);
 
+  // What the floor did: loaded with the page, then kept fresh while it stays open.
+  useEffect(() => {
+    void useFactoryStore.getState().loadStats();
+    const id = window.setInterval(() => { if (!document.hidden) void useFactoryStore.getState().loadStats(); }, STATS_EVERY_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
   const viewState = useCallback((): ViewState | null => {
     const s = useFactoryStore.getState(), l = live.current;
     if (!s.snapshot || !s.layout) return null;
     return {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, a.p])),
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
-      hoverMachine: l.hover, edit: l.building, ghost: l.ghost, drag: l.drag,
+      hoverMachine: l.hover, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
     };
   }, []);
 
@@ -283,13 +305,17 @@ function Floor() {
   const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     const p = local(e), hit = v.pick(p.x, p.y, st, true);
-    if (hit && 'ticketId' in hit) setOpenTicket(hit.ticketId);
+    if (hit && 'ticketId' in hit) { setOpenTicket(hit.ticketId); return; }
+    /* a station or a zone opens on what it holds; in build mode a double-click stays a click */
+    const m = hit && 'machineId' in hit && !live.current.building ? v.machine(hit.machineId) : null;
+    if (m && (m.kind === 'station' || m.kind === 'zone')) setOpenMachine(m.id);
   };
 
   // ---------- commands and their keys ----------
   const selMachine = selection && 'machine' in selection && layout ? layout.machines.find((m) => m.id === selection.machine) ?? null : null;
   const selMany = useMemo(() => (selection && 'machines' in selection ? selection.machines : []), [selection]);
   const selTicket = selection && 'ticket' in selection && snapshot ? snapshot.tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
+  const closeMachine = useCallback(() => setOpenMachine(null), []);
   const transferTo = useCallback((ticketId: string) => { void useFactoryStore.getState().transfer(ticketId, {}); }, []);
 
   const commands: Command[] = useMemo(() => {
@@ -306,6 +332,7 @@ function Floor() {
       out.push({ key: 'Delete', label: 'Remove', icon: 'trash', danger: true, title: `Remove the ${selMany.length} selected machines`, run: () => { const l = useFactoryStore.getState().layout; if (l) commit(eraseMany(l, new Set(selMany))); setSelection(null); } });
     } else if (selMachine && (!building || tool === 'select')) {
       if (selMachine.kind === 'belt' || selMachine.kind === 'arm') out.push({ key: 'R', label: 'Turn', icon: 'rotate', title: 'Quarter turn', run: () => { const l = useFactoryStore.getState().layout; if (l) commit(rotate(l, selMachine.id)); } });
+      if (!building && (selMachine.kind === 'station' || selMachine.kind === 'zone')) out.push({ key: 'V', label: 'Open', icon: 'open', primary: selMachine.kind === 'station', title: 'Everything inside, what each ticket waits for, and what this machine did lately', run: () => setOpenMachine(selMachine.id) });
       if (selMachine.kind === 'zone') {
         const next = snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0];
         out.push({ key: 'L', label: 'Release 1', icon: 'play', primary: true, disabled: !next, title: 'Release the ticket that has waited longest', run: () => { if (next) void store.release(next.ticketId); } });
@@ -317,12 +344,13 @@ function Floor() {
     } else {
       out.push({ key: 'B', label: 'Build', icon: 'build', primary: true, title: 'Lay belts, arms, stations and zones', run: () => { setBuilding(true); setSelection(null); } });
       out.push({ key: 'T', label: 'Hand over', icon: 'inbound', title: 'Hand tickets over to the Factory: they land in Inbound', run: () => setTransferOpen(true) });
+      for (const [l, key, icon, title] of LENS_KEYS) out.push({ key, label: LENS_LABEL[l], icon, title: `Lens: ${title}`, active: lens === l, run: () => setLens((cur) => (cur === l ? 'none' : l)) });
     }
     out.push({ key: 'F', label: 'Fit', icon: 'fit', title: 'Frame the floor', run: fit });
     if (building) out.push({ key: 'Escape', label: tool !== 'select' ? 'Drop tool' : selection ? 'Menu' : 'Done', icon: 'back', title: tool !== 'select' ? 'Put the tool down' : selection ? 'Back to the build menu' : 'Leave build mode',
       run: () => { if (tool !== 'select') setTool('select'); else if (selection) setSelection(null); else setBuilding(false); } });
     return out;
-  }, [selTicket, selMachine, selMany, building, tool, dir, selection, layout, snapshot, store, commit, removeMachine]);
+  }, [selTicket, selMachine, selMany, building, tool, dir, selection, layout, snapshot, store, commit, removeMachine, lens]);
 
   // Saved selections, RTS style: Shift+1…6 saves, 1…6 recalls and centres the view on it.
   const onGroup = useCallback((i: number, save: boolean) => {
@@ -343,7 +371,7 @@ function Floor() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-      if (e.metaKey || e.ctrlKey || e.altKey || transferOpen || openTicket) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || transferOpen || openTicket || openMachine) return;
       if (e.code === 'Space') { e.preventDefault(); live.current.space = true; return; }
       const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (arrow && viewRef.current) { e.preventDefault(); viewRef.current.cam.x += arrow[0]! * 3; viewRef.current.cam.y += arrow[1]! * 3; return; }
@@ -357,7 +385,7 @@ function Floor() {
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); };
-  }, [commands, selection, transferOpen, openTicket, onGroup]);
+  }, [commands, selection, transferOpen, openTicket, openMachine, onGroup]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
@@ -377,6 +405,13 @@ function Floor() {
             aria-label="Factory floor" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
             onPointerLeave={() => { live.current.hover = null; live.current.ghost = null; }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
+          {layer && !building && (
+            <div className="absolute left-3 top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg" role="status">
+              <span className="flex-none text-xs font-semibold text-[var(--theme-text-primary)]">{LENS_LABEL[layer.kind]}</span>
+              <span className="min-w-0 flex-1 text-[11px] text-[var(--theme-text-secondary)]">{layer.legend}{layer.kind !== 'load' && stats && layer.values.size === 0 ? ' — nothing to show yet.' : ''}</span>
+              <Button size="sm" variant="ghost" onClick={() => setLens('none')}>Off</Button>
+            </div>
+          )}
           {layout && layout.machines.length <= 1 && !building && snapshot && snapshot.tickets.length === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="pointer-events-auto max-w-sm rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4 text-center">
@@ -387,11 +422,13 @@ function Floor() {
             </div>
           )}
         </div>
-        <FactoryInspector selection={selection} view={view} onSelect={setSelection} onPatch={patchMachine} onRemove={removeMachine} onTransfer={() => setTransferOpen(true)} building={building} />
+        <FactoryInspector selection={selection} view={view} onSelect={setSelection} onPatch={patchMachine} onRemove={removeMachine} onTransfer={() => setTransferOpen(true)} onOpenMachine={setOpenMachine} lens={lens} onLens={setLens} building={building} />
       </div>
       <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} commands={commands} groups={groups} onGroup={onGroup} miniRef={miniRef}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket to open it. Tickets you hand over wait in Inbound.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Tickets you hand over wait in Inbound.')} />
+      {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
+      {openMachine && !openTicket && <FactoryMachineModal machineId={openMachine} onClose={closeMachine} onOpenTicket={setOpenTicket} />}
       {openTicket && <FactoryTicketModal ticketId={openTicket} onClose={() => setOpenTicket(null)} />}
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
     </div>
