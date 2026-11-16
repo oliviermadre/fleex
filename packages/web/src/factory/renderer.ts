@@ -4,6 +4,7 @@
  * `--theme-*` variables, so the floor follows the active theme.
  */
 import type { LensLayer } from './lens';
+import { layoutNames, tie, type NamedTicket } from './nameTags';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number }[]; ok: boolean; erase?: boolean; text?: string }
@@ -31,6 +32,8 @@ export interface ViewState {
   found?: ReadonlySet<string> | null;
   /** Tickets that carry their name on the floor, on top of favourites and the selected one. */
   named?: ReadonlySet<string> | null;
+  /** Every ticket carries its name (a key held down). */
+  allNames?: boolean;
 }
 export type Hit = { ticketId: string } | { machineId: string } | null;
 
@@ -43,7 +46,7 @@ const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string }
-type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Drawn however far the view is zoomed out. */ always?: boolean; /** Least room, in pixels, before the text is cut. */ minFit?: number }];
+type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number }];
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   r = Math.min(r, w / 2, h / 2);
@@ -176,7 +179,7 @@ export class FactoryView {
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     for (const [raw, wx, wy, size, color, o] of this.labels) {
       let px = size * z;
-      if (px < 3.6 && !o.always) continue;
+      if (px < 3.6) continue;
       if (o.min) px = Math.max(px, o.min);
       if (o.max) px = Math.min(px, o.max);
       const sx = (wx - this.cam.x) * z + this.w / 2, sy = (wy - this.cam.y) * z + this.h / 2;
@@ -184,7 +187,7 @@ export class FactoryView {
       ctx.font = `${o.weight ?? 500} ${px.toFixed(1)}px ${o.mono ? MONO : SANS}`;
       ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
       let text = raw;
-      if (o.fit) { const room = Math.max(o.fit * z, o.minFit ?? 0); if (ctx.measureText(text).width > room) { while (text.length > 3 && ctx.measureText(`${text}…`).width > room) text = text.slice(0, -1); text += '…'; } }
+      if (o.fit) { const room = o.fit * z; if (ctx.measureText(text).width > room) { while (text.length > 3 && ctx.measureText(`${text}…`).width > room) text = text.slice(0, -1); text += '…'; } }
       if (o.plate) {
         const tw = ctx.measureText(text).width, pad = px * 0.45, ph = px * 1.5;
         const x0 = o.align === 'center' ? sx - tw / 2 - pad : o.align === 'right' ? sx - tw - pad : sx - pad;
@@ -243,10 +246,55 @@ export class FactoryView {
     }
     if (found) { ctx.strokeStyle = pal.accent; ctx.lineWidth = 0.07; rr(ctx, px - s / 2 - 0.09, py - s / 2 - 0.09, s + 0.18, s + 0.18, s * 0.3); ctx.stroke(); }
     if (selected) { ctx.strokeStyle = pal.text; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(px, py, Math.max(s * 0.95, 0.3), 0, 6.3); ctx.stroke(); }
-    /* the tickets you follow carry their name wherever they are, at any zoom */
-    if (info && !dragging && (info.favorite || selected || st.named?.has(t.ticketId))) {
-      this.label(`#${info.displayId} ${info.title}`, px, py - s / 2 - 0.3, 0.24, pal.text, { align: 'center', plate: found ? 'rgba(88,44,26,0.95)' : 'rgba(9,9,11,0.88)', min: 10, max: 12, fit: 5.5, always: true, minFit: 150 });
+  }
+
+  /**
+   * Names on the floor, at any zoom: the tickets you follow (favourites, the selected one, what a search found), or
+   * every ticket while the key is held. Tickets of one machine, or close together on a belt, share a box that lists
+   * them, and boxes keep clear of each other (see `nameTags.ts`). Drawn last, in screen pixels.
+   */
+  private names(st: ViewState, pal: Palette): void {
+    const all = st.allNames === true, z = this.cam.z;
+    const items: NamedTicket[] = [], byId = new Map<string, FactoryTicket>();
+    const sx = (wx: number) => (wx - this.cam.x) * z + this.w / 2, sy = (wy: number) => (wy - this.cam.y) * z + this.h / 2;
+    for (const t of st.tickets) {
+      const info = t.info;
+      if (!info || st.drag?.ticketId === t.ticketId || st.dim?.has(t.ticketId)) continue;
+      if (!all && !info.favorite && st.selTicket !== t.ticketId && !st.named?.has(t.ticketId)) continue;
+      const m = this.machine(t.machineId), p = this.shown.get(t.ticketId) ?? { x: t.x + 0.5, y: t.y + 0.5 };
+      byId.set(t.ticketId, t);
+      items.push({
+        id: t.ticketId, text: `#${info.displayId} ${info.title}`, x: sx(p.x), y: sy(p.y),
+        box: m && (m.kind === 'station' || m.kind === 'zone') ? { id: m.id, rect: { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z } } : undefined,
+      });
     }
+    if (!items.length) return;
+    const ctx = this.ctx, LH = 15, PAD = 5;
+    ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.font = `500 11px ${SANS}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit').map((m) => ({ x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z }));
+    const boxes = layoutNames(items, { w: this.w, h: this.h }, (s) => ctx.measureText(s).width, { maxLines: all ? 8 : 6, maxWidth: 230, lineHeight: LH, pad: PAD, chip: 13, nearX: 120, nearY: 24, radius: Math.max(5, z * 0.26) }, solid);
+    /* the lines that tie each box to what it names go under every box */
+    ctx.strokeStyle = 'rgba(244,244,245,0.45)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (const b of boxes) {
+      const ends = b.points.length ? b.points.map((p) => tie(b, { x: p.x, y: p.y, w: 0, h: 0 })) : [tie(b, b.anchor)];
+      for (const e of ends) { ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); }
+    }
+    ctx.stroke();
+    for (const b of boxes) {
+      const hot = b.lines.some((l) => st.found?.has(l.id));
+      rr(ctx, b.x, b.y, b.w, b.h, 5); ctx.fillStyle = 'rgba(9,9,11,0.92)'; ctx.fill();
+      ctx.strokeStyle = hot ? pal.accent : 'rgba(244,244,245,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+      b.lines.forEach((l, i) => {
+        const t = byId.get(l.id), y = b.y + PAD + i * LH + LH / 2, sel = st.selTicket === l.id;
+        rr(ctx, b.x + PAD, y - 4, 8, 8, 2); ctx.fillStyle = TYPE_COLORS[t?.info?.type ?? ''] ?? '#8b949e'; ctx.fill();
+        if (t?.info?.favorite) { ctx.fillStyle = STAR; ctx.beginPath(); ctx.arc(b.x + PAD + 8, y - 4, 2.2, 0, 6.3); ctx.fill(); }
+        ctx.font = `${sel ? 700 : 500} 11px ${SANS}`; ctx.fillStyle = sel || st.found?.has(l.id) ? '#ffffff' : 'rgba(244,244,245,0.86)';
+        ctx.fillText(l.text, b.x + PAD + 13, y + 0.5);
+      });
+      if (b.more > 0) { ctx.font = `500 11px ${SANS}`; ctx.fillStyle = 'rgba(244,244,245,0.55)'; ctx.fillText(`+${b.more} more`, b.x + PAD + 13, b.y + PAD + b.lines.length * LH + LH / 2 + 0.5); }
+    }
+    ctx.restore();
   }
 
   ticketPos(ticketId: string): { x: number; y: number } | null { return this.shown.get(ticketId) ?? null; }
@@ -307,6 +355,7 @@ export class FactoryView {
     if (st.lens) this.lens(st.lens, L, pal);
     this.overlay(st, pal);
     this.flushLabels();
+    this.names(st, pal);
   }
 
   /** Veil every station and zone, then heat the ones the lens has a value for: yellow is little, red is the most on the floor. */

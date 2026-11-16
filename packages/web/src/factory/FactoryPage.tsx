@@ -143,7 +143,7 @@ function Floor() {
     const keep = new Set(found.map((t) => t.ticketId));
     return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
   }, [found, snapshot]);
-  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false });
+  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false, allNames: false });
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks;
   const fitted = useRef(false);
   useToastOffset(184);   // keep toasts clear of the command bar
@@ -176,7 +176,7 @@ function Floor() {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, a.p])),
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       hoverMachine: l.hover, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
-      dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
+      dim: l.marks.dim, found: l.marks.found, named: l.marks.named, allNames: l.allNames,
     };
   }, []);
 
@@ -437,6 +437,8 @@ function Floor() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       if (transferOpen || openTicket || openMachine) return;
+      /* Tab held down: every ticket shows its name, as long as the key is down */
+      if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); live.current.allNames = true; return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
       const chord = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey ? e.key.toLowerCase() : '';
       if (live.current.building && (chord === 'c' || chord === 'x' || chord === 'v')) {
@@ -461,9 +463,11 @@ function Floor() {
       if (cmd) { e.preventDefault(); cmd.run(); }
       else if (key === 'Escape' && selection) setSelection(null);
     };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; };
-    window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; if (e.key === 'Tab') live.current.allNames = false; };
+    /* a key released while the window is elsewhere never says so: let go of both */
+    const onBlur = () => { live.current.space = false; live.current.allNames = false; };
+    window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
   }, [commands, selection, transferOpen, openTicket, openMachine, onGroup, copy, paste]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
@@ -507,7 +511,7 @@ function Floor() {
       </div>
       <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} commands={commands} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Hover a ticket to see what it is; / finds one.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Hold Tab to name every ticket, hover one to see what it is; / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && <FactoryMachineModal machineId={openMachine} onClose={closeMachine} onOpenTicket={setOpenTicket} />}
       {openTicket && <FactoryTicketModal ticketId={openTicket} onClose={() => setOpenTicket(null)} />}
