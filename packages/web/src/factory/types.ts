@@ -45,6 +45,8 @@ export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'revie
 export interface FactoryTicketInfo {
   id: string; displayId: number; title: string; type: string; priority: string; status: TicketStatus; tags: string[];
   boardId: string; complexity: string | null; favorite: boolean;
+  /** Absent on a snapshot from a server older than this field. */
+  blocked?: boolean;
 }
 export interface FactoryTicket {
   ticketId: string; machineId: string | null; info: FactoryTicketInfo | null;

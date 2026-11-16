@@ -42,8 +42,10 @@ describe('the command card', () => {
     expect(depth(factoryMenu(ctx()))).toBe(1);
   });
 
-  it('starts with Build, Intake and Fit', () => {
-    expect(labels(factoryMenu(ctx())).filter(Boolean)).toEqual(['Build', 'Intake', 'Fit']);
+  it('starts with Build, Intake, Fit and the list of tickets, which Tab opens', () => {
+    const root = factoryMenu(ctx());
+    expect(labels(root).filter(Boolean)).toEqual(['Build', 'Intake', 'Fit', 'Tickets']);
+    expect(byKey(root, 'Tab')).toMatchObject({ id: 'tickets', label: 'Tickets' });
   });
 
   it('build sorts what can be placed into Move, Station and Area', () => {

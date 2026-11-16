@@ -84,6 +84,20 @@ describe('Modal dismissal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves Escape to a popover opened from the dialog: the popover closes, not the dialog', () => {
+    const { onClose } = setup();
+    /* a drop-down of the dialog lives in a floating portal, outside the dialog's own markup */
+    const portal = document.createElement('div');
+    portal.setAttribute('data-floating-ui-portal', '');
+    const option = document.createElement('button');
+    portal.appendChild(option); document.body.appendChild(portal);
+    fireEvent.keyDown(option, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    portal.remove();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('renders nothing when closed', () => {
     const { baseElement } = render(
       <Modal open={false} onClose={vi.fn()}><p>hidden</p></Modal>,

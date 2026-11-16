@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { acceptsOutcome, conditionsOf, holds, isConditional, matches, normaliseConditions, takesQuestions } from '../../src/factory/conditions.js';
 import type { ArmCondition, ArmSpec, FactoryTicketInfo } from '../../src/factory/types.js';
 
-const info = (over: Partial<FactoryTicketInfo> = {}): FactoryTicketInfo => ({ id: 't', displayId: 1, title: 't', type: 'build', priority: 'medium', status: 'todo', tags: ['api'], boardId: 'core', complexity: '5', favorite: false, ...over });
+const info = (over: Partial<FactoryTicketInfo> = {}): FactoryTicketInfo => ({ id: 't', displayId: 1, title: 't', type: 'build', priority: 'medium', status: 'todo', tags: ['api'], boardId: 'core', complexity: '5', favorite: false, blocked: false, ...over });
 const arm = (when?: ArmCondition[], filter?: ArmSpec['filter']): ArmSpec => ({ id: 'a', kind: 'arm', x: 0, y: 0, w: 1, h: 1, dir: 0, when, filter });
 const c = (field: ArmCondition['field'], op: ArmCondition['op'], ...values: string[]): ArmCondition => ({ field, op, values });
 const ok = (cond: ArmCondition, over: Partial<FactoryTicketInfo> = {}, outcome = '') => holds(cond, info(over), outcome);

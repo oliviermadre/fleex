@@ -10,6 +10,7 @@ import { since, span } from './format';
 import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { LENS_LABEL } from './lens';
 import { conditionsOf, longCondition } from './armRules';
+import { TOGGLES, type Show } from './viewToggles';
 import { bridgeFlow, flowLabel } from './bridges';
 import type { FactoryView } from './renderer';
 import { needsHuman, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec } from './types';
@@ -27,6 +28,7 @@ const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
   question: 'the agent asked a question', failed: 'run failed', out: 'done, waiting for an arm', zone: 'in a zone',
 };
+const YELLOW = tintClasses('yellow');
 const keyLabel = (k: string) => (k === 'Escape' ? 'Esc' : k === 'Delete' ? 'Del' : k);
 
 function machineIcon(m: MachineSpec): string {
@@ -85,12 +87,14 @@ function Tile({ c, onRun }: { c: Command; onRun: (c: Command) => void }) {
   );
 }
 
-export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit }: {
+export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit, show, onShow }: {
   view: FactoryView | null; snapshot: FactorySnapshot | null; layout: FactoryLayout | null; selection: Selection; onSelect: (s: Selection) => void;
   /** The menu shown in the command card, the menus that lead to it, and what running one of its commands does. */
   menu: Menu; trail: string[]; onRun: (c: Command) => void;
   title: string; hint: string; groups: Selection[]; onGroup: (index: number, save: boolean) => void; miniRef: React.RefObject<HTMLCanvasElement | null>;
   lens: Lens; onLens: (lens: Lens) => void; onFit: () => void;
+  /** What the floor shows on top of the machines, and the switch for each. */
+  show: Show; onShow: (key: keyof Show) => void;
 }) {
   const boards = useTicketStore((s) => s.boards);
   const down = useRef(false);
@@ -118,8 +122,20 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
     <div className="flex h-[254px] flex-shrink-0 gap-2 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-2" aria-label="Factory console">
       {/* minimap */}
       <div className={cn(box, 'flex flex-none gap-1.5 p-1.5')}>
-        <canvas ref={miniRef} className="h-full w-[250px] cursor-crosshair touch-none rounded-md" aria-label="Minimap: click to go there"
+        <div className="flex h-full w-[250px] flex-col gap-1.5">
+          {/* what the floor shows on top of the machines: each one on or off, black or yellow */}
+          <div className="flex flex-none gap-1" role="group" aria-label="Show on the floor">
+            {TOGGLES.map((t) => (
+              <button key={t.key} type="button" aria-pressed={show[t.key]} aria-label={t.label} title={`${t.title}: ${show[t.key] ? 'shown' : 'hidden'}`} onClick={() => onShow(t.key)}
+                className={cn('grid h-[26px] w-[30px] place-items-center rounded-md border transition-colors',
+                  show[t.key] ? cn(YELLOW.solid, YELLOW.onSolid, 'border-transparent') : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}>
+                <FIcon name={t.icon} size={16} />
+              </button>
+            ))}
+          </div>
+          <canvas ref={miniRef} className="min-h-0 w-full flex-1 cursor-crosshair touch-none rounded-md" aria-label="Minimap: click to go there"
           onPointerDown={(e) => { down.current = true; e.currentTarget.setPointerCapture(e.pointerId); go(e); }} onPointerMove={(e) => { if (down.current) go(e); }} onPointerUp={() => { down.current = false; }} />
+        </div>
         <div className="flex w-[104px] flex-col justify-between gap-1">
           {/* one layer at a time: a list, not commands */}
           <div className="flex flex-col rounded-md border border-[var(--theme-border-input)] p-0.5" role="radiogroup" aria-label="Layer">

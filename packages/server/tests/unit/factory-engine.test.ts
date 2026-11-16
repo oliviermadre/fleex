@@ -46,7 +46,7 @@ let pending: { station: string; ticketId: string; resolve: (r: StationRunResult)
 let clock: number;
 let engine: FactoryEngine;
 
-const info = (id: string, over: Partial<FactoryTicketInfo> = {}): FactoryTicketInfo => ({ id, displayId: 1, title: id, type: 'build', priority: 'medium', status: 'todo', tags: [], boardId: 'b1', complexity: null, favorite: false, ...over });
+const info = (id: string, over: Partial<FactoryTicketInfo> = {}): FactoryTicketInfo => ({ id, displayId: 1, title: id, type: 'build', priority: 'medium', status: 'todo', tags: [], boardId: 'b1', complexity: null, favorite: false, blocked: false, ...over });
 const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 /** Advance the floor by `seconds`, in small ticks, letting async work land in between. */
 const run = async (seconds: number) => { for (let i = 0; i < seconds * 10; i++) { clock += 100; engine.tick(0.1); await settle(); } };

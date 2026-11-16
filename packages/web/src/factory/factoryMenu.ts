@@ -32,6 +32,8 @@ export interface MenuContext {
   mod: string;
   act: {
     build(): void; done(): void; intake(): void; fit(): void; plan(): void;
+    /** Open the list of the tickets on the floor. */
+    tickets(): void;
     /** Take a tool in hand, or put it down when it already is. */
     tool(t: Tool): void;
     /** Put down whatever tool is in hand. */
@@ -78,6 +80,7 @@ export function factoryMenu(c: MenuContext): Menu {
       0: { id: 'build', key: 'B', label: 'Build', icon: 'build', tone: 'go', title: 'Lay belts, arms, stations and zones', run: a.build },
       1: { id: 'intake', key: 'T', label: 'Intake', icon: 'inbound', tone: 'ticket', title: 'Hand tickets over to the Factory: they land in Inbound', run: a.intake },
       2: { id: 'fit', key: 'F', label: 'Fit', icon: 'fit', tone: 'plain', title: 'Frame the floor', run: a.fit },
+      3: { id: 'tickets', key: 'Tab', label: 'Tickets', icon: 'list', tone: 'ticket', title: 'Every ticket on the floor, as a list to filter and to jump from', run: a.tickets },
     });
   }
 

@@ -29,6 +29,8 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
         if ((e.target as HTMLElement | null)?.closest?.('[data-floating-panel]')) return;
         // An open @-mention menu inside the modal takes Escape first: it closes the menu, not the modal.
         if (backdropRef.current?.querySelector('[data-mention-menu]')) return;
+        // A popover opened from the dialog (a filter drop-down, a picker) lives in a floating portal and closes itself on Escape.
+        if ((e.target as HTMLElement | null)?.closest?.('[data-floating-ui-portal]')) return;
         // A zone of the dialog that folds itself on Escape (e.g. a composer opened on demand) keeps it.
         if ((e.target as HTMLElement | null)?.closest?.('[data-modal-escape-local]')) return;
         e.preventDefault();

@@ -41,8 +41,14 @@ export interface ViewState {
   found?: ReadonlySet<string> | null;
   /** Tickets that carry their name on the floor, on top of favourites and the selected one. */
   named?: ReadonlySet<string> | null;
-  /** Every ticket carries its name (a key held down). */
+  /** Every ticket carries its name. */
   allNames?: boolean;
+  /** What an arm takes is written next to it (on by default). Off, only the arm selected or pointed at says it. */
+  armTags?: boolean;
+  /** Every token carries its number, not only when the view is close. */
+  numbers?: boolean;
+  /** The lines of the grid (on by default). */
+  grid?: boolean;
 }
 export type Hit = { ticketId: string } | { machineId: string } | null;
 
@@ -278,7 +284,7 @@ export class FactoryView {
     if (info && !dragging) {
       /* its number, once there is room: inside a square, on a small plate under a token */
       if (!call && !token && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
-      if (token && B * z >= 34) this.label(String(info.displayId), px, py + B * 0.52, B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)' });
+      if (token && (B * z >= 34 || (st.numbers && B * z >= 13))) this.label(String(info.displayId), px, py + B * 0.52, B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
       /* priority: a pip in the top-left corner for what is urgent or high */
       const pip = PRIORITY_PIP[info.priority];
       if (pip && s * z >= 7) { ctx.beginPath(); ctx.arc(px - B / 2 + B * 0.06, py - B / 2 + B * 0.06, B * 0.15, 0, 6.3); ctx.fillStyle = pip; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.stroke(); }
@@ -356,7 +362,7 @@ export class FactoryView {
     const F = floorRect(L);
     rr(ctx, F.x - 0.5, F.y - 0.5, F.w + 1, F.h + 1, 0.7); ctx.fillStyle = pal.floor; ctx.fill();
     ctx.strokeStyle = st.edit ? pal.accent : pal.grid; ctx.lineWidth = st.edit ? 0.08 : 0.05; ctx.stroke();
-    if (z >= (st.edit ? 6 : 12)) {
+    if (st.grid !== false && z >= (st.edit ? 6 : 12)) {
       ctx.strokeStyle = pal.grid; ctx.globalAlpha = st.edit ? 0.9 : 0.5; ctx.lineWidth = 1 / z; ctx.beginPath();
       for (let i = 0; i <= F.w; i++) { ctx.moveTo(F.x + i, F.y); ctx.lineTo(F.x + i, F.y + F.h); }
       for (let i = 0; i <= F.h; i++) { ctx.moveTo(F.x, F.y + i); ctx.lineTo(F.x + F.w, F.y + i); }
@@ -534,7 +540,8 @@ export class FactoryView {
     if (carried) this.ticket(carried, hx, hy, 0.44, st, '', dt);
     ctx.strokeStyle = col; ctx.lineWidth = 0.06; ctx.beginPath(); ctx.arc(hx, hy, 0.17, th - 1.9, th + 1.9); ctx.stroke();
     const src = this.at(a.x - dx, a.y - dy), tag = armTag(a, src ? this.takersOf(src) : [], st.boardName);
-    if (!tag || (this.cam.z < 11 && st.selMachine !== a.id && st.hoverMachine !== a.id)) return;
+    const asked = st.selMachine === a.id || st.hoverMachine === a.id;
+    if (!tag || (!asked && (st.armTags === false || this.cam.z < 11))) return;
     /*
      * What the arm takes is written past its head, on the side it drops on: on its own row for an arm that points
      * sideways, in its own column otherwise. Arms stacked against a station then each carry their own tag, where a

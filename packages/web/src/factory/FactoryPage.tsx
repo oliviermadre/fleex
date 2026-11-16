@@ -22,6 +22,8 @@ import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryTicketModal } from './FactoryTicketModal';
 import { FactoryMachineModal } from './FactoryMachineModal';
 import { FactoryPlanModal } from './FactoryPlanModal';
+import { FactoryTicketsModal } from './FactoryTicketsModal';
+import { loadShow, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { humanCall, needsHuman, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
 
@@ -136,6 +138,10 @@ function Floor() {
   const [openTicket, setOpenTicket] = useState<string | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  /* what the floor shows on top of the machines: kept in the browser from one visit to the next */
+  const [show, setShow] = useState<Show>(loadShow);
+  const flipShow = useCallback((key: keyof Show) => setShow((s) => { const next = { ...s, [key]: !s[key] }; saveShow(next); return next; }), []);
   const [lens, setLens] = useState<Lens>('none');
   const stats = useFactoryStore((s) => s.stats);
   /* the lens is worked out when its inputs change, not at every frame */
@@ -147,8 +153,8 @@ function Floor() {
     const keep = new Set(found.map((t) => t.ticketId));
     return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
   }, [found, snapshot]);
-  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false, allNames: false });
-  live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks;
+  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false, show });
+  live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks; live.current.show = show;
   const fitted = useRef(false);
   useToastOffset(262);   // keep toasts clear of the console
 
@@ -182,7 +188,8 @@ function Floor() {
       armAge: (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, boardName,
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       hoverMachine: l.hover, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
-      dim: l.marks.dim, found: l.marks.found, named: l.marks.named, allNames: l.allNames,
+      dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
+      allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
     };
   }, [boardName]);
 
@@ -402,6 +409,7 @@ function Floor() {
       build: () => { setBuilding(true); setSelection(null); },
       done: () => setBuilding(false),
       intake: () => setTransferOpen(true),
+      tickets: () => setListOpen(true),
       fit, plan: () => setPlanOpen(true), paste,
       tool: (t) => setTool((cur) => (cur === t ? 'select' : t)),
       select: () => setTool('select'),
@@ -459,8 +467,8 @@ function Floor() {
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
       if (transferOpen || openTicket || openMachine || document.querySelector('[data-overlay-top]')) return;
-      /* Tab held down: every ticket shows its name, as long as the key is down */
-      if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); live.current.allNames = true; return; }
+      /* Tab opens the list of the tickets on the floor; in the list, Tab closes it */
+      if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setListOpen(true); return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
       const chord = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey ? e.key.toLowerCase() : '';
       if (live.current.building && (chord === 'c' || chord === 'x' || chord === 'v')) {
@@ -486,9 +494,9 @@ function Floor() {
       else if (key === 'F') { e.preventDefault(); fit(); }
       else if (key === 'Escape' && selection) setSelection(null);
     };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; if (e.key === 'Tab') live.current.allNames = false; };
-    /* a key released while the window is elsewhere never says so: let go of both */
-    const onBlur = () => { live.current.space = false; live.current.allNames = false; };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; };
+    /* a key released while the window is elsewhere never says so: let go of it */
+    const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
   }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, onGroup, copy, paste]);
@@ -532,13 +540,15 @@ function Floor() {
         </div>
         <FactoryInspector selection={selection} view={view} onSelect={setSelection} onPatch={patchMachine} onRemove={removeMachine} onTransfer={() => setTransferOpen(true)} onOpenMachine={setOpenMachine} found={found} onGoTo={goTo} building={building} />
       </div>
-      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit}
+      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Hold Tab to name every ticket, hover one to see what it is; / finds one.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && <FactoryMachineModal machineId={openMachine} onClose={closeMachine} onOpenTicket={setOpenTicket} />}
       {openTicket && <FactoryTicketModal ticketId={openTicket} onClose={() => setOpenTicket(null)} />}
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
+      {listOpen && !openTicket && <FactoryTicketsModal finder={finder} onFinder={setFinder} onClose={() => setListOpen(false)}
+        onGoTo={(id) => { setListOpen(false); setBuilding(false); goTo(id); }} onDetail={(id) => { setListOpen(false); setOpenTicket(id); }} />}
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
     </div>
   );

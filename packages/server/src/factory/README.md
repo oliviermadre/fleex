@@ -69,7 +69,9 @@ Fleex's own icons. On the floor a ticket is a small object in the shape of its t
 (`ticketToken.ts` reads the shape from `TicketTypeIconSvg`, so there is one drawing per type in the app), with a star
 when it is a favourite and a pip when it is urgent or high. A ticket with no type is a plain crate; too small to be
 told apart, a ticket is a square. Hovering a ticket shows a card; favourites and the selected ticket carry their name on the
-floor, and holding Tab names every ticket. Tickets of one machine, or close together on a belt, share a box that lists
+floor, and a toggle above the minimap names every ticket. That row of toggles also switches what each arm takes, the
+ticket numbers and the grid; the choice is kept in the browser. Tab opens the list of the tickets on the floor, with
+the same filters and a few more (status, machine, state, a range of complexity, blocked). Tickets of one machine, or close together on a belt, share a box that lists
 them, and boxes keep clear of each other. The header has a search (title, number, tag) and filters (boards, types, priorities, favourites, waiting for a
 human): what a filter leaves out is faded, never hidden. Starring a ticket from the Factory changes the ticket itself
 (`PATCH /api/tickets/:id`), then `POST /api/factory/tickets/:id/refresh` re-reads it without waiting for the
@@ -107,6 +109,7 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 | `application/ports/config.port.ts` | `factoryEnabled`, `isFactoryEnabled()` |
 | `infrastructure/http/focus.routes.ts` | a Factory-managed ticket is not listed as `idle` |
 | `application/use-cases/execute-agent.ts`, `services/step-executors/{types,agent-step-executor}.ts` | an optional model for one workflow-step execution (`model`, `modelOverride`): unset by workflows, set by an agent station |
+| web: `components/ui/Modal.tsx` | a dialog leaves Escape to a popover opened from it (a general fix, found with the ticket list's filters; it can stay) |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
 | web: `work/WorkView.tsx` | the "Managed by the Factory" banner on a ticket |

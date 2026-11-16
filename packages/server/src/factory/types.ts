@@ -109,5 +109,5 @@ export interface FactoryRunRow {
 export interface FactoryTicketInfo {
   id: string; displayId: number; title: string; type: string; priority: string; status: TicketStatus; tags: string[];
   /** What the page needs to tell tickets apart and to filter them; the engine routes on none of it. */
-  boardId: string; complexity: string | null; favorite: boolean;
+  boardId: string; complexity: string | null; favorite: boolean; blocked: boolean;
 }
