@@ -158,3 +158,24 @@ pour comparer avant et après un aménagement ; comment afficher un plan de plus
 
 Comme les autres prototypes, c'est une intention visuelle : pour l'intégrer à `packages/web`, reprendre les primitives existantes
 (`toast()`, `Modal`, tints) au lieu de copier le balisage (voir `packages/web/CLAUDE.md`).
+
+## Établi : opérer un ticket à la main sans quitter l'usine
+
+Seconde maquette, [`workbench.html`](./workbench.html) (un seul fichier, données simulées, à ouvrir dans un navigateur après
+l'avoir enveloppé d'un `<html><body>` ou tel quel dans un visualiseur d'artifacts). Elle répond à une question : comment garder la
+vue Work comme lieu de travail manuel quand les tickets sont dans la Factory.
+
+- **L'établi.** Ouvrir un ticket depuis le floor pose dessus la surface de la vue Work (modes Chat / Shell / Code, fil, composer,
+  panneau de droite, bande d'outils), pas une fiche allégée. `J` / `K` passent d'un ticket qui attend quelqu'un au suivant.
+- **La bande de ligne.** En haut de l'établi, dans la Factory comme dans Work, à la place du bandeau « Managed by the Factory » :
+  où est le ticket sur sa ligne, ce qu'il attend, et les gestes (décider un gate, relancer, prendre en main, remettre).
+- **Le débrayage.** Lancer un agent, un skill ou un panel à la main, ou « Take in hand », sort le ticket de la ligne : les machines
+  n'y touchent plus. Un commentaire, le shell, le diff, le browser ne débrayent rien. « Put back » le remet : comme si le poste
+  avait produit telle issue (fait à la main), au même poste pour qu'il reprenne, ou ailleurs. Un poste qui tourne sur le ticket
+  doit être interrompu d'abord : un seul pilote à la fois.
+- **Répondre relance.** Répondre à la question d'un agent relance le poste, sans second geste.
+- **Du geste au poste.** Les runs lancés à la main sont comptés par poste (« By hand this week »). Cinq fois le même skill au même
+  endroit, et la Factory propose le poste, posé comme un collage.
+
+Ce que la maquette ne montre pas : le mode build, la carte de commandes, la minimap (inchangés), et les panneaux de Work autres
+que Context, Diff, Docs et Todo.
