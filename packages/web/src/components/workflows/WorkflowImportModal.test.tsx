@@ -91,6 +91,32 @@ describe('WorkflowImportModal', () => {
     expect(replaceButton().disabled).toBe(false);
   });
 
+  it('never imports a document that no longer matches the text (debounce window)', async () => {
+    const { onReplace } = setup();
+    await type(JSON.stringify(minimalExample(EXAMPLE_REFS)));
+    expect(replaceButton().disabled).toBe(false);
+    // The user edits the JSON: until the new text is checked, Replace must not
+    // import the previous version of the document.
+    fireEvent.change(screen.getByLabelText('Workflow JSON'), { target: { value: JSON.stringify({ ...minimalExample(EXAMPLE_REFS), name: 'Edited' }) } });
+    expect(replaceButton().disabled).toBe(true);
+    fireEvent.click(replaceButton());
+    expect(onReplace).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(IMPORT_VALIDATION_DEBOUNCE_MS); });
+    fireEvent.click(replaceButton());
+    expect(onReplace).toHaveBeenCalledWith(expect.objectContaining({ name: 'Edited' }));
+  });
+
+  it('does not offer the previous import when the modal is reopened empty', async () => {
+    const onReplace = vi.fn();
+    const props = { initialText: '', editorSlug: 'spec-dev-pr', onClose: () => {}, onReplace };
+    const { rerender } = render(<WorkflowImportModal open {...props} />);
+    await type(JSON.stringify(minimalExample(EXAMPLE_REFS)));
+    rerender(<WorkflowImportModal open={false} {...props} />);
+    rerender(<WorkflowImportModal open {...props} />);
+    expect((screen.getByLabelText('Workflow JSON') as HTMLTextAreaElement).value).toBe('');
+    expect(replaceButton().disabled).toBe(true);
+  });
+
   it('hints at ⌘V when clipboard read is denied', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       value: { readText: vi.fn().mockRejectedValue(new Error('NotAllowedError')) },

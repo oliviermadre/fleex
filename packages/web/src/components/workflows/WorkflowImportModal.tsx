@@ -38,7 +38,10 @@ function localCheck(text: string): Check {
 
 export function WorkflowImportModal({ open, initialText, editorSlug, onClose, onReplace }: Props) {
   const [text, setText] = useState(initialText);
-  const [check, setCheck] = useState<Check>({ stage: 'empty' });
+  // Each result remembers the text it was computed for: during the debounce
+  // window (or after a reopen) a result for older text must not be importable.
+  const [result, setResult] = useState<{ text: string; check: Check }>({ text: '', check: { stage: 'empty' } });
+  const check = result.check;
   const [clipboardDenied, setClipboardDenied] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -51,15 +54,15 @@ export function WorkflowImportModal({ open, initialText, editorSlug, onClose, on
     let cancelled = false;
     const timer = setTimeout(() => {
       const local = localCheck(text);
-      setCheck(local);
+      setResult({ text, check: local });
       if (local.stage !== 'checking') return;
       // The editor keeps its slug, so references are checked as if the
       // document already lived under it (no false SLUG_TAKEN).
       applyWorkflowDryRun({ ...local.doc, slug: editorSlug })
-        .then(({ errors, warnings }) => { if (!cancelled) setCheck({ stage: 'checked', doc: local.doc, errors, warnings }); })
+        .then(({ errors, warnings }) => { if (!cancelled) setResult({ text, check: { stage: 'checked', doc: local.doc, errors, warnings } }); })
         .catch((err) => {
           console.warn('[workflow-json] dry-run failed', err);
-          if (!cancelled) setCheck({ stage: 'unchecked', doc: local.doc });
+          if (!cancelled) setResult({ text, check: { stage: 'unchecked', doc: local.doc } });
         });
     }, IMPORT_VALIDATION_DEBOUNCE_MS);
     return () => { cancelled = true; clearTimeout(timer); };
@@ -78,7 +81,7 @@ export function WorkflowImportModal({ open, initialText, editorSlug, onClose, on
     if (file) setText(await file.text());
   };
 
-  const doc = check.stage === 'checked' || check.stage === 'unchecked' ? check.doc : null;
+  const doc = result.text === text && (check.stage === 'checked' || check.stage === 'unchecked') ? check.doc : null;
   const referenceIssues = check.stage === 'checked' ? [...check.errors, ...check.warnings] : [];
   const anyway = check.stage === 'unchecked' || referenceIssues.length > 0;
   const slugIgnored = doc && doc.slug !== editorSlug ? doc.slug : null;
