@@ -3,6 +3,7 @@
  * favourite. One place, so the hover card, the console, the side panel and the
  * machine window all show a ticket the same way as the rest of the app.
  */
+import { useEffect, useRef } from 'react';
 import type { TicketComplexity, TicketPriority, TicketType } from '@fleex/shared';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
 import { TicketTypeIconSvg } from '../components/tickets/TicketTypeIconSvg';
@@ -11,6 +12,7 @@ import { ComplexityBadge, complexityDescription, DIAL_FILL } from '../components
 import { tintClasses } from '../lib/tints';
 import { cn } from '../lib/cn';
 import { TYPE_COLORS } from './renderer';
+import { tokenSprite, TOKEN_PAD } from './ticketToken';
 import type { FactoryTicketInfo } from './types';
 
 export const typeOf = (info: FactoryTicketInfo | null): TicketType | null => (info && info.type in TICKET_TYPE_LABELS ? (info.type as TicketType) : null);
@@ -41,11 +43,25 @@ export function TicketGlyphs({ info, words = false, className }: { info: Factory
   );
 }
 
-/** The ticket as it looks on the floor: a square in its type's colour, with the type's icon. */
-export function TicketSquare({ info, size = 28, className }: { info: FactoryTicketInfo | null; size?: number; className?: string }) {
+/**
+ * The ticket as it looks on the floor: the token in the shape of its type, drawn by the same code as the floor's
+ * (`ticketToken.ts`), so a ticket is the same object in a list as on a belt.
+ */
+export function TicketToken({ info, size = 28, className }: { info: FactoryTicketInfo | null; size?: number; className?: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const type = info?.type ?? '', pad = Math.ceil(size * TOKEN_PAD);
+  useEffect(() => {
+    const cv = ref.current, ctx = cv?.getContext('2d');
+    if (!cv || !ctx) return;
+    const d = Math.min(window.devicePixelRatio || 1, 3), sprite = tokenSprite(type, TYPE_COLORS[type] ?? '#8b949e', size * d);
+    cv.width = cv.height = Math.round((size + pad * 2) * d);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (sprite) ctx.drawImage(sprite, 0, 0, cv.width, cv.height);
+  }, [type, size, pad]);
   return (
-    <span className={cn('relative grid flex-none place-items-center rounded-[22%]', className)} style={{ width: size, height: size, background: TYPE_COLORS[info?.type ?? ''] ?? '#8b949e' }}>
-      {size >= 18 && <TicketTypeIconSvg type={typeOf(info)} size={Math.round(size * 0.58)} className="!text-black/70" />}
+    <span className={cn('relative inline-block flex-none', className)} style={{ width: size, height: size }} role="img" aria-label={`${typeLabel(info)} ticket`}>
+      {/* the picture is larger than the token's box, by the room its shadow and thickness take */}
+      <canvas ref={ref} className="pointer-events-none absolute" style={{ left: -pad, top: -pad, width: size + pad * 2, height: size + pad * 2 }} aria-hidden="true" />
       {info?.favorite && <Star on size={Math.max(8, Math.round(size * 0.36))} className="absolute -right-1 -top-1 drop-shadow" />}
     </span>
   );

@@ -9,7 +9,7 @@ import { useFactoryStore } from './factoryStore';
 import { MachineFigures, PeriodSelect } from './FactoryStatsBits';
 import { since, span } from './format';
 import { FIcon } from './icons';
-import { TicketGlyphs, TicketSquare } from './FactoryTicketMeta';
+import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { needsHuman, type FactoryRun, type FactoryTicket, type MachineSpec } from './types';
 
 const REFRESH_MS = 4000;
@@ -87,7 +87,7 @@ export function FactoryMachineModal({ machineId, onClose, onOpenTicket }: { mach
                   const why = needsHuman(t), age = since(t.since, now);
                   return (
                     <li key={t.ticketId} className="flex items-center gap-2 rounded-md border border-[var(--theme-border)] px-2 py-1.5">
-                      <TicketSquare info={t.info} size={22} />
+                      <TicketToken info={t.info} size={22} />
                       <button type="button" onClick={() => onOpenTicket(t.ticketId)} className="min-w-0 flex-1 text-left" title="Open the ticket">
                         <div className="truncate text-xs font-medium text-[var(--theme-text-primary)] hover:underline"><span className="mr-1.5 font-mono text-[var(--theme-text-muted)]">#{t.info?.displayId ?? '?'}</span>{t.info?.title ?? t.ticketId}</div>
                         <div className={cn('truncate text-[11px]', why ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>

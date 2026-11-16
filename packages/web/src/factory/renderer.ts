@@ -8,6 +8,7 @@ import { layoutNames, tie, type NamedTicket } from './nameTags';
 import { armTag, isConditional } from './armRules';
 import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
+import { tokenSprite, type TokenLook } from './ticketToken';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number }[]; ok: boolean; erase?: boolean; text?: string }
@@ -48,6 +49,8 @@ export type Hit = { ticketId: string } | { machineId: string } | null;
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). */
 export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa' };
 const STAR = '#facc15';
+/** A ticket with no type, and the ghost of one a filter leaves out. */
+const NO_TYPE = '#8b949e', GHOST = '#71717a';
 const PRIORITY_PIP: Record<string, string> = { urgent: '#ef4444', high: '#fb923c' };
 const STATUS_COLORS: Record<string, string> = { backlog: '#71717a', todo: '#fb923c', doing: '#60a5fa', reviewing: '#c084fc', done: '#22c55e' };
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
@@ -215,48 +218,80 @@ export class FactoryView {
     const k = cur ? 1 - Math.pow(0.0005, dt) : 1, px = cur ? cur.x + (x - cur.x) * k : x, py = cur ? cur.y + (y - cur.y) * k : y;
     this.shown.set(t.ticketId, { x: px, y: py });
     const selected = st.selTicket === t.ticketId, dim = !!st.dim?.has(t.ticketId) && !selected && !dragging;
+    const z = this.cam.z, info = t.info, type = info?.type ?? '', color = TYPE_COLORS[type] ?? NO_TYPE;
+    /*
+     * A ticket is a token in the shape of its type (see `ticketToken.ts`), a little larger than the square it replaces
+     * since a shape has holes. Too small to be told apart, it is the plain square again.
+     */
+    const T = s * 1.16, shaped = T * z >= 10;
+    const stamp = (look: TokenLook, tint: string, alpha: number): boolean => {
+      const sprite = shaped ? tokenSprite(type, tint, T * z * this.dpr, look) : null;
+      if (!sprite) return false;
+      const w = sprite.width / (z * this.dpr);
+      ctx.globalAlpha = alpha; ctx.drawImage(sprite, px - w / 2, py - w / 2, w, w); ctx.globalAlpha = 1;
+      return true;
+    };
     if (dim) {
       /* left out by the filter: still there, but faded and without any of its marks */
-      ctx.globalAlpha = 0.28; rr(ctx, px - s / 2, py - s / 2, s, s, s * 0.22); ctx.fillStyle = pal.text3; ctx.fill(); ctx.globalAlpha = 1;
+      if (!stamp('ghost', GHOST, 0.32)) { ctx.globalAlpha = 0.28; rr(ctx, px - s / 2, py - s / 2, s, s, s * 0.22); ctx.fillStyle = pal.text3; ctx.fill(); ctx.globalAlpha = 1; }
       return;
     }
-    ctx.globalAlpha = dragging ? 0.25 : mark === 'wait' ? 0.5 : 1;
-    rr(ctx, px - s / 2, py - s / 2, s, s, s * 0.22);
-    ctx.fillStyle = TYPE_COLORS[t.info?.type ?? ''] ?? '#8b949e'; ctx.fill();
-    ctx.lineWidth = 0.045; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(px - s / 2 + s * 0.16, py - s / 2 + s * 0.14, s * 0.68, s * 0.14);
-    ctx.globalAlpha = 1;
+    const alpha = dragging ? 0.25 : mark === 'wait' ? 0.5 : 1;
+    const token = stamp('solid', color, alpha);
+    if (!token) {
+      ctx.globalAlpha = alpha;
+      rr(ctx, px - s / 2, py - s / 2, s, s, s * 0.22);
+      ctx.fillStyle = color; ctx.fill();
+      ctx.lineWidth = 0.045; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(px - s / 2 + s * 0.16, py - s / 2 + s * 0.14, s * 0.68, s * 0.14);
+      ctx.globalAlpha = 1;
+    }
+    /* marks are placed around the token's box when there is one, around the square otherwise */
+    const B = token ? T : s;
     const blink = Math.floor(this.clock * 2.4) % 2 === 0;
-    if (mark === 'run' && s * this.cam.z > 6) { const a0 = this.clock * 4 + t.ticketId.length; ctx.strokeStyle = 'rgba(0,0,0,0.62)'; ctx.lineWidth = s * 0.15; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(px, py, s * 0.24, a0, a0 + 4.2); ctx.stroke(); ctx.lineCap = 'butt'; }
-    else if ((mark === 'human' || mark === 'fail') && !humanCall(t)) { ctx.strokeStyle = mark === 'fail' ? pal.danger : pal.warn; ctx.lineWidth = blink ? 0.1 : 0.05; rr(ctx, px - s / 2 - 0.06, py - s / 2 - 0.06, s + 0.12, s + 0.12, 0.13); ctx.stroke(); }
-    else if (mark === 'out') { ctx.strokeStyle = pal.text2; ctx.lineWidth = 0.04; rr(ctx, px - s / 2 - 0.04, py - s / 2 - 0.04, s + 0.08, s + 0.08, 0.1); ctx.stroke(); }
+    if (mark === 'run' && s * z > 6) {
+      /* at work: an arc turning, around a token, inside a square */
+      const a0 = this.clock * 4 + t.ticketId.length, r = token ? B * 0.6 : s * 0.24;
+      ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(px, py, r, a0, a0 + (token ? 2.6 : 4.2));
+      if (token) { ctx.strokeStyle = 'rgba(9,9,11,0.85)'; ctx.lineWidth = 0.085; ctx.stroke(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.045; ctx.stroke(); }
+      else { ctx.strokeStyle = 'rgba(0,0,0,0.62)'; ctx.lineWidth = s * 0.15; ctx.stroke(); }
+      ctx.lineCap = 'butt';
+    }
+    else if ((mark === 'human' || mark === 'fail') && !humanCall(t)) { ctx.strokeStyle = mark === 'fail' ? pal.danger : pal.warn; ctx.lineWidth = blink ? 0.1 : 0.05; rr(ctx, px - B / 2 - 0.06, py - B / 2 - 0.06, B + 0.12, B + 0.12, 0.13); ctx.stroke(); }
+    else if (mark === 'out') { ctx.strokeStyle = pal.text2; ctx.lineWidth = 0.04; rr(ctx, px - B / 2 - 0.04, py - B / 2 - 0.04, B + 0.08, B + 0.08, 0.1); ctx.stroke(); }
     /* a ticket waiting for a human calls for attention wherever it is: a pulsing halo and a "?" (or "!" when the run failed) */
     const call = dragging ? null : humanCall(t);
     if (call) {
-      const col = call === 'failed' ? pal.danger : pal.warn, ph = (this.clock * 0.9 + (t.ticketId.charCodeAt(0) % 10) / 10) % 1, grow = s * 0.7 * ph;
+      const col = call === 'failed' ? pal.danger : pal.warn, ph = (this.clock * 0.9 + (t.ticketId.charCodeAt(0) % 10) / 10) % 1, grow = B * 0.7 * ph;
       ctx.globalAlpha = 0.85 * (1 - ph); ctx.strokeStyle = col; ctx.lineWidth = 0.07;
-      rr(ctx, px - s / 2 - 0.05 - grow / 2, py - s / 2 - 0.05 - grow / 2, s + 0.1 + grow, s + 0.1 + grow, s * 0.3); ctx.stroke();
+      rr(ctx, px - B / 2 - 0.05 - grow / 2, py - B / 2 - 0.05 - grow / 2, B + 0.1 + grow, B + 0.1 + grow, B * 0.3); ctx.stroke();
       ctx.globalAlpha = 1; ctx.lineWidth = 0.06 + 0.04 * Math.sin(this.clock * 6) ** 2;
-      rr(ctx, px - s / 2 - 0.05, py - s / 2 - 0.05, s + 0.1, s + 0.1, s * 0.26); ctx.stroke();
-      this.label(call === 'failed' ? '!' : '?', px, py + s * 0.04, s * 0.74, 'rgba(0,0,0,0.82)', { align: 'center', weight: 800, min: 8, max: 30 });
+      rr(ctx, px - B / 2 - 0.05, py - B / 2 - 0.05, B + 0.1, B + 0.1, B * 0.26); ctx.stroke();
+      if (token) {
+        /* the sign goes on a badge at the corner: over the token, it would hide what the ticket is */
+        const bx = px + B * 0.36, by = py + B * 0.34, br = B * 0.25;
+        ctx.beginPath(); ctx.arc(bx, by, br, 0, 6.3); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
+        this.label(call === 'failed' ? '!' : '?', bx, by + br * 0.08, br * 1.5, 'rgba(0,0,0,0.85)', { align: 'center', weight: 800, min: 7, max: 22 });
+      } else this.label(call === 'failed' ? '!' : '?', px, py + s * 0.04, s * 0.74, 'rgba(0,0,0,0.82)', { align: 'center', weight: 800, min: 8, max: 30 });
     }
-    const z = this.cam.z, info = t.info, found = !!st.found?.has(t.ticketId);
+    const found = !!st.found?.has(t.ticketId);
     if (info && !dragging) {
-      /* its number, once the square is big enough to hold it */
-      if (!call && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
+      /* its number, once there is room: inside a square, on a small plate under a token */
+      if (!call && !token && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
+      if (token && B * z >= 34) this.label(String(info.displayId), px, py + B * 0.52, B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)' });
       /* priority: a pip in the top-left corner for what is urgent or high */
       const pip = PRIORITY_PIP[info.priority];
-      if (pip && s * z >= 7) { ctx.beginPath(); ctx.arc(px - s / 2 + s * 0.06, py - s / 2 + s * 0.06, s * 0.17, 0, 6.3); ctx.fillStyle = pip; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.stroke(); }
+      if (pip && s * z >= 7) { ctx.beginPath(); ctx.arc(px - B / 2 + B * 0.06, py - B / 2 + B * 0.06, B * 0.15, 0, 6.3); ctx.fillStyle = pip; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.stroke(); }
       /* favourite: a star on the top-right corner */
       if (info.favorite && s * z >= 7) {
-        const cx = px + s / 2 - s * 0.04, cy = py - s / 2 + s * 0.04, r = s * 0.3;
+        const cx = px + B / 2 - B * 0.04, cy = py - B / 2 + B * 0.04, r = B * 0.26;
         ctx.beginPath();
         for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rad = i % 2 ? r * 0.45 : r; ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad); }
         ctx.closePath(); ctx.fillStyle = STAR; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.stroke();
       }
     }
-    if (found) { ctx.strokeStyle = pal.accent; ctx.lineWidth = 0.07; rr(ctx, px - s / 2 - 0.09, py - s / 2 - 0.09, s + 0.18, s + 0.18, s * 0.3); ctx.stroke(); }
-    if (selected) { ctx.strokeStyle = pal.text; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(px, py, Math.max(s * 0.95, 0.3), 0, 6.3); ctx.stroke(); }
+    if (found) { ctx.strokeStyle = pal.accent; ctx.lineWidth = 0.07; rr(ctx, px - B / 2 - 0.09, py - B / 2 - 0.09, B + 0.18, B + 0.18, B * 0.3); ctx.stroke(); }
+    if (selected) { ctx.strokeStyle = pal.text; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(px, py, Math.max(B * 0.92, 0.3), 0, 6.3); ctx.stroke(); }
   }
 
   /**
@@ -614,7 +649,10 @@ export class FactoryView {
       ctx.strokeStyle = dr.ok ? pal.ok : pal.warn; ctx.lineWidth = 0.09; ctx.setLineDash(dr.ok ? [] : [0.16, 0.12]);
       rr(ctx, box.x + 0.03, box.y + 0.03, box.w - 0.06, box.h - 0.06, 0.2); ctx.stroke(); ctx.setLineDash([]);
       const t = st.tickets.find((q) => q.ticketId === dr.ticketId);
-      rr(ctx, dr.x - 0.3, dr.y - 0.3, 0.6, 0.6, 0.13); ctx.fillStyle = TYPE_COLORS[t?.info?.type ?? ''] ?? '#8b949e'; ctx.fill();
+      /* what is being carried: the ticket's own token, a little larger than on the floor */
+      const held = t?.info?.type ?? '', sprite = tokenSprite(held, TYPE_COLORS[held] ?? NO_TYPE, 0.7 * this.cam.z * this.dpr);
+      if (sprite) { const w = sprite.width / (this.cam.z * this.dpr); ctx.drawImage(sprite, dr.x - w / 2, dr.y - w / 2, w, w); }
+      else { rr(ctx, dr.x - 0.3, dr.y - 0.3, 0.6, 0.6, 0.13); ctx.fillStyle = TYPE_COLORS[held] ?? NO_TYPE; ctx.fill(); }
       this.label(dr.text, dr.x, dr.y - 0.75, 0.3, pal.text, { align: 'center', plate: dr.ok ? 'rgba(20,83,45,0.95)' : 'rgba(120,53,15,0.95)', min: 10, max: 13 });
     }
   }

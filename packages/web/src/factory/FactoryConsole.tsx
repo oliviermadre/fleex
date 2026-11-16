@@ -7,11 +7,11 @@ import { FIcon } from './icons';
 import type { Selection } from './FactoryInspector';
 import { useTicketStore } from '../stores/ticketStore';
 import { since, span } from './format';
-import { TicketGlyphs, TicketSquare } from './FactoryTicketMeta';
+import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { LENS_LABEL } from './lens';
 import { conditionsOf, longCondition } from './armRules';
 import { bridgeFlow, flowLabel } from './bridges';
-import { TYPE_COLORS, type FactoryView } from './renderer';
+import type { FactoryView } from './renderer';
 import { needsHuman, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec } from './types';
 
 /** The layers of the floor, in the order they are listed next to the minimap. */
@@ -48,11 +48,12 @@ const Stat = ({ label, value }: { label: string; value: string | number }) => <s
 function Wire({ tickets, onSelect }: { tickets: FactoryTicket[]; onSelect: (s: Selection) => void }) {
   if (tickets.length === 0) return null;
   return (
-    <div className="flex max-h-[42px] flex-wrap gap-[3px] overflow-hidden">
+    <div className="flex max-h-[58px] flex-wrap gap-[3px] overflow-hidden">
       {tickets.slice(0, 40).map((t) => (
         <button key={t.ticketId} type="button" onClick={() => onSelect({ ticket: t.ticketId })} title={`#${t.info?.displayId ?? '?'} ${t.info?.title ?? ''} · ${PHASE[t.phase]}`}
-          aria-label={`Ticket ${t.info?.displayId ?? ''}`} className={cn('h-[18px] w-[18px] flex-none rounded-[5px] border-2', needsHuman(t) ? 'border-[var(--theme-warning)]' : 'border-[var(--theme-bg-base)]')}
-          style={{ background: TYPE_COLORS[t.info?.type ?? ''] ?? '#8b949e' }} />
+          aria-label={`Ticket ${t.info?.displayId ?? ''}`} className={cn('grid h-[26px] w-[26px] flex-none place-items-center rounded-md border', needsHuman(t) ? 'border-[var(--theme-warning)]' : 'border-transparent hover:border-[var(--theme-border-input)]')}>
+          <TicketToken info={t.info ? { ...t.info, favorite: false } : null} size={18} />
+        </button>
       ))}
       {tickets.length > 40 && <span className="self-center pl-1 font-mono text-[10px] text-[var(--theme-text-muted)]">+{tickets.length - 40}</span>}
     </div>
@@ -149,7 +150,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
         <div className="flex min-h-0 flex-1 gap-2.5 border-t border-[var(--theme-border)] pt-2">
           <div className={cn('grid h-[58px] w-[58px] flex-none place-items-center rounded-lg border-2 bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)]',
             ticket && needsHuman(ticket) ? 'border-[var(--theme-warning)]' : 'border-[var(--theme-border-input)]')}>
-            {ticket ? <TicketSquare info={ticket.info} size={34} /> : <FIcon name={machine ? machineIcon(machine) : 'floor'} size={30} />}
+            {ticket ? <TicketToken info={ticket.info} size={38} /> : <FIcon name={machine ? machineIcon(machine) : 'floor'} size={30} />}
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {ticket ? (

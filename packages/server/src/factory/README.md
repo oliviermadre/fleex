@@ -65,8 +65,10 @@ opens on everything it holds (double-click, or V).
 ## Finding a ticket
 
 The snapshot carries what tells tickets apart: board, type, priority, complexity, favourite. They are shown with
-Fleex's own icons, and a ticket's square takes its type's usual colour, with a star when it is a favourite and a pip
-when it is urgent or high. Hovering a ticket shows a card; favourites and the selected ticket carry their name on the
+Fleex's own icons. On the floor a ticket is a small object in the shape of its type's icon and in its usual colour
+(`ticketToken.ts` reads the shape from `TicketTypeIconSvg`, so there is one drawing per type in the app), with a star
+when it is a favourite and a pip when it is urgent or high. A ticket with no type is a plain crate; too small to be
+told apart, a ticket is a square. Hovering a ticket shows a card; favourites and the selected ticket carry their name on the
 floor, and holding Tab names every ticket. Tickets of one machine, or close together on a belt, share a box that lists
 them, and boxes keep clear of each other. The header has a search (title, number, tag) and filters (boards, types, priorities, favourites, waiting for a
 human): what a filter leaves out is faded, never hidden. Starring a ticket from the Factory changes the ticket itself
